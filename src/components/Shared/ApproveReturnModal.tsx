@@ -2,7 +2,6 @@ import React, { useCallback, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Modal } from '../UI/Modal';
 import { Button } from '../UI/Button';
-import { Textarea } from '../UI/Textarea';
 import { AlertCircle } from 'lucide-react';
 import { Order } from '../../types';
 
@@ -89,7 +88,7 @@ const ApproveReturnModal: React.FC<ApproveReturnModalProps> = ({
           <label htmlFor="return-notes" className="block text-sm font-medium text-gray-900 mb-1">
             {t('orders.notes') || (isRtl ? 'ملاحظات' : 'Notes')}
           </label>
-          <Textarea
+          <textarea
             id="return-notes"
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
