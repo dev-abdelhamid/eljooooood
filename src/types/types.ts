@@ -1,6 +1,5 @@
 export enum OrderStatus {
   Pending = 'pending',
-  Approved = 'approved',
   InProduction = 'in_production',
   Completed = 'completed',
   InTransit = 'in_transit',
@@ -42,76 +41,77 @@ export enum NotificationType {
   ReturnCreated = 'returnCreated',
 }
 
-export interface Department {
-  _id: string;
-  name: string;
-}
-
-export interface OrderItem {
-  _id: string;
-  itemId?: string;
-  productId: string;
-  productName: string;
-  quantity: number;
-  price: number;
-  department: Department;
-  assignedTo?: { _id: string; name: string; username: string };  // Corrected to include name and username for consistency
-  status: ItemStatus;
-  unit: string;  // Ensured unit is required with fallback to 'unit'
-  returnedQuantity?: number;
-  returnReason?: string;
-}
-
-export interface ReturnItem {
-  itemId: string;
-  productId: string;
-  productName: string;
-  quantity: number;
-  price?: number;
-  reason: string;
-  status?: ReturnStatus;
-  reviewNotes?: string;
-  unit: string;  // Ensured unit is included with fallback to 'unit'
-}
-
-export interface OrderReturn {
-  returnId: string;
-  items: ReturnItem[];
-  status: ReturnStatus;
-  reviewNotes?: string;
-  createdAt: string;
-  createdBy: { _id: string; username: string };
-}
-
-export interface StatusHistory {
-  status: string;
-  changedBy: string;
-  changedAt: string;
-  notes?: string;
-}
-
 export interface Order {
   id: string;
   orderNumber: string;
   branchId: string;
   branchName: string;
   branch: { _id: string; name: string };
-  items: OrderItem[];
-  returns?: OrderReturn[];
+  items: Array<{
+    _id: string;
+    itemId?: string;
+    productId: string;
+    productName: string;
+    quantity: number;
+    price: number;
+    department: { _id: string; name: string };
+    assignedTo?: { _id: string; name: string };
+    status: ItemStatus;
+    unit?: string;
+    returnedQuantity?: number;
+    returnReason?: string;
+  }>;
+  returns?: Array<{
+    returnId: string;
+    items: Array<{
+      productId: string;
+      productName: string;
+      quantity: number;
+      reason: string;
+      status?: ReturnStatus;
+      reviewNotes?: string;
+    }>;
+    status: ReturnStatus;
+    reviewNotes?: string;
+    createdAt: string;
+    createdBy: { _id: string; username: string };
+  }>;
   status: OrderStatus;
   totalAmount: number;
   date: string;
   notes?: string;
   priority: Priority;
   createdBy: string;
-  statusHistory?: StatusHistory[];
+  statusHistory?: Array<{
+    status: OrderStatus;
+    changedBy?: string;
+    changedAt?: string;
+    date?: string;
+    notes?: string;
+  }>;
 }
 
 export interface Chef {
   _id: string;
   userId: string;
   name: string;
-  department: Department | null;
+  department: { _id: string; name: string } | null;
+}
+
+
+
+export interface OrderItem {
+  itemId: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  price: number;
+  department: Department;
+  status: ItemStatus;
+  unit: string;
+  returnedQuantity?: number;
+  returnReason?: string;
+  assignedTo?: { _id: string; username: string };
 }
 
 export interface Branch {
@@ -155,6 +155,17 @@ export interface Notification {
   vibrate?: number[];
 }
 
+export interface ReturnItem {
+  itemId: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  price?: number;
+  reason: string;
+  status?: ReturnStatus;
+  reviewNotes?: string;
+}
+
 export interface Return {
   id: string;
   returnNumber: string;
@@ -181,15 +192,6 @@ export interface Return {
     notes?: string;
     changedAt: string;
   }>;
-}
-
-export interface User {
-  id: string;
-  username: string;
-  role: 'admin' | 'branch' | 'chef' | 'production';
-  name: string;
-  branch?: string;
-  department?: string;
 }
 
 export interface State {
@@ -221,6 +223,16 @@ export interface State {
   socketError: string | null;
   viewMode: 'card' | 'table';
 }
+
+export interface User {
+  id: string;
+  username: string;
+  role: 'admin' | 'branch' | 'chef' | 'production';
+  name: string;
+  branch?: string;
+  department?: string;
+}
+
 
 export type Action =
   | { type: 'SET_ORDERS'; payload: Order[] }
