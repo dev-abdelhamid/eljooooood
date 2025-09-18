@@ -1,11 +1,12 @@
-import React, { memo } from 'react';
+import React, { useCallback, useState } from 'react';
+import { motion } from 'framer-motion';
 import { Modal } from '../UI/Modal';
 import { Button } from '../UI/Button';
-import { Input } from '../UI/Input';
-import { Order } from '../../types/types';
-import { X } from 'lucide-react';
+import { Textarea } from '../UI/Textarea';
+import { AlertCircle } from 'lucide-react';
+import { Order } from '../../types';
 
-interface Props {
+interface ApproveReturnModalProps {
   isOpen: boolean;
   onClose: () => void;
   order: Order | null;
@@ -16,78 +17,129 @@ interface Props {
   submitting: string | null;
 }
 
-const ApproveReturnModal: React.FC<Props> = memo(
-  ({ isOpen, onClose, order, returnId, t, isRtl, handleApproveReturn, submitting }) => {
-    if (!order) return null;
+const ApproveReturnModal: React.FC<ApproveReturnModalProps> = ({
+  isOpen,
+  onClose,
+  order,
+  returnId,
+  t,
+  isRtl,
+  handleApproveReturn,
+  submitting,
+}) => {
+  const [notes, setNotes] = useState('');
+  const returnData = order?.returns?.find(ret => ret.returnId === returnId);
 
-    const selectedReturn = order.returns?.find(ret => ret.returnId === returnId);
+  const handleSubmit = useCallback(
+    (status: 'approved' | 'rejected') => {
+      if (order?.id) {
+        handleApproveReturn(order.id, returnId, status, notes);
+        setNotes('');
+        onClose();
+      }
+    },
+    [order, returnId, notes, handleApproveReturn, onClose]
+  );
 
-    const [notes, setNotes] = React.useState('');
-
-    const handleSubmit = (e: React.FormEvent, status: 'approved' | 'rejected') => {
-      e.preventDefault();
-      handleApproveReturn(order.id, returnId, status, notes);
-      setNotes('');
-      onClose();
-    };
-
-    return (
-      <Modal
-        isOpen={isOpen}
-        onClose={onClose}
-        title={isRtl ? `الموافقة على إرجاع الطلب #${order.orderNumber}` : `Approve Return for Order #${order.orderNumber}`}
-        icon={X}
-        className="max-w-lg w-full p-6 bg-white rounded-lg shadow-xl"
-        dir={isRtl ? 'rtl' : 'ltr'}
-      >
-        <div className="space-y-6">
-          <div>
-            <p className="text-sm font-medium text-gray-700">{isRtl ? 'تفاصيل الإرجاع' : 'Return Details'}</p>
-            <p className="text-sm text-gray-600">
-              {selectedReturn?.items.map(item => 
-                `${item.quantity} ${t(`units.${order.items.find(i => i.productId === item.productId)?.unit || 'unit'}`)} × ${order.items.find(i => i.productId === item.productId)?.productName || 'غير معروف'} (${t(`orders.return_reasons_${item.reason}`)})`
-              ).join(', ')}
-            </p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'ملاحظات' : 'Notes'}</label>
-            <Input
-              type="text"
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm"
-              placeholder={isRtl ? 'أدخل ملاحظات إضافية (اختياري)' : 'Enter additional notes (optional)'}
-            />
-          </div>
-          <div className={`flex gap-4 ${isRtl ? 'justify-start' : 'justify-end'}`}>
-            <Button
-              variant="secondary"
-              onClick={onClose}
-              className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg px-4 py-2 text-sm"
-            >
-              {isRtl ? 'إلغاء' : 'Cancel'}
-            </Button>
-            <Button
-              variant="success"
-              onClick={(e) => handleSubmit(e, 'approved')}
-              className="bg-green-500 hover:bg-green-600 text-white rounded-lg px-4 py-2 text-sm"
-              disabled={submitting === order.id}
-            >
-              {isRtl ? 'الموافقة' : 'Approve'}
-            </Button>
-            <Button
-              variant="danger"
-              onClick={(e) => handleSubmit(e, 'rejected')}
-              className="bg-red-500 hover:bg-red-600 text-white rounded-lg px-4 py-2 text-sm"
-              disabled={submitting === order.id}
-            >
-              {isRtl ? 'رفض' : 'Reject'}
-            </Button>
-          </div>
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={t('orders.approve_return_title', { returnId }) || (isRtl ? `الموافقة على إرجاع ${returnId}` : `Approve Return ${returnId}`)}
+      size="md"
+      className="bg-white rounded-lg shadow-xl"
+      ariaLabel={t('orders.approve_return')}
+    >
+      <div className="space-y-6">
+        {returnData && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            <h3 className="text-sm font-medium text-gray-800">
+              {t('orders.return_details') || (isRtl ? 'تفاصيل الإرجاع' : 'Return Details')}
+            </h3>
+            <ul className="mt-2 space-y-2 text-xs">
+              {returnData.items.map((item, index) => (
+                <li key={index} className="flex justify-between gap-2">
+                  <span>
+                    {item.quantity} {t(`units.${item.unit || 'unit'}`) || (isRtl ? { unit: 'وحدة', kg: 'كجم', piece: 'قطعة' }[item.unit || 'unit'] : item.unit || 'unit')} - {item.reason}
+                  </span>
+                  <span>{t(`orders.return_status_${returnData.status}`) || (isRtl
+                    ? returnData.status === 'pending_approval' ? 'قيد الموافقة'
+                      : returnData.status === 'approved' ? 'تم الموافقة'
+                      : 'مرفوض'
+                    : returnData.status)}</span>
+                </li>
+              ))}
+            </ul>
+            {returnData.reviewNotes && (
+              <p className="mt-2 text-xs text-gray-600">
+                <strong>{t('orders.review_notes') || (isRtl ? 'ملاحظات المراجعة' : 'Review Notes')}:</strong> {returnData.reviewNotes}
+              </p>
+            )}
+          </motion.div>
+        )}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, delay: 0.1 }}
+        >
+          <label htmlFor="return-notes" className="block text-sm font-medium text-gray-900 mb-1">
+            {t('orders.notes') || (isRtl ? 'ملاحظات' : 'Notes')}
+          </label>
+          <Textarea
+            id="return-notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder={t('orders.notes_placeholder') || (isRtl ? 'أدخل ملاحظات الإرجاع...' : 'Enter return notes...')}
+            className="w-full rounded-lg border-gray-300 focus:ring-blue-500 text-xs"
+            aria-label={t('orders.notes')}
+          />
+        </motion.div>
+        {submitting && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className={`p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}
+            role="alert"
+          >
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <span className="text-red-600">{t('common.loading') || (isRtl ? 'جارٍ التحميل' : 'Loading')}</span>
+          </motion.div>
+        )}
+        <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <Button
+            variant="secondary"
+            onClick={onClose}
+            className="bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-full px-4 py-2 text-sm"
+            aria-label={t('common.cancel') || (isRtl ? 'إلغاء' : 'Cancel')}
+          >
+            {t('common.cancel') || (isRtl ? 'إلغاء' : 'Cancel')}
+          </Button>
+          <Button
+            variant="success"
+            onClick={() => handleSubmit('approved')}
+            className="bg-green-600 hover:bg-green-700 text-white rounded-full px-4 py-2 text-sm"
+            disabled={submitting === order?.id}
+            aria-label={t('orders.approve') || (isRtl ? 'موافقة' : 'Approve')}
+          >
+            {t('orders.approve') || (isRtl ? 'موافقة' : 'Approve')}
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => handleSubmit('rejected')}
+            className="bg-red-600 hover:bg-red-700 text-white rounded-full px-4 py-2 text-sm"
+            disabled={submitting === order?.id}
+            aria-label={t('orders.reject') || (isRtl ? 'رفض' : 'Reject')}
+          >
+            {t('orders.reject') || (isRtl ? 'رفض' : 'Reject')}
+          </Button>
         </div>
-      </Modal>
-    );
-  }
-);
+      </div>
+    </Modal>
+  );
+};
 
 export default ApproveReturnModal;
