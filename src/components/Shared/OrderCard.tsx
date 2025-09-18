@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '../UI/Button';
 import { useAuth } from '../../contexts/AuthContext';
-import { Order, OrderStatus, ItemStatus } from '../../types';
+import { Order, OrderStatus, ItemStatus } from '../../types/types';
 import { Clock, Check, Package, Truck, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 const STATUS_COLORS: Record<OrderStatus, { color: string; icon: React.FC; label: string; progress: number }> = {
