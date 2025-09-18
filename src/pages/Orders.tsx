@@ -90,7 +90,7 @@ interface State {
   sortOrder: 'asc' | 'desc';
   currentPage: number;
   loading: boolean;
-  error: string | null;
+  error: string;
   submitting: string | null;
   socketConnected: boolean;
   socketError: string | null;
@@ -107,6 +107,7 @@ interface Action {
   by?: 'date' | 'totalAmount' | 'priority';
   order?: 'asc' | 'desc';
   isOpen?: boolean;
+  modal?: string;
 }
 
 // Initial state
@@ -124,7 +125,7 @@ const initialState: State = {
   sortOrder: 'desc',
   currentPage: 1,
   loading: true,
-  error: null,
+  error: '',
   submitting: null,
   socketConnected: false,
   socketError: null,
@@ -135,7 +136,7 @@ const initialState: State = {
 const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case 'SET_ORDERS':
-      return { ...state, orders: action.payload, error: null };
+      return { ...state, orders: action.payload, error: '' };
     case 'ADD_ORDER':
       return { ...state, orders: [action.payload, ...state.orders.filter(o => o.id !== action.payload.id)] };
     case 'SET_SELECTED_ORDER':
@@ -292,7 +293,7 @@ const reducer = (state: State, action: Action): State => {
 };
 
 // Constants
-const ORDERS_PER_PAGE: Record<State['viewMode'], number> = { card: 12, table: 50 };
+const ORDERS_PER_PAGE = { card: 12, table: 50 };
 
 const validTransitions: Record<Order['status'], Order['status'][]> = {
   pending: ['approved', 'cancelled'],
@@ -321,7 +322,7 @@ const sortOptions = [
   { value: 'priority', label: 'sort_priority' },
 ];
 
-// Utility function to convert ArrayBuffer to Base64
+// Utility functions
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   let binary = '';
   const bytes = new Uint8Array(buffer);
@@ -331,7 +332,7 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   return window.btoa(binary);
 };
 
-// Skeleton components
+// Skeleton component
 const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
@@ -404,12 +405,12 @@ export const Orders: React.FC = () => {
   const cacheRef = useRef<Map<string, Order[]>>(new Map());
   const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
 
-  // Update stateRef whenever state changes
+  // Update stateRef
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
-  // WebSocket listeners for real-time updates
+  // WebSocket listeners
   useEffect(() => {
     if (!user || !['admin', 'production'].includes(user.role)) {
       dispatch({ type: 'SET_ERROR', payload: t('errors.unauthorized_access') });
@@ -445,7 +446,7 @@ export const Orders: React.FC = () => {
               price: Number(item.price) || 0,
               unit: item.unit || 'unit',
               department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
-              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || t('chefs.unknown') } : undefined,
+              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || 'غير معروف' } : undefined,
               status: item.status || 'pending',
               returnedQuantity: Number(item.returnedQuantity) || 0,
               returnReason: item.returnReason || '',
@@ -484,52 +485,34 @@ export const Orders: React.FC = () => {
       };
       dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
       playNotificationSound('/sounds/new-order.mp3', [200, 100, 200]);
-      toast.success(
-        isRtl 
-          ? `تم استلام طلب جديد: ${order.orderNumber}`
-          : `New order received: ${order.orderNumber}`,
-        {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        }
-      );
+      toast.success(t('orders.new_order', { orderNumber: order.orderNumber }), {
+        position: isRtl ? 'top-left' : 'top-right',
+        autoClose: 3000,
+      });
     });
 
     socket.on('orderStatusUpdated', ({ orderId, status }: { orderId: string; status: Order['status'] }) => {
       dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
-      toast.info(
-        isRtl 
-          ? `تم تحديث حالة الطلب إلى: ${t(`orders.status_${status}`)}`
-          : `Order status updated to: ${t(`orders.status_${status}`)}`,
-        {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        }
-      );
+      toast.info(t('orders.status_updated', { status: t(`orders.status_${status}`) }), {
+        position: isRtl ? 'top-left' : 'top-right',
+        autoClose: 3000,
+      });
     });
 
     socket.on('returnStatusUpdated', ({ orderId, returnId, status }: { orderId: string; returnId: string; status: string }) => {
       dispatch({ type: 'RETURN_STATUS_UPDATED', orderId, returnId, status });
-      toast.info(
-        isRtl 
-          ? `تم تحديث حالة المرتجع إلى: ${t(`orders.return_status_${status}`)}`
-          : `Return status updated to: ${t(`orders.return_status_${status}`)}`,
-        {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        }
-      );
+      toast.info(t('orders.return_status_updated', { status: t(`orders.return_status_${status}`) }), {
+        position: isRtl ? 'top-left' : 'top-right',
+        autoClose: 3000,
+      });
     });
 
     socket.on('taskAssigned', ({ orderId, items }: { orderId: string; items: any[] }) => {
       dispatch({ type: 'TASK_ASSIGNED', orderId, items });
-      toast.info(
-        isRtl ? 'تم تعيين الطهاة بنجاح' : 'Chefs assigned successfully',
-        {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        }
-      );
+      toast.info(t('orders.chefs_assigned'), {
+        position: isRtl ? 'top-left' : 'top-right',
+        autoClose: 3000,
+      });
     });
 
     return () => {
@@ -593,7 +576,7 @@ export const Orders: React.FC = () => {
                   price: Number(item.price) || 0,
                   unit: item.unit || 'unit',
                   department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
-                  assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || t('chefs.unknown') } : undefined,
+                  assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || 'غير معروف' } : undefined,
                   status: item.status || 'pending',
                   returnedQuantity: Number(item.returnedQuantity) || 0,
                   returnReason: item.returnReason || '',
@@ -638,7 +621,7 @@ export const Orders: React.FC = () => {
           payload: chefsResponse.map((chef: any) => ({
             _id: chef._id,
             userId: chef.user._id,
-            name: chef.user?.name || chef.name || t('chefs.unknown'),
+            name: chef.user?.name || chef.name || 'غير معروف',
             department: chef.department || null,
           })),
         });
@@ -651,7 +634,7 @@ export const Orders: React.FC = () => {
             }))
             .sort((a: Branch, b: Branch) => a.name.localeCompare(b.name, language)),
         });
-        dispatch({ type: 'SET_ERROR', payload: null });
+        dispatch({ type: 'SET_ERROR', payload: '' });
       } catch (err: any) {
         if (retryCount < 2) {
           setTimeout(() => fetchData(retryCount + 1), 1000);
@@ -714,10 +697,7 @@ export const Orders: React.FC = () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, t('orders.title'));
     XLSX.writeFile(wb, 'Orders.xlsx');
-    toast.success(
-      isRtl ? 'تم تصدير البيانات إلى Excel بنجاح' : 'Data exported to Excel successfully',
-      { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
-    );
+    toast.success(t('orders.export_success'), { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
   }, [state.orders, t, isRtl, calculateAdjustedTotal]);
 
   // Export to PDF
@@ -810,19 +790,13 @@ export const Orders: React.FC = () => {
       });
 
       doc.save('Orders.pdf');
-      toast.success(
-        isRtl ? 'تم تصدير البيانات إلى PDF بنجاح' : 'Data exported to PDF successfully',
-        { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
-      );
+      toast.success(t('orders.export_pdf_success'), { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
     } catch (err) {
-      toast.error(
-        isRtl ? 'فشل تصدير البيانات إلى PDF' : 'Failed to export data to PDF',
-        { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
-      );
+      toast.error(t('orders.export_pdf_error'), { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
     }
   }, [state.orders, t, isRtl, language, calculateAdjustedTotal]);
 
-  // Search handling with debouncing
+  // Search handling
   const handleSearchChange = useMemo(
     () => debounce((value: string) => {
       dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
@@ -883,10 +857,7 @@ export const Orders: React.FC = () => {
     async (orderId: string, newStatus: Order['status']) => {
       const order = state.orders.find(o => o.id === orderId);
       if (!order || !validTransitions[order.status].includes(newStatus)) {
-        toast.error(
-          isRtl ? 'انتقال غير صالح لحالة الطلب' : 'Invalid order status transition',
-          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
-        );
+        toast.error(t('errors.invalid_transition'), { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
         return;
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
@@ -896,25 +867,15 @@ export const Orders: React.FC = () => {
         if (socket && isConnected) {
           emit('orderStatusUpdated', { orderId, status: newStatus });
         }
-        toast.success(
-          isRtl 
-            ? `تم تحديث حالة الطلب إلى: ${t(`orders.status_${newStatus}`)}`
-            : `Order status updated to: ${t(`orders.status_${newStatus}`)}`,
-          {
-            position: isRtl ? 'top-left' : 'top-right',
-            autoClose: 3000,
-          }
-        );
+        toast.success(t('orders.status_updated', { status: t(`orders.status_${newStatus}`) }), {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 3000,
+        });
       } catch (err: any) {
-        toast.error(
-          isRtl 
-            ? `فشل تحديث حالة الطلب: ${err.message}`
-            : `Failed to update order status: ${err.message}`,
-          {
-            position: isRtl ? 'top-left' : 'top-right',
-            autoClose: 3000,
-          }
-        );
+        toast.error(t('errors.update_order_status', { message: err.message }), {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 3000,
+        });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
@@ -925,29 +886,21 @@ export const Orders: React.FC = () => {
   const assignChefs = useCallback(
     async (orderId: string) => {
       if (state.assignFormData.items.some(item => !item.assignedTo)) {
-        toast.error(
-          isRtl ? 'يرجى تعيين طاهٍ لكل عنصر' : 'Please assign a chef to each item',
-          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
-        );
+        toast.error(t('orders.assign_error'), { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
         return;
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
         await ordersAPI.assignChef(orderId, { items: state.assignFormData.items });
         dispatch({ type: 'TASK_ASSIGNED', orderId, items: state.assignFormData.items });
-        dispatch({ type: 'SET_MODAL', isOpen: false });
+        dispatch({ type: 'SET_MODAL', modal: 'assign', isOpen: false });
         dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
-        toast.success(
-          isRtl ? 'تم تعيين الطهاة بنجاح' : 'Chefs assigned successfully',
-          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
-        );
+        toast.success(t('orders.chefs_assigned'), { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       } catch (err: any) {
-        toast.error(
-          isRtl 
-            ? `فشل تعيين الطهاة: ${err.message}`
-            : `Failed to assign chefs: ${err.message}`,
-          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
-        );
+        toast.error(t('errors.assign_chef', { message: err.message }), {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 3000,
+        });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
@@ -958,10 +911,7 @@ export const Orders: React.FC = () => {
   const openAssignModal = useCallback(
     (order: Order) => {
       if (order.status !== 'approved') {
-        toast.error(
-          isRtl ? 'الطلب لم يتم الموافقة عليه بعد' : 'Order is not approved yet',
-          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
-        );
+        toast.error(t('errors.order_not_approved'), { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
         return;
       }
       dispatch({ type: 'SET_SELECTED_ORDER', payload: order });
@@ -979,7 +929,7 @@ export const Orders: React.FC = () => {
             })),
         },
       });
-      dispatch({ type: 'SET_MODAL', isOpen: true });
+      dispatch({ type: 'SET_MODAL', modal: 'assign', isOpen: true });
     },
     [t, isRtl]
   );
@@ -1123,7 +1073,7 @@ export const Orders: React.FC = () => {
               {paginatedOrders.length === 0 ? (
                 <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-6">
                   <Card className="p-8 sm:p-12 text-center bg-white shadow-lg rounded-lg border border-gray-100">
-                    <ShoppingCart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <ShoppingCart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-800 mb-2">{t('orders.no_orders')}</h3>
                     <p className="text-sm text-gray-500">
                       {state.filterStatus || state.filterBranch || state.searchQuery
@@ -1175,7 +1125,7 @@ export const Orders: React.FC = () => {
               <AssignChefsModal
                 isOpen={state.isAssignModalOpen}
                 onClose={() => {
-                  dispatch({ type: 'SET_MODAL', isOpen: false });
+                  dispatch({ type: 'SET_MODAL', modal: 'assign', isOpen: false });
                   dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
                   dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
                 }}
