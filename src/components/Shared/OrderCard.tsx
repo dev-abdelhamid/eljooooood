@@ -7,20 +7,20 @@ import { Order, OrderStatus, ItemStatus } from '../../types/types';
 import { Clock, Check, Package, Truck, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 const STATUS_COLORS: Record<OrderStatus, { color: string; icon: React.FC; label: string; progress: number }> = {
-  [OrderStatus.Pending]: { color: 'bg-yellow-100 text-yellow-700', icon: Clock, label: 'pending', progress: 0 },
-  [OrderStatus.Approved]: { color: 'bg-teal-100 text-teal-700', icon: Check, label: 'approved', progress: 25 },
-  [OrderStatus.InProduction]: { color: 'bg-purple-100 text-purple-700', icon: Package, label: 'in_production', progress: 50 },
-  [OrderStatus.Completed]: { color: 'bg-green-100 text-green-700', icon: Check, label: 'completed', progress: 75 },
-  [OrderStatus.InTransit]: { color: 'bg-blue-100 text-blue-700', icon: Truck, label: 'in_transit', progress: 90 },
-  [OrderStatus.Delivered]: { color: 'bg-gray-100 text-gray-700', icon: Check, label: 'delivered', progress: 100 },
-  [OrderStatus.Cancelled]: { color: 'bg-red-100 text-red-700', icon: AlertCircle, label: 'cancelled', progress: 0 },
+  pending: { color: 'bg-yellow-100 text-yellow-700', icon: Clock, label: 'pending', progress: 0 },
+  approved: { color: 'bg-teal-100 text-teal-700', icon: Check, label: 'approved', progress: 25 },
+  in_production: { color: 'bg-purple-100 text-purple-700', icon: Package, label: 'in_production', progress: 50 },
+  completed: { color: 'bg-green-100 text-green-700', icon: Check, label: 'completed', progress: 75 },
+  in_transit: { color: 'bg-blue-100 text-blue-700', icon: Truck, label: 'in_transit', progress: 90 },
+  delivered: { color: 'bg-gray-100 text-gray-700', icon: Check, label: 'delivered', progress: 100 },
+  cancelled: { color: 'bg-red-100 text-red-700', icon: AlertCircle, label: 'cancelled', progress: 0 },
 };
 
 const ITEM_STATUS_COLORS: Record<ItemStatus, { label: string; color: string; icon: React.FC }> = {
-  [ItemStatus.Pending]: { label: 'item_pending', color: 'bg-gray-50 text-gray-600', icon: Clock },
-  [ItemStatus.Assigned]: { label: 'item_assigned', color: 'bg-blue-50 text-blue-600', icon: Check },
-  [ItemStatus.InProgress]: { label: 'item_in_progress', color: 'bg-yellow-50 text-yellow-600', icon: Package },
-  [ItemStatus.Completed]: { label: 'item_completed', color: 'bg-green-50 text-green-600', icon: Check },
+  pending: { label: 'item_pending', color: 'bg-gray-50 text-gray-600', icon: Clock },
+  assigned: { label: 'item_assigned', color: 'bg-blue-50 text-blue-600', icon: Check },
+  in_progress: { label: 'item_in_progress', color: 'bg-yellow-50 text-yellow-600', icon: Package },
+  completed: { label: 'item_completed', color: 'bg-green-50 text-green-600', icon: Check },
 };
 
 const PRIORITY_COLORS: Record<Order['priority'], string> = {
@@ -51,7 +51,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
   ({ order, updateOrderStatus, openAssignModal, calculateAdjustedTotal, submitting, t, isRtl }) => {
     const { user } = useAuth();
     const [isItemsExpanded, setIsItemsExpanded] = useState(false);
-    const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS[OrderStatus.Pending];
+    const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS.pending;
     const StatusIcon = statusInfo.icon;
     const unassignedItems = order.items.filter((item) => !item.assignedTo);
 
@@ -68,57 +68,57 @@ const OrderCard: React.FC<OrderCardProps> = memo(
         role="region"
         aria-labelledby={`order-${order.id}`}
       >
-        <div className="p-3 bg-white shadow-sm rounded-md border border-gray-200 hover:shadow-md transition-shadow">
-          <div className="space-y-3">
+        <div className="p-2 bg-white shadow-sm rounded-md border border-gray-100 hover:shadow-md transition-shadow">
+          <div className="space-y-2">
             <div className={`flex items-center justify-between ${isRtl ? 'flex-row-reverse' : ''}`}>
               <div className="flex items-center gap-2">
-                <h3 id={`order-${order.id}`} className="text-sm font-semibold text-gray-800">
-                  {t('orders.order_number', { number: order.orderNumber })}
+                <h3 id={`order-${order.id}`} className="text-xs font-semibold text-gray-800 truncate">
+                  {t('orders.order_number', { number: order.orderNumber }) || `Order ${order.orderNumber}`}
                 </h3>
                 {order.priority !== 'medium' && (
-                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${PRIORITY_COLORS[order.priority]}`}>
-                    {t(`orders.priority_${order.priority}`)}
+                  <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${PRIORITY_COLORS[order.priority]}`}>
+                    {t(`orders.priority_${order.priority}`) || order.priority}
                   </span>
                 )}
               </div>
-              <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${statusInfo.color} ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <StatusIcon className="w-4 h-4" />
-                {t(`orders.status_${statusInfo.label}`)}
+              <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium flex items-center gap-1 ${statusInfo.color} ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <StatusIcon className="w-3 h-3" />
+                {t(`orders.status_${statusInfo.label}`) || statusInfo.label}
               </span>
             </div>
             {unassignedItems.length > 0 && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="p-2 bg-yellow-50 border border-yellow-100 rounded-md flex items-center gap-2 text-xs text-yellow-600"
+                className="p-1.5 bg-yellow-50 border border-yellow-100 rounded-md flex items-center gap-1.5 text-xs text-yellow-600"
                 role="alert"
               >
-                <AlertCircle className="w-4 h-4" />
-                <span>{t('orders.unassigned_items', { count: unassignedItems.length })}</span>
+                <AlertCircle className="w-3 h-3" />
+                <span className="truncate">{t('orders.unassigned_items', { count: unassignedItems.length }) || `${unassignedItems.length} unassigned items`}</span>
               </motion.div>
             )}
             <div className="grid grid-cols-3 gap-2 text-xs">
               <div>
-                <p className="text-gray-500">{t('orders.items_count')}</p>
+                <p className="text-gray-500 truncate">{t('orders.items_count') || (isRtl ? 'عدد العناصر' : 'Items Count')}</p>
                 <p className="font-medium text-gray-800">{order.items.length}</p>
               </div>
               <div>
-                <p className="text-gray-500">{t('orders.total_amount')}</p>
-                <p className="font-medium text-teal-600">{calculateAdjustedTotal(order)}</p>
+                <p className="text-gray-500 truncate">{t('orders.total_amount') || (isRtl ? 'إجمالي المبلغ' : 'Total Amount')}</p>
+                <p className="font-medium text-teal-600 truncate">{calculateAdjustedTotal(order)}</p>
               </div>
               <div>
-                <p className="text-gray-500">{t('orders.date')}</p>
-                <p className="font-medium text-gray-800">{order.date}</p>
+                <p className="text-gray-500 truncate">{t('orders.date') || (isRtl ? 'التاريخ' : 'Date')}</p>
+                <p className="font-medium text-gray-800 truncate">{order.date}</p>
               </div>
             </div>
             <button
               onClick={toggleItemsExpanded}
-              className="flex items-center justify-between w-full p-2 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors text-sm"
+              className="flex items-center justify-between w-full p-1.5 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors text-xs"
               aria-expanded={isItemsExpanded}
               aria-controls={`items-${order.id}`}
             >
-              <span className="font-medium text-gray-800">{t('orders.items')}</span>
-              {isItemsExpanded ? <ChevronUp className="w-4 h-4 text-gray-600" /> : <ChevronDown className="w-4 h-4 text-gray-600" />}
+              <span className="font-medium text-gray-800 truncate">{t('orders.items') || (isRtl ? 'العناصر' : 'Items')}</span>
+              {isItemsExpanded ? <ChevronUp className="w-3 h-3 text-gray-600" /> : <ChevronDown className="w-3 h-3 text-gray-600" />}
             </button>
             <AnimatePresence>
               {isItemsExpanded && (
@@ -130,9 +130,9 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                   transition={{ duration: 0.3 }}
                   className="overflow-hidden"
                 >
-                  <div className="space-y-2 mt-2">
+                  <div className="space-y-1.5 mt-1.5">
                     {order.items.map((item) => {
-                      const itemStatusInfo = ITEM_STATUS_COLORS[item.status] || ITEM_STATUS_COLORS[ItemStatus.Pending];
+                      const itemStatusInfo = ITEM_STATUS_COLORS[item.status] || ITEM_STATUS_COLORS.pending;
                       const ItemStatusIcon = itemStatusInfo.icon;
                       return (
                         <motion.div
@@ -140,22 +140,25 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                           initial={{ opacity: 0, x: isRtl ? 10 : -10 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ duration: 0.2 }}
-                          className="p-2 bg-gray-50 rounded-md text-xs"
+                          className="p-1.5 bg-gray-50 rounded-md text-xs"
                         >
                           <div className="flex justify-between gap-2">
                             <div>
-                              <p className="font-medium text-gray-800">{item.productName}</p>
-                              <p className="text-gray-600">{item.quantity} {t(`units.${item.unit || 'unit'}`)}</p>
-                              <p className="text-gray-600">{t(departmentLabels[item.department?.name || 'unknown'])}</p>
+                              <p className="font-medium text-gray-800 truncate">{item.productName}</p>
+                              <p className="text-gray-600 truncate">{`${item.quantity} ${t(`units.${item.unit || 'unit'}`)}`}</p>
+                              <p className="text-gray-600 truncate">{t(departmentLabels[item.department?.name || 'unknown']) || item.department?.name || 'Unknown'}</p>
                               <p className={`flex items-center gap-1 ${itemStatusInfo.color} ${isRtl ? 'flex-row-reverse' : ''}`}>
-                                <ItemStatusIcon className="w-4 h-4" />
-                                {t(`orders.${itemStatusInfo.label}`)}
+                                <ItemStatusIcon className="w-3 h-3" />
+                                {t(`orders.${itemStatusInfo.label}`) || itemStatusInfo.label}
                               </p>
                               {item.assignedTo && (
-                                <p className="text-gray-600">{t('orders.assigned_to', { name: item.assignedTo.name })}</p>
+                                <p className="text-gray-600 truncate">
+                                  {t('orders.assigned_to', { name: `${item.assignedTo.name} (${t(departmentLabels[item.department?.name || 'unknown']) || item.department?.name || 'Unknown'})` }) ||
+                                    `${item.assignedTo.name} (${t(departmentLabels[item.department?.name || 'unknown']) || item.department?.name || 'Unknown'})`}
+                                </p>
                               )}
                             </div>
-                            <p className="font-medium text-gray-800">
+                            <p className="font-medium text-gray-800 truncate">
                               {item.price.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
                             </p>
                           </div>
@@ -167,16 +170,20 @@ const OrderCard: React.FC<OrderCardProps> = memo(
               )}
             </AnimatePresence>
             {order.notes && (
-              <div className="p-2 bg-amber-50 rounded-md text-xs">
-                <p className="text-amber-800"><strong>{t('orders.notes_label')}:</strong> {order.notes}</p>
+              <div className="p-1.5 bg-amber-50 rounded-md text-xs">
+                <p className="text-amber-800 truncate">
+                  <strong>{t('orders.notes_label') || (isRtl ? 'ملاحظات' : 'Notes')}:</strong> {order.notes}
+                </p>
               </div>
             )}
             {order.returns?.length > 0 && (
-              <div className="p-2 bg-amber-50 rounded-md text-xs">
-                <p className="font-medium text-amber-800">{t('orders.returns')}</p>
+              <div className="p-1.5 bg-amber-50 rounded-md text-xs">
+                <p className="font-medium text-amber-800">{t('orders.returns') || (isRtl ? 'الإرجاعات' : 'Returns')}</p>
                 {order.returns.map((r, i) => (
-                  <p key={i} className="text-amber-700">
-                    {r.items.map((item) => `${item.quantity} ${t(`units.${item.unit || 'unit'}`)} ${item.reason}`).join(', ')} - {t(`orders.return_status_${r.status}`)}
+                  <p key={i} className="text-amber-700 truncate">
+                    {r.items
+                      .map((item) => `${item.quantity} ${t(`units.${item.unit || 'unit'}`)} ${item.reason}`)
+                      .join(', ')} - {t(`orders.return_status_${r.status}`) || r.status}
                   </p>
                 ))}
               </div>
@@ -186,58 +193,58 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                 <Button
                   variant="primary"
                   size="xs"
-                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1"
-                  aria-label={t('orders.view_order', { orderNumber: order.orderNumber })}
+                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1 text-xs"
+                  aria-label={t('orders.view_order', { orderNumber: order.orderNumber }) || `View order ${order.orderNumber}`}
                 >
-                  {t('orders.view')}
+                  {t('orders.view') || (isRtl ? 'عرض' : 'View')}
                 </Button>
               </Link>
-              {user?.role === 'production' && order.status === OrderStatus.Pending && (
+              {user?.role === 'production' && order.status === 'pending' && (
                 <>
                   <Button
                     variant="success"
                     size="xs"
-                    onClick={() => updateOrderStatus(order.id, OrderStatus.Approved)}
-                    className="bg-green-500 hover:bg-green-600 text-white rounded-md px-2 py-1"
+                    onClick={() => updateOrderStatus(order.id, 'approved')}
+                    className="bg-green-500 hover:bg-green-600 text-white rounded-md px-2 py-1 text-xs"
                     disabled={submitting === order.id}
-                    aria-label={t('orders.approve_order', { orderNumber: order.orderNumber })}
+                    aria-label={t('orders.approve_order', { orderNumber: order.orderNumber }) || `Approve order ${order.orderNumber}`}
                   >
-                    {submitting === order.id ? t('common.loading') : t('orders.approve')}
+                    {submitting === order.id ? t('common.loading') || (isRtl ? 'جارٍ التحميل' : 'Loading') : t('orders.approve') || (isRtl ? 'موافقة' : 'Approve')}
                   </Button>
                   <Button
                     variant="danger"
                     size="xs"
-                    onClick={() => updateOrderStatus(order.id, OrderStatus.Cancelled)}
-                    className="bg-red-500 hover:bg-red-600 text-white rounded-md px-2 py-1"
+                    onClick={() => updateOrderStatus(order.id, 'cancelled')}
+                    className="bg-red-500 hover:bg-red-600 text-white rounded-md px-2 py-1 text-xs"
                     disabled={submitting === order.id}
-                    aria-label={t('orders.cancel_order', { orderNumber: order.orderNumber })}
+                    aria-label={t('orders.cancel_order', { orderNumber: order.orderNumber }) || `Cancel order ${order.orderNumber}`}
                   >
-                    {submitting === order.id ? t('common.loading') : t('orders.cancel')}
+                    {submitting === order.id ? t('common.loading') || (isRtl ? 'جارٍ التحميل' : 'Loading') : t('orders.cancel') || (isRtl ? 'إلغاء' : 'Cancel')}
                   </Button>
                 </>
               )}
-              {user?.role === 'production' && order.status === OrderStatus.Approved && unassignedItems.length > 0 && (
+              {user?.role === 'production' && order.status === 'approved' && unassignedItems.length > 0 && (
                 <Button
                   variant="primary"
                   size="xs"
                   onClick={() => openAssignModal(order)}
-                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1"
+                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1 text-xs"
                   disabled={submitting === order.id}
-                  aria-label={t('orders.assign_order', { orderNumber: order.orderNumber })}
+                  aria-label={t('orders.assign_order', { orderNumber: order.orderNumber }) || `Assign order ${order.orderNumber}`}
                 >
-                  {submitting === order.id ? t('common.loading') : t('orders.assign')}
+                  {submitting === order.id ? t('common.loading') || (isRtl ? 'جارٍ التحميل' : 'Loading') : t('orders.assign') || (isRtl ? 'تعيين' : 'Assign')}
                 </Button>
               )}
-              {user?.role === 'production' && order.status === OrderStatus.Completed && (
+              {user?.role === 'production' && order.status === 'completed' && (
                 <Button
                   variant="primary"
                   size="xs"
-                  onClick={() => updateOrderStatus(order.id, OrderStatus.InTransit)}
-                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1"
+                  onClick={() => updateOrderStatus(order.id, 'in_transit')}
+                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1 text-xs"
                   disabled={submitting === order.id}
-                  aria-label={t('orders.ship_order', { orderNumber: order.orderNumber })}
+                  aria-label={t('orders.ship_order', { orderNumber: order.orderNumber }) || `Ship order ${order.orderNumber}`}
                 >
-                  {submitting === order.id ? t('common.loading') : t('orders.ship')}
+                  {submitting === order.id ? t('common.loading') || (isRtl ? 'جارٍ التحميل' : 'Loading') : t('orders.ship') || (isRtl ? 'شحن' : 'Ship')}
                 </Button>
               )}
             </div>
