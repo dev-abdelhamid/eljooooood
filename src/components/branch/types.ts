@@ -1,0 +1,137 @@
+// types.ts
+export enum ItemStatus {
+  Pending = 'pending',
+  Assigned = 'assigned',
+  InProgress = 'in_progress',
+  Completed = 'completed',
+  Cancelled = 'cancelled',
+}
+
+export enum OrderStatus {
+  Pending = 'pending',
+  Approved = 'approved',
+  InProduction = 'in_production',
+  Completed = 'completed',
+  InTransit = 'in_transit',
+  Delivered = 'delivered',
+  Cancelled = 'cancelled',
+}
+
+export interface Department {
+  _id: string;
+  name: string;
+}
+
+export interface OrderItem {
+  itemId: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  price: number;
+  department: Department;
+  status: ItemStatus;
+  unit: string;
+  returnedQuantity?: number;
+  returnReason?: string;
+  assignedTo?: { _id: string; username: string };
+}
+
+export interface User {
+  id: string;
+  
+  username: string;
+  role: 'admin' | 'branch' | 'chef' | 'production';
+  name: string;
+  branch?: string;
+  department?: string;
+}
+
+export interface ReturnItem {
+  productId: string;
+  quantity: number;
+  reason: string;
+  status: string;
+  reviewNotes?: string;
+}
+
+export interface OrderReturn {
+  returnId: string;
+  items: ReturnItem[];
+  status: string;
+  reviewNotes?: string;
+  createdAt: string;
+}
+
+export interface StatusHistory {
+  status: string;
+  changedBy: string;
+  changedAt: string;
+  notes?: string;
+}
+
+export interface Order {
+  id: string;
+  orderNumber: string;
+  branchId: string;
+  branchName: string;
+  branch: { _id: string; name: string };
+  items: OrderItem[];
+  returns: OrderReturn[];
+  status: OrderStatus;
+  totalAmount: number;
+  date: string;
+  notes?: string;
+  priority: 'urgent' | 'high' | 'medium' | 'low';
+  createdBy: string;
+  statusHistory: StatusHistory[];
+}
+
+export interface ReturnForm {
+  itemId: string;
+  quantity: number;
+  reason: string;
+  notes: string;
+}
+
+export interface State {
+  orders: Order[];
+  selectedOrder: Order | null;
+  isViewModalOpen: boolean;
+  isConfirmDeliveryModalOpen: boolean;
+  isReturnModalOpen: boolean;
+  returnFormData: ReturnForm;
+  searchQuery: string;
+  filterStatus: string;
+  sortBy: 'date' | 'totalAmount';
+  sortOrder: 'asc' | 'desc';
+  currentPage: number;
+  loading: boolean;
+  error: string;
+  submitting: string | null;
+  socketConnected: boolean;
+  socketError: string | null;
+  viewMode: 'card' | 'table';
+}
+
+export type Action =
+  | { type: 'SET_ORDERS'; payload: Order[] }
+  | { type: 'ADD_ORDER'; payload: Order }
+  | { type: 'SET_SELECTED_ORDER'; payload: Order | null }
+  | { type: 'SET_MODAL'; modal: 'view' | 'confirmDelivery' | 'return'; isOpen: boolean }
+  | { type: 'SET_RETURN_FORM'; payload: ReturnForm }
+  | { type: 'SET_SEARCH_QUERY'; payload: string }
+  | { type: 'SET_FILTER_STATUS'; payload: string }
+  | { type: 'SET_SORT'; by: 'date' | 'totalAmount'; order: 'asc' | 'desc' }
+  | { type: 'SET_PAGE'; payload: number }
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_ERROR'; payload: string }
+  | { type: 'SET_SUBMITTING'; payload: string | null }
+  | { type: 'SET_SOCKET_CONNECTED'; payload: boolean }
+  | { type: 'SET_SOCKET_ERROR'; payload: string | null }
+  | { type: 'UPDATE_ORDER_STATUS'; orderId: string; status: OrderStatus }
+  | { type: 'UPDATE_ITEM_STATUS'; payload: { orderId: string; itemId: string; status: ItemStatus } }
+  | { type: 'ADD_RETURN'; orderId: string; returnData: OrderReturn }
+  | { type: 'UPDATE_RETURN_STATUS'; orderId: string; returnId: string; status: string }
+  | { type: 'TASK_ASSIGNED'; orderId: string; items: { _id: string; assignedTo: { _id: string; username: string } }[] }
+  | { type: 'MISSING_ASSIGNMENTS'; orderId: string; itemId: string; productName: string }
+  | { type: 'SET_VIEW_MODE'; payload: 'card' | 'table' };
