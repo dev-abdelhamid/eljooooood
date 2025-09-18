@@ -19,7 +19,7 @@ interface AssignChefsModalProps {
   selectedOrder: Order | null;
   assignFormData: AssignChefsForm;
   chefs: Chef[];
-  error: string;
+  error: string | null;
   submitting: string | null;
   assignChefs: (orderId: string, formData: AssignChefsForm) => void;
   setAssignForm: (formData: AssignChefsForm) => void;
@@ -44,9 +44,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     const map = new Map<string, Chef[]>();
     chefs.forEach((chef) => {
       if (chef.department?._id) {
-        if (!map.has(chef.department._id)) {
-          map.set(chef.department._id, []);
-        }
+        if (!map.has(chef.department._id)) map.set(chef.department._id, []);
         map.get(chef.department._id)!.push(chef);
       }
     });
@@ -67,9 +65,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      if (selectedOrder?.id) {
-        assignChefs(selectedOrder.id, assignFormData);
-      }
+      if (selectedOrder?.id) assignChefs(selectedOrder.id, assignFormData);
     },
     [selectedOrder, assignChefs, assignFormData]
   );
@@ -79,11 +75,11 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
       isOpen={isOpen}
       onClose={onClose}
       title={t('orders.assign_chefs_title', { orderNumber: selectedOrder?.orderNumber || '' })}
-      size="md"
-      className="bg-white rounded-lg shadow-xl"
+      size="sm"
+      className="bg-white rounded-lg shadow-xl max-w-md mx-auto"
       ariaLabel={t('orders.assign_chefs')}
     >
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-4">
         {assignFormData.items.map((item, index) => {
           const orderItem = selectedOrder?.items.find((i) => i._id === item.itemId);
           const departmentId = orderItem?.department?._id || '';
@@ -93,14 +89,15 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
           const availableChefs = availableChefsByDepartment.get(departmentId) || [];
           return (
             <motion.div
-              key={index}
+              key={item.itemId}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2, delay: index * 0.1 }}
+              className="space-y-1"
             >
               <label
-                className="block text-sm font-medium text-gray-900 mb-1"
-                htmlFor={`chef-select-${index}`}
+                className="block text-xs font-medium text-gray-700"
+                htmlFor={`chef-select-${item.itemId}`}
               >
                 {t('orders.assign_chef_to', {
                   product: orderItem?.productName || t('common.unknown'),
@@ -109,7 +106,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                 })}
               </label>
               <Select
-                id={`chef-select-${index}`}
+                id={`chef-select-${item.itemId}`}
                 options={[
                   { value: '', label: t('orders.select_chef') },
                   ...availableChefs.map((chef) => ({
@@ -119,7 +116,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                 ]}
                 value={item.assignedTo}
                 onChange={(value) => updateAssignment(index, value)}
-                className="w-full rounded-lg border-gray-300 focus:ring-blue-500"
+                className="w-full rounded-md border-gray-200 text-sm focus:ring-amber-500"
                 aria-label={t('orders.select_chef')}
               />
             </motion.div>
@@ -129,18 +126,18 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className={`p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}
+            className={`flex items-center gap-2 p-2 bg-red-50 border border-red-200 rounded-md text-sm text-red-600 ${isRtl ? 'flex-row-reverse' : ''}`}
             role="alert"
           >
-            <AlertCircle className="w-5 h-5 text-red-600" />
-            <span className="text-red-600">{error}</span>
+            <AlertCircle className="w-4 h-4" />
+            <span>{error}</span>
           </motion.div>
         )}
-        <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex gap-2 ${isRtl ? 'justify-end flex-row-reverse' : 'justify-end'}`}>
           <Button
             variant="secondary"
             onClick={onClose}
-            className="bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-full px-4 py-2 text-sm"
+            className="rounded-md px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700"
             aria-label={t('common.cancel')}
           >
             {t('common.cancel')}
@@ -149,7 +146,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
             type="submit"
             variant="primary"
             disabled={submitting !== null || !assignFormData.items.some((item) => item.assignedTo)}
-            className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 py-2 text-sm disabled:opacity-50"
+            className="rounded-md px-3 py-1.5 text-xs bg-amber-500 hover:bg-amber-600 text-white disabled:opacity-50"
             aria-label={t('orders.assign_chefs')}
           >
             {submitting ? t('common.loading') : t('orders.assign_chefs')}

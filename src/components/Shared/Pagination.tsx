@@ -12,15 +12,11 @@ interface PaginationProps {
 
 const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, t, isRtl, handlePageChange }) => {
   const handlePrevious = useCallback(() => {
-    if (currentPage > 1) {
-      handlePageChange(currentPage - 1);
-    }
+    if (currentPage > 1) handlePageChange(currentPage - 1);
   }, [currentPage, handlePageChange]);
 
   const handleNext = useCallback(() => {
-    if (currentPage < totalPages) {
-      handlePageChange(currentPage + 1);
-    }
+    if (currentPage < totalPages) handlePageChange(currentPage + 1);
   }, [currentPage, totalPages, handlePageChange]);
 
   if (totalPages <= 1) return null;
@@ -30,29 +26,29 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, t, isR
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
-      className={`flex justify-center items-center gap-3 mt-6 ${isRtl ? 'flex-row-reverse' : ''}`}
+      className={`flex justify-center items-center gap-2 mt-4 ${isRtl ? 'flex-row-reverse' : ''}`}
       role="navigation"
       aria-label={t('pagination.navigation')}
     >
       <Button
         variant="secondary"
-        size="sm"
+        size="xs"
         onClick={handlePrevious}
         disabled={currentPage === 1}
-        className="disabled:opacity-50 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm shadow-sm"
+        className="bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md px-2 py-1 text-xs disabled:opacity-50"
         aria-label={t('pagination.previous')}
       >
         {t('pagination.previous')}
       </Button>
-      <span className="text-gray-700 text-sm font-semibold">
+      <span className="text-xs font-semibold text-gray-700">
         {t('pagination.page', { current: currentPage, total: totalPages })}
       </span>
       <Button
         variant="secondary"
-        size="sm"
+        size="xs"
         onClick={handleNext}
         disabled={currentPage === totalPages}
-        className="disabled:opacity-50 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm shadow-sm"
+        className="bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md px-2 py-1 text-xs disabled:opacity-50"
         aria-label={t('pagination.next')}
       >
         {t('pagination.next')}
