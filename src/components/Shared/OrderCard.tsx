@@ -34,7 +34,6 @@ interface OrderCardProps {
   order: Order;
   updateOrderStatus: (orderId: string, newStatus: OrderStatus) => void;
   openAssignModal: (order: Order) => void;
-  openReturnModal: (order: Order, itemId: string) => void;
   calculateAdjustedTotal: (order: Order) => string;
   calculateTotalQuantity: (order: Order) => number;
   submitting: string | null;
@@ -43,7 +42,7 @@ interface OrderCardProps {
 }
 
 const OrderCard: React.FC<OrderCardProps> = memo(
-  ({ order, updateOrderStatus, openAssignModal, openReturnModal, calculateAdjustedTotal, calculateTotalQuantity, submitting, t, isRtl }) => {
+  ({ order, updateOrderStatus, openAssignModal, calculateAdjustedTotal, calculateTotalQuantity, submitting, t, isRtl }) => {
     const { user } = useAuth();
     const [isItemsExpanded, setIsItemsExpanded] = useState(false);
     const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS.pending;
@@ -232,7 +231,6 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                           pending_approval: 'قيد الموافقة',
                           approved: 'تم الموافقة',
                           rejected: 'مرفوض',
-                          processed: 'تمت المعالجة',
                         }[r.status]
                       : r.status)}
                   </p>
@@ -296,18 +294,6 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                   aria-label={t('orders.ship_order', { orderNumber: order.orderNumber }) || (isRtl ? `شحن الطلب ${order.orderNumber}` : `Ship order ${order.orderNumber}`)}
                 >
                   {submitting === order.id ? (t('common.loading') || (isRtl ? 'جارٍ التحميل' : 'Loading')) : t('orders.ship') || (isRtl ? 'شحن' : 'Ship')}
-                </Button>
-              )}
-              {order.status === 'delivered' && user?.role === 'branch' && order.branch._id === user.branchId && (
-                <Button
-                  variant="secondary"
-                  size="xs"
-                  onClick={() => openReturnModal(order, order.items[0]?._id || '')}
-                  className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-2 py-1 text-xs"
-                  disabled={submitting === order.id || !order.items.length}
-                  aria-label={t('orders.request_return', { orderNumber: order.orderNumber }) || (isRtl ? `طلب إرجاع للطلب ${order.orderNumber}` : `Request return for order ${order.orderNumber}`)}
-                >
-                  {t('orders.request_return') || (isRtl ? 'طلب إرجاع' : 'Request Return')}
                 </Button>
               )}
             </div>

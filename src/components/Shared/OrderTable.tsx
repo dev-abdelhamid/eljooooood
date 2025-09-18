@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Button } from '../UI/Button';
 import { Order, OrderStatus } from '../../types';
-import { Truck, ChefHat, AlertCircle } from 'lucide-react';
+import { ChefHat } from 'lucide-react';
 
 const STATUS_COLORS: Record<OrderStatus, { color: string; label: string }> = {
   pending: { color: 'bg-yellow-100 text-yellow-800', label: 'pending' },
@@ -29,15 +29,14 @@ interface OrderTableProps {
   calculateAdjustedTotal: (order: Order) => string;
   calculateTotalQuantity: (order: Order) => number;
   startIndex: number;
-  openConfirmDeliveryModal: (order: Order) => void;
-  openApproveReturnModal: (order: Order, returnId: string) => void;
-  openReturnModal: (order: Order, itemId: string) => void;
+  updateOrderStatus: (orderId: string, newStatus: OrderStatus) => void;
+  openAssignModal: (order: Order) => void;
   user: any;
   submitting: string | null;
 }
 
 const OrderTable: React.FC<OrderTableProps> = memo(
-  ({ orders, t, isRtl, calculateAdjustedTotal, calculateTotalQuantity, startIndex, openConfirmDeliveryModal, openApproveReturnModal, openReturnModal, user, submitting }) => {
+  ({ orders, t, isRtl, calculateAdjustedTotal, calculateTotalQuantity, startIndex, updateOrderStatus, openAssignModal, user, submitting }) => {
     const getFirstTwoWords = useCallback((name: string | undefined | null): string => {
       if (!name) return isRtl ? 'غير معروف' : 'Unknown';
       const words = name.trim().split(' ');
@@ -74,7 +73,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                   className={`hover:bg-gray-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}
                 >
                   <td className="px-3 py-2 text-xs text-gray-800">{order.orderNumber}</td>
-                  <td className="px-3 py-2 text-xs text-gray-800">{order.branch.name}</td>
+                  <td className="px-3 py-2 text-xs text-gray-800">{order.branchName}</td>
                   <td className="px-3 py-2">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
                       {t(`orders.status_${statusInfo.label}`) || (isRtl
@@ -117,7 +116,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                           {t('common.view') || (isRtl ? 'عرض' : 'View')}
                         </Button>
                       </Link>
-                      {user?.role === 'admin' && ['pending', 'approved', 'in_production', 'completed'].includes(order.status) && (
+                      {user?.role === 'production' && ['pending', 'approved', 'in_production', 'completed'].includes(order.status) && (
                         <Button
                           variant="primary"
                           size="xs"
@@ -130,55 +129,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                           {t('orders.assign') || (isRtl ? 'تعيين' : 'Assign')}
                         </Button>
                       )}
-                      {order.status === 'in_transit' && user?.role === 'branch' && order.branch._id === user.branchId && (
-                        <Button
-                          variant="success"
-                          size="xs"
-                          onClick={() => openConfirmDeliveryModal(order)}
-                          className="bg-green-500 hover:bg-green-600 text-white rounded-md px-2 py-1 text-xs"
-                          disabled={submitting === order.id}
-                          aria-label={t('orders.confirm_delivery', { orderNumber: order.orderNumber }) || (isRtl ? `تأكيد تسليم الطلب ${order.orderNumber}` : `Confirm delivery of order ${order.orderNumber}`)}
-                        >
-                          <Truck className="w-3 h-3 mr-1" />
-                          {t('orders.confirm_delivery') || (isRtl ? 'تأكيد التسليم' : 'Confirm Delivery')}
-                        </Button>
-                      )}
-                      {order.status === 'delivered' && user?.role === 'branch' && order.branch._id === user.branchId && (
-                        <Button
-                          variant="secondary"
-                          size="xs"
-                          onClick={() => openReturnModal(order, order.items[0]?._id || '')}
-                          className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-2 py-1 text-xs"
-                          disabled={submitting === order.id || !order.items.length}
-                          aria-label={t('orders.request_return', { orderNumber: order.orderNumber }) || (isRtl ? `طلب إرجاع للطلب ${order.orderNumber}` : `Request return for order ${order.orderNumber}`)}
-                        >
-                          {t('orders.request_return') || (isRtl ? 'طلب إرجاع' : 'Request Return')}
-                        </Button>
-                      )}
-                      {order.returns?.length > 0 && user?.role === 'admin' && (
-                        order.returns.map((ret) => (
-                          ret.status === 'pending_approval' && (
-                            <Button
-                              key={ret.returnId}
-                              variant="secondary"
-                              size="xs"
-                              onClick={() => openApproveReturnModal(order, ret.returnId)}
-                              className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-2 py-1 text-xs"
-                              disabled={submitting === order.id}
-                              aria-label={t('orders.approve_return', { returnId: ret.returnId }) || (isRtl ? `الموافقة على إرجاع ${ret.returnId}` : `Approve return ${ret.returnId}`)}
-                            >
-                              {t('orders.approve_return') || (isRtl ? 'الموافقة على الإرجاع' : 'Approve Return')}
-                            </Button>
-                          )
-                        ))
-                      )}
                     </div>
-                    {unassignedItems.length > 0 && (
-                      <div className={`flex items-center gap-1 mt-1 text-xs text-yellow-600 ${isRtl ? 'justify-end' : ''}`}>
-                        <AlertCircle className="w-3 h-3" />
-                        <span>{t('orders.unassigned_items', { count: unassignedItems.length }) || (isRtl ? `${unassignedItems.length} عناصر غير معينة` : `${unassignedItems.length} unassigned items`)}</span>
-                      </div>
-                    )}
                   </td>
                 </tr>
               );
