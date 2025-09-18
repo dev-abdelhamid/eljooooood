@@ -5,11 +5,12 @@ import { motion } from 'framer-motion';
 interface PaginationProps {
   currentPage: number;
   totalPages: number;
+  t: (key: string, params?: any) => string;
   isRtl: boolean;
   handlePageChange: (page: number) => void;
 }
 
-const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, isRtl, handlePageChange }) => {
+const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, t, isRtl, handlePageChange }) => {
   const handlePrevious = useCallback(() => {
     if (currentPage > 1) handlePageChange(currentPage - 1);
   }, [currentPage, handlePageChange]);
@@ -27,7 +28,7 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, isRtl,
       transition={{ duration: 0.3 }}
       className={`flex justify-center items-center gap-2 mt-4 ${isRtl ? 'flex-row-reverse' : ''}`}
       role="navigation"
-      aria-label={isRtl ? 'التنقل بين الصفحات' : 'Pagination navigation'}
+      aria-label={t('pagination.navigation') || (isRtl ? 'التنقل بين الصفحات' : 'Pagination navigation')}
     >
       <Button
         variant="secondary"
@@ -35,12 +36,12 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, isRtl,
         onClick={handlePrevious}
         disabled={currentPage === 1}
         className="bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md px-2 py-1 text-xs disabled:opacity-50"
-        aria-label={isRtl ? 'السابق' : 'Previous'}
+        aria-label={t('pagination.previous') || (isRtl ? 'السابق' : 'Previous')}
       >
-        {isRtl ? 'السابق' : 'Previous'}
+        {t('pagination.previous') || (isRtl ? 'السابق' : 'Previous')}
       </Button>
       <span className="text-xs font-semibold text-gray-700 truncate">
-        {isRtl ? `الصفحة ${currentPage} من ${totalPages}` : `Page ${currentPage} of ${totalPages}`}
+        {t('pagination.page', { current: currentPage, total: totalPages }) || (isRtl ? `الصفحة ${currentPage} من ${totalPages}` : `Page ${currentPage} of ${totalPages}`)}
       </span>
       <Button
         variant="secondary"
@@ -48,9 +49,9 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, isRtl,
         onClick={handleNext}
         disabled={currentPage === totalPages}
         className="bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-md px-2 py-1 text-xs disabled:opacity-50"
-        aria-label={isRtl ? 'التالي' : 'Next'}
+        aria-label={t('pagination.next') || (isRtl ? 'التالي' : 'Next')}
       >
-        {isRtl ? 'التالي' : 'Next'}
+        {t('pagination.next') || (isRtl ? 'التالي' : 'Next')}
       </Button>
     </motion.div>
   );
