@@ -1,4 +1,3 @@
-
 import React, { useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Modal } from '../UI/Modal';
