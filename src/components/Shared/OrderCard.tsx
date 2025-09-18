@@ -1,20 +1,19 @@
-import React, { useState, memo, useCallback } from 'react';
-import { useLanguage } from '../../contexts/LanguageContext';
-import { useAuth } from '../../contexts/AuthContext';
-import { Order, OrderStatus, ItemStatus } from '../../types/types';
-import { Button } from '../UI/Button';
+import React, { useState, useCallback, memo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Button } from '../UI/Button';
+import { useAuth } from '../../contexts/AuthContext';
+import { Order, OrderStatus, ItemStatus } from '../../types/types';
 import { Clock, Check, Package, Truck, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 
 const STATUS_COLORS: Record<OrderStatus, { color: string; icon: React.FC; label: string; progress: number }> = {
-  [OrderStatus.Pending]: { color: 'bg-yellow-100 text-yellow-800', icon: Clock, label: 'pending', progress: 0 },
-  [OrderStatus.Approved]: { color: 'bg-teal-100 text-teal-800', icon: Check, label: 'approved', progress: 25 },
-  [OrderStatus.InProduction]: { color: 'bg-purple-100 text-purple-800', icon: Package, label: 'in_production', progress: 50 },
-  [OrderStatus.Completed]: { color: 'bg-green-100 text-green-800', icon: Check, label: 'completed', progress: 75 },
-  [OrderStatus.InTransit]: { color: 'bg-blue-100 text-blue-800', icon: Truck, label: 'in_transit', progress: 90 },
-  [OrderStatus.Delivered]: { color: 'bg-gray-100 text-gray-800', icon: Check, label: 'delivered', progress: 100 },
-  [OrderStatus.Cancelled]: { color: 'bg-red-100 text-red-800', icon: AlertCircle, label: 'cancelled', progress: 0 },
+  [OrderStatus.Pending]: { color: 'bg-yellow-100 text-yellow-700', icon: Clock, label: 'pending', progress: 0 },
+  [OrderStatus.Approved]: { color: 'bg-teal-100 text-teal-700', icon: Check, label: 'approved', progress: 25 },
+  [OrderStatus.InProduction]: { color: 'bg-purple-100 text-purple-700', icon: Package, label: 'in_production', progress: 50 },
+  [OrderStatus.Completed]: { color: 'bg-green-100 text-green-700', icon: Check, label: 'completed', progress: 75 },
+  [OrderStatus.InTransit]: { color: 'bg-blue-100 text-blue-700', icon: Truck, label: 'in_transit', progress: 90 },
+  [OrderStatus.Delivered]: { color: 'bg-gray-100 text-gray-700', icon: Check, label: 'delivered', progress: 100 },
+  [OrderStatus.Cancelled]: { color: 'bg-red-100 text-red-700', icon: AlertCircle, label: 'cancelled', progress: 0 },
 };
 
 const ITEM_STATUS_COLORS: Record<ItemStatus, { label: string; color: string; icon: React.FC }> = {
@@ -25,10 +24,10 @@ const ITEM_STATUS_COLORS: Record<ItemStatus, { label: string; color: string; ico
 };
 
 const PRIORITY_COLORS: Record<Order['priority'], string> = {
-  low: 'bg-gray-100 text-gray-700',
-  medium: 'bg-blue-100 text-blue-700',
-  high: 'bg-orange-100 text-orange-700',
-  urgent: 'bg-red-100 text-red-700',
+  low: 'bg-gray-100 text-gray-600',
+  medium: 'bg-blue-100 text-blue-600',
+  high: 'bg-orange-100 text-orange-600',
+  urgent: 'bg-red-100 text-red-600',
 };
 
 const departmentLabels: Record<string, string> = {
@@ -62,182 +61,132 @@ const OrderCard: React.FC<OrderCardProps> = memo(
 
     return (
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="mb-4"
+        className="mb-3"
         role="region"
         aria-labelledby={`order-${order.id}`}
       >
-        <div className="p-4 sm:p-5 bg-white shadow-md rounded-lg border border-gray-200 hover:shadow-lg transition-shadow duration-300">
-          <div className="flex flex-col gap-4">
+        <div className="p-3 bg-white shadow-sm rounded-md border border-gray-200 hover:shadow-md transition-shadow">
+          <div className="space-y-3">
             <div className={`flex items-center justify-between ${isRtl ? 'flex-row-reverse' : ''}`}>
               <div className="flex items-center gap-2">
-                <h3 id={`order-${order.id}`} className="text-lg font-semibold text-gray-800">
+                <h3 id={`order-${order.id}`} className="text-sm font-semibold text-gray-800">
                   {t('orders.order_number', { number: order.orderNumber })}
                 </h3>
                 {order.priority !== 'medium' && (
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${PRIORITY_COLORS[order.priority]} ${
-                      isRtl ? 'ml-2' : 'mr-2'
-                    }`}
-                  >
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${PRIORITY_COLORS[order.priority]}`}>
                     {t(`orders.priority_${order.priority}`)}
                   </span>
                 )}
               </div>
-              <span
-                className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${statusInfo.color} ${
-                  isRtl ? 'flex-row-reverse' : ''
-                }`}
-              >
+              <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${statusInfo.color} ${isRtl ? 'flex-row-reverse' : ''}`}>
                 <StatusIcon className="w-4 h-4" />
                 {t(`orders.status_${statusInfo.label}`)}
               </span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2.5">
-              <div
-                className="bg-amber-600 h-2.5 rounded-full transition-all duration-500"
-                style={{ width: `${statusInfo.progress}%` }}
-              />
             </div>
             {unassignedItems.length > 0 && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="p-2 bg-yellow-50 border border-yellow-100 rounded-lg flex items-center gap-2"
+                className="p-2 bg-yellow-50 border border-yellow-100 rounded-md flex items-center gap-2 text-xs text-yellow-600"
                 role="alert"
               >
-                <AlertCircle className="w-4 h-4 text-yellow-600" />
-                <span className="text-sm text-yellow-600">
-                  {t('orders.unassigned_items', { count: unassignedItems.length })}
-                </span>
+                <AlertCircle className="w-4 h-4" />
+                <span>{t('orders.unassigned_items', { count: unassignedItems.length })}</span>
               </motion.div>
             )}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2 text-xs">
               <div>
-                <p className="text-xs text-gray-500">{t('orders.items_count')}</p>
-                <p className="text-sm font-medium text-gray-800">
-                  {t('orders.items_count_value', { count: order.items.length })}
-                </p>
+                <p className="text-gray-500">{t('orders.items_count')}</p>
+                <p className="font-medium text-gray-800">{order.items.length}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-500">{t('orders.total_amount')}</p>
-                <p className="text-sm font-semibold text-teal-600">{calculateAdjustedTotal(order)}</p>
+                <p className="text-gray-500">{t('orders.total_amount')}</p>
+                <p className="font-medium text-teal-600">{calculateAdjustedTotal(order)}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-500">{t('orders.date')}</p>
-                <p className="text-sm font-medium text-gray-800">{order.date}</p>
+                <p className="text-gray-500">{t('orders.date')}</p>
+                <p className="font-medium text-gray-800">{order.date}</p>
               </div>
             </div>
-            <div>
-              <button
-                onClick={toggleItemsExpanded}
-                className="flex items-center justify-between w-full p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors duration-200"
-                aria-expanded={isItemsExpanded}
-                aria-controls={`items-${order.id}`}
-              >
-                <h4 className="font-semibold text-gray-900">{t('orders.items')}</h4>
-                {isItemsExpanded ? (
-                  <ChevronUp className="w-5 h-5 text-gray-600" />
-                ) : (
-                  <ChevronDown className="w-5 h-5 text-gray-600" />
-                )}
-              </button>
-              <AnimatePresence>
-                {isItemsExpanded && (
-                  <motion.div
-                    id={`items-${order.id}`}
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="space-y-3 mt-3">
-                      {order.items.map((item) => {
-                        const itemStatusInfo = ITEM_STATUS_COLORS[item.status] || ITEM_STATUS_COLORS[ItemStatus.Pending];
-                        const ItemStatusIcon = itemStatusInfo.icon;
-                        return (
-                          <motion.div
-                            key={item._id}
-                            initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-gray-50 rounded-lg gap-3"
-                          >
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <p className="font-medium text-gray-900">{item.productName}</p>
-                                <span className="text-xs text-gray-600">
-                                  ({item.quantity} {t(`units.${item.unit || 'unit'}`)})
-                                </span>
-                              </div>
-                              <p className="text-xs text-gray-600 mt-1">
-                                {t('orders.department', {
-                                  name: t(departmentLabels[item.department?.name || 'unknown']),
-                                })}
-                              </p>
-                              <p
-                                className={`text-xs ${itemStatusInfo.color} flex items-center gap-1 ${
-                                  isRtl ? 'flex-row-reverse' : ''
-                                }`}
-                              >
+            <button
+              onClick={toggleItemsExpanded}
+              className="flex items-center justify-between w-full p-2 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors text-sm"
+              aria-expanded={isItemsExpanded}
+              aria-controls={`items-${order.id}`}
+            >
+              <span className="font-medium text-gray-800">{t('orders.items')}</span>
+              {isItemsExpanded ? <ChevronUp className="w-4 h-4 text-gray-600" /> : <ChevronDown className="w-4 h-4 text-gray-600" />}
+            </button>
+            <AnimatePresence>
+              {isItemsExpanded && (
+                <motion.div
+                  id={`items-${order.id}`}
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="overflow-hidden"
+                >
+                  <div className="space-y-2 mt-2">
+                    {order.items.map((item) => {
+                      const itemStatusInfo = ITEM_STATUS_COLORS[item.status] || ITEM_STATUS_COLORS[ItemStatus.Pending];
+                      const ItemStatusIcon = itemStatusInfo.icon;
+                      return (
+                        <motion.div
+                          key={item._id}
+                          initial={{ opacity: 0, x: isRtl ? 10 : -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="p-2 bg-gray-50 rounded-md text-xs"
+                        >
+                          <div className="flex justify-between gap-2">
+                            <div>
+                              <p className="font-medium text-gray-800">{item.productName}</p>
+                              <p className="text-gray-600">{item.quantity} {t(`units.${item.unit || 'unit'}`)}</p>
+                              <p className="text-gray-600">{t(departmentLabels[item.department?.name || 'unknown'])}</p>
+                              <p className={`flex items-center gap-1 ${itemStatusInfo.color} ${isRtl ? 'flex-row-reverse' : ''}`}>
                                 <ItemStatusIcon className="w-4 h-4" />
                                 {t(`orders.${itemStatusInfo.label}`)}
                               </p>
                               {item.assignedTo && (
-                                <p className="text-xs text-gray-600 mt-1">
-                                  {t('orders.assigned_to', { name: item.assignedTo.name || t('common.unknown') })}
-                                </p>
+                                <p className="text-gray-600">{t('orders.assigned_to', { name: item.assignedTo.name })}</p>
                               )}
                             </div>
-                            <div className={isRtl ? 'text-right' : 'text-left'}>
-                              <p className="text-sm font-medium text-gray-900">
-                                {item.price.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
-                                  style: 'currency',
-                                  currency: 'SAR',
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 2,
-                                })}
-                              </p>
-                            </div>
-                          </motion.div>
-                        );
-                      })}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+                            <p className="font-medium text-gray-800">
+                              {item.price.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
+                            </p>
+                          </div>
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
             {order.notes && (
-              <div className="mt-2 p-2 bg-amber-50 rounded-md">
-                <p className="text-xs text-amber-800">
-                  <strong>{t('orders.notes_label')}:</strong> {order.notes}
-                </p>
+              <div className="p-2 bg-amber-50 rounded-md text-xs">
+                <p className="text-amber-800"><strong>{t('orders.notes_label')}:</strong> {order.notes}</p>
               </div>
             )}
             {order.returns?.length > 0 && (
-              <div className="mt-2 p-2 bg-amber-50 rounded-md">
-                <p className="text-xs font-medium text-amber-800">{t('orders.returns')}</p>
+              <div className="p-2 bg-amber-50 rounded-md text-xs">
+                <p className="font-medium text-amber-800">{t('orders.returns')}</p>
                 {order.returns.map((r, i) => (
-                  <p key={i} className="text-xs text-amber-700">
-                    {t('orders.return_details', {
-                      items: r.items
-                        .map((item) => `${item.quantity} ${t(`units.${item.unit || 'unit'}`)} ${item.reason}`)
-                        .join(', '),
-                      status: t(`orders.return_status_${r.status}`),
-                    })}
+                  <p key={i} className="text-amber-700">
+                    {r.items.map((item) => `${item.quantity} ${t(`units.${item.unit || 'unit'}`)} ${item.reason}`).join(', ')} - {t(`orders.return_status_${r.status}`)}
                   </p>
                 ))}
               </div>
             )}
-            <div className={`flex flex-wrap gap-2 ${isRtl ? 'justify-end' : 'justify-start'}`}>
+            <div className={`flex gap-1 flex-wrap ${isRtl ? 'justify-end' : 'justify-start'}`}>
               <Link to={`/orders/${order.id}`}>
                 <Button
                   variant="primary"
-                  size="sm"
-                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-3 py-1 text-xs"
+                  size="xs"
+                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1"
                   aria-label={t('orders.view_order', { orderNumber: order.orderNumber })}
                 >
                   {t('orders.view')}
@@ -247,9 +196,9 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                 <>
                   <Button
                     variant="success"
-                    size="sm"
+                    size="xs"
                     onClick={() => updateOrderStatus(order.id, OrderStatus.Approved)}
-                    className="bg-green-500 hover:bg-green-600 text-white rounded-full px-3 py-1 text-xs"
+                    className="bg-green-500 hover:bg-green-600 text-white rounded-md px-2 py-1"
                     disabled={submitting === order.id}
                     aria-label={t('orders.approve_order', { orderNumber: order.orderNumber })}
                   >
@@ -257,9 +206,9 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                   </Button>
                   <Button
                     variant="danger"
-                    size="sm"
+                    size="xs"
                     onClick={() => updateOrderStatus(order.id, OrderStatus.Cancelled)}
-                    className="bg-red-500 hover:bg-red-600 text-white rounded-full px-3 py-1 text-xs"
+                    className="bg-red-500 hover:bg-red-600 text-white rounded-md px-2 py-1"
                     disabled={submitting === order.id}
                     aria-label={t('orders.cancel_order', { orderNumber: order.orderNumber })}
                   >
@@ -270,9 +219,9 @@ const OrderCard: React.FC<OrderCardProps> = memo(
               {user?.role === 'production' && order.status === OrderStatus.Approved && unassignedItems.length > 0 && (
                 <Button
                   variant="primary"
-                  size="sm"
+                  size="xs"
                   onClick={() => openAssignModal(order)}
-                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-3 py-1 text-xs"
+                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1"
                   disabled={submitting === order.id}
                   aria-label={t('orders.assign_order', { orderNumber: order.orderNumber })}
                 >
@@ -282,9 +231,9 @@ const OrderCard: React.FC<OrderCardProps> = memo(
               {user?.role === 'production' && order.status === OrderStatus.Completed && (
                 <Button
                   variant="primary"
-                  size="sm"
+                  size="xs"
                   onClick={() => updateOrderStatus(order.id, OrderStatus.InTransit)}
-                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-3 py-1 text-xs"
+                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1"
                   disabled={submitting === order.id}
                   aria-label={t('orders.ship_order', { orderNumber: order.orderNumber })}
                 >
