@@ -1,22 +1,17 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Modal } from '../../components/UI/Modal';
-import { Button } from '../../components/UI/Button';
-import { Select } from '../../components/UI/Select';
-import { useLanguage } from '../../contexts/LanguageContext';
+import { Modal } from '../UI/Modal';
+import { Button } from '../UI/Button';
+import { Select } from '../UI/Select';
 import { AlertCircle } from 'lucide-react';
-import { Order } from '../../types/types';
+import { Order, Chef, AssignChefsForm } from '../../types';
 
-interface Chef {
-  _id: string;
-  userId: string;
-  name: string;
-  department: { _id: string; name: string } | null;
-}
-
-interface AssignChefsForm {
-  items: Array<{ itemId: string; assignedTo: string; product: string; quantity: number; unit: string }>;
-}
+const departmentLabels: Record<string, string> = {
+  bread: 'departments.bread',
+  pastries: 'departments.pastries',
+  cakes: 'departments.cakes',
+  unknown: 'departments.unknown',
+};
 
 interface AssignChefsModalProps {
   isOpen: boolean;
@@ -26,18 +21,13 @@ interface AssignChefsModalProps {
   chefs: Chef[];
   error: string;
   submitting: string | null;
-  assignChefs: (orderId: string) => void;
+  assignChefs: (orderId: string, formData: AssignChefsForm) => void;
   setAssignForm: (formData: AssignChefsForm) => void;
+  t: (key: string, params?: any) => string;
+  isRtl: boolean;
 }
 
-const departmentLabels: Record<string, string> = {
-  bread: 'departments.bread',
-  pastries: 'departments.pastries',
-  cakes: 'departments.cakes',
-  unknown: 'departments.unknown',
-};
-
-export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
+const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   isOpen,
   onClose,
   selectedOrder,
@@ -47,10 +37,9 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   submitting,
   assignChefs,
   setAssignForm,
+  t,
+  isRtl,
 }) => {
-  const { t, language } = useLanguage();
-  const isRtl = language === 'ar';
-
   const availableChefsByDepartment = useMemo(() => {
     const map = new Map<string, Chef[]>();
     chefs.forEach((chef) => {
@@ -64,35 +53,43 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     return map;
   }, [chefs]);
 
-  const updateAssignment = (index: number, value: string) => {
-    setAssignForm({
-      items: assignFormData.items.map((i, idx) =>
-        idx === index ? { ...i, assignedTo: value } : i
-      ),
-    });
-  };
+  const updateAssignment = useCallback(
+    (index: number, value: string) => {
+      setAssignForm({
+        items: assignFormData.items.map((i, idx) =>
+          idx === index ? { ...i, assignedTo: value } : i
+        ),
+      });
+    },
+    [assignFormData.items, setAssignForm]
+  );
+
+  const handleSubmit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      if (selectedOrder?.id) {
+        assignChefs(selectedOrder.id, assignFormData);
+      }
+    },
+    [selectedOrder, assignChefs, assignFormData]
+  );
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={t('orders.assign_chefs_title', { orderNumber: selectedOrder?.orderNumber })}
+      title={t('orders.assign_chefs_title', { orderNumber: selectedOrder?.orderNumber || '' })}
       size="md"
       className="bg-white rounded-lg shadow-xl"
+      ariaLabel={t('orders.assign_chefs')}
     >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          assignChefs(selectedOrder?.id || '');
-        }}
-        className="space-y-6"
-      >
+      <form onSubmit={handleSubmit} className="space-y-6">
         {assignFormData.items.map((item, index) => {
           const orderItem = selectedOrder?.items.find((i) => i._id === item.itemId);
-          const departmentId = orderItem?.department._id || '';
+          const departmentId = orderItem?.department?._id || '';
           const departmentName = orderItem?.department?.name
-            ? t(departmentLabels[orderItem.department.name] || orderItem.department.name)
-            : t('departments.unknown');
+            ? t(departmentLabels[orderItem.department.name] || departmentLabels.unknown)
+            : t(departmentLabels.unknown);
           const availableChefs = availableChefsByDepartment.get(departmentId) || [];
           return (
             <motion.div
@@ -106,9 +103,9 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                 htmlFor={`chef-select-${index}`}
               >
                 {t('orders.assign_chef_to', {
-                  product: orderItem?.productName,
+                  product: orderItem?.productName || t('common.unknown'),
                   quantity: item.quantity,
-                  unit: t(item.unit || 'unit'),
+                  unit: t(`units.${item.unit || 'unit'}`),
                 })}
               </label>
               <Select
@@ -133,6 +130,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className={`p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}
+            role="alert"
           >
             <AlertCircle className="w-5 h-5 text-red-600" />
             <span className="text-red-600">{error}</span>
@@ -150,8 +148,8 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
           <Button
             type="submit"
             variant="primary"
-            disabled={submitting !== null}
-            className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 py-2 text-sm"
+            disabled={submitting !== null || !assignFormData.items.some((item) => item.assignedTo)}
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 py-2 text-sm disabled:opacity-50"
             aria-label={t('orders.assign_chefs')}
           >
             {submitting ? t('common.loading') : t('orders.assign_chefs')}

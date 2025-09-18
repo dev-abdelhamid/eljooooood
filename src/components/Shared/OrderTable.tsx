@@ -1,19 +1,20 @@
 import React, { memo } from 'react';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { Order } from '../../types/types';
+import { useAuth } from '../../contexts/AuthContext';
+import { Order, OrderStatus } from '../../types/types';
 import { Button } from '../UI/Button';
-import { Clock, Check, Package, Truck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { Clock, Check, Package, Truck, AlertCircle } from 'lucide-react';
 
-const STATUS_COLORS = {
-  pending: { color: 'bg-yellow-100 text-yellow-800', label: 'pending', icon: Clock },
-  approved: { color: 'bg-teal-100 text-teal-800', label: 'approved', icon: Check },
-  in_production: { color: 'bg-purple-100 text-purple-800', label: 'in_production', icon: Package },
-  completed: { color: 'bg-green-100 text-green-800', label: 'completed', icon: Check },
-  in_transit: { color: 'bg-blue-100 text-blue-800', label: 'in_transit', icon: Truck },
-  delivered: { color: 'bg-gray-100 text-gray-800', label: 'delivered', icon: Check },
-  cancelled: { color: 'bg-red-100 text-red-800', label: 'cancelled', icon: Package },
+const STATUS_COLORS: Record<OrderStatus, { color: string; label: string; icon: React.FC }> = {
+  [OrderStatus.Pending]: { color: 'bg-yellow-100 text-yellow-800', label: 'pending', icon: Clock },
+  [OrderStatus.Approved]: { color: 'bg-teal-100 text-teal-800', label: 'approved', icon: Check },
+  [OrderStatus.InProduction]: { color: 'bg-purple-100 text-purple-800', label: 'in_production', icon: Package },
+  [OrderStatus.Completed]: { color: 'bg-green-100 text-green-800', label: 'completed', icon: Check },
+  [OrderStatus.InTransit]: { color: 'bg-blue-100 text-blue-800', label: 'in_transit', icon: Truck },
+  [OrderStatus.Delivered]: { color: 'bg-gray-100 text-gray-800', label: 'delivered', icon: Check },
+  [OrderStatus.Cancelled]: { color: 'bg-red-100 text-red-800', label: 'cancelled', icon: AlertCircle },
 };
 
 const getFirstTwoWords = (name: string | undefined | null): string => {
@@ -25,7 +26,7 @@ const getFirstTwoWords = (name: string | undefined | null): string => {
 interface OrderTableProps {
   orders: Order[];
   calculateAdjustedTotal: (order: Order) => string;
-  updateOrderStatus: (orderId: string, status: Order['status']) => void;
+  updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   openAssignModal: (order: Order) => void;
   startIndex: number;
   submitting: string | null;
@@ -35,12 +36,7 @@ interface OrderTableProps {
 
 const OrderTable: React.FC<OrderTableProps> = memo(
   ({ orders, calculateAdjustedTotal, updateOrderStatus, openAssignModal, startIndex, submitting, t, isRtl }) => {
-    const priorityLabels: Record<Order['priority'], string> = {
-      low: t('orders.priority_low'),
-      medium: t('orders.priority_medium'),
-      high: t('orders.priority_high'),
-      urgent: t('orders.priority_urgent'),
-    };
+    const { user } = useAuth();
 
     return (
       <motion.div
@@ -48,6 +44,8 @@ const OrderTable: React.FC<OrderTableProps> = memo(
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3 }}
         className="overflow-x-auto rounded-lg shadow-md border border-gray-200"
+        role="table"
+        aria-label={t('orders.table_label')}
       >
         <table className="min-w-full divide-y divide-gray-200 table-auto bg-white">
           <thead className="bg-gray-50">
@@ -83,37 +81,30 @@ const OrderTable: React.FC<OrderTableProps> = memo(
           </thead>
           <tbody className="divide-y divide-gray-100">
             {orders.map((order, index) => {
-              const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS.pending;
+              const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS[OrderStatus.Pending];
               const StatusIcon = statusInfo.icon;
+              const unassignedItems = order.items.filter((item) => !item.assignedTo);
               return (
                 <tr key={order.id} className={`hover:bg-gray-50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{startIndex + index}</td>
                   <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{order.orderNumber}</td>
                   <td className="px-4 py-2 whitespace-nowrap text-sm text-right">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${statusInfo.color} ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${statusInfo.color} ${
+                        isRtl ? 'flex-row-reverse' : ''
+                      }`}
+                    >
                       <StatusIcon className="w-4 h-4" />
-                      {isRtl
-                        ? order.status === 'pending'
-                          ? 'معلق'
-                          : order.status === 'approved'
-                          ? 'معتمد'
-                          : order.status === 'in_production'
-                          ? 'قيد الإنتاج'
-                          : order.status === 'completed'
-                          ? 'مكتمل'
-                          : order.status === 'in_transit'
-                          ? 'في النقل'
-                          : order.status === 'delivered'
-                          ? 'تم التسليم'
-                          : 'ملغى'
-                        : t(`orders.status_${statusInfo.label}`)}
+                      {t(`orders.status_${statusInfo.label}`)}
                     </span>
                   </td>
-                  <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{priorityLabels[order.priority]}</td>
+                  <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">
+                    {t(`orders.priority_${order.priority}`)}
+                  </td>
                   <td className="px-4 py-2 text-sm text-gray-600 text-right">
                     {order.items.map((item) => (
                       <p key={item._id} className="truncate">
-                        {item.quantity} {t(item.unit || 'unit')} {getFirstTwoWords(item.productName)}
+                        {item.quantity} {t(`units.${item.unit || 'unit'}`)} {getFirstTwoWords(item.productName)}
                       </p>
                     ))}
                   </td>
@@ -134,12 +125,12 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                           {t('orders.view')}
                         </Button>
                       </Link>
-                      {order.status === 'pending' && (
+                      {user?.role === 'production' && order.status === OrderStatus.Pending && (
                         <>
                           <Button
                             variant="success"
                             size="sm"
-                            onClick={() => updateOrderStatus(order.id, 'approved')}
+                            onClick={() => updateOrderStatus(order.id, OrderStatus.Approved)}
                             className="bg-green-500 hover:bg-green-600 text-white rounded-full px-3 py-1 text-xs"
                             disabled={submitting === order.id}
                             aria-label={t('orders.approve_order', { orderNumber: order.orderNumber })}
@@ -149,7 +140,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                           <Button
                             variant="danger"
                             size="sm"
-                            onClick={() => updateOrderStatus(order.id, 'cancelled')}
+                            onClick={() => updateOrderStatus(order.id, OrderStatus.Cancelled)}
                             className="bg-red-500 hover:bg-red-600 text-white rounded-full px-3 py-1 text-xs"
                             disabled={submitting === order.id}
                             aria-label={t('orders.cancel_order', { orderNumber: order.orderNumber })}
@@ -158,7 +149,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                           </Button>
                         </>
                       )}
-                      {order.status === 'approved' && order.items.some(item => !item.assignedTo) && (
+                      {user?.role === 'production' && order.status === OrderStatus.Approved && unassignedItems.length > 0 && (
                         <Button
                           variant="primary"
                           size="sm"
@@ -170,11 +161,11 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                           {submitting === order.id ? t('common.loading') : t('orders.assign')}
                         </Button>
                       )}
-                      {order.status === 'completed' && (
+                      {user?.role === 'production' && order.status === OrderStatus.Completed && (
                         <Button
                           variant="primary"
                           size="sm"
-                          onClick={() => updateOrderStatus(order.id, 'in_transit')}
+                          onClick={() => updateOrderStatus(order.id, OrderStatus.InTransit)}
                           className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-3 py-1 text-xs"
                           disabled={submitting === order.id}
                           aria-label={t('orders.ship_order', { orderNumber: order.orderNumber })}
