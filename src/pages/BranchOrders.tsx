@@ -1048,12 +1048,12 @@ const BranchOrders: React.FC = () => {
 
   // Render
   return (
-    <div className="px-4 py-6 min-h-screen bg-gray-50" dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="px-4 py-6 min-h-screen " dir={isRtl ? 'rtl' : 'ltr'}>
       <Suspense fallback={<LoadingSpinner size="lg" />}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-8">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 flex items-center gap-3">
+              <h1 className="text-xl sm:text-xl font-bold text-gray-800 flex items-center gap-3">
                 <ShoppingCart className="w-8 h-8 text-amber-600" />
                 {isRtl ? 'الطلبات' : 'Orders'}
               </h1>
