@@ -245,9 +245,9 @@ const reducer = (state: State, action: Action): State => {
 };
 
 // الثوابت
-const ORDERS_PER_PAGE = { card: 12, table: 50 };
+const ORDERS_PER_PAGE = { card: 12, table: 50 } as const;
 
-const validTransitions: Record<Order['status'], Order['status'][]> = {
+const validTransitions: Record<OrderStatus, OrderStatus[]> = {
   pending: ['approved', 'cancelled'],
   approved: ['in_production', 'cancelled'],
   in_production: ['completed', 'cancelled'],
@@ -284,8 +284,7 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   return window.btoa(binary);
 };
 
-// ترجمة الوحدات
-const translateUnit = (unit: string, isRtl: boolean) => {
+const translateUnit = (unit: string, isRtl: boolean): string => {
   const translations: Record<string, { ar: string; en: string }> = {
     'كيلو': { ar: 'كيلو', en: 'kg' },
     'قطعة': { ar: 'قطعة', en: 'piece' },
@@ -358,7 +357,7 @@ const OrderCardSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
 );
 
 // المكون الرئيسي
-export const Orders: React.FC = () => {
+const Orders: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
@@ -374,13 +373,13 @@ export const Orders: React.FC = () => {
   }, [state]);
 
   // حساب إجمالي الكمية
-  const calculateTotalQuantity = useCallback((order: Order) => {
+  const calculateTotalQuantity = useCallback((order: Order): number => {
     return order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   }, []);
 
   // حساب المبلغ المعدل
   const calculateAdjustedTotal = useCallback(
-    (order: Order) => {
+    (order: Order): string => {
       const approvedReturnsTotal = order.returns
         .filter(ret => ret.status === 'approved')
         .reduce((sum, ret) => {
@@ -403,11 +402,10 @@ export const Orders: React.FC = () => {
   // مستمعات WebSocket
   useEffect(() => {
     if (!user || !['admin', 'production'].includes(user.role)) {
-      dispatch({ type: 'SET_ERROR', payload: t('errors.unauthorized_access') || (isRtl ? 'غير مصرح للوصول' : 'Unauthorized access') });
+      dispatch({ type: 'SET_ERROR', payload: t('errors.unauthorized_access') });
       dispatch({ type: 'SET_LOADING', payload: false });
       return;
     }
-
     if (!socket) return;
 
     socket.on('connect', () => {
@@ -415,9 +413,9 @@ export const Orders: React.FC = () => {
       dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
     });
 
-    socket.on('connect_error', (err) => {
+    socket.on('connect_error', (err: Error) => {
       console.error('Socket connect error:', err.message);
-      dispatch({ type: 'SET_SOCKET_ERROR', payload: t('socket.connection_error') || (isRtl ? 'خطأ في الاتصال' : 'Connection error') });
+      dispatch({ type: 'SET_SOCKET_ERROR', payload: t('socket.connection_error') });
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
     });
 
@@ -430,17 +428,17 @@ export const Orders: React.FC = () => {
         id: order._id,
         orderNumber: order.orderNumber,
         branchId: order.branch?._id || 'unknown',
-        branchName: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+        branchName: order.branch?.name || t('common.unknown'),
         items: Array.isArray(order.items)
           ? order.items.map((item: any) => ({
               _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
               productId: item.product?._id || 'unknown',
-              productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+              productName: item.product?.name || t('common.unknown'),
               quantity: Number(item.quantity) || 1,
               price: Number(item.price) || 0,
               unit: item.product?.unit || 'unit',
-              department: item.product?.department ? { _id: item.product.department._id, name: item.product.department.name || (isRtl ? 'غير معروف' : 'Unknown') } : { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' },
-              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'), department: item.assignedTo.department } : undefined,
+              department: item.product?.department ? { _id: item.product.department._id, name: item.product.department.name || t('common.unknown') } : { _id: 'unknown', name: t('common.unknown') },
+              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || t('common.unknown'), department: item.assignedTo.department } : undefined,
               status: item.status || 'pending',
               returnedQuantity: Number(item.returnedQuantity) || 0,
               returnReason: item.returnReason || '',
@@ -451,20 +449,20 @@ export const Orders: React.FC = () => {
         returns: Array.isArray(order.returns)
           ? order.returns.map((ret: any) => ({
               returnId: ret._id || `temp-${Math.random().toString(36).substring(2)}`,
-              returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
+              returnNumber: ret.returnNumber || t('common.unknown'),
               items: Array.isArray(ret.items)
                 ? ret.items.map((item: any) => ({
                     productId: item.product?._id || 'unknown',
-                    productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                    productName: item.product?.name || t('common.unknown'),
                     quantity: Number(item.quantity) || 0,
-                    reason: item.reason || (isRtl ? 'غير محدد' : 'Unspecified'),
+                    reason: item.reason || t('common.unspecified'),
                     unit: item.product?.unit || 'unit',
                   }))
                 : [],
               status: ret.status || 'pending',
               reviewNotes: ret.notes || '',
               createdAt: formatDate(ret.createdAt ? new Date(ret.createdAt) : new Date(), language),
-              createdBy: ret.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+              createdBy: ret.createdBy?.name || t('common.unknown'),
             }))
           : [],
         status: order.status || 'pending',
@@ -474,8 +472,8 @@ export const Orders: React.FC = () => {
         requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : undefined,
         notes: order.notes || '',
         priority: order.priority || 'medium',
-        createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-        approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
+        createdBy: order.createdBy?.name || t('common.unknown'),
+        approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || t('common.unknown') } : undefined,
         approvedAt: order.approvedAt ? new Date(order.approvedAt) : undefined,
         deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : undefined,
         transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : undefined,
@@ -490,19 +488,19 @@ export const Orders: React.FC = () => {
       };
       dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
       playNotificationSound('/sounds/new-order.mp3', [200, 100, 200]);
-      toast.success(t('orders.new_order', { orderNumber: mappedOrder.orderNumber }) || `New order received: ${mappedOrder.orderNumber}`, {
+      toast.success(t('orders.new_order', { orderNumber: mappedOrder.orderNumber }), {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
       });
     });
 
-    socket.on('orderStatusUpdated', ({ orderId, status }: { orderId: string; status: Order['status'] }) => {
+    socket.on('orderStatusUpdated', ({ orderId, status }: { orderId: string; status: OrderStatus }) => {
       if (!orderId || !status) {
         console.warn('Invalid order status update data:', { orderId, status });
         return;
       }
       dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
-      toast.info(t('orders.status_updated', { status: t(`orders.status_${status}`) }) || `Order status updated to: ${status}`, {
+      toast.info(t('orders.status_updated', { status: t(`orders.status_${status}`) }), {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
       });
@@ -514,7 +512,7 @@ export const Orders: React.FC = () => {
         return;
       }
       dispatch({ type: 'RETURN_STATUS_UPDATED', orderId, returnId, status });
-      toast.info(t('orders.return_status_updated', { status: t(`orders.return_status_${status}`) }) || `Return status updated to: ${status}`, {
+      toast.info(t('orders.return_status_updated', { status: t(`orders.return_status_${status}`) }), {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
       });
@@ -526,7 +524,7 @@ export const Orders: React.FC = () => {
         return;
       }
       dispatch({ type: 'TASK_ASSIGNED', orderId, items });
-      toast.info(t('orders.chefs_assigned') || 'Chefs assigned', {
+      toast.info(t('orders.chefs_assigned'), {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
       });
@@ -546,11 +544,10 @@ export const Orders: React.FC = () => {
   const fetchData = useCallback(
     async (retryCount = 0) => {
       if (!user || !['admin', 'production'].includes(user.role)) {
-        dispatch({ type: 'SET_ERROR', payload: t('errors.unauthorized_access') || (isRtl ? 'غير مصرح للوصول' : 'Unauthorized access') });
+        dispatch({ type: 'SET_ERROR', payload: t('errors.unauthorized_access') });
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
       }
-
       dispatch({ type: 'SET_LOADING', payload: true });
       const cacheKey = `${user.id}-${state.filterStatus}-${state.filterBranch}-${state.currentPage}-${state.viewMode}-${state.searchQuery}`;
       if (cacheRef.current.has(cacheKey)) {
@@ -558,7 +555,6 @@ export const Orders: React.FC = () => {
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
       }
-
       try {
         const query: Record<string, any> = {
           page: state.currentPage,
@@ -583,17 +579,17 @@ export const Orders: React.FC = () => {
             id: order._id,
             orderNumber: order.orderNumber,
             branchId: order.branch?._id || 'unknown',
-            branchName: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+            branchName: order.branch?.name || t('common.unknown'),
             items: Array.isArray(order.items)
               ? order.items.map((item: any) => ({
                   _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
                   productId: item.product?._id || 'unknown',
-                  productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                  productName: item.product?.name || t('common.unknown'),
                   quantity: Number(item.quantity) || 1,
                   price: Number(item.price) || 0,
                   unit: item.product?.unit || 'unit',
-                  department: item.product?.department ? { _id: item.product.department._id, name: item.product.department.name || (isRtl ? 'غير معروف' : 'Unknown') } : { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' },
-                  assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'), department: item.assignedTo.department } : undefined,
+                  department: item.product?.department ? { _id: item.product.department._id, name: item.product.department.name || t('common.unknown') } : { _id: 'unknown', name: t('common.unknown') },
+                  assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || t('common.unknown'), department: item.assignedTo.department } : undefined,
                   status: item.status || 'pending',
                   returnedQuantity: Number(item.returnedQuantity) || 0,
                   returnReason: item.returnReason || '',
@@ -604,20 +600,20 @@ export const Orders: React.FC = () => {
             returns: Array.isArray(order.returns)
               ? order.returns.map((ret: any) => ({
                   returnId: ret._id || `temp-${Math.random().toString(36).substring(2)}`,
-                  returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
+                  returnNumber: ret.returnNumber || t('common.unknown'),
                   items: Array.isArray(ret.items)
                     ? ret.items.map((item: any) => ({
                         productId: item.product?._id || 'unknown',
-                        productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                        productName: item.product?.name || t('common.unknown'),
                         quantity: Number(item.quantity) || 0,
-                        reason: item.reason || (isRtl ? 'غير محدد' : 'Unspecified'),
+                        reason: item.reason || t('common.unspecified'),
                         unit: item.product?.unit || 'unit',
                       }))
                     : [],
                   status: ret.status || 'pending',
                   reviewNotes: ret.notes || '',
                   createdAt: formatDate(ret.createdAt ? new Date(ret.createdAt) : new Date(), language),
-                  createdBy: ret.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                  createdBy: ret.createdBy?.name || t('common.unknown'),
                 }))
               : [],
             status: order.status || 'pending',
@@ -627,8 +623,8 @@ export const Orders: React.FC = () => {
             requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : undefined,
             notes: order.notes || '',
             priority: order.priority || 'medium',
-            createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-            approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
+            createdBy: order.createdBy?.name || t('common.unknown'),
+            approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || t('common.unknown') } : undefined,
             approvedAt: order.approvedAt ? new Date(order.approvedAt) : undefined,
             deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : undefined,
             transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : undefined,
@@ -651,8 +647,8 @@ export const Orders: React.FC = () => {
             .map((chef: any) => ({
               _id: chef._id,
               userId: chef.user._id,
-              name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              department: chef.department ? { _id: chef.department._id, name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown') } : null,
+              name: chef.user?.name || chef.name || t('common.unknown'),
+              department: chef.department ? { _id: chef.department._id, name: chef.department.name || t('common.unknown') } : null,
               status: chef.status || 'active',
             })),
         });
@@ -662,7 +658,7 @@ export const Orders: React.FC = () => {
             .filter((branch: any) => branch && branch._id)
             .map((branch: any) => ({
               _id: branch._id,
-              name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
+              name: branch.name || t('common.unknown'),
             }))
             .sort((a: Branch, b: Branch) => a.name.localeCompare(b.name, language)),
         });
@@ -674,8 +670,8 @@ export const Orders: React.FC = () => {
           return;
         }
         const errorMessage = err.response?.status === 404
-          ? t('errors.no_orders_found') || (isRtl ? 'لم يتم العثور على طلبات' : 'No orders found')
-          : t('errors.fetch_orders', { message: err.message }) || (isRtl ? `خطأ في جلب الطلبات: ${err.message}` : `Error fetching orders: ${err.message}`);
+          ? t('errors.no_orders_found')
+          : t('errors.fetch_orders', { message: err.message });
         dispatch({ type: 'SET_ERROR', payload: errorMessage });
         toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       } finally {
@@ -688,13 +684,13 @@ export const Orders: React.FC = () => {
   // تصدير إلى Excel
   const exportToExcel = useCallback(() => {
     const headers = [
-      t('orders.orderNumber') || 'Order Number',
-      t('orders.branchName') || 'Branch',
-      t('orders.status') || 'Status',
-      t('orders.priority') || 'Priority',
-      t('orders.totalAmount') || 'Total Amount',
-      t('orders.total_quantity') || 'Total Quantity',
-      t('orders.date') || 'Date',
+      t('orders.orderNumber'),
+      t('orders.branchName'),
+      t('orders.status'),
+      t('orders.priority'),
+      t('orders.totalAmount'),
+      t('orders.total_quantity'),
+      t('orders.date'),
     ];
     const data = state.orders.map(order => ({
       [headers[0]]: order.orderNumber,
@@ -702,16 +698,16 @@ export const Orders: React.FC = () => {
       [headers[2]]: t(`orders.status_${order.status}`) || order.status,
       [headers[3]]: t(`orders.priority_${order.priority}`) || order.priority,
       [headers[4]]: calculateAdjustedTotal(order),
-      [headers[5]]: `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
+      [headers[5]]: `${calculateTotalQuantity(order)} ${translateUnit('unit', isRtl)}`,
       [headers[6]]: order.date,
     }));
     const ws = XLSX.utils.json_to_sheet(isRtl ? data.map(row => Object.fromEntries(Object.entries(row).reverse())) : data, { header: headers });
     if (isRtl) ws['!views'] = [{ RTL: true }];
     ws['!cols'] = headers.map((_, i) => ({ wch: i === 2 ? 40 : 20 }));
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, t('orders.title') || 'Orders');
+    XLSX.utils.book_append_sheet(wb, ws, t('orders.title'));
     XLSX.writeFile(wb, 'Orders.xlsx');
-    toast.success(t('orders.export_success') || (isRtl ? 'تم تصدير الملف بنجاح' : 'Export successful'), {
+    toast.success(t('orders.export_success'), {
       position: isRtl ? 'top-left' : 'top-right',
       autoClose: 3000,
     });
@@ -722,7 +718,6 @@ export const Orders: React.FC = () => {
     try {
       const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
       doc.setLanguage(isRtl ? 'ar' : 'en');
-
       const fontUrl = '/fonts/Amiri-Regular.ttf';
       const fontName = 'Amiri';
       const fontBytes = await fetch(fontUrl).then(res => {
@@ -732,18 +727,17 @@ export const Orders: React.FC = () => {
       doc.addFileToVFS(`${fontName}-Regular.ttf`, arrayBufferToBase64(fontBytes));
       doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
       doc.setFont(fontName);
-
       doc.setFontSize(16);
-      doc.text(t('orders.title') || 'Orders', isRtl ? doc.internal.pageSize.width - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
+      doc.text(t('orders.title'), isRtl ? doc.internal.pageSize.width - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
 
       const headers = [
-        t('orders.orderNumber') || 'Order Number',
-        t('orders.branchName') || 'Branch',
-        t('orders.status') || 'Status',
-        t('orders.priority') || 'Priority',
-        t('orders.totalAmount') || 'Total Amount',
-        t('orders.total_quantity') || 'Total Quantity',
-        t('orders.date') || 'Date',
+        t('orders.orderNumber'),
+        t('orders.branchName'),
+        t('orders.status'),
+        t('orders.priority'),
+        t('orders.totalAmount'),
+        t('orders.total_quantity'),
+        t('orders.date'),
       ];
       const data = state.orders.map(order => [
         order.orderNumber,
@@ -751,7 +745,7 @@ export const Orders: React.FC = () => {
         t(`orders.status_${order.status}`) || order.status,
         t(`orders.priority_${order.priority}`) || order.priority,
         calculateAdjustedTotal(order),
-        `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
+        `${calculateTotalQuantity(order)} ${translateUnit('unit', isRtl)}`,
         order.date,
       ]);
 
@@ -793,13 +787,13 @@ export const Orders: React.FC = () => {
           doc.setFont(fontName);
           doc.setFontSize(8);
           doc.text(
-            t('orders.generated_on', { date: formatDate(new Date(), language) }) || `Generated on: ${formatDate(new Date(), language)}`,
+            t('orders.generated_on', { date: formatDate(new Date(), language) }),
             isRtl ? doc.internal.pageSize.width - 10 : 10,
             doc.internal.pageSize.height - 10,
             { align: isRtl ? 'right' : 'left' }
           );
           doc.text(
-            t('pagination.page', { current: data.pageNumber, total: '' }) || `Page ${data.pageNumber}`,
+            t('pagination.page', { current: data.pageNumber, total: '' }),
             isRtl ? 10 : doc.internal.pageSize.width - 30,
             doc.internal.pageSize.height - 10,
             { align: isRtl ? 'left' : 'right' }
@@ -809,13 +803,13 @@ export const Orders: React.FC = () => {
       });
 
       doc.save('Orders.pdf');
-      toast.success(t('orders.export_pdf_success') || (isRtl ? 'تم تصدير PDF بنجاح' : 'PDF export successful'), {
+      toast.success(t('orders.export_pdf_success'), {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
       });
     } catch (err: any) {
       console.error('PDF export error:', err.message);
-      toast.error(t('orders.export_pdf_error') || (isRtl ? 'خطأ في تصدير PDF' : 'PDF export error'), {
+      toast.error(t('orders.export_pdf_error'), {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
       });
@@ -824,10 +818,9 @@ export const Orders: React.FC = () => {
 
   // التعامل مع البحث
   const handleSearchChange = useMemo(
-    () =>
-      debounce((value: string) => {
-        dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
-      }, 300),
+    () => debounce((value: string) => {
+      dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
+    }, 300),
     []
   );
 
@@ -855,7 +848,7 @@ export const Orders: React.FC = () => {
   );
 
   const sortedOrders = useMemo(() => {
-    const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 };
+    const priorityOrder: Record<string, number> = { urgent: 4, high: 3, medium: 2, low: 1 };
     return [...filteredOrders].sort((a, b) => {
       if (state.sortBy === 'date') {
         return state.sortOrder === 'asc'
@@ -878,10 +871,10 @@ export const Orders: React.FC = () => {
 
   // إجراءات الطلب
   const updateOrderStatus = useCallback(
-    async (orderId: string, newStatus: Order['status']) => {
+    async (orderId: string, newStatus: OrderStatus) => {
       const order = state.orders.find(o => o.id === orderId);
       if (!order || !validTransitions[order.status].includes(newStatus)) {
-        toast.error(t('errors.invalid_transition') || (isRtl ? 'انتقال غير صالح' : 'Invalid transition'), {
+        toast.error(t('errors.invalid_transition'), {
           position: isRtl ? 'top-left' : 'top-right',
           autoClose: 3000,
         });
@@ -894,13 +887,13 @@ export const Orders: React.FC = () => {
         if (socket && isConnected) {
           emit('orderStatusUpdated', { orderId, status: newStatus });
         }
-        toast.success(t('orders.status_updated', { status: t(`orders.status_${newStatus}`) }) || `Order status updated to: ${newStatus}`, {
+        toast.success(t('orders.status_updated', { status: t(`orders.status_${newStatus}`) }), {
           position: isRtl ? 'top-left' : 'top-right',
           autoClose: 3000,
         });
       } catch (err: any) {
         console.error('Update order status error:', err.message);
-        toast.error(t('errors.update_order_status', { message: err.message }) || `Failed to update status: ${err.message}`, {
+        toast.error(t('errors.update_order_status', { message: err.message }), {
           position: isRtl ? 'top-left' : 'top-right',
           autoClose: 3000,
         });
@@ -914,7 +907,7 @@ export const Orders: React.FC = () => {
   const updateItemStatus = useCallback(
     async (orderId: string, itemId: string, status: Order['items'][0]['status']) => {
       if (!user?.id) {
-        toast.error(t('errors.no_user') || (isRtl ? 'لا يوجد مستخدم مرتبط' : 'No user associated'), {
+        toast.error(t('errors.no_user'), {
           position: isRtl ? 'top-left' : 'top-right',
           autoClose: 3000,
         });
@@ -927,13 +920,13 @@ export const Orders: React.FC = () => {
         if (socket && isConnected) {
           emit('itemStatusUpdated', { orderId, itemId, status });
         }
-        toast.success(t('orders.item_status_updated', { status: t(`orders.item_${status}`) }) || `Item status updated to: ${status}`, {
+        toast.success(t('orders.item_status_updated', { status: t(`orders.item_${status}`) }), {
           position: isRtl ? 'top-left' : 'top-right',
           autoClose: 3000,
         });
       } catch (err: any) {
         console.error('Update item status error:', err.message);
-        toast.error(t('errors.update_item_status', { message: err.message }) || `Failed to update item status: ${err.message}`, {
+        toast.error(t('errors.update_item_status', { message: err.message }), {
           position: isRtl ? 'top-left' : 'top-right',
           autoClose: 3000,
         });
@@ -947,7 +940,7 @@ export const Orders: React.FC = () => {
   const assignChefs = useCallback(
     async (orderId: string) => {
       if (!user?.id || state.assignFormData.items.some(item => !item.assignedTo)) {
-        toast.error(t('orders.assign_error') || (isRtl ? 'يرجى تعيين شيف واحد على الأقل' : 'Please assign at least one chef'), {
+        toast.error(t('orders.assign_error'), {
           position: isRtl ? 'top-left' : 'top-right',
           autoClose: 3000,
         });
@@ -958,8 +951,8 @@ export const Orders: React.FC = () => {
         await ordersAPI.assignChef(orderId, { items: state.assignFormData.items });
         const items = state.assignFormData.items.map(item => ({
           _id: item.itemId,
-          assignedTo: state.chefs.find(chef => chef.userId === item.assignedTo) || { _id: item.assignedTo, name: isRtl ? 'غير معروف' : 'Unknown', department: { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' } },
-          status: 'assigned',
+          assignedTo: state.chefs.find(chef => chef.userId === item.assignedTo) || { _id: item.assignedTo, name: t('common.unknown'), department: { _id: 'unknown', name: t('common.unknown') } },
+          status: 'assigned' as const,
         }));
         dispatch({ type: 'TASK_ASSIGNED', orderId, items });
         dispatch({ type: 'SET_MODAL', modal: 'assign', isOpen: false });
@@ -967,13 +960,13 @@ export const Orders: React.FC = () => {
         if (socket && isConnected) {
           emit('taskAssigned', { orderId, items });
         }
-        toast.success(t('orders.chefs_assigned') || (isRtl ? 'تم تعيين الشيفات بنجاح' : 'Chefs assigned successfully'), {
+        toast.success(t('orders.chefs_assigned'), {
           position: isRtl ? 'top-left' : 'top-right',
           autoClose: 3000,
         });
       } catch (err: any) {
         console.error('Assign chefs error:', err.message);
-        toast.error(t('errors.assign_chef', { message: err.message }) || `Failed to assign chefs: ${err.message}`, {
+        toast.error(t('errors.assign_chef', { message: err.message }), {
           position: isRtl ? 'top-left' : 'top-right',
           autoClose: 3000,
         });
@@ -981,13 +974,13 @@ export const Orders: React.FC = () => {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     },
-    [user, state.assignFormData, state.chefs, socket, isConnected, emit, t, isRtl]
+    [user, state.assignFormData, state.chefs, socket, isConnected, emit, t]
   );
 
   const openAssignModal = useCallback(
     (order: Order) => {
       if (order.status !== 'approved') {
-        toast.error(t('errors.order_not_approved') || (isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved'), {
+        toast.error(t('errors.order_not_approved'), {
           position: isRtl ? 'top-left' : 'top-right',
           autoClose: 3000,
         });
@@ -1010,7 +1003,7 @@ export const Orders: React.FC = () => {
       });
       dispatch({ type: 'SET_MODAL', modal: 'assign', isOpen: true });
     },
-    [t, isRtl]
+    [t]
   );
 
   // جلب البيانات عند التحميل أو تغيير الفلاتر
@@ -1020,16 +1013,16 @@ export const Orders: React.FC = () => {
 
   // التصيير
   return (
-    <div className="px-2 py-4 min-h-screen bg-gray-50">
+    <div dir={isRtl ? 'rtl' : 'ltr'} className="px-2 py-4 min-h-screen bg-gray-50">
       <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-6">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${isRtl ? 'flex-row' : ''}`}>
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-gray-800 flex items-center gap-2">
                 <ShoppingCart className="w-6 h-6 text-amber-600" />
-                {t('orders.title') || (isRtl ? 'الطلبات' : 'Orders')}
+                {t('orders.title')}
               </h1>
-              <p className="text-xs text-gray-500 mt-1">{t('orders.subtitle') || (isRtl ? 'إدارة طلبات الإنتاج' : 'Manage production orders')}</p>
+              <p className="text-xs text-gray-500 mt-1">{t('orders.subtitle')}</p>
             </div>
             <div className="flex gap-2 flex-wrap">
               <Button
@@ -1039,10 +1032,10 @@ export const Orders: React.FC = () => {
                   state.orders.length > 0 ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
                 } rounded-md px-3 py-1.5 text-xs shadow-sm`}
                 disabled={state.orders.length === 0}
-                aria-label={t('orders.export_excel') || (isRtl ? 'تصدير إلى Excel' : 'Export to Excel')}
+                aria-label={t('orders.export_excel')}
               >
                 <Download className="w-4 h-4" />
-                {t('orders.export_excel') || (isRtl ? 'تصدير إلى Excel' : 'Export to Excel')}
+                {t('orders.export_excel')}
               </Button>
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
@@ -1051,42 +1044,42 @@ export const Orders: React.FC = () => {
                   state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
                 } rounded-md px-3 py-1.5 text-xs shadow-sm`}
                 disabled={state.orders.length === 0}
-                aria-label={t('orders.export_pdf') || (isRtl ? 'تصدير إلى PDF' : 'Export to PDF')}
+                aria-label={t('orders.export_pdf')}
               >
                 <Upload className="w-4 h-4" />
-                {t('orders.export_pdf') || (isRtl ? 'تصدير إلى PDF' : 'Export to PDF')}
+                {t('orders.export_pdf')}
               </Button>
               <Button
                 variant="secondary"
                 onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' })}
                 className="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md px-3 py-1.5 text-xs shadow-sm"
-                aria-label={t(state.viewMode === 'card' ? 'orders.view_table' : 'orders.view_card') || (isRtl ? (state.viewMode === 'card' ? 'عرض كجدول' : 'عرض كبطاقات') : (state.viewMode === 'card' ? 'View as Table' : 'View as Cards'))}
+                aria-label={t(state.viewMode === 'card' ? 'orders.view_table' : 'orders.view_card')}
               >
                 {state.viewMode === 'card' ? <Table2 className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
-                {t(state.viewMode === 'card' ? 'orders.view_table' : 'orders.view_card') || (isRtl ? (state.viewMode === 'card' ? 'عرض كجدول' : 'عرض كبطاقات') : (state.viewMode === 'card' ? 'View as Table' : 'View as Cards'))}
+                {t(state.viewMode === 'card' ? 'orders.view_table' : 'orders.view_card')}
               </Button>
             </div>
           </div>
           <Card className="p-3 sm:p-4 mt-4 bg-white shadow-md rounded-md border border-gray-100">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{t('common.search') || (isRtl ? 'بحث' : 'Search')}</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{t('common.search')}</label>
                 <div className="relative">
                   <Search className={`w-4 h-4 text-gray-500 absolute top-2.5 ${isRtl ? 'right-3' : 'left-3'}`} />
                   <Input
                     value={state.searchQuery}
                     onChange={(e) => handleSearchChange(e.target.value)}
-                    placeholder={t('orders.search_placeholder') || (isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...')}
+                    placeholder={t('orders.search_placeholder')}
                     className={`w-full ${isRtl ? 'pr-10' : 'pl-10'} rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm`}
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{t('orders.filter_by_status') || (isRtl ? 'تصفية حسب الحالة' : 'Filter by Status')}</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{t('orders.filter_by_status')}</label>
                 <Select
                   options={statusOptions.map(opt => ({
                     value: opt.value,
-                    label: t(`orders.status_${opt.value}`) || (isRtl ? 'كل الحالات' : 'All Statuses'),
+                    label: t(`orders.status_${opt.value}`) || t('common.all_statuses'),
                   }))}
                   value={state.filterStatus}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
@@ -1094,20 +1087,20 @@ export const Orders: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{t('orders.filter_by_branch') || (isRtl ? 'تصفية حسب الفرع' : 'Filter by Branch')}</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{t('orders.filter_by_branch')}</label>
                 <Select
-                  options={[{ value: '', label: t('branches.all') || (isRtl ? 'جميع الفروع' : 'All Branches') }, ...state.branches.map(b => ({ value: b._id, label: b.name }))]}
+                  options={[{ value: '', label: t('branches.all') }, ...state.branches.map(b => ({ value: b._id, label: b.name }))]}
                   value={state.filterBranch}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_BRANCH', payload: value })}
                   className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{t('orders.sort_by') || (isRtl ? 'ترتيب حسب' : 'Sort By')}</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{t('orders.sort_by')}</label>
                 <Select
                   options={sortOptions.map(opt => ({
                     value: opt.value,
-                    label: t(`orders.${opt.label}`) || opt.label,
+                    label: t(`orders.${opt.label}`),
                   }))}
                   value={state.sortBy}
                   onChange={(value) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
@@ -1116,7 +1109,7 @@ export const Orders: React.FC = () => {
               </div>
             </div>
             <div className="text-xs text-center text-gray-500 mt-3">
-              {t('orders.orders_count', { count: filteredOrders.length }) || (isRtl ? `عدد الطلبات: ${filteredOrders.length}` : `Orders count: ${filteredOrders.length}`)}
+              {t('orders.orders_count', { count: filteredOrders.length })}
             </div>
           </Card>
           {state.loading ? (
@@ -1138,9 +1131,9 @@ export const Orders: React.FC = () => {
                   variant="primary"
                   onClick={() => fetchData()}
                   className="mt-3 bg-amber-500 hover:bg-amber-600 text-white rounded-md px-4 py-1.5 text-xs shadow-sm"
-                  aria-label={t('common.retry') || (isRtl ? 'إعادة المحاولة' : 'Retry')}
+                  aria-label={t('common.retry')}
                 >
-                  {t('common.retry') || (isRtl ? 'إعادة المحاولة' : 'Retry')}
+                  {t('common.retry')}
                 </Button>
               </Card>
             </motion.div>
@@ -1150,11 +1143,11 @@ export const Orders: React.FC = () => {
                 <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-4">
                   <Card className="p-6 sm:p-8 text-center bg-white shadow-md rounded-md border border-gray-100">
                     <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-                    <h3 className="text-sm font-medium text-gray-800 mb-2">{t('orders.no_orders') || (isRtl ? 'لا توجد طلبات' : 'No Orders')}</h3>
+                    <h3 className="text-sm font-medium text-gray-800 mb-2">{t('orders.no_orders')}</h3>
                     <p className="text-xs text-gray-500">
                       {state.filterStatus || state.filterBranch || state.searchQuery
-                        ? t('orders.no_matching_orders') || (isRtl ? 'لا توجد طلبات مطابقة' : 'No matching orders')
-                        : t('orders.no_orders_yet') || (isRtl ? 'لا توجد طلبات بعد' : 'No orders yet')}
+                        ? t('orders.no_matching_orders')
+                        : t('orders.no_orders_yet')}
                     </p>
                   </Card>
                 </motion.div>
