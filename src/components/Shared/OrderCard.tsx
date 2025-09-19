@@ -111,7 +111,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
               <div>
                 <p className="text-xs text-gray-500">{isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}</p>
                 <p className="text-xs font-medium text-gray-800">
-                  {isRtl ? `${calculateTotalQuantity(order)} عنصر` : `${calculateTotalQuantity(order) } items`}
+                  {isRtl ? `${calculateTotalQuantity(order)} عنصر` : `${calculateTotalQuantity(order)} items`}
                 </p>
               </div>
               <div>
@@ -175,8 +175,8 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                               {item.assignedTo && (
                                 <p className="text-xs text-gray-600 truncate">
                                   {isRtl
-                                    ? `معين لـ: ${item.assignedTo.name || item.assignedTo.username || 'غير معروف'} (${item.department?.name || 'Unknown'})`
-                                    : `Assigned to: ${item.assignedTo.name || item.assignedTo.username || 'Unknown'} (${item.department?.name || 'Unknown'})`}
+                                    ? `معين لـ: شيف ${item.assignedTo.name} (${item.department?.name || 'Unknown'})`
+                                    : `Assigned to: Chef ${item.assignedTo.name} (${item.department?.name || 'Unknown'})`}
                                 </p>
                               )}
                               <p className="text-xs font-medium text-gray-900">{item.price}</p>
