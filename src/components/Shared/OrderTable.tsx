@@ -1,10 +1,12 @@
-import React, { memo, useState } from 'react';
+import React, { memo, useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Button } from '../UI/Button';
 import { useAuth } from '../../contexts/AuthContext';
-import { Order, OrderStatus } from '../../types/types';
-import { Clock, Check, Package, Truck, AlertCircle } from 'lucide-react';
+import { Order, OrderStatus, ItemStatus } from '../../types/types';
+import { Clock, Check, Package, Truck, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import Skeleton from 'react-loading-skeleton';
+import 'react-loading-skeleton/dist/skeleton.css';
 
 const STATUS_COLORS: Record<OrderStatus, { color: string; label: string; icon: React.FC }> = {
   pending: { color: 'bg-yellow-100 text-yellow-700', label: 'pending', icon: Clock },
@@ -32,18 +34,57 @@ interface OrderTableProps {
   onAssignChefs: (order: Order) => void;
   submitting: string | null;
   isRtl: boolean;
-  t: (key: string, params?: any) => string;
+  loading: boolean;
   startIndex: number;
 }
 
+const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.3 }}
+    className="overflow-x-auto bg-white shadow-md rounded-lg border border-gray-100"
+  >
+    <table className="min-w-full">
+      <thead>
+        <tr className={isRtl ? 'flex-row-reverse' : ''}>
+          {Array(11).fill(0).map((_, index) => (
+            <th key={index} className="px-3 py-2">
+              <Skeleton width={80} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {Array(5).fill(0).map((_, rowIndex) => (
+          <tr
+            key={rowIndex}
+            className={`hover:bg-gray-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}
+          >
+            {Array(11).fill(0).map((_, cellIndex) => (
+              <td key={cellIndex} className="px-3 py-2">
+                <Skeleton width={100} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </motion.div>
+);
+
 const OrderTable: React.FC<OrderTableProps> = memo(
-  ({ orders, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, updateOrderStatus, onAssignChefs, submitting, isRtl, t, startIndex }) => {
+  ({ orders, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, updateOrderStatus, onAssignChefs, submitting, isRtl, loading, startIndex }) => {
     const { user } = useAuth();
     const [expandedRows, setExpandedRows] = useState<string[]>([]);
 
     const toggleExpand = (orderId: string) => {
       setExpandedRows(prev => (prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]));
     };
+
+    if (loading) {
+      return <OrderTableSkeleton isRtl={isRtl} />;
+    }
 
     return (
       <motion.div
@@ -52,155 +93,188 @@ const OrderTable: React.FC<OrderTableProps> = memo(
         transition={{ duration: 0.3 }}
         className="overflow-x-auto rounded-md shadow-md border border-gray-100 bg-white"
         role="table"
-        aria-label={t('orders.table_label')}
+        aria-label={isRtl ? 'جدول الطلبات' : 'Orders Table'}
       >
         <table className="min-w-full divide-y divide-gray-100 text-xs">
           <thead className="bg-gray-50">
             <tr className={isRtl ? 'flex-row-reverse' : ''}>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[40px]">{t('orders.table_headers.number')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">{t('orders.table_headers.order_number')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">{t('orders.table_headers.branch')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">{t('orders.table_headers.status')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">{t('orders.table_headers.priority')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[200px]">{t('orders.table_headers.products')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[150px]">{t('orders.table_headers.chefs')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">{t('orders.table_headers.total_amount')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">{t('orders.table_headers.total_quantity')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">{t('orders.table_headers.date')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[120px]">{t('orders.table_headers.actions')}</th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[40px]">
+                {isRtl ? 'رقم' : 'No.'}
+              </th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">
+                {isRtl ? 'رقم الطلب' : 'Order Number'}
+              </th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">
+                {isRtl ? 'الفرع' : 'Branch'}
+              </th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">
+                {isRtl ? 'الحالة' : 'Status'}
+              </th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">
+                {isRtl ? 'الأولوية' : 'Priority'}
+              </th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[200px]">
+                {isRtl ? 'المنتجات' : 'Products'}
+              </th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[150px]">
+                {isRtl ? 'الشيفات' : 'Chefs'}
+              </th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">
+                {isRtl ? 'إجمالي المبلغ' : 'Total Amount'}
+              </th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">
+                {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
+              </th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">
+                {isRtl ? 'التاريخ' : 'Date'}
+              </th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[120px]">
+                {isRtl ? 'الإجراءات' : 'Actions'}
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {orders.map((order, index) => {
-              const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS.pending;
-              const StatusIcon = statusInfo.icon;
-              const unassignedItems = order.items.filter((item) => !item.assignedTo);
-              const isExpanded = expandedRows.includes(order.id);
-              const productsToShow = isExpanded ? order.items : order.items.slice(0, 3);
-              const remaining = order.items.length - 3;
+            {orders.length === 0 ? (
+              <tr>
+                <td colSpan={11} className="text-center py-4 text-gray-500 text-xs">
+                  {isRtl ? 'لا توجد طلبات' : 'No orders found'}
+                </td>
+              </tr>
+            ) : (
+              orders.map((order, index) => {
+                const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS.pending;
+                const StatusIcon = statusInfo.icon;
+                const unassignedItems = useMemo(() => order.items.filter((item) => !item.assignedTo), [order.items]);
+                const isExpanded = expandedRows.includes(order.id);
+                const productsToShow = useMemo(
+                  () => (isExpanded ? order.items : order.items.slice(0, 3)),
+                  [order.items, isExpanded]
+                );
+                const remaining = order.items.length - 3;
 
-              return (
-                <tr key={order.id} className={`hover:bg-gray-50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  <td className="px-2 py-2 text-gray-600 text-center whitespace-nowrap">{startIndex + index}</td>
-                  <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[100px]">{order.orderNumber}</td>
-                  <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[100px]">{order.branchName}</td>
-                  <td className="px-2 py-2 text-center whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium items-center gap-1 ${statusInfo.color} ${isRtl ? 'flex-row-reverse' : ''}`}>
-                      <StatusIcon className="w-4 h-4" />
-                      {t(`orders.statuses.${statusInfo.label}`)}
-                    </span>
-                  </td>
-                  <td className="px-2 py-2 text-center whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${PRIORITY_COLORS[order.priority]}`}>
-                      {t(`orders.priorities.${order.priority}`)}
-                    </span>
-                  </td>
-                  <td className="px-2 py-2 text-gray-600 text-center">
-                    <div className="flex overflow-x-auto max-w-[200px] whitespace-nowrap scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100" onClick={() => toggleExpand(order.id)}>
-                      {productsToShow.map((item, idx) => (
-                        <span key={item._id} className="inline-block mx-1 truncate">
-                          {`${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.productName}${idx < productsToShow.length - 1 ? ',' : ''}`}
-                        </span>
-                      ))}
-                      {!isExpanded && remaining > 0 && (
-                        <span className="text-blue-500 cursor-pointer mx-1" onClick={() => toggleExpand(order.id)}>
-                          {t('orders.more_items', { count: remaining })}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-2 py-2 text-gray-600 text-center">
-                    <div className="flex overflow-x-auto max-w-[150px] whitespace-nowrap scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                      {order.items
-                        .filter(item => item.assignedTo)
-                        .map(item => (
-                          <span
-                            key={item._id}
-                            className="inline-block mx-1 truncate bg-blue-50 px-2 py-1 rounded-md text-blue-600"
-                          >
-                            {item.assignedTo?.name || (isRtl ? 'غير معروف' : 'Unknown')}
+                return (
+                  <tr key={order.id} className={`hover:bg-gray-50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <td className="px-2 py-2 text-gray-600 text-center whitespace-nowrap">{startIndex + index}</td>
+                    <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[100px]">{order.orderNumber}</td>
+                    <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[100px]">{order.branchName}</td>
+                    <td className="px-2 py-2 text-center whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium items-center gap-1 ${statusInfo.color} ${isRtl ? 'flex-row-reverse' : ''}`}>
+                        <StatusIcon className="w-4 h-4" />
+                        {isRtl
+                          ? { pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[statusInfo.label]
+                          : statusInfo.label}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2 text-center whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${PRIORITY_COLORS[order.priority]}`}>
+                        {isRtl ? { urgent: 'عاجل', high: 'مرتفع', medium: 'متوسط', low: 'منخفض' }[order.priority] : order.priority}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2 text-gray-600 text-center">
+                      <div className="flex overflow-x-auto max-w-[200px] whitespace-nowrap scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                        {productsToShow.map((item, idx) => (
+                          <span key={item._id} className="inline-block mx-1 truncate">
+                            {`${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.productName}${idx < productsToShow.length - 1 ? ',' : ''}`}
                           </span>
                         ))}
-                      {order.items.every(item => !item.assignedTo) && (
-                        <span className="text-gray-500">{t('orders.no_chefs_assigned')}</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-2 py-2 text-gray-600 text-center truncate">{calculateAdjustedTotal(order)}</td>
-                  <td className="px-2 py-2 text-gray-600 text-center">{calculateTotalQuantity(order)}</td>
-                  <td className="px-2 py-2 text-gray-600 text-center truncate">{order.date}</td>
-                  <td className="px-2 py-2 text-center">
-                    <div className={`flex gap-1 flex-wrap ${isRtl ? 'justify-end' : 'justify-start'}`}>
-                      <Link to={`/orders/${order.id}`}>
-                        <Button
-                          variant="primary"
-                          size="xs"
-                          className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1 text-xs"
-                          aria-label={t('orders.view_order', { orderNumber: order.orderNumber })}
-                        >
-                          {t('orders.view')}
-                        </Button>
-                      </Link>
-                      {user?.role === 'production' && order.status === 'pending' && (
-                        <>
-                          <Button
-                            variant="success"
-                            size="xs"
-                            onClick={() => updateOrderStatus(order.id, 'approved')}
-                            className="bg-green-500 hover:bg-green-600 text-white rounded-md px-2 py-1 text-xs"
-                            disabled={submitting === order.id}
-                            aria-label={t('orders.approve_order', { orderNumber: order.orderNumber })}
+                        {!isExpanded && remaining > 0 && (
+                          <span
+                            className="text-blue-500 cursor-pointer mx-1"
+                            onClick={() => toggleExpand(order.id)}
                           >
-                            {submitting === order.id ? t('common.loading') : t('orders.approve')}
-                          </Button>
+                            {isRtl ? `+${remaining} أخرى` : `+${remaining} more`}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-2 py-2 text-gray-600 text-center">
+                      <div className="flex overflow-x-auto max-w-[150px] whitespace-nowrap scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                        {order.items
+                          .filter(item => item.assignedTo && item.assignedTo.name)
+                          .map(item => (
+                            <span
+                              key={item._id}
+                              className="inline-block mx-1 truncate bg-blue-50 px-2 py-1 rounded-md text-blue-600"
+                            >
+                              {item.assignedTo?.name || (isRtl ? 'غير معروف' : 'Unknown')}
+                            </span>
+                          ))}
+                        {order.items.every(item => !item.assignedTo || !item.assignedTo.name) && (
+                          <span className="text-gray-500">{isRtl ? 'لم يتم تعيين شيفات' : 'No chefs assigned'}</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-2 py-2 text-gray-600 text-center truncate">{calculateAdjustedTotal(order)}</td>
+                    <td className="px-2 py-2 text-gray-600 text-center">{calculateTotalQuantity(order)}</td>
+                    <td className="px-2 py-2 text-gray-600 text-center truncate">{order.date}</td>
+                    <td className="px-2 py-2 text-center">
+                      <div className={`flex gap-1 flex-wrap ${isRtl ? 'justify-end' : 'justify-start'}`}>
+                        <Link to={`/orders/${order.id}`}>
                           <Button
-                            variant="danger"
+                            variant="primary"
                             size="xs"
-                            onClick={() => updateOrderStatus(order.id, 'cancelled')}
-                            className="bg-red-500 hover:bg-red-600 text-white rounded-md px-2 py-1 text-xs"
-                            disabled={submitting === order.id}
-                            aria-label={t('orders.cancel_order', { orderNumber: order.orderNumber })}
+                            className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1 text-xs"
+                            aria-label={isRtl ? `عرض طلب رقم ${order.orderNumber}` : `View order #${order.orderNumber}`}
                           >
-                            {submitting === order.id ? t('common.loading') : t('orders.cancel')}
+                            {isRtl ? 'عرض' : 'View'}
                           </Button>
-                        </>
-                      )}
-                      {user?.role === 'production' && order.status === 'approved' && unassignedItems.length > 0 && (
-                        <Button
-                          variant="primary"
-                          size="xs"
-                          onClick={() => onAssignChefs(order)}
-                          className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1 text-xs"
-                          disabled={submitting === order.id}
-                          aria-label={t('orders.assign_order', { orderNumber: order.orderNumber })}
-                        >
-                          {submitting === order.id ? t('common.loading') : t('orders.assign')}
-                        </Button>
-                      )}
-                      {user?.role === 'production' && order.status === 'completed' && (
-                        <Button
-                          variant="primary"
-                          size="xs"
-                          onClick={() => updateOrderStatus(order.id, 'in_transit')}
-                          className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1 text-xs"
-                          disabled={submitting === order.id}
-                          aria-label={t('orders.ship_order', { orderNumber: order.orderNumber })}
-                        >
-                          {submitting === order.id ? t('common.loading') : t('orders.ship')}
-                        </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
+                        </Link>
+                        {user?.role === 'production' && order.status === 'pending' && (
+                          <>
+                            <Button
+                              variant="success"
+                              size="xs"
+                              onClick={() => updateOrderStatus(order.id, 'approved')}
+                              className="bg-green-500 hover:bg-green-600 text-white rounded-md px-2 py-1 text-xs"
+                              disabled={submitting === order.id}
+                              aria-label={isRtl ? `الموافقة على طلب رقم ${order.orderNumber}` : `Approve order #${order.orderNumber}`}
+                            >
+                              {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : (isRtl ? 'موافقة' : 'Approve')}
+                            </Button>
+                            <Button
+                              variant="danger"
+                              size="xs"
+                              onClick={() => updateOrderStatus(order.id, 'cancelled')}
+                              className="bg-red-500 hover:bg-red-600 text-white rounded-md px-2 py-1 text-xs"
+                              disabled={submitting === order.id}
+                              aria-label={isRtl ? `إلغاء طلب رقم ${order.orderNumber}` : `Cancel order #${order.orderNumber}`}
+                            >
+                              {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : (isRtl ? 'إلغاء' : 'Cancel')}
+                            </Button>
+                          </>
+                        )}
+                        {user?.role === 'production' && order.status === 'approved' && unassignedItems.length > 0 && (
+                          <Button
+                            variant="primary"
+                            size="xs"
+                            onClick={() => onAssignChefs(order)}
+                            className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1 text-xs"
+                            disabled={submitting === order.id}
+                            aria-label={isRtl ? `تعيين طلب رقم ${order.orderNumber}` : `Assign order #${order.orderNumber}`}
+                          >
+                            {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : (isRtl ? 'توزيع' : 'Assign')}
+                          </Button>
+                        )}
+                        {user?.role === 'production' && order.status === 'completed' && (
+                          <Button
+                            variant="primary"
+                            size="xs"
+                            onClick={() => updateOrderStatus(order.id, 'in_transit')}
+                            className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1 text-xs"
+                            disabled={submitting === order.id}
+                            aria-label={isRtl ? `شحن طلب رقم ${order.orderNumber}` : `Ship order #${order.orderNumber}`}
+                          >
+                            {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : (isRtl ? 'شحن' : 'Ship')}
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
-        {orders.length === 0 && (
-          <div className="text-center py-4 text-gray-500 text-xs">
-            {t('orders.no_orders')}
-          </div>
-        )}
       </motion.div>
     );
   }
