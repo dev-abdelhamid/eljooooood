@@ -3,26 +3,33 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../UI/Button';
 import { Check, Package, X } from 'lucide-react';
-import { Order, OrderStatus } from '../../types/types';
+
+interface Order {
+  id: string;
+  orderNumber: string;
+  status: 'pending' | 'approved' | 'in_production' | 'completed' | 'in_transit' | 'delivered' | 'cancelled';
+  items: Array<{
+    _id: string;
+    assignedTo?: { _id: string; name: string };
+  }>;
+}
 
 interface OrderActionsProps {
   order: Order;
-  updateOrderStatus: (orderId: string, status: OrderStatus) => void;
-  onAssignChefs: (order: Order) => void;
+  updateOrderStatus: (orderId: string, status: Order['status']) => void;
+  openAssignModal: (order: Order) => void;
   submitting: string | null;
-  t: (key: string, params?: any) => string;
-  isRtl: boolean;
 }
 
-const OrderActions: React.FC<OrderActionsProps> = ({
+export const OrderActions: React.FC<OrderActionsProps> = ({
   order,
   updateOrderStatus,
-  onAssignChefs,
+  openAssignModal,
   submitting,
-  t,
-  isRtl,
 }) => {
+  const { t, language } = useLanguage();
   const { user } = useAuth();
+  const isRtl = language === 'ar';
   const unassignedItems = order.items.filter((item) => !item.assignedTo);
 
   return (
@@ -58,7 +65,7 @@ const OrderActions: React.FC<OrderActionsProps> = ({
           variant="primary"
           size="sm"
           icon={Package}
-          onClick={() => onAssignChefs(order)}
+          onClick={() => openAssignModal(order)}
           className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-3 py-1 text-xs"
           disabled={submitting === order.id}
           aria-label={t('orders.assign_order', { orderNumber: order.orderNumber })}
