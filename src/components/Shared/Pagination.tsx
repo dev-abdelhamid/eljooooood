@@ -23,6 +23,23 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, t, isR
     }
   }, [currentPage, totalPages, handlePageChange]);
 
+  const getPageNumbers = useCallback(() => {
+    const pages = [];
+    const maxPagesToShow = 5;
+    let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+    let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+
+    if (endPage - startPage < maxPagesToShow - 1) {
+      startPage = Math.max(1, endPage - maxPagesToShow + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+
+    return pages;
+  }, [currentPage, totalPages]);
+
   if (totalPages <= 1) return null;
 
   return (
@@ -30,33 +47,50 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, t, isR
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
-      className={`flex justify-center items-center gap-3 mt-6 ${isRtl ? 'flex-row-reverse' : ''}`}
+      className={`flex justify-center items-center gap-2 mt-6 ${isRtl ? 'flex-row-reverse' : ''}`}
       role="navigation"
-      aria-label={t('pagination.navigation')}
+      aria-label={isRtl ? 'التنقل بين الصفحات' : 'Pagination navigation'}
     >
       <Button
         variant="secondary"
         size="sm"
         onClick={handlePrevious}
         disabled={currentPage === 1}
-        className="disabled:opacity-50 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm shadow-sm"
-        aria-label={t('pagination.previous')}
+        className="disabled:opacity-50 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg px-3 py-1.5 text-sm shadow-sm"
+        aria-label={isRtl ? 'الصفحة السابقة' : 'Previous page'}
       >
-        {t('pagination.previous')}
+        {isRtl ? 'السابق' : 'Previous'}
       </Button>
-      <span className="text-gray-700 text-sm font-semibold">
-        {t('pagination.page', { current: currentPage, total: totalPages })}
-      </span>
+      {getPageNumbers().map((page) => (
+        <Button
+          key={page}
+          variant={page === currentPage ? 'primary' : 'secondary'}
+          size="sm"
+          onClick={() => handlePageChange(page)}
+          className={`${
+            page === currentPage
+              ? 'bg-amber-500 hover:bg-amber-600 text-white'
+              : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+          } rounded-lg px-3 py-1.5 text-sm shadow-sm`}
+          aria-label={isRtl ? `الصفحة ${page}` : `Page ${page}`}
+          aria-current={page === currentPage ? 'page' : undefined}
+        >
+          {page}
+        </Button>
+      ))}
       <Button
         variant="secondary"
         size="sm"
         onClick={handleNext}
         disabled={currentPage === totalPages}
-        className="disabled:opacity-50 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm shadow-sm"
-        aria-label={t('pagination.next')}
+        className="disabled:opacity-50 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg px-3 py-1.5 text-sm shadow-sm"
+        aria-label={isRtl ? 'الصفحة التالية' : 'Next page'}
       >
-        {t('pagination.next')}
+        {isRtl ? 'التالي' : 'Next'}
       </Button>
+      <span className="text-gray-700 text-sm font-semibold">
+        {isRtl ? `الصفحة ${currentPage} من ${totalPages}` : `Page ${currentPage} of ${totalPages}`}
+      </span>
     </motion.div>
   );
 };

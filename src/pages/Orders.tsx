@@ -1212,6 +1212,7 @@ export const Orders: React.FC = () => {
                   dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
                   dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
                 }}
+                
                 selectedOrder={state.selectedOrder}
                 chefs={state.chefs}
                 assignFormData={state.assignFormData}
