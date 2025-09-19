@@ -168,7 +168,6 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                                   isRtl ? 'flex-row-reverse' : ''
                                 }`}
                               >
-                                <ItemStatusIcon className="w-3 h-3" />
                                 {isRtl ? { pending: 'قيد الانتظار', assigned: 'معين', in_progress: 'قيد التقدم', completed: 'مكتمل' }[item.status] : itemStatusInfo.label}
                               </span>
                             </div>
