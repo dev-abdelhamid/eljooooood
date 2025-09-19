@@ -172,7 +172,7 @@ const reducer = (state: State, action: Action): State => {
                     ? {
                         ...i,
                         assignedTo: assignment.assignedTo
-                          ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name, department: assignment.assignedTo.department }
+                          ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name || assignment.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), department: assignment.assignedTo.department }
                           : undefined,
                         status: assignment.status || i.status,
                       }
@@ -191,7 +191,7 @@ const reducer = (state: State, action: Action): State => {
                   ? {
                       ...i,
                       assignedTo: assignment.assignedTo
-                        ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name, department: assignment.assignedTo.department }
+                        ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name || assignment.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), department: assignment.assignedTo.department }
                         : undefined,
                       status: assignment.status || i.status,
                     }
@@ -444,7 +444,7 @@ export const Orders: React.FC = () => {
               price: Number(item.price) || 0,
               unit: item.product?.unit || 'unit',
               department: item.product?.department ? { _id: item.product.department._id, name: item.product.department.name || (isRtl ? 'غير معروف' : 'Unknown') } : { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' },
-              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'), department: item.assignedTo.department } : undefined,
+              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || item.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), department: item.assignedTo.department } : undefined,
               status: item.status || 'pending',
               returnedQuantity: Number(item.returnedQuantity) || 0,
               returnReason: item.returnReason || '',
@@ -610,7 +610,7 @@ export const Orders: React.FC = () => {
                   price: Number(item.price) || 0,
                   unit: item.product?.unit || 'unit',
                   department: item.product?.department ? { _id: item.product.department._id, name: item.product.department.name || (isRtl ? 'غير معروف' : 'Unknown') } : { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' },
-                  assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'), department: item.assignedTo.department } : undefined,
+                  assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || item.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), department: item.assignedTo.department } : undefined,
                   status: item.status || 'pending',
                   returnedQuantity: Number(item.returnedQuantity) || 0,
                   returnReason: item.returnReason || '',
