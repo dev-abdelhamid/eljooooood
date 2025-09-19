@@ -1,6 +1,6 @@
 import React, { useState, memo, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Order, OrderStatus, ItemStatus } from '../../types/types';
+import { Order, OrderStatus,Chef, ItemStatus } from '../../types/types';
 import { Button } from '../UI/Button';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -162,7 +162,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
               <div>
                 <p className="text-xs text-gray-500">{isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}</p>
                 <p className="text-sm font-medium text-gray-800">
-                  {isRtl ? `${calculateTotalQuantity(order)} وحدة` : `${calculateTotalQuantity(order)} units`}
+                  {isRtl ? `${calculateTotalQuantity(order)} عنصر ` : `${calculateTotalQuantity(order)} items`}
                 </p>
               </div>
               <div>
@@ -181,7 +181,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                 aria-expanded={isItemsExpanded}
                 aria-controls={`items-${order.id}`}
               >
-                <h4 className="font-semibold text-gray-900">{isRtl ? 'العناصر' : 'Items'}</h4>
+                <h4 className="font-semibold text-gray-900">{isRtl ? 'المنتجات' : 'products'}</h4>
                 {isItemsExpanded ? (
                   <ChevronUp className="w-5 h-5 text-gray-600" />
                 ) : (
@@ -222,7 +222,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                               </p>
                               <p
                                 className={`text-xs ${itemStatusInfo.color} flex items-center gap-1 ${
-                                  isRtl ? 'flex-row-reverse' : ''
+                                  isRtl ? 'flex-row' : ''
                                 }`}
                               >
                                 <ItemStatusIcon className="w-4 h-4" />
@@ -230,7 +230,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                               </p>
                               {item.assignedTo && (
                                 <p className="text-xs text-gray-600 mt-1 truncate">
-                                  {isRtl ? `معين إلى: ${item.assignedTo.name || 'غير معروف'}` : `Assigned to: ${item.assignedTo.name || 'Unknown'}`}
+                                  {isRtl ? `معين إلى: ${item.assignedTo.chef.name || 'غير معروف'}` : `Assigned to: ${item.assignedTo.chef.name || 'Unknown'}`}
                                 </p>
                               )}
                             </div>
