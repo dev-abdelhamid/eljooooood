@@ -98,7 +98,7 @@ export interface Chef {
   _id: string;
   userId: string;
   name: string;
-  department: { _id: string; name: string } | null;
+  department: { _id: string; name: string } ;
 }
 
 export interface OrderItem {
@@ -112,7 +112,7 @@ export interface OrderItem {
   status: ItemStatus;
   returnedQuantity?: number;
   returnReason?: string;
-  assignedTo?: { _id: string; username: string };
+  assignedTo?: { _id: string; username: string , name: string};
 }
 
 export interface Branch {
