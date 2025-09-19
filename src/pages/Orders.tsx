@@ -1072,7 +1072,7 @@ export const Orders: React.FC = () => {
             </div>
           </div>
           <Card className="p-3 sm:p-4 mt-4 bg-white shadow-md rounded-md border border-gray-100">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
                 <div className="relative">
