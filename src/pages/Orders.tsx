@@ -318,7 +318,7 @@ const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
     <table className="min-w-full">
       <thead>
         <tr className={isRtl ? 'flex-row-reverse' : ''}>
-          {Array(9).fill(0).map((_, index) => (
+          {Array(10).fill(0).map((_, index) => (
             <th key={index} className="px-3 py-2">
               <Skeleton width={80} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
             </th>
@@ -331,7 +331,7 @@ const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
             key={rowIndex}
             className={`hover:bg-gray-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}
           >
-            {Array(9).fill(0).map((_, cellIndex) => (
+            {Array(10).fill(0).map((_, cellIndex) => (
               <td key={cellIndex} className="px-3 py-2">
                 <Skeleton width={100} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
               </td>
