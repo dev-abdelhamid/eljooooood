@@ -898,7 +898,7 @@ export const Orders: React.FC = () => {
         if (socket && isConnected) {
           emit('orderStatusUpdated', { orderId, status: newStatus });
         }
-        toast.success(isRtl ? `تم تحديث الحالة إلى ${newStatus}` : `Order status updated to: ${newStatus}`, {
+        toast.success(isRtl ? `تم تحديث الحالة إلى ${isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[newStatus] : newStatus}` : `Order status updated to: ${newStatus}`, {
           position: isRtl ? 'top-left' : 'top-right',
           autoClose: 3000,
         });
@@ -1090,7 +1090,7 @@ export const Orders: React.FC = () => {
                 <Select
                   options={statusOptions.map(opt => ({
                     value: opt.value,
-                    label: isRtl ? { '': 'كل الحالات', pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[opt.value] : { '': 'All Statuses', pending: 'Pending', approved: 'Approved', in_production: 'In Production', completed: 'Completed', in_transit: 'In Transit', delivered: 'Delivered', cancelled: 'Cancelled' }[opt.value],
+                    label: isRtl ? { '': 'كل الحالات', pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[opt.value] : opt.label,
                   }))}
                   value={state.filterStatus}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
@@ -1111,7 +1111,7 @@ export const Orders: React.FC = () => {
                 <Select
                   options={sortOptions.map(opt => ({
                     value: opt.value,
-                    label: isRtl ? { date: 'التاريخ', totalAmount: 'إجمالي المبلغ', priority: 'الأولوية' }[opt.value] : { date: 'Date', totalAmount: 'Total Amount', priority: 'Priority' }[opt.value],
+                    label: isRtl ? { date: 'التاريخ', totalAmount: 'إجمالي المبلغ', priority: 'الأولوية' }[opt.value] : opt.label,
                   }))}
                   value={state.sortBy}
                   onChange={(value) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
@@ -1171,9 +1171,8 @@ export const Orders: React.FC = () => {
                     calculateTotalQuantity={calculateTotalQuantity}
                     translateUnit={translateUnit}
                     updateOrderStatus={updateOrderStatus}
-                    openAssignModal={openAssignModal}
+                    onAssignChefs={openAssignModal}
                     startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
-                    user={user}
                     submitting={state.submitting}
                   />
                 </motion.div>
@@ -1188,7 +1187,7 @@ export const Orders: React.FC = () => {
                       calculateTotalQuantity={calculateTotalQuantity}
                       translateUnit={translateUnit}
                       updateOrderStatus={updateOrderStatus}
-                      openAssignModal={openAssignModal}
+                      onAssignChefs={openAssignModal}
                       submitting={state.submitting}
                     />
                   ))}
@@ -1200,7 +1199,6 @@ export const Orders: React.FC = () => {
                     currentPage={state.currentPage}
                     totalPages={Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode])}
                     isRtl={isRtl}
-                      t={(key) => key}
                     handlePageChange={(page) => dispatch({ type: 'SET_PAGE', payload: page })}
                   />
                 </motion.div>
