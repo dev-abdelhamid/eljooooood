@@ -163,24 +163,27 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                               <p className="text-xs font-medium text-gray-900 truncate flex-1">
                                 {item.productName} ({item.quantity} {translateUnit(item.unit, isRtl)})
                               </p>
-                              <p className="text-xs text-gray-600 truncate">
-                                {isRtl ? `القسم: ${ {bread: 'الخبز', pastries: 'المعجنات', cakes: 'الكعك', unknown: 'غير معروف'}[item.department?.name || 'unknown']}` : `Department: ${item.department?.name || 'Unknown'}`}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2 mt-1">
-                              <span
+                             <span
                                 className={`px-1.5 py-0.5 rounded-full text-xs font-medium flex items-center gap-1 ${itemStatusInfo.color} ${
-                                  isRtl ? 'flex-row-reverse' : ''
+                                  isRtl ? 'flex-row' : ''
                                 }`}
                               >
-                                <ItemStatusIcon className="w-3 h-3" />
                                 {isRtl ? {pending: 'قيد الانتظار', assigned: 'معين', in_progress: 'قيد التقدم', completed: 'مكتمل'}[item.status] : itemStatusInfo.label}
                               </span>
+
+                            </div>
+                            <div className="flex items-center gap-2 mt-1">
+                              
                               {item.assignedTo && (
                                 <p className="text-xs text-gray-600 truncate">
-                                  {isRtl ? `معين إلى: ${item.assignedTo.name || 'غير معروف'}` : `Assigned to: ${item.assignedTo.name || 'Unknown'}`}
+                                  {isRtl ? `معين إلى: ${item.assignedTo.chef.name || 'غير معروف'}` : `Assigned to: ${item.assignedTo.chef.name || 'Unknown'}`} - 
+                                {isRtl ? ` ${item.department?.name || 'غير معروف'}` : ` ${item.department?.name || 'Unknown'}`}
+                         
                                 </p>
+
                               )}
+                                                          <p className="text-xs font-medium text-gray-900">{item.price}</p>
+
                             </div>
                           </motion.div>
                         );
@@ -236,7 +239,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                     disabled={submitting === order.id}
                     aria-label={isRtl ? `الموافقة على طلب رقم ${order.orderNumber}` : `Approve order #${order.orderNumber}`}
                   >
-                    {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : isRtl ? 'موافقة' : 'Approve'}
+                    {submitting === order.id ? (isRtl ? 'جارٍ الموافقة...' : 'Loading...') : isRtl ? 'موافقة' : 'Approve'}
                   </Button>
                   <Button
                     variant="danger"
@@ -246,7 +249,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                     disabled={submitting === order.id}
                     aria-label={isRtl ? `إلغاء طلب رقم ${order.orderNumber}` : `Cancel order #${order.orderNumber}`}
                   >
-                    {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : isRtl ? 'إلغاء' : 'Cancel'}
+                    {submitting === order.id ? (isRtl ? 'جارٍ الالغاء...' : 'Loading...') : isRtl ? 'إلغاء' : 'Cancel'}
                   </Button>
                 </>
               )}
@@ -259,7 +262,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                   disabled={submitting === order.id}
                   aria-label={isRtl ? `تعيين طلب رقم ${order.orderNumber}` : `Assign order #${order.orderNumber}`}
                 >
-                  {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : isRtl ? 'تعيين' : 'Assign'}
+                  {submitting === order.id ? (isRtl ? 'جارٍ التوزيع...' : 'Loading...') : isRtl ? 'توزيع' : 'Assign'}
                 </Button>
               )}
               {user?.role === 'production' && order.status === 'completed' && (
@@ -271,7 +274,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                   disabled={submitting === order.id}
                   aria-label={isRtl ? `شحن طلب رقم ${order.orderNumber}` : `Ship order #${order.orderNumber}`}
                 >
-                  {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : isRtl ? 'شحن' : 'Ship'}
+                  {submitting === order.id ? (isRtl ? 'جارٍ الشحن...' : 'Loading...') : isRtl ? 'شحن' : 'Ship'}
                 </Button>
               )}
             </div>
