@@ -664,7 +664,7 @@ export const Orders: React.FC = () => {
           type: 'SET_BRANCHES',
           payload: branchesResponse
             .filter((branch: any) => branch && branch._id)
-            .map((branch: tuinue;any) => ({
+            .map((branch:any) => ({
               _id: branch._id,
               name: branch.name || t('common.unknown'),
             }))
