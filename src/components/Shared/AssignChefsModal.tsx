@@ -65,25 +65,6 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     [selectedOrder, assignChefs, assignFormData]
   );
 
-  const translateDepartment = (dept: string) => {
-    const translations: Record<string, { ar: string; en: string }> = {
-      bread: { ar: 'الخبز', en: 'Bread' },
-      pastries: { ar: 'المعجنات', en: 'Pastries' },
-      cakes: { ar: 'الكعك', en: 'Cakes' },
-      unknown: { ar: 'غير معروف', en: 'Unknown' },
-    };
-    return translations[dept] ? (isRtl ? translations[dept].ar : translations[dept].en) : dept;
-  };
-
-  const translateUnit = (unit: string) => {
-    const translations: Record<string, { ar: string; en: string }> = {
-      unit: { ar: 'وحدة', en: 'Unit' },
-      kg: { ar: 'كجم', en: 'kg' },
-      piece: { ar: 'قطعة', en: 'Piece' },
-    };
-    return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : unit;
-  };
-
   return (
     <Modal
       isOpen={isOpen}
@@ -97,7 +78,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
         {assignFormData.items.map((item, index) => {
           const orderItem = selectedOrder?.items.find((i) => i._id === item.itemId);
           const departmentId = orderItem?.department?._id || '';
-          const departmentName = translateDepartment(orderItem?.department?.name || 'unknown');
+          const departmentName = isRtl ? {bread: 'الخبز', pastries: 'المعجنات', cakes: 'الكعك', unknown: 'غير معروف'}[orderItem?.department?.name || 'unknown'] : orderItem?.department?.name || 'Unknown';
           const availableChefs = availableChefsByDepartment.get(departmentId) || [];
           return (
             <motion.div
@@ -111,16 +92,16 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                 htmlFor={`chef-select-${index}`}
               >
                 {isRtl
-                  ? `تعيين شيف لـ ${orderItem?.productName || 'غير معروف'} (${item.quantity} ${translateUnit(item.unit || 'unit')})`
-                  : `Assign chef to ${orderItem?.productName || 'Unknown'} (${item.quantity} ${translateUnit(item.unit || 'unit')})`}
+                  ? `تعيين شيف لـ ${orderItem?.productName || 'غير معروف'} (${item.quantity} ${translateUnit(item.unit || 'unit', isRtl)})`
+                  : `Assign chef to ${orderItem?.productName || 'Unknown'} (${item.quantity} ${translateUnit(item.unit || 'unit', isRtl)})`}
               </label>
               <Select
                 id={`chef-select-${index}`}
                 options={[
                   { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
                   ...availableChefs.map((chef) => ({
-                    value: chef.userId,
-                    label: `${chef.name} (${translateDepartment(chef.department?.name || 'unknown')})`,
+                    value: chef._id,
+                    label: `${chef.name} (${departmentName})`,
                   })),
                 ]}
                 value={item.assignedTo}
