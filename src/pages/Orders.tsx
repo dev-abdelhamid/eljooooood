@@ -26,7 +26,7 @@ const OrderTable = lazy(() => import('../components/Shared/OrderTable'));
 const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
 const Pagination = lazy(() => import('../components/Shared/Pagination'));
 
-// واجهة الحالة
+// State interface
 interface State {
   orders: Order[];
   selectedOrder: Order | null;
@@ -48,7 +48,7 @@ interface State {
   viewMode: 'card' | 'table';
 }
 
-// واجهة الإجراء
+// Action interface
 interface Action {
   type: string;
   payload?: any;
@@ -62,7 +62,7 @@ interface Action {
   modal?: string;
 }
 
-// الحالة الابتدائية
+// Initial state
 const initialState: State = {
   orders: [],
   selectedOrder: null,
@@ -84,7 +84,7 @@ const initialState: State = {
   viewMode: 'card',
 };
 
-// دالة المختزل (Reducer)
+// Reducer function
 const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case 'SET_ORDERS':
@@ -172,7 +172,11 @@ const reducer = (state: State, action: Action): State => {
                     ? {
                         ...i,
                         assignedTo: assignment.assignedTo
-                          ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name, department: assignment.assignedTo.department }
+                          ? {
+                              _id: assignment.assignedTo._id,
+                              name: assignment.assignedTo.name,
+                              department: assignment.assignedTo.department,
+                            }
                           : undefined,
                         status: assignment.status || i.status,
                       }
@@ -191,7 +195,11 @@ const reducer = (state: State, action: Action): State => {
                   ? {
                       ...i,
                       assignedTo: assignment.assignedTo
-                        ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name, department: assignment.assignedTo.department }
+                        ? {
+                            _id: assignment.assignedTo._id,
+                            name: assignment.assignedTo.name,
+                            department: assignment.assignedTo.department,
+                          }
                         : undefined,
                       status: assignment.status || i.status,
                     }
@@ -244,7 +252,7 @@ const reducer = (state: State, action: Action): State => {
   }
 };
 
-// الثوابت
+// Constants
 const ORDERS_PER_PAGE = { card: 12, table: 50 };
 
 const validTransitions: Record<Order['status'], Order['status'][]> = {
@@ -274,7 +282,7 @@ const sortOptions = [
   { value: 'priority', label: 'sort_priority' },
 ];
 
-// دوال مساعدة
+// Helper functions
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   let binary = '';
   const bytes = new Uint8Array(buffer);
@@ -284,7 +292,7 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   return window.btoa(binary);
 };
 
-// ترجمة الوحدات
+// Translate units
 const translateUnit = (unit: string, isRtl: boolean) => {
   const translations: Record<string, { ar: string; en: string }> = {
     'كيلو': { ar: 'كيلو', en: 'kg' },
@@ -299,7 +307,7 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
 
-// مكونات الهيكل العظمي (Skeleton)
+// Skeleton components
 const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
@@ -310,7 +318,7 @@ const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
     <table className="min-w-full">
       <thead>
         <tr className={isRtl ? 'flex-row-reverse' : ''}>
-          {Array(7).fill(0).map((_, index) => (
+          {Array(10).fill(0).map((_, index) => (
             <th key={index} className="px-3 py-2">
               <Skeleton width={80} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
             </th>
@@ -323,7 +331,7 @@ const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
             key={rowIndex}
             className={`hover:bg-gray-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}
           >
-            {Array(7).fill(0).map((_, cellIndex) => (
+            {Array(10).fill(0).map((_, cellIndex) => (
               <td key={cellIndex} className="px-3 py-2">
                 <Skeleton width={100} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
               </td>
@@ -361,9 +369,9 @@ const OrderCardSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
   </Card>
 );
 
-// المكون الرئيسي
+// Main component
 export const Orders: React.FC = () => {
-  const { t, language } = useLanguage(); // إضافة t للترجمة
+  const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
   const { socket, isConnected, emit } = useSocket();
@@ -372,17 +380,17 @@ export const Orders: React.FC = () => {
   const cacheRef = useRef<Map<string, Order[]>>(new Map());
   const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
 
-  // تحديث مرجع الحالة
+  // Update state reference
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
-  // حساب إجمالي الكمية
+  // Calculate total quantity
   const calculateTotalQuantity = useCallback((order: Order) => {
     return order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   }, []);
 
-  // حساب المبلغ المعدل
+  // Calculate adjusted total
   const calculateAdjustedTotal = useCallback(
     (order: Order) => {
       const approvedReturnsTotal = order.returns
@@ -404,7 +412,7 @@ export const Orders: React.FC = () => {
     [isRtl]
   );
 
-  // مستمعات WebSocket
+  // WebSocket listeners
   useEffect(() => {
     if (!user || !['admin', 'production'].includes(user.role)) {
       dispatch({ type: 'SET_ERROR', payload: t('errors.unauthorized_access') });
@@ -443,8 +451,12 @@ export const Orders: React.FC = () => {
               quantity: Number(item.quantity) || 1,
               price: Number(item.price) || 0,
               unit: item.product?.unit || 'unit',
-              department: item.product?.department ? { _id: item.product.department._id, name: item.product.department.name || t('common.unknown') } : { _id: 'unknown', name: t('common.unknown') },
-              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || t('common.unknown'), department: item.assignedTo.department } : undefined,
+              department: item.product?.department
+                ? { _id: item.product.department._id, name: item.product.department.name || t('common.unknown') }
+                : { _id: 'unknown', name: t('common.unknown') },
+              assignedTo: item.assignedTo
+                ? { _id: item.assignedTo._id, name: item.assignedTo.name || t('common.unknown'), department: item.assignedTo.department }
+                : undefined,
               status: item.status || 'pending',
               returnedQuantity: Number(item.returnedQuantity) || 0,
               returnReason: item.returnReason || '',
@@ -479,7 +491,9 @@ export const Orders: React.FC = () => {
         notes: order.notes || '',
         priority: order.priority || 'medium',
         createdBy: order.createdBy?.name || t('common.unknown'),
-        approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || t('common.unknown') } : undefined,
+        approvedBy: order.approvedBy
+          ? { _id: order.approvedBy._id, name: order.approvedBy.name || t('common.unknown') }
+          : undefined,
         approvedAt: order.approvedAt ? new Date(order.approvedAt) : undefined,
         deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : undefined,
         transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : undefined,
@@ -546,7 +560,7 @@ export const Orders: React.FC = () => {
     };
   }, [user, socket, isRtl, language, playNotificationSound, t]);
 
-  // جلب البيانات مع آلية إعادة المحاولة
+  // Fetch data with retry mechanism
   const fetchData = useCallback(
     async (retryCount = 0) => {
       if (!user || !['admin', 'production'].includes(user.role)) {
@@ -596,8 +610,16 @@ export const Orders: React.FC = () => {
                   quantity: Number(item.quantity) || 1,
                   price: Number(item.price) || 0,
                   unit: item.product?.unit || 'unit',
-                  department: item.product?.department ? { _id: item.product.department._id, name: item.product.department.name || t('common.unknown') } : { _id: 'unknown', name: t('common.unknown') },
-                  assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || t('common.unknown'), department: item.assignedTo.department } : undefined,
+                  department: item.product?.department
+                    ? { _id: item.product.department._id, name: item.product.department.name || t('common.unknown') }
+                    : { _id: 'unknown', name: t('common.unknown') },
+                  assignedTo: item.assignedTo
+                    ? {
+                        _id: item.assignedTo._id,
+                        name: item.assignedTo.name || t('common.unknown'),
+                        department: item.assignedTo.department || { _id: 'unknown', name: t('common.unknown') },
+                      }
+                    : undefined,
                   status: item.status || 'pending',
                   returnedQuantity: Number(item.returnedQuantity) || 0,
                   returnReason: item.returnReason || '',
@@ -626,13 +648,15 @@ export const Orders: React.FC = () => {
               : [],
             status: order.status || 'pending',
             totalAmount: Number(order.totalAmount) || 0,
-            adjustedTotal: Number(order.totalAmount) || 0,
+            adjustedTotal: Number(order.adjustedTotal) || 0,
             date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
             requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : undefined,
             notes: order.notes || '',
             priority: order.priority || 'medium',
             createdBy: order.createdBy?.name || t('common.unknown'),
-            approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || t('common.unknown') } : undefined,
+            approvedBy: order.approvedBy
+              ? { _id: order.approvedBy._id, name: order.approvedBy.name || t('common.unknown') }
+              : undefined,
             approvedAt: order.approvedAt ? new Date(order.approvedAt) : undefined,
             deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : undefined,
             transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : undefined,
@@ -656,7 +680,9 @@ export const Orders: React.FC = () => {
               _id: chef._id,
               userId: chef.user._id,
               name: chef.user?.name || chef.name || t('common.unknown'),
-              department: chef.department ? { _id: chef.department._id, name: chef.department.name || t('common.unknown') } : null,
+              department: chef.department
+                ? { _id: chef.department._id, name: chef.department.name || t('common.unknown') }
+                : null,
               status: chef.status || 'active',
             })),
         });
@@ -689,7 +715,7 @@ export const Orders: React.FC = () => {
     [user, state.filterStatus, state.filterBranch, state.currentPage, state.viewMode, state.searchQuery, state.sortBy, state.sortOrder, isRtl, language, t]
   );
 
-  // تصدير إلى Excel
+  // Export to Excel
   const exportToExcel = useCallback(() => {
     const headers = [
       t('orders.order_number'),
@@ -721,7 +747,7 @@ export const Orders: React.FC = () => {
     });
   }, [state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, t]);
 
-  // تصدير إلى PDF
+  // Export to PDF
   const exportToPDF = useCallback(async () => {
     try {
       const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
@@ -826,7 +852,7 @@ export const Orders: React.FC = () => {
     }
   }, [state.orders, isRtl, language, calculateAdjustedTotal, calculateTotalQuantity, t]);
 
-  // التعامل مع البحث
+  // Handle search
   const handleSearchChange = useMemo(
     () =>
       debounce((value: string) => {
@@ -835,7 +861,7 @@ export const Orders: React.FC = () => {
     []
   );
 
-  // تصفية وترتيب وتجزئة الطلبات
+  // Filter, sort, and paginate orders
   const filteredOrders = useMemo(
     () =>
       state.orders
@@ -880,7 +906,7 @@ export const Orders: React.FC = () => {
     [sortedOrders, state.currentPage, state.viewMode]
   );
 
-  // إجراءات الطلب
+  // Order actions
   const updateOrderStatus = useCallback(
     async (orderId: string, newStatus: Order['status']) => {
       const order = state.orders.find(o => o.id === orderId);
@@ -962,7 +988,11 @@ export const Orders: React.FC = () => {
         await ordersAPI.assignChef(orderId, { items: state.assignFormData.items });
         const items = state.assignFormData.items.map(item => ({
           _id: item.itemId,
-          assignedTo: state.chefs.find(chef => chef._id === item.assignedTo) || { _id: item.assignedTo, name: t('common.unknown'), department: { _id: 'unknown', name: t('common.unknown') } },
+          assignedTo: state.chefs.find(chef => chef._id === item.assignedTo) || {
+            _id: item.assignedTo,
+            name: t('common.unknown'),
+            department: { _id: 'unknown', name: t('common.unknown') },
+          },
           status: 'assigned',
         }));
         dispatch({ type: 'TASK_ASSIGNED', orderId, items });
@@ -1017,18 +1047,17 @@ export const Orders: React.FC = () => {
     [t, isRtl]
   );
 
-  // جلب البيانات عند التحميل أو تغيير الفلاتر
+  // Fetch data on mount or filter changes
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // التصيير
-    // التصيير
+  // Render
   return (
     <div className="px-2 py-4 min-h-screen bg-gray-50">
       <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-6">
-          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${isRtl ? 'flex-row' : ''}`}>
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-gray-800 flex items-center gap-2">
                 <ShoppingCart className="w-6 h-6 text-amber-600" />
@@ -1042,7 +1071,7 @@ export const Orders: React.FC = () => {
                 onClick={state.orders.length > 0 ? exportToExcel : undefined}
                 className={`flex items-center gap-1.5 ${
                   state.orders.length > 0 ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-md px-3 py-1.5 text-xs shadow-sm`}
+                } rounded-full px-3 py-1.5 text-xs shadow-sm`}
                 disabled={state.orders.length === 0}
                 aria-label={t('orders.export_excel')}
               >
@@ -1054,7 +1083,7 @@ export const Orders: React.FC = () => {
                 onClick={state.orders.length > 0 ? exportToPDF : undefined}
                 className={`flex items-center gap-1.5 ${
                   state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-md px-3 py-1.5 text-xs shadow-sm`}
+                } rounded-full px-3 py-1.5 text-xs shadow-sm`}
                 disabled={state.orders.length === 0}
                 aria-label={t('orders.export_pdf')}
               >
@@ -1064,7 +1093,7 @@ export const Orders: React.FC = () => {
               <Button
                 variant="secondary"
                 onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' })}
-                className="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md px-3 py-1.5 text-xs shadow-sm"
+                className="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-3 py-1.5 text-xs shadow-sm"
                 aria-label={state.viewMode === 'card' ? t('orders.view_as_table') : t('orders.view_as_cards')}
               >
                 {state.viewMode === 'card' ? <Table2 className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
@@ -1072,22 +1101,27 @@ export const Orders: React.FC = () => {
               </Button>
             </div>
           </div>
-          <Card className="p-3 sm:p-4 mt-4 bg-white shadow-md rounded-md border border-gray-100">
+          <Card className="p-3 sm:p-4 mt-4 bg-white shadow-md rounded-lg border border-gray-100">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{t('orders.search')}</label>
+                <label className={`block text-xs font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                  {t('orders.search')}
+                </label>
                 <div className="relative">
                   <Search className={`w-4 h-4 text-gray-500 absolute top-2.5 ${isRtl ? 'right-3' : 'left-3'}`} />
                   <Input
                     value={state.searchQuery}
                     onChange={(e) => handleSearchChange(e.target.value)}
                     placeholder={t('orders.search_placeholder')}
-                    className={`w-full ${isRtl ? 'pr-10' : 'pl-10'} rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm`}
+                    className={`w-full ${isRtl ? 'pr-10 text-right' : 'pl-10 text-left'} rounded-lg border-gray-200 focus:ring-amber-500 text-xs shadow-sm`}
+                    aria-label={t('orders.search')}
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{t('orders.filter_by_status')}</label>
+                <label className={`block text-xs font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                  {t('orders.filter_by_status')}
+                </label>
                 <Select
                   options={statusOptions.map(opt => ({
                     value: opt.value,
@@ -1095,20 +1129,26 @@ export const Orders: React.FC = () => {
                   }))}
                   value={state.filterStatus}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
-                  className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
+                  className={`w-full rounded-lg border-gray-200 focus:ring-amber-500 text-xs shadow-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                  aria-label={t('orders.filter_by_status')}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{t('orders.filter_by_branch')}</label>
+                <label className={`block text-xs font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                  {t('orders.filter_by_branch')}
+                </label>
                 <Select
                   options={[{ value: '', label: t('orders.all_branches') }, ...state.branches.map(b => ({ value: b._id, label: b.name }))]}
                   value={state.filterBranch}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_BRANCH', payload: value })}
-                  className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
+                  className={`w-full rounded-lg border-gray-200 focus:ring-amber-500 text-xs shadow-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                  aria-label={t('orders.filter_by_branch')}
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{t('orders.sort_by')}</label>
+                <label className={`block text-xs font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                  {t('orders.sort_by')}
+                </label>
                 <Select
                   options={sortOptions.map(opt => ({
                     value: opt.value,
@@ -1116,7 +1156,8 @@ export const Orders: React.FC = () => {
                   }))}
                   value={state.sortBy}
                   onChange={(value) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
-                  className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
+                  className={`w-full rounded-lg border-gray-200 focus:ring-amber-500 text-xs shadow-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                  aria-label={t('orders.sort_by')}
                 />
               </div>
             </div>
@@ -1134,7 +1175,7 @@ export const Orders: React.FC = () => {
             </motion.div>
           ) : state.error ? (
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="mt-4">
-              <Card className="p-4 max-w-md mx-auto text-center bg-red-50 shadow-md rounded-md border border-red-100">
+              <Card className="p-4 max-w-md mx-auto text-center bg-red-50 shadow-md rounded-lg border border-red-100">
                 <div className={`flex items-center justify-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <AlertCircle className="w-5 h-5 text-red-600" />
                   <p className="text-sm font-medium text-red-600">{state.error}</p>
@@ -1142,7 +1183,7 @@ export const Orders: React.FC = () => {
                 <Button
                   variant="primary"
                   onClick={() => fetchData()}
-                  className="mt-3 bg-amber-500 hover:bg-amber-600 text-white rounded-md px-4 py-1.5 text-xs shadow-sm"
+                  className="mt-3 bg-amber-500 hover:bg-amber-600 text-white rounded-full px-4 py-1.5 text-xs shadow-sm"
                   aria-label={t('common.retry')}
                 >
                   {t('common.retry')}
@@ -1153,7 +1194,7 @@ export const Orders: React.FC = () => {
             <AnimatePresence>
               {paginatedOrders.length === 0 ? (
                 <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-4">
-                  <Card className="p-6 sm:p-8 text-center bg-white shadow-md rounded-md border border-gray-100">
+                  <Card className="p-6 sm:p-8 text-center bg-white shadow-md rounded-lg border border-gray-100">
                     <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
                     <h3 className="text-sm font-medium text-gray-800 mb-2">{t('orders.no_orders')}</h3>
                     <p className="text-xs text-gray-500">
@@ -1174,7 +1215,7 @@ export const Orders: React.FC = () => {
                 >
                   {state.viewMode === 'card' ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {paginatedOrders.map((order, index) => (
+                      {paginatedOrders.map((order) => (
                         <OrderCard
                           key={order.id}
                           order={order}
@@ -1182,14 +1223,10 @@ export const Orders: React.FC = () => {
                           calculateAdjustedTotal={calculateAdjustedTotal}
                           translateUnit={translateUnit}
                           isRtl={isRtl}
-                          validTransitions={validTransitions}
-                          onUpdateStatus={updateOrderStatus}
-                          onUpdateItemStatus={updateItemStatus}
+                          updateOrderStatus={updateOrderStatus}
                           onAssignChefs={openAssignModal}
                           submitting={state.submitting}
-                          user={user}
                           t={t}
-                          index={index}
                         />
                       ))}
                     </div>
@@ -1200,12 +1237,9 @@ export const Orders: React.FC = () => {
                       calculateAdjustedTotal={calculateAdjustedTotal}
                       translateUnit={translateUnit}
                       isRtl={isRtl}
-                      validTransitions={validTransitions}
-                      onUpdateStatus={updateOrderStatus}
-                      onUpdateItemStatus={updateItemStatus}
+                      updateOrderStatus={updateOrderStatus}
                       onAssignChefs={openAssignModal}
                       submitting={state.submitting}
-                      user={user}
                       t={t}
                     />
                   )}
