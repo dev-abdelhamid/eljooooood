@@ -362,9 +362,19 @@ export const Orders: React.FC = () => {
     stateRef.current = state;
   }, [state]);
 
+  // ترجمة الوحدات
+  const translateUnit = (unit: string) => {
+    const translations: Record<string, { ar: string; en: string }> = {
+      unit: { ar: 'وحدة', en: 'Unit' },
+      kg: { ar: 'كجم', en: 'kg' },
+      piece: { ar: 'قطعة', en: 'Piece' },
+    };
+    return translations[unit.toLowerCase()] ? (isRtl ? translations[unit.toLowerCase()].ar : translations[unit.toLowerCase()].en) : unit;
+  };
+
   // حساب إجمالي الكمية
   const calculateTotalQuantity = useCallback((order: Order) => {
-    return order.items.reduce((sum, item) => sum + item.quantity, 0);
+    return order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   }, []);
 
   // حساب المبلغ المعدل
@@ -417,7 +427,7 @@ export const Orders: React.FC = () => {
       }
       const mappedOrder: Order = {
         id: order._id,
-        orderNumber: order.orderNumber || 'N/A',
+        orderNumber: order.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
         branchId: order.branch?._id || 'unknown',
         branchName: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
         items: Array.isArray(order.items)
@@ -442,7 +452,7 @@ export const Orders: React.FC = () => {
                 ? ret.items.map((item: any) => ({
                     productId: item.product?._id || 'unknown',
                     quantity: Number(item.quantity) || 0,
-                    reason: item.reason || '',
+                    reason: item.reason || (isRtl ? 'غير محدد' : 'Unspecified'),
                     unit: item.unit || 'unit',
                   }))
                 : [],
@@ -468,7 +478,7 @@ export const Orders: React.FC = () => {
       };
       dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
       playNotificationSound('/sounds/new-order.mp3', [200, 100, 200]);
-      toast.success(t('orders.new_order', { orderNumber: order.orderNumber }) || `New order received: ${order.orderNumber}`, {
+      toast.success(t('orders.new_order', { orderNumber: mappedOrder.orderNumber }) || `New order received: ${mappedOrder.orderNumber}`, {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
       });
@@ -559,7 +569,7 @@ export const Orders: React.FC = () => {
           .filter((order: any) => order && order._id)
           .map((order: any) => ({
             id: order._id,
-            orderNumber: order.orderNumber || 'N/A',
+            orderNumber: order.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
             branchId: order.branch?._id || 'unknown',
             branchName: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
             items: Array.isArray(order.items)
@@ -584,7 +594,7 @@ export const Orders: React.FC = () => {
                     ? ret.items.map((item: any) => ({
                         productId: item.product?._id || 'unknown',
                         quantity: Number(item.quantity) || 0,
-                        reason: item.reason || '',
+                        reason: item.reason || (isRtl ? 'غير محدد' : 'Unspecified'),
                         unit: item.unit || 'unit',
                       }))
                     : [],
@@ -619,7 +629,7 @@ export const Orders: React.FC = () => {
               _id: chef._id,
               userId: chef.user._id,
               name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              department: chef.department || null,
+              department: chef.department || { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' },
             })),
         });
         dispatch({
@@ -659,7 +669,7 @@ export const Orders: React.FC = () => {
       t('orders.status') || 'Status',
       t('orders.priority') || 'Priority',
       t('orders.totalAmount') || 'Total Amount',
-      t('orders.items_count') || 'Items Count',
+      t('orders.total_quantity') || 'Total Quantity',
       t('orders.date') || 'Date',
     ];
     const data = state.orders.map(order => ({
@@ -668,7 +678,7 @@ export const Orders: React.FC = () => {
       [headers[2]]: t(`orders.status_${order.status}`) || order.status,
       [headers[3]]: t(`orders.priority_${order.priority}`) || order.priority,
       [headers[4]]: calculateAdjustedTotal(order),
-      [headers[5]]: calculateTotalQuantity(order),
+      [headers[5]]: `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
       [headers[6]]: order.date,
     }));
     const ws = XLSX.utils.json_to_sheet(isRtl ? data.map(row => Object.fromEntries(Object.entries(row).reverse())) : data, { header: headers });
@@ -708,7 +718,7 @@ export const Orders: React.FC = () => {
         t('orders.status') || 'Status',
         t('orders.priority') || 'Priority',
         t('orders.totalAmount') || 'Total Amount',
-        t('orders.items_count') || 'Items Count',
+        t('orders.total_quantity') || 'Total Quantity',
         t('orders.date') || 'Date',
       ];
       const data = state.orders.map(order => [
@@ -717,7 +727,7 @@ export const Orders: React.FC = () => {
         t(`orders.status_${order.status}`) || order.status,
         t(`orders.priority_${order.priority}`) || order.priority,
         calculateAdjustedTotal(order),
-        calculateTotalQuantity(order).toString(),
+        `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
         order.date,
       ]);
 
@@ -924,7 +934,7 @@ export const Orders: React.FC = () => {
         await ordersAPI.assignChef(orderId, { items: state.assignFormData.items });
         const items = state.assignFormData.items.map(item => ({
           _id: item.itemId,
-          assignedTo: state.chefs.find(chef => chef.userId === item.assignedTo) || { _id: item.assignedTo, name: isRtl ? 'غير معروف' : 'Unknown' },
+          assignedTo: state.chefs.find(chef => chef.userId === item.assignedTo) || { _id: item.assignedTo, name: isRtl ? 'غير معروف' : 'Unknown', department: { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' } },
           status: 'assigned',
         }));
         dispatch({ type: 'TASK_ASSIGNED', orderId, items });
@@ -1132,6 +1142,7 @@ export const Orders: React.FC = () => {
                     isRtl={isRtl}
                     calculateAdjustedTotal={calculateAdjustedTotal}
                     calculateTotalQuantity={calculateTotalQuantity}
+                    translateUnit={translateUnit}
                     updateOrderStatus={updateOrderStatus}
                     openAssignModal={openAssignModal}
                     startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
@@ -1149,6 +1160,7 @@ export const Orders: React.FC = () => {
                       isRtl={isRtl}
                       calculateAdjustedTotal={calculateAdjustedTotal}
                       calculateTotalQuantity={calculateTotalQuantity}
+                      translateUnit={translateUnit}
                       updateOrderStatus={updateOrderStatus}
                       openAssignModal={openAssignModal}
                       submitting={state.submitting}
