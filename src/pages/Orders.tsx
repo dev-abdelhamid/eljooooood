@@ -1200,7 +1200,7 @@ export const Orders: React.FC = () => {
                     currentPage={state.currentPage}
                     totalPages={Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode])}
                     isRtl={isRtl}
-                    t={t}
+                    
                     handlePageChange={(page) => dispatch({ type: 'SET_PAGE', payload: page })}
                   />
                 </motion.div>
@@ -1212,7 +1212,6 @@ export const Orders: React.FC = () => {
                   dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
                   dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
                 }}
-                
                 selectedOrder={state.selectedOrder}
                 chefs={state.chefs}
                 assignFormData={state.assignFormData}
