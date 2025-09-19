@@ -1,5 +1,6 @@
 import React, { useState, memo, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { Order, OrderStatus, Chef, ItemStatus } from '../../types/types';
 import { Button } from '../UI/Button';
 import { Link } from 'react-router-dom';
@@ -42,8 +43,11 @@ interface OrderCardProps {
 }
 
 const OrderCard: React.FC<OrderCardProps> = memo(
-  ({ order, updateOrderStatus, openAssignModal, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, submitting, isRtl }) => {
+  ({ order, updateOrderStatus, openAssignModal, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, submitting }) => {
     const { user } = useAuth();
+      const { t, language } = useLanguage();
+  const isRtl = language === 'ar';
+    
     const [isItemsExpanded, setIsItemsExpanded] = useState(false);
     const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS.pending;
     const StatusIcon = statusInfo.icon;

@@ -1184,6 +1184,7 @@ export const Orders: React.FC = () => {
                       key={order.id}
                       order={order}
                       isRtl={isRtl}
+                     t={(key) => key}
                       calculateAdjustedTotal={calculateAdjustedTotal}
                       calculateTotalQuantity={calculateTotalQuantity}
                       translateUnit={translateUnit}
