@@ -42,11 +42,11 @@ interface OrderTableProps {
   isRtl: boolean;
   t: (key: string, params?: any) => string;
   startIndex: number;
+  user: { id: string; role: string; department?: { _id: string; name: string } } | null;
 }
 
 const OrderTable: React.FC<OrderTableProps> = memo(
-  ({ orders, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, updateOrderStatus, openAssignModal, submitting, isRtl, t, startIndex }) => {
-    const { user } = useAuth();
+  ({ orders, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, updateOrderStatus, openAssignModal, submitting, isRtl, t, startIndex, user }) => {
     const [expandedRows, setExpandedRows] = useState<string[]>([]);
 
     const toggleExpand = useCallback((orderId: string) => {
@@ -58,7 +58,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3 }}
-        className="overflow-x-auto rounded-lg shadow-md border border-gray-200 bg-white"
+        className="overflow-x-auto rounded-lg shadow-md border border-gray-100 bg-white"
         role="table"
         aria-label={t('orders.table_label')}
       >
@@ -104,9 +104,9 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                     </span>
                   </td>
                   <td className="px-4 py-3 text-gray-800 text-center">
-                    <div className="flex flex-col items-center max-w-[250px]">
+                    <div className={`flex flex-col items-center max-w-[250px] ${isRtl ? 'text-right' : 'text-left'}`}>
                       {productsToShow.map((item, idx) => (
-                        <div key={item._id} className="flex items-center justify-between w-full py-1">
+                        <div key={item._id} className={`flex items-center justify-between w-full py-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
                           <span className="truncate flex-1">
                             {`${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.productName}`}
                           </span>
@@ -118,11 +118,12 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                       {!isExpanded && remaining > 0 && (
                         <button
                           onClick={() => toggleExpand(order.id)}
-                          className="text-blue-600 text-sm hover:underline mt-1"
+                          className="text-amber-600 text-sm hover:underline mt-1"
                           aria-expanded={isExpanded}
                           aria-controls={`products-${order.id}`}
                         >
                           {t('orders.more_items', { count: remaining })}
+                          {isExpanded ? <ChevronUp className="w-4 h-4 inline-block ml-1" /> : <ChevronDown className="w-4 h-4 inline-block ml-1" />}
                         </button>
                       )}
                     </div>
@@ -134,13 +135,13 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                         .map((item) => (
                           <span
                             key={item._id}
-                            className="inline-block truncate bg-blue-50 px-3 py-1 rounded-lg text-blue-700 text-sm"
+                            className="inline-block truncate bg-blue-50 px-3 py-1 rounded-md text-blue-700 text-sm"
                           >
                             {item.assignedTo?.name || (isRtl ? 'غير معروف' : 'Unknown')} ({item.department?.name || (isRtl ? 'غير معروف' : 'Unknown')})
                           </span>
                         ))}
                       {unassignedItems.length > 0 && (
-                        <span className="inline-block truncate bg-yellow-50 px-3 py-1 rounded-lg text-yellow-700 text-sm">
+                        <span className="inline-block truncate bg-yellow-50 px-3 py-1 rounded-md text-yellow-700 text-sm">
                           {t('orders.unassigned_items', { count: unassignedItems.length })}
                         </span>
                       )}
@@ -158,7 +159,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                         <Button
                           variant="primary"
                           size="sm"
-                          className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-3 py-1 text-sm"
+                          className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-sm shadow-sm"
                           aria-label={t('orders.view_order', { orderNumber: order.orderNumber })}
                         >
                           {t('orders.view')}
@@ -170,7 +171,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                             variant="success"
                             size="sm"
                             onClick={() => updateOrderStatus(order.id, 'approved')}
-                            className="bg-green-600 hover:bg-green-700 text-white rounded-full px-3 py-1 text-sm"
+                            className="bg-green-500 hover:bg-green-600 text-white rounded-md px-3 py-1 text-sm shadow-sm"
                             disabled={submitting === order.id}
                             aria-label={t('orders.approve_order', { orderNumber: order.orderNumber })}
                           >
@@ -180,7 +181,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                             variant="danger"
                             size="sm"
                             onClick={() => updateOrderStatus(order.id, 'cancelled')}
-                            className="bg-red-600 hover:bg-red-700 text-white rounded-full px-3 py-1 text-sm"
+                            className="bg-red-500 hover:bg-red-600 text-white rounded-md px-3 py-1 text-sm shadow-sm"
                             disabled={submitting === order.id}
                             aria-label={t('orders.cancel_order', { orderNumber: order.id })}
                           >
@@ -193,7 +194,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                           variant="primary"
                           size="sm"
                           onClick={() => openAssignModal(order)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-3 py-1 text-sm"
+                          className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-sm shadow-sm"
                           disabled={submitting === order.id}
                           aria-label={t('orders.assign_order', { orderNumber: order.orderNumber })}
                         >
@@ -205,7 +206,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                           variant="primary"
                           size="sm"
                           onClick={() => updateOrderStatus(order.id, 'in_transit')}
-                          className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-3 py-1 text-sm"
+                          className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-3 py-1 text-sm shadow-sm"
                           disabled={submitting === order.id}
                           aria-label={t('orders.ship_order', { orderNumber: order.orderNumber })}
                         >
