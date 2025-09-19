@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Modal } from '../../components/UI/Modal';
 import { Button } from '../../components/UI/Button';
@@ -30,7 +30,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   assignChefs,
   setAssignForm,
 }) => {
-  const { t, language } = useLanguage();
+  const { language } = useLanguage();
   const isRtl = language === 'ar';
 
   // تجميع الشيفات حسب القسم باستخدام useMemo لتحسين الأداء
@@ -56,11 +56,33 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     });
   };
 
+  // تلقائي تعيين الشيف إذا كان هناك شيف واحد فقط في القسم
+  useEffect(() => {
+    if (!selectedOrder) return;
+
+    const updatedItems = assignFormData.items.map((item) => {
+      const orderItem = selectedOrder.items.find((i) => i._id === item.itemId);
+      const departmentId = orderItem?.department._id || '';
+      const availableChefs = availableChefsByDepartment.get(departmentId) || [];
+
+      if (item.assignedTo === '' && availableChefs.length === 1) {
+        return { ...item, assignedTo: availableChefs[0].userId };
+      }
+      return item;
+    });
+
+    // تحقق إذا كان هناك تغيير لتجنب تحديثات غير ضرورية
+    const hasChanges = updatedItems.some((item, idx) => item.assignedTo !== assignFormData.items[idx].assignedTo);
+    if (hasChanges) {
+      setAssignForm({ items: updatedItems });
+    }
+  }, [assignFormData.items, availableChefsByDepartment, selectedOrder, setAssignForm]);
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title={t('orders.assign_chefs_title', { orderNumber: selectedOrder?.orderNumber })}
+      title={isRtl ? `تعيين الشيفات لطلب ${selectedOrder?.orderNumber}` : `Assign Chefs to Order #${selectedOrder?.orderNumber}`}
       size="md"
       className="bg-white rounded-lg shadow-xl"
     >
@@ -78,10 +100,10 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
 
           // إعداد خيارات الشيفات مع إضافة اسم القسم
           const chefOptions = [
-            { value: '', label: t('orders.select_chef') },
+            { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
             ...availableChefs.map((chef) => ({
               value: chef.userId,
-              label: `${chef.name} (${chef.department?.name || t('departments.unknown')})`,
+              label: `${chef.name} (${chef.department?.name || (isRtl ? 'غير معروف' : 'Unknown')})`,
             })),
           ];
 
@@ -96,10 +118,9 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                 className="block text-sm font-medium text-gray-900 mb-1"
                 htmlFor={`chef-select-${index}`}
               >
-                {t('orders.assign_chef_to', {
-                  product: orderItem?.productName,
-                  quantity: item.quantity,
-                })}
+                {isRtl
+                  ? `تعيين شيف لـ ${orderItem?.productName} (${item.quantity})`
+                  : `Assign chef to ${orderItem?.productName} (${item.quantity})`}
               </label>
               <Select
                 id={`chef-select-${index}`}
@@ -107,7 +128,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                 value={item.assignedTo}
                 onChange={(value) => updateAssignment(index, value)}
                 className="w-full rounded-lg border-gray-300 focus:ring-blue-500"
-                aria-label={t('orders.select_chef')}
+                aria-label={isRtl ? 'اختر شيف' : 'Select Chef'}
               />
             </motion.div>
           );
@@ -127,18 +148,18 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
             variant="secondary"
             onClick={onClose}
             className="bg-gray-200 hover:bg-gray-300 text-gray-900 rounded-full px-4 py-2 text-sm"
-            aria-label={t('common.cancel')}
+            aria-label={isRtl ? 'إلغاء' : 'Cancel'}
           >
-            {t('common.cancel')}
+            {isRtl ? 'إلغاء' : 'Cancel'}
           </Button>
           <Button
             type="submit"
             variant="primary"
             disabled={submitting !== null}
             className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 py-2 text-sm"
-            aria-label={t('orders.assign_chefs')}
+            aria-label={isRtl ? 'تعيين الشيفات' : 'Assign Chefs'}
           >
-            {submitting ? t('common.loading') : t('orders.assign_chefs')}
+            {submitting ? (isRtl ? 'جارٍ التحميل' : 'Loading') : (isRtl ? 'تعيين الشيفات' : 'Assign Chefs')}
           </Button>
         </div>
       </form>

@@ -44,7 +44,7 @@ interface OrderCardProps {
 const OrderCard: React.FC<OrderCardProps> = memo(
   ({ order, updateOrderStatus, openAssignModal, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, submitting }) => {
     const { user } = useAuth();
-    const { t, language } = useLanguage();
+    const { language } = useLanguage();
     const isRtl = language === 'ar';
     
     const [isItemsExpanded, setIsItemsExpanded] = useState(false);
@@ -179,8 +179,8 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                               {item.assignedTo && (
                                 <p className="text-xs text-gray-600 truncate">
                                   {isRtl
-                                    ? `معين إلى: شيف ${item.assignedTo.username || 'غير معروف'} (${item.department?.name || 'غير معروف'})`
-                                    : `Assigned to: Chef ${item.assignedTo.username || 'Unknown'} (${item.department?.name || 'Unknown'})`}
+                                    ? `معين إلى: شيف ${item.assignedTo.name || 'غير معروف'} (${item.department?.name || 'غير معروف'})`
+                                    : `Assigned to: Chef ${item.assignedTo.name || 'Unknown'} (${item.department?.name || 'Unknown'})`}
                                 </p>
                               )}
                               <p className="text-xs font-medium text-gray-900">{item.price}</p>
