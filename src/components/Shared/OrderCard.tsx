@@ -39,14 +39,13 @@ interface OrderCardProps {
   calculateTotalQuantity: (order: Order) => number;
   translateUnit: (unit: string, isRtl: boolean) => string;
   submitting: string | null;
-  isRtl: boolean;
 }
 
 const OrderCard: React.FC<OrderCardProps> = memo(
   ({ order, updateOrderStatus, openAssignModal, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, submitting }) => {
     const { user } = useAuth();
-      const { t, language } = useLanguage();
-  const isRtl = language === 'ar';
+    const { t, language } = useLanguage();
+    const isRtl = language === 'ar';
     
     const [isItemsExpanded, setIsItemsExpanded] = useState(false);
     const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS.pending;
@@ -71,7 +70,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
             <div className={`flex items-center justify-between ${isRtl ? 'flex-row' : ''}`}>
               <div className="flex items-center gap-1">
                 <h3 id={`order-${order.id}`} className="text-base font-semibold text-gray-800 truncate max-w-[220px]">
-                  {isRtl ? `طلب  ${order.orderNumber || 'غير معروف'}` : `Order #${order.orderNumber || 'Unknown'}`}
+                  {isRtl ? `طلب ${order.orderNumber || 'غير معروف'}` : `Order #${order.orderNumber || 'Unknown'}`}
                 </h3>
                 {order.priority !== 'medium' && (
                   <span
@@ -79,7 +78,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                       isRtl ? 'ml-1' : 'mr-1'
                     }`}
                   >
-                    {isRtl ? {urgent: 'عاجل', high: 'مرتفع', medium: 'متوسط', low: 'منخفض'}[order.priority] : order.priority}
+                    {isRtl ? { urgent: 'عاجل', high: 'مرتفع', medium: 'متوسط', low: 'منخفض' }[order.priority] : order.priority}
                   </span>
                 )}
               </div>
@@ -89,7 +88,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                 }`}
               >
                 <StatusIcon className="w-3 h-3" />
-                {isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : statusInfo.label}
+                {isRtl ? { pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[order.status] : statusInfo.label}
               </span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-1.5">
@@ -115,7 +114,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
               <div>
                 <p className="text-xs text-gray-500">{isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}</p>
                 <p className="text-xs font-medium text-gray-800">
-                  {isRtl ? `${calculateTotalQuantity(order)} عنصر ` : `${calculateTotalQuantity(order)} items`}
+                  {isRtl ? `${calculateTotalQuantity(order)} عنصر` : `${calculateTotalQuantity(order)} items`}
                 </p>
               </div>
               <div>
@@ -167,27 +166,24 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                               <p className="text-xs font-medium text-gray-900 truncate flex-1">
                                 {item.productName} ({item.quantity} {translateUnit(item.unit, isRtl)})
                               </p>
-                             <span
+                              <span
                                 className={`px-1.5 py-0.5 rounded-full text-xs font-medium flex items-center gap-1 ${itemStatusInfo.color} ${
-                                  isRtl ? 'flex-row' : ''
+                                  isRtl ? 'flex-row-reverse' : ''
                                 }`}
                               >
-                                {isRtl ? {pending: 'قيد الانتظار', assigned: 'معين', in_progress: 'قيد التقدم', completed: 'مكتمل'}[item.status] : itemStatusInfo.label}
+                                <ItemStatusIcon className="w-3 h-3" />
+                                {isRtl ? { pending: 'قيد الانتظار', assigned: 'معين', in_progress: 'قيد التقدم', completed: 'مكتمل' }[item.status] : itemStatusInfo.label}
                               </span>
-
                             </div>
                             <div className="flex items-center gap-2 mt-1">
-                              
                               {item.assignedTo && (
                                 <p className="text-xs text-gray-600 truncate">
-                                  {isRtl ? `معين إلى: ${item.assignedTo.chef.name || 'غير معروف'}` : `Assigned to: ${item.assignedTo.chef.name || 'Unknown'}`} - 
-                                {isRtl ? ` ${item.department?.name || 'غير معروف'}` : ` ${item.department?.name || 'Unknown'}`}
-                         
+                                  {isRtl
+                                    ? `معين إلى: شيف ${item.assignedTo.username || 'غير معروف'} (${item.department?.name || 'غير معروف'})`
+                                    : `Assigned to: Chef ${item.assignedTo.username || 'Unknown'} (${item.department?.name || 'Unknown'})`}
                                 </p>
-
                               )}
-                                                          <p className="text-xs font-medium text-gray-900">{item.price}</p>
-
+                              <p className="text-xs font-medium text-gray-900">{item.price}</p>
                             </div>
                           </motion.div>
                         );
@@ -213,7 +209,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                       ? `${r.items
                           .map((item) => `${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.reason}`)
                           .join(', ')} - الحالة: ${
-                          isRtl ? {pending: 'قيد الانتظار', approved: 'تمت الموافقة', rejected: 'مرفوض', processed: 'تمت المعالجة'}[r.status] : r.status
+                          isRtl ? { pending: 'قيد الانتظار', approved: 'تمت الموافقة', rejected: 'مرفوض', processed: 'تمت المعالجة' }[r.status] : r.status
                         }`
                       : `${r.items
                           .map((item) => `${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.reason}`)

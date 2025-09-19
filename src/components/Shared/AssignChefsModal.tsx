@@ -5,19 +5,7 @@ import { Button } from '../../components/UI/Button';
 import { Select } from '../../components/UI/Select';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { AlertCircle } from 'lucide-react';
-import { Order } from '../../types/types';
-
-interface Chef {
-  _id: string;
-  userId: string;
-  username: string;
-  name: string;
-  department: { _id: string; name: string } | null;
-}
-
-interface AssignChefsForm {
-  items: Array<{ itemId: string; assignedTo: string; product: string; quantity: number }>;
-}
+import { Order, Chef, AssignChefsForm } from '../../types/types';
 
 interface AssignChefsModalProps {
   isOpen: boolean;
@@ -29,12 +17,6 @@ interface AssignChefsModalProps {
   submitting: string | null;
   assignChefs: (orderId: string) => void;
   setAssignForm: (formData: AssignChefsForm) => void;
-
-  order: Order;
-
-  setAssignFormData: (data: AssignChefsForm) => void;
-  onSubmit: () => Promise<void>;
-
 }
 
 export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
@@ -51,6 +33,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
 
+  // تجميع الشيفات حسب القسم باستخدام useMemo لتحسين الأداء
   const availableChefsByDepartment = useMemo(() => {
     const map = new Map<string, Chef[]>();
     chefs.forEach((chef) => {
@@ -64,6 +47,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     return map;
   }, [chefs]);
 
+  // تحديث تعيين الشيف
   const updateAssignment = (index: number, value: string) => {
     setAssignForm({
       items: assignFormData.items.map((i, idx) =>
@@ -91,6 +75,16 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
           const orderItem = selectedOrder?.items.find((i) => i._id === item.itemId);
           const departmentId = orderItem?.department._id || '';
           const availableChefs = availableChefsByDepartment.get(departmentId) || [];
+
+          // إعداد خيارات الشيفات مع إضافة اسم القسم
+          const chefOptions = [
+            { value: '', label: t('orders.select_chef') },
+            ...availableChefs.map((chef) => ({
+              value: chef.userId,
+              label: `${chef.name} (${chef.department?.name || t('departments.unknown')})`,
+            })),
+          ];
+
           return (
             <motion.div
               key={index}
@@ -102,17 +96,14 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                 className="block text-sm font-medium text-gray-900 mb-1"
                 htmlFor={`chef-select-${index}`}
               >
-                {t('orders.assign_chef_to', { product: orderItem?.productName, quantity: item.quantity })}
+                {t('orders.assign_chef_to', {
+                  product: orderItem?.productName,
+                  quantity: item.quantity,
+                })}
               </label>
               <Select
                 id={`chef-select-${index}`}
-                options={[
-                  { value: '', label: t('orders.select_chef') },
-                  ...availableChefs.map((chef) => ({
-                    value: chef.userId,
-                    label: chef.name,
-                  })),
-                ]}
+                options={chefOptions}
                 value={item.assignedTo}
                 onChange={(value) => updateAssignment(index, value)}
                 className="w-full rounded-lg border-gray-300 focus:ring-blue-500"
