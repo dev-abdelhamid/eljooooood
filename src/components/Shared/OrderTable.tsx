@@ -52,7 +52,6 @@ const OrderTable: React.FC<OrderTableProps> = memo(
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">{isRtl ? 'رقم الطلب' : 'Order Number'}</th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">{isRtl ? 'الفرع' : 'Branch'}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">{isRtl ? 'الحالة' : 'Status'}</th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">{isRtl ? 'الأولوية' : 'Priority'}</th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[200px]">{isRtl ? 'المنتجات' : 'Products'}</th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">{isRtl ? 'إجمالي المبلغ' : 'Total Amount'}</th>
@@ -81,11 +80,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                       {isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : statusInfo.label}
                     </span>
                   </td>
-                  <td className="px-2 py-2 text-gray-600 text-center truncate">
-                    {isRtl
-                      ? {urgent: 'عاجل', high: 'مرتفع', medium: 'متوسط', low: 'منخفض'}[order.priority]
-                      : order.priority}
-                  </td>
+                  
                   <td className="px-2 py-2 text-gray-600 text-center cursor-pointer" onClick={() => toggleExpand(order.id)}>
                     {productsToShow.map((item) => (
                       <span key={item._id} className="inline-block mr-1 truncate">
