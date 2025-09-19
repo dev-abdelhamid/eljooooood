@@ -1214,7 +1214,7 @@ export const Orders: React.FC = () => {
                   className="mt-4"
                 >
                   {state.viewMode === 'card' ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1  gap-3">
                       {paginatedOrders.map((order) => (
                         <OrderCard
                           key={order.id}
