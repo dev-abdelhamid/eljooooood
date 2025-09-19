@@ -212,7 +212,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                             key={item._id}
                             className="inline-block mx-1 truncate bg-blue-50 px-2 py-1 rounded-md text-blue-600"
                           >
-                            {item.assignedTo?.name || (isRtl ? 'غير معروف' : 'Unknown')}
+                            {item.assignedTo?.name || t.unknown}
                           </span>
                         ))}
                       {order.items.every(item => !item.assignedTo) && (
