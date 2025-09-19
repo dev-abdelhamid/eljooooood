@@ -172,7 +172,7 @@ const reducer = (state: State, action: Action): State => {
                     ? {
                         ...i,
                         assignedTo: assignment.assignedTo
-                          ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name }
+                          ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name, department: assignment.assignedTo.department }
                           : undefined,
                         status: assignment.status || i.status,
                       }
@@ -191,7 +191,7 @@ const reducer = (state: State, action: Action): State => {
                   ? {
                       ...i,
                       assignedTo: assignment.assignedTo
-                        ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name }
+                        ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name, department: assignment.assignedTo.department }
                         : undefined,
                       status: assignment.status || i.status,
                     }
@@ -213,12 +213,12 @@ const reducer = (state: State, action: Action): State => {
                 returns: order.returns.map(ret =>
                   ret.returnId === action.returnId ? { ...ret, status: action.status! } : ret
                 ),
-                totalAmount: action.status === 'approved'
-                  ? order.totalAmount - (order.returns.find(r => r.returnId === action.returnId)?.items.reduce((sum, item) => {
+                adjustedTotal: action.status === 'approved'
+                  ? order.adjustedTotal - (order.returns.find(r => r.returnId === action.returnId)?.items.reduce((sum, item) => {
                       const orderItem = order.items.find(i => i.productId === item.productId);
                       return sum + (orderItem ? orderItem.price * item.quantity : 0);
                     }, 0) || 0)
-                  : order.totalAmount,
+                  : order.adjustedTotal,
               }
             : order
         ),
@@ -228,12 +228,12 @@ const reducer = (state: State, action: Action): State => {
               returns: state.selectedOrder.returns.map(ret =>
                 ret.returnId === action.returnId ? { ...ret, status: action.status! } : ret
               ),
-              totalAmount: action.status === 'approved'
-                ? state.selectedOrder.totalAmount - (state.selectedOrder.returns.find(r => r.returnId === action.returnId)?.items.reduce((sum, item) => {
+              adjustedTotal: action.status === 'approved'
+                ? state.selectedOrder.adjustedTotal - (state.selectedOrder.returns.find(r => r.returnId === action.returnId)?.items.reduce((sum, item) => {
                     const orderItem = state.selectedOrder.items.find(i => i.productId === item.productId);
                     return sum + (orderItem ? orderItem.price * item.quantity : 0);
                   }, 0) || 0)
-                : state.selectedOrder.totalAmount,
+                : state.selectedOrder.adjustedTotal,
             }
           : state.selectedOrder,
       };
@@ -282,6 +282,17 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
     binary += String.fromCharCode(bytes[i]);
   }
   return window.btoa(binary);
+};
+
+// ترجمة الوحدات
+const translateUnit = (unit: string, isRtl: boolean) => {
+  const translations: Record<string, { ar: string; en: string }> = {
+    'كيلو': { ar: 'كيلو', en: 'kg' },
+    'قطعة': { ar: 'قطعة', en: 'piece' },
+    'علبة': { ar: 'علبة', en: 'pack' },
+    'صينية': { ar: 'صينية', en: 'tray' },
+  };
+  return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
 
 // مكونات الهيكل العظمي (Skeleton)
@@ -362,16 +373,6 @@ export const Orders: React.FC = () => {
     stateRef.current = state;
   }, [state]);
 
-  // ترجمة الوحدات
-  const translateUnit = (unit: string) => {
-    const translations: Record<string, { ar: string; en: string }> = {
-      unit: { ar: 'وحدة', en: 'Unit' },
-      kg: { ar: 'كجم', en: 'kg' },
-      piece: { ar: 'قطعة', en: 'Piece' },
-    };
-    return translations[unit.toLowerCase()] ? (isRtl ? translations[unit.toLowerCase()].ar : translations[unit.toLowerCase()].en) : unit;
-  };
-
   // حساب إجمالي الكمية
   const calculateTotalQuantity = useCallback((order: Order) => {
     return order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
@@ -389,7 +390,7 @@ export const Orders: React.FC = () => {
           }, 0);
           return sum + returnTotal;
         }, 0);
-      return (order.totalAmount - approvedReturnsTotal).toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
+      return (order.adjustedTotal || order.totalAmount - approvedReturnsTotal).toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
         style: 'currency',
         currency: 'SAR',
         minimumFractionDigits: 2,
@@ -421,13 +422,13 @@ export const Orders: React.FC = () => {
     });
 
     socket.on('newOrder', (order: any) => {
-      if (!order || !order._id) {
+      if (!order || !order._id || !order.orderNumber) {
         console.warn('Invalid new order data:', order);
         return;
       }
       const mappedOrder: Order = {
         id: order._id,
-        orderNumber: order.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
+        orderNumber: order.orderNumber,
         branchId: order.branch?._id || 'unknown',
         branchName: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
         items: Array.isArray(order.items)
@@ -437,40 +438,51 @@ export const Orders: React.FC = () => {
               productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
               quantity: Number(item.quantity) || 1,
               price: Number(item.price) || 0,
-              unit: item.unit || 'unit',
-              department: item.product?.department || { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' },
-              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
+              unit: item.product?.unit || 'unit',
+              department: item.product?.department ? { _id: item.product.department._id, name: item.product.department.name || (isRtl ? 'غير معروف' : 'Unknown') } : { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' },
+              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'), department: item.assignedTo.department } : undefined,
               status: item.status || 'pending',
               returnedQuantity: Number(item.returnedQuantity) || 0,
               returnReason: item.returnReason || '',
+              startedAt: item.startedAt ? new Date(item.startedAt) : undefined,
+              completedAt: item.completedAt ? new Date(item.completedAt) : undefined,
             }))
           : [],
         returns: Array.isArray(order.returns)
           ? order.returns.map((ret: any) => ({
               returnId: ret._id || `temp-${Math.random().toString(36).substring(2)}`,
+              returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
               items: Array.isArray(ret.items)
                 ? ret.items.map((item: any) => ({
                     productId: item.product?._id || 'unknown',
+                    productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                     quantity: Number(item.quantity) || 0,
                     reason: item.reason || (isRtl ? 'غير محدد' : 'Unspecified'),
-                    unit: item.unit || 'unit',
+                    unit: item.product?.unit || 'unit',
                   }))
                 : [],
-              status: ret.status || 'pending_approval',
-              reviewNotes: ret.reviewNotes || '',
+              status: ret.status || 'pending',
+              reviewNotes: ret.notes || '',
               createdAt: formatDate(ret.createdAt ? new Date(ret.createdAt) : new Date(), language),
+              createdBy: ret.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
             }))
           : [],
         status: order.status || 'pending',
         totalAmount: Number(order.totalAmount) || 0,
+        adjustedTotal: Number(order.adjustedTotal) || 0,
         date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
+        requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : undefined,
         notes: order.notes || '',
         priority: order.priority || 'medium',
         createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+        approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
+        approvedAt: order.approvedAt ? new Date(order.approvedAt) : undefined,
+        deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : undefined,
+        transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : undefined,
         statusHistory: Array.isArray(order.statusHistory)
           ? order.statusHistory.map((history: any) => ({
               status: history.status || 'pending',
-              changedBy: history.changedBy || 'unknown',
+              changedBy: history.changedBy?.name || 'unknown',
               changedAt: formatDate(history.changedAt ? new Date(history.changedAt) : new Date(), language),
               notes: history.notes || '',
             }))
@@ -566,10 +578,10 @@ export const Orders: React.FC = () => {
         ]);
 
         const mappedOrders: Order[] = ordersResponse
-          .filter((order: any) => order && order._id)
+          .filter((order: any) => order && order._id && order.orderNumber)
           .map((order: any) => ({
             id: order._id,
-            orderNumber: order.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
+            orderNumber: order.orderNumber,
             branchId: order.branch?._id || 'unknown',
             branchName: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
             items: Array.isArray(order.items)
@@ -579,40 +591,51 @@ export const Orders: React.FC = () => {
                   productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                   quantity: Number(item.quantity) || 1,
                   price: Number(item.price) || 0,
-                  unit: item.unit || 'unit',
-                  department: item.product?.department || { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' },
-                  assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
+                  unit: item.product?.unit || 'unit',
+                  department: item.product?.department ? { _id: item.product.department._id, name: item.product.department.name || (isRtl ? 'غير معروف' : 'Unknown') } : { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' },
+                  assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'), department: item.assignedTo.department } : undefined,
                   status: item.status || 'pending',
                   returnedQuantity: Number(item.returnedQuantity) || 0,
                   returnReason: item.returnReason || '',
+                  startedAt: item.startedAt ? new Date(item.startedAt) : undefined,
+                  completedAt: item.completedAt ? new Date(item.completedAt) : undefined,
                 }))
               : [],
             returns: Array.isArray(order.returns)
               ? order.returns.map((ret: any) => ({
                   returnId: ret._id || `temp-${Math.random().toString(36).substring(2)}`,
+                  returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
                   items: Array.isArray(ret.items)
                     ? ret.items.map((item: any) => ({
                         productId: item.product?._id || 'unknown',
+                        productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                         quantity: Number(item.quantity) || 0,
                         reason: item.reason || (isRtl ? 'غير محدد' : 'Unspecified'),
-                        unit: item.unit || 'unit',
+                        unit: item.product?.unit || 'unit',
                       }))
                     : [],
-                  status: ret.status || 'pending_approval',
-                  reviewNotes: ret.reviewNotes || '',
+                  status: ret.status || 'pending',
+                  reviewNotes: ret.notes || '',
                   createdAt: formatDate(ret.createdAt ? new Date(ret.createdAt) : new Date(), language),
+                  createdBy: ret.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                 }))
               : [],
             status: order.status || 'pending',
             totalAmount: Number(order.totalAmount) || 0,
+            adjustedTotal: Number(order.adjustedTotal) || 0,
             date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
+            requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : undefined,
             notes: order.notes || '',
             priority: order.priority || 'medium',
             createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+            approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
+            approvedAt: order.approvedAt ? new Date(order.approvedAt) : undefined,
+            deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : undefined,
+            transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : undefined,
             statusHistory: Array.isArray(order.statusHistory)
               ? order.statusHistory.map((history: any) => ({
                   status: history.status || 'pending',
-                  changedBy: history.changedBy || 'unknown',
+                  changedBy: history.changedBy?.name || 'unknown',
                   changedAt: formatDate(history.changedAt ? new Date(history.changedAt) : new Date(), language),
                   notes: history.notes || '',
                 }))
@@ -629,7 +652,8 @@ export const Orders: React.FC = () => {
               _id: chef._id,
               userId: chef.user._id,
               name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              department: chef.department || { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' },
+              department: chef.department ? { _id: chef.department._id, name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown') } : null,
+              status: chef.status || 'active',
             })),
         });
         dispatch({
@@ -838,7 +862,7 @@ export const Orders: React.FC = () => {
           ? new Date(a.date).getTime() - new Date(b.date).getTime()
           : new Date(b.date).getTime() - new Date(a.date).getTime();
       } else if (state.sortBy === 'totalAmount') {
-        return state.sortOrder === 'asc' ? a.totalAmount - b.totalAmount : b.totalAmount - a.totalAmount;
+        return state.sortOrder === 'asc' ? a.adjustedTotal - b.adjustedTotal : b.adjustedTotal - a.adjustedTotal;
       } else {
         return state.sortOrder === 'asc'
           ? priorityOrder[a.priority] - priorityOrder[b.priority]
@@ -1137,7 +1161,7 @@ export const Orders: React.FC = () => {
               ) : state.viewMode === 'table' ? (
                 <motion.div key="table-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-4">
                   <OrderTable
-                    orders={paginatedOrders.filter(o => o && o.id && o.branchId)}
+                    orders={paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber)}
                     t={t}
                     isRtl={isRtl}
                     calculateAdjustedTotal={calculateAdjustedTotal}
@@ -1152,7 +1176,7 @@ export const Orders: React.FC = () => {
                 </motion.div>
               ) : (
                 <motion.div key="card-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="space-y-3 mt-4">
-                  {paginatedOrders.filter(o => o && o.id && o.branchId).map(order => (
+                  {paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber).map(order => (
                     <OrderCard
                       key={order.id}
                       order={order}
