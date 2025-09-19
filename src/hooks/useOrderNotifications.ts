@@ -227,6 +227,9 @@ export const useOrderNotifications = (
                 productName: item.product?.name || t('products.unknown'),
                 quantity: Number(item.quantity) || 1,
                 price: Number(item.price) || 0,
+                
+                unit: item.unit || t('orders.unknown'),
+
                 department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
                 status: item.status || 'completed',
                 assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown') } : undefined,
