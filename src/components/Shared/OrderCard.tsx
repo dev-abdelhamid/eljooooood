@@ -25,12 +25,7 @@ const ITEM_STATUS_COLORS: Record<ItemStatus, { label: string; color: string; ico
   [ItemStatus.Cancelled]: { label: 'cancelled', color: 'bg-red-50 text-red-600', icon: AlertCircle },
 };
 
-const PRIORITY_COLORS: Record<Order['priority'], string> = {
-  [Priority.Low]: 'bg-gray-100 text-gray-700',
-  [Priority.Medium]: 'bg-blue-100 text-blue-700',
-  [Priority.High]: 'bg-orange-100 text-orange-700',
-  [Priority.Urgent]: 'bg-red-100 text-red-700',
-};
+
 
 interface OrderCardProps {
   order: Order;
