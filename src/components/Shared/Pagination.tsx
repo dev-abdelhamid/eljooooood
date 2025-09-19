@@ -5,12 +5,11 @@ import { motion } from 'framer-motion';
 interface PaginationProps {
   currentPage: number;
   totalPages: number;
-  t: (key: string, params?: any) => string;
   isRtl: boolean;
   handlePageChange: (page: number) => void;
 }
 
-const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, t, isRtl, handlePageChange }) => {
+const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, isRtl, handlePageChange }) => {
   const handlePrevious = useCallback(() => {
     if (currentPage > 1) {
       handlePageChange(currentPage - 1);
@@ -24,17 +23,23 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, t, isR
   }, [currentPage, totalPages, handlePageChange]);
 
   const getPageNumbers = useCallback(() => {
-    const pages = [];
     const maxPagesToShow = 5;
-    let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
-    let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+    const pages: (number | string)[] = [];
+    const startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+    const endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
 
-    if (endPage - startPage < maxPagesToShow - 1) {
-      startPage = Math.max(1, endPage - maxPagesToShow + 1);
+    if (startPage > 1) {
+      pages.push(1);
+      if (startPage > 2) pages.push('...');
     }
 
     for (let i = startPage; i <= endPage; i++) {
       pages.push(i);
+    }
+
+    if (endPage < totalPages) {
+      if (endPage < totalPages - 1) pages.push('...');
+      pages.push(totalPages);
     }
 
     return pages;
@@ -56,24 +61,24 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, t, isR
         size="sm"
         onClick={handlePrevious}
         disabled={currentPage === 1}
-        className="disabled:opacity-50 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg px-3 py-1.5 text-sm shadow-sm"
+        className="disabled:opacity-50 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm shadow-sm"
         aria-label={isRtl ? 'الصفحة السابقة' : 'Previous page'}
       >
         {isRtl ? 'السابق' : 'Previous'}
       </Button>
-      {getPageNumbers().map((page) => (
+      {getPageNumbers().map((page, index) => (
         <Button
-          key={page}
+          key={index}
           variant={page === currentPage ? 'primary' : 'secondary'}
           size="sm"
-          onClick={() => handlePageChange(page)}
+          onClick={() => typeof page === 'number' && handlePageChange(page)}
+          disabled={typeof page !== 'number'}
           className={`${
             page === currentPage
               ? 'bg-amber-500 hover:bg-amber-600 text-white'
-              : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
-          } rounded-lg px-3 py-1.5 text-sm shadow-sm`}
-          aria-label={isRtl ? `الصفحة ${page}` : `Page ${page}`}
-          aria-current={page === currentPage ? 'page' : undefined}
+              : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
+          } rounded-lg px-3 py-2 text-sm shadow-sm ${typeof page !== 'number' ? 'cursor-default' : ''}`}
+          aria-label={typeof page === 'number' ? (isRtl ? `الصفحة ${page}` : `Page ${page}`) : isRtl ? '...' : '...'}
         >
           {page}
         </Button>
@@ -83,14 +88,11 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, t, isR
         size="sm"
         onClick={handleNext}
         disabled={currentPage === totalPages}
-        className="disabled:opacity-50 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg px-3 py-1.5 text-sm shadow-sm"
+        className="disabled:opacity-50 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm shadow-sm"
         aria-label={isRtl ? 'الصفحة التالية' : 'Next page'}
       >
         {isRtl ? 'التالي' : 'Next'}
       </Button>
-      <span className="text-gray-700 text-sm font-semibold">
-        {isRtl ? `الصفحة ${currentPage} من ${totalPages}` : `Page ${currentPage} of ${totalPages}`}
-      </span>
     </motion.div>
   );
 };
