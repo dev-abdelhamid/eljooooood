@@ -23,6 +23,100 @@ const PRIORITY_COLORS: Record<Order['priority'], string> = {
   urgent: 'bg-red-100 text-red-700',
 };
 
+// ترجمات ثابتة
+const translations = {
+  ar: {
+    table_label: 'جدول الطلبات',
+    table_headers: {
+      number: 'رقم',
+      order_number: 'رقم الطلب',
+      branch: 'الفرع',
+      status: 'الحالة',
+      priority: 'الأولوية',
+      products: 'المنتجات',
+      chefs: 'الشيفات',
+      total_amount: 'إجمالي المبلغ',
+      total_quantity: 'الكمية الإجمالية',
+      date: 'التاريخ',
+      actions: 'الإجراءات',
+    },
+    statuses: {
+      pending: 'قيد الانتظار',
+      approved: 'تم الموافقة',
+      in_production: 'في الإنتاج',
+      completed: 'مكتمل',
+      in_transit: 'في النقل',
+      delivered: 'تم التسليم',
+      cancelled: 'ملغى',
+    },
+    priorities: {
+      low: 'منخفض',
+      medium: 'متوسط',
+      high: 'مرتفع',
+      urgent: 'عاجل',
+    },
+    view: 'عرض',
+    approve: 'موافقة',
+    cancel: 'إلغاء',
+    assign: 'تعيين',
+    ship: 'شحن',
+    no_orders: 'لا توجد طلبات',
+    no_chefs_assigned: 'لم يتم تعيين شيفات',
+    more_items: 'المزيد (+{count})',
+    view_order: 'عرض الطلب {orderNumber}',
+    approve_order: 'موافقة الطلب {orderNumber}',
+    cancel_order: 'إلغاء الطلب {orderNumber}',
+    assign_order: 'تعيين الطلب {orderNumber}',
+    ship_order: 'شحن الطلب {orderNumber}',
+    loading: 'جارٍ التحميل',
+  },
+  en: {
+    table_label: 'Orders Table',
+    table_headers: {
+      number: 'No.',
+      order_number: 'Order Number',
+      branch: 'Branch',
+      status: 'Status',
+      priority: 'Priority',
+      products: 'Products',
+      chefs: 'Chefs',
+      total_amount: 'Total Amount',
+      total_quantity: 'Total Quantity',
+      date: 'Date',
+      actions: 'Actions',
+    },
+    statuses: {
+      pending: 'Pending',
+      approved: 'Approved',
+      in_production: 'In Production',
+      completed: 'Completed',
+      in_transit: 'In Transit',
+      delivered: 'Delivered',
+      cancelled: 'Cancelled',
+    },
+    priorities: {
+      low: 'Low',
+      medium: 'Medium',
+      high: 'High',
+      urgent: 'Urgent',
+    },
+    view: 'View',
+    approve: 'Approve',
+    cancel: 'Cancel',
+    assign: 'Assign',
+    ship: 'Ship',
+    no_orders: 'No orders',
+    no_chefs_assigned: 'No chefs assigned',
+    more_items: 'More (+{count})',
+    view_order: 'View order {orderNumber}',
+    approve_order: 'Approve order {orderNumber}',
+    cancel_order: 'Cancel order {orderNumber}',
+    assign_order: 'Assign order {orderNumber}',
+    ship_order: 'Ship order {orderNumber}',
+    loading: 'Loading',
+  },
+};
+
 interface OrderTableProps {
   orders: Order[];
   calculateAdjustedTotal: (order: Order) => string;
@@ -32,14 +126,14 @@ interface OrderTableProps {
   onAssignChefs: (order: Order) => void;
   submitting: string | null;
   isRtl: boolean;
-  t: (key: string, params?: any) => string;
   startIndex: number;
 }
 
 const OrderTable: React.FC<OrderTableProps> = memo(
-  ({ orders, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, updateOrderStatus, onAssignChefs, submitting, isRtl, t, startIndex }) => {
+  ({ orders, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, updateOrderStatus, onAssignChefs, submitting, isRtl, startIndex }) => {
     const { user } = useAuth();
     const [expandedRows, setExpandedRows] = useState<string[]>([]);
+    const t = translations[isRtl ? 'ar' : 'en'];
 
     const toggleExpand = (orderId: string) => {
       setExpandedRows(prev => (prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]));
@@ -52,22 +146,22 @@ const OrderTable: React.FC<OrderTableProps> = memo(
         transition={{ duration: 0.3 }}
         className="overflow-x-auto rounded-md shadow-md border border-gray-100 bg-white"
         role="table"
-        aria-label={t('orders.table_label')}
+        aria-label={t.table_label}
       >
         <table className="min-w-full divide-y divide-gray-100 text-xs">
           <thead className="bg-gray-50">
             <tr className={isRtl ? 'flex-row-reverse' : ''}>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[40px]">{t('orders.table_headers.number')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">{t('orders.table_headers.order_number')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">{t('orders.table_headers.branch')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">{t('orders.table_headers.status')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">{t('orders.table_headers.priority')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[200px]">{t('orders.table_headers.products')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[150px]">{t('orders.table_headers.chefs')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">{t('orders.table_headers.total_amount')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">{t('orders.table_headers.total_quantity')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">{t('orders.table_headers.date')}</th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[120px]">{t('orders.table_headers.actions')}</th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[40px]">{t.table_headers.number}</th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">{t.table_headers.order_number}</th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">{t.table_headers.branch}</th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">{t.table_headers.status}</th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">{t.table_headers.priority}</th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[200px]">{t.table_headers.products}</th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[150px]">{t.table_headers.chefs}</th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">{t.table_headers.total_amount}</th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">{t.table_headers.total_quantity}</th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">{t.table_headers.date}</th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[120px]">{t.table_headers.actions}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -87,12 +181,12 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                   <td className="px-2 py-2 text-center whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium items-center gap-1 ${statusInfo.color} ${isRtl ? 'flex-row-reverse' : ''}`}>
                       <StatusIcon className="w-4 h-4" />
-                      {t(`orders.statuses.${statusInfo.label}`)}
+                      {t.statuses[statusInfo.label]}
                     </span>
                   </td>
                   <td className="px-2 py-2 text-center whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${PRIORITY_COLORS[order.priority]}`}>
-                      {t(`orders.priorities.${order.priority}`)}
+                      {t.priorities[order.priority]}
                     </span>
                   </td>
                   <td className="px-2 py-2 text-gray-600 text-center">
@@ -104,7 +198,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                       ))}
                       {!isExpanded && remaining > 0 && (
                         <span className="text-blue-500 cursor-pointer mx-1" onClick={() => toggleExpand(order.id)}>
-                          {t('orders.more_items', { count: remaining })}
+                          {t.more_items.replace('{count}', remaining.toString())}
                         </span>
                       )}
                     </div>
@@ -122,7 +216,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                           </span>
                         ))}
                       {order.items.every(item => !item.assignedTo) && (
-                        <span className="text-gray-500">{t('orders.no_chefs_assigned')}</span>
+                        <span className="text-gray-500">{t.no_chefs_assigned}</span>
                       )}
                     </div>
                   </td>
@@ -136,9 +230,9 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                           variant="primary"
                           size="xs"
                           className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1 text-xs"
-                          aria-label={t('orders.view_order', { orderNumber: order.orderNumber })}
+                          aria-label={t.view_order.replace('{orderNumber}', order.orderNumber)}
                         >
-                          {t('orders.view')}
+                          {t.view}
                         </Button>
                       </Link>
                       {user?.role === 'production' && order.status === 'pending' && (
@@ -149,9 +243,9 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                             onClick={() => updateOrderStatus(order.id, 'approved')}
                             className="bg-green-500 hover:bg-green-600 text-white rounded-md px-2 py-1 text-xs"
                             disabled={submitting === order.id}
-                            aria-label={t('orders.approve_order', { orderNumber: order.orderNumber })}
+                            aria-label={t.approve_order.replace('{orderNumber}', order.orderNumber)}
                           >
-                            {submitting === order.id ? t('common.loading') : t('orders.approve')}
+                            {submitting === order.id ? t.loading : t.approve}
                           </Button>
                           <Button
                             variant="danger"
@@ -159,9 +253,9 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                             onClick={() => updateOrderStatus(order.id, 'cancelled')}
                             className="bg-red-500 hover:bg-red-600 text-white rounded-md px-2 py-1 text-xs"
                             disabled={submitting === order.id}
-                            aria-label={t('orders.cancel_order', { orderNumber: order.orderNumber })}
+                            aria-label={t.cancel_order.replace('{orderNumber}', order.orderNumber)}
                           >
-                            {submitting === order.id ? t('common.loading') : t('orders.cancel')}
+                            {submitting === order.id ? t.loading : t.cancel}
                           </Button>
                         </>
                       )}
@@ -172,9 +266,9 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                           onClick={() => onAssignChefs(order)}
                           className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1 text-xs"
                           disabled={submitting === order.id}
-                          aria-label={t('orders.assign_order', { orderNumber: order.orderNumber })}
+                          aria-label={t.assign_order.replace('{orderNumber}', order.orderNumber)}
                         >
-                          {submitting === order.id ? t('common.loading') : t('orders.assign')}
+                          {submitting === order.id ? t.loading : t.assign}
                         </Button>
                       )}
                       {user?.role === 'production' && order.status === 'completed' && (
@@ -184,9 +278,9 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                           onClick={() => updateOrderStatus(order.id, 'in_transit')}
                           className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1 text-xs"
                           disabled={submitting === order.id}
-                          aria-label={t('orders.ship_order', { orderNumber: order.orderNumber })}
+                          aria-label={t.ship_order.replace('{orderNumber}', order.orderNumber)}
                         >
-                          {submitting === order.id ? t('common.loading') : t('orders.ship')}
+                          {submitting === order.id ? t.loading : t.ship}
                         </Button>
                       )}
                     </div>
@@ -198,7 +292,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
         </table>
         {orders.length === 0 && (
           <div className="text-center py-4 text-gray-500 text-xs">
-            {t('orders.no_orders')}
+            {t.no_orders}
           </div>
         )}
       </motion.div>
