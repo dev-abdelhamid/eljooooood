@@ -118,7 +118,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
             <div className={`flex items-center justify-between ${isRtl ? 'flex-row' : ''}`}>
               <div className="flex items-center gap-2">
                 <h3 id={`order-${order.id}`} className="text-lg font-semibold text-gray-800 truncate max-w-[260px]">
-                  {isRtl ? `طلب رقم ${order.orderNumber || 'غير معروف'}` : `Order #${order.orderNumber || 'Unknown'}`}
+                  {isRtl ? `طلب  ${order.orderNumber || 'غير معروف'}` : `Order #${order.orderNumber || 'Unknown'}`}
                 </h3>
                 {order.priority !== 'medium' && (
                   <span
