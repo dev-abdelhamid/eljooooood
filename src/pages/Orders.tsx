@@ -1196,13 +1196,13 @@ export const Orders: React.FC = () => {
               )}
               {paginatedOrders.length > 0 && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="mt-4">
-             <Pagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        t={t}
-        isRtl={isRtl}
-        handlePageChange={handlePageChange}
-      />
+                  <Pagination
+                    currentPage={state.currentPage}
+                    totalPages={Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode])}
+                    isRtl={isRtl}
+                    t={t}
+                    handlePageChange={(page) => dispatch({ type: 'SET_PAGE', payload: page })}
+                  />
                 </motion.div>
               )}
               <AssignChefsModal
