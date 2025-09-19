@@ -16,6 +16,13 @@ const STATUS_COLORS: Record<OrderStatus, { color: string; label: string; icon: R
   cancelled: { color: 'bg-red-100 text-red-700', label: 'cancelled', icon: AlertCircle },
 };
 
+const PRIORITY_COLORS: Record<Order['priority'], string> = {
+  low: 'bg-gray-100 text-gray-700',
+  medium: 'bg-blue-100 text-blue-700',
+  high: 'bg-orange-100 text-orange-700',
+  urgent: 'bg-red-100 text-red-700',
+};
+
 interface OrderTableProps {
   orders: Order[];
   calculateAdjustedTotal: (order: Order) => string;
@@ -26,15 +33,16 @@ interface OrderTableProps {
   submitting: string | null;
   isRtl: boolean;
   t: (key: string, params?: any) => string;
+  startIndex: number;
 }
 
 const OrderTable: React.FC<OrderTableProps> = memo(
-  ({ orders, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, updateOrderStatus, onAssignChefs, submitting, isRtl, t }) => {
+  ({ orders, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, updateOrderStatus, onAssignChefs, submitting, isRtl, t, startIndex }) => {
     const { user } = useAuth();
     const [expandedRows, setExpandedRows] = useState<string[]>([]);
 
     const toggleExpand = (orderId: string) => {
-      setExpandedRows(prev => prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]);
+      setExpandedRows(prev => (prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]));
     };
 
     return (
@@ -55,6 +63,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">{t('orders.table_headers.status')}</th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">{t('orders.table_headers.priority')}</th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[200px]">{t('orders.table_headers.products')}</th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[150px]">{t('orders.table_headers.chefs')}</th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">{t('orders.table_headers.total_amount')}</th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">{t('orders.table_headers.total_quantity')}</th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">{t('orders.table_headers.date')}</th>
@@ -72,7 +81,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
 
               return (
                 <tr key={order.id} className={`hover:bg-gray-50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  <td className="px-2 py-2 text-gray-600 text-center whitespace-nowrap">{index + 1}</td>
+                  <td className="px-2 py-2 text-gray-600 text-center whitespace-nowrap">{startIndex + index}</td>
                   <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[100px]">{order.orderNumber}</td>
                   <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[100px]">{order.branchName}</td>
                   <td className="px-2 py-2 text-center whitespace-nowrap">
@@ -82,12 +91,12 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                     </span>
                   </td>
                   <td className="px-2 py-2 text-center whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${order.priority === 'urgent' ? 'bg-red-100 text-red-700' : order.priority === 'high' ? 'bg-orange-100 text-orange-700' : order.priority === 'medium' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'}`}>
+                    <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${PRIORITY_COLORS[order.priority]}`}>
                       {t(`orders.priorities.${order.priority}`)}
                     </span>
                   </td>
                   <td className="px-2 py-2 text-gray-600 text-center">
-                    <div className="flex overflow-x-auto max-w-[200px] whitespace-nowrap" onClick={() => toggleExpand(order.id)}>
+                    <div className="flex overflow-x-auto max-w-[200px] whitespace-nowrap scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100" onClick={() => toggleExpand(order.id)}>
                       {productsToShow.map((item, idx) => (
                         <span key={item._id} className="inline-block mx-1 truncate">
                           {`${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.productName}${idx < productsToShow.length - 1 ? ',' : ''}`}
@@ -97,6 +106,23 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                         <span className="text-blue-500 cursor-pointer mx-1" onClick={() => toggleExpand(order.id)}>
                           {t('orders.more_items', { count: remaining })}
                         </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-2 py-2 text-gray-600 text-center">
+                    <div className="flex overflow-x-auto max-w-[150px] whitespace-nowrap scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                      {order.items
+                        .filter(item => item.assignedTo)
+                        .map(item => (
+                          <span
+                            key={item._id}
+                            className="inline-block mx-1 truncate bg-blue-50 px-2 py-1 rounded-md text-blue-600"
+                          >
+                            {item.assignedTo?.name || (isRtl ? 'غير معروف' : 'Unknown')}
+                          </span>
+                        ))}
+                      {order.items.every(item => !item.assignedTo) && (
+                        <span className="text-gray-500">{t('orders.no_chefs_assigned')}</span>
                       )}
                     </div>
                   </td>
