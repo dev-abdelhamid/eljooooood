@@ -231,9 +231,9 @@ export const ordersAPI = {
     console.log(`ordersAPI.updateChefItem - Response at ${new Date().toISOString()}:`, response);
     return response;
   },
- assignChef: async (orderId: string, data: { items: Array<{ itemId: string; assignedTo: string }> }) => {
+  assignChef: async (orderId: string, data: { items: Array<{ itemId: string; assignedTo: string }> }) => {
     console.log(`[${new Date().toISOString()}] ordersAPI.assignChef - Sending:`, { orderId, data });
-    if ((orderId) || data.items.some(item => !(item.itemId) || !(item.assignedTo))) {
+    if ((orderId) || data.items.some(item => !(item.itemId) || (item.assignedTo))) {
       console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - بيانات غير صالحة:`, { orderId, data });
       throw new Error('معرف الطلب أو معرف العنصر أو معرف الشيف غير صالح');
     }
@@ -250,7 +250,6 @@ export const ordersAPI = {
       console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - Error:`, error.response?.data || error.message);
       throw new Error(error.response?.data?.message || 'خطأ في تعيين الشيف');
     }
-  },
   },
   confirmDelivery: async (orderId: string) => {
     if (!/^[0-9a-fA-F]{24}$/.test(orderId)) {
