@@ -1,6 +1,6 @@
-import React, { memo, useState, useCallback } from 'react';
+import React, { useState, memo, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Order, OrderStatus, ItemStatus } from '../../types/types';
+import { Order, OrderStatus, Chef, ItemStatus } from '../../types/types';
 import { Button } from '../UI/Button';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -33,17 +33,16 @@ const PRIORITY_COLORS: Record<Order['priority'], string> = {
 interface OrderCardProps {
   order: Order;
   updateOrderStatus: (orderId: string, newStatus: OrderStatus) => void;
-  onAssignChefs: (order: Order) => void;
+  openAssignModal: (order: Order) => void;
   calculateAdjustedTotal: (order: Order) => string;
   calculateTotalQuantity: (order: Order) => number;
   translateUnit: (unit: string, isRtl: boolean) => string;
   submitting: string | null;
   isRtl: boolean;
-  t: (key: string, params?: any) => string;
 }
 
 const OrderCard: React.FC<OrderCardProps> = memo(
-  ({ order, updateOrderStatus, onAssignChefs, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, submitting, isRtl, t }) => {
+  ({ order, updateOrderStatus, openAssignModal, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, submitting, isRtl }) => {
     const { user } = useAuth();
     const [isItemsExpanded, setIsItemsExpanded] = useState(false);
     const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS.pending;
@@ -63,27 +62,35 @@ const OrderCard: React.FC<OrderCardProps> = memo(
         role="region"
         aria-labelledby={`order-${order.id}`}
       >
-        <div className="p-4 bg-white shadow-md rounded-lg border border-gray-200 hover:shadow-lg transition-shadow duration-300">
-          <div className="flex flex-col gap-4">
-            <div className={`flex items-center justify-between ${isRtl ? 'flex-row-reverse' : ''}`}>
-              <div className="flex items-center gap-2">
+        <div className="p-3 bg-white shadow-md rounded-lg border border-gray-200 hover:shadow-lg transition-shadow duration-300">
+          <div className="flex flex-col gap-3">
+            <div className={`flex items-center justify-between ${isRtl ? 'flex-row' : ''}`}>
+              <div className="flex items-center gap-1">
                 <h3 id={`order-${order.id}`} className="text-base font-semibold text-gray-800 truncate max-w-[220px]">
-                  {t('orders.order_number', { number: order.orderNumber || t('common.unknown') })}
+                  {isRtl ? `طلب  ${order.orderNumber || 'غير معروف'}` : `Order #${order.orderNumber || 'Unknown'}`}
                 </h3>
                 {order.priority !== 'medium' && (
-                  <span className={`px-2 py-1 rounded-full text-sm font-medium ${PRIORITY_COLORS[order.priority]}`}>
-                    {t(`orders.priorities.${order.priority}`)}
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${PRIORITY_COLORS[order.priority]} ${
+                      isRtl ? 'ml-1' : 'mr-1'
+                    }`}
+                  >
+                    {isRtl ? {urgent: 'عاجل', high: 'مرتفع', medium: 'متوسط', low: 'منخفض'}[order.priority] : order.priority}
                   </span>
                 )}
               </div>
-              <span className={`px-2 py-1 rounded-full text-sm font-medium flex items-center gap-1 ${statusInfo.color} ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <StatusIcon className="w-4 h-4" />
-                {t(`orders.statuses.${statusInfo.label}`)}
+              <span
+                className={`px-1.5 py-0.5 rounded-full text-xs font-medium flex items-center gap-1 ${statusInfo.color} ${
+                  isRtl ? 'flex-row-reverse' : ''
+                }`}
+              >
+                <StatusIcon className="w-3 h-3" />
+                {isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : statusInfo.label}
               </span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-1.5">
               <div
-                className="bg-amber-500 h-1.5 rounded-full transition-all duration-500"
+                className="bg-amber-600 h-1.5 rounded-full transition-all duration-500"
                 style={{ width: `${statusInfo.progress}%` }}
               />
             </div>
@@ -91,37 +98,39 @@ const OrderCard: React.FC<OrderCardProps> = memo(
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="p-2 bg-yellow-50 border border-yellow-100 rounded-md flex items-center gap-2"
+                className="p-1.5 bg-yellow-50 border border-yellow-100 rounded-md flex items-center gap-1.5"
                 role="alert"
               >
-                <AlertCircle className="w-4 h-4 text-yellow-600" />
-                <span className="text-sm text-yellow-600">
-                  {t('orders.unassigned_items', { count: unassignedItems.length })}
+                <AlertCircle className="w-3 h-3 text-yellow-600" />
+                <span className="text-xs text-yellow-600">
+                  {isRtl ? `${unassignedItems.length} عناصر غير معينة` : `${unassignedItems.length} unassigned items`}
                 </span>
               </motion.div>
             )}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2">
               <div>
-                <p className="text-sm text-gray-500">{t('orders.total_quantity')}</p>
-                <p className="text-sm font-medium text-gray-800">{calculateTotalQuantity(order)}</p>
+                <p className="text-xs text-gray-500">{isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}</p>
+                <p className="text-xs font-medium text-gray-800">
+                  {isRtl ? `${calculateTotalQuantity(order)} عنصر ` : `${calculateTotalQuantity(order)} items`}
+                </p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">{t('orders.total_amount')}</p>
-                <p className="text-sm font-semibold text-amber-600">{calculateAdjustedTotal(order)}</p>
+                <p className="text-xs text-gray-500">{isRtl ? 'إجمالي المبلغ' : 'Total Amount'}</p>
+                <p className="text-xs font-semibold text-teal-600">{calculateAdjustedTotal(order)}</p>
               </div>
               <div className="col-span-2">
-                <p className="text-sm text-gray-500">{t('orders.date')}</p>
-                <p className="text-sm font-medium text-gray-800 truncate">{order.date}</p>
+                <p className="text-xs text-gray-500">{isRtl ? 'التاريخ' : 'Date'}</p>
+                <p className="text-xs font-medium text-gray-800 truncate">{order.date}</p>
               </div>
             </div>
             <div>
               <button
                 onClick={toggleItemsExpanded}
-                className={`flex items-center justify-between w-full p-2 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}
+                className="flex items-center justify-between w-full p-2 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors duration-200"
                 aria-expanded={isItemsExpanded}
                 aria-controls={`items-${order.id}`}
               >
-                <h4 className="text-sm font-semibold text-gray-900">{t('orders.products')}</h4>
+                <h4 className="text-sm font-semibold text-gray-900">{isRtl ? 'المنتجات' : 'Products'}</h4>
                 {isItemsExpanded ? (
                   <ChevronUp className="w-4 h-4 text-gray-600" />
                 ) : (
@@ -139,7 +148,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                     className="overflow-hidden"
                   >
                     <div className="space-y-2 mt-2">
-                      {order.items.map((item, index) => {
+                      {order.items.map((item) => {
                         const itemStatusInfo = ITEM_STATUS_COLORS[item.status] || ITEM_STATUS_COLORS.pending;
                         const ItemStatusIcon = itemStatusInfo.icon;
                         return (
@@ -147,25 +156,29 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                             key={item._id}
                             initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
                             animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.2, delay: index * 0.1 }}
+                            transition={{ duration: 0.2 }}
                             className="p-2 bg-gray-50 rounded-md"
                           >
-                            <div className={`flex items-center justify-between gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                              <p className="text-sm font-medium text-gray-900 truncate flex-1">
-                                {`${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.productName}`}
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="text-xs font-medium text-gray-900 truncate flex-1">
+                                {item.productName} ({item.quantity} {translateUnit(item.unit, isRtl)})
                               </p>
-                              <p className="text-sm text-gray-600 truncate">
-                                {t('orders.department', { name: t(`departments.${item.department?.name || 'unknown'}`) })}
+                              <p className="text-xs text-gray-600 truncate">
+                                {isRtl ? `القسم: ${ {bread: 'الخبز', pastries: 'المعجنات', cakes: 'الكعك', unknown: 'غير معروف'}[item.department?.name || 'unknown']}` : `Department: ${item.department?.name || 'Unknown'}`}
                               </p>
                             </div>
-                            <div className={`flex items-center gap-2 mt-1 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                              <span className={`px-2 py-1 rounded-full text-sm font-medium flex items-center gap-1 ${itemStatusInfo.color}`}>
-                                <ItemStatusIcon className="w-4 h-4" />
-                                {t(`orders.item_statuses.${itemStatusInfo.label}`)}
+                            <div className="flex items-center gap-2 mt-1">
+                              <span
+                                className={`px-1.5 py-0.5 rounded-full text-xs font-medium flex items-center gap-1 ${itemStatusInfo.color} ${
+                                  isRtl ? 'flex-row-reverse' : ''
+                                }`}
+                              >
+                                <ItemStatusIcon className="w-3 h-3" />
+                                {isRtl ? {pending: 'قيد الانتظار', assigned: 'معين', in_progress: 'قيد التقدم', completed: 'مكتمل'}[item.status] : itemStatusInfo.label}
                               </span>
                               {item.assignedTo && (
-                                <p className="text-sm text-gray-600 truncate">
-                                  {t('orders.assigned_to', { name: item.assignedTo.name || t('common.unknown') })}
+                                <p className="text-xs text-gray-600 truncate">
+                                  {isRtl ? `معين إلى: ${item.assignedTo.name || 'غير معروف'}` : `Assigned to: ${item.assignedTo.name || 'Unknown'}`}
                                 </p>
                               )}
                             </div>
@@ -178,36 +191,39 @@ const OrderCard: React.FC<OrderCardProps> = memo(
               </AnimatePresence>
             </div>
             {order.notes && (
-              <div className="mt-2 p-2 bg-amber-50 rounded-md">
-                <p className="text-sm text-amber-800 truncate">
-                  <strong>{t('orders.notes')}:</strong> {order.notes}
+              <div className="mt-1 p-1.5 bg-amber-50 rounded-md">
+                <p className="text-xs text-amber-800 truncate">
+                  <strong>{isRtl ? 'ملاحظات:' : 'Notes:'}</strong> {order.notes}
                 </p>
               </div>
             )}
             {order.returns?.length > 0 && (
-              <div className="mt-2 p-2 bg-amber-50 rounded-md">
-                <p className="text-sm font-medium text-amber-800">{t('orders.returns')}</p>
+              <div className="mt-1 p-1.5 bg-amber-50 rounded-md">
+                <p className="text-xs font-medium text-amber-800">{isRtl ? 'الإرجاعات' : 'Returns'}</p>
                 {order.returns.map((r, i) => (
-                  <p key={i} className="text-sm text-amber-700 truncate">
-                    {t('orders.return_items', {
-                      items: r.items
-                        .map((item) => `${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.reason}`)
-                        .join(', '),
-                      status: t(`orders.return_statuses.${r.status}`),
-                    })}
+                  <p key={i} className="text-xs text-amber-700 truncate">
+                    {isRtl
+                      ? `${r.items
+                          .map((item) => `${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.reason}`)
+                          .join(', ')} - الحالة: ${
+                          isRtl ? {pending: 'قيد الانتظار', approved: 'تمت الموافقة', rejected: 'مرفوض', processed: 'تمت المعالجة'}[r.status] : r.status
+                        }`
+                      : `${r.items
+                          .map((item) => `${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.reason}`)
+                          .join(', ')} - Status: ${r.status}`}
                   </p>
                 ))}
               </div>
             )}
-            <div className={`flex flex-wrap gap-2 ${isRtl ? 'justify-end flex-row-reverse' : 'justify-start'}`}>
+            <div className={`flex flex-wrap gap-1.5 ${isRtl ? 'justify-end' : 'justify-start'}`}>
               <Link to={`/orders/${order.id}`}>
                 <Button
                   variant="primary"
                   size="sm"
-                  className="bg-amber-500 hover:bg-amber-600 text-white rounded-full px-3 py-1 text-sm"
-                  aria-label={t('orders.view_order', { orderNumber: order.orderNumber })}
+                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-2.5 py-1 text-xs"
+                  aria-label={isRtl ? `عرض طلب رقم ${order.orderNumber}` : `View order #${order.orderNumber}`}
                 >
-                  {t('orders.view')}
+                  {isRtl ? 'عرض' : 'View'}
                 </Button>
               </Link>
               {user?.role === 'production' && order.status === 'pending' && (
@@ -216,21 +232,21 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                     variant="success"
                     size="sm"
                     onClick={() => updateOrderStatus(order.id, 'approved')}
-                    className="bg-green-500 hover:bg-green-600 text-white rounded-full px-3 py-1 text-sm"
+                    className="bg-green-500 hover:bg-green-600 text-white rounded-full px-2.5 py-1 text-xs"
                     disabled={submitting === order.id}
-                    aria-label={t('orders.approve_order', { orderNumber: order.orderNumber })}
+                    aria-label={isRtl ? `الموافقة على طلب رقم ${order.orderNumber}` : `Approve order #${order.orderNumber}`}
                   >
-                    {submitting === order.id ? t('common.loading') : t('orders.approve')}
+                    {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : isRtl ? 'موافقة' : 'Approve'}
                   </Button>
                   <Button
                     variant="danger"
                     size="sm"
                     onClick={() => updateOrderStatus(order.id, 'cancelled')}
-                    className="bg-red-500 hover:bg-red-600 text-white rounded-full px-3 py-1 text-sm"
+                    className="bg-red-500 hover:bg-red-600 text-white rounded-full px-2.5 py-1 text-xs"
                     disabled={submitting === order.id}
-                    aria-label={t('orders.cancel_order', { orderNumber: order.orderNumber })}
+                    aria-label={isRtl ? `إلغاء طلب رقم ${order.orderNumber}` : `Cancel order #${order.orderNumber}`}
                   >
-                    {submitting === order.id ? t('common.loading') : t('orders.cancel')}
+                    {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : isRtl ? 'إلغاء' : 'Cancel'}
                   </Button>
                 </>
               )}
@@ -238,12 +254,12 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={() => onAssignChefs(order)}
-                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-3 py-1 text-sm"
+                  onClick={() => openAssignModal(order)}
+                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-2.5 py-1 text-xs"
                   disabled={submitting === order.id}
-                  aria-label={t('orders.assign_order', { orderNumber: order.orderNumber })}
+                  aria-label={isRtl ? `تعيين طلب رقم ${order.orderNumber}` : `Assign order #${order.orderNumber}`}
                 >
-                  {submitting === order.id ? t('common.loading') : t('orders.assign')}
+                  {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : isRtl ? 'تعيين' : 'Assign'}
                 </Button>
               )}
               {user?.role === 'production' && order.status === 'completed' && (
@@ -251,11 +267,11 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                   variant="primary"
                   size="sm"
                   onClick={() => updateOrderStatus(order.id, 'in_transit')}
-                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-3 py-1 text-sm"
+                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-2.5 py-1 text-xs"
                   disabled={submitting === order.id}
-                  aria-label={t('orders.ship_order', { orderNumber: order.orderNumber })}
+                  aria-label={isRtl ? `شحن طلب رقم ${order.orderNumber}` : `Ship order #${order.orderNumber}`}
                 >
-                  {submitting === order.id ? t('common.loading') : t('orders.ship')}
+                  {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : isRtl ? 'شحن' : 'Ship'}
                 </Button>
               )}
             </div>
