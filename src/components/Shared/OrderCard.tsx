@@ -1,11 +1,10 @@
-import React, { useState, memo, useCallback } from 'react';
+import React, { useState, useCallback, memo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useLanguage } from '../../contexts/LanguageContext';
-import { Order, OrderStatus, Chef, ItemStatus } from '../../types/types';
 import { Button } from '../UI/Button';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, Check, Package, Truck, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Order, OrderStatus, ItemStatus } from '../../types/types';
 
 const STATUS_COLORS: Record<OrderStatus, { color: string; icon: React.FC; label: string; progress: number }> = {
   pending: { color: 'bg-yellow-100 text-yellow-800', icon: Clock, label: 'pending', progress: 0 },
@@ -39,14 +38,12 @@ interface OrderCardProps {
   calculateTotalQuantity: (order: Order) => number;
   translateUnit: (unit: string, isRtl: boolean) => string;
   submitting: string | null;
+  isRtl: boolean;
 }
 
 const OrderCard: React.FC<OrderCardProps> = memo(
-  ({ order, updateOrderStatus, openAssignModal, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, submitting }) => {
+  ({ order, updateOrderStatus, openAssignModal, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, submitting, isRtl }) => {
     const { user } = useAuth();
-    const { language } = useLanguage();
-    const isRtl = language === 'ar';
-    
     const [isItemsExpanded, setIsItemsExpanded] = useState(false);
     const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS.pending;
     const StatusIcon = statusInfo.icon;
@@ -67,7 +64,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
       >
         <div className="p-3 bg-white shadow-md rounded-lg border border-gray-200 hover:shadow-lg transition-shadow duration-300">
           <div className="flex flex-col gap-3">
-            <div className={`flex items-center justify-between ${isRtl ? 'flex-row' : ''}`}>
+            <div className={`flex items-center justify-between ${isRtl ? 'flex-row-reverse' : ''}`}>
               <div className="flex items-center gap-1">
                 <h3 id={`order-${order.id}`} className="text-base font-semibold text-gray-800 truncate max-w-[220px]">
                   {isRtl ? `طلب ${order.orderNumber || 'غير معروف'}` : `Order #${order.orderNumber || 'Unknown'}`}
@@ -75,7 +72,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                 {order.priority !== 'medium' && (
                   <span
                     className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${PRIORITY_COLORS[order.priority]} ${
-                      isRtl ? 'ml-1' : 'mr-1'
+                      isRtl ? 'mr-1' : 'ml-1'
                     }`}
                   >
                     {isRtl ? { urgent: 'عاجل', high: 'مرتفع', medium: 'متوسط', low: 'منخفض' }[order.priority] : order.priority}
@@ -239,7 +236,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                     disabled={submitting === order.id}
                     aria-label={isRtl ? `الموافقة على طلب رقم ${order.orderNumber}` : `Approve order #${order.orderNumber}`}
                   >
-                    {submitting === order.id ? (isRtl ? 'جارٍ الموافقة...' : 'Loading...') : isRtl ? 'موافقة' : 'Approve'}
+                    {submitting === order.id ? (isRtl ? 'جارٍ الموافقة...' : 'Loading...') : (isRtl ? 'موافقة' : 'Approve')}
                   </Button>
                   <Button
                     variant="danger"
@@ -249,7 +246,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                     disabled={submitting === order.id}
                     aria-label={isRtl ? `إلغاء طلب رقم ${order.orderNumber}` : `Cancel order #${order.orderNumber}`}
                   >
-                    {submitting === order.id ? (isRtl ? 'جارٍ الالغاء...' : 'Loading...') : isRtl ? 'إلغاء' : 'Cancel'}
+                    {submitting === order.id ? (isRtl ? 'جارٍ الإلغاء...' : 'Loading...') : (isRtl ? 'إلغاء' : 'Cancel')}
                   </Button>
                 </>
               )}
@@ -262,7 +259,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                   disabled={submitting === order.id}
                   aria-label={isRtl ? `تعيين طلب رقم ${order.orderNumber}` : `Assign order #${order.orderNumber}`}
                 >
-                  {submitting === order.id ? (isRtl ? 'جارٍ التوزيع...' : 'Loading...') : isRtl ? 'توزيع' : 'Assign'}
+                  {submitting === order.id ? (isRtl ? 'جارٍ التوزيع...' : 'Loading...') : (isRtl ? 'توزيع' : 'Assign')}
                 </Button>
               )}
               {user?.role === 'production' && order.status === 'completed' && (
@@ -274,7 +271,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                   disabled={submitting === order.id}
                   aria-label={isRtl ? `شحن طلب رقم ${order.orderNumber}` : `Ship order #${order.orderNumber}`}
                 >
-                  {submitting === order.id ? (isRtl ? 'جارٍ الشحن...' : 'Loading...') : isRtl ? 'شحن' : 'Ship'}
+                  {submitting === order.id ? (isRtl ? 'جارٍ الشحن...' : 'Loading...') : (isRtl ? 'شحن' : 'Ship')}
                 </Button>
               )}
             </div>
