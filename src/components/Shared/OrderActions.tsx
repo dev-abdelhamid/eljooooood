@@ -3,11 +3,20 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../UI/Button';
 import { Check, Package, X } from 'lucide-react';
-import { Order, OrderStatus } from '../../types/types';
+
+interface Order {
+  id: string;
+  orderNumber: string;
+  status: 'pending' | 'approved' | 'in_production' | 'completed' | 'in_transit' | 'delivered' | 'cancelled';
+  items: Array<{
+    _id: string;
+    assignedTo?: { _id: string; name: string };
+  }>;
+}
 
 interface OrderActionsProps {
   order: Order;
-  updateOrderStatus: (orderId: string, status: OrderStatus) => void;
+  updateOrderStatus: (orderId: string, status: Order['status']) => void;
   openAssignModal: (order: Order) => void;
   submitting: string | null;
 }
@@ -25,33 +34,33 @@ export const OrderActions: React.FC<OrderActionsProps> = ({
 
   return (
     <div className={`flex flex-wrap gap-2 ${isRtl ? 'justify-end' : 'justify-start'}`}>
-      {user?.role === 'production' && order.status === OrderStatus.Pending && (
+      {user?.role === 'production' && order.status === 'pending' && (
         <>
           <Button
             variant="success"
             size="sm"
             icon={Check}
-            onClick={() => updateOrderStatus(order.id, OrderStatus.Approved)}
+            onClick={() => updateOrderStatus(order.id, 'approved')}
             className="bg-green-600 hover:bg-green-700 text-white rounded-full px-3 py-1 text-xs"
             disabled={submitting === order.id}
-            aria-label={t('orders.approve_order', { orderNumber: order.orderNumber, defaultValue: isRtl ? `الموافقة على طلب رقم ${order.orderNumber}` : `Approve order #${order.orderNumber}` })}
+            aria-label={t('orders.approve_order', { orderNumber: order.orderNumber })}
           >
-            {submitting === order.id ? t('common.loading', { defaultValue: isRtl ? 'جارٍ التحميل' : 'Loading' }) : t('orders.approve', { defaultValue: isRtl ? 'موافقة' : 'Approve' })}
+            {submitting === order.id ? t('common.loading') : t('orders.approve')}
           </Button>
           <Button
             variant="danger"
             size="sm"
             icon={X}
-            onClick={() => updateOrderStatus(order.id, OrderStatus.Cancelled)}
+            onClick={() => updateOrderStatus(order.id, 'cancelled')}
             className="bg-red-600 hover:bg-red-700 text-white rounded-full px-3 py-1 text-xs"
             disabled={submitting === order.id}
-            aria-label={t('orders.cancel_order', { orderNumber: order.orderNumber, defaultValue: isRtl ? `إلغاء طلب رقم ${order.orderNumber}` : `Cancel order #${order.orderNumber}` })}
+            aria-label={t('orders.cancel_order', { orderNumber: order.orderNumber })}
           >
-            {submitting === order.id ? t('common.loading', { defaultValue: isRtl ? 'جارٍ التحميل' : 'Loading' }) : t('orders.cancel', { defaultValue: isRtl ? 'إلغاء' : 'Cancel' })}
+            {submitting === order.id ? t('common.loading') : t('orders.cancel')}
           </Button>
         </>
       )}
-      {user?.role === 'production' && order.status === OrderStatus.Approved && unassignedItems.length > 0 && (
+      {user?.role === 'production' && order.status === 'approved' && unassignedItems.length > 0 && (
         <Button
           variant="primary"
           size="sm"
@@ -59,22 +68,22 @@ export const OrderActions: React.FC<OrderActionsProps> = ({
           onClick={() => openAssignModal(order)}
           className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-3 py-1 text-xs"
           disabled={submitting === order.id}
-          aria-label={t('orders.assign_order', { orderNumber: order.orderNumber, defaultValue: isRtl ? `تعيين طلب رقم ${order.orderNumber}` : `Assign order #${order.orderNumber}` })}
+          aria-label={t('orders.assign_order', { orderNumber: order.orderNumber })}
         >
-          {submitting === order.id ? t('common.loading', { defaultValue: isRtl ? 'جارٍ التحميل' : 'Loading' }) : t('orders.assign', { defaultValue: isRtl ? 'تعيين' : 'Assign' })}
+          {submitting === order.id ? t('common.loading') : t('orders.assign')}
         </Button>
       )}
-      {user?.role === 'production' && order.status === OrderStatus.Completed && (
+      {user?.role === 'production' && order.status === 'completed' && (
         <Button
           variant="primary"
           size="sm"
           icon={Package}
-          onClick={() => updateOrderStatus(order.id, OrderStatus.InTransit)}
+          onClick={() => updateOrderStatus(order.id, 'in_transit')}
           className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-3 py-1 text-xs"
           disabled={submitting === order.id}
-          aria-label={t('orders.ship_order', { orderNumber: order.orderNumber, defaultValue: isRtl ? `شحن طلب رقم ${order.orderNumber}` : `Ship order #${order.orderNumber}` })}
+          aria-label={t('orders.ship_order', { orderNumber: order.orderNumber })}
         >
-          {submitting === order.id ? t('common.loading', { defaultValue: isRtl ? 'جارٍ التحميل' : 'Loading' }) : t('orders.ship', { defaultValue: isRtl ? 'شحن' : 'Ship' })}
+          {submitting === order.id ? t('common.loading') : t('orders.ship')}
         </Button>
       )}
     </div>
