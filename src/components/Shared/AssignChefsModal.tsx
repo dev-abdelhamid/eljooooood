@@ -4,7 +4,7 @@ import { Modal } from '../UI/Modal';
 import { Button } from '../UI/Button';
 import { Select } from '../UI/Select';
 import { AlertCircle } from 'lucide-react';
-import { Order, Chef, AssignChefsForm } from '../../types';
+import { Order, Chef, AssignChefsForm } from '../../types/types';
 import { useLanguage } from '../../contexts/LanguageContext';
 
 interface AssignChefsModalProps {

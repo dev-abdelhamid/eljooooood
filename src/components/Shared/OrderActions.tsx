@@ -3,7 +3,7 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../UI/Button';
 import { Check, Package, X } from 'lucide-react';
-import { Order, OrderStatus } from '../../types';
+import { Order, OrderStatus } from '../../types/types';
 
 interface OrderActionsProps {
   order: Order;

@@ -1,7 +1,7 @@
 import React, { useState, memo, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { Order, OrderStatus, ItemStatus } from '../../types';
+import { Order, OrderStatus, ItemStatus } from '../../types/types';
 import { Button } from '../UI/Button';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
