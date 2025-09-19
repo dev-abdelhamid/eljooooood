@@ -176,8 +176,8 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                               {item.assignedTo && (
                                 <p className="text-xs text-gray-600 truncate">
                                   {isRtl
-                                    ? `معين إلى: شيف ${item.assignedTo.name || 'غير معروف'} (${item.department?.name || 'غير معروف'})`
-                                    : `Assigned to: Chef ${item.assignedTo.name || 'Unknown'} (${item.department?.name || 'Unknown'})`}
+                                    ? `تعيين لـ: ${item.assignedTo.name} (${item.department?.name || 'غير معروف'})`
+                                    : `Assigned to: ${item.assignedTo.name} (${item.department?.name || 'Unknown'})`}
                                 </p>
                               )}
                               <p className="text-xs font-medium text-gray-900">{item.price}</p>
