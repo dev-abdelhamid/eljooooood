@@ -1,10 +1,10 @@
-import React, { memo, useState, useMemo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Button } from '../UI/Button';
 import { useAuth } from '../../contexts/AuthContext';
-import { Order, OrderStatus, ItemStatus } from '../../types/types';
-import { Clock, Check, Package, Truck, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Order, OrderStatus } from '../../types/types';
+import { Clock, Check, Package, Truck, AlertCircle } from 'lucide-react';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
 
@@ -16,13 +16,6 @@ const STATUS_COLORS: Record<OrderStatus, { color: string; label: string; icon: R
   in_transit: { color: 'bg-blue-100 text-blue-700', label: 'in_transit', icon: Truck },
   delivered: { color: 'bg-gray-100 text-gray-700', label: 'delivered', icon: Check },
   cancelled: { color: 'bg-red-100 text-red-700', label: 'cancelled', icon: AlertCircle },
-};
-
-const PRIORITY_COLORS: Record<Order['priority'], string> = {
-  low: 'bg-gray-100 text-gray-700',
-  medium: 'bg-blue-100 text-blue-700',
-  high: 'bg-orange-100 text-orange-700',
-  urgent: 'bg-red-100 text-red-700',
 };
 
 interface OrderTableProps {
@@ -48,7 +41,7 @@ const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
     <table className="min-w-full">
       <thead>
         <tr className={isRtl ? 'flex-row-reverse' : ''}>
-          {Array(11).fill(0).map((_, index) => (
+          {Array(8).fill(0).map((_, index) => (
             <th key={index} className="px-3 py-2">
               <Skeleton width={80} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
             </th>
@@ -61,7 +54,7 @@ const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
             key={rowIndex}
             className={`hover:bg-gray-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}
           >
-            {Array(11).fill(0).map((_, cellIndex) => (
+            {Array(8).fill(0).map((_, cellIndex) => (
               <td key={cellIndex} className="px-3 py-2">
                 <Skeleton width={100} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
               </td>
@@ -76,11 +69,12 @@ const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
 const OrderTable: React.FC<OrderTableProps> = memo(
   ({ orders, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, updateOrderStatus, onAssignChefs, submitting, isRtl, loading, startIndex }) => {
     const { user } = useAuth();
-    const [expandedRows, setExpandedRows] = useState<string[]>([]);
 
-    const toggleExpand = (orderId: string) => {
-      setExpandedRows(prev => (prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]));
-    };
+    const formatProducts = useMemo(() => (order: Order) => {
+      return order.items
+        .map(item => `(${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.productName})`)
+        .join(' + ');
+    }, [isRtl, translateUnit]);
 
     if (loading) {
       return <OrderTableSkeleton isRtl={isRtl} />;
@@ -110,14 +104,8 @@ const OrderTable: React.FC<OrderTableProps> = memo(
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">
                 {isRtl ? 'الحالة' : 'Status'}
               </th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">
-                {isRtl ? 'الأولوية' : 'Priority'}
-              </th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[200px]">
                 {isRtl ? 'المنتجات' : 'Products'}
-              </th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[150px]">
-                {isRtl ? 'الشيفات' : 'Chefs'}
               </th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">
                 {isRtl ? 'إجمالي المبلغ' : 'Total Amount'}
@@ -136,7 +124,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
           <tbody className="divide-y divide-gray-100">
             {orders.length === 0 ? (
               <tr>
-                <td colSpan={11} className="text-center py-4 text-gray-500 text-xs">
+                <td colSpan={9} className="text-center py-4 text-gray-500 text-xs">
                   {isRtl ? 'لا توجد طلبات' : 'No orders found'}
                 </td>
               </tr>
@@ -145,12 +133,6 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                 const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS.pending;
                 const StatusIcon = statusInfo.icon;
                 const unassignedItems = useMemo(() => order.items.filter((item) => !item.assignedTo), [order.items]);
-                const isExpanded = expandedRows.includes(order.id);
-                const productsToShow = useMemo(
-                  () => (isExpanded ? order.items : order.items.slice(0, 3)),
-                  [order.items, isExpanded]
-                );
-                const remaining = order.items.length - 3;
 
                 return (
                   <tr key={order.id} className={`hover:bg-gray-50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
@@ -165,44 +147,8 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                           : statusInfo.label}
                       </span>
                     </td>
-                    <td className="px-2 py-2 text-center whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${PRIORITY_COLORS[order.priority]}`}>
-                        {isRtl ? { urgent: 'عاجل', high: 'مرتفع', medium: 'متوسط', low: 'منخفض' }[order.priority] : order.priority}
-                      </span>
-                    </td>
-                    <td className="px-2 py-2 text-gray-600 text-center">
-                      <div className="flex overflow-x-auto max-w-[200px] whitespace-nowrap scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                        {productsToShow.map((item, idx) => (
-                          <span key={item._id} className="inline-block mx-1 truncate">
-                            {`${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.productName}${idx < productsToShow.length - 1 ? ',' : ''}`}
-                          </span>
-                        ))}
-                        {!isExpanded && remaining > 0 && (
-                          <span
-                            className="text-blue-500 cursor-pointer mx-1"
-                            onClick={() => toggleExpand(order.id)}
-                          >
-                            {isRtl ? `+${remaining} أخرى` : `+${remaining} more`}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-2 py-2 text-gray-600 text-center">
-                      <div className="flex overflow-x-auto max-w-[150px] whitespace-nowrap scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                        {order.items
-                          .filter(item => item.assignedTo && item.assignedTo.name)
-                          .map(item => (
-                            <span
-                              key={item._id}
-                              className="inline-block mx-1 truncate bg-blue-50 px-2 py-1 rounded-md text-blue-600"
-                            >
-                              {item.assignedTo?.name || (isRtl ? 'غير معروف' : 'Unknown')}
-                            </span>
-                          ))}
-                        {order.items.every(item => !item.assignedTo || !item.assignedTo.name) && (
-                          <span className="text-gray-500">{isRtl ? 'لم يتم تعيين شيفات' : 'No chefs assigned'}</span>
-                        )}
-                      </div>
+                    <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[200px]">
+                      {formatProducts(order)}
                     </td>
                     <td className="px-2 py-2 text-gray-600 text-center truncate">{calculateAdjustedTotal(order)}</td>
                     <td className="px-2 py-2 text-gray-600 text-center">{calculateTotalQuantity(order)}</td>
