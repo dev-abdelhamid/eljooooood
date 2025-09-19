@@ -64,7 +64,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
       >
         <div className="p-3 bg-white shadow-md rounded-lg border border-gray-200 hover:shadow-lg transition-shadow duration-300">
           <div className="flex flex-col gap-3">
-            <div className={`flex items-center justify-between ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <div className={`flex items-center justify-between ${isRtl ? 'flex-row' : ''}`}>
               <div className="flex items-center gap-1">
                 <h3 id={`order-${order.id}`} className="text-base font-semibold text-gray-800 truncate max-w-[220px]">
                   {isRtl ? `طلب ${order.orderNumber || 'غير معروف'}` : `Order #${order.orderNumber || 'Unknown'}`}
@@ -176,7 +176,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                               {item.assignedTo && (
                                 <p className="text-xs text-gray-600 truncate">
                                   {isRtl
-                                    ? `تعيين لـ: ${item.assignedTo.name} (${item.department?.name || 'غير معروف'})`
+                                    ? `معين لـ: ${item.assignedTo.name} (${item.department?.name || 'Unknown'})`
                                     : `Assigned to: ${item.assignedTo.name} (${item.department?.name || 'Unknown'})`}
                                 </p>
                               )}
