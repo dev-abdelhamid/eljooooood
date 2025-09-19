@@ -176,7 +176,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                               {item.assignedTo && (
                                 <p className="text-xs text-gray-600 truncate">
                                   {isRtl
-                                    ? `تعيين لـ: ${item.assignedTo.name} (${item.department?.name || 'غير معروف'})`
+                                    ? `معين لـ: ${item.assignedTo.name} (${item.department?.name || 'Unknown'})`
                                     : `Assigned to: ${item.assignedTo.name} (${item.department?.name || 'Unknown'})`}
                                 </p>
                               )}
