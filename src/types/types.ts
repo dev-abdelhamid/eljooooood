@@ -1,5 +1,6 @@
 export enum OrderStatus {
   Pending = 'pending',
+  Approved = 'approved',
   InProduction = 'in_production',
   Completed = 'completed',
   InTransit = 'in_transit',
@@ -23,7 +24,7 @@ export enum Priority {
 }
 
 export enum ReturnStatus {
-  PendingApproval = 'pending_approval',
+  PendingApproval = 'pending',
   Approved = 'approved',
   Rejected = 'rejected',
   Processed = 'processed',
@@ -54,10 +55,10 @@ export interface Order {
     productName: string;
     quantity: number;
     price: number;
+    unit: string;
     department: { _id: string; name: string };
     assignedTo?: { _id: string; name: string };
     status: ItemStatus;
-    unit?: string;
     returnedQuantity?: number;
     returnReason?: string;
   }>;
@@ -67,6 +68,7 @@ export interface Order {
       productId: string;
       productName: string;
       quantity: number;
+      unit: string;
       reason: string;
       status?: ReturnStatus;
       reviewNotes?: string;
@@ -78,6 +80,7 @@ export interface Order {
   }>;
   status: OrderStatus;
   totalAmount: number;
+  adjustedTotal: number;
   date: string;
   notes?: string;
   priority: Priority;
@@ -98,17 +101,15 @@ export interface Chef {
   department: { _id: string; name: string } | null;
 }
 
-
-
 export interface OrderItem {
   itemId: string;
   productId: string;
   productName: string;
   quantity: number;
   price: number;
-  department: Department;
-  status: ItemStatus;
   unit: string;
+  department: { _id: string; name: string };
+  status: ItemStatus;
   returnedQuantity?: number;
   returnReason?: string;
   assignedTo?: { _id: string; username: string };
@@ -125,6 +126,7 @@ export interface AssignChefsForm {
     assignedTo: string;
     product?: string;
     quantity: number;
+    unit?: string;
   }>;
 }
 
@@ -160,6 +162,7 @@ export interface ReturnItem {
   productId: string;
   productName: string;
   quantity: number;
+  unit: string;
   price?: number;
   reason: string;
   status?: ReturnStatus;
@@ -233,7 +236,6 @@ export interface User {
   department?: string;
 }
 
-
 export type Action =
   | { type: 'SET_ORDERS'; payload: Order[] }
   | { type: 'ADD_ORDER'; payload: Order }
@@ -279,6 +281,7 @@ export interface Task {
   orderNumber: string;
   productName: string;
   quantity: number;
+  unit: string;
   status: ItemStatus;
   updatedAt: string;
   startedAt?: string;
@@ -293,6 +296,7 @@ export interface ChefTask {
   productId: string;
   productName: string;
   quantity: number;
+  unit: string;
   status: 'pending' | 'in_progress' | 'completed';
   createdAt: string;
   updatedAt: string;
