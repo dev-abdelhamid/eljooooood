@@ -127,7 +127,7 @@ const reducer = (state: State, action: Action): State => {
         orders: state.orders.map(o =>
           o.id === action.orderId ? { ...o, status: action.status! } : o
         ),
-        selectedOrder: state.selectedOrder?.id === action.orderId
+        selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
           ? { ...state.selectedOrder, status: action.status! }
           : state.selectedOrder,
       };
@@ -147,7 +147,7 @@ const reducer = (state: State, action: Action): State => {
               }
             : order
         ),
-        selectedOrder: state.selectedOrder?.id === action.orderId
+        selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
           ? {
               ...state.selectedOrder,
               items: state.selectedOrder.items.map(item =>
@@ -182,7 +182,7 @@ const reducer = (state: State, action: Action): State => {
               }
             : order
         ),
-        selectedOrder: state.selectedOrder?.id === action.orderId
+        selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
           ? {
               ...state.selectedOrder,
               items: state.selectedOrder.items.map(i => {
@@ -222,7 +222,7 @@ const reducer = (state: State, action: Action): State => {
               }
             : order
         ),
-        selectedOrder: state.selectedOrder?.id === action.orderId
+        selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
           ? {
               ...state.selectedOrder,
               returns: state.selectedOrder.returns.map(ret =>
@@ -363,7 +363,7 @@ const OrderCardSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
 
 // المكون الرئيسي
 export const Orders: React.FC = () => {
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
   const { socket, isConnected, emit } = useSocket();
@@ -512,6 +512,18 @@ export const Orders: React.FC = () => {
       });
     });
 
+    socket.on('itemStatusUpdated', ({ orderId, itemId, status }: { orderId: string; itemId: string; status: string }) => {
+      if (!orderId || !itemId || !status) {
+        console.warn('Invalid item status update data:', { orderId, itemId, status });
+        return;
+      }
+      dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
+      toast.info(isRtl ? `تم تحديث حالة العنصر إلى: ${isRtl ? {pending: 'قيد الانتظار', assigned: 'معين', in_progress: 'قيد التقدم', completed: 'مكتمل'}[status] : status}` : `Item status updated to: ${status}`, {
+        position: isRtl ? 'top-left' : 'top-right',
+        autoClose: 3000,
+      });
+    });
+
     socket.on('returnStatusUpdated', ({ orderId, returnId, status }: { orderId: string; returnId: string; status: string }) => {
       if (!orderId || !returnId || !status) {
         console.warn('Invalid return status update data:', { orderId, returnId, status });
@@ -541,6 +553,7 @@ export const Orders: React.FC = () => {
       socket.off('connect_error');
       socket.off('newOrder');
       socket.off('orderStatusUpdated');
+      socket.off('itemStatusUpdated');
       socket.off('returnStatusUpdated');
       socket.off('taskAssigned');
     };
@@ -962,7 +975,7 @@ export const Orders: React.FC = () => {
         await ordersAPI.assignChef(orderId, { items: state.assignFormData.items });
         const items = state.assignFormData.items.map(item => ({
           _id: item.itemId,
-          assignedTo: state.chefs.find(chef => chef._id === item.assignedTo) || { _id: item.assignedTo, name: isRtl ? 'غير معروف' : 'Unknown', department: { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' } },
+          assignedTo: state.chefs.find(chef => chef.userId === item.assignedTo) || { _id: item.assignedTo, name: isRtl ? 'غير معروف' : 'Unknown', department: { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' } },
           status: 'assigned',
         }));
         dispatch({ type: 'TASK_ASSIGNED', orderId, items });
@@ -1167,6 +1180,7 @@ export const Orders: React.FC = () => {
                   <OrderTable
                     orders={paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber)}
                     isRtl={isRtl}
+                    t={t}
                     calculateAdjustedTotal={calculateAdjustedTotal}
                     calculateTotalQuantity={calculateTotalQuantity}
                     translateUnit={translateUnit}
@@ -1184,7 +1198,7 @@ export const Orders: React.FC = () => {
                       key={order.id}
                       order={order}
                       isRtl={isRtl}
-                     t={(key) => key}
+                      t={t}
                       calculateAdjustedTotal={calculateAdjustedTotal}
                       calculateTotalQuantity={calculateTotalQuantity}
                       translateUnit={translateUnit}
@@ -1201,7 +1215,7 @@ export const Orders: React.FC = () => {
                     currentPage={state.currentPage}
                     totalPages={Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode])}
                     isRtl={isRtl}
-                      t={(key) => key}
+                    t={t}
                     handlePageChange={(page) => dispatch({ type: 'SET_PAGE', payload: page })}
                   />
                 </motion.div>

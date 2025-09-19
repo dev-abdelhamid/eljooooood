@@ -29,6 +29,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   submitting,
   assignChefs,
   setAssignForm,
+  
 }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';

@@ -111,7 +111,6 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                             {`${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.productName}`}
                           </span>
                           <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium items-center gap-1 ${ITEM_STATUS_COLORS[item.status].color} ${isRtl ? 'flex-row-reverse' : ''}`}>
-                            <ITEM_STATUS_COLORS[item.status].icon className="w-3 h-3" />
                             {t(`orders.item_statuses.${ITEM_STATUS_COLORS[item.status].label}`)}
                           </span>
                         </div>
