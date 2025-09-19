@@ -37,6 +37,15 @@ const OrderTable: React.FC<OrderTableProps> = memo(
       setExpandedRows((prev) => prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId]);
     };
 
+    // Memo لترجمة أسماء الأقسام
+    const departmentLabels = useMemo(() => ({
+      bread: isRtl ? 'الخبز' : 'Bread',
+      pastries: isRtl ? 'المعجنات' : 'Pastries',
+      cakes: isRtl ? 'الكعك' : 'Cakes',
+      baklava: isRtl ? 'بقلاوة' : 'Baklava',
+      unknown: isRtl ? 'غير معروف' : 'Unknown',
+    }), [isRtl]);
+
     return (
       <motion.div
         initial={{ opacity: 0 }}
@@ -69,30 +78,24 @@ const OrderTable: React.FC<OrderTableProps> = memo(
               const productsToShow = isExpanded ? order.items : order.items.slice(0, 3);
               const remaining = order.items.length - 3;
 
-              // Memo للـ labels
-              const departmentLabels = useMemo(() => ({
-                bread: isRtl ? 'الخبز' : 'Bread',
-                pastries: isRtl ? 'المعجنات' : 'Pastries',
-                cakes: isRtl ? 'الكعك' : 'Cakes',
-                unknown: isRtl ? 'غير معروف' : 'Unknown',
-              }), [isRtl]);
-
               return (
-                <tr key={order.id} className="hover:bg-gray-50 transition-colors h-12 align-middle"> {/* ارتفاع ثابت للـ row */}
+                <tr key={order.id} className="hover:bg-gray-50 transition-colors h-12 align-middle">
                   <td className="px-2 py-2 text-gray-600 text-center whitespace-nowrap">{startIndex + index}</td>
                   <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[100px] whitespace-nowrap">{order.orderNumber}</td>
                   <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[100px] whitespace-nowrap">{order.branchName}</td>
-                  <td className="px-2 py-2 text-center whitespace-nowrap"> {/* الحالة في سطر واحد */}
+                  <td className="px-2 py-2 text-center whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium items-center gap-1 ${statusInfo.color} ${isRtl ? 'flex-row-reverse' : ''}`}>
                       <StatusIcon className="w-4 h-4" />
                       {isRtl ? { pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[order.status] : statusInfo.label}
                     </span>
                   </td>
-                  <td className="px-2 py-2 text-gray-600 text-center"> {/* المنتجات مع scroll أفقي في سطر واحد */}
+                  <td className="px-2 py-2 text-gray-600 text-center">
                     <div className="flex overflow-x-auto max-w-[300px] whitespace-nowrap scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 gap-2">
                       {productsToShow.map((item) => (
                         <span key={item._id} className="inline-block min-w-0 truncate bg-gray-100 px-1 py-0.5 rounded text-xs">
-                          {`${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.productName} (${departmentLabels[item.department?.name || 'unknown']}${item.assignedTo ? `, ${isRtl ? 'الشيف:' : 'Chef:'} ${item.assignedTo.name}` : ''})`}
+                          {isRtl
+                            ? `${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.productName} (${departmentLabels[item.department?.name || 'unknown']}${item.assignedTo ? `, شيف ${item.assignedTo.name} (${item.assignedTo.department?.name || departmentLabels.unknown})` : ''})`
+                            : `${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.productName} (${departmentLabels[item.department?.name || 'unknown']}${item.assignedTo ? `, Chef ${item.assignedTo.name} (${item.assignedTo.department?.name || departmentLabels.unknown})` : ''})`}
                         </span>
                       ))}
                       {!isExpanded && remaining > 0 && (
@@ -109,7 +112,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                   <td className="px-2 py-2 text-gray-600 text-center truncate whitespace-nowrap">{calculateAdjustedTotal(order)}</td>
                   <td className="px-2 py-2 text-gray-600 text-center whitespace-nowrap">{calculateTotalQuantity(order)}</td>
                   <td className="px-2 py-2 text-gray-600 text-center truncate whitespace-nowrap">{order.date}</td>
-                  <td className="px-2 py-2 text-center whitespace-nowrap"> {/* الأزرار في سطر واحد مع flex nowrap */}
+                  <td className="px-2 py-2 text-center whitespace-nowrap">
                     <div className={`flex gap-1 ${isRtl ? 'flex-row-reverse' : ''} items-center justify-center`}>
                       <Link to={`/orders/${order.id}`}>
                         <Button variant="primary" size="xs" className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1 text-xs whitespace-nowrap" aria-label={isRtl ? `عرض الطلب ${order.orderNumber}` : `View order ${order.orderNumber}`}>
