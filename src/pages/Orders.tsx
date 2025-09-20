@@ -210,6 +210,7 @@ const reducer = (state: State, action: Action): State => {
 };
 
 const ORDERS_PER_PAGE = { card: 12, table: 50 };
+
 const validTransitions: Record<Order['status'], Order['status'][]> = {
   pending: ['approved', 'cancelled'],
   approved: ['in_production', 'cancelled'],
@@ -219,6 +220,7 @@ const validTransitions: Record<Order['status'], Order['status'][]> = {
   delivered: [],
   cancelled: [],
 };
+
 const statusOptions = [
   { value: '', label: 'all_statuses' },
   { value: 'pending', label: 'pending' },
@@ -229,6 +231,7 @@ const statusOptions = [
   { value: 'delivered', label: 'delivered' },
   { value: 'cancelled', label: 'cancelled' },
 ];
+
 const sortOptions = [
   { value: 'date', label: 'sort_date' },
   { value: 'totalAmount', label: 'sort_total_amount' },
@@ -302,23 +305,28 @@ export const Orders: React.FC = () => {
       return;
     }
     if (!socket) return;
+
     socket.on('connect', () => {
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
       dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
     });
+
     socket.on('connect_error', (err) => {
       console.error('Socket connect error:', err.message);
       dispatch({ type: 'SET_SOCKET_ERROR', payload: isRtl ? 'خطأ في الاتصال' : 'Connection error' });
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
     });
+
     socket.on('reconnect', (attempt) => {
       console.log(`[${new Date().toISOString()}] Socket reconnected after ${attempt} attempts`);
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
     });
+
     socket.on('disconnect', (reason) => {
       console.log(`[${new Date().toISOString()}] Socket disconnected: ${reason}`);
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
     });
+
     socket.on('newOrder', (order: any) => {
       if (!order || !order._id || !order.orderNumber) {
         console.warn('Invalid new order data:', order);
@@ -387,44 +395,54 @@ export const Orders: React.FC = () => {
           : [],
       };
       dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
+      cacheRef.current.clear(); // Clear cache on new order
       playNotificationSound('/sounds/new-order.mp3', [200, 100, 200]);
     });
+
     socket.on('orderStatusUpdated', ({ orderId, status }: { orderId: string; status: Order['status'] }) => {
       if (!orderId || !status) {
         console.warn('Invalid order status update data:', { orderId, status });
         return;
       }
       dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
+      cacheRef.current.clear(); // Clear cache on status update
     });
+
     socket.on('itemStatusUpdated', ({ orderId, itemId, status }: { orderId: string; itemId: string; status: string }) => {
       if (!orderId || !itemId || !status) {
         console.warn('Invalid item status update data:', { orderId, itemId, status });
         return;
       }
       dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
+      cacheRef.current.clear(); // Clear cache on item status update
     });
+
     socket.on('returnStatusUpdated', ({ orderId, returnId, status }: { orderId: string; returnId: string; status: string }) => {
       if (!orderId || !returnId || !status) {
         console.warn('Invalid return status update data:', { orderId, returnId, status });
         return;
       }
       dispatch({ type: 'RETURN_STATUS_UPDATED', orderId, returnId, status });
+      cacheRef.current.clear(); // Clear cache on return status update
       toast.info(isRtl ? `تم تحديث حالة الإرجاع إلى: ${isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', rejected: 'مرفوض', processed: 'معالج'}[status] : status}` : `Return status updated to: ${status}`, {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
       });
     });
+
     socket.on('taskAssigned', ({ orderId, items }: { orderId: string; items: any[] }) => {
       if (!orderId || !items) {
         console.warn('Invalid task assigned data:', { orderId, items });
         return;
       }
       dispatch({ type: 'TASK_ASSIGNED', orderId, items });
+      cacheRef.current.clear(); // Clear cache on task assignment
       toast.info(isRtl ? 'تم تعيين الشيفات' : 'Chefs assigned', {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
       });
     });
+
     return () => {
       socket.off('connect');
       socket.off('connect_error');
@@ -444,12 +462,14 @@ export const Orders: React.FC = () => {
         return;
       }
       dispatch({ type: 'SET_LOADING', payload: true });
-      const cacheKey = `${user.id}-${state.filterStatus}-${state.filterBranch}-${state.currentPage}-${state.viewMode}-${state.searchQuery}`;
+
+      const cacheKey = `${user.id}-${state.filterStatus}-${state.filterBranch}-${state.currentPage}-${state.viewMode}-${state.searchQuery}-${state.sortBy}-${state.sortOrder}`;
       if (cacheRef.current.has(cacheKey)) {
         dispatch({ type: 'SET_ORDERS', payload: cacheRef.current.get(cacheKey)! });
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
       }
+
       try {
         const query: Record<string, any> = {
           page: state.currentPage,
@@ -461,11 +481,13 @@ export const Orders: React.FC = () => {
         if (state.filterBranch) query.branch = state.filterBranch;
         if (state.searchQuery.trim()) query.search = state.searchQuery.trim();
         if (user.role === 'production' && user.department) query.department = user.department._id;
+
         const [ordersResponse, chefsResponse, branchesResponse] = await Promise.all([
           ordersAPI.getAll(query),
           chefsAPI.getAll(),
           branchesAPI.getAll(),
         ]);
+
         const mappedOrders: Order[] = ordersResponse
           .filter((order: any) => order && order._id && order.orderNumber)
           .map((order: any) => ({
@@ -530,7 +552,8 @@ export const Orders: React.FC = () => {
                 }))
               : [],
           }));
-        cacheRef.current.clear();
+
+        cacheRef.current.clear(); // Clear cache before setting new data
         cacheRef.current.set(cacheKey, mappedOrders);
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
         dispatch({
@@ -612,6 +635,7 @@ export const Orders: React.FC = () => {
     () =>
       debounce((value: string) => {
         dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
+        cacheRef.current.clear(); // Clear cache on search change
       }, 300),
     []
   );
@@ -674,6 +698,7 @@ export const Orders: React.FC = () => {
       try {
         await ordersAPI.updateStatus(orderId, { status: newStatus });
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: newStatus });
+        cacheRef.current.clear(); // Clear cache on status update
         if (socket && isConnected) {
           emit('orderStatusUpdated', { orderId, status: newStatus });
         }
@@ -707,6 +732,7 @@ export const Orders: React.FC = () => {
       try {
         await ordersAPI.updateItemStatus(orderId, itemId, { status });
         dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
+        cacheRef.current.clear(); // Clear cache on item status update
         if (socket && isConnected) {
           emit('itemStatusUpdated', { orderId, itemId, status });
         }
@@ -747,6 +773,7 @@ export const Orders: React.FC = () => {
         dispatch({ type: 'TASK_ASSIGNED', orderId, items });
         dispatch({ type: 'SET_MODAL', modal: 'assign', isOpen: false });
         dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
+        cacheRef.current.clear(); // Clear cache on task assignment
         if (socket && isConnected) {
           emit('taskAssigned', { orderId, items });
         }
