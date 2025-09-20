@@ -2,7 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
 import { Order } from '../../types/types';
-import { formatDate } from '../../utils/formatDate';
+import { getBidiText } from 'bidi-js';
 
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   let binary = '';
@@ -34,10 +34,12 @@ const loadFont = async (doc: jsPDF, fontName: string, fontUrl: string): Promise<
 const generatePDFHeader = (doc: jsPDF, isRtl: boolean, title: string) => {
   doc.setFontSize(18);
   doc.setTextColor(33, 33, 33);
-  doc.text(title, isRtl ? doc.internal.pageSize.width - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
+  const bidiTitle = isRtl ? getBidiText(title) : title;
+  doc.text(bidiTitle, isRtl ? doc.internal.pageSize.width - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
   doc.setFontSize(12);
   doc.setTextColor(100, 100, 100);
-  doc.text(isRtl ? 'تقرير طلبات الإنتاج' : 'Production Orders Report', isRtl ? doc.internal.pageSize.width - 20 : 20, 25, { align: isRtl ? 'right' : 'left' });
+  const subtitle = isRtl ? getBidiText('تقرير طلبات الإنتاج') : 'Production Orders Report';
+  doc.text(subtitle, isRtl ? doc.internal.pageSize.width - 20 : 20, 25, { align: isRtl ? 'right' : 'left' });
   doc.setLineWidth(0.5);
   doc.setDrawColor(200, 200, 200);
   doc.line(20, 30, doc.internal.pageSize.width - 20, 30);
@@ -55,8 +57,8 @@ const generatePDFTable = (
   translateUnit: (unit: string, isRtl: boolean) => string
 ) => {
   autoTable(doc, {
-    head: [isRtl ? headers.reverse() : headers],
-    body: data.map(row => isRtl ? row.reverse() : row),
+    head: [isRtl ? headers.map(h => getBidiText(h)).reverse() : headers],
+    body: data.map(row => isRtl ? row.map((cell: string) => typeof cell === 'string' ? getBidiText(cell) : cell).reverse() : row),
     theme: 'grid',
     startY: 35,
     margin: { left: 20, right: 20 },
@@ -97,7 +99,7 @@ const generatePDFTable = (
         if (typeof text === 'string' && text.trim() !== '') {
           data.cell.text[0] = text.replace(/٫/g, '.').replace(/[^\d.]/g, '');
         } else {
-          data.cell.text[0] = '0.00'; // قيمة افتراضية في حال كانت القيمة غير موجودة
+          data.cell.text[0] = '0.00';
         }
       }
     },
