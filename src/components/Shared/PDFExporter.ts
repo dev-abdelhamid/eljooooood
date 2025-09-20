@@ -2,43 +2,33 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
 import { Order } from '../../types/types';
-import { formatDate } from '../../utils/formatDate';
 
-// تحسين دالة arrayBufferToBase64 لدعم التشفير الصحيح للخطوط العربية
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-  try {
-    const bytes = new Uint8Array(buffer);
-    // تحويل البايتات إلى سلسلة باستخدام TextDecoder لدعم UTF-8
-    const decoder = new TextDecoder('utf-8');
-    const binary = decoder.decode(bytes);
-    return window.btoa(binary);
-  } catch (error) {
-    console.error('خطأ في تحويل ArrayBuffer إلى Base64:', error);
-    return '';
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
   }
+  return window.btoa(binary);
 };
 
-// تحميل الخط مع ضمان دعم اللغة العربية
 const loadFont = async (doc: jsPDF, fontName: string, fontUrl: string): Promise<boolean> => {
   try {
     const fontBytes = await fetch(fontUrl).then(res => {
-      if (!res.ok) throw new Error('فشل في تحميل الخط');
+      if (!res.ok) throw new Error('Failed to fetch font');
       return res.arrayBuffer();
     });
-    const fontBase64 = arrayBufferToBase64(fontBytes);
-    if (!fontBase64) throw new Error('فشل في تحويل الخط إلى Base64');
-    doc.addFileToVFS(`${fontName}-Regular.ttf`, fontBase64);
+    doc.addFileToVFS(`${fontName}-Regular.ttf`, arrayBufferToBase64(fontBytes));
     doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
-    doc.setFont(fontName, 'normal');
+    doc.setFont(fontName);
     return true;
   } catch (fontError) {
-    console.error('خطأ تحميل الخط:', fontError);
-    doc.setFont('Amiri', 'normal'); // استخدام خط Amiri كبديل موثوق للغة العربية
+    console.error('Font loading error:', fontError);
+    doc.setFont('helvetica');
     return false;
   }
 };
 
-// إنشاء رأس الـ PDF
 const generatePDFHeader = (doc: jsPDF, isRtl: boolean, title: string) => {
   doc.setFontSize(18);
   doc.setTextColor(33, 33, 33);
@@ -51,7 +41,6 @@ const generatePDFHeader = (doc: jsPDF, isRtl: boolean, title: string) => {
   doc.line(20, 30, doc.internal.pageSize.width - 20, 30);
 };
 
-// إنشاء جدول الـ PDF مع تحسين عرض الأرقام والنصوص العربية
 const generatePDFTable = (
   doc: jsPDF,
   headers: string[],
@@ -74,15 +63,13 @@ const generatePDFTable = (
       textColor: [255, 255, 255],
       fontSize: 10,
       halign: isRtl ? 'right' : 'left',
-      font: fontLoaded ? fontName : 'Amiri',
-      fontStyle: 'normal',
+      font: fontLoaded ? fontName : 'helvetica',
       cellPadding: 3,
     },
     bodyStyles: {
       fontSize: 9,
       halign: isRtl ? 'right' : 'left',
-      font: fontLoaded ? fontName : 'Amiri',
-      fontStyle: 'normal',
+      font: fontLoaded ? fontName : 'helvetica',
       cellPadding: 3,
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
@@ -97,35 +84,13 @@ const generatePDFTable = (
       6: { cellWidth: 30 },
     },
     didParseCell: (data) => {
-      data.cell.styles.halign = isRtl ? 'right' : 'left';
-      data.cell.styles.valign = 'middle';
-      // تصحيح الأرقام المعكوسة في عمود إجمالي المبلغ
-      if (data.column.index === 4 && typeof data.cell.text[0] === 'string') {
-        let text = data.cell.text[0];
-        if (text.trim() !== '') {
-          // إزالة أي أحرف غير رقمية باستثناء النقطة
-          text = text.replace(/[^\d.]/g, '');
-          // إعادة ترتيب الأرقام إذا كانت معكوسة
-          if (isRtl) {
-            text = text.split('.').reverse().join('.');
-          }
-          // التأكد من التنسيق الصحيح (مثل 200.00)
-          const number = parseFloat(text);
-          data.cell.text[0] = number.toLocaleString('ar-SA', {
-            style: 'currency',
-            currency: 'SAR',
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          });
-        } else {
-          data.cell.text[0] = '٠٫٠٠ ر.س';
-        }
+      if (data.section === 'head') {
+        data.cell.styles.halign = isRtl ? 'right' : 'left';
       }
     },
   });
 };
 
-// دالة تصدير الـ PDF
 export const exportToPDF = async (
   orders: Order[],
   isRtl: boolean,
@@ -136,8 +101,8 @@ export const exportToPDF = async (
   try {
     const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
     doc.setLanguage(isRtl ? 'ar' : 'en');
-    const fontName = 'Amiri'; // استخدام خط Amiri الذي يدعم اللغة العربية بشكل موثوق
-    const fontLoaded = await loadFont(doc, fontName, '/fonts/Amiri-Regular.ttf');
+    const fontName = 'Alexandria';
+    const fontLoaded = await loadFont(doc, fontName, '/fonts/Alexandria-Regular.ttf');
     generatePDFHeader(doc, isRtl, isRtl ? 'تقرير الطلبات' : 'Orders Report');
     const headers = [
       isRtl ? 'رقم الطلب' : 'Order Number',
@@ -149,21 +114,13 @@ export const exportToPDF = async (
       isRtl ? 'التاريخ' : 'Date',
     ];
     const data = orders.map(order => [
-      order.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
-      order.branchName || (isRtl ? 'غير معروف' : 'Unknown'),
-      isRtl ? {
-        pending: 'قيد الانتظار',
-        approved: 'تم الموافقة',
-        in_production: 'في الإنتاج',
-        completed: 'مكتمل',
-        in_transit: 'في النقل',
-        delivered: 'تم التسليم',
-        cancelled: 'ملغى'
-      }[order.status] || order.status : order.status,
-      order.items.map(i => `${i.productName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ') || (isRtl ? 'لا توجد منتجات' : 'No products'),
-      calculateAdjustedTotal(order) || '0.00',
+      order.orderNumber,
+      order.branchName,
+      isRtl ? { pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[order.status] || order.status : order.status,
+      order.items.map(i => `${i.productName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', '),
+      calculateAdjustedTotal(order),
       `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
-      order.date || formatDate(new Date(), isRtl ? 'ar' : 'en'),
+      order.date,
     ]);
     generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName, calculateAdjustedTotal, calculateTotalQuantity, translateUnit);
     doc.save('Orders.pdf');
@@ -172,7 +129,7 @@ export const exportToPDF = async (
       autoClose: 3000,
     });
   } catch (err: any) {
-    console.error('خطأ في تصدير PDF:', err.message);
+    console.error('PDF export error:', err.message);
     toast.error(isRtl ? `خطأ في تصدير PDF: ${err.message}` : `PDF export error: ${err.message}`, {
       position: isRtl ? 'top-left' : 'top-right',
       autoClose: 3000,
