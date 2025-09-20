@@ -3,6 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
 import { Order } from '../../types/types';
 import { getBidiText } from 'bidi-js';
+import { formatDate } from '../../utils/formatDate';
 
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   let binary = '';
