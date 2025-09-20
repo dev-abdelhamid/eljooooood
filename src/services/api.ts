@@ -195,10 +195,6 @@ export const ordersAPI = {
       console.error(`ordersAPI.create - Invalid branchId at ${new Date().toISOString()}:`, orderData.branchId);
       throw new Error('Invalid branch ID');
     }
-    if (!orderData.items?.length || orderData.items.some(item => !/^[0-9a-fA-F]{24}$/.test(item.productId) || item.quantity < 1 || item.price < 0)) {
-      console.error(`ordersAPI.create - Invalid items at ${new Date().toISOString()}:`, orderData.items);
-      throw new Error('Invalid items array');
-    }
     const response = await api.post('/orders', orderData);
     console.log(`ordersAPI.create - Response at ${new Date().toISOString()}:`, response);
     return response;
@@ -222,10 +218,6 @@ export const ordersAPI = {
       console.error(`ordersAPI.updateStatus - Invalid order ID at ${new Date().toISOString()}:`, id);
       throw new Error('Invalid order ID');
     }
-    if (!['pending', 'approved', 'in_production', 'completed', 'in_transit', 'delivered', 'cancelled'].includes(data.status)) {
-      console.error(`ordersAPI.updateStatus - Invalid status at ${new Date().toISOString()}:`, data.status);
-      throw new Error('Invalid status');
-    }
     const response = await api.patch(`/orders/${id}/status`, data);
     console.log(`ordersAPI.updateStatus - Response at ${new Date().toISOString()}:`, response);
     return response;
@@ -235,40 +227,24 @@ export const ordersAPI = {
       console.error(`ordersAPI.updateChefItem - Invalid order ID or task ID at ${new Date().toISOString()}:`, { orderId, taskId: data.taskId });
       throw new Error('Invalid order ID or task ID');
     }
-    if (!['pending', 'in_progress', 'completed'].includes(data.status)) {
-      console.error(`ordersAPI.updateChefItem - Invalid status at ${new Date().toISOString()}:`, data.status);
-      throw new Error('Invalid task status');
-    }
     const response = await api.patch(`/orders/${orderId}/tasks/${data.taskId}/status`, { status: data.status });
     console.log(`ordersAPI.updateChefItem - Response at ${new Date().toISOString()}:`, response);
     return response;
   },
-  assignChef: async (orderId: string, data: { items: Array<{ itemId: string; assignedTo: string; productId: string; quantity: number }> }) => {
+   assignChef: async (orderId: string, data: { items: Array<{ itemId: string; assignedTo: string }> }) => {
     console.log(`[${new Date().toISOString()}] ordersAPI.assignChef - Sending:`, { orderId, data });
-    if (!/^[0-9a-fA-F]{24}$/.test(orderId)) {
-      console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - Invalid orderId:`, orderId);
-      throw new Error('معرف الطلب غير صالح');
+    if (!/^[0-9a-fA-F]{24}$/.test(orderId) || data.items.some(item => !/^[0-9a-fA-F]{24}$/.test(item.itemId) || !/^[0-9a-fA-F]{24}$/.test(item.assignedTo))) {
+      console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - بيانات غير صالحة:`, { orderId, data });
+      throw new Error('معرف الطلب أو معرف العنصر أو معرف الشيف غير صالح');
     }
-    if (!data.items?.length || data.items.some(item => 
-      !/^[0-9a-fA-F]{24}$/.test(item.itemId) || 
-      !/^[0-9a-fA-F]{24}$/.test(item.assignedTo) || 
-      !/^[0-9a-fA-F]{24}$/.test(item.productId) || 
-      item.quantity < 1
-    )) {
-      console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - Invalid items:`, data.items);
-      throw new Error('بيانات العناصر غير صالحة');
-    }
-    const response = await api.patch(`/orders/${orderId}/assign`, {
-      items: data.items.map(item => ({
-        itemId: item.itemId,
-        assignedTo: item.assignedTo,
-        productId: item.productId,
-        quantity: item.quantity,
-      })),
+    const response = await axios.patch(`${API_BASE_URL}/orders/${orderId}/assign`, {
+      items: data.items,
       timestamp: new Date().toISOString(),
+    }, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
     });
-    console.log(`[${new Date().toISOString()}] ordersAPI.assignChef - Response:`, response);
-    return response;
+    console.log(`[${new Date().toISOString()}] ordersAPI.assignChef - Response:`, response.data);
+    return response.data;
   },
   confirmDelivery: async (orderId: string) => {
     if (!/^[0-9a-fA-F]{24}$/.test(orderId)) {
@@ -305,10 +281,6 @@ export const productsAPI = {
     description?: string;
     unit?: string;
   }) => {
-    if (!/^[0-9a-fA-F]{24}$/.test(productData.department) || productData.price < 0) {
-      console.error(`productsAPI.create - Invalid data at ${new Date().toISOString()}:`, productData);
-      throw new Error('Invalid department ID or price');
-    }
     const response = await api.post('/products', {
       name: productData.name.trim(),
       code: productData.code.trim(),
@@ -328,9 +300,9 @@ export const productsAPI = {
     description: string;
     unit: string;
   }>) => {
-    if (!/^[0-9a-fA-F]{24}$/.test(id) || (productData.department && !/^[0-9a-fA-F]{24}$/.test(productData.department))) {
-      console.error(`productsAPI.update - Invalid product ID or department ID at ${new Date().toISOString()}:`, { id, department: productData.department });
-      throw new Error('Invalid product ID or department ID');
+    if (!/^[0-9a-fA-F]{24}$/.test(id)) {
+      console.error(`productsAPI.update - Invalid product ID at ${new Date().toISOString()}:`, id);
+      throw new Error('Invalid product ID');
     }
     const response = await api.put(`/products/${id}`, {
       name: productData.name?.trim(),
@@ -419,10 +391,6 @@ export const chefsAPI = {
     };
     department: string;
   }) => {
-    if (!/^[0-9a-fA-F]{24}$/.test(chefData.department)) {
-      console.error(`chefsAPI.create - Invalid department ID at ${new Date().toISOString()}:`, chefData.department);
-      throw new Error('Invalid department ID');
-    }
     const response = await api.post('/chefs', {
       user: {
         name: chefData.user.name.trim(),
@@ -438,9 +406,9 @@ export const chefsAPI = {
     return response;
   },
   update: async (id: string, chefData: Partial<{ userId: string; departmentId: string }>) => {
-    if (!/^[0-9a-fA-F]{24}$/.test(id) || (chefData.departmentId && !/^[0-9a-fA-F]{24}$/.test(chefData.departmentId))) {
-      console.error(`chefsAPI.update - Invalid chef ID or department ID at ${new Date().toISOString()}:`, { id, departmentId: chefData.departmentId });
-      throw new Error('Invalid chef ID or department ID');
+    if (!/^[0-9a-fA-F]{24}$/.test(id)) {
+      console.error(`chefsAPI.update - Invalid chef ID at ${new Date().toISOString()}:`, id);
+      throw new Error('Invalid chef ID');
     }
     const response = await api.put(`/chefs/${id}`, chefData);
     console.log(`chefsAPI.update - Response at ${new Date().toISOString()}:`, response);
@@ -465,15 +433,12 @@ export const productionAssignmentsAPI = {
     quantity: number;
     itemId: string;
   }) => {
-    if (
-      !/^[0-9a-fA-F]{24}$/.test(assignmentData.order) ||
-      !/^[0-9a-fA-F]{24}$/.test(assignmentData.product) ||
-      !/^[0-9a-fA-F]{24}$/.test(assignmentData.chef) ||
-      !/^[0-9a-fA-F]{24}$/.test(assignmentData.itemId) ||
-      assignmentData.quantity < 1
-    ) {
+    if (!/^[0-9a-fA-F]{24}$/.test(assignmentData.order) ||
+        !/^[0-9a-fA-F]{24}$/.test(assignmentData.product) ||
+        !/^[0-9a-fA-F]{24}$/.test(assignmentData.chef) ||
+        !/^[0-9a-fA-F]{24}$/.test(assignmentData.itemId)) {
       console.error(`productionAssignmentsAPI.create - Invalid data at ${new Date().toISOString()}:`, assignmentData);
-      throw new Error('Invalid order ID, product ID, chef ID, item ID, or quantity');
+      throw new Error('Invalid order ID, product ID, chef ID, or item ID');
     }
     console.log(`[${new Date().toISOString()}] productionAssignmentsAPI.create - Sending:`, assignmentData);
     const response = await api.post('/orders/tasks', assignmentData);
@@ -494,10 +459,6 @@ export const productionAssignmentsAPI = {
     if (!/^[0-9a-fA-F]{24}$/.test(orderId) || !/^[0-9a-fA-F]{24}$/.test(taskId)) {
       console.error(`[${new Date().toISOString()}] productionAssignmentsAPI.updateTaskStatus - Invalid orderId or taskId:`, { orderId, taskId });
       throw new Error('Invalid order ID or task ID');
-    }
-    if (!['pending', 'in_progress', 'completed'].includes(data.status)) {
-      console.error(`[${new Date().toISOString()}] productionAssignmentsAPI.updateTaskStatus - Invalid status:`, data.status);
-      throw new Error('Invalid task status');
     }
     console.log(`[${new Date().toISOString()}] productionAssignmentsAPI.updateTaskStatus - Sending:`, { orderId, taskId, data });
     const response = await api.patch(`/orders/${orderId}/tasks/${taskId}/status`, data);
