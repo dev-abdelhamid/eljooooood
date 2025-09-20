@@ -18,16 +18,22 @@ const STATUS_COLORS: Record<OrderStatus, { color: string; label: string; icon: R
   cancelled: { color: 'bg-red-100 text-red-700', label: 'cancelled', icon: AlertCircle },
 };
 
+const PRIORITY_COLORS: Record<Order['priority'], string> = {
+  low: 'bg-gray-100 text-gray-700',
+  medium: 'bg-blue-100 text-blue-700',
+  high: 'bg-orange-100 text-orange-700',
+  urgent: 'bg-red-100 text-red-700',
+};
+
 interface OrderTableProps {
   orders: Order[];
   calculateAdjustedTotal: (order: Order) => string;
   calculateTotalQuantity: (order: Order) => number;
   translateUnit: (unit: string, isRtl: boolean) => string;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
-  onAssignChefs: (order: Order) => void;
+  openAssignModal: (order: Order) => void;
   submitting: string | null;
   isRtl: boolean;
-  loading: boolean;
   startIndex: number;
 }
 
@@ -41,7 +47,7 @@ const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
     <table className="min-w-full">
       <thead>
         <tr className={isRtl ? 'flex-row-reverse' : ''}>
-          {Array(8).fill(0).map((_, index) => (
+          {Array(10).fill(0).map((_, index) => (
             <th key={index} className="px-3 py-2">
               <Skeleton width={80} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
             </th>
@@ -54,7 +60,7 @@ const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
             key={rowIndex}
             className={`hover:bg-gray-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}
           >
-            {Array(8).fill(0).map((_, cellIndex) => (
+            {Array(10).fill(0).map((_, cellIndex) => (
               <td key={cellIndex} className="px-3 py-2">
                 <Skeleton width={100} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
               </td>
@@ -67,7 +73,7 @@ const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
 );
 
 const OrderTable: React.FC<OrderTableProps> = memo(
-  ({ orders, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, updateOrderStatus, onAssignChefs, submitting, isRtl, loading, startIndex }) => {
+  ({ orders, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, updateOrderStatus, openAssignModal, submitting, isRtl, startIndex }) => {
     const { user } = useAuth();
 
     const formatProducts = useMemo(() => (order: Order) => {
@@ -75,10 +81,6 @@ const OrderTable: React.FC<OrderTableProps> = memo(
         .map(item => `(${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.productName})`)
         .join(' + ');
     }, [isRtl, translateUnit]);
-
-    if (loading) {
-      return <OrderTableSkeleton isRtl={isRtl} />;
-    }
 
     return (
       <motion.div
@@ -104,6 +106,9 @@ const OrderTable: React.FC<OrderTableProps> = memo(
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">
                 {isRtl ? 'الحالة' : 'Status'}
               </th>
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">
+                {isRtl ? 'الأولوية' : 'Priority'}
+              </th>
               <th className="px-2 py-2 font-medium text-gray-600  tracking-wider text-center ">
                 {isRtl ? 'المنتجات' : 'Products'}
               </th>
@@ -124,7 +129,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
           <tbody className="divide-y divide-gray-100">
             {orders.length === 0 ? (
               <tr>
-                <td colSpan={9} className="text-center py-4 text-gray-500 text-xs">
+                <td colSpan={10} className="text-center py-4 text-gray-500 text-xs">
                   {isRtl ? 'لا توجد طلبات' : 'No orders found'}
                 </td>
               </tr>
@@ -143,8 +148,13 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                       <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium items-center gap-1 ${statusInfo.color} ${isRtl ? 'flex-row-reverse' : ''}`}>
                         <StatusIcon className="w-4 h-4" />
                         {isRtl
-                          ? { pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[statusInfo.label]
+                          ? { pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[order.status]
                           : statusInfo.label}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2 text-center whitespace-nowrap">
+                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${PRIORITY_COLORS[order.priority]}`}>
+                        {isRtl ? { urgent: 'عاجل', high: 'مرتفع', medium: 'متوسط', low: 'منخفض' }[order.priority] : order.priority}
                       </span>
                     </td>
                     <td className="px-2 py-2 text-gray-600 text-center">
@@ -193,7 +203,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                           <Button
                             variant="primary"
                             size="xs"
-                            onClick={() => onAssignChefs(order)}
+                            onClick={() => openAssignModal(order)}
                             className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1 text-xs"
                             disabled={submitting === order.id}
                             aria-label={isRtl ? `تعيين طلب رقم ${order.orderNumber}` : `Assign order #${order.orderNumber}`}

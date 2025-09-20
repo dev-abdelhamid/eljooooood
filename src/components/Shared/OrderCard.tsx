@@ -88,10 +88,6 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                 {isRtl ? { pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[order.status] : statusInfo.label}
               </span>
             </div>
-            <div className="flex items-center gap-1">
-              <p className="text-xs text-gray-500">{isRtl ? 'الفرع:' : 'Branch:'}</p>
-              <p className="text-xs font-medium text-gray-800 truncate">{order.branchName}</p>
-            </div>
             <div className="w-full bg-gray-200 rounded-full h-1.5">
               <div
                 className="bg-amber-600 h-1.5 rounded-full transition-all duration-500"
@@ -163,29 +159,28 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                             transition={{ duration: 0.2 }}
                             className="p-2 bg-gray-50 rounded-md"
                           >
-                            <div className={`flex items-start justify-between gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                            <div className="flex items-center justify-between gap-2">
                               <p className="text-xs font-medium text-gray-900 truncate flex-1">
                                 {item.productName} ({item.quantity} {translateUnit(item.unit, isRtl)})
                               </p>
-                              <div className={`flex flex-col items-end gap-0.5 ${isRtl ? 'items-start' : ''}`}>
-                                <span
-                                  className={`px-1.5 py-0.5 rounded-full text-xs font-medium flex items-center gap-1 ${itemStatusInfo.color} ${
-                                    isRtl ? 'flex-row-reverse' : ''
-                                  }`}
-                                >
-                                  <ItemStatusIcon className="w-3 h-3" />
-                                  {isRtl ? { pending: 'قيد الانتظار', assigned: 'معين', in_progress: 'قيد التقدم', completed: 'مكتمل' }[item.status] : itemStatusInfo.label}
-                                </span>
-                                <p className="text-xs font-medium text-gray-900">{item.price}</p>
-                              </div>
+                              <span
+                                className={`px-1.5 py-0.5 rounded-full text-xs font-medium flex items-center gap-1 ${itemStatusInfo.color} ${
+                                  isRtl ? 'flex-row-reverse' : ''
+                                }`}
+                              >
+                                {isRtl ? { pending: 'قيد الانتظار', assigned: 'معين', in_progress: 'قيد التقدم', completed: 'مكتمل' }[item.status] : itemStatusInfo.label}
+                              </span>
                             </div>
-                            {item.assignedTo && (
-                              <p className="text-xs text-gray-600 truncate mt-1">
-                                {isRtl
-                                  ? `معين لـ: شيف ${item.assignedTo.name} (${item.department?.name || 'Unknown'})`
-                                  : `Assigned to: Chef ${item.assignedTo.name} (${item.department?.name || 'Unknown'})`}
-                              </p>
-                            )}
+                            <div className="flex items-center gap-2 mt-1">
+                              {item.assignedTo && (
+                                <p className="text-xs text-gray-600 truncate">
+                                  {isRtl
+                                    ? `معين لـ: شيف ${item.assignedTo.name} (${item.department?.name || 'Unknown'})`
+                                    : `Assigned to: Chef ${item.assignedTo.name} (${item.department?.name || 'Unknown'})`}
+                                </p>
+                              )}
+                              <p className="text-xs font-medium text-gray-900">{item.price}</p>
+                            </div>
                           </motion.div>
                         );
                       })}
