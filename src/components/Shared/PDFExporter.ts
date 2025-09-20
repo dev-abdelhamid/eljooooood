@@ -93,7 +93,11 @@ const generatePDFTable = (
     didDrawCell: (data) => {
       if (data.section === 'body' && data.column.index === 4) {
         const text = data.cell.text[0];
-        data.cell.text[0] = text.replace(/٫/g, '.').replace(/[^\d.]/g, '');
+        if (typeof text === 'string' && text.trim() !== '') {
+          data.cell.text[0] = text.replace(/٫/g, '.').replace(/[^\d.]/g, '');
+        } else {
+          data.cell.text[0] = '0.00'; // قيمة افتراضية في حال كانت القيمة غير موجودة
+        }
       }
     },
   });
@@ -122,8 +126,8 @@ export const exportToPDF = async (
       isRtl ? 'التاريخ' : 'Date',
     ];
     const data = orders.map(order => [
-      order.orderNumber,
-      order.branchName,
+      order.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
+      order.branchName || (isRtl ? 'غير معروف' : 'Unknown'),
       isRtl ? {
         pending: 'قيد الانتظار',
         approved: 'تم الموافقة',
@@ -133,10 +137,10 @@ export const exportToPDF = async (
         delivered: 'تم التسليم',
         cancelled: 'ملغى'
       }[order.status] || order.status : order.status,
-      order.items.map(i => `${i.productName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', '),
-      calculateAdjustedTotal(order),
+      order.items.map(i => `${i.productName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ') || (isRtl ? 'لا توجد منتجات' : 'No products'),
+      calculateAdjustedTotal(order) || '0.00',
       `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
-      order.date,
+      order.date || formatDate(new Date(), isRtl ? 'ar' : 'en'),
     ]);
     generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName, calculateAdjustedTotal, calculateTotalQuantity, translateUnit);
     doc.save('Orders.pdf');
