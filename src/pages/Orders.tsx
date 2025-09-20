@@ -19,12 +19,24 @@ import { ordersAPI, chefsAPI, branchesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { Order, Chef, Branch, AssignChefsForm, OrderStatus } from '../types/types';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 // Lazy-loaded components
 const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
 const OrderTable = lazy(() => import('../components/Shared/OrderTable'));
 const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
 const Pagination = lazy(() => import('../components/Shared/Pagination'));
+
+// ScrollToTop component for navigation
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [pathname]);
+
+  return null;
+};
 
 // واجهة الحالة
 interface State {
@@ -425,6 +437,16 @@ export const Orders: React.FC = () => {
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
     });
 
+    socket.on('reconnect', (attempt) => {
+      console.log(`[${new Date().toISOString()}] Socket reconnected after ${attempt} attempts`);
+      dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log(`[${new Date().toISOString()}] Socket disconnected: ${reason}`);
+      dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
+    });
+
     socket.on('newOrder', (order: any) => {
       if (!order || !order._id || !order.orderNumber) {
         console.warn('Invalid new order data:', order);
@@ -444,7 +466,7 @@ export const Orders: React.FC = () => {
               price: Number(item.price) || 0,
               unit: item.product?.unit || 'unit',
               department: item.product?.department ? { _id: item.product.department._id, name: item.product.department.name || (isRtl ? 'غير معروف' : 'Unknown') } : { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' },
-              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || item.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), department: item.assignedTo.department } : undefined,
+              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'), department: item.assignedTo.department } : undefined,
               status: item.status || 'pending',
               returnedQuantity: Number(item.returnedQuantity) || 0,
               returnReason: item.returnReason || '',
@@ -604,7 +626,7 @@ export const Orders: React.FC = () => {
             items: Array.isArray(order.items)
               ? order.items.map((item: any) => ({
                   _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
-                  productId: item.product?._id || 'unknown',
+                  productId: order.product?._id || 'unknown',
                   productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                   quantity: Number(item.quantity) || 1,
                   price: Number(item.price) || 0,
@@ -728,8 +750,8 @@ export const Orders: React.FC = () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, isRtl ? 'الطلبات' : 'Orders');
     XLSX.writeFile(wb, 'Orders.xlsx');
-    toast.success(isRtl ? 'تم تصدير الملف بنجاح' : 'Export successful', {
-      position: isRtl ? 'top-left' : 'top-right',
+    toast.success(isRtl ? 'تم تصدير الملف بنجاح' : 'Export successful', { 
+      position: isRtl ? 'top-left' : 'top-right', 
       autoClose: 3000,
     });
   }, [state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity]);
