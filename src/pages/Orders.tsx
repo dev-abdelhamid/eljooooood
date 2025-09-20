@@ -1230,7 +1230,6 @@ export const Orders: React.FC = () => {
                         key={order.id}
                         order={order}
                         isRtl={isRtl}
-                        t={t}
                         calculateAdjustedTotal={calculateAdjustedTotal}
                         calculateTotalQuantity={calculateTotalQuantity}
                         translateUnit={translateUnit}
@@ -1247,7 +1246,6 @@ export const Orders: React.FC = () => {
                       currentPage={state.currentPage}
                       totalPages={Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode])}
                       isRtl={isRtl}
-                      t={t}
                       handlePageChange={handlePageChange}
                     />
                   </motion.div>
