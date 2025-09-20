@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
 import { Order } from '../../types/types';
+import { formatDate } from '../../utils/formatDate';
 
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   let binary = '';
