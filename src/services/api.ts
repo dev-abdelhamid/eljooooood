@@ -231,25 +231,20 @@ export const ordersAPI = {
     console.log(`ordersAPI.updateChefItem - Response at ${new Date().toISOString()}:`, response);
     return response;
   },
-  assignChef: async (orderId: string, data: { items: Array<{ itemId: string; assignedTo: string }> }) => {
+ assignChef: async (orderId: string, data: { items: Array<{ itemId: string; assignedTo: string }> }) => {
     console.log(`[${new Date().toISOString()}] ordersAPI.assignChef - Sending:`, { orderId, data });
-    if ((orderId) || data.items.some(item => !(item.itemId) || (item.assignedTo))) {
+    if (!/^[0-9a-fA-F]{24}$/.test(orderId) || data.items.some(item => !/^[0-9a-fA-F]{24}$/.test(item.itemId) || !/^[0-9a-fA-F]{24}$/.test(item.assignedTo))) {
       console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - بيانات غير صالحة:`, { orderId, data });
       throw new Error('معرف الطلب أو معرف العنصر أو معرف الشيف غير صالح');
     }
-    try {
-      const response = await axios.patch(`${API_BASE_URL}/orders/${orderId}/assign`, {
-        items: data.items,
-        timestamp: new Date().toISOString(),
-      }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-      });
-      console.log(`[${new Date().toISOString()}] ordersAPI.assignChef - Response:`, response.data);
-      return response.data;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - Error:`, error.response?.data || error.message);
-      throw new Error(error.response?.data?.message || 'خطأ في تعيين الشيف');
-    }
+    const response = await axios.patch(`${API_BASE_URL}/orders/${orderId}/assign`, {
+      items: data.items,
+      timestamp: new Date().toISOString(),
+    }, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+    });
+    console.log(`[${new Date().toISOString()}] ordersAPI.assignChef - Response:`, response.data);
+    return response.data;
   },
   confirmDelivery: async (orderId: string) => {
     if (!/^[0-9a-fA-F]{24}$/.test(orderId)) {
