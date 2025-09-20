@@ -113,7 +113,9 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                 <p className="text-xs font-medium text-gray-800">
                   {isRtl ? `${calculateTotalQuantity(order)} عنصر` : `${calculateTotalQuantity(order)} items`}
                 </p>
+                
               </div>
+
               <div>
                 <p className="text-xs text-gray-500">{isRtl ? 'إجمالي المبلغ' : 'Total Amount'}</p>
                 <p className="text-xs font-semibold text-teal-600">{calculateAdjustedTotal(order)}</p>
@@ -121,6 +123,10 @@ const OrderCard: React.FC<OrderCardProps> = memo(
               <div className="col-span-2">
                 <p className="text-xs text-gray-500">{isRtl ? 'التاريخ' : 'Date'}</p>
                 <p className="text-xs font-medium text-gray-800 truncate">{order.date}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-500">{isRtl ? 'الفرع' : 'Branch'}</p>
+                <p className="text-xs font-medium text-gray-800 truncate">{order.branchName}</p>
               </div>
             </div>
             <div>
@@ -130,7 +136,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                 aria-expanded={isItemsExpanded}
                 aria-controls={`items-${order.id}`}
               >
-                <h4 className="text-sm font-semibold text-gray-900">{isRtl ? 'المنتجات' : 'Products'}</h4>
+                <h4 className="text-xs font-semibold text-gray-900">{isRtl ? 'المنتجات' : 'Products'}</h4>
                 {isItemsExpanded ? (
                   <ChevronUp className="w-4 h-4 text-gray-600" />
                 ) : (
@@ -164,14 +170,14 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                                 {item.productName} ({item.quantity} {translateUnit(item.unit, isRtl)})
                               </p>
                               <span
-                                className={`px-1.5 py-0.5 rounded-full text-xs font-medium flex items-center gap-1 ${itemStatusInfo.color} ${
+                                className={`px-1.5 py-0.5 rounded-full text-xs font-small flex items-center gap-1 ${itemStatusInfo.color} ${
                                   isRtl ? 'flex-row-reverse' : ''
                                 }`}
                               >
                                 {isRtl ? { pending: 'قيد الانتظار', assigned: 'معين', in_progress: 'قيد التقدم', completed: 'مكتمل' }[item.status] : itemStatusInfo.label}
                               </span>
                             </div>
-                            <div className="flex items-center gap-2 mt-1">
+                            <div className="flex items-center justify-between gap-2 mt-1">
                               {item.assignedTo && (
                                 <p className="text-xs text-gray-600 truncate">
                                   {isRtl
@@ -179,7 +185,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                                     : `Assigned to: Chef ${item.assignedTo.name} (${item.department?.name || 'Unknown'})`}
                                 </p>
                               )}
-                              <p className="text-xs font-medium text-gray-900">{item.price}</p>
+                              <p className="text-xs font-medium text-gray-900">{item.price} {isRtl ? 'ريال' : 'SAR'}</p>
                             </div>
                           </motion.div>
                         );
