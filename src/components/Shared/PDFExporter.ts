@@ -15,16 +15,17 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
 const loadFont = async (doc: jsPDF, fontName: string, fontUrl: string): Promise<boolean> => {
   try {
     const fontBytes = await fetch(fontUrl).then(res => {
-      if (!res.ok) throw new Error('Failed to fetch font');
+      if (!res.ok) throw new Error('فشل في تحميل الخط');
       return res.arrayBuffer();
     });
-    doc.addFileToVFS(`${fontName}-Regular.ttf`, arrayBufferToBase64(fontBytes));
+    const fontBase64 = arrayBufferToBase64(fontBytes);
+    doc.addFileToVFS(`${fontName}-Regular.ttf`, fontBase64);
     doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
-    doc.setFont(fontName);
+    doc.setFont(fontName, 'normal');
     return true;
   } catch (fontError) {
-    console.error('Font loading error:', fontError);
-    doc.setFont('helvetica');
+    console.error('خطأ تحميل الخط:', fontError);
+    doc.setFont('helvetica', 'normal');
     return false;
   }
 };
@@ -64,12 +65,14 @@ const generatePDFTable = (
       fontSize: 10,
       halign: isRtl ? 'right' : 'left',
       font: fontLoaded ? fontName : 'helvetica',
+      fontStyle: 'normal',
       cellPadding: 3,
     },
     bodyStyles: {
       fontSize: 9,
       halign: isRtl ? 'right' : 'left',
       font: fontLoaded ? fontName : 'helvetica',
+      fontStyle: 'normal',
       cellPadding: 3,
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
@@ -84,8 +87,13 @@ const generatePDFTable = (
       6: { cellWidth: 30 },
     },
     didParseCell: (data) => {
-      if (data.section === 'head') {
-        data.cell.styles.halign = isRtl ? 'right' : 'left';
+      data.cell.styles.halign = isRtl ? 'right' : 'left';
+      data.cell.styles.valign = 'middle';
+    },
+    didDrawCell: (data) => {
+      if (data.section === 'body' && data.column.index === 4) {
+        const text = data.cell.text[0];
+        data.cell.text[0] = text.replace(/٫/g, '.').replace(/[^\d.]/g, '');
       }
     },
   });
@@ -116,7 +124,15 @@ export const exportToPDF = async (
     const data = orders.map(order => [
       order.orderNumber,
       order.branchName,
-      isRtl ? { pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[order.status] || order.status : order.status,
+      isRtl ? {
+        pending: 'قيد الانتظار',
+        approved: 'تم الموافقة',
+        in_production: 'في الإنتاج',
+        completed: 'مكتمل',
+        in_transit: 'في النقل',
+        delivered: 'تم التسليم',
+        cancelled: 'ملغى'
+      }[order.status] || order.status : order.status,
       order.items.map(i => `${i.productName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', '),
       calculateAdjustedTotal(order),
       `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
@@ -129,7 +145,7 @@ export const exportToPDF = async (
       autoClose: 3000,
     });
   } catch (err: any) {
-    console.error('PDF export error:', err.message);
+    console.error('خطأ في تصدير PDF:', err.message);
     toast.error(isRtl ? `خطأ في تصدير PDF: ${err.message}` : `PDF export error: ${err.message}`, {
       position: isRtl ? 'top-left' : 'top-right',
       autoClose: 3000,
