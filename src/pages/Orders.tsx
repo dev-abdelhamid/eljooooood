@@ -14,16 +14,18 @@ import * as XLSX from 'xlsx';
 import { ordersAPI, chefsAPI, branchesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
-import { Order, Chef, Branch, AssignChefsForm } from '../types/types';
+import { Order, Chef, Branch, AssignChefsForm, OrderStatus } from '../types/types';
 import { useNavigate } from 'react-router-dom';
 import { exportToPDF } from '../components/Shared/PDFExporter';
 import { OrderTableSkeleton, OrderCardSkeleton } from '../components/Shared/OrderSkeletons';
-import Pagination from '../components/Shared/Pagination';
 
+// Lazy-loaded components
 const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
 const OrderTable = lazy(() => import('../components/Shared/OrderTable'));
 const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
+const Pagination = lazy(() => import('../components/Shared/Pagination'));
 
+// State interface
 interface State {
   orders: Order[];
   selectedOrder: Order | null;
@@ -45,6 +47,7 @@ interface State {
   viewMode: 'card' | 'table';
 }
 
+// Action interface
 interface Action {
   type: string;
   payload?: any;
@@ -58,6 +61,7 @@ interface Action {
   modal?: string;
 }
 
+// Initial state
 const initialState: State = {
   orders: [],
   selectedOrder: null,
@@ -79,63 +83,108 @@ const initialState: State = {
   viewMode: 'card',
 };
 
+// Reducer function
 const reducer = (state: State, action: Action): State => {
   switch (action.type) {
-    case 'SET_ORDERS': return { ...state, orders: action.payload, error: '', currentPage: 1 };
-    case 'ADD_ORDER': return { ...state, orders: [action.payload, ...state.orders.filter(o => o.id !== action.payload.id)] };
-    case 'SET_SELECTED_ORDER': return { ...state, selectedOrder: action.payload };
-    case 'SET_CHEFS': return { ...state, chefs: action.payload };
-    case 'SET_BRANCHES': return { ...state, branches: action.payload };
-    case 'SET_MODAL': return { ...state, isAssignModalOpen: action.isOpen ?? false };
-    case 'SET_ASSIGN_FORM': return { ...state, assignFormData: action.payload };
-    case 'SET_FILTER_STATUS': return { ...state, filterStatus: action.payload, currentPage: 1 };
-    case 'SET_FILTER_BRANCH': return { ...state, filterBranch: action.payload, currentPage: 1 };
-    case 'SET_SEARCH_QUERY': return { ...state, searchQuery: action.payload, currentPage: 1 };
-    case 'SET_SORT': return { ...state, sortBy: action.by ?? 'date', sortOrder: action.order ?? 'desc', currentPage: 1 };
-    case 'SET_PAGE': return { ...state, currentPage: action.payload };
-    case 'SET_LOADING': return { ...state, loading: action.payload };
-    case 'SET_ERROR': return { ...state, error: action.payload };
-    case 'SET_SUBMITTING': return { ...state, submitting: action.payload };
-    case 'SET_SOCKET_CONNECTED': return { ...state, socketConnected: action.payload };
-    case 'SET_SOCKET_ERROR': return { ...state, socketError: action.payload };
-    case 'UPDATE_ORDER_STATUS': return {
-      ...state,
-      orders: state.orders.map(o => o.id === action.orderId ? { ...o, status: action.status! } : o),
-      selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
-        ? { ...state.selectedOrder, status: action.status! } : state.selectedOrder,
-    };
-    case 'UPDATE_ITEM_STATUS': return {
-      ...state,
-      orders: state.orders.map(order =>
-        order.id === action.orderId
+    case 'SET_ORDERS':
+      return { ...state, orders: action.payload, error: '' };
+    case 'ADD_ORDER':
+      return { ...state, orders: [action.payload, ...state.orders.filter(o => o.id !== action.payload.id)] };
+    case 'SET_SELECTED_ORDER':
+      return { ...state, selectedOrder: action.payload };
+    case 'SET_CHEFS':
+      return { ...state, chefs: action.payload };
+    case 'SET_BRANCHES':
+      return { ...state, branches: action.payload };
+    case 'SET_MODAL':
+      return { ...state, isAssignModalOpen: action.isOpen ?? false };
+    case 'SET_ASSIGN_FORM':
+      return { ...state, assignFormData: action.payload };
+    case 'SET_FILTER_STATUS':
+      return { ...state, filterStatus: action.payload, currentPage: 1 };
+    case 'SET_FILTER_BRANCH':
+      return { ...state, filterBranch: action.payload, currentPage: 1 };
+    case 'SET_SEARCH_QUERY':
+      return { ...state, searchQuery: action.payload, currentPage: 1 };
+    case 'SET_SORT':
+      return { ...state, sortBy: action.by ?? 'date', sortOrder: action.order ?? 'desc', currentPage: 1 };
+    case 'SET_PAGE':
+      return { ...state, currentPage: action.payload };
+    case 'SET_LOADING':
+      return { ...state, loading: action.payload };
+    case 'SET_ERROR':
+      return { ...state, error: action.payload };
+    case 'SET_SUBMITTING':
+      return { ...state, submitting: action.payload };
+    case 'SET_SOCKET_CONNECTED':
+      return { ...state, socketConnected: action.payload };
+    case 'SET_SOCKET_ERROR':
+      return { ...state, socketError: action.payload };
+    case 'UPDATE_ORDER_STATUS':
+      return {
+        ...state,
+        orders: state.orders.map(o =>
+          o.id === action.orderId ? { ...o, status: action.status! } : o
+        ),
+        selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
+          ? { ...state.selectedOrder, status: action.status! }
+          : state.selectedOrder,
+      };
+    case 'UPDATE_ITEM_STATUS':
+      return {
+        ...state,
+        orders: state.orders.map(order =>
+          order.id === action.orderId
+            ? {
+                ...order,
+                items: order.items.map(item =>
+                  item._id === action.payload.itemId ? { ...item, status: action.payload.status } : item
+                ),
+                status: order.items.every(i => i.status === 'completed') && order.status !== 'completed'
+                  ? 'completed'
+                  : order.status,
+              }
+            : order
+        ),
+        selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
           ? {
-              ...order,
-              items: order.items.map(item =>
+              ...state.selectedOrder,
+              items: state.selectedOrder.items.map(item =>
                 item._id === action.payload.itemId ? { ...item, status: action.payload.status } : item
               ),
-              status: order.items.every(i => i.status === 'completed') && order.status !== 'completed'
-                ? 'completed' : order.status,
+              status: state.selectedOrder.items.every(i => i.status === 'completed') && state.selectedOrder.status !== 'completed'
+                ? 'completed'
+                : state.selectedOrder.status,
             }
-          : order
-      ),
-      selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
-        ? {
-            ...state.selectedOrder,
-            items: state.selectedOrder.items.map(item =>
-              item._id === action.payload.itemId ? { ...item, status: action.payload.status } : item
-            ),
-            status: state.selectedOrder.items.every(i => i.status === 'completed') && state.selectedOrder.status !== 'completed'
-              ? 'completed' : state.selectedOrder.status,
-          }
-        : state.selectedOrder,
-    };
-    case 'TASK_ASSIGNED': return {
-      ...state,
-      orders: state.orders.map(order =>
-        order.id === action.orderId
+          : state.selectedOrder,
+      };
+    case 'TASK_ASSIGNED':
+      return {
+        ...state,
+        orders: state.orders.map(order =>
+          order.id === action.orderId
+            ? {
+                ...order,
+                items: order.items.map(i => {
+                  const assignment = action.items?.find(a => a._id === i._id);
+                  return assignment
+                    ? {
+                        ...i,
+                        assignedTo: assignment.assignedTo
+                          ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name || assignment.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), department: assignment.assignedTo.department }
+                          : undefined,
+                        status: assignment.status || i.status,
+                      }
+                    : i;
+                }),
+                status: order.items.every(i => i.status === 'assigned') ? 'in_production' : order.status,
+              }
+            : order
+        ),
+        selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
           ? {
-              ...order,
-              items: order.items.map(i => {
+              ...state.selectedOrder,
+              items: state.selectedOrder.items.map(i => {
                 const assignment = action.items?.find(a => a._id === i._id);
                 return assignment
                   ? {
@@ -147,68 +196,54 @@ const reducer = (state: State, action: Action): State => {
                     }
                   : i;
               }),
-              status: order.items.every(i => i.status === 'assigned') ? 'in_production' : order.status,
+              status: state.selectedOrder.items.every(i => i.status === 'assigned')
+                ? 'in_production'
+                : state.selectedOrder.status,
             }
-          : order
-      ),
-      selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
-        ? {
-            ...state.selectedOrder,
-            items: state.selectedOrder.items.map(i => {
-              const assignment = action.items?.find(a => a._id === i._id);
-              return assignment
-                ? {
-                    ...i,
-                    assignedTo: assignment.assignedTo
-                      ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name || assignment.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), department: assignment.assignedTo.department }
-                      : undefined,
-                    status: assignment.status || i.status,
-                  }
-                : i;
-            }),
-            status: state.selectedOrder.items.every(i => i.status === 'assigned')
-              ? 'in_production' : state.selectedOrder.status,
-          }
-        : state.selectedOrder,
-    };
-    case 'RETURN_STATUS_UPDATED': return {
-      ...state,
-      orders: state.orders.map(order =>
-        order.id === action.orderId
+          : state.selectedOrder,
+      };
+    case 'RETURN_STATUS_UPDATED':
+      return {
+        ...state,
+        orders: state.orders.map(order =>
+          order.id === action.orderId
+            ? {
+                ...order,
+                returns: order.returns.map(ret =>
+                  ret.returnId === action.returnId ? { ...ret, status: action.status! } : ret
+                ),
+                adjustedTotal: action.status === 'approved'
+                  ? order.adjustedTotal - (order.returns.find(r => r.returnId === action.returnId)?.items.reduce((sum, item) => {
+                      const orderItem = order.items.find(i => i.productId === item.productId);
+                      return sum + (orderItem ? orderItem.price * item.quantity : 0);
+                    }, 0) || 0)
+                  : order.adjustedTotal,
+              }
+            : order
+        ),
+        selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
           ? {
-              ...order,
-              returns: order.returns.map(ret =>
+              ...state.selectedOrder,
+              returns: state.selectedOrder.returns.map(ret =>
                 ret.returnId === action.returnId ? { ...ret, status: action.status! } : ret
               ),
               adjustedTotal: action.status === 'approved'
-                ? order.adjustedTotal - (order.returns.find(r => r.returnId === action.returnId)?.items.reduce((sum, item) => {
-                    const orderItem = order.items.find(i => i.productId === item.productId);
+                ? state.selectedOrder.adjustedTotal - (state.selectedOrder.returns.find(r => r.returnId === action.returnId)?.items.reduce((sum, item) => {
+                    const orderItem = state.selectedOrder.items.find(i => i.productId === item.productId);
                     return sum + (orderItem ? orderItem.price * item.quantity : 0);
                   }, 0) || 0)
-                : order.adjustedTotal,
+                : state.selectedOrder.adjustedTotal,
             }
-          : order
-      ),
-      selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
-        ? {
-            ...state.selectedOrder,
-            returns: state.selectedOrder.returns.map(ret =>
-              ret.returnId === action.returnId ? { ...ret, status: action.status! } : ret
-            ),
-            adjustedTotal: action.status === 'approved'
-              ? state.selectedOrder.adjustedTotal - (state.selectedOrder.returns.find(r => r.returnId === action.returnId)?.items.reduce((sum, item) => {
-                  const orderItem = state.selectedOrder.items.find(i => i.productId === item.productId);
-                  return sum + (orderItem ? orderItem.price * item.quantity : 0);
-                }, 0) || 0)
-              : state.selectedOrder.adjustedTotal,
-          }
-        : state.selectedOrder,
-    };
-    case 'SET_VIEW_MODE': return { ...state, viewMode: action.payload, currentPage: 1 };
-    default: return state;
+          : state.selectedOrder,
+      };
+    case 'SET_VIEW_MODE':
+      return { ...state, viewMode: action.payload, currentPage: 1 };
+    default:
+      return state;
   }
 };
 
+// Constants
 const ORDERS_PER_PAGE = { card: 12, table: 50 };
 const validTransitions: Record<Order['status'], Order['status'][]> = {
   pending: ['approved', 'cancelled'],
@@ -219,6 +254,7 @@ const validTransitions: Record<Order['status'], Order['status'][]> = {
   delivered: [],
   cancelled: [],
 };
+
 const statusOptions = [
   { value: '', label: 'all_statuses' },
   { value: 'pending', label: 'pending' },
@@ -229,12 +265,14 @@ const statusOptions = [
   { value: 'delivered', label: 'delivered' },
   { value: 'cancelled', label: 'cancelled' },
 ];
+
 const sortOptions = [
   { value: 'date', label: 'sort_date' },
   { value: 'totalAmount', label: 'sort_total_amount' },
   { value: 'priority', label: 'sort_priority' },
 ];
 
+// Helper function
 const translateUnit = (unit: string, isRtl: boolean) => {
   const translations: Record<string, { ar: string; en: string }> = {
     'كيلو': { ar: 'كيلو', en: 'kg' },
@@ -249,6 +287,7 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
 
+// Main component
 export const Orders: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
@@ -292,7 +331,7 @@ export const Orders: React.FC = () => {
 
   const handleNavigateToDetails = useCallback((orderId: string) => {
     navigate(`/orders/${orderId}`);
-    window.scrollTo(0, 0);
+    window.scrollTo(0, 0); // Scroll to top when navigating to details
   }, [navigate]);
 
   useEffect(() => {
@@ -388,6 +427,7 @@ export const Orders: React.FC = () => {
       };
       dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
       playNotificationSound('/sounds/new-order.mp3', [200, 100, 200]);
+    
     });
     socket.on('orderStatusUpdated', ({ orderId, status }: { orderId: string; status: Order['status'] }) => {
       if (!orderId || !status) {
@@ -395,6 +435,7 @@ export const Orders: React.FC = () => {
         return;
       }
       dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
+    
     });
     socket.on('itemStatusUpdated', ({ orderId, itemId, status }: { orderId: string; itemId: string; status: string }) => {
       if (!orderId || !itemId || !status) {
@@ -402,6 +443,7 @@ export const Orders: React.FC = () => {
         return;
       }
       dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
+      
     });
     socket.on('returnStatusUpdated', ({ orderId, returnId, status }: { orderId: string; returnId: string; status: string }) => {
       if (!orderId || !returnId || !status) {
@@ -530,7 +572,6 @@ export const Orders: React.FC = () => {
                 }))
               : [],
           }));
-        cacheRef.current.clear();
         cacheRef.current.set(cacheKey, mappedOrders);
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
         dispatch({
@@ -811,7 +852,7 @@ export const Orders: React.FC = () => {
     <div className="px-2 py-4 min-h-screen bg-gray-50">
       <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-6">
-          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${isRtl ? 'flex-row' : ''}`}>
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-gray-800 flex items-center gap-2">
                 <ShoppingCart className="w-6 h-6 text-amber-600" />
@@ -856,7 +897,7 @@ export const Orders: React.FC = () => {
             </div>
           </div>
           <Card className="p-3 sm:p-4 mt-4 bg-white shadow-md rounded-md border border-gray-100">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
                 <div className="relative">
