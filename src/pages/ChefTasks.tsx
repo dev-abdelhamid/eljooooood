@@ -15,7 +15,6 @@ import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { formatDate } from '../utils/formatDate';
-import * as Sentry from '@sentry/react';
 
 interface ChefTask {
   itemId: string;
@@ -24,7 +23,6 @@ interface ChefTask {
   productId: string;
   productName: string;
   quantity: number;
-  unit?: string;
   status: 'pending' | 'in_progress' | 'completed';
   createdAt: string;
   updatedAt: string;
@@ -33,7 +31,7 @@ interface ChefTask {
   branchId?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   department?: { _id: string; name: string };
-  assignedTo?: { _id: string; username: string; name?: string };
+  assignedTo?: { _id: string; username: string };
 }
 
 interface State {
@@ -55,7 +53,6 @@ type Action =
   | { type: 'SET_ERROR'; payload: string }
   | { type: 'SET_SUBMITTING'; payload: string | null }
   | { type: 'SET_SOCKET_CONNECTED'; payload: boolean }
-  | { type: 'SET_SOCKET_ERROR'; payload: string | null }
   | { type: 'SET_FILTER'; payload: { status: string; search: string } }
   | { type: 'SET_PAGE'; payload: number }
   | { type: 'TASK_ASSIGNED'; payload: { orderId: string; items: any[]; orderNumber: string; branchName: string } }
@@ -91,8 +88,6 @@ const reducer = (state: State, action: Action): State => {
       return { ...state, submitting: action.payload };
     case 'SET_SOCKET_CONNECTED':
       return { ...state, socketConnected: action.payload };
-    case 'SET_SOCKET_ERROR':
-      return { ...state, error: action.payload || '' };
     case 'SET_FILTER':
       return { ...state, filter: action.payload, page: 1 };
     case 'SET_PAGE':
@@ -106,13 +101,12 @@ const reducer = (state: State, action: Action): State => {
       const newTasks = items
         .filter((item) => item.assignedTo?._id === state.chefId)
         .map((item) => ({
-          itemId: item._id || item.itemId || crypto.randomUUID(),
+          itemId: item.itemId || 'unknown',
           orderId: action.payload.orderId || 'unknown',
           orderNumber: action.payload.orderNumber || 'N/A',
-          productId: item.product?._id || item.productId || 'unknown',
-          productName: item.product?.name || item.productName || 'Unknown Product',
+          productId: item.productId || 'unknown',
+          productName: item.productName || 'Unknown Product',
           quantity: Number(item.quantity) || 1,
-          unit: item.unit || item.product?.unit || 'unit',
           status: item.status || 'pending',
           createdAt: item.createdAt || new Date().toISOString(),
           updatedAt: item.updatedAt || new Date().toISOString(),
@@ -120,8 +114,8 @@ const reducer = (state: State, action: Action): State => {
           branchName: action.payload.branchName || 'Unknown Branch',
           branchId: item.branchId || 'unknown',
           priority: item.priority || 'medium',
-          department: item.department || item.product?.department || { _id: 'unknown', name: 'Unknown Department' },
-          assignedTo: item.assignedTo || { _id: 'unknown', username: 'Unknown Chef', name: 'Unknown Chef' },
+          department: item.department || { _id: 'unknown', name: 'Unknown Department' },
+          assignedTo: item.assignedTo || { _id: 'unknown', username: 'Unknown Chef' },
         }));
       const updatedTasks = [...state.tasks.filter((t) => !newTasks.some((nt) => nt.itemId === t.itemId)), ...newTasks];
       return {
@@ -180,15 +174,7 @@ export function ChefTasks() {
   stateRef.current = state;
   const tasksPerPage = 10;
 
-  const addNotification = useCallback(
-    (notification: any) => {
-      toast.info(notification.message, {
-        toastId: notification._id,
-        position: isRtl ? 'top-left' : 'top-right',
-      });
-    },
-    [isRtl]
-  );
+  useOrderNotifications(dispatch, stateRef, user);
 
   const cacheKey = useMemo(
     () => `${state.chefId}-${state.page}-${state.filter.status}-${state.filter.search}`,
@@ -224,7 +210,6 @@ export function ChefTasks() {
       const errorMessage = err.message || t('errors.chef_fetch_failed');
       dispatch({ type: 'SET_ERROR', payload: errorMessage });
       toast.error(errorMessage, { toastId: `error-chefProfile-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
-      Sentry.captureException(err, { extra: { context: 'fetchChefProfile', userId } });
       dispatch({ type: 'SET_LOADING', payload: false });
     }
   }, [user, t, isRtl, navigate]);
@@ -247,10 +232,10 @@ export function ChefTasks() {
         if (state.filter.status && state.filter.status !== 'all') query.status = state.filter.status;
         if (state.filter.search) query.search = state.filter.search;
         const response = await productionAssignmentsAPI.getChefTasks(state.chefId, query);
-        if (!response || !Array.isArray(response.docs)) {
+        if (!Array.isArray(response)) {
           throw new Error(t('errors.invalid_response'));
         }
-        const mappedTasks: ChefTask[] = response.docs
+        const mappedTasks: ChefTask[] = response
           .filter((task: any) => {
             if (!task._id || !task.order?._id || !task.product?._id || !task.chef?._id || !/^[0-9a-fA-F]{24}$/.test(task._id)) {
               console.warn(`[${new Date().toISOString()}] Invalid task data:`, task);
@@ -271,7 +256,6 @@ export function ChefTasks() {
             productId: task.product._id || 'unknown',
             productName: task.product.name || t('orders.unknown_product'),
             quantity: Number(task.quantity) || 1,
-            unit: task.product?.unit || 'unit',
             status: task.status || 'pending',
             createdAt: task.createdAt || new Date().toISOString(),
             updatedAt: task.updatedAt || new Date().toISOString(),
@@ -280,11 +264,11 @@ export function ChefTasks() {
             branchId: task.order?.branch?._id || 'unknown',
             priority: task.order?.priority || 'medium',
             department: task.product?.department || { _id: 'unknown', name: t('orders.unknown_department') },
-            assignedTo: task.chef ? { _id: task.chef._id, username: task.chef.username || task.chef.name || t('orders.unknown_chef'), name: task.chef.name } : undefined,
+            assignedTo: task.chef ? { _id: task.chef._id, username: task.chef.username || t('orders.unknown_chef') } : undefined,
           }));
         cache.set(cacheKey, { data: mappedTasks, timestamp: Date.now() });
-        dispatch({ type: 'SET_TASKS', payload: { tasks: mappedTasks, totalPages: response.totalPages || Math.ceil(response.totalDocs / tasksPerPage) || 1 } });
-        if (mappedTasks.length === 0 && response.totalDocs > 0) {
+        dispatch({ type: 'SET_TASKS', payload: { tasks: mappedTasks, totalPages: Math.ceil(response.length / tasksPerPage) || 1 } });
+        if (mappedTasks.length === 0 && response.length > 0) {
           dispatch({ type: 'SET_ERROR', payload: t('errors.all_tasks_filtered') });
           toast.warn(t('errors.all_tasks_filtered'), { toastId: `error-invalidTasks-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
         } else {
@@ -294,7 +278,6 @@ export function ChefTasks() {
         const errorMessage = err.message || t('errors.task_fetch_failed');
         dispatch({ type: 'SET_ERROR', payload: errorMessage });
         toast.error(errorMessage, { toastId: `error-fetchTasks-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
-        Sentry.captureException(err, { extra: { context: 'fetchTasks', chefId: state.chefId, query } });
       } finally {
         dispatch({ type: 'SET_LOADING', payload: false });
       }
@@ -340,7 +323,6 @@ export function ChefTasks() {
             quantity: task.quantity,
             unit: task.unit || 'unit',
             eventId: crypto.randomUUID(),
-            orderStatus: response.order?.status,
           });
         }
         toast.success(t('orders.task_updated', { status: t(`orders.item_${newStatus}`) }), {
@@ -351,15 +333,12 @@ export function ChefTasks() {
         const errorMessage = err.message || t('errors.task_update_failed');
         dispatch({ type: 'SET_ERROR', payload: errorMessage });
         toast.error(errorMessage, { toastId: `error-taskUpdate-${taskId}-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
-        Sentry.captureException(err, { extra: { context: 'handleUpdateTaskStatus', taskId, orderId, newStatus } });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     }, 500),
     [t, state.tasks, state.chefId, user, socket, state.socketConnected, isRtl]
   );
-
-  useOrderNotifications(dispatch, stateRef, user, addNotification, fetchTasks);
 
   useEffect(() => {
     fetchChefProfile();
@@ -486,20 +465,22 @@ export function ChefTasks() {
             </div>
           </Card>
           {!state.socketConnected && (
-            <Card className="p-4 mb-8 bg-yellow-50 shadow-lg rounded-xl border border-yellow-200">
-              <div className="flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-yellow-600" />
-                <p className="text-sm text-yellow-600">{t('errors.socket_disconnected')}</p>
-              </div>
-            </Card>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg shadow-sm flex items-center gap-2"
+            >
+              <AlertCircle className="w-5 h-5 text-yellow-600" />
+              <p className="text-sm text-yellow-700">{t('errors.socket_disconnected')}</p>
+            </motion.div>
           )}
-          {paginatedTasks.length === 0 ? (
-            <Card className="p-6 text-center bg-gray-50 shadow-lg rounded-xl border border-gray-200">
-              <p className="text-base text-gray-600">{t('orders.no_tasks')}</p>
-            </Card>
-          ) : (
-            <div className="flex flex-col gap-4">
-              <AnimatePresence>
+          <AnimatePresence>
+            {paginatedTasks.length === 0 ? (
+              <Card className="p-8 text-center bg-white shadow-lg rounded-xl border border-gray-100">
+                <p className="text-base text-gray-600">{t('orders.no_tasks')}</p>
+              </Card>
+            ) : (
+              <div className="space-y-4">
                 {paginatedTasks.map((task) => {
                   const { label, color, icon: StatusIcon, progress } = getStatusInfo(task.status);
                   return (
@@ -510,47 +491,46 @@ export function ChefTasks() {
                       exit={{ opacity: 0, y: -10 }}
                       transition={{ duration: 0.2 }}
                     >
-                      <Card className="p-6 bg-white shadow-lg rounded-xl border border-gray-100">
-                        <div className="flex flex-col sm:flex-row justify-between gap-4">
+                      <Card className="p-6 bg-white shadow-lg rounded-xl border border-gray-100 hover:shadow-xl transition-all hover:-translate-y-1">
+                        <div className="flex flex-col justify-between gap-4">
                           <div className="flex-1">
                             <div className="flex items-center justify-between mb-3">
-                              <h2 className="text-lg font-semibold text-gray-900">{task.productName}</h2>
-                              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${color}`}>
-                                <StatusIcon className="w-4 h-4 mr-1" />
+                              <h3 className="text-lg font-bold text-gray-900 truncate">{task.productName}</h3>
+                              <span className={`px-3 py-1 rounded-full text-sm font-medium ${color} flex items-center gap-1`}>
+                                <StatusIcon className="w-5 h-5" />
                                 {t(`orders.${label}`)}
                               </span>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-gray-600">
                               <p>
-                                <span className="font-medium">{t('orders.order_number')}:</span> {task.orderNumber}
+                                <span className="font-semibold">{t('orders.order_number')}:</span> {task.orderNumber}
                               </p>
                               <p>
-                                <span className="font-medium">{t('orders.quantity')}:</span> {task.quantity} {task.unit}
+                                <span className="font-semibold">{t('orders.quantity')}:</span> {task.quantity}
                               </p>
                               <p>
-                                <span className="font-medium">{t('orders.created_at')}:</span>{' '}
+                                <span className="font-semibold">{t('orders.created_at')}:</span>{' '}
                                 {formatDate(task.createdAt, language, 'Europe/Athens')}
                               </p>
                               <p>
-                                <span className="font-medium">{t('orders.updated_at')}:</span>{' '}
+                                <span className="font-semibold">{t('orders.updated_at')}:</span>{' '}
                                 {formatDate(task.updatedAt, language, 'Europe/Athens')}
-                              </p>
-                              <p>
-                                <span className="font-medium">{t('orders.branch')}:</span> {task.branchName}
-                              </p>
-                              <p>
-                                <span className="font-medium">{t('orders.priority')}:</span> {t(`orders.priority_${task.priority}`)}
                               </p>
                             </div>
                             <div className="mt-4">
-                              <div className="w-full bg-gray-200 rounded-full h-2.5">
-                                <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
+                              <div className="w-full bg-gray-200 rounded-full h-3">
+                                <div
+                                  className="bg-gradient-to-r from-blue-500 to-blue-600 h-3 rounded-full transition-all duration-500"
+                                  style={{ width: `${progress}%` }}
+                                ></div>
                               </div>
                             </div>
                           </div>
-                          <div className="flex items-center gap-3">
+                          <div className={`flex items-center gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
                             {task.status !== 'completed' && (
                               <Button
+                                variant="primary"
+                                size="sm"
                                 onClick={() => handleUpdateTaskStatus(task.itemId, task.orderId, getNextStatus(task.status))}
                                 disabled={state.submitting === task.itemId || !state.socketConnected}
                                 className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-5 py-2.5 text-sm shadow-md transition-all disabled:opacity-50"
@@ -560,6 +540,7 @@ export function ChefTasks() {
                                   <LoadingSpinner className="w-5 h-5" />
                                 ) : (
                                   <>
+                                    <CheckCircle className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'}`} />
                                     {t(`orders.item_${getNextStatus(task.status)}`)}
                                   </>
                                 )}
@@ -571,12 +552,19 @@ export function ChefTasks() {
                     </motion.div>
                   );
                 })}
-              </AnimatePresence>
-            </div>
-          )}
+              </div>
+            )}
+          </AnimatePresence>
           {state.totalPages > 1 && (
-            <div className="flex items-center justify-between mt-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+              className="flex justify-center items-center gap-4 mt-8"
+            >
               <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => dispatch({ type: 'SET_PAGE', payload: state.page - 1 })}
                 disabled={state.page === 1}
                 className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-5 py-2.5 text-sm shadow-sm transition-all disabled:opacity-50"
@@ -584,10 +572,12 @@ export function ChefTasks() {
               >
                 {t('orders.previous')}
               </Button>
-              <span className="text-sm text-gray-600">
+              <span className="text-gray-700 text-sm font-semibold">
                 {t('orders.page', { current: state.page, total: state.totalPages })}
               </span>
               <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => dispatch({ type: 'SET_PAGE', payload: state.page + 1 })}
                 disabled={state.page === state.totalPages}
                 className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-5 py-2.5 text-sm shadow-sm transition-all disabled:opacity-50"
@@ -595,7 +585,7 @@ export function ChefTasks() {
               >
                 {t('orders.next')}
               </Button>
-            </div>
+            </motion.div>
           )}
         </motion.div>
       )}
