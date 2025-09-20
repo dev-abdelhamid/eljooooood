@@ -2,7 +2,6 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
 import { Order } from '../../types/types';
-import 
 
 // تحويل الأرقام إلى أرقام عربية
 const toArabicNumerals = (number: string | number): string => {
@@ -10,23 +9,23 @@ const toArabicNumerals = (number: string | number): string => {
   return String(number).replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
 };
 
-// تنسيق السعر بشكل صحيح للعربية
+// تنسيق السعر بشكل صحيح
 const formatPrice = (amount: number, isRtl: boolean): string => {
   const formatted = amount.toFixed(2).replace('.', ',');
   const arabicNumber = toArabicNumerals(formatted);
   return isRtl ? `${arabicNumber} ر.س.` : `SAR ${formatted}`;
 };
 
-// تنسيق المنتجات بشكل متناسق مع دعم النصوص الطويلة
+// تنسيق المنتجات بدون أقواس زائدة
 const formatProducts = (items: Order['items'], isRtl: boolean, translateUnit: (unit: string, isRtl: boolean) => string): string => {
   return items
     .map((item) => {
       const quantity = isRtl ? toArabicNumerals(item.quantity) : item.quantity;
       return isRtl
-        ? `(${item.productName}، ${quantity} ${translateUnit(item.unit, isRtl)})`
-        : `(${item.productName}, ${quantity} ${translateUnit(item.unit, isRtl)})`;
+        ? `${item.productName} (${quantity} ${translateUnit(item.unit, isRtl)})`
+        : `${item.productName} (${quantity} ${translateUnit(item.unit, isRtl)})`;
     })
-    .join('\n'); // استخدام \n لفصل العناصر بدلاً من الفواصل لتجنب التداخل
+    .join('\n'); // استخدام \n لتجنب التداخل ولدعم النصوص الطويلة
 };
 
 // تحويل array buffer إلى base64
@@ -60,7 +59,11 @@ const loadFont = async (doc: jsPDF, fontName: string, fontUrl: string): Promise<
 // إنشاء اسم ملف ديناميكي بناءً على التصفية
 const generateFileName = (filterStatus: string, filterBranch: string, isRtl: boolean): string => {
   const date = new Date().toISOString().split('T')[0];
-  const status = isRtl ? (filterStatus ? {pending: 'قيد_الانتظار', approved: 'تم_الموافقة', in_production: 'في_الإنتاج', completed: 'مكتمل', in_transit: 'في_النقل', delivered: 'تم_التسليم', cancelled: 'ملغى'}[filterStatus] : 'الكل') : (filterStatus || 'all');
+  const status = isRtl
+    ? filterStatus
+      ? { pending: 'قيد_الانتظار', approved: 'تم_الموافقة', in_production: 'في_الإنتاج', completed: 'مكتمل', in_transit: 'في_النقل', delivered: 'تم_التسليم', cancelled: 'ملغى' }[filterStatus] || 'الكل'
+      : 'الكل'
+    : filterStatus || 'all';
   const branch = filterBranch ? filterBranch.replace(/\s+/g, '_') : (isRtl ? 'جميع_الفروع' : 'all_branches');
   return `Orders_${status}_${branch}_${date}.pdf`;
 };
@@ -81,7 +84,7 @@ const generatePDFHeader = (
   const pageWidth = doc.internal.pageSize.width;
   const pageHeight = doc.internal.pageSize.height;
 
-  // إضافة عنوان رئيسي
+  // إضافة العنوان الرئيسي
   doc.text(title, isRtl ? pageWidth - 20 : 20, 15, {
     align: isRtl ? 'right' : 'left',
   });
@@ -89,8 +92,17 @@ const generatePDFHeader = (
   // إضافة معلومات التصفية
   doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
+  const statusTranslations = {
+    pending: 'قيد الانتظار',
+    approved: 'تم الموافقة',
+    in_production: 'في الإنتاج',
+    completed: 'مكتمل',
+    in_transit: 'في النقل',
+    delivered: 'تم التسليم',
+    cancelled: 'ملغى',
+  };
   const filterInfo = isRtl
-    ? `الحالة: ${filterStatus ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[filterStatus] : 'الكل'} | الفرع: ${filterBranch || 'جميع الفروع'}`
+    ? `الحالة: ${filterStatus ? statusTranslations[filterStatus] || 'الكل' : 'الكل'} | الفرع: ${filterBranch || 'جميع الفروع'}`
     : `Status: ${filterStatus || 'All'} | Branch: ${filterBranch || 'All Branches'}`;
   doc.text(filterInfo, isRtl ? pageWidth - 20 : 20, 25, {
     align: isRtl ? 'right' : 'left',
@@ -144,7 +156,7 @@ const generatePDFTable = (
     startY: 45,
     margin: { left: 15, right: 15 },
     headStyles: {
-      fillColor: [40, 74, 94], // لون أزرق داكن أنيق
+      fillColor: [40, 74, 94], // أزرق داكن أنيق
       textColor: [255, 255, 255],
       fontSize: 10,
       halign: isRtl ? 'right' : 'left',
@@ -160,7 +172,7 @@ const generatePDFTable = (
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
       textDirection: isRtl ? 'rtl' : 'ltr',
-      fillColor: [245, 245, 245], // خلفية خفيفة للصفوف
+      fillColor: [245, 245, 245], // خلفية خفيفة
     },
     alternateRowStyles: {
       fillColor: [255, 255, 255], // تباين بين الصفوف
@@ -169,7 +181,7 @@ const generatePDFTable = (
       0: { cellWidth: 25 }, // رقم الطلب
       1: { cellWidth: 25 }, // الفرع
       2: { cellWidth: 25 }, // الحالة
-      3: { cellWidth: 100 }, // المنتجات (عرض أكبر لتجنب التداخل)
+      3: { cellWidth: 100 }, // المنتجات (عرض أكبر)
       4: { cellWidth: 25 }, // إجمالي المبلغ
       5: { cellWidth: 20 }, // الكمية الإجمالية
       6: { cellWidth: 35 }, // التاريخ
@@ -177,13 +189,13 @@ const generatePDFTable = (
     styles: {
       overflow: 'linebreak', // دعم التفاف النصوص
       cellWidth: 'wrap',
-      minCellHeight: 10, // ارتفاع أدنى للخلايا لدعم النصوص الطويلة
+      minCellHeight: 15, // ارتفاع أدنى لدعم النصوص الطويلة
     },
     didParseCell: (data) => {
       data.cell.styles.halign = isRtl ? 'right' : 'left';
       data.cell.styles.textDirection = isRtl ? 'rtl' : 'ltr';
       if (data.column.index === 3) {
-        data.cell.styles.cellPadding = { top: 5, right: 5, bottom: 5, left: 5 }; // زيادة المسافات للمنتجات
+        data.cell.styles.cellPadding = { top: 5, right: 5, bottom: 5, left: 5 }; // مسافات إضافية للمنتجات
       }
     },
   });
@@ -203,13 +215,16 @@ export const exportToPDF = async (
     const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
     doc.setLanguage('ar'); // دعم اللغة العربية
     const fontName = 'Alexandria';
-    const fontUrl = 'https://fonts.gstatic.com/s/alexandria/v1/4fae0ee711-9df0-4e3b-a7c2-4c00c0a0b0e0.ttf'; // رابط CDN لخط الكسندرية
+    const fontUrl = '/fonts/Alexandria-Regular.ttf'; // المسار المحلي لخط الكسندرية
     const fontLoaded = await loadFont(doc, fontName, fontUrl);
 
     // حساب الإحصائيات
     const totalOrders = orders.length;
     const totalQuantity = orders.reduce((sum, order) => sum + calculateTotalQuantity(order), 0);
-    const totalAmount = orders.reduce((sum, order) => sum + parseFloat(calculateAdjustedTotal(order).replace(/[^0-9.]/g, '')), 0);
+    const totalAmount = orders.reduce((sum, order) => {
+      const amountStr = calculateAdjustedTotal(order).replace(/[^0-9.]/g, '');
+      return sum + (parseFloat(amountStr) || 0);
+    }, 0);
 
     // إنشاء الهيدر
     generatePDFHeader(
@@ -254,7 +269,7 @@ export const exportToPDF = async (
         order.branchName,
         isRtl ? statusTranslations[order.status] || order.status : order.status,
         productsStr,
-        formatPrice(parseFloat(calculateAdjustedTotal(order).replace(/[^0-9.]/g, '')), isRtl),
+        calculateAdjustedTotal(order), // استخدام القيمة المنسقة مباشرة
         `${totalQuantity} ${isRtl ? 'وحدة' : 'units'}`,
         order.date,
       ];
