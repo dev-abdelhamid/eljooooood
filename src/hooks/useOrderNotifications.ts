@@ -18,6 +18,20 @@ export const useOrderNotifications = (
   const { socket } = useSocket();
   const { t } = useLanguage();
 
+  const fetchOrderDetails = useCallback(async (orderId: string) => {
+    try {
+      const order = await ordersAPI.getById(orderId);
+      if (!order || !order._id) {
+        console.error(`[${new Date().toISOString()}] Failed to fetch order:`, orderId);
+        return null;
+      }
+      return order;
+    } catch (err) {
+      console.error(`[${new Date().toISOString()}] Failed to fetch order:`, err);
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
     if (!socket || !user) {
       console.warn(`[${new Date().toISOString()}] Socket or user not available`);
@@ -32,10 +46,10 @@ export const useOrderNotifications = (
       userId: user._id,
     });
 
-    const events: { name: string; handler: (data: any) => void; config: SocketEventConfig }[] = [
+    const events: { name: string; handler: (data: any) => Promise<void> | void; config: SocketEventConfig }[] = [
       {
         name: 'orderCreated',
-        handler: (newOrder: any) => {
+        handler: async (newOrder: any) => {
           if (!newOrder?._id || !Array.isArray(newOrder.items) || !newOrder.orderNumber || !newOrder.branch?.name) {
             console.warn(`[${new Date().toISOString()}] Invalid order data:`, newOrder);
             return;
@@ -60,6 +74,7 @@ export const useOrderNotifications = (
               productName: item.product?.name || t('products.unknown'),
               quantity: Number(item.quantity) || 1,
               price: Number(item.price) || 0,
+              unit: item.unit || t('orders.unknown_unit'),
               department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
               status: item.status || 'pending',
               assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown') } : undefined,
@@ -105,29 +120,24 @@ export const useOrderNotifications = (
         },
       },
       {
-        name: 'orderConfirmed',
-        handler: (data: any) => {
-          if (!['admin', 'branch'].includes(user.role)) return;
-          if (!data.orderId || !data.orderNumber || !data.branchName) {
-            console.warn(`[${new Date().toISOString()}] Invalid order confirmed data:`, data);
-            return;
-          }
-          if (user.role === 'branch' && data.branchId !== user.branchId) return;
-
-          dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'confirmed' });
-        },
-        config: {
-          type: 'UPDATE_ORDER_STATUS',
-          roles: ['admin', 'branch'],
-        },
-      },
-      {
         name: 'taskAssigned',
-        handler: (data: any) => {
+        handler: async (data: any) => {
           if (!['admin', 'production', 'chef'].includes(user.role)) return;
-          if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName) {
+          if (!data.orderId || !Array.isArray(data.items) || !data.orderNumber || !data.branchName) {
             console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, data);
-            return;
+            const order = await fetchOrderDetails(data.orderId);
+            if (!order) return;
+            data.orderNumber = data.orderNumber || order.orderNumber;
+            data.branchName = data.branchName || order.branch?.name;
+            data.items = data.items.length ? data.items : order.items.map((item: any) => ({
+              itemId: item._id,
+              productId: item.product?._id,
+              productName: item.product?.name,
+              quantity: item.quantity,
+              unit: item.unit || t('orders.unknown_unit'),
+              status: item.status,
+              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username } : null,
+            }));
           }
           if (user.role === 'chef' && !data.items.some((item: any) => item.assignedTo?._id === user._id)) return;
 
@@ -137,6 +147,7 @@ export const useOrderNotifications = (
             productId: item.productId || 'unknown',
             productName: item.productName || t('products.unknown'),
             quantity: Number(item.quantity) || 1,
+            unit: item.unit || t('orders.unknown_unit'),
             department: item.department || { _id: 'unknown', name: t('departments.unknown') },
             status: item.status || 'assigned',
             assignedTo: item.assignedTo
@@ -144,7 +155,17 @@ export const useOrderNotifications = (
               : undefined,
           }));
 
-          dispatch({ type: 'TASK_ASSIGNED', orderId: data.orderId, items: mappedItems });
+          dispatch({
+            type: 'TASK_ASSIGNED',
+            orderId: data.orderId,
+            orderNumber: data.orderNumber,
+            branchName: data.branchName,
+            items: mappedItems,
+          });
+
+          if (user.role === 'chef') {
+            dispatch({ type: 'FETCH_CHEF_TASKS', chefId: user._id });
+          }
         },
         config: {
           type: 'TASK_ASSIGNED',
@@ -167,7 +188,7 @@ export const useOrderNotifications = (
           });
 
           try {
-            const updatedOrder = await ordersAPI.getById(data.orderId);
+            const updatedOrder = await fetchOrderDetails(data.orderId);
             if (!updatedOrder || !updatedOrder._id || !Array.isArray(updatedOrder.items)) {
               console.warn(`[${new Date().toISOString()}] Failed to fetch updated order:`, data.orderId);
               return;
@@ -209,7 +230,7 @@ export const useOrderNotifications = (
             return;
           }
           try {
-            const updatedOrder = await ordersAPI.getById(data.orderId);
+            const updatedOrder = await fetchOrderDetails(data.orderId);
             if (!updatedOrder || !updatedOrder._id) {
               console.warn(`[${new Date().toISOString()}] Failed to fetch updated order:`, data.orderId);
               return;
@@ -227,9 +248,7 @@ export const useOrderNotifications = (
                 productName: item.product?.name || t('products.unknown'),
                 quantity: Number(item.quantity) || 1,
                 price: Number(item.price) || 0,
-                
-                unit: item.unit || t('orders.unknown'),
-
+                unit: item.unit || t('orders.unknown_unit'),
                 department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
                 status: item.status || 'completed',
                 assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown') } : undefined,
@@ -273,185 +292,7 @@ export const useOrderNotifications = (
         },
         config: {
           type: 'UPDATE_ORDER_STATUS',
-          roles: ['admin', 'branch', 'production'],
-        },
-      },
-      {
-        name: 'orderShipped',
-        handler: async (data: any) => {
-          if (!['admin', 'branch', 'production'].includes(user.role)) return;
-          if (!data.orderId || !data.orderNumber || !data.branchName || !data.branchId) {
-            console.warn(`[${new Date().toISOString()}] Invalid order shipped data:`, data);
-            return;
-          }
-          if (user.role === 'branch' && data.branchId !== user.branchId) return;
-          try {
-            const updatedOrder = await ordersAPI.getById(data.orderId);
-            if (!updatedOrder || !updatedOrder._id) {
-              console.warn(`[${new Date().toISOString()}] Failed to fetch updated order:`, data.orderId);
-              return;
-            }
-            const mappedOrder: Order = {
-              id: updatedOrder._id,
-              orderNumber: updatedOrder.orderNumber || t('orders.unknown'),
-              branchName: updatedOrder.branch?.name || t('branches.unknown'),
-              branchId: updatedOrder.branch?._id || 'unknown',
-              branch: updatedOrder.branch || { _id: 'unknown', name: t('branches.unknown') },
-              items: updatedOrder.items.map((item: any) => ({
-                _id: item._id || crypto.randomUUID(),
-                itemId: item._id || crypto.randomUUID(),
-                productId: item.product?._id || 'unknown',
-                productName: item.product?.name || t('products.unknown'),
-                quantity: Number(item.quantity) || 1,
-                price: Number(item.price) || 0,
-                department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
-                status: item.status || 'completed',
-                assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown') } : undefined,
-                returnedQuantity: Number(item.returnedQuantity) || 0,
-                returnReason: item.returnReason || '',
-              })),
-              status: 'in_transit',
-              totalAmount: Number(updatedOrder.totalAmount) || 0,
-              date: formatDate(updatedOrder.createdAt || new Date(), t('language')),
-              notes: updatedOrder.notes || '',
-              priority: updatedOrder.priority || 'medium',
-              createdBy: updatedOrder.createdBy?.username || t('orders.unknown'),
-              statusHistory: Array.isArray(updatedOrder.statusHistory)
-                ? updatedOrder.statusHistory.map((history: any) => ({
-                    status: history.status || 'pending',
-                    changedBy: history.changedBy || t('orders.unknown'),
-                    changedAt: formatDate(history.changedAt || new Date(), t('language')),
-                    notes: history.notes || '',
-                  }))
-                : [],
-              returns: Array.isArray(updatedOrder.returns)
-                ? updatedOrder.returns.map((ret: any) => ({
-                    returnId: ret._id || crypto.randomUUID(),
-                    items: Array.isArray(ret.items)
-                      ? ret.items.map((item: any) => ({
-                          productId: item.product?._id || 'unknown',
-                          quantity: Number(item.quantity) || 0,
-                          reason: item.reason || '',
-                        }))
-                      : [],
-                    status: ret.status || 'pending_approval',
-                    reviewNotes: ret.reviewNotes || '',
-                    createdAt: formatDate(ret.createdAt || new Date(), t('language')),
-                  }))
-                : [],
-            };
-            dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'in_transit', payload: mappedOrder });
-          } catch (err) {
-            console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
-          }
-        },
-        config: {
-          type: 'UPDATE_ORDER_STATUS',
-          roles: ['admin', 'branch', 'production'],
-        },
-      },
-      {
-        name: 'orderDelivered',
-        handler: async (data: any) => {
-          if (!['admin', 'branch', 'production'].includes(user.role)) return;
-          if (!data.orderId || !data.orderNumber || !data.branchName) {
-            console.warn(`[${new Date().toISOString()}] Invalid order delivered data:`, data);
-            return;
-          }
-          if (user.role === 'branch' && data.branchId !== user.branchId) return;
-          try {
-            const updatedOrder = await ordersAPI.getById(data.orderId);
-            if (!updatedOrder || !updatedOrder._id) {
-              console.warn(`[${new Date().toISOString()}] Failed to fetch updated order:`, data.orderId);
-              return;
-            }
-            const mappedOrder: Order = {
-              id: updatedOrder._id,
-              orderNumber: updatedOrder.orderNumber || t('orders.unknown'),
-              branchName: updatedOrder.branch?.name || t('branches.unknown'),
-              branchId: updatedOrder.branch?._id || 'unknown',
-              branch: updatedOrder.branch || { _id: 'unknown', name: t('branches.unknown') },
-              items: updatedOrder.items.map((item: any) => ({
-                _id: item._id || crypto.randomUUID(),
-                itemId: item._id || crypto.randomUUID(),
-                productId: item.product?._id || 'unknown',
-                productName: item.product?.name || t('products.unknown'),
-                quantity: Number(item.quantity) || 1,
-                price: Number(item.price) || 0,
-                department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
-                status: item.status || 'completed',
-                assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown') } : undefined,
-                returnedQuantity: Number(item.returnedQuantity) || 0,
-                returnReason: item.returnReason || '',
-              })),
-              status: 'delivered',
-              totalAmount: Number(updatedOrder.totalAmount) || 0,
-              date: formatDate(updatedOrder.createdAt || new Date(), t('language')),
-              notes: updatedOrder.notes || '',
-              priority: updatedOrder.priority || 'medium',
-              createdBy: updatedOrder.createdBy?.username || t('orders.unknown'),
-              statusHistory: Array.isArray(updatedOrder.statusHistory)
-                ? updatedOrder.statusHistory.map((history: any) => ({
-                    status: history.status || 'pending',
-                    changedBy: history.changedBy || t('orders.unknown'),
-                    changedAt: formatDate(history.changedAt || new Date(), t('language')),
-                    notes: history.notes || '',
-                  }))
-                : [],
-              returns: Array.isArray(updatedOrder.returns)
-                ? updatedOrder.returns.map((ret: any) => ({
-                    returnId: ret._id || crypto.randomUUID(),
-                    items: Array.isArray(ret.items)
-                      ? ret.items.map((item: any) => ({
-                          productId: item.product?._id || 'unknown',
-                          quantity: Number(item.quantity) || 0,
-                          reason: item.reason || '',
-                        }))
-                      : [],
-                    status: ret.status || 'pending_approval',
-                    reviewNotes: ret.reviewNotes || '',
-                    createdAt: formatDate(ret.createdAt || new Date(), t('language')),
-                  }))
-                : [],
-            };
-            dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'delivered', payload: mappedOrder });
-          } catch (err) {
-            console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
-          }
-        },
-        config: {
-          type: 'UPDATE_ORDER_STATUS',
-          roles: ['admin', 'branch', 'production'],
-        },
-      },
-      {
-        name: 'returnStatusUpdated',
-        handler: (data: any) => {
-          if (!['admin', 'branch', 'production'].includes(user.role)) return;
-          if (!data.orderId || !data.returnId || !data.status || !data.orderNumber) {
-            console.warn(`[${new Date().toISOString()}] Invalid return status update data:`, data);
-            return;
-          }
-          dispatch({ type: 'RETURN_STATUS_UPDATED', orderId: data.orderId, returnId: data.returnId, status: data.status });
-        },
-        config: {
-          type: 'RETURN_STATUS_UPDATED',
-          roles: ['admin', 'branch', 'production'],
-        },
-      },
-      {
-        name: 'missingAssignments',
-        handler: (data: any) => {
-          if (!['admin', 'production'].includes(user.role)) return;
-          if (!data.orderId || !data.itemId || !data.orderNumber || !data.productName) {
-            console.warn(`[${new Date().toISOString()}] Invalid missing assignments data:`, data);
-            return;
-          }
-          dispatch({ type: 'MISSING_ASSIGNMENTS', orderId: data.orderId, itemId: data.itemId, productName: data.productName });
-        },
-        config: {
-          type: 'MISSING_ASSIGNMENTS',
-          roles: ['admin', 'production'],
+          roles: ['admin', 'branch', 'production', 'chef'],
         },
       },
       {
@@ -495,7 +336,7 @@ export const useOrderNotifications = (
     return () => {
       events.forEach(({ name, handler }) => socket.off(name, handler));
     };
-  }, [socket, user, dispatch, stateRef, t]);
+  }, [socket, user, dispatch, stateRef, t, fetchOrderDetails]);
 
   return {};
 };
