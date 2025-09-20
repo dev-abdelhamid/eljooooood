@@ -4,21 +4,6 @@ import { toast } from 'react-toastify';
 import { Order } from '../../types/types';
 import { formatDate } from '../../utils/formatDate';
 
-// دالة لعكس النصوص العربية يدويًا مع الحفاظ على التنسيق
-const reverseArabicText = (text: string): string => {
-  // تحقق مما إذا كان النص يحتوي على حروف عربية
-  const arabicRegex = /[\u0600-\u06FF]/;
-  if (arabicRegex.test(text)) {
-    // عكس النص مع الحفاظ على الأرقام والرموز
-    return text
-      .split(/(\s+)/)
-      .map(segment => (arabicRegex.test(segment) ? segment.split('').reverse().join('') : segment))
-      .reverse()
-      .join('');
-  }
-  return text;
-};
-
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   let binary = '';
   const bytes = new Uint8Array(buffer);
@@ -49,12 +34,10 @@ const loadFont = async (doc: jsPDF, fontName: string, fontUrl: string): Promise<
 const generatePDFHeader = (doc: jsPDF, isRtl: boolean, title: string) => {
   doc.setFontSize(18);
   doc.setTextColor(33, 33, 33);
-  const processedTitle = isRtl ? reverseArabicText(title) : title;
-  doc.text(processedTitle, isRtl ? doc.internal.pageSize.width - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
+  doc.text(title, isRtl ? doc.internal.pageSize.width - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
   doc.setFontSize(12);
   doc.setTextColor(100, 100, 100);
-  const subtitle = isRtl ? reverseArabicText('تقرير طلبات الإنتاج') : 'Production Orders Report';
-  doc.text(subtitle, isRtl ? doc.internal.pageSize.width - 20 : 20, 25, { align: isRtl ? 'right' : 'left' });
+  doc.text(isRtl ? 'تقرير طلبات الإنتاج' : 'Production Orders Report', isRtl ? doc.internal.pageSize.width - 20 : 20, 25, { align: isRtl ? 'right' : 'left' });
   doc.setLineWidth(0.5);
   doc.setDrawColor(200, 200, 200);
   doc.line(20, 30, doc.internal.pageSize.width - 20, 30);
@@ -72,8 +55,8 @@ const generatePDFTable = (
   translateUnit: (unit: string, isRtl: boolean) => string
 ) => {
   autoTable(doc, {
-    head: [isRtl ? headers.map(h => reverseArabicText(h)).reverse() : headers],
-    body: data.map(row => isRtl ? row.map((cell: string) => typeof cell === 'string' ? reverseArabicText(cell) : cell).reverse() : row),
+    head: [isRtl ? headers.reverse() : headers],
+    body: data.map(row => isRtl ? row.reverse() : row),
     theme: 'grid',
     startY: 35,
     margin: { left: 20, right: 20 },
@@ -114,7 +97,7 @@ const generatePDFTable = (
         if (typeof text === 'string' && text.trim() !== '') {
           data.cell.text[0] = text.replace(/٫/g, '.').replace(/[^\d.]/g, '');
         } else {
-          data.cell.text[0] = '0.00';
+          data.cell.text[0] = '0.00'; // قيمة افتراضية في حال كانت القيمة غير موجودة
         }
       }
     },
