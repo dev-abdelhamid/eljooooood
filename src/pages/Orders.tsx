@@ -19,7 +19,7 @@ import { ordersAPI, chefsAPI, branchesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { Order, Chef, Branch, AssignChefsForm, OrderStatus } from '../types/types';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 // Lazy-loaded components
 const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
@@ -30,15 +30,13 @@ const Pagination = lazy(() => import('../components/Shared/Pagination'));
 // ScrollToTop component for navigation
 const ScrollToTop = () => {
   const { pathname } = useLocation();
-
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [pathname]);
-
   return null;
 };
 
-// واجهة الحالة
+// State interface
 interface State {
   orders: Order[];
   selectedOrder: Order | null;
@@ -60,7 +58,7 @@ interface State {
   viewMode: 'card' | 'table';
 }
 
-// واجهة الإجراء
+// Action interface
 interface Action {
   type: string;
   payload?: any;
@@ -74,7 +72,7 @@ interface Action {
   modal?: string;
 }
 
-// الحالة الابتدائية
+// Initial state
 const initialState: State = {
   orders: [],
   selectedOrder: null,
@@ -96,7 +94,7 @@ const initialState: State = {
   viewMode: 'card',
 };
 
-// دالة المختزل (Reducer)
+// Reducer function
 const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case 'SET_ORDERS':
@@ -256,9 +254,8 @@ const reducer = (state: State, action: Action): State => {
   }
 };
 
-// الثوابت
+// Constants
 const ORDERS_PER_PAGE = { card: 12, table: 50 };
-
 const validTransitions: Record<Order['status'], Order['status'][]> = {
   pending: ['approved', 'cancelled'],
   approved: ['in_production', 'cancelled'],
@@ -286,7 +283,7 @@ const sortOptions = [
   { value: 'priority', label: 'sort_priority' },
 ];
 
-// دوال مساعدة
+// Helper functions
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   let binary = '';
   const bytes = new Uint8Array(buffer);
@@ -296,7 +293,6 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   return window.btoa(binary);
 };
 
-// ترجمة الوحدات
 const translateUnit = (unit: string, isRtl: boolean) => {
   const translations: Record<string, { ar: string; en: string }> = {
     'كيلو': { ar: 'كيلو', en: 'kg' },
@@ -311,7 +307,7 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
 
-// مكونات الهيكل العظمي (Skeleton)
+// Skeleton components
 const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
@@ -374,7 +370,149 @@ const OrderCardSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
   </Card>
 );
 
-// المكون الرئيسي
+// PDF Helper Functions
+const loadFont = async (doc: jsPDF, fontName: string, fontUrl: string): Promise<boolean> => {
+  try {
+    const fontBytes = await fetch(fontUrl).then(res => {
+      if (!res.ok) throw new Error('Failed to fetch font');
+      return res.arrayBuffer();
+    });
+    doc.addFileToVFS(`${fontName}-Regular.ttf`, arrayBufferToBase64(fontBytes));
+    doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
+    doc.setFont(fontName);
+    return true;
+  } catch (fontError) {
+    console.error('Font loading error:', fontError);
+    doc.setFont('helvetica');
+    return false;
+  }
+};
+
+const generatePDFHeader = (doc: jsPDF, isRtl: boolean, title: string) => {
+  doc.setFontSize(18);
+  doc.setTextColor(33, 33, 33);
+  doc.text(title, isRtl ? doc.internal.pageSize.width - 20 : 20, 15, {
+    align: isRtl ? 'right' : 'left',
+  });
+  doc.setFontSize(12);
+  doc.setTextColor(100, 100, 100);
+  doc.text(isRtl ? 'تقرير طلبات الإنتاج' : 'Production Orders Report', isRtl ? doc.internal.pageSize.width - 20 : 20, 25, {
+    align: isRtl ? 'right' : 'left',
+  });
+  doc.setLineWidth(0.5);
+  doc.setDrawColor(200, 200, 200);
+  doc.line(20, 30, doc.internal.pageSize.width - 20, 30);
+};
+
+const generatePDFTable = (
+  doc: jsPDF,
+  headers: string[],
+  data: any[],
+  isRtl: boolean,
+  fontLoaded: boolean,
+  fontName: string,
+  calculateAdjustedTotal: (order: Order) => string,
+  calculateTotalQuantity: (order: Order) => number,
+  translateUnit: (unit: string, isRtl: boolean) => string
+) => {
+  autoTable(doc, {
+    head: [isRtl ? headers.reverse() : headers],
+    body: isRtl ? data.map(row => row.reverse()) : data,
+    theme: 'grid',
+    startY: 35,
+    margin: { left: 20, right: 20 },
+    headStyles: {
+      fillColor: [34, 34, 34],
+      textColor: [255, 255, 255],
+      fontSize: 10,
+      halign: isRtl ? 'right' : 'left',
+      font: fontLoaded ? fontName : 'helvetica',
+      cellPadding: 3,
+    },
+    bodyStyles: {
+      fontSize: 9,
+      halign: isRtl ? 'right' : 'left',
+      font: fontLoaded ? fontName : 'helvetica',
+      cellPadding: 3,
+      textColor: [33, 33, 33],
+      lineColor: [200, 200, 200],
+    },
+    columnStyles: {
+      0: { cellWidth: 30 },
+      1: { cellWidth: 30 },
+      2: { cellWidth: 25 },
+      3: { cellWidth: 80 },
+      4: { cellWidth: 30 },
+      5: { cellWidth: 25 },
+      6: { cellWidth: 30 },
+    },
+    styles: {
+      overflow: 'linebreak',
+      cellWidth: 'wrap',
+    },
+    didParseCell: (data) => {
+      if (data.section === 'head') {
+        data.cell.styles.halign = isRtl ? 'right' : 'left';
+      }
+    },
+  });
+};
+
+const exportToPDF = useCallback(async (
+  orders: Order[],
+  isRtl: boolean,
+  calculateAdjustedTotal: (order: Order) => string,
+  calculateTotalQuantity: (order: Order) => number,
+  translateUnit: (unit: string, isRtl: boolean) => string
+) => {
+  try {
+    const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
+    doc.setLanguage(isRtl ? 'ar' : 'en');
+    const fontName = 'Alexandria';
+    const fontLoaded = await loadFont(doc, fontName, '/fonts/Alexandria-Regular.ttf');
+
+    generatePDFHeader(doc, isRtl, isRtl ? 'تقرير الطلبات' : 'Orders Report');
+
+    const headers = [
+      isRtl ? 'رقم الطلب' : 'Order Number',
+      isRtl ? 'الفرع' : 'Branch',
+      isRtl ? 'الحالة' : 'Status',
+      isRtl ? 'المنتجات' : 'Products',
+      isRtl ? 'إجمالي المبلغ' : 'Total Amount',
+      isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
+      isRtl ? 'التاريخ' : 'Date',
+    ];
+
+    const data = orders.map(order => {
+      const productsStr = order.items.map(i => `${i.productName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ');
+      return [
+        order.orderNumber,
+        order.branchName,
+        isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status,
+        productsStr,
+        calculateAdjustedTotal(order),
+        `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
+        order.date,
+      ];
+    });
+
+    generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName, calculateAdjustedTotal, calculateTotalQuantity, translateUnit);
+
+    doc.save('Orders.pdf');
+    toast.success(isRtl ? 'تم تصدير PDF بنجاح' : 'PDF export successful', {
+      position: isRtl ? 'top-left' : 'top-right',
+      autoClose: 3000,
+    });
+  } catch (err: any) {
+    console.error('PDF export error:', err.message);
+    toast.error(isRtl ? `خطأ في تصدير PDF: ${err.message}` : `PDF export error: ${err.message}`, {
+      position: isRtl ? 'top-left' : 'top-right',
+      autoClose: 3000,
+    });
+  }
+}, []);
+
+// Main component
 export const Orders: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
@@ -386,17 +524,14 @@ export const Orders: React.FC = () => {
   const listRef = useRef<HTMLDivElement>(null);
   const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
 
-  // تحديث مرجع الحالة
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
-  // حساب إجمالي الكمية
   const calculateTotalQuantity = useCallback((order: Order) => {
     return order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   }, []);
 
-  // حساب المبلغ المعدل
   const calculateAdjustedTotal = useCallback(
     (order: Order) => {
       const approvedReturnsTotal = order.returns
@@ -418,37 +553,30 @@ export const Orders: React.FC = () => {
     [isRtl]
   );
 
-  // مستمعات WebSocket
   useEffect(() => {
     if (!user || !['admin', 'production'].includes(user.role)) {
       dispatch({ type: 'SET_ERROR', payload: isRtl ? 'غير مصرح للوصول' : 'Unauthorized access' });
       dispatch({ type: 'SET_LOADING', payload: false });
       return;
     }
-
     if (!socket) return;
-
     socket.on('connect', () => {
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
       dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
     });
-
     socket.on('connect_error', (err) => {
       console.error('Socket connect error:', err.message);
       dispatch({ type: 'SET_SOCKET_ERROR', payload: isRtl ? 'خطأ في الاتصال' : 'Connection error' });
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
     });
-
     socket.on('reconnect', (attempt) => {
       console.log(`[${new Date().toISOString()}] Socket reconnected after ${attempt} attempts`);
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
     });
-
     socket.on('disconnect', (reason) => {
       console.log(`[${new Date().toISOString()}] Socket disconnected: ${reason}`);
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
     });
-
     socket.on('newOrder', (order: any) => {
       if (!order || !order._id || !order.orderNumber) {
         console.warn('Invalid new order data:', order);
@@ -523,7 +651,6 @@ export const Orders: React.FC = () => {
         autoClose: 3000,
       });
     });
-
     socket.on('orderStatusUpdated', ({ orderId, status }: { orderId: string; status: Order['status'] }) => {
       if (!orderId || !status) {
         console.warn('Invalid order status update data:', { orderId, status });
@@ -535,7 +662,6 @@ export const Orders: React.FC = () => {
         autoClose: 3000,
       });
     });
-
     socket.on('itemStatusUpdated', ({ orderId, itemId, status }: { orderId: string; itemId: string; status: string }) => {
       if (!orderId || !itemId || !status) {
         console.warn('Invalid item status update data:', { orderId, itemId, status });
@@ -547,7 +673,6 @@ export const Orders: React.FC = () => {
         autoClose: 3000,
       });
     });
-
     socket.on('returnStatusUpdated', ({ orderId, returnId, status }: { orderId: string; returnId: string; status: string }) => {
       if (!orderId || !returnId || !status) {
         console.warn('Invalid return status update data:', { orderId, returnId, status });
@@ -559,7 +684,6 @@ export const Orders: React.FC = () => {
         autoClose: 3000,
       });
     });
-
     socket.on('taskAssigned', ({ orderId, items }: { orderId: string; items: any[] }) => {
       if (!orderId || !items) {
         console.warn('Invalid task assigned data:', { orderId, items });
@@ -571,7 +695,6 @@ export const Orders: React.FC = () => {
         autoClose: 3000,
       });
     });
-
     return () => {
       socket.off('connect');
       socket.off('connect_error');
@@ -583,7 +706,6 @@ export const Orders: React.FC = () => {
     };
   }, [user, socket, isRtl, language, playNotificationSound]);
 
-  // جلب البيانات مع آلية إعادة المحاولة
   const fetchData = useCallback(
     async (retryCount = 0) => {
       if (!user || !['admin', 'production'].includes(user.role)) {
@@ -591,7 +713,6 @@ export const Orders: React.FC = () => {
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
       }
-
       dispatch({ type: 'SET_LOADING', payload: true });
       const cacheKey = `${user.id}-${state.filterStatus}-${state.filterBranch}-${state.currentPage}-${state.viewMode}-${state.searchQuery}`;
       if (cacheRef.current.has(cacheKey)) {
@@ -599,7 +720,6 @@ export const Orders: React.FC = () => {
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
       }
-
       try {
         const query: Record<string, any> = {
           page: state.currentPage,
@@ -611,13 +731,11 @@ export const Orders: React.FC = () => {
         if (state.filterBranch) query.branch = state.filterBranch;
         if (state.searchQuery.trim()) query.search = state.searchQuery.trim();
         if (user.role === 'production' && user.department) query.department = user.department._id;
-
         const [ordersResponse, chefsResponse, branchesResponse] = await Promise.all([
           ordersAPI.getAll(query),
           chefsAPI.getAll(),
           branchesAPI.getAll(),
         ]);
-
         const mappedOrders: Order[] = ordersResponse
           .filter((order: any) => order && order._id && order.orderNumber)
           .map((order: any) => ({
@@ -682,7 +800,6 @@ export const Orders: React.FC = () => {
                 }))
               : [],
           }));
-
         cacheRef.current.set(cacheKey, mappedOrders);
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
         dispatch({
@@ -726,7 +843,6 @@ export const Orders: React.FC = () => {
     [user, state.filterStatus, state.filterBranch, state.currentPage, state.viewMode, state.searchQuery, state.sortBy, state.sortOrder, isRtl, language]
   );
 
-  // تصدير إلى Excel
   const exportToExcel = useCallback(() => {
     const headers = [
       isRtl ? 'رقم الطلب' : 'Order Number',
@@ -755,133 +871,12 @@ export const Orders: React.FC = () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, isRtl ? 'الطلبات' : 'Orders');
     XLSX.writeFile(wb, 'Orders.xlsx');
-    toast.success(isRtl ? 'تم تصدير الملف بنجاح' : 'Export successful', { 
-      position: isRtl ? 'top-left' : 'top-right', 
+    toast.success(isRtl ? 'تم تصدير الملف بنجاح' : 'Export successful', {
+      position: isRtl ? 'top-left' : 'top-right',
       autoClose: 3000,
     });
   }, [state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity]);
 
-  // تصدير إلى PDF
-  const exportToPDF = useCallback(async () => {
-    try {
-      const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
-      doc.setLanguage(isRtl ? 'ar' : 'en');
-
-      let fontName = 'Amiri';
-      let fontLoaded = false;
-
-      try {
-        const fontUrl = '/fonts/Amiri-Regular.ttf';
-        const fontBytes = await fetch(fontUrl).then(res => {
-          if (!res.ok) throw new Error('Failed to fetch font');
-          return res.arrayBuffer();
-        });
-        doc.addFileToVFS(`${fontName}-Regular.ttf`, arrayBufferToBase64(fontBytes));
-        doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
-        doc.setFont(fontName);
-        fontLoaded = true;
-      } catch (fontError) {
-        console.error('Font loading error:', fontError);
-        // Fallback to a default font
-        fontName = 'helvetica'; // jsPDF built-in font
-        doc.setFont(fontName);
-        toast.warn(isRtl ? 'فشل تحميل الخط، يتم استخدام خط افتراضي' : 'Failed to load font, using default font', {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        });
-      }
-
-      doc.setFontSize(16);
-      doc.text(isRtl ? 'الطلبات' : 'Orders', isRtl ? doc.internal.pageSize.width - 20 : 20, 15, {
-        align: isRtl ? 'right' : 'left',
-      });
-
-      const headers = [
-        isRtl ? 'رقم الطلب' : 'Order Number',
-        isRtl ? 'الفرع' : 'Branch',
-        isRtl ? 'الحالة' : 'Status',
-        isRtl ? 'المنتجات' : 'Products',
-        isRtl ? 'إجمالي المبلغ' : 'Total Amount',
-        isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
-        isRtl ? 'التاريخ' : 'Date',
-      ];
-      const data = state.orders.map(order => {
-        const productsStr = order.items.map(i => `${i.productName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ');
-        return [
-          order.orderNumber,
-          order.branchName,
-          isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status,
-          productsStr,
-          calculateAdjustedTotal(order),
-          `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
-          order.date,
-        ];
-      });
-
-      autoTable(doc, {
-        head: [isRtl ? headers.reverse() : headers],
-        body: isRtl ? data.map(row => row.reverse()) : data,
-        theme: 'striped',
-        headStyles: {
-          fillColor: [34, 34, 34],
-          textColor: 255,
-          fontSize: 10,
-          halign: isRtl ? 'right' : 'left',
-          font: fontLoaded ? fontName : 'helvetica',
-          cellPadding: 2,
-        },
-        bodyStyles: {
-          fontSize: 8,
-          halign: isRtl ? 'right' : 'left',
-          font: fontLoaded ? fontName : 'helvetica',
-          cellPadding: 2,
-          textColor: [33, 33, 33],
-        },
-        alternateRowStyles: {
-          fillColor: [245, 245, 245],
-        },
-        margin: { top: 25, left: 10, right: 10 },
-        tableWidth: doc.internal.pageSize.width - 20,
-        didParseCell: (data) => {
-          if (data.section === 'body' && data.column.index === (isRtl ? 2 : 4) && data.cell.raw) {
-            const text = data.cell.raw.toString();
-            data.cell.text = [isRtl ? text.replace(/(\d+\.\d{2})/, '$1 ر.س') : `SAR ${text}`];
-          }
-        },
-        didDrawPage: (data) => {
-          doc.setFont(fontLoaded ? fontName : 'helvetica');
-          doc.setFontSize(8);
-          doc.text(
-            isRtl ? `تم إنشاؤه في: ${formatDate(new Date(), language)}` : `Generated on: ${formatDate(new Date(), language)}`,
-            isRtl ? doc.internal.pageSize.width - 10 : 10,
-            doc.internal.pageSize.height - 10,
-            { align: isRtl ? 'right' : 'left' }
-          );
-          doc.text(
-            isRtl ? `الصفحة ${data.pageNumber}` : `Page ${data.pageNumber}`,
-            isRtl ? 10 : doc.internal.pageSize.width - 30,
-            doc.internal.pageSize.height - 10,
-            { align: isRtl ? 'left' : 'right' }
-          );
-        },
-        styles: { overflow: 'linebreak', font: fontLoaded ? fontName : 'helvetica', fontSize: 8, cellPadding: 2, halign: isRtl ? 'right' : 'left' },
-      });
-
-      doc.save('Orders.pdf');
-      toast.success(isRtl ? 'تم تصدير PDF بنجاح' : 'PDF export successful', {
-        position: isRtl ? 'top-left' : 'top-right',
-        autoClose: 3000,
-      });
-    } catch (err: any) {
-      console.error('PDF export error:', err.message);
-      toast.error(isRtl ? `خطأ في تصدير PDF: ${err.message}` : `PDF export error: ${err.message}`, {
-        position: isRtl ? 'top-left' : 'top-right',
-        autoClose: 3000,
-      });
-    }
-  }, [state.orders, isRtl, language, calculateAdjustedTotal, calculateTotalQuantity]);
-
-  // التعامل مع البحث
   const handleSearchChange = useMemo(
     () =>
       debounce((value: string) => {
@@ -890,7 +885,6 @@ export const Orders: React.FC = () => {
     []
   );
 
-  // تصفية وترتيب وتجزئة الطلبات
   const filteredOrders = useMemo(
     () =>
       state.orders
@@ -935,7 +929,6 @@ export const Orders: React.FC = () => {
     [sortedOrders, state.currentPage, state.viewMode]
   );
 
-  // إجراءات الطلب
   const updateOrderStatus = useCallback(
     async (orderId: string, newStatus: Order['status']) => {
       const order = state.orders.find(o => o.id === orderId);
@@ -1079,12 +1072,10 @@ export const Orders: React.FC = () => {
     }
   }, []);
 
-  // جلب البيانات عند التحميل أو تغيير الفلاتر
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // التصيير
   return (
     <div className="px-2 py-4 min-h-screen bg-gray-50">
       <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
@@ -1112,7 +1103,7 @@ export const Orders: React.FC = () => {
               </Button>
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
-                onClick={state.orders.length > 0 ? exportToPDF : undefined}
+                onClick={state.orders.length > 0 ? () => exportToPDF(state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit) : undefined}
                 className={`flex items-center gap-1.5 ${
                   state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
                 } rounded-md px-3 py-1.5 text-xs shadow-sm`}
@@ -1141,7 +1132,7 @@ export const Orders: React.FC = () => {
                   <Search className={`w-4 h-4 text-gray-500 absolute top-2.5 ${isRtl ? 'right-3' : 'left-3'}`} />
                   <Input
                     value={state.searchQuery}
-                    onChange={(e) => handleSearchChange(e.target.value)}
+                    onChange={(e) => handleSearchChange(e?.target?.value || '')}
                     placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
                     className={`w-full ${isRtl ? 'pr-10' : 'pl-10'} rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm`}
                   />
