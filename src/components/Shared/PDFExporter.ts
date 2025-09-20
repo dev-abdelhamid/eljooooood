@@ -18,7 +18,7 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   }
 };
 
-// تحميل الخط مع ضمان دعم اللغة العربية باستخدام Alexandria
+// تحميل الخط مع ضمان دعم اللغة العربية
 const loadFont = async (doc: jsPDF, fontName: string, fontUrl: string): Promise<boolean> => {
   try {
     const fontBytes = await fetch(fontUrl).then(res => {
@@ -33,7 +33,7 @@ const loadFont = async (doc: jsPDF, fontName: string, fontUrl: string): Promise<
     return true;
   } catch (fontError) {
     console.error('خطأ تحميل الخط:', fontError);
-    doc.setFont('helvetica', 'normal'); // الرجوع إلى خط Helvetica كبديل
+    doc.setFont('Amiri', 'normal'); // استخدام خط Amiri كبديل موثوق للغة العربية
     return false;
   }
 };
@@ -74,14 +74,14 @@ const generatePDFTable = (
       textColor: [255, 255, 255],
       fontSize: 10,
       halign: isRtl ? 'right' : 'left',
-      font: fontLoaded ? fontName : 'helvetica',
+      font: fontLoaded ? fontName : 'Amiri',
       fontStyle: 'normal',
       cellPadding: 3,
     },
     bodyStyles: {
       fontSize: 9,
       halign: isRtl ? 'right' : 'left',
-      font: fontLoaded ? fontName : 'helvetica',
+      font: fontLoaded ? fontName : 'Amiri',
       fontStyle: 'normal',
       cellPadding: 3,
       textColor: [33, 33, 33],
@@ -105,18 +105,18 @@ const generatePDFTable = (
         if (text.trim() !== '') {
           // إزالة أي أحرف غير رقمية باستثناء النقطة
           text = text.replace(/[^\d.]/g, '');
-          // تحويل النص إلى رقم وإعادة تنسيقه
-          const number = parseFloat(text);
-          if (!isNaN(number)) {
-            data.cell.text[0] = number.toLocaleString('ar-SA', {
-              style: 'currency',
-              currency: 'SAR',
-              minimumFractionDigits: 2,
-              maximumFractionDigits: 2,
-            });
-          } else {
-            data.cell.text[0] = '٠٫٠٠ ر.س';
+          // إعادة ترتيب الأرقام إذا كانت معكوسة
+          if (isRtl) {
+            text = text.split('.').reverse().join('.');
           }
+          // التأكد من التنسيق الصحيح (مثل 200.00)
+          const number = parseFloat(text);
+          data.cell.text[0] = number.toLocaleString('ar-SA', {
+            style: 'currency',
+            currency: 'SAR',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          });
         } else {
           data.cell.text[0] = '٠٫٠٠ ر.س';
         }
@@ -136,8 +136,8 @@ export const exportToPDF = async (
   try {
     const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
     doc.setLanguage(isRtl ? 'ar' : 'en');
-    const fontName = 'Alexandria';
-    const fontLoaded = await loadFont(doc, fontName, '/fonts/Alexandria-Regular.ttf');
+    const fontName = 'Amiri'; // استخدام خط Amiri الذي يدعم اللغة العربية بشكل موثوق
+    const fontLoaded = await loadFont(doc, fontName, '/fonts/Amiri-Regular.ttf');
     generatePDFHeader(doc, isRtl, isRtl ? 'تقرير الطلبات' : 'Orders Report');
     const headers = [
       isRtl ? 'رقم الطلب' : 'Order Number',
