@@ -19,7 +19,7 @@ import { ordersAPI, chefsAPI, branchesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { Order, Chef, Branch, AssignChefsForm, OrderStatus } from '../types/types';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 
 // Lazy-loaded components
 const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
@@ -762,98 +762,124 @@ export const Orders: React.FC = () => {
   }, [state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity]);
 
   // تصدير إلى PDF
- const exportToPDF = useCallback(async () => {
-  try {
-    const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
-    doc.setLanguage(isRtl ? 'ar' : 'en');
-
-    let fontName = 'Alexandria';
-    let fontLoaded = false;
-
+  const exportToPDF = useCallback(async () => {
     try {
-      const fontUrl = '/fonts/Alexandria-Regular.ttf';
-      const fontBytes = await fetch(fontUrl).then(res => {
-        if (!res.ok) throw new Error('Failed to fetch font');
-        return res.arrayBuffer();
+      const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
+      doc.setLanguage(isRtl ? 'ar' : 'en');
+
+      let fontName = 'Amiri';
+      let fontLoaded = false;
+
+      try {
+        const fontUrl = '/fonts/Amiri-Regular.ttf';
+        const fontBytes = await fetch(fontUrl).then(res => {
+          if (!res.ok) throw new Error('Failed to fetch font');
+          return res.arrayBuffer();
+        });
+        doc.addFileToVFS(`${fontName}-Regular.ttf`, arrayBufferToBase64(fontBytes));
+        doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
+        doc.setFont(fontName);
+        fontLoaded = true;
+      } catch (fontError) {
+        console.error('Font loading error:', fontError);
+        // Fallback to a default font
+        fontName = 'helvetica'; // jsPDF built-in font
+        doc.setFont(fontName);
+        toast.warn(isRtl ? 'فشل تحميل الخط، يتم استخدام خط افتراضي' : 'Failed to load font, using default font', {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 3000,
+        });
+      }
+
+      doc.setFontSize(16);
+      doc.text(isRtl ? 'الطلبات' : 'Orders', isRtl ? doc.internal.pageSize.width - 20 : 20, 15, {
+        align: isRtl ? 'right' : 'left',
       });
-      doc.addFileToVFS(`${fontName}-Regular.ttf`, arrayBufferToBase64(fontBytes));
-      doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
-      doc.setFont(fontName);
-      fontLoaded = true;
-    } catch (fontError) {
-      console.error('Font loading error:', fontError);
-      // Fallback to a default font
-      fontName = 'helvetica'; // jsPDF built-in font
-      doc.setFont(fontName);
-      toast.warn(isRtl ? 'فشل تحميل الخط، يتم استخدام خط افتراضي' : 'Failed to load font, using default font', {
+
+      const headers = [
+        isRtl ? 'رقم الطلب' : 'Order Number',
+        isRtl ? 'الفرع' : 'Branch',
+        isRtl ? 'الحالة' : 'Status',
+        isRtl ? 'المنتجات' : 'Products',
+        isRtl ? 'إجمالي المبلغ' : 'Total Amount',
+        isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
+        isRtl ? 'التاريخ' : 'Date',
+      ];
+      const data = state.orders.map(order => {
+        const productsStr = order.items.map(i => `${i.productName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ');
+        return [
+          order.orderNumber,
+          order.branchName,
+          isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status,
+          productsStr,
+          calculateAdjustedTotal(order),
+          `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
+          order.date,
+        ];
+      });
+
+      autoTable(doc, {
+        head: [isRtl ? headers.reverse() : headers],
+        body: isRtl ? data.map(row => row.reverse()) : data,
+        theme: 'striped',
+        headStyles: {
+          fillColor: [34, 34, 34],
+          textColor: 255,
+          fontSize: 10,
+          halign: isRtl ? 'right' : 'left',
+          font: fontLoaded ? fontName : 'helvetica',
+          cellPadding: 2,
+        },
+        bodyStyles: {
+          fontSize: 8,
+          halign: isRtl ? 'right' : 'left',
+          font: fontLoaded ? fontName : 'helvetica',
+          cellPadding: 2,
+          textColor: [33, 33, 33],
+        },
+        alternateRowStyles: {
+          fillColor: [245, 245, 245],
+        },
+        margin: { top: 25, left: 10, right: 10 },
+        tableWidth: doc.internal.pageSize.width - 20,
+        didParseCell: (data) => {
+          if (data.section === 'body' && data.column.index === (isRtl ? 2 : 4) && data.cell.raw) {
+            const text = data.cell.raw.toString();
+            data.cell.text = [isRtl ? text.replace(/(\d+\.\d{2})/, '$1 ر.س') : `SAR ${text}`];
+          }
+        },
+        didDrawPage: (data) => {
+          doc.setFont(fontLoaded ? fontName : 'helvetica');
+          doc.setFontSize(8);
+          doc.text(
+            isRtl ? `تم إنشاؤه في: ${formatDate(new Date(), language)}` : `Generated on: ${formatDate(new Date(), language)}`,
+            isRtl ? doc.internal.pageSize.width - 10 : 10,
+            doc.internal.pageSize.height - 10,
+            { align: isRtl ? 'right' : 'left' }
+          );
+          doc.text(
+            isRtl ? `الصفحة ${data.pageNumber}` : `Page ${data.pageNumber}`,
+            isRtl ? 10 : doc.internal.pageSize.width - 30,
+            doc.internal.pageSize.height - 10,
+            { align: isRtl ? 'left' : 'right' }
+          );
+        },
+        styles: { overflow: 'linebreak', font: fontLoaded ? fontName : 'helvetica', fontSize: 8, cellPadding: 2, halign: isRtl ? 'right' : 'left' },
+      });
+
+      doc.save('Orders.pdf');
+      toast.success(isRtl ? 'تم تصدير PDF بنجاح' : 'PDF export successful', {
+        position: isRtl ? 'top-left' : 'top-right',
+        autoClose: 3000,
+      });
+    } catch (err: any) {
+      console.error('PDF export error:', err.message);
+      toast.error(isRtl ? `خطأ في تصدير PDF: ${err.message}` : `PDF export error: ${err.message}`, {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
       });
     }
-
-    doc.setFontSize(16);
-    doc.text(isRtl ? 'الطلبات' : 'Orders', isRtl ? doc.internal.pageSize.width - 20 : 20, 15, {
-      align: isRtl ? 'right' : 'left',
-    });
-
-    // Rest of the autoTable and PDF generation logic
-    const headers = [
-      isRtl ? 'رقم الطلب' : 'Order Number',
-      isRtl ? 'الفرع' : 'Branch',
-      isRtl ? 'الحالة' : 'Status',
-      isRtl ? 'المنتجات' : 'Products',
-      isRtl ? 'إجمالي المبلغ' : 'Total Amount',
-      isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
-      isRtl ? 'التاريخ' : 'Date',
-    ];
-    const data = state.orders.map(order => {
-      const productsStr = order.items.map(i => `${i.productName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ');
-      return [
-        order.orderNumber,
-        order.branchName,
-        isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status,
-        productsStr,
-        calculateAdjustedTotal(order),
-        `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
-        order.date,
-      ];
-    });
-
-    autoTable(doc, {
-      head: [isRtl ? headers.reverse() : headers],
-      body: isRtl ? data.map(row => row.reverse()) : data,
-      theme: 'striped',
-      headStyles: {
-        fillColor: [34, 34, 34],
-        textColor: 255,
-        fontSize: 10,
-        halign: isRtl ? 'right' : 'left',
-        font: fontLoaded ? fontName : 'helvetica',
-        cellPadding: 2,
-      },
-      bodyStyles: {
-        fontSize: 8,
-        halign: isRtl ? 'right' : 'left',
-        font: fontLoaded ? fontName : 'helvetica',
-        cellPadding: 2,
-        textColor: [33, 33, 33],
-      },
-      // ... other autoTable options
-    });
-
-    doc.save('Orders.pdf');
-    toast.success(isRtl ? 'تم تصدير PDF بنجاح' : 'PDF export successful', {
-      position: isRtl ? 'top-left' : 'top-right',
-      autoClose: 3000,
-    });
-  } catch (err: any) {
-    console.error('PDF export error:', err.message);
-    toast.error(isRtl ? `خطأ في تصدير PDF: ${err.message}` : `PDF export error: ${err.message}`, {
-      position: isRtl ? 'top-left' : 'top-right',
-      autoClose: 3000,
-    });
-  }
-}, [state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity]);
+  }, [state.orders, isRtl, language, calculateAdjustedTotal, calculateTotalQuantity]);
 
   // التعامل مع البحث
   const handleSearchChange = useMemo(
@@ -1115,7 +1141,7 @@ export const Orders: React.FC = () => {
                   <Search className={`w-4 h-4 text-gray-500 absolute top-2.5 ${isRtl ? 'right-3' : 'left-3'}`} />
                   <Input
                     value={state.searchQuery}
-                    onChange={(e) => handleSearchChange(e?.target?.value || '')}
+                    onChange={(e) => handleSearchChange(e.target.value)}
                     placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
                     className={`w-full ${isRtl ? 'pr-10' : 'pl-10'} rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm`}
                   />
