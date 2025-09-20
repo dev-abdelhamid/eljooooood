@@ -4,7 +4,6 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { Order } from '../types/types';
 import { formatDate } from '../utils/formatDate';
 import { ordersAPI } from '../services/api';
-import * as Sentry from '@sentry/react';
 
 interface SocketEventData {
   orderId: string;
@@ -12,8 +11,7 @@ interface SocketEventData {
   branchName?: string;
   branchId?: string;
   items?: Array<{
-    itemId?: string;
-    _id?: string;
+    itemId: string;
     productId?: string;
     productName?: string;
     quantity?: number;
@@ -21,11 +19,9 @@ interface SocketEventData {
     status?: string;
     assignedTo?: { _id: string; username?: string; name?: string };
     department?: { _id: string; name: string };
-    product?: { _id: string; name: string; unit?: string; department?: { _id: string; name: string } };
   }>;
   eventId?: string;
   status?: string;
-  chefId?: string;
 }
 
 interface SocketEventConfig {
@@ -37,24 +33,23 @@ export const useOrderNotifications = (
   dispatch: React.Dispatch<any>,
   stateRef: React.MutableRefObject<any>,
   user: any,
-  addNotification: (notification: any) => void,
-  fetchTasks?: (forceRefresh?: boolean) => void
+  addNotification: (notification: any) => void
 ) => {
-  const { socket, isConnected } = useSocket();
+  const { socket } = useSocket();
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
 
   // دالة ترجمة الوحدات
   const translateUnit = (unit: string | undefined) => {
     const translations: Record<string, { ar: string; en: string }> = {
-      كيلو: { ar: 'كيلو', en: 'kg' },
-      قطعة: { ar: 'قطعة', en: 'piece' },
-      علبة: { ar: 'علبة', en: 'pack' },
-      صينية: { ar: 'صينية', en: 'tray' },
-      kg: { ar: 'كجم', en: 'kg' },
-      piece: { ar: 'قطعة', en: 'piece' },
-      pack: { ar: 'علبة', en: 'pack' },
-      tray: { ar: 'صينية', en: 'tray' },
+      'كيلو': { ar: 'كيلو', en: 'kg' },
+      'قطعة': { ar: 'قطعة', en: 'piece' },
+      'علبة': { ar: 'علبة', en: 'pack' },
+      'صينية': { ar: 'صينية', en: 'tray' },
+      'kg': { ar: 'كجم', en: 'kg' },
+      'piece': { ar: 'قطعة', en: 'piece' },
+      'pack': { ar: 'علبة', en: 'pack' },
+      'tray': { ar: 'صينية', en: 'tray' },
     };
     return unit && translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
   };
@@ -62,7 +57,6 @@ export const useOrderNotifications = (
   useEffect(() => {
     if (!socket || !user) {
       console.warn(`[${new Date().toISOString()}] Socket or user not available`);
-      Sentry.captureMessage('Socket or user not available', { level: 'warning', extra: { context: 'useOrderNotifications' } });
       return;
     }
 
@@ -76,44 +70,10 @@ export const useOrderNotifications = (
 
     const events: { name: string; handler: (data: any) => void; config: SocketEventConfig }[] = [
       {
-        name: 'connect',
-        handler: () => {
-          dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
-          dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
-          console.log(`[${new Date().toISOString()}] Socket connected`);
-          if (stateRef.current.chefId && typeof fetchTasks === 'function') {
-            dispatch({ type: 'SET_PAGE', payload: 1 });
-            fetchTasks(true);
-          }
-        },
-        config: { type: 'SET_SOCKET_CONNECTED', roles: ['admin', 'branch', 'production', 'chef'] },
-      },
-      {
-        name: 'connect_error',
-        handler: (err: Error) => {
-          console.error(`[${new Date().toISOString()}] Socket connection error:`, err.message);
-          dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
-          dispatch({ type: 'SET_SOCKET_ERROR', payload: `${t('socket.error')}: ${err.message}` });
-          Sentry.captureException(err, { extra: { context: 'socket_connect_error' } });
-        },
-        config: { type: 'SET_SOCKET_ERROR', roles: ['admin', 'branch', 'production', 'chef'] },
-      },
-      {
-        name: 'disconnect',
-        handler: (reason: string) => {
-          console.warn(`[${new Date().toISOString()}] Socket disconnected:`, reason);
-          dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
-          dispatch({ type: 'SET_SOCKET_ERROR', payload: t('socket.disconnected') });
-          Sentry.captureMessage(`Socket disconnected: ${reason}`, { level: 'warning', extra: { context: 'socket_disconnect', reason } });
-        },
-        config: { type: 'SET_SOCKET_DISCONNECTED', roles: ['admin', 'branch', 'production', 'chef'] },
-      },
-      {
         name: 'orderCreated',
         handler: (newOrder: any) => {
           if (!newOrder?._id || !Array.isArray(newOrder.items) || !newOrder.orderNumber || !newOrder.branch?.name) {
             console.warn(`[${new Date().toISOString()}] Invalid order data:`, newOrder);
-            Sentry.captureMessage('Invalid order data', { level: 'warning', extra: { data: newOrder } });
             return;
           }
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
@@ -174,6 +134,7 @@ export const useOrderNotifications = (
                 }))
               : [],
           };
+
           dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
           addNotification({
             _id: newOrder.eventId || crypto.randomUUID(),
@@ -189,7 +150,10 @@ export const useOrderNotifications = (
             vibrate: [200, 100, 200],
           });
         },
-        config: { type: 'ADD_ORDER', roles: ['admin', 'branch', 'production'] },
+        config: {
+          type: 'ADD_ORDER',
+          roles: ['admin', 'branch', 'production'],
+        },
       },
       {
         name: 'orderConfirmed',
@@ -197,10 +161,10 @@ export const useOrderNotifications = (
           if (!['admin', 'branch'].includes(user.role)) return;
           if (!data.orderId || !data.orderNumber || !data.branchName) {
             console.warn(`[${new Date().toISOString()}] Invalid order confirmed data:`, data);
-            Sentry.captureMessage('Invalid order confirmed data', { level: 'warning', extra: { data } });
             return;
           }
           if (user.role === 'branch' && data.branchId !== user.branchId) return;
+
           dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'confirmed' });
           addNotification({
             _id: data.eventId || crypto.randomUUID(),
@@ -216,94 +180,90 @@ export const useOrderNotifications = (
             vibrate: [200, 100, 200],
           });
         },
-        config: { type: 'UPDATE_ORDER_STATUS', roles: ['admin', 'branch'] },
+        config: {
+          type: 'UPDATE_ORDER_STATUS',
+          roles: ['admin', 'branch'],
+        },
       },
       {
-        name: 'taskAssigned',
-        handler: (notification: any) => {
-          try {
-            console.log(`[${new Date().toISOString()}] taskAssigned - Received data:`, JSON.stringify(notification, null, 2));
-            const data: SocketEventData = notification.data || notification;
-            if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName) {
-              console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, data);
-              Sentry.captureMessage('Invalid task assigned data', { level: 'warning', extra: { data } });
-              return;
-            }
-            if (!['admin', 'production', 'chef'].includes(user.role)) return;
-            if (user.role === 'chef' && !data.items.some((item: any) => item.assignedTo?._id === user._id)) return;
+     name: 'taskAssigned',
+  handler: (notification: any) => {
+    console.log(`[${new Date().toISOString()}] taskAssigned - Received data:`, JSON.stringify(notification, null, 2));
+    const data: SocketEventData = notification.data || notification;
 
-            const mappedItems = data.items
-              .filter((item: any) => (item._id || item.itemId) && (item.product?.name || item.productName) && item.assignedTo?._id)
-              .map((item: any) => ({
-                _id: item._id || item.itemId || crypto.randomUUID(),
-                itemId: item._id || item.itemId || crypto.randomUUID(),
-                productId: item.product?._id || item.productId || 'unknown',
-                productName: item.product?.name || item.productName || t('products.unknown'),
-                quantity: Number(item.quantity) || 1,
-                unit: translateUnit(item.unit || item.product?.unit),
-                department: item.department || item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
-                status: item.status === 'assigned' ? 'pending' : item.status || 'pending',
-                assignedTo: item.assignedTo
-                  ? { _id: item.assignedTo._id, username: item.assignedTo.username || item.assignedTo.name || t('chefs.unknown'), name: item.assignedTo.name }
-                  : undefined,
-              }));
+    if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName) {
+      console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, data);
+      return;
+    }
+    if (!['admin', 'production', 'chef'].includes(user.role)) return;
+    if (user.role === 'chef' && !data.items.some((item: any) => item.assignedTo?._id === user._id)) return;
 
-            if (mappedItems.length === 0) {
-              console.warn(`[${new Date().toISOString()}] No valid items for taskAssigned:`, data);
-              Sentry.captureMessage('No valid items for taskAssigned', { level: 'warning', extra: { data } });
-              return;
-            }
+    const mappedItems = data.items
+      .filter((item: any) => item._id && item.product?.name && item.assignedTo?._id) // فحص صارم
+      .map((item: any) => ({
+        _id: item._id || item.itemId || crypto.randomUUID(),
+        itemId: item._id || item.itemId || crypto.randomUUID(),
+        productId: item.product?._id || item.productId || 'unknown',
+        productName: item.product?.name || item.productName || t('products.unknown'),
+        quantity: Number(item.quantity) || 1,
+        unit: translateUnit(item.unit || item.product?.unit),
+        department: item.department || item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
+        status: item.status || 'pending', // تغيير من 'assigned' إلى 'pending' لتتماشى مع حالة المهمة الأولية
+        assignedTo: item.assignedTo
+          ? { _id: item.assignedTo._id, username: item.assignedTo.username || item.assignedTo.name || t('chefs.unknown'), name: item.assignedTo.name }
+          : undefined,
+      }));
 
-            dispatch({
-              type: 'TASK_ASSIGNED',
-              payload: { orderId: data.orderId, items: mappedItems, orderNumber: data.orderNumber, branchName: data.branchName },
-            });
+    if (mappedItems.length === 0) {
+      console.warn(`[${new Date().toISOString()}] No valid items for taskAssigned:`, data);
+      return;
+    }
 
-            mappedItems.forEach((item: any) => {
-              addNotification({
-                _id: `${data.eventId || crypto.randomUUID()}-${item.itemId}`,
-                type: 'info',
-                message: t('notifications.task_assigned_to_chef', {
-                  chefName: item.assignedTo?.name || item.assignedTo?.username || t('chefs.unknown'),
-                  productName: item.productName || t('products.unknown'),
-                  quantity: item.quantity,
-                  unit: item.unit,
-                  orderNumber: data.orderNumber,
-                  branchName: data.branchName || t('branches.unknown'),
-                }),
-                data: { orderId: data.orderId, itemId: item.itemId, eventId: data.eventId },
-                read: false,
-                createdAt: new Date().toISOString(),
-                sound: '/sounds/notification.mp3',
-                vibrate: [400, 100, 400],
-              });
-            });
-          } catch (err) {
-            console.error(`[${new Date().toISOString()}] Error in taskAssigned handler:`, err);
-            Sentry.captureException(err, { extra: { context: 'taskAssigned', notification } });
-          }
-        },
-        config: { type: 'TASK_ASSIGNED', roles: ['admin', 'production', 'chef'] },
-      },
+    dispatch({ type: 'TASK_ASSIGNED', payload: { orderId: data.orderId, items: mappedItems, orderNumber: data.orderNumber, branchName: data.branchName } });
+    mappedItems.forEach((item: any) => {
+      addNotification({
+        _id: `${data.eventId || crypto.randomUUID()}-${item.itemId}`,
+        type: 'info',
+        message: t('notifications.task_assigned_to_chef', {
+          chefName: item.assignedTo?.name || item.assignedTo?.username || t('chefs.unknown'),
+          productName: item.productName || t('products.unknown'),
+          quantity: item.quantity,
+          unit: item.unit,
+          orderNumber: data.orderNumber,
+          branchName: data.branchName || t('branches.unknown'),
+        }),
+        data: { orderId: data.orderId, itemId: item.itemId, eventId: data.eventId },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: '/sounds/notification.mp3',
+        vibrate: [400, 100, 400],
+      });
+    });
+  },
+  config: {
+    type: 'TASK_ASSIGNED',
+    roles: ['admin', 'production', 'chef'],
+  },
+},
       {
         name: 'itemStatusUpdated',
         handler: async (data: SocketEventData) => {
           if (!['admin', 'production', 'chef'].includes(user.role)) return;
           if (!data.orderId || !data.itemId || !data.status || !data.orderNumber || !data.branchName) {
             console.warn(`[${new Date().toISOString()}] Invalid item status update data:`, data);
-            Sentry.captureMessage('Invalid item status update data', { level: 'warning', extra: { data } });
             return;
           }
           if (user.role === 'chef' && data.chefId !== user._id) return;
+
           dispatch({
             type: 'UPDATE_ITEM_STATUS',
-            payload: { orderId: data.orderId, itemId: data.itemId, status: data.status, updatedAt: new Date().toISOString() },
+            payload: { orderId: data.orderId, itemId: data.itemId, status: data.status },
           });
+
           try {
             const updatedOrder = await ordersAPI.getById(data.orderId);
             if (!updatedOrder || !updatedOrder._id || !Array.isArray(updatedOrder.items)) {
               console.warn(`[${new Date().toISOString()}] Failed to fetch updated order:`, data.orderId);
-              Sentry.captureMessage('Failed to fetch updated order', { level: 'warning', extra: { orderId: data.orderId } });
               return;
             }
             const allItemsCompleted = updatedOrder.items.every((item: any) => item.status === 'completed');
@@ -325,10 +285,12 @@ export const useOrderNotifications = (
             }
           } catch (err) {
             console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
-            Sentry.captureException(err, { extra: { context: 'itemStatusUpdated', orderId: data.orderId } });
           }
         },
-        config: { type: 'UPDATE_ITEM_STATUS', roles: ['admin', 'production', 'chef'] },
+        config: {
+          type: 'UPDATE_ITEM_STATUS',
+          roles: ['admin', 'production', 'chef'],
+        },
       },
       {
         name: 'orderStatusUpdated',
@@ -336,7 +298,6 @@ export const useOrderNotifications = (
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
           if (!data.orderId || !data.status || !data.orderNumber || !data.branchName) {
             console.warn(`[${new Date().toISOString()}] Invalid order status update data:`, data);
-            Sentry.captureMessage('Invalid order status update data', { level: 'warning', extra: { data } });
             return;
           }
           dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: data.status });
@@ -355,7 +316,10 @@ export const useOrderNotifications = (
             vibrate: [200, 100, 200],
           });
         },
-        config: { type: 'UPDATE_ORDER_STATUS', roles: ['admin', 'branch', 'production'] },
+        config: {
+          type: 'UPDATE_ORDER_STATUS',
+          roles: ['admin', 'branch', 'production'],
+        },
       },
       {
         name: 'orderCompleted',
@@ -363,14 +327,12 @@ export const useOrderNotifications = (
           if (!['admin', 'branch', 'production', 'chef'].includes(user.role)) return;
           if (!data.orderId || !data.orderNumber || !data.branchName) {
             console.warn(`[${new Date().toISOString()}] Invalid order completed data:`, data);
-            Sentry.captureMessage('Invalid order completed data', { level: 'warning', extra: { data } });
             return;
           }
           try {
             const updatedOrder = await ordersAPI.getById(data.orderId);
             if (!updatedOrder || !updatedOrder._id) {
               console.warn(`[${new Date().toISOString()}] Failed to fetch updated order:`, data.orderId);
-              Sentry.captureMessage('Failed to fetch updated order', { level: 'warning', extra: { orderId: data.orderId } });
               return;
             }
             const mappedOrder: Order = {
@@ -389,7 +351,7 @@ export const useOrderNotifications = (
                 unit: translateUnit(item.unit || item.product?.unit),
                 department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
                 status: item.status || 'completed',
-                assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown'), name: item.assignedTo.name } : undefined,
+                assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username, name: item.assignedTo.name } : undefined,
                 returnedQuantity: Number(item.returnedQuantity) || 0,
                 returnReason: item.returnReason || '',
               })),
@@ -439,10 +401,12 @@ export const useOrderNotifications = (
             });
           } catch (err) {
             console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
-            Sentry.captureException(err, { extra: { context: 'orderCompleted', orderId: data.orderId } });
           }
         },
-        config: { type: 'UPDATE_ORDER_STATUS', roles: ['admin', 'branch', 'production', 'chef'] },
+        config: {
+          type: 'UPDATE_ORDER_STATUS',
+          roles: ['admin', 'branch', 'production', 'chef'],
+        },
       },
       {
         name: 'orderShipped',
@@ -450,7 +414,6 @@ export const useOrderNotifications = (
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
           if (!data.orderId || !data.orderNumber || !data.branchName || !data.branchId) {
             console.warn(`[${new Date().toISOString()}] Invalid order shipped data:`, data);
-            Sentry.captureMessage('Invalid order shipped data', { level: 'warning', extra: { data } });
             return;
           }
           if (user.role === 'branch' && data.branchId !== user.branchId) return;
@@ -458,7 +421,6 @@ export const useOrderNotifications = (
             const updatedOrder = await ordersAPI.getById(data.orderId);
             if (!updatedOrder || !updatedOrder._id) {
               console.warn(`[${new Date().toISOString()}] Failed to fetch updated order:`, data.orderId);
-              Sentry.captureMessage('Failed to fetch updated order', { level: 'warning', extra: { orderId: data.orderId } });
               return;
             }
             const mappedOrder: Order = {
@@ -527,10 +489,12 @@ export const useOrderNotifications = (
             });
           } catch (err) {
             console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
-            Sentry.captureException(err, { extra: { context: 'orderShipped', orderId: data.orderId } });
           }
         },
-        config: { type: 'UPDATE_ORDER_STATUS', roles: ['admin', 'branch', 'production'] },
+        config: {
+          type: 'UPDATE_ORDER_STATUS',
+          roles: ['admin', 'branch', 'production'],
+        },
       },
       {
         name: 'orderDelivered',
@@ -538,7 +502,6 @@ export const useOrderNotifications = (
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
           if (!data.orderId || !data.orderNumber || !data.branchName) {
             console.warn(`[${new Date().toISOString()}] Invalid order delivered data:`, data);
-            Sentry.captureMessage('Invalid order delivered data', { level: 'warning', extra: { data } });
             return;
           }
           if (user.role === 'branch' && data.branchId !== user.branchId) return;
@@ -546,7 +509,6 @@ export const useOrderNotifications = (
             const updatedOrder = await ordersAPI.getById(data.orderId);
             if (!updatedOrder || !updatedOrder._id) {
               console.warn(`[${new Date().toISOString()}] Failed to fetch updated order:`, data.orderId);
-              Sentry.captureMessage('Failed to fetch updated order', { level: 'warning', extra: { orderId: data.orderId } });
               return;
             }
             const mappedOrder: Order = {
@@ -615,10 +577,12 @@ export const useOrderNotifications = (
             });
           } catch (err) {
             console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
-            Sentry.captureException(err, { extra: { context: 'orderDelivered', orderId: data.orderId } });
           }
         },
-        config: { type: 'UPDATE_ORDER_STATUS', roles: ['admin', 'branch', 'production'] },
+        config: {
+          type: 'UPDATE_ORDER_STATUS',
+          roles: ['admin', 'branch', 'production'],
+        },
       },
       {
         name: 'returnStatusUpdated',
@@ -626,7 +590,6 @@ export const useOrderNotifications = (
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
           if (!data.orderId || !data.returnId || !data.status || !data.orderNumber) {
             console.warn(`[${new Date().toISOString()}] Invalid return status update data:`, data);
-            Sentry.captureMessage('Invalid return status update data', { level: 'warning', extra: { data } });
             return;
           }
           dispatch({ type: 'RETURN_STATUS_UPDATED', orderId: data.orderId, returnId: data.returnId, status: data.status });
@@ -645,7 +608,10 @@ export const useOrderNotifications = (
             vibrate: [200, 100, 200],
           });
         },
-        config: { type: 'RETURN_STATUS_UPDATED', roles: ['admin', 'branch', 'production'] },
+        config: {
+          type: 'RETURN_STATUS_UPDATED',
+          roles: ['admin', 'branch', 'production'],
+        },
       },
       {
         name: 'missingAssignments',
@@ -653,7 +619,6 @@ export const useOrderNotifications = (
           if (!['admin', 'production'].includes(user.role)) return;
           if (!data.orderId || !data.itemId || !data.orderNumber || !data.productName) {
             console.warn(`[${new Date().toISOString()}] Invalid missing assignments data:`, data);
-            Sentry.captureMessage('Invalid missing assignments data', { level: 'warning', extra: { data } });
             return;
           }
           dispatch({ type: 'MISSING_ASSIGNMENTS', orderId: data.orderId, itemId: data.itemId, productName: data.productName });
@@ -672,31 +637,53 @@ export const useOrderNotifications = (
             vibrate: [300, 100, 300],
           });
         },
-        config: { type: 'MISSING_ASSIGNMENTS', roles: ['admin', 'production'] },
+        config: {
+          type: 'MISSING_ASSIGNMENTS',
+          roles: ['admin', 'production'],
+        },
+      },
+      {
+        name: 'connect',
+        handler: () => {
+          dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
+          dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
+          console.log(`[${new Date().toISOString()}] Socket connected`);
+        },
+        config: {
+          type: 'SET_SOCKET_CONNECTED',
+          roles: ['admin', 'branch', 'production', 'chef'],
+        },
+      },
+      {
+        name: 'disconnect',
+        handler: () => {
+          dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
+          dispatch({ type: 'SET_SOCKET_ERROR', payload: t('socket.disconnected') });
+          console.warn(`[${new Date().toISOString()}] Socket disconnected`);
+        },
+        config: {
+          type: 'SET_SOCKET_DISCONNECTED',
+          roles: ['admin', 'branch', 'production', 'chef'],
+        },
+      },
+      {
+        name: 'connect_error',
+        handler: (error: Error) => {
+          dispatch({ type: 'SET_SOCKET_ERROR', payload: `${t('socket.error')}: ${error.message}` });
+          console.error(`[${new Date().toISOString()}] Socket connection error:`, error);
+        },
+        config: {
+          type: 'SET_SOCKET_ERROR',
+          roles: ['admin', 'branch', 'production', 'chef'],
+        },
       },
     ];
 
-    events.forEach(({ name, handler }) => {
-      if (typeof handler !== 'function') {
-        console.error(`[${new Date().toISOString()}] Handler for ${name} is not a function:`, handler);
-        Sentry.captureMessage(`Invalid handler for event ${name}`, { level: 'error', extra: { eventName: name, handler } });
-        return;
-      }
-      socket.on(name, (data: any) => {
-        try {
-          console.log(`[${new Date().toISOString()}] Received ${name} event:`, JSON.stringify(data, null, 2));
-          handler(data);
-        } catch (err) {
-          console.error(`[${new Date().toISOString()}] Error processing ${name} event:`, err);
-          Sentry.captureException(err, { extra: { context: name, data } });
-        }
-      });
-    });
-
+    events.forEach(({ name, handler }) => socket.on(name, handler));
     return () => {
-      events.forEach(({ name }) => socket.off(name));
+      events.forEach(({ name, handler }) => socket.off(name, handler));
     };
-  }, [socket, user, dispatch, stateRef, t, language, addNotification, isConnected, fetchTasks]);
+  }, [socket, user, dispatch, stateRef, t, language, addNotification]);
 
-  return { socket, isConnected };
+  return {};
 };
