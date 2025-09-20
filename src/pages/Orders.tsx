@@ -6,39 +6,26 @@ import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Select } from '../components/UI/Select';
 import { Input } from '../components/UI/Input';
-import { ShoppingCart, AlertCircle, Search, Table2, Grid, Upload, Download } from 'lucide-react';
+import { ShoppingCart, AlertCircle, Search, Table2, Grid, Download } from 'lucide-react';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
-import Skeleton from 'react-loading-skeleton';
-import 'react-loading-skeleton/dist/skeleton.css';
 import { ordersAPI, chefsAPI, branchesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { Order, Chef, Branch, AssignChefsForm, OrderStatus } from '../types/types';
-import { useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import { exportToPDF } from './PDFExporter';
+import { OrderTableSkeleton, OrderCardSkeleton } from './OrderSkeletons';
 
 // Lazy-loaded components
-const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
-const OrderTable = lazy(() => import('../components/Shared/OrderTable'));
-const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
-const Pagination = lazy(() => import('../components/Shared/Pagination'));
+const OrderCard = lazy(() => import('./OrderCard'));
+const OrderTable = lazy(() => import('./OrderTable'));
+const AssignChefsModal = lazy(() => import('./AssignChefsModal'));
+const Pagination = lazy(() => import('./Pagination'));
 
-// ScrollToTop component for navigation
-const ScrollToTop = () => {
-  const { pathname } = useLocation();
-
-  useEffect(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [pathname]);
-
-  return null;
-};
-
-// واجهة الحالة
+// State interface
 interface State {
   orders: Order[];
   selectedOrder: Order | null;
@@ -60,7 +47,7 @@ interface State {
   viewMode: 'card' | 'table';
 }
 
-// واجهة الإجراء
+// Action interface
 interface Action {
   type: string;
   payload?: any;
@@ -74,7 +61,7 @@ interface Action {
   modal?: string;
 }
 
-// الحالة الابتدائية
+// Initial state
 const initialState: State = {
   orders: [],
   selectedOrder: null,
@@ -96,7 +83,7 @@ const initialState: State = {
   viewMode: 'card',
 };
 
-// دالة المختزل (Reducer)
+// Reducer function
 const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case 'SET_ORDERS':
@@ -256,9 +243,8 @@ const reducer = (state: State, action: Action): State => {
   }
 };
 
-// الثوابت
+// Constants
 const ORDERS_PER_PAGE = { card: 12, table: 50 };
-
 const validTransitions: Record<Order['status'], Order['status'][]> = {
   pending: ['approved', 'cancelled'],
   approved: ['in_production', 'cancelled'],
@@ -286,17 +272,7 @@ const sortOptions = [
   { value: 'priority', label: 'sort_priority' },
 ];
 
-// دوال مساعدة
-const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return window.btoa(binary);
-};
-
-// ترجمة الوحدات
+// Helper function
 const translateUnit = (unit: string, isRtl: boolean) => {
   const translations: Record<string, { ar: string; en: string }> = {
     'كيلو': { ar: 'كيلو', en: 'kg' },
@@ -311,70 +287,7 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
 
-// مكونات الهيكل العظمي (Skeleton)
-const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.3 }}
-    className="overflow-x-auto bg-white shadow-md rounded-lg border border-gray-100"
-  >
-    <table className="min-w-full">
-      <thead>
-        <tr className={isRtl ? 'flex-row-reverse' : ''}>
-          {Array(7).fill(0).map((_, index) => (
-            <th key={index} className="px-3 py-2">
-              <Skeleton width={80} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
-            </th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {Array(5).fill(0).map((_, rowIndex) => (
-          <tr
-            key={rowIndex}
-            className={`hover:bg-gray-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}
-          >
-            {Array(7).fill(0).map((_, cellIndex) => (
-              <td key={cellIndex} className="px-3 py-2">
-                <Skeleton width={100} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
-              </td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  </motion.div>
-);
-
-const OrderCardSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
-  <Card className="p-3 mb-3 bg-white shadow-md rounded-lg border border-gray-100 hover:shadow-lg transition-shadow">
-    <div className="flex flex-col gap-2">
-      <div className={`flex items-center ${isRtl ? 'justify-end' : 'justify-between'}`}>
-        <Skeleton width={160} height={18} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
-        <Skeleton width={70} height={18} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
-      </div>
-      <Skeleton width={120} height={12} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
-      <Skeleton width="100%" height={5} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {Array(4).fill(0).map((_, index) => (
-          <div key={index}>
-            <Skeleton width={60} height={12} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
-            <Skeleton width={90} height={16} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
-          </div>
-        ))}
-      </div>
-      <Skeleton width="100%" height={28} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
-      <div className={`flex gap-2 ${isRtl ? 'justify-end' : 'justify-start'}`}>
-        {Array(2).fill(0).map((_, index) => (
-          <Skeleton key={index} width={70} height={24} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
-        ))}
-      </div>
-    </div>
-  </Card>
-);
-
-// المكون الرئيسي
+// Main component
 export const Orders: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
@@ -385,18 +298,16 @@ export const Orders: React.FC = () => {
   const cacheRef = useRef<Map<string, Order[]>>(new Map());
   const listRef = useRef<HTMLDivElement>(null);
   const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
+  const navigate = useNavigate();
 
-  // تحديث مرجع الحالة
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
-  // حساب إجمالي الكمية
   const calculateTotalQuantity = useCallback((order: Order) => {
     return order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   }, []);
 
-  // حساب المبلغ المعدل
   const calculateAdjustedTotal = useCallback(
     (order: Order) => {
       const approvedReturnsTotal = order.returns
@@ -418,37 +329,35 @@ export const Orders: React.FC = () => {
     [isRtl]
   );
 
-  // مستمعات WebSocket
+  const handleNavigateToDetails = useCallback((orderId: string) => {
+    navigate(`/orders/${orderId}`);
+    window.scrollTo(0, 0); // Scroll to top when navigating to details
+  }, [navigate]);
+
   useEffect(() => {
     if (!user || !['admin', 'production'].includes(user.role)) {
       dispatch({ type: 'SET_ERROR', payload: isRtl ? 'غير مصرح للوصول' : 'Unauthorized access' });
       dispatch({ type: 'SET_LOADING', payload: false });
       return;
     }
-
     if (!socket) return;
-
     socket.on('connect', () => {
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
       dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
     });
-
     socket.on('connect_error', (err) => {
       console.error('Socket connect error:', err.message);
       dispatch({ type: 'SET_SOCKET_ERROR', payload: isRtl ? 'خطأ في الاتصال' : 'Connection error' });
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
     });
-
     socket.on('reconnect', (attempt) => {
       console.log(`[${new Date().toISOString()}] Socket reconnected after ${attempt} attempts`);
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
     });
-
     socket.on('disconnect', (reason) => {
       console.log(`[${new Date().toISOString()}] Socket disconnected: ${reason}`);
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
     });
-
     socket.on('newOrder', (order: any) => {
       if (!order || !order._id || !order.orderNumber) {
         console.warn('Invalid new order data:', order);
@@ -468,7 +377,7 @@ export const Orders: React.FC = () => {
               price: Number(item.price) || 0,
               unit: item.product?.unit || 'unit',
               department: item.product?.department ? { _id: item.product.department._id, name: item.product.department.name || (isRtl ? 'غير معروف' : 'Unknown') } : { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' },
-              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'), department: item.assignedTo.department } : undefined,
+              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || item.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), department: item.assignedTo.department } : undefined,
               status: item.status || 'pending',
               returnedQuantity: Number(item.returnedQuantity) || 0,
               returnReason: item.returnReason || '',
@@ -523,7 +432,6 @@ export const Orders: React.FC = () => {
         autoClose: 3000,
       });
     });
-
     socket.on('orderStatusUpdated', ({ orderId, status }: { orderId: string; status: Order['status'] }) => {
       if (!orderId || !status) {
         console.warn('Invalid order status update data:', { orderId, status });
@@ -535,7 +443,6 @@ export const Orders: React.FC = () => {
         autoClose: 3000,
       });
     });
-
     socket.on('itemStatusUpdated', ({ orderId, itemId, status }: { orderId: string; itemId: string; status: string }) => {
       if (!orderId || !itemId || !status) {
         console.warn('Invalid item status update data:', { orderId, itemId, status });
@@ -547,7 +454,6 @@ export const Orders: React.FC = () => {
         autoClose: 3000,
       });
     });
-
     socket.on('returnStatusUpdated', ({ orderId, returnId, status }: { orderId: string; returnId: string; status: string }) => {
       if (!orderId || !returnId || !status) {
         console.warn('Invalid return status update data:', { orderId, returnId, status });
@@ -559,7 +465,6 @@ export const Orders: React.FC = () => {
         autoClose: 3000,
       });
     });
-
     socket.on('taskAssigned', ({ orderId, items }: { orderId: string; items: any[] }) => {
       if (!orderId || !items) {
         console.warn('Invalid task assigned data:', { orderId, items });
@@ -571,7 +476,6 @@ export const Orders: React.FC = () => {
         autoClose: 3000,
       });
     });
-
     return () => {
       socket.off('connect');
       socket.off('connect_error');
@@ -583,7 +487,6 @@ export const Orders: React.FC = () => {
     };
   }, [user, socket, isRtl, language, playNotificationSound]);
 
-  // جلب البيانات مع آلية إعادة المحاولة
   const fetchData = useCallback(
     async (retryCount = 0) => {
       if (!user || !['admin', 'production'].includes(user.role)) {
@@ -591,7 +494,6 @@ export const Orders: React.FC = () => {
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
       }
-
       dispatch({ type: 'SET_LOADING', payload: true });
       const cacheKey = `${user.id}-${state.filterStatus}-${state.filterBranch}-${state.currentPage}-${state.viewMode}-${state.searchQuery}`;
       if (cacheRef.current.has(cacheKey)) {
@@ -599,7 +501,6 @@ export const Orders: React.FC = () => {
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
       }
-
       try {
         const query: Record<string, any> = {
           page: state.currentPage,
@@ -611,13 +512,11 @@ export const Orders: React.FC = () => {
         if (state.filterBranch) query.branch = state.filterBranch;
         if (state.searchQuery.trim()) query.search = state.searchQuery.trim();
         if (user.role === 'production' && user.department) query.department = user.department._id;
-
         const [ordersResponse, chefsResponse, branchesResponse] = await Promise.all([
           ordersAPI.getAll(query),
           chefsAPI.getAll(),
           branchesAPI.getAll(),
         ]);
-
         const mappedOrders: Order[] = ordersResponse
           .filter((order: any) => order && order._id && order.orderNumber)
           .map((order: any) => ({
@@ -682,7 +581,6 @@ export const Orders: React.FC = () => {
                 }))
               : [],
           }));
-
         cacheRef.current.set(cacheKey, mappedOrders);
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
         dispatch({
@@ -726,7 +624,6 @@ export const Orders: React.FC = () => {
     [user, state.filterStatus, state.filterBranch, state.currentPage, state.viewMode, state.searchQuery, state.sortBy, state.sortOrder, isRtl, language]
   );
 
-  // تصدير إلى Excel
   const exportToExcel = useCallback(() => {
     const headers = [
       isRtl ? 'رقم الطلب' : 'Order Number',
@@ -755,133 +652,12 @@ export const Orders: React.FC = () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, isRtl ? 'الطلبات' : 'Orders');
     XLSX.writeFile(wb, 'Orders.xlsx');
-    toast.success(isRtl ? 'تم تصدير الملف بنجاح' : 'Export successful', { 
-      position: isRtl ? 'top-left' : 'top-right', 
+    toast.success(isRtl ? 'تم تصدير الملف بنجاح' : 'Export successful', {
+      position: isRtl ? 'top-left' : 'top-right',
       autoClose: 3000,
     });
   }, [state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity]);
 
-  // تصدير إلى PDF
-  const exportToPDF = useCallback(async () => {
-    try {
-      const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
-      doc.setLanguage(isRtl ? 'ar' : 'en');
-
-      let fontName = 'Amiri';
-      let fontLoaded = false;
-
-      try {
-        const fontUrl = '/fonts/Amiri-Regular.ttf';
-        const fontBytes = await fetch(fontUrl).then(res => {
-          if (!res.ok) throw new Error('Failed to fetch font');
-          return res.arrayBuffer();
-        });
-        doc.addFileToVFS(`${fontName}-Regular.ttf`, arrayBufferToBase64(fontBytes));
-        doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
-        doc.setFont(fontName);
-        fontLoaded = true;
-      } catch (fontError) {
-        console.error('Font loading error:', fontError);
-        // Fallback to a default font
-        fontName = 'helvetica'; // jsPDF built-in font
-        doc.setFont(fontName);
-        toast.warn(isRtl ? 'فشل تحميل الخط، يتم استخدام خط افتراضي' : 'Failed to load font, using default font', {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        });
-      }
-
-      doc.setFontSize(16);
-      doc.text(isRtl ? 'الطلبات' : 'Orders', isRtl ? doc.internal.pageSize.width - 20 : 20, 15, {
-        align: isRtl ? 'right' : 'left',
-      });
-
-      const headers = [
-        isRtl ? 'رقم الطلب' : 'Order Number',
-        isRtl ? 'الفرع' : 'Branch',
-        isRtl ? 'الحالة' : 'Status',
-        isRtl ? 'المنتجات' : 'Products',
-        isRtl ? 'إجمالي المبلغ' : 'Total Amount',
-        isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
-        isRtl ? 'التاريخ' : 'Date',
-      ];
-      const data = state.orders.map(order => {
-        const productsStr = order.items.map(i => `${i.productName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ');
-        return [
-          order.orderNumber,
-          order.branchName,
-          isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status,
-          productsStr,
-          calculateAdjustedTotal(order),
-          `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
-          order.date,
-        ];
-      });
-
-      autoTable(doc, {
-        head: [isRtl ? headers.reverse() : headers],
-        body: isRtl ? data.map(row => row.reverse()) : data,
-        theme: 'striped',
-        headStyles: {
-          fillColor: [34, 34, 34],
-          textColor: 255,
-          fontSize: 10,
-          halign: isRtl ? 'right' : 'left',
-          font: fontLoaded ? fontName : 'helvetica',
-          cellPadding: 2,
-        },
-        bodyStyles: {
-          fontSize: 8,
-          halign: isRtl ? 'right' : 'left',
-          font: fontLoaded ? fontName : 'helvetica',
-          cellPadding: 2,
-          textColor: [33, 33, 33],
-        },
-        alternateRowStyles: {
-          fillColor: [245, 245, 245],
-        },
-        margin: { top: 25, left: 10, right: 10 },
-        tableWidth: doc.internal.pageSize.width - 20,
-        didParseCell: (data) => {
-          if (data.section === 'body' && data.column.index === (isRtl ? 2 : 4) && data.cell.raw) {
-            const text = data.cell.raw.toString();
-            data.cell.text = [isRtl ? text.replace(/(\d+\.\d{2})/, '$1 ر.س') : `SAR ${text}`];
-          }
-        },
-        didDrawPage: (data) => {
-          doc.setFont(fontLoaded ? fontName : 'helvetica');
-          doc.setFontSize(8);
-          doc.text(
-            isRtl ? `تم إنشاؤه في: ${formatDate(new Date(), language)}` : `Generated on: ${formatDate(new Date(), language)}`,
-            isRtl ? doc.internal.pageSize.width - 10 : 10,
-            doc.internal.pageSize.height - 10,
-            { align: isRtl ? 'right' : 'left' }
-          );
-          doc.text(
-            isRtl ? `الصفحة ${data.pageNumber}` : `Page ${data.pageNumber}`,
-            isRtl ? 10 : doc.internal.pageSize.width - 30,
-            doc.internal.pageSize.height - 10,
-            { align: isRtl ? 'left' : 'right' }
-          );
-        },
-        styles: { overflow: 'linebreak', font: fontLoaded ? fontName : 'helvetica', fontSize: 8, cellPadding: 2, halign: isRtl ? 'right' : 'left' },
-      });
-
-      doc.save('Orders.pdf');
-      toast.success(isRtl ? 'تم تصدير PDF بنجاح' : 'PDF export successful', {
-        position: isRtl ? 'top-left' : 'top-right',
-        autoClose: 3000,
-      });
-    } catch (err: any) {
-      console.error('PDF export error:', err.message);
-      toast.error(isRtl ? `خطأ في تصدير PDF: ${err.message}` : `PDF export error: ${err.message}`, {
-        position: isRtl ? 'top-left' : 'top-right',
-        autoClose: 3000,
-      });
-    }
-  }, [state.orders, isRtl, language, calculateAdjustedTotal, calculateTotalQuantity]);
-
-  // التعامل مع البحث
   const handleSearchChange = useMemo(
     () =>
       debounce((value: string) => {
@@ -890,7 +666,6 @@ export const Orders: React.FC = () => {
     []
   );
 
-  // تصفية وترتيب وتجزئة الطلبات
   const filteredOrders = useMemo(
     () =>
       state.orders
@@ -935,7 +710,6 @@ export const Orders: React.FC = () => {
     [sortedOrders, state.currentPage, state.viewMode]
   );
 
-  // إجراءات الطلب
   const updateOrderStatus = useCallback(
     async (orderId: string, newStatus: Order['status']) => {
       const order = state.orders.find(o => o.id === orderId);
@@ -1079,12 +853,10 @@ export const Orders: React.FC = () => {
     }
   }, []);
 
-  // جلب البيانات عند التحميل أو تغيير الفلاتر
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // التصيير
   return (
     <div className="px-2 py-4 min-h-screen bg-gray-50">
       <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
@@ -1112,14 +884,14 @@ export const Orders: React.FC = () => {
               </Button>
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
-                onClick={state.orders.length > 0 ? exportToPDF : undefined}
+                onClick={state.orders.length > 0 ? () => exportToPDF(state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit) : undefined}
                 className={`flex items-center gap-1.5 ${
                   state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
                 } rounded-md px-3 py-1.5 text-xs shadow-sm`}
                 disabled={state.orders.length === 0}
                 aria-label={isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
               >
-                <Upload className="w-4 h-4" />
+                <Download className="w-4 h-4" />
                 {isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
               </Button>
               <Button
@@ -1141,7 +913,7 @@ export const Orders: React.FC = () => {
                   <Search className={`w-4 h-4 text-gray-500 absolute top-2.5 ${isRtl ? 'right-3' : 'left-3'}`} />
                   <Input
                     value={state.searchQuery}
-                    onChange={(e) => handleSearchChange(e.target.value)}
+                    onChange={(e) => handleSearchChange(e?.target?.value || '')}
                     placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
                     className={`w-full ${isRtl ? 'pr-10' : 'pl-10'} rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm`}
                   />
@@ -1239,6 +1011,7 @@ export const Orders: React.FC = () => {
                       startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
                       user={user}
                       submitting={state.submitting}
+                      onNavigateToDetails={handleNavigateToDetails}
                     />
                   </motion.div>
                 ) : (
@@ -1254,6 +1027,7 @@ export const Orders: React.FC = () => {
                         updateOrderStatus={updateOrderStatus}
                         openAssignModal={openAssignModal}
                         submitting={state.submitting}
+                        onNavigateToDetails={handleNavigateToDetails}
                       />
                     ))}
                   </motion.div>
