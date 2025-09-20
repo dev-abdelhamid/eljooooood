@@ -15,7 +15,6 @@ import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { formatDate } from '../utils/formatDate';
-import * as Sentry from '@sentry/react';
 
 interface ChefTask {
   itemId: string;
@@ -56,7 +55,7 @@ type Action =
   | { type: 'SET_SOCKET_CONNECTED'; payload: boolean }
   | { type: 'SET_FILTER'; payload: { status: string; search: string } }
   | { type: 'SET_PAGE'; payload: number }
-  | { type: 'TASK_ASSIGNED'; payload: { orderId: string; items: any[]; orderNumber: string; branchName: string; branchId: string } }
+  | { type: 'TASK_ASSIGNED'; payload: { orderId: string; items: any[]; orderNumber: string; branchName: string } }
   | { type: 'UPDATE_ITEM_STATUS'; payload: { orderId: string; itemId: string; status: string; updatedAt: string } }
   | { type: 'UPDATE_ORDER_STATUS'; orderId: string; status: string };
 
@@ -95,37 +94,34 @@ const reducer = (state: State, action: Action): State => {
       return { ...state, page: action.payload };
     case 'TASK_ASSIGNED': {
       const items = Array.isArray(action.payload.items) ? action.payload.items : [];
-      if (!items.length || !action.payload.orderId || !action.payload.orderNumber || !action.payload.branchName || !action.payload.branchId) {
+      if (!items.length || !action.payload.orderId || !action.payload.orderNumber || !action.payload.branchName) {
         console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, action.payload);
         return state;
       }
       const newTasks = items
         .filter((item) => item.assignedTo?._id === state.chefId)
         .map((item) => ({
-          itemId: item._id || 'unknown',
+          itemId: item.itemId || 'unknown',
           orderId: action.payload.orderId || 'unknown',
-          orderNumber: action.payload.orderNumber || t('orders.unknown'),
-          productId: item.product?._id || 'unknown',
-          productName: item.product?.name || t('orders.unknown_product'),
+          orderNumber: action.payload.orderNumber || 'N/A',
+          productId: item.productId || 'unknown',
+          productName: item.productName || 'Unknown Product',
           quantity: Number(item.quantity) || 1,
           status: item.status || 'pending',
           createdAt: item.createdAt || new Date().toISOString(),
           updatedAt: item.updatedAt || new Date().toISOString(),
           progress: getStatusInfo(item.status || 'pending').progress,
-          branchName: action.payload.branchName || t('orders.unknown_branch'),
-          branchId: action.payload.branchId || 'unknown',
+          branchName: action.payload.branchName || 'Unknown Branch',
+          branchId: item.branchId || 'unknown',
           priority: item.priority || 'medium',
-          department: item.department || { _id: 'unknown', name: t('orders.unknown_department') },
-          assignedTo: {
-            _id: item.assignedTo?._id || 'unknown',
-            username: item.assignedTo?.username || item.assignedTo?.name || t('orders.unknown_chef'),
-          },
+          department: item.department || { _id: 'unknown', name: 'Unknown Department' },
+          assignedTo: item.assignedTo || { _id: 'unknown', username: 'Unknown Chef' },
         }));
       const updatedTasks = [...state.tasks.filter((t) => !newTasks.some((nt) => nt.itemId === t.itemId)), ...newTasks];
       return {
         ...state,
         tasks: updatedTasks,
-        totalPages: Math.ceil(updatedTasks.length / tasksPerPage) || 1,
+        totalPages: Math.ceil(updatedTasks.length / 10) || 1,
       };
     }
     case 'UPDATE_ITEM_STATUS':
@@ -215,7 +211,6 @@ export function ChefTasks() {
       dispatch({ type: 'SET_ERROR', payload: errorMessage });
       toast.error(errorMessage, { toastId: `error-chefProfile-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
       dispatch({ type: 'SET_LOADING', payload: false });
-      Sentry.captureException(err, { extra: { userId } });
     }
   }, [user, t, isRtl, navigate]);
 
@@ -237,17 +232,19 @@ export function ChefTasks() {
         if (state.filter.status && state.filter.status !== 'all') query.status = state.filter.status;
         if (state.filter.search) query.search = state.filter.search;
         const response = await productionAssignmentsAPI.getChefTasks(state.chefId, query);
-        if (!Array.isArray(response.tasks)) {
+        if (!Array.isArray(response)) {
           throw new Error(t('errors.invalid_response'));
         }
-        const mappedTasks: ChefTask[] = response.tasks
+        const mappedTasks: ChefTask[] = response
           .filter((task: any) => {
             if (!task._id || !task.order?._id || !task.product?._id || !task.chef?._id || !/^[0-9a-fA-F]{24}$/.test(task._id)) {
               console.warn(`[${new Date().toISOString()}] Invalid task data:`, task);
+              toast.warn(t('errors.invalid_task_data'), { toastId: `error-task-${task?._id || 'unknown'}-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
               return false;
             }
             if (!task.quantity || task.quantity <= 0) {
               console.warn(`[${new Date().toISOString()}] Invalid quantity for task ${task._id}:`, task.quantity);
+              toast.warn(t('errors.invalid_task_quantity'), { toastId: `error-task-quantity-${task?._id || 'unknown'}-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
               return false;
             }
             return true;
@@ -267,14 +264,11 @@ export function ChefTasks() {
             branchId: task.order?.branch?._id || 'unknown',
             priority: task.order?.priority || 'medium',
             department: task.product?.department || { _id: 'unknown', name: t('orders.unknown_department') },
-            assignedTo: {
-              _id: task.chef._id || 'unknown',
-              username: task.chef.username || task.chef.name || t('orders.unknown_chef'),
-            },
+            assignedTo: task.chef ? { _id: task.chef._id, username: task.chef.username || t('orders.unknown_chef') } : undefined,
           }));
         cache.set(cacheKey, { data: mappedTasks, timestamp: Date.now() });
-        dispatch({ type: 'SET_TASKS', payload: { tasks: mappedTasks, totalPages: response.totalPages || Math.ceil(mappedTasks.length / tasksPerPage) || 1 } });
-        if (mappedTasks.length === 0 && response.tasks.length > 0) {
+        dispatch({ type: 'SET_TASKS', payload: { tasks: mappedTasks, totalPages: Math.ceil(response.length / tasksPerPage) || 1 } });
+        if (mappedTasks.length === 0 && response.length > 0) {
           dispatch({ type: 'SET_ERROR', payload: t('errors.all_tasks_filtered') });
           toast.warn(t('errors.all_tasks_filtered'), { toastId: `error-invalidTasks-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
         } else {
@@ -284,7 +278,6 @@ export function ChefTasks() {
         const errorMessage = err.message || t('errors.task_fetch_failed');
         dispatch({ type: 'SET_ERROR', payload: errorMessage });
         toast.error(errorMessage, { toastId: `error-fetchTasks-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
-        Sentry.captureException(err, { extra: { chefId: state.chefId, query } });
       } finally {
         dispatch({ type: 'SET_LOADING', payload: false });
       }
@@ -340,7 +333,6 @@ export function ChefTasks() {
         const errorMessage = err.message || t('errors.task_update_failed');
         dispatch({ type: 'SET_ERROR', payload: errorMessage });
         toast.error(errorMessage, { toastId: `error-taskUpdate-${taskId}-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
-        Sentry.captureException(err, { extra: { taskId, orderId, newStatus, chefId: state.chefId } });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
@@ -375,9 +367,7 @@ export function ChefTasks() {
 
   const paginatedTasks = useMemo(() => {
     const start = (state.page - 1) * tasksPerPage;
-    return filteredTasks
-      .filter(task => task.itemId && task.orderId && task.orderNumber && task.productName)
-      .slice(start, start + tasksPerPage);
+    return filteredTasks.slice(start, start + tasksPerPage);
   }, [filteredTasks, state.page]);
 
   const statusOptions = [
@@ -525,12 +515,6 @@ export function ChefTasks() {
                               <p>
                                 <span className="font-semibold">{t('orders.updated_at')}:</span>{' '}
                                 {formatDate(task.updatedAt, language, 'Europe/Athens')}
-                              </p>
-                              <p>
-                                <span className="font-semibold">{t('orders.branch')}:</span> {task.branchName}
-                              </p>
-                              <p>
-                                <span className="font-semibold">{t('orders.chef')}:</span> {task.assignedTo?.username}
                               </p>
                             </div>
                             <div className="mt-4">
