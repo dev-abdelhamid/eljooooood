@@ -118,7 +118,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
 
               <div>
                 <p className="text-xs text-gray-500">{isRtl ? 'إجمالي المبلغ' : 'Total Amount'}</p>
-                <p className="text-xs font-semibold text-teal-600">{calculateAdjustedTotal(order)}</p>
+                <p className="text-xs  font-semibold text-teal-600">{calculateAdjustedTotal(order)}</p>
               </div>
               <div >
                 <p className="text-xs text-gray-500">{isRtl ? 'التاريخ' : 'Date'}</p>
@@ -185,7 +185,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                                     : `Assigned to: Chef ${item.assignedTo.name} (${item.department?.name || 'Unknown'})`}
                                 </p>
                               )}
-                              <p className="text-xs font-medium text-gray-900">{item.price} {isRtl ? 'ريال' : 'SAR'}</p>
+                              <p className="text-xs font-semibold text-teal-600">{item.price} {isRtl ? 'ريال' : 'SAR'}</p>
                             </div>
                           </motion.div>
                         );
