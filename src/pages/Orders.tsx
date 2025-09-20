@@ -16,14 +16,14 @@ import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { Order, Chef, Branch, AssignChefsForm, OrderStatus } from '../types/types';
 import { useNavigate } from 'react-router-dom';
-import { exportToPDF } from './PDFExporter';
-import { OrderTableSkeleton, OrderCardSkeleton } from './OrderSkeletons';
+import { exportToPDF } from '../components/Shared/PDFExporter';
+import { OrderTableSkeleton, OrderCardSkeleton } from '../components/Shared/OrderSkeletons';
 
 // Lazy-loaded components
-const OrderCard = lazy(() => import('./OrderCard'));
-const OrderTable = lazy(() => import('./OrderTable'));
-const AssignChefsModal = lazy(() => import('./AssignChefsModal'));
-const Pagination = lazy(() => import('./Pagination'));
+const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
+const OrderTable = lazy(() => import('../components/Shared/OrderTable'));
+const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
+const Pagination = lazy(() => import('../components/Shared/Pagination'));
 
 // State interface
 interface State {
@@ -427,10 +427,7 @@ export const Orders: React.FC = () => {
       };
       dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
       playNotificationSound('/sounds/new-order.mp3', [200, 100, 200]);
-      toast.success(isRtl ? `طلب جديد: ${mappedOrder.orderNumber}` : `New order received: ${mappedOrder.orderNumber}`, {
-        position: isRtl ? 'top-left' : 'top-right',
-        autoClose: 3000,
-      });
+    
     });
     socket.on('orderStatusUpdated', ({ orderId, status }: { orderId: string; status: Order['status'] }) => {
       if (!orderId || !status) {
@@ -438,10 +435,7 @@ export const Orders: React.FC = () => {
         return;
       }
       dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
-      toast.info(isRtl ? `تم تحديث حالة الطلب إلى: ${isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[status] : status}` : `Order status updated to: ${status}`, {
-        position: isRtl ? 'top-left' : 'top-right',
-        autoClose: 3000,
-      });
+    
     });
     socket.on('itemStatusUpdated', ({ orderId, itemId, status }: { orderId: string; itemId: string; status: string }) => {
       if (!orderId || !itemId || !status) {
@@ -449,10 +443,7 @@ export const Orders: React.FC = () => {
         return;
       }
       dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
-      toast.info(isRtl ? `تم تحديث حالة العنصر إلى: ${isRtl ? {pending: 'قيد الانتظار', assigned: 'معين', in_progress: 'قيد التقدم', completed: 'مكتمل'}[status] : status}` : `Item status updated to: ${status}`, {
-        position: isRtl ? 'top-left' : 'top-right',
-        autoClose: 3000,
-      });
+      
     });
     socket.on('returnStatusUpdated', ({ orderId, returnId, status }: { orderId: string; returnId: string; status: string }) => {
       if (!orderId || !returnId || !status) {
