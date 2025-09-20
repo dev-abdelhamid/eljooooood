@@ -185,60 +185,66 @@ export const useOrderNotifications = (
           roles: ['admin', 'branch'],
         },
       },
-      {
-        name: 'taskAssigned',
-        handler: (notification: any) => {
-          console.log(`[${new Date().toISOString()}] taskAssigned - Received data:`, JSON.stringify(notification, null, 2));
-          const data: SocketEventData = notification.data || notification;
+     {
+  name: 'taskAssigned',
+  handler: (notification: any) => {
+    console.log(`[${new Date().toISOString()}] taskAssigned - Received data:`, JSON.stringify(notification, null, 2));
+    const data: SocketEventData = notification.data || notification;
 
-          if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName) {
-            console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, notification);
-            return;
-          }
-          if (!['admin', 'production', 'chef'].includes(user.role)) return;
-          if (user.role === 'chef' && !data.items.some((item: any) => item.assignedTo?._id === user._id)) return;
+    if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName) {
+      console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, data);
+      return;
+    }
+    if (!['admin', 'production', 'chef'].includes(user.role)) return;
+    if (user.role === 'chef' && !data.items.some((item: any) => item.assignedTo?._id === user._id)) return;
 
-          const mappedItems = data.items.map((item: any) => ({
-            _id: item.itemId || crypto.randomUUID(),
-            itemId: item.itemId || crypto.randomUUID(),
-            productId: item.product?._id || item.productId || 'unknown',
-            productName: item.product?.name || item.productName || t('products.unknown'),
-            quantity: Number(item.quantity) || 1,
-            unit: translateUnit(item.unit || item.product?.unit),
-            department: item.department || item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
-            status: item.status || 'assigned',
-            assignedTo: item.assignedTo
-              ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown'), name: item.assignedTo.name }
-              : undefined,
-          }));
+    const mappedItems = data.items
+      .filter((item: any) => item._id && item.product?.name && item.assignedTo?._id) // فحص صارم
+      .map((item: any) => ({
+        _id: item._id || item.itemId || crypto.randomUUID(),
+        itemId: item._id || item.itemId || crypto.randomUUID(),
+        productId: item.product?._id || item.productId || 'unknown',
+        productName: item.product?.name || item.productName || t('products.unknown'),
+        quantity: Number(item.quantity) || 1,
+        unit: translateUnit(item.unit || item.product?.unit),
+        department: item.department || item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
+        status: item.status || 'pending', // تغيير من 'assigned' إلى 'pending' لتتماشى مع حالة المهمة الأولية
+        assignedTo: item.assignedTo
+          ? { _id: item.assignedTo._id, username: item.assignedTo.username || item.assignedTo.name || t('chefs.unknown'), name: item.assignedTo.name }
+          : undefined,
+      }));
 
-          dispatch({ type: 'TASK_ASSIGNED', orderId: data.orderId, items: mappedItems });
-          data.items.forEach((item: any) => {
-            if (!item.itemId || !item.productName || !item.quantity || !item.assignedTo?.username) return;
-            addNotification({
-              _id: `${data.eventId || crypto.randomUUID()}-${item.itemId}`,
-              type: 'info',
-              message: t('notifications.task_assigned_to_chef', {
-                chefName: item.assignedTo.name || item.assignedTo.username || t('chefs.unknown'),
-                productName: item.productName || t('products.unknown'),
-                quantity: item.quantity,
-                unit: translateUnit(item.unit),
-                orderNumber: data.orderNumber,
-                branchName: data.branchName || t('branches.unknown'),
-              }),
-              data: { orderId: data.orderId, itemId: item.itemId, eventId: data.eventId },
-              read: false,
-              createdAt: new Date().toISOString(),
-              sound: '/sounds/notification.mp3',
-              vibrate: [400, 100, 400],
-            });
-          });
-        },
-        config: {
-          type: 'TASK_ASSIGNED',
-          roles: ['admin', 'production', 'chef'],
-        },
-      },
+    if (mappedItems.length === 0) {
+      console.warn(`[${new Date().toISOString()}] No valid items for taskAssigned:`, data);
+      return;
+    }
+
+    dispatch({ type: 'TASK_ASSIGNED', payload: { orderId: data.orderId, items: mappedItems, orderNumber: data.orderNumber, branchName: data.branchName } });
+    mappedItems.forEach((item: any) => {
+      addNotification({
+        _id: `${data.eventId || crypto.randomUUID()}-${item.itemId}`,
+        type: 'info',
+        message: t('notifications.task_assigned_to_chef', {
+          chefName: item.assignedTo?.name || item.assignedTo?.username || t('chefs.unknown'),
+          productName: item.productName || t('products.unknown'),
+          quantity: item.quantity,
+          unit: item.unit,
+          orderNumber: data.orderNumber,
+          branchName: data.branchName || t('branches.unknown'),
+        }),
+        data: { orderId: data.orderId, itemId: item.itemId, eventId: data.eventId },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: '/sounds/notification.mp3',
+        vibrate: [400, 100, 400],
+      });
+    });
+  },
+  config: {
+    type: 'TASK_ASSIGNED',
+    roles: ['admin', 'production', 'chef'],
+  },
+},
       {
         name: 'itemStatusUpdated',
         handler: async (data: SocketEventData) => {
@@ -636,18 +642,28 @@ export const useOrderNotifications = (
           roles: ['admin', 'production'],
         },
       },
-      {
-        name: 'connect',
-        handler: () => {
-          dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
-          dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
-          console.log(`[${new Date().toISOString()}] Socket connected`);
-        },
-        config: {
-          type: 'SET_SOCKET_CONNECTED',
-          roles: ['admin', 'branch', 'production', 'chef'],
-        },
-      },
+     {
+  name: 'connect',
+  handler: () => {
+    dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
+    dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
+    console.log(`[${new Date().toISOString()}] Socket connected`);
+    // إعادة جلب المهام عند إعادة الاتصال
+    if (stateRef.current.chefId) {
+      dispatch({ type: 'SET_PAGE', payload: 1 });
+      // Define a simple cache Map if not already available
+      const cache = (window as any).orderCache || new Map();
+      cache.delete(`${stateRef.current.chefId}-${stateRef.current.page}-${stateRef.current.filter.status}-${stateRef.current.filter.search}`);
+      (window as any).orderCache = cache;
+      // استدعاء fetchTasks مباشرة (يفترض أن يتم استيراده أو تمريره كمعامل)
+      // fetchTasks(true);
+    }
+  },
+  config: {
+    type: 'SET_SOCKET_CONNECTED',
+    roles: ['admin', 'branch', 'production', 'chef'],
+  },
+},
       {
         name: 'disconnect',
         handler: () => {
