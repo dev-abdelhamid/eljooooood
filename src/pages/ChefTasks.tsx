@@ -15,6 +15,7 @@ import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { formatDate } from '../utils/formatDate';
+import * as Sentry from '@sentry/react';
 
 interface ChefTask {
   itemId: string;
@@ -31,7 +32,7 @@ interface ChefTask {
   branchId?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   department?: { _id: string; name: string };
-  assignedTo?: { _id: string};
+  assignedTo?: { _id: string; username: string };
 }
 
 interface State {
@@ -96,25 +97,26 @@ const reducer = (state: State, action: Action): State => {
       const items = Array.isArray(action.payload.items) ? action.payload.items : [];
       if (!items.length || !action.payload.orderId || !action.payload.orderNumber || !action.payload.branchName) {
         console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, action.payload);
+        Sentry.captureMessage('Invalid task assigned data', { level: 'warning', extra: { payload: action.payload } });
         return state;
       }
       const newTasks = items
         .filter((item) => item.assignedTo?._id === state.chefId)
         .map((item) => ({
-          itemId: item.itemId || 'unknown',
+          itemId: item.itemId || item._id || 'unknown',
           orderId: action.payload.orderId || 'unknown',
           orderNumber: action.payload.orderNumber || 'N/A',
-          productId: item.productId || 'unknown',
-          productName: item.productName || 'Unknown Product',
+          productId: item.productId || item.product?._id || 'unknown',
+          productName: item.productName || item.product?.name || 'Unknown Product',
           quantity: Number(item.quantity) || 1,
-          status: item.status || 'pending',
+          status: item.status === 'assigned' ? 'pending' : item.status || 'pending',
           createdAt: item.createdAt || new Date().toISOString(),
           updatedAt: item.updatedAt || new Date().toISOString(),
           progress: getStatusInfo(item.status || 'pending').progress,
           branchName: action.payload.branchName || 'Unknown Branch',
-          branchId: item.branchId || 'unknown',
+          branchId: item.branchId || action.payload.branchId || 'unknown',
           priority: item.priority || 'medium',
-          department: item.department || { _id: 'unknown', name: 'Unknown Department' },
+          department: item.department || item.product?.department || { _id: 'unknown', name: 'Unknown Department' },
           assignedTo: item.assignedTo || { _id: 'unknown', username: 'Unknown Chef' },
         }));
       const updatedTasks = [...state.tasks.filter((t) => !newTasks.some((nt) => nt.itemId === t.itemId)), ...newTasks];
@@ -174,7 +176,65 @@ export function ChefTasks() {
   stateRef.current = state;
   const tasksPerPage = 10;
 
-  useOrderNotifications(dispatch, stateRef, user);
+  // تعريف دالة addNotification باستخدام react-toastify
+  const addNotification = useCallback(
+    (notification: {
+      _id: string;
+      type: 'success' | 'info' | 'warning' | 'error';
+      message: string;
+      data: { orderId: string; itemId?: string; eventId?: string };
+      read: boolean;
+      createdAt: string;
+      sound?: string;
+      vibrate?: number[];
+    }) => {
+      const toastOptions = {
+        toastId: notification._id,
+        position: isRtl ? 'top-left' : 'top-right',
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+        progress: undefined,
+      };
+
+      switch (notification.type) {
+        case 'success':
+          toast.success(notification.message, toastOptions);
+          break;
+        case 'info':
+          toast.info(notification.message, toastOptions);
+          break;
+        case 'warning':
+          toast.warn(notification.message, toastOptions);
+          break;
+        case 'error':
+          toast.error(notification.message, toastOptions);
+          break;
+        default:
+          toast(notification.message, toastOptions);
+      }
+
+      // تشغيل الصوت إذا تم توفيره
+      if (notification.sound) {
+        const audio = new Audio(notification.sound);
+        audio.play().catch((err) => {
+          console.warn(`[${new Date().toISOString()}] Failed to play notification sound:`, err);
+          Sentry.captureException(err, { extra: { context: 'addNotification', sound: notification.sound } });
+        });
+      }
+
+      // تشغيل الاهتزاز إذا كان مدعومًا
+      if (notification.vibrate && 'vibrate' in navigator) {
+        navigator.vibrate(notification.vibrate);
+      }
+    },
+    [isRtl]
+  );
+
+  // تمرير addNotification و fetchTasks إلى useOrderNotifications
+  useOrderNotifications(dispatch, stateRef, user, addNotification, fetchTasks);
 
   const cacheKey = useMemo(
     () => `${state.chefId}-${state.page}-${state.filter.status}-${state.filter.search}`,
@@ -210,6 +270,7 @@ export function ChefTasks() {
       const errorMessage = err.message || t('errors.chef_fetch_failed');
       dispatch({ type: 'SET_ERROR', payload: errorMessage });
       toast.error(errorMessage, { toastId: `error-chefProfile-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
+      Sentry.captureException(err, { extra: { context: 'fetchChefProfile', userId } });
       dispatch({ type: 'SET_LOADING', payload: false });
     }
   }, [user, t, isRtl, navigate]);
@@ -240,11 +301,13 @@ export function ChefTasks() {
             if (!task._id || !task.order?._id || !task.product?._id || !task.chef?._id || !/^[0-9a-fA-F]{24}$/.test(task._id)) {
               console.warn(`[${new Date().toISOString()}] Invalid task data:`, task);
               toast.warn(t('errors.invalid_task_data'), { toastId: `error-task-${task?._id || 'unknown'}-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
+              Sentry.captureMessage('Invalid task data', { level: 'warning', extra: { task } });
               return false;
             }
             if (!task.quantity || task.quantity <= 0) {
               console.warn(`[${new Date().toISOString()}] Invalid quantity for task ${task._id}:`, task.quantity);
               toast.warn(t('errors.invalid_task_quantity'), { toastId: `error-task-quantity-${task?._id || 'unknown'}-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
+              Sentry.captureMessage('Invalid task quantity', { level: 'warning', extra: { taskId: task._id, quantity: task.quantity } });
               return false;
             }
             return true;
@@ -264,7 +327,7 @@ export function ChefTasks() {
             branchId: task.order?.branch?._id || 'unknown',
             priority: task.order?.priority || 'medium',
             department: task.product?.department || { _id: 'unknown', name: t('orders.unknown_department') },
-            assignedTo: task.chef ? { _id: task.chef._id } : undefined,
+            assignedTo: task.chef ? { _id: task.chef._id, username: task.chef.username || t('orders.unknown_chef') } : undefined,
           }));
         cache.set(cacheKey, { data: mappedTasks, timestamp: Date.now() });
         dispatch({ type: 'SET_TASKS', payload: { tasks: mappedTasks, totalPages: Math.ceil(response.length / tasksPerPage) || 1 } });
@@ -278,6 +341,7 @@ export function ChefTasks() {
         const errorMessage = err.message || t('errors.task_fetch_failed');
         dispatch({ type: 'SET_ERROR', payload: errorMessage });
         toast.error(errorMessage, { toastId: `error-fetchTasks-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
+        Sentry.captureException(err, { extra: { context: 'fetchTasks', chefId: state.chefId, query } });
       } finally {
         dispatch({ type: 'SET_LOADING', payload: false });
       }
@@ -333,6 +397,7 @@ export function ChefTasks() {
         const errorMessage = err.message || t('errors.task_update_failed');
         dispatch({ type: 'SET_ERROR', payload: errorMessage });
         toast.error(errorMessage, { toastId: `error-taskUpdate-${taskId}-${Date.now()}`, position: isRtl ? 'top-left' : 'top-right' });
+        Sentry.captureException(err, { extra: { context: 'handleUpdateTaskStatus', taskId, orderId, newStatus } });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
