@@ -169,7 +169,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                               <p className="text-xs font-medium text-gray-900 truncate flex-1">
                                 {item.productName} ({item.quantity} {translateUnit(item.unit, isRtl)})
                               </p>
-                                                           <p className="text-xs font-semibold text-teal-600">{item.price} {isRtl ? 'ريال' : 'SAR'}</p>
+                                                           <p className="text-xs font-semibold  px-1.5 py-0.5 text-teal-600">{item.price} {isRtl ? 'ريال' : 'SAR'}</p>
 
                             </div>
                             <div className="flex items-center justify-between gap-2 mt-1">
