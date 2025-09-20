@@ -13,7 +13,7 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   return window.btoa(binary);
 };
 
-// Loading custom font (Alexandria)
+// Loading custom font (Amiri for Arabic support)
 const loadFont = async (doc: jsPDF, fontName: string, fontUrl: string): Promise<boolean> => {
   try {
     const fontBytes = await fetch(fontUrl).then(res => {
@@ -35,17 +35,18 @@ const loadFont = async (doc: jsPDF, fontName: string, fontUrl: string): Promise<
 const generatePDFHeader = (doc: jsPDF, isRtl: boolean, title: string) => {
   doc.setFontSize(18);
   doc.setTextColor(33, 33, 33);
-  doc.text(title, isRtl ? doc.internal.pageSize.width - 20 : 20, 15, {
+  const pageWidth = doc.internal.pageSize.width;
+  doc.text(title, isRtl ? pageWidth - 20 : 20, 15, {
     align: isRtl ? 'right' : 'left',
   });
   doc.setFontSize(12);
   doc.setTextColor(100, 100, 100);
-  doc.text(isRtl ? 'تقرير طلبات الإنتاج' : 'Production Orders Report', isRtl ? doc.internal.pageSize.width - 20 : 20, 25, {
+  doc.text(isRtl ? 'تقرير طلبات الإنتاج' : 'Production Orders Report', isRtl ? pageWidth - 20 : 20, 25, {
     align: isRtl ? 'right' : 'left',
   });
   doc.setLineWidth(0.5);
   doc.setDrawColor(200, 200, 200);
-  doc.line(20, 30, doc.internal.pageSize.width - 20, 30);
+  doc.line(20, 30, pageWidth - 20, 30);
 };
 
 // Generating PDF table
@@ -73,6 +74,7 @@ const generatePDFTable = (
       halign: isRtl ? 'right' : 'left',
       font: fontLoaded ? fontName : 'helvetica',
       cellPadding: 3,
+      textDirection: isRtl ? 'rtl' : 'ltr', // Explicitly set text direction
     },
     bodyStyles: {
       fontSize: 9,
@@ -81,6 +83,7 @@ const generatePDFTable = (
       cellPadding: 3,
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
+      textDirection: isRtl ? 'rtl' : 'ltr', // Explicitly set text direction
     },
     columnStyles: {
       0: { cellWidth: 30 },
@@ -96,9 +99,8 @@ const generatePDFTable = (
       cellWidth: 'wrap',
     },
     didParseCell: (data) => {
-      if (data.section === 'head') {
-        data.cell.styles.halign = isRtl ? 'right' : 'left';
-      }
+      data.cell.styles.halign = isRtl ? 'right' : 'left';
+      data.cell.styles.textDirection = isRtl ? 'rtl' : 'ltr';
     },
   });
 };
@@ -113,10 +115,10 @@ export const exportToPDF = async (
 ) => {
   try {
     const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
-    doc.setLanguage(isRtl ? 'ar' : 'en');
-    const fontName = 'Alexandria';
-    const fontLoaded = await loadFont(doc, fontName, '/fonts/Alexandria-Regular.ttf');
-
+    doc.setLanguage('ar'); // Always set to Arabic for proper RTL rendering
+    const fontName = 'Amiri'; // Use Amiri font for Arabic support
+    const fontUrl = '/fonts/Amiri-Regular.ttf'; // Ensure this path is correct
+    const fontLoaded = await loadFont(doc, fontName, fontUrl);
     generatePDFHeader(doc, isRtl, isRtl ? 'تقرير الطلبات' : 'Orders Report');
 
     const headers = [
@@ -129,12 +131,24 @@ export const exportToPDF = async (
       isRtl ? 'التاريخ' : 'Date',
     ];
 
+    const statusTranslations: Record<string, string> = {
+      pending: 'قيد الانتظار',
+      approved: 'تم الموافقة',
+      in_production: 'في الإنتاج',
+      completed: 'مكتمل',
+      in_transit: 'في النقل',
+      delivered: 'تم التسليم',
+      cancelled: 'ملغى',
+    };
+
     const data = orders.map(order => {
-      const productsStr = order.items.map(i => `${i.productName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ');
+      const productsStr = order.items
+        .map(i => `${i.productName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`)
+        .join('، '); // Use Arabic comma
       return [
         order.orderNumber,
         order.branchName,
-        isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status,
+        isRtl ? statusTranslations[order.status] || order.status : order.status,
         productsStr,
         calculateAdjustedTotal(order),
         `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
@@ -143,7 +157,6 @@ export const exportToPDF = async (
     });
 
     generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName, calculateAdjustedTotal, calculateTotalQuantity, translateUnit);
-
     doc.save('Orders.pdf');
     toast.success(isRtl ? 'تم تصدير PDF بنجاح' : 'PDF export successful', {
       position: isRtl ? 'top-left' : 'top-right',
