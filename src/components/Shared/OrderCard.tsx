@@ -115,7 +115,10 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                 </p>
                 
               </div>
-
+<div className="col-span-2">
+                <p className="text-xs text-gray-500">{isRtl ? 'الفرع' : 'Branch'}</p>
+                <p className="text-xs font-medium text-gray-800 truncate">{order.branchName}</p>
+              </div>
               <div>
                 <p className="text-xs text-gray-500">{isRtl ? 'إجمالي المبلغ' : 'Total Amount'}</p>
                 <p className="text-xs font-semibold text-teal-600">{calculateAdjustedTotal(order)}</p>
@@ -124,10 +127,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                 <p className="text-xs text-gray-500">{isRtl ? 'التاريخ' : 'Date'}</p>
                 <p className="text-xs font-medium text-gray-800 truncate">{order.date}</p>
               </div>
-              <div>
-                <p className="text-xs text-gray-500">{isRtl ? 'الفرع' : 'Branch'}</p>
-                <p className="text-xs font-medium text-gray-800 truncate">{order.branchName}</p>
-              </div>
+              
             </div>
             <div>
               <button

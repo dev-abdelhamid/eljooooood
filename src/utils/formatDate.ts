@@ -1,5 +1,4 @@
 export const formatDate = (dateString: string | Date | undefined, language: string = 'ar'): string => {
-  console.log('Formatting date:', { dateString, language });
   if (!dateString) {
     console.warn('Invalid date provided to formatDate:', dateString);
     return 'غير معروف';
