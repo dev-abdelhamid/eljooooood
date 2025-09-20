@@ -140,7 +140,7 @@ export const useOrderNotifications = (
             department: item.department || { _id: 'unknown', name: t('departments.unknown') },
             status: item.status || 'assigned',
             assignedTo: item.assignedTo
-              ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown') }
+              ? { _id: item.assignedTo._id, username: item.assignedTo.username , name: item.assignedTo.name  }
               : undefined,
           }));
 

@@ -353,7 +353,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               _id: itemEventId,
               type: 'info',
               message: t('notifications.task_assigned_to_chef', {
-                chefName: item.assignedTo.username || t('chefs.unknown'),
+                chefName: item.assignedTo.name || t('chefs.unknown'),
                 productName: item.productName,
                 quantity: item.quantity,
                 orderNumber: data.orderNumber,
