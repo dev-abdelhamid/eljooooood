@@ -13,7 +13,7 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   return window.btoa(binary);
 };
 
-// Loading Alexandria font
+// Loading custom font (Alexandria)
 const loadFont = async (doc: jsPDF, fontName: string, fontUrl: string): Promise<boolean> => {
   try {
     const fontBytes = await fetch(fontUrl).then(res => {
@@ -33,12 +33,12 @@ const loadFont = async (doc: jsPDF, fontName: string, fontUrl: string): Promise<
 
 // Generating PDF header
 const generatePDFHeader = (doc: jsPDF, isRtl: boolean, title: string) => {
-  doc.setFontSize(16);
+  doc.setFontSize(18);
   doc.setTextColor(33, 33, 33);
   doc.text(title, isRtl ? doc.internal.pageSize.width - 20 : 20, 15, {
     align: isRtl ? 'right' : 'left',
   });
-  doc.setFontSize(10);
+  doc.setFontSize(12);
   doc.setTextColor(100, 100, 100);
   doc.text(isRtl ? 'تقرير طلبات الإنتاج' : 'Production Orders Report', isRtl ? doc.internal.pageSize.width - 20 : 20, 25, {
     align: isRtl ? 'right' : 'left',
@@ -69,35 +69,34 @@ const generatePDFTable = (
     headStyles: {
       fillColor: [34, 34, 34],
       textColor: [255, 255, 255],
+      fontSize: 10,
+      halign: isRtl ? 'right' : 'left',
+      font: fontLoaded ? fontName : 'helvetica',
+      cellPadding: 3,
+    },
+    bodyStyles: {
       fontSize: 9,
       halign: isRtl ? 'right' : 'left',
       font: fontLoaded ? fontName : 'helvetica',
-      cellPadding: 2,
-    },
-    bodyStyles: {
-      fontSize: 8,
-      halign: isRtl ? 'right' : 'left',
-      font: fontLoaded ? fontName : 'helvetica',
-      cellPadding: 2,
+      cellPadding: 3,
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
     },
     columnStyles: {
-      0: { cellWidth: 25 },
-      1: { cellWidth: 25 },
-      2: { cellWidth: 20 },
-      3: { cellWidth: 70 },
-      4: { cellWidth: 25 },
-      5: { cellWidth: 20 },
-      6: { cellWidth: 25 },
+      0: { cellWidth: 30 },
+      1: { cellWidth: 30 },
+      2: { cellWidth: 25 },
+      3: { cellWidth: 80 },
+      4: { cellWidth: 30 },
+      5: { cellWidth: 25 },
+      6: { cellWidth: 30 },
     },
     styles: {
       overflow: 'linebreak',
       cellWidth: 'wrap',
-      font: fontLoaded ? fontName : 'helvetica',
     },
     didParseCell: (data) => {
-      if (data.section === 'head' || data.section === 'body') {
+      if (data.section === 'head') {
         data.cell.styles.halign = isRtl ? 'right' : 'left';
       }
     },
@@ -117,6 +116,7 @@ export const exportToPDF = async (
     doc.setLanguage(isRtl ? 'ar' : 'en');
     const fontName = 'Alexandria';
     const fontLoaded = await loadFont(doc, fontName, '/fonts/Alexandria-Regular.ttf');
+
     generatePDFHeader(doc, isRtl, isRtl ? 'تقرير الطلبات' : 'Orders Report');
 
     const headers = [
@@ -130,19 +130,20 @@ export const exportToPDF = async (
     ];
 
     const data = orders.map(order => {
-      const productsStr = order.items.map(i => `${i.productName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join('، ');
+      const productsStr = order.items.map(i => `${i.productName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ');
       return [
         order.orderNumber,
         order.branchName,
         isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status,
         productsStr,
-        calculateAdjustedTotal(order).replace(/[0-9]/g, (d) => String.fromCharCode(0x0660 + parseInt(d))),
-        `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`.replace(/[0-9]/g, (d) => String.fromCharCode(0x0660 + parseInt(d))),
-        order.date.replace(/[0-9]/g, (d) => String.fromCharCode(0x0660 + parseInt(d))),
+        calculateAdjustedTotal(order),
+        `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
+        order.date,
       ];
     });
 
     generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName, calculateAdjustedTotal, calculateTotalQuantity, translateUnit);
+
     doc.save('Orders.pdf');
     toast.success(isRtl ? 'تم تصدير PDF بنجاح' : 'PDF export successful', {
       position: isRtl ? 'top-left' : 'top-right',
