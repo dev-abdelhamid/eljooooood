@@ -185,8 +185,8 @@ export const useOrderNotifications = (
           roles: ['admin', 'branch'],
         },
       },
-     {
-  name: 'taskAssigned',
+      {
+     name: 'taskAssigned',
   handler: (notification: any) => {
     console.log(`[${new Date().toISOString()}] taskAssigned - Received data:`, JSON.stringify(notification, null, 2));
     const data: SocketEventData = notification.data || notification;
@@ -642,28 +642,18 @@ export const useOrderNotifications = (
           roles: ['admin', 'production'],
         },
       },
-     {
-  name: 'connect',
-  handler: () => {
-    dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
-    dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
-    console.log(`[${new Date().toISOString()}] Socket connected`);
-    // إعادة جلب المهام عند إعادة الاتصال
-    if (stateRef.current.chefId) {
-      dispatch({ type: 'SET_PAGE', payload: 1 });
-      // Define a simple cache Map if not already available
-      const cache = (window as any).orderCache || new Map();
-      cache.delete(`${stateRef.current.chefId}-${stateRef.current.page}-${stateRef.current.filter.status}-${stateRef.current.filter.search}`);
-      (window as any).orderCache = cache;
-      // استدعاء fetchTasks مباشرة (يفترض أن يتم استيراده أو تمريره كمعامل)
-      // fetchTasks(true);
-    }
-  },
-  config: {
-    type: 'SET_SOCKET_CONNECTED',
-    roles: ['admin', 'branch', 'production', 'chef'],
-  },
-},
+      {
+        name: 'connect',
+        handler: () => {
+          dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
+          dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
+          console.log(`[${new Date().toISOString()}] Socket connected`);
+        },
+        config: {
+          type: 'SET_SOCKET_CONNECTED',
+          roles: ['admin', 'branch', 'production', 'chef'],
+        },
+      },
       {
         name: 'disconnect',
         handler: () => {
