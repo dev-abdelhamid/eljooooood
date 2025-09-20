@@ -732,23 +732,26 @@ export const Orders: React.FC = () => {
       isRtl ? 'رقم الطلب' : 'Order Number',
       isRtl ? 'الفرع' : 'Branch',
       isRtl ? 'الحالة' : 'Status',
-      isRtl ? 'الأولوية' : 'Priority',
+      isRtl ? 'المنتجات' : 'Products',
       isRtl ? 'إجمالي المبلغ' : 'Total Amount',
       isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
       isRtl ? 'التاريخ' : 'Date',
     ];
-    const data = state.orders.map(order => ({
-      [headers[0]]: order.orderNumber,
-      [headers[1]]: order.branchName,
-      [headers[2]]: isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status,
-      [headers[3]]: isRtl ? {urgent: 'عاجل', high: 'مرتفع', medium: 'متوسط', low: 'منخفض'}[order.priority] : order.priority,
-      [headers[4]]: calculateAdjustedTotal(order),
-      [headers[5]]: `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
-      [headers[6]]: order.date,
-    }));
+    const data = state.orders.map(order => {
+      const productsStr = order.items.map(i => `${i.productName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ');
+      return {
+        [headers[0]]: order.orderNumber,
+        [headers[1]]: order.branchName,
+        [headers[2]]: isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status,
+        [headers[3]]: productsStr,
+        [headers[4]]: calculateAdjustedTotal(order),
+        [headers[5]]: `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
+        [headers[6]]: order.date,
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(isRtl ? data.map(row => Object.fromEntries(Object.entries(row).reverse())) : data, { header: headers });
     if (isRtl) ws['!views'] = [{ RTL: true }];
-    ws['!cols'] = headers.map((_, i) => ({ wch: i === 2 ? 40 : 20 }));
+    ws['!cols'] = [{ wch: 20 }, { wch: 30 }, { wch: 20 }, { wch: 60 }, { wch: 25 }, { wch: 15 }, { wch: 30 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, isRtl ? 'الطلبات' : 'Orders');
     XLSX.writeFile(wb, 'Orders.xlsx');
@@ -764,8 +767,8 @@ export const Orders: React.FC = () => {
       const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
       doc.setLanguage(isRtl ? 'ar' : 'en');
 
-      const fontUrl = '/fonts/Amiri-Regular.ttf';
-      const fontName = 'Amiri';
+      const fontUrl = '/fonts/Alexandria-Regular.ttf';
+      const fontName = 'Alexandria';
       const fontBytes = await fetch(fontUrl).then(res => {
         if (!res.ok) throw new Error('Failed to fetch font');
         return res.arrayBuffer();
@@ -781,27 +784,30 @@ export const Orders: React.FC = () => {
         isRtl ? 'رقم الطلب' : 'Order Number',
         isRtl ? 'الفرع' : 'Branch',
         isRtl ? 'الحالة' : 'Status',
-        isRtl ? 'الأولوية' : 'Priority',
+        isRtl ? 'المنتجات' : 'Products',
         isRtl ? 'إجمالي المبلغ' : 'Total Amount',
         isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
         isRtl ? 'التاريخ' : 'Date',
       ];
-      const data = state.orders.map(order => [
-        order.orderNumber,
-        order.branchName,
-        isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status,
-        isRtl ? {urgent: 'عاجل', high: 'مرتفع', medium: 'متوسط', low: 'منخفض'}[order.priority] : order.priority,
-        calculateAdjustedTotal(order),
-        `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
-        order.date,
-      ]);
+      const data = state.orders.map(order => {
+        const productsStr = order.items.map(i => `${i.productName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ');
+        return [
+          order.orderNumber,
+          order.branchName,
+          isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status,
+          productsStr,
+          calculateAdjustedTotal(order),
+          `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
+          order.date,
+        ];
+      });
 
       autoTable(doc, {
         head: [isRtl ? headers.reverse() : headers],
         body: isRtl ? data.map(row => row.reverse()) : data,
-        theme: 'grid',
+        theme: 'striped',
         headStyles: {
-          fillColor: [255, 193, 7],
+          fillColor: [34, 34, 34], // Dark gray for luxury feel
           textColor: 255,
           fontSize: 10,
           halign: isRtl ? 'right' : 'left',
@@ -815,11 +821,14 @@ export const Orders: React.FC = () => {
           cellPadding: 2,
           textColor: [33, 33, 33],
         },
+        alternateRowStyles: {
+          fillColor: [245, 245, 245],
+        },
         columnStyles: {
           0: { cellWidth: 25 },
           1: { cellWidth: 30 },
           2: { cellWidth: 20 },
-          3: { cellWidth: 20 },
+          3: { cellWidth: 60 },
           4: { cellWidth: 25 },
           5: { cellWidth: 15 },
           6: { cellWidth: 30 },
@@ -1123,7 +1132,7 @@ export const Orders: React.FC = () => {
                   <Search className={`w-4 h-4 text-gray-500 absolute top-2.5 ${isRtl ? 'right-3' : 'left-3'}`} />
                   <Input
                     value={state.searchQuery}
-                    onChange={(e) => handleSearchChange(e.target.value)}
+                    onChange={(e) => handleSearchChange(e?.target?.value || '')}
                     placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
                     className={`w-full ${isRtl ? 'pr-10' : 'pl-10'} rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm`}
                   />

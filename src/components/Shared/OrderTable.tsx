@@ -106,9 +106,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">
                 {isRtl ? 'الحالة' : 'Status'}
               </th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">
-                {isRtl ? 'الأولوية' : 'Priority'}
-              </th>
+             
               <th className="px-2 py-2 font-medium text-gray-600  tracking-wider text-center ">
                 {isRtl ? 'المنتجات' : 'Products'}
               </th>
@@ -152,11 +150,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                           : statusInfo.label}
                       </span>
                     </td>
-                    <td className="px-2 py-2 text-center whitespace-nowrap">
-                      <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${PRIORITY_COLORS[order.priority]}`}>
-                        {isRtl ? { urgent: 'عاجل', high: 'مرتفع', medium: 'متوسط', low: 'منخفض' }[order.priority] : order.priority}
-                      </span>
-                    </td>
+                  
                     <td className="px-2 py-2 text-gray-600 text-center">
                       {formatProducts(order)}
                     </td>
