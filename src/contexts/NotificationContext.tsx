@@ -23,6 +23,7 @@ interface Notification {
     taskId?: string;
     eventId?: string;
     returnId?: string;
+    itemId?: string;
   };
   read: boolean;
   createdAt: string;
@@ -107,6 +108,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               chefId: n.data?.chefId,
               taskId: n.data?.taskId,
               eventId: n.data?.eventId,
+              itemId: n.data?.itemId,
             },
             read: n.read,
             createdAt: n.createdAt,
