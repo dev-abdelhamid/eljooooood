@@ -107,7 +107,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                 </span>
               </motion.div>
             )}
-            <div className="grid grid-cols-4 sm:grid-cols-2 gap-2">
+            <div className="grid  grid-cols-2 sm:grid-cols-4 gap-2">
               <div>
                 <p className="text-xs text-gray-500">{isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}</p>
                 <p className="text-xs font-medium text-gray-800">
