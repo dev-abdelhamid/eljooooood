@@ -31,7 +31,7 @@ interface ChefTask {
   branchId?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   department?: { _id: string; name: string };
-  assignedTo?: { _id: string; username: string };
+  assignedTo?: { _id: string};
 }
 
 interface State {
@@ -264,7 +264,7 @@ export function ChefTasks() {
             branchId: task.order?.branch?._id || 'unknown',
             priority: task.order?.priority || 'medium',
             department: task.product?.department || { _id: 'unknown', name: t('orders.unknown_department') },
-            assignedTo: task.chef ? { _id: task.chef._id, username: task.chef.username || t('orders.unknown_chef') } : undefined,
+            assignedTo: task.chef ? { _id: task.chef._id } : undefined,
           }));
         cache.set(cacheKey, { data: mappedTasks, timestamp: Date.now() });
         dispatch({ type: 'SET_TASKS', payload: { tasks: mappedTasks, totalPages: Math.ceil(response.length / tasksPerPage) || 1 } });
