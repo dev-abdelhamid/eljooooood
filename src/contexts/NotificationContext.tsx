@@ -23,6 +23,7 @@ interface Notification {
     taskId?: string;
     eventId?: string;
     returnId?: string;
+    itemId?: string;
   };
   read: boolean;
   createdAt: string;
@@ -107,6 +108,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               chefId: n.data?.chefId,
               taskId: n.data?.taskId,
               eventId: n.data?.eventId,
+
             },
             read: n.read,
             createdAt: n.createdAt,
@@ -353,7 +355,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               _id: itemEventId,
               type: 'info',
               message: t('notifications.task_assigned_to_chef', {
-                chefName: item.assignedTo.username || t('chefs.unknown'),
+                chefName: item.assignedTo.username || item.assignedTo.name,
                 productName: item.productName,
                 quantity: item.quantity,
                 orderNumber: data.orderNumber,

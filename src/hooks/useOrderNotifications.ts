@@ -69,6 +69,7 @@ export const useOrderNotifications = (
             })),
             status: newOrder.status || 'pending',
             totalAmount: Number(newOrder.totalAmount) || 0,
+            adjustedTotal: typeof newOrder.adjustedTotal === 'number' ? newOrder.adjustedTotal : Number(newOrder.totalAmount) || 0,
             date: formatDate(newOrder.createdAt || new Date(), t('language')),
             notes: newOrder.notes || '',
             priority: newOrder.priority || 'medium',
