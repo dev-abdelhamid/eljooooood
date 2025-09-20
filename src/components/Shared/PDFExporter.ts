@@ -2,8 +2,22 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
 import { Order } from '../../types/types';
-import { getBidiText } from 'bidi-js';
 import { formatDate } from '../../utils/formatDate';
+
+// دالة لعكس النصوص العربية يدويًا مع الحفاظ على التنسيق
+const reverseArabicText = (text: string): string => {
+  // تحقق مما إذا كان النص يحتوي على حروف عربية
+  const arabicRegex = /[\u0600-\u06FF]/;
+  if (arabicRegex.test(text)) {
+    // عكس النص مع الحفاظ على الأرقام والرموز
+    return text
+      .split(/(\s+)/)
+      .map(segment => (arabicRegex.test(segment) ? segment.split('').reverse().join('') : segment))
+      .reverse()
+      .join('');
+  }
+  return text;
+};
 
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   let binary = '';
@@ -35,11 +49,11 @@ const loadFont = async (doc: jsPDF, fontName: string, fontUrl: string): Promise<
 const generatePDFHeader = (doc: jsPDF, isRtl: boolean, title: string) => {
   doc.setFontSize(18);
   doc.setTextColor(33, 33, 33);
-  const bidiTitle = isRtl ? getBidiText(title) : title;
-  doc.text(bidiTitle, isRtl ? doc.internal.pageSize.width - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
+  const processedTitle = isRtl ? reverseArabicText(title) : title;
+  doc.text(processedTitle, isRtl ? doc.internal.pageSize.width - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
   doc.setFontSize(12);
   doc.setTextColor(100, 100, 100);
-  const subtitle = isRtl ? getBidiText('تقرير طلبات الإنتاج') : 'Production Orders Report';
+  const subtitle = isRtl ? reverseArabicText('تقرير طلبات الإنتاج') : 'Production Orders Report';
   doc.text(subtitle, isRtl ? doc.internal.pageSize.width - 20 : 20, 25, { align: isRtl ? 'right' : 'left' });
   doc.setLineWidth(0.5);
   doc.setDrawColor(200, 200, 200);
@@ -58,8 +72,8 @@ const generatePDFTable = (
   translateUnit: (unit: string, isRtl: boolean) => string
 ) => {
   autoTable(doc, {
-    head: [isRtl ? headers.map(h => getBidiText(h)).reverse() : headers],
-    body: data.map(row => isRtl ? row.map((cell: string) => typeof cell === 'string' ? getBidiText(cell) : cell).reverse() : row),
+    head: [isRtl ? headers.map(h => reverseArabicText(h)).reverse() : headers],
+    body: data.map(row => isRtl ? row.map((cell: string) => typeof cell === 'string' ? reverseArabicText(cell) : cell).reverse() : row),
     theme: 'grid',
     startY: 35,
     margin: { left: 20, right: 20 },
