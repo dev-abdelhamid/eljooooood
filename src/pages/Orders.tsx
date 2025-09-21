@@ -249,6 +249,13 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
 
+// Converts Western digits to Arabic-Indic numerals
+function toArabicNumerals(num: number | string): string {
+  return num
+    .toString()
+    .replace(/\d/g, (d) => String.fromCharCode(0x0660 + Number(d)));
+}
+
 export const Orders: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
@@ -280,7 +287,8 @@ export const Orders: React.FC = () => {
           }, 0);
           return sum + returnTotal;
         }, 0);
-      return (order.adjustedTotal || order.totalAmount - approvedReturnsTotal).toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
+      const adjusted = (order.adjustedTotal || order.totalAmount || 0) - approvedReturnsTotal;
+      return adjusted.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
         style: 'currency',
         currency: 'SAR',
         minimumFractionDigits: 2,
@@ -444,8 +452,8 @@ export const Orders: React.FC = () => {
         return;
       }
       dispatch({ type: 'SET_LOADING', payload: true });
-      const cacheKey = `${user.id}-${state.filterStatus}-${state.filterBranch}-${state.currentPage}-${state.viewMode}-${state.searchQuery}`;
-      if (cacheRef.current.has(cacheKey)) {
+      const cacheKey = `${user.id}-${state.filterStatus}-${state.filterBranch}-${state.currentPage}-${state.viewMode}`;
+      if (cacheRef.current.has(cacheKey) ) {
         dispatch({ type: 'SET_ORDERS', payload: cacheRef.current.get(cacheKey)! });
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
@@ -459,7 +467,6 @@ export const Orders: React.FC = () => {
         };
         if (state.filterStatus) query.status = state.filterStatus;
         if (state.filterBranch) query.branch = state.filterBranch;
-        if (state.searchQuery.trim()) query.search = state.searchQuery.trim();
         if (user.role === 'production' && user.department) query.department = user.department._id;
         const [ordersResponse, chefsResponse, branchesResponse] = await Promise.all([
           ordersAPI.getAll(query),
@@ -571,7 +578,7 @@ export const Orders: React.FC = () => {
         dispatch({ type: 'SET_LOADING', payload: false });
       }
     },
-    [user, state.filterStatus, state.filterBranch, state.currentPage, state.viewMode, state.searchQuery, state.sortBy, state.sortOrder, isRtl, language]
+    [user, state.filterStatus, state.filterBranch, state.currentPage, state.viewMode, state.sortBy, state.sortOrder, isRtl, language]
   );
 
   const exportToExcel = useCallback(() => {
@@ -658,6 +665,11 @@ export const Orders: React.FC = () => {
   const paginatedOrders = useMemo(
     () => sortedOrders.slice((state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode], state.currentPage * ORDERS_PER_PAGE[state.viewMode]),
     [sortedOrders, state.currentPage, state.viewMode]
+  );
+
+  const totalPages = useMemo(
+    () => Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode]),
+    [sortedOrders, state.viewMode]
   );
 
   const updateOrderStatus = useCallback(
@@ -808,69 +820,72 @@ export const Orders: React.FC = () => {
   }, [fetchData]);
 
   return (
-    <div className="px-2 py-4 min-h-screen bg-gray-50">
+    <div className="px-4 py-6 min-h-screen bg-gray-50">
       <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-6">
-          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-800 flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
                 <ShoppingCart className="w-6 h-6 text-amber-600" />
                 {isRtl ? 'الطلبات' : 'Orders'}
               </h1>
-              <p className="text-xs text-gray-500 mt-1">{isRtl ? 'إدارة طلبات الإنتاج' : 'Manage production orders'}</p>
+              <p className="text-sm text-gray-500 mt-1">{isRtl ? 'إدارة طلبات الإنتاج' : 'Manage production orders'}</p>
             </div>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-3 flex-wrap">
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
                 onClick={state.orders.length > 0 ? exportToExcel : undefined}
                 className={`flex items-center gap-1.5 ${
                   state.orders.length > 0 ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-md px-3 py-1.5 text-xs shadow-sm`}
+                } rounded-lg px-4 py-2 text-sm shadow-md transition-colors duration-200`}
                 disabled={state.orders.length === 0}
                 aria-label={isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
               >
-                <Download className="w-4 h-4" />
+                <Download className="w-5 h-5" />
                 {isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
               </Button>
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
-                onClick={state.orders.length > 0 ? () => exportToPDF(state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit) : undefined}
+                onClick={state.orders.length > 0 ? () => {
+                  const filterBranchName = state.branches.find(b => b._id === state.filterBranch)?.name || '';
+                  exportToPDF(state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, state.filterStatus, filterBranchName);
+                } : undefined}
                 className={`flex items-center gap-1.5 ${
                   state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-md px-3 py-1.5 text-xs shadow-sm`}
+                } rounded-lg px-4 py-2 text-sm shadow-md transition-colors duration-200`}
                 disabled={state.orders.length === 0}
                 aria-label={isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
               >
-                <Download className="w-4 h-4" />
+                <Download className="w-5 h-5" />
                 {isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
               </Button>
               <Button
                 variant="secondary"
                 onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' })}
-                className="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md px-3 py-1.5 text-xs shadow-sm"
+                className="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-4 py-2 text-sm shadow-md transition-colors duration-200"
                 aria-label={state.viewMode === 'card' ? (isRtl ? 'عرض كجدول' : 'View as Table') : (isRtl ? 'عرض كبطاقات' : 'View as Cards')}
               >
-                {state.viewMode === 'card' ? <Table2 className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
+                {state.viewMode === 'card' ? <Table2 className="w-5 h-5" /> : <Grid className="w-5 h-5" />}
                 {state.viewMode === 'card' ? (isRtl ? 'عرض كجدول' : 'View as Table') : (isRtl ? 'عرض كبطاقات' : 'View as Cards')}
               </Button>
             </div>
           </div>
-          <Card className="p-3 sm:p-4 mt-4 bg-white shadow-md rounded-md border border-gray-100">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <Card className="p-4 mt-6 bg-white shadow-lg rounded-lg border border-gray-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
                 <div className="relative">
-                  <Search className={`w-4 h-4 text-gray-500 absolute top-2.5 ${isRtl ? 'right-3' : 'left-3'}`} />
+                  <Search className={`w-5 h-5 text-gray-500 absolute top-2.5 ${isRtl ? 'right-3' : 'left-3'}`} />
                   <Input
                     value={state.searchQuery}
                     onChange={(e) => handleSearchChange(e?.target?.value || '')}
                     placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
-                    className={`w-full ${isRtl ? 'pr-10' : 'pl-10'} rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm`}
+                    className={`w-full ${isRtl ? 'pr-10' : 'pl-10'} rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200`}
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
                 <Select
                   options={statusOptions.map(opt => ({
                     value: opt.value,
@@ -878,20 +893,20 @@ export const Orders: React.FC = () => {
                   }))}
                   value={state.filterStatus}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
-                  className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
+                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الفرع' : 'Filter by Branch'}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الفرع' : 'Filter by Branch'}</label>
                 <Select
                   options={[{ value: '', label: isRtl ? 'جميع الفروع' : 'All Branches' }, ...state.branches.map(b => ({ value: b._id, label: b.name }))]}
                   value={state.filterBranch}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_BRANCH', payload: value })}
-                  className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
+                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
                 <Select
                   options={sortOptions.map(opt => ({
                     value: opt.value,
@@ -899,34 +914,36 @@ export const Orders: React.FC = () => {
                   }))}
                   value={state.sortBy}
                   onChange={(value) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
-                  className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
+                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
                 />
               </div>
             </div>
-            <div className="text-xs text-center text-gray-500 mt-3">
-              {isRtl ? `عدد الطلبات: ${filteredOrders.length}` : `Orders count: ${filteredOrders.length}`}
+            <div className="text-sm text-center text-gray-500 mt-4">
+              {isRtl ? `عدد الطلبات: ${toArabicNumerals(filteredOrders.length)}` : `Orders count: ${filteredOrders.length}`}
             </div>
           </Card>
-          <div ref={listRef}>
+          <div ref={listRef} className="mt-6 min-h-[500px]">
             {state.loading ? (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-3 mt-4">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-4">
                 {state.viewMode === 'card' ? (
-                  Array(6).fill(null).map((_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)
+                  <div className="grid grid-cols-1 gap-4">
+                    {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)}
+                  </div>
                 ) : (
                   <OrderTableSkeleton isRtl={isRtl} />
                 )}
               </motion.div>
             ) : state.error ? (
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="mt-4">
-                <Card className="p-4 max-w-md mx-auto text-center bg-red-50 shadow-md rounded-md border border-red-100">
+              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="mt-6">
+                <Card className="p-6 max-w-md mx-auto text-center bg-red-50 shadow-lg rounded-lg border border-red-100">
                   <div className={`flex items-center justify-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                    <AlertCircle className="w-5 h-5 text-red-600" />
+                    <AlertCircle className="w-6 h-6 text-red-600" />
                     <p className="text-sm font-medium text-red-600">{state.error}</p>
                   </div>
                   <Button
                     variant="primary"
                     onClick={() => fetchData()}
-                    className="mt-3 bg-amber-500 hover:bg-amber-600 text-white rounded-md px-4 py-1.5 text-xs shadow-sm"
+                    className="mt-4 bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-4 py-2 text-sm shadow-md transition-colors duration-200"
                     aria-label={isRtl ? 'إعادة المحاولة' : 'Retry'}
                   >
                     {isRtl ? 'إعادة المحاولة' : 'Retry'}
@@ -934,62 +951,62 @@ export const Orders: React.FC = () => {
                 </Card>
               </motion.div>
             ) : (
-              <AnimatePresence>
+              <AnimatePresence mode="wait">
                 {paginatedOrders.length === 0 ? (
-                  <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-4">
-                    <Card className="p-6 sm:p-8 text-center bg-white shadow-md rounded-md border border-gray-100">
-                      <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-                      <h3 className="text-sm font-medium text-gray-800 mb-2">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
-                      <p className="text-xs text-gray-500">
+                  <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-6">
+                    <Card className="p-8 text-center bg-white shadow-lg rounded-lg border border-gray-100">
+                      <ShoppingCart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-800 mb-2">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
+                      <p className="text-sm text-gray-500">
                         {state.filterStatus || state.filterBranch || state.searchQuery
                           ? isRtl ? 'لا توجد طلبات مطابقة' : 'No matching orders'
                           : isRtl ? 'لا توجد طلبات بعد' : 'No orders yet'}
                       </p>
                     </Card>
                   </motion.div>
-                ) : state.viewMode === 'table' ? (
-                  <motion.div key="table-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-4">
-                    <OrderTable
-                      orders={paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber)}
-                      isRtl={isRtl}
-                      t={t}
-                      calculateAdjustedTotal={calculateAdjustedTotal}
-                      calculateTotalQuantity={calculateTotalQuantity}
-                      translateUnit={translateUnit}
-                      updateOrderStatus={updateOrderStatus}
-                      openAssignModal={openAssignModal}
-                      startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
-                      user={user}
-                      submitting={state.submitting}
-                      onNavigateToDetails={handleNavigateToDetails}
-                    />
-                  </motion.div>
                 ) : (
-                  <motion.div key="card-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="space-y-3 mt-4">
-                    {paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber).map(order => (
-                      <OrderCard
-                        key={order.id}
-                        order={order}
+                  <motion.div key="orders-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="space-y-4">
+                    {state.viewMode === 'table' ? (
+                      <OrderTable
+                        orders={paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber)}
                         isRtl={isRtl}
+                        t={t}
                         calculateAdjustedTotal={calculateAdjustedTotal}
                         calculateTotalQuantity={calculateTotalQuantity}
                         translateUnit={translateUnit}
                         updateOrderStatus={updateOrderStatus}
                         openAssignModal={openAssignModal}
+                        startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
+                        user={user}
                         submitting={state.submitting}
                         onNavigateToDetails={handleNavigateToDetails}
                       />
-                    ))}
-                  </motion.div>
-                )}
-                {paginatedOrders.length > 0 && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="mt-4">
-                    <Pagination
-                      currentPage={state.currentPage}
-                      totalPages={Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode])}
-                      isRtl={isRtl}
-                      handlePageChange={handlePageChange}
-                    />
+                    ) : (
+                      <div className="grid grid-cols-1 gap-4">
+                        {paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber).map(order => (
+                          <OrderCard
+                            key={order.id}
+                            order={order}
+                            isRtl={isRtl}
+                            calculateAdjustedTotal={calculateAdjustedTotal}
+                            calculateTotalQuantity={calculateTotalQuantity}
+                            translateUnit={translateUnit}
+                            updateOrderStatus={updateOrderStatus}
+                            openAssignModal={openAssignModal}
+                            submitting={state.submitting}
+                            onNavigateToDetails={handleNavigateToDetails}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    {totalPages > 1 && (
+                      <Pagination
+                        currentPage={state.currentPage}
+                        totalPages={totalPages}
+                        isRtl={isRtl}
+                        handlePageChange={handlePageChange}
+                      />
+                    )}
                   </motion.div>
                 )}
                 <AssignChefsModal
