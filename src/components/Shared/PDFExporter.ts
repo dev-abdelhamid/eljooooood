@@ -22,7 +22,7 @@ const fromArabicNumerals = (str: string): string => {
 const formatPrice = (amount: number | undefined, isRtl: boolean): string => {
   const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
   // Ensure the number is formatted correctly without extra zeros
-  const formatted = Number(validAmount).toFixed(2).replace('.', ','); // Fixed: Use Number() to avoid extra zeros
+  const formatted = Number(validAmount); // Fixed: Use Number() to avoid extra zeros
   const arabicNumber = isRtl ? toArabicNumerals(formatted) : formatted;
   return isRtl ? `${arabicNumber} ر.س` : `${formatted} SAR`;
 };
