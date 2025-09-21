@@ -13,7 +13,7 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   return window.btoa(binary);
 };
 
-// FIXED: Add function to convert Arabic numerals to Latin for parsing
+// Convert Arabic numerals to Latin for parsing
 const fromArabicNumerals = (str: string): string => {
   const arabicMap: { [key: string]: string } = {
     '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
@@ -22,13 +22,13 @@ const fromArabicNumerals = (str: string): string => {
   return str.replace(/[٠-٩]/g, (digit) => arabicMap[digit] || digit);
 };
 
-// FIXED: Add function to convert Latin numerals to Arabic
+// Convert Latin numerals to Arabic for display (except orderNumber)
 const toArabicNumerals = (number: string | number): string => {
   const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
   return String(number).replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
 };
 
-// FIXED: Add formatPrice to handle price formatting
+// Format price with proper currency and Arabic numerals
 const formatPrice = (amount: number | undefined, isRtl: boolean): string => {
   const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
   const formatted = validAmount.toFixed(2).replace('.', ',');
@@ -106,13 +106,13 @@ const generatePDFTable = (
       lineColor: [200, 200, 200],
     },
     columnStyles: {
-      0: { cellWidth: 30 },
-      1: { cellWidth: 30 },
-      2: { cellWidth: 25 },
-      3: { cellWidth: 80 },
-      4: { cellWidth: 30, fontStyle: 'bold' }, // FIXED: Bold for Total Amount
-      5: { cellWidth: 25 },
-      6: { cellWidth: 30 },
+      0: { cellWidth: 30 }, // Order Number
+      1: { cellWidth: 30 }, // Branch
+      2: { cellWidth: 25 }, // Status
+      3: { cellWidth: 80 }, // Products
+      4: { cellWidth: 30, fontStyle: 'bold' }, // Total Amount (bold)
+      5: { cellWidth: 25 }, // Total Quantity
+      6: { cellWidth: 30 }, // Date
     },
     styles: {
       overflow: 'linebreak',
@@ -122,7 +122,7 @@ const generatePDFTable = (
       data.cell.styles.halign = isRtl ? 'right' : 'left';
       if (data.column.index === (isRtl ? headers.length - 5 : 4)) { // Total Amount column
         if (!data.cell.text[0] || data.cell.text[0].includes('NaN')) {
-          data.cell.text[0] = formatPrice(0, isRtl); // FIXED: Use formatPrice for consistency
+          data.cell.text[0] = formatPrice(0, isRtl);
         }
         data.cell.styles.fontStyle = 'bold'; // Ensure bold for price
       }
@@ -163,13 +163,13 @@ export const exportToPDF = async (
     ];
 
     const data = orders.map(order => {
-      // FIXED: Use productNameEn if available and isRtl
+      // Use productNameEn if available and isRtl
       const productsStr = order.items.map(i => {
         const name = isRtl && i.productNameEn ? i.productNameEn : i.productName;
         const quantity = isRtl ? toArabicNumerals(i.quantity) : i.quantity;
         return `${name} (${quantity} ${translateUnit(i.unit, isRtl)})`;
       }).join(', ');
-      // FIXED: Parse calculateAdjustedTotal correctly
+      // Parse calculateAdjustedTotal correctly
       const totalAmountStr = calculateAdjustedTotal(order);
       let formattedTotalAmount: string;
       if (totalAmountStr.includes('NaN')) {
@@ -181,7 +181,7 @@ export const exportToPDF = async (
         formattedTotalAmount = isNaN(parsedAmount) ? formatPrice(0, isRtl) : formatPrice(parsedAmount, isRtl);
       }
       return [
-        isRtl ? toArabicNumerals(order.orderNumber) : order.orderNumber,
+        order.orderNumber, // Always use Latin numerals for orderNumber
         order.branchName,
         isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status,
         productsStr,

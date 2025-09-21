@@ -186,65 +186,65 @@ export const useOrderNotifications = (
         },
       },
       {
-        name: 'taskAssigned',
-        handler: (notification: any) => {
-          console.log(`[${new Date().toISOString()}] taskAssigned - Received data:`, JSON.stringify(notification, null, 2));
-          const data: SocketEventData = notification.data || notification;
+     name: 'taskAssigned',
+  handler: (notification: any) => {
+    console.log(`[${new Date().toISOString()}] taskAssigned - Received data:`, JSON.stringify(notification, null, 2));
+    const data: SocketEventData = notification.data || notification;
 
-          if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName) {
-            console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, data);
-            return;
-          }
-          if (!['admin', 'production', 'chef'].includes(user.role)) return;
-          if (user.role === 'chef' && !data.items.some((item: any) => item.assignedTo?._id === user._id)) return;
+    if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName) {
+      console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, data);
+      return;
+    }
+    if (!['admin', 'production', 'chef'].includes(user.role)) return;
+    if (user.role === 'chef' && !data.items.some((item: any) => item.assignedTo?._id === user._id)) return;
 
-          const mappedItems = data.items
-            .filter((item: any) => item._id && item.product?.name && item.assignedTo?._id)
-            .map((item: any) => ({
-              _id: item._id || item.itemId || crypto.randomUUID(),
-              itemId: item._id || item.itemId || crypto.randomUUID(),
-              productId: item.product?._id || item.productId || 'unknown',
-              productName: item.product?.name || item.productName || t('products.unknown'),
-              quantity: Number(item.quantity) || 1,
-              unit: translateUnit(item.unit || item.product?.unit),
-              department: item.department || item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
-              status: item.status || 'pending',
-              assignedTo: item.assignedTo
-                ? { _id: item.assignedTo._id, username: item.assignedTo.username || item.assignedTo.name || t('chefs.unknown'), name: item.assignedTo.name }
-                : undefined,
-            }));
+    const mappedItems = data.items
+      .filter((item: any) => item._id && item.product?.name && item.assignedTo?._id) // فحص صارم
+      .map((item: any) => ({
+        _id: item._id || item.itemId || crypto.randomUUID(),
+        itemId: item._id || item.itemId || crypto.randomUUID(),
+        productId: item.product?._id || item.productId || 'unknown',
+        productName: item.product?.name || item.productName || t('products.unknown'),
+        quantity: Number(item.quantity) || 1,
+        unit: translateUnit(item.unit || item.product?.unit),
+        department: item.department || item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
+        status: item.status || 'pending', // تغيير من 'assigned' إلى 'pending' لتتماشى مع حالة المهمة الأولية
+        assignedTo: item.assignedTo
+          ? { _id: item.assignedTo._id, username: item.assignedTo.username || item.assignedTo.name || t('chefs.unknown'), name: item.assignedTo.name }
+          : undefined,
+      }));
 
-          if (mappedItems.length === 0) {
-            console.warn(`[${new Date().toISOString()}] No valid items for taskAssigned:`, data);
-            return;
-          }
+    if (mappedItems.length === 0) {
+      console.warn(`[${new Date().toISOString()}] No valid items for taskAssigned:`, data);
+      return;
+    }
 
-          dispatch({ type: 'TASK_ASSIGNED', payload: { orderId: data.orderId, items: mappedItems, orderNumber: data.orderNumber, branchName: data.branchName } });
-          mappedItems.forEach((item: any) => {
-            addNotification({
-              _id: `${data.eventId || crypto.randomUUID()}-${item.itemId}`,
-              type: 'info',
-              message: t('notifications.task_assigned_to_chef', {
-                chefName: item.assignedTo?.name || item.assignedTo?.username || t('chefs.unknown'),
-                productName: item.productName || t('products.unknown'),
-                quantity: item.quantity,
-                unit: item.unit,
-                orderNumber: data.orderNumber,
-                branchName: data.branchName || t('branches.unknown'),
-              }),
-              data: { orderId: data.orderId, itemId: item.itemId, eventId: data.eventId },
-              read: false,
-              createdAt: new Date().toISOString(),
-              sound: '/sounds/notification.mp3',
-              vibrate: [400, 100, 400],
-            });
-          });
-        },
-        config: {
-          type: 'TASK_ASSIGNED',
-          roles: ['admin', 'production', 'chef'], // استبعد 'branch'
-        },
-      },
+    dispatch({ type: 'TASK_ASSIGNED', payload: { orderId: data.orderId, items: mappedItems, orderNumber: data.orderNumber, branchName: data.branchName } });
+    mappedItems.forEach((item: any) => {
+      addNotification({
+        _id: `${data.eventId || crypto.randomUUID()}-${item.itemId}`,
+        type: 'info',
+        message: t('notifications.task_assigned_to_chef', {
+          chefName: item.assignedTo?.name || item.assignedTo?.username || t('chefs.unknown'),
+          productName: item.productName || t('products.unknown'),
+          quantity: item.quantity,
+          unit: item.unit,
+          orderNumber: data.orderNumber,
+          branchName: data.branchName || t('branches.unknown'),
+        }),
+        data: { orderId: data.orderId, itemId: item.itemId, eventId: data.eventId },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: '/sounds/notification.mp3',
+        vibrate: [400, 100, 400],
+      });
+    });
+  },
+  config: {
+    type: 'TASK_ASSIGNED',
+    roles: ['admin', 'production', 'chef'],
+  },
+},
       {
         name: 'itemStatusUpdated',
         handler: async (data: SocketEventData) => {
@@ -639,7 +639,7 @@ export const useOrderNotifications = (
         },
         config: {
           type: 'MISSING_ASSIGNMENTS',
-          roles: ['admin', 'production'], // استبعد 'branch'
+          roles: ['admin', 'production'],
         },
       },
       {
