@@ -5,8 +5,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   optimizeDeps: {
-        include: ['bidi-js', 'jspdf', 'jspdf-autotable'], // تأكد من تضمين bidi-js
-
+    
     exclude: ['lucide-react'],
   },
 });
