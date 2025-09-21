@@ -118,23 +118,18 @@ export const authAPI = {
 };
 
 export const branchesAPI = {
-  getAll: async (params: { isRtl?: string } = {}) => {
-    const response = await api.get('/branches', { params });
+  getAll: async () => {
+    const response = await api.get('/branches');
     console.log(`Branches getAll response at ${new Date().toISOString()}:`, response);
-    return Array.isArray(response) ? response : response.data || [];
+    return response;
   },
   getById: async (id: string) => {
-    if (!/^[0-9a-fA-F]{24}$/.test(id)) {
-      console.error(`branchesAPI.getById - Invalid branch ID at ${new Date().toISOString()}:`, id);
-      throw new Error('Invalid branch ID');
-    }
     const response = await api.get(`/branches/${id}`);
     console.log(`Branches getById response at ${new Date().toISOString()}:`, response);
     return response;
   },
   create: async (branchData: {
     name: string;
-    nameEn?: string;
     code: string;
     address: string;
     city: string;
@@ -145,7 +140,6 @@ export const branchesAPI = {
   }) => {
     const response = await api.post('/branches', {
       name: branchData.name.trim(),
-      nameEn: branchData.nameEn?.trim(),
       code: branchData.code.trim(),
       address: branchData.address.trim(),
       city: branchData.city.trim(),
@@ -159,19 +153,13 @@ export const branchesAPI = {
   },
   update: async (id: string, branchData: {
     name: string;
-    nameEn?: string;
     code: string;
     address: string;
     city: string;
     phone?: string;
   }) => {
-    if (!/^[0-9a-fA-F]{24}$/.test(id)) {
-      console.error(`branchesAPI.update - Invalid branch ID at ${new Date().toISOString()}:`, id);
-      throw new Error('Invalid branch ID');
-    }
     const response = await api.put(`/branches/${id}`, {
       name: branchData.name.trim(),
-      nameEn: branchData.nameEn?.trim(),
       code: branchData.code.trim(),
       address: branchData.address.trim(),
       city: branchData.city.trim(),
@@ -181,10 +169,6 @@ export const branchesAPI = {
     return response;
   },
   delete: async (id: string) => {
-    if (!/^[0-9a-fA-F]{24}$/.test(id)) {
-      console.error(`branchesAPI.delete - Invalid branch ID at ${new Date().toISOString()}:`, id);
-      throw new Error('Invalid branch ID');
-    }
     const response = await api.delete(`/branches/${id}`);
     console.log(`Branches delete response at ${new Date().toISOString()}:`, response);
     return response;
@@ -192,98 +176,6 @@ export const branchesAPI = {
   checkEmail: async (email: string) => {
     const response = await api.post('/branches/check-email', { email: email.trim() });
     console.log(`Branches checkEmail response at ${new Date().toISOString()}:`, response);
-    return response;
-  },
-  resetPassword: async (branchId: string, data: { password: string }) => {
-    if (!/^[0-9a-fA-F]{24}$/.test(branchId)) {
-      console.error(`branchesAPI.resetPassword - Invalid branch ID at ${new Date().toISOString()}:`, branchId);
-      throw new Error('Invalid branch ID');
-    }
-    const response = await api.post(`/branches/${branchId}/reset-password`, { password: data.password });
-    console.log(`Branches resetPassword response at ${new Date().toISOString()}:`, response);
-    return response;
-  },
-};
-
-export const usersAPI = {
-  getAll: async (params: { isRtl?: string } = {}) => {
-    const response = await api.get('/users', { params });
-    console.log(`Users getAll response at ${new Date().toISOString()}:`, response);
-    return Array.isArray(response) ? response : response.data || [];
-  },
-  create: async (userData: {
-    name: string;
-    nameEn?: string;
-    username: string;
-    email?: string;
-    phone?: string;
-    role: 'admin' | 'branch' | 'chef' | 'production';
-    branch?: string;
-    password: string;
-    isActive?: boolean;
-  }) => {
-    const response = await api.post('/users', {
-      name: userData.name.trim(),
-      nameEn: userData.nameEn?.trim(),
-      username: userData.username.trim(),
-      email: userData.email?.trim(),
-      phone: userData.phone?.trim(),
-      role: userData.role,
-      branch: userData.branch,
-      password: userData.password,
-      isActive: userData.isActive ?? true,
-    });
-    console.log(`Users create response at ${new Date().toISOString()}:`, response);
-    return response;
-  },
-  update: async (id: string, userData: {
-    name: string;
-    nameEn?: string;
-    username: string;
-    email?: string;
-    phone?: string;
-    role: 'admin' | 'branch' | 'chef' | 'production';
-    branch?: string;
-    isActive: boolean;
-  }) => {
-    if (!/^[0-9a-fA-F]{24}$/.test(id)) {
-      console.error(`usersAPI.update - Invalid user ID at ${new Date().toISOString()}:`, id);
-      throw new Error('Invalid user ID');
-    }
-    const response = await api.put(`/users/${id}`, {
-      name: userData.name.trim(),
-      nameEn: userData.nameEn?.trim(),
-      username: userData.username.trim(),
-      email: userData.email?.trim(),
-      phone: userData.phone?.trim(),
-      role: userData.role,
-      branch: userData.branch,
-      isActive: userData.isActive,
-    });
-    console.log(`Users update response at ${new Date().toISOString()}:`, response);
-    return response;
-  },
-  delete: async (id: string) => {
-    if (!/^[0-9a-fA-F]{24}$/.test(id)) {
-      console.error(`usersAPI.delete - Invalid user ID at ${new Date().toISOString()}:`, id);
-      throw new Error('Invalid user ID');
-    }
-    const response = await api.delete(`/users/${id}`);
-    console.log(`Users delete response at ${new Date().toISOString()}:`, response);
-    return response;
-  },
-  checkEmail: async (email: string, userId?: string) => {
-    const response = await api.post('/users/check-email', { email: email.trim(), userId });
-    console.log(`Users checkEmail response at ${new Date().toISOString()}:`, response);
-    return response;
-  },
-  resetPassword: async (userId: string, data: { password: string }) => {
-    if (!/^[0-9a-fA-F]{24}$/.test(userId)) {
-      console.error(`usersAPI.resetPassword - Invalid user ID at ${new Date().toISOString()}:`, userId);
-      throw new Error('Invalid user ID');
-    }
-    const response = await api.post(`/users/${userId}/reset-password`, { password: data.password });
-    console.log(`Users resetPassword response at ${new Date().toISOString()}:`, response);
     return response;
   },
 };
@@ -312,6 +204,7 @@ export const ordersAPI = {
     console.log(`ordersAPI.create - Response at ${new Date().toISOString()}:`, response.data);
     return response.data;
   },
+
   getAll: async (params: { status?: string; branch?: string; page?: number; limit?: number; department?: string; search?: string; sortBy?: string; sortOrder?: 'asc' | 'desc' } = {}) => {
     const response = await axios.get(`${API_BASE_URL}/orders`, { 
       params,
@@ -320,6 +213,7 @@ export const ordersAPI = {
     console.log(`ordersAPI.getAll - Response at ${new Date().toISOString()}:`, response.data);
     return response.data;
   },
+
   getById: async (id: string) => {
     if (!/^[0-9a-fA-F]{24}$/.test(id)) {
       console.error(`ordersAPI.getById - Invalid order ID at ${new Date().toISOString()}:`, id);
@@ -331,6 +225,7 @@ export const ordersAPI = {
     console.log(`ordersAPI.getById - Response at ${new Date().toISOString()}:`, response.data);
     return response.data;
   },
+
   updateStatus: async (id: string, data: { status: string; notes?: string }) => {
     if (!/^[0-9a-fA-F]{24}$/.test(id)) {
       console.error(`ordersAPI.updateStatus - Invalid order ID at ${new Date().toISOString()}:`, id);
@@ -342,6 +237,7 @@ export const ordersAPI = {
     console.log(`ordersAPI.updateStatus - Response at ${new Date().toISOString()}:`, response.data);
     return response.data;
   },
+
   updateChefItem: async (orderId: string, data: { taskId: string; status: string }) => {
     if (!/^[0-9a-fA-F]{24}$/.test(orderId) || !/^[0-9a-fA-F]{24}$/.test(data.taskId)) {
       console.error(`ordersAPI.updateChefItem - Invalid order ID or task ID at ${new Date().toISOString()}:`, { orderId, taskId: data.taskId });
@@ -353,6 +249,7 @@ export const ordersAPI = {
     console.log(`ordersAPI.updateChefItem - Response at ${new Date().toISOString()}:`, response.data);
     return response.data;
   },
+
   assignChef: async (orderId: string, data: { items: Array<{ itemId: string; assignedTo: string }> }) => {
     console.log(`[${new Date().toISOString()}] ordersAPI.assignChef - Sending:`, { orderId, data });
     if (!/^[0-9a-fA-F]{24}$/.test(orderId) || data.items.some(item => !/^[0-9a-fA-F]{24}$/.test(item.itemId) || !/^[0-9a-fA-F]{24}$/.test(item.assignedTo))) {
@@ -368,6 +265,7 @@ export const ordersAPI = {
     console.log(`[${new Date().toISOString()}] ordersAPI.assignChef - Response:`, response.data);
     return response.data;
   },
+
   confirmDelivery: async (orderId: string) => {
     if (!/^[0-9a-fA-F]{24}$/.test(orderId)) {
       console.error(`ordersAPI.confirmDelivery - Invalid order ID at ${new Date().toISOString()}:`, orderId);
@@ -701,7 +599,7 @@ export const inventoryAPI = {
       throw new Error('Stock quantity cannot be negative');
     }
     console.log(`inventoryAPI.updateStock - Sending at ${new Date().toISOString()}:`, { id, data });
-    const response = api.put(`/inventory/${id}`, {
+    const response = await api.put(`/inventory/${id}`, {
       currentStock: data.currentStock,
       minStockLevel: data.minStockLevel,
       maxStockLevel: data.maxStockLevel,
