@@ -919,7 +919,7 @@ export const Orders: React.FC = () => {
               </div>
             </div>
             <div className="text-sm text-center text-gray-500 mt-4">
-              {isRtl ? `عدد الطلبات: ${toArabicNumerals(filteredOrders.length)}` : `Orders count: ${filteredOrders.length}`}
+              {isRtl ? `عدد الطلبات: ${(filteredOrders.length)}` : `Orders count: ${filteredOrders.length}`}
             </div>
           </Card>
           <div ref={listRef} className="mt-6 min-h-[500px]">
