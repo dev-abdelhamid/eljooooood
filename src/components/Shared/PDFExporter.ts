@@ -171,7 +171,7 @@ const generatePDFTable = (
       halign: isRtl ? 'right' : 'left',
       font: fontLoaded ? fontName : 'helvetica',
       cellPadding: 5,
-      textDirection: isRtl ? 'rtl' : 'ltr',
+      textDirection: isRtl ? 'ltr' : 'rtl',
     },
     bodyStyles: {
       fontSize: 9,
@@ -180,7 +180,7 @@ const generatePDFTable = (
       cellPadding: 5,
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
-      textDirection: isRtl ? 'rtl' : 'ltr',
+      textDirection: isRtl ? 'ltr' : 'rtl',
       fillColor: [255, 245, 195],
     },
     alternateRowStyles: {
@@ -198,10 +198,10 @@ const generatePDFTable = (
     styles: {
       overflow: 'linebreak',
       cellWidth: 'wrap',
-      minCellHeight: 15,
+      minCellHeight: 12,
     },
     didParseCell: (data) => {
-      data.cell.styles.halign = isRtl ? 'right' : 'left';
+      data.cell.styles.halign = isRtl ? 'left' : 'right';
       data.cell.styles.textDirection = isRtl ? 'rtl' : 'ltr';
       if (data.column.index === 4 && !data.cell.text[0]) {
         data.cell.text[0] = formatPrice(0, isRtl); // Fallback if total amount is empty
@@ -239,7 +239,7 @@ export const exportToPDF = async (
     const totalQuantity = filteredOrders.reduce((sum, order) => sum + calculateTotalQuantity(order), 0);
     const totalAmount = filteredOrders.reduce((sum, order) => {
       const amountStr = calculateAdjustedTotal(order).replace(/[^0-9.]/g, '');
-      return sum + (parseFloat(amountStr) || 0);
+      return sum + (amountStr ? parseFloat(amountStr) : 0);
     }, 0);
 
     // Generate header
