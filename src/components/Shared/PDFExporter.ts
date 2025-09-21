@@ -9,13 +9,14 @@ const toArabicNumerals = (number: string | number): string => {
   return String(number).replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
 };
 
-// Format price with proper currency and Arabic numerals (no decimals)
+// Format price with proper currency and Arabic numerals
 const formatPrice = (amount: number | undefined, isRtl: boolean): string => {
   const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
-  const formatted = Math.round(validAmount).toString(); // Remove decimals
-  const arabicNumber = isRtl ? toArabicNumerals(formatted) : formatted;
-  return isRtl ? `${arabicNumber} ر.س` : `${formatted} SAR`;
+  const formatted = validAmount.toFixed(2).replace('.', ',');
+  const arabicNumber = isRtl ? (formatted) : formatted;
+  return isRtl ? `${arabicNumber} ر.س  ` : ` ${formatted} SAR`;
 };
+
 
 // Format products for Arabic and English with correct separator
 const formatProducts = (items: Order['items'], isRtl: boolean, translateUnit: (unit: string, isRtl: boolean) => string): string => {
@@ -28,7 +29,6 @@ const formatProducts = (items: Order['items'], isRtl: boolean, translateUnit: (u
     })
     .join('  +  ');
 };
-
 // Convert array buffer to base64 for font embedding
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   let binary = '';
@@ -39,36 +39,23 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   return window.btoa(binary);
 };
 
-// Load Amiri font (regular and bold)
+// Load Amiri font for reliable Arabic rendering
 const loadFont = async (doc: jsPDF): Promise<boolean> => {
   const fontName = 'Amiri';
-  const fontUrls = {
-    regular: '/fonts/Amiri-Regular.ttf',
-    bold: '/fonts/Amiri-Bold.ttf', // Add bold font
-  };
+  const fontUrl = '/fonts/Amiri-Regular.ttf';
   try {
-    // Load regular font
-    const regularFontBytes = await fetch(fontUrls.regular).then((res) => {
-      if (!res.ok) throw new Error('فشل تحميل الخط Amiri Regular');
+    const fontBytes = await fetch(fontUrl).then((res) => {
+      if (!res.ok) throw new Error('فشل تحميل الخط Amiri');
       return res.arrayBuffer();
     });
-    doc.addFileToVFS(`${fontName}-regular.ttf`, arrayBufferToBase64(regularFontBytes));
-    doc.addFont(`${fontName}-regular.ttf`, fontName, 'normal');
-
-    // Load bold font
-    const boldFontBytes = await fetch(fontUrls.bold).then((res) => {
-      if (!res.ok) throw new Error('فشل تحميل الخط Amiri Bold');
-      return res.arrayBuffer();
-    });
-    doc.addFileToVFS(`${fontName}-bold.ttf`, arrayBufferToBase64(boldFontBytes));
-    doc.addFont(`${fontName}-bold.ttf`, fontName, 'bold');
-
+    doc.addFileToVFS(`${fontName}-normal.ttf`, arrayBufferToBase64(fontBytes));
+    doc.addFont(`${fontName}-normal.ttf`, fontName, 'normal');
     doc.setFont(fontName, 'normal');
     return true;
   } catch (error) {
     console.error('خطأ تحميل الخط:', error);
     doc.setFont('helvetica', 'normal');
-    toast.error('فشل تحميل خط Amiri، استخدام خط افتراضي', {
+    toast.error('فشل تحميل الخط Amiri، استخدام خط افتراضي', {
       position: 'top-right',
       autoClose: 3000,
     });
@@ -93,7 +80,7 @@ const generateFileName = (filterStatus: string, filterBranchName: string, isRtl:
   return `${status}${branch}_${date}.pdf`;
 };
 
-// Generate PDF header with professional design
+// Generate PDF header with filter information
 const generatePDFHeader = (
   doc: jsPDF,
   isRtl: boolean,
@@ -106,32 +93,14 @@ const generatePDFHeader = (
   fontName: string,
   fontLoaded: boolean
 ) => {
-  doc.setFont(fontLoaded ? fontName : 'helvetica', 'bold'); // Use bold font
-  doc.setFontSize(20); // Slightly larger for prominence
+  doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
+  doc.setFontSize(18);
   doc.setTextColor(33, 33, 33);
   const pageWidth = doc.internal.pageSize.width;
   const pageHeight = doc.internal.pageSize.height;
 
-  // Add company logo (replace with your logo URL or base64)
-  const logoUrl = '/path/to/company-logo.png'; // Update with actual logo path
-  try {
-    doc.addImage(logoUrl, 'PNG', isRtl ? pageWidth - 50 : 20, 10, 30, 20); // Logo positioning
-  } catch (error) {
-    console.warn('فشل تحميل الشعار، يتم تخطيه:', error);
-  }
-
-  // Add company details
-  doc.setFontSize(10);
-  doc.setTextColor(100, 100, 100);
-  const companyDetails = isRtl
-    ? doc.processArabic('شركة مثال | الرياض، المملكة العربية السعودية | هاتف: ٠١٢٣٤٥٦٧٨٩')
-    : 'Example Company | Riyadh, Saudi Arabia | Phone: +966 123 456 789';
-  doc.text(companyDetails, isRtl ? pageWidth - 20 : 20, 35, { align: isRtl ? 'right' : 'left' });
-
   // Add main title
-  doc.setFontSize(18);
-  doc.setTextColor(33, 33, 33);
-  doc.text(isRtl ? doc.processArabic(title) : title, isRtl ? pageWidth - 20 : 20, 45, { align: isRtl ? 'right' : 'left' });
+  doc.text(isRtl ? doc.processArabic(title) : title, isRtl ? pageWidth - 20 : 20, 12, { align: isRtl ? 'right' : 'left' });
 
   // Add filter information
   doc.setFontSize(10);
@@ -152,14 +121,14 @@ const generatePDFHeader = (
     ? doc.processArabic(`إجمالي الطلبات: ${toArabicNumerals(totalOrders)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${formatPrice(totalAmount, isRtl)}`)
     : `Total Orders: ${totalOrders} | Total Quantity: ${totalQuantity} units | Total Amount: ${formatPrice(totalAmount, isRtl)}`;
 
-  // Position filter info and stats
-  doc.text(filterInfo, isRtl ? 20 : pageWidth - 100, 55, { align: isRtl ? 'left' : 'right' });
-  doc.text(stats, isRtl ? pageWidth - 20 : 20, 55, { align: isRtl ? 'right' : 'left' });
+  // Position filter info on the left and stats on the right
+  doc.text(filterInfo, isRtl ? 20 : pageWidth - 100, 20, { align: isRtl ? 'left' : 'right' });
+  doc.text(stats, isRtl ? pageWidth - 20 : 20, 20, { align: isRtl ? 'right' : 'left' });
 
   // Add separator line
-  doc.setLineWidth(0.8); // Thicker line for prominence
-  doc.setDrawColor(33, 150, 243); // Blue color for professional look
-  doc.line(20, 60, pageWidth - 20, 60);
+  doc.setLineWidth(0.5);
+  doc.setDrawColor(255, 193, 7);
+  doc.line(20, 25, pageWidth - 20, 25);
 
   // Add footer with page number
   const pageCount = doc.getNumberOfPages();
@@ -173,7 +142,7 @@ const generatePDFHeader = (
   }
 };
 
-// Generate PDF table with professional styling
+// Generate PDF table with correct Arabic headers and RTL support
 const generatePDFTable = (
   doc: jsPDF,
   headers: string[],
@@ -192,40 +161,40 @@ const generatePDFTable = (
     head: [isRtl ? processedHeaders.slice().reverse() : processedHeaders],
     body: isRtl ? processedData.map(row => row.slice().reverse()) : processedData,
     theme: 'grid',
-    startY: 70, // Adjusted for header space
+    startY: 35,
     margin: { left: 15, right: 15 },
     headStyles: {
-      fillColor: [33, 150, 243], // Blue background for headers
-      textColor: [255, 255, 255], // White text for contrast
-      fontSize: 11,
-      halign: isRtl ? 'right' : 'left',
-      font: fontLoaded ? fontName : 'helvetica',
-      fontStyle: 'bold', // Bold headers
-      cellPadding: 5,
-      minCellHeight: 10,
-    },
-    bodyStyles: {
+      fillColor: [255, 193, 7],
+      textColor: [33, 33, 33],
       fontSize: 10,
       halign: isRtl ? 'right' : 'left',
       font: fontLoaded ? fontName : 'helvetica',
+      fontStyle: 'normal', // Critical for custom fonts
+      cellPadding: 4,
+      minCellHeight: 8,
+    },
+    bodyStyles: {
+      fontSize: 9,
+      halign: isRtl ? 'right' : 'left',
+      font: fontLoaded ? fontName : 'helvetica',
       fontStyle: 'normal',
-      cellPadding: 5,
+      cellPadding: 4,
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
       fillColor: [255, 255, 255],
-      minCellHeight: 8,
+      minCellHeight: 6,
     },
     alternateRowStyles: {
-      fillColor: [240, 240, 240], // Lighter alternate rows
+      fillColor: [245, 245, 245],
     },
     columnStyles: {
       0: { cellWidth: 30 }, // Order Number
-      1: { cellWidth: 25 }, // Branch
+      1: { cellWidth: 20 }, // Branch
       2: { cellWidth: 30 }, // Status
       3: { cellWidth: 'auto' }, // Products
-      4: { cellWidth: 25 }, // Total Amount
-      5: { cellWidth: 20 }, // Total Quantity
-      6: { cellWidth: 45 }, // Date
+      4: { cellWidth: 20 }, // Total Amount
+      5: { cellWidth: 16 }, // Total Quantity
+      6: { cellWidth: 42 }, // Date
     },
     styles: {
       overflow: 'linebreak',
@@ -322,14 +291,14 @@ export const exportToPDF = async (
         cancelled: isRtl ? 'ملغى' : 'Cancelled',
       };
       const totalAmountStr = calculateAdjustedTotal(order);
-      const formattedTotalAmount = totalAmountStr.includes('NaN') ? formatPrice(0, isRtl) : formatPrice(parseFloat(totalAmountStr.replace(/[^0-9.,]/g, '').replace(',', '.')), isRtl);
+      const formattedTotalAmount = totalAmountStr.includes('NaN') ? formatPrice(0, isRtl) : totalAmountStr;
       return [
-        isRtl ? toArabicNumerals(order.orderNumber) : order.orderNumber,
+        isRtl ? (order.orderNumber) : order.orderNumber,
         order.branchName,
         statusTranslations[order.status] || order.status,
         formatProducts(order.items, isRtl, translateUnit),
         formattedTotalAmount,
-        isRtl ? `${toArabicNumerals(calculateTotalQuantity(order))} ${translateUnit('unit', isRtl)}` : `${calculateTotalQuantity(order)} ${translateUnit('unit', isRtl)}`,
+        isRtl ? `${(calculateTotalQuantity(order))} ${translateUnit('unit', isRtl)}` : `${calculateTotalQuantity(order)} ${translateUnit('unit', isRtl)}`,
         order.date,
       ];
     });

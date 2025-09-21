@@ -861,7 +861,7 @@ export const Orders: React.FC = () => {
           </div>
           <Card className="p-3 mt-6 bg-white shadow-md rounded-xl border border-gray-200">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div>
+              <div className=" flex flex-row-reverse  items-center w-full">
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
                 <div className="relative">
                   <Search className={`w-4 h-4 text-gray-500 absolute top-2 ${isRtl ? 'right-2' : 'left-2'}`} />
@@ -869,7 +869,7 @@ export const Orders: React.FC = () => {
                     value={state.searchQuery}
                     onChange={(e) => handleSearchChange(e?.target?.value || '')}
                     placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
-                    className={`w-full ${isRtl ? 'pr-8' : 'pl-8'} rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200`}
+                    className={`w-full ${isRtl ? 'pr-8 ' : 'pl-8'} rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200`}
                   />
                 </div>
               </div>
