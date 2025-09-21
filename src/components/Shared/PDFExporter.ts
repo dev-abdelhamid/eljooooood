@@ -21,7 +21,8 @@ const fromArabicNumerals = (str: string): string => {
 // Format price with proper currency and Arabic numerals
 const formatPrice = (amount: number | undefined, isRtl: boolean): string => {
   const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
-  const formatted = validAmount.toFixed(2).replace('.', ',');
+  // Ensure the number is formatted correctly without extra zeros
+  const formatted = Number(validAmount).toFixed(2).replace('.', ','); // Fixed: Use Number() to avoid extra zeros
   const arabicNumber = isRtl ? toArabicNumerals(formatted) : formatted;
   return isRtl ? `${arabicNumber} ر.س` : `${formatted} SAR`;
 };
@@ -32,7 +33,7 @@ const formatProducts = (items: Order['items'], isRtl: boolean, translateUnit: (u
     .map((item) => {
       const quantity = isRtl ? toArabicNumerals(item.quantity) : item.quantity;
       const name = isRtl && item.productNameEn ? item.productNameEn : item.productName; // Use English name if available and isRtl
-      return `${quantity} ${translateUnit(item.unit, isRtl)} ${name}`; // Fixed: Removed unnecessary ternary operator
+      return `${quantity} ${translateUnit(item.unit, isRtl)} ${name}`;
     })
     .join(' + ');
 };
@@ -183,7 +184,7 @@ const generatePDFTable = (
   translateUnit: (unit: string, isRtl: boolean) => string
 ) => {
   const processedHeaders = isRtl ? headers.map(header => doc.processArabic(header)) : headers;
-  const processedData = data.map(row => isRtl ? row.map((cell: string) => doc.processArabic(String(cell))) : row); // Fixed: Ensure cell is string
+  const processedData = data.map(row => isRtl ? row.map((cell: string) => doc.processArabic(String(cell))) : row);
 
   autoTable(doc, {
     head: [isRtl ? processedHeaders.slice().reverse() : processedHeaders],
@@ -336,7 +337,7 @@ export const exportToPDF = async (
         statusTranslations[order.status] || order.status,
         formatProducts(order.items, isRtl, translateUnit),
         formattedTotalAmount,
-        isRtl ? `${toArabicNumerals(calculateTotalQuantity(order))} ${translateUnit('unit', isRtl)}` : `${calculateTotalQuantity(order)} ${translateUnit('unit', isRtl)}`, // Fixed: Corrected translateUnit call
+        isRtl ? `${toArabicNumerals(calculateTotalQuantity(order))} ${translateUnit('unit', isRtl)}` : `${calculateTotalQuantity(order)} ${translateUnit('unit', isRtl)}`,
         order.date,
       ];
     });
