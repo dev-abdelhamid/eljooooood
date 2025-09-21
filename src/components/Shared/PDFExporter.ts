@@ -151,6 +151,7 @@ const generatePDFTable = (
   isRtl: boolean,
   fontLoaded: boolean,
   fontName: string,
+  calculateAdjustedTotal: (order: Order) => string,
   calculateTotalQuantity: (order: Order) => number,
   translateUnit: (unit: string, isRtl: boolean) => string
 ) => {
@@ -293,19 +294,19 @@ export const exportToPDF = async (
       const totalAmountStr = calculateAdjustedTotal(order);
       const formattedTotalAmount = totalAmountStr.includes('NaN') ? formatPrice(0, isRtl) : totalAmountStr;
       return [
-        isRtl ? toArabicNumerals(order.orderNumber) : order.orderNumber,
+        isRtl ? (order.orderNumber) : order.orderNumber,
         order.branchName,
         statusTranslations[order.status] || order.status,
         formatProducts(order.items, isRtl, translateUnit),
         formattedTotalAmount,
-        isRtl ? `${toArabicNumerals(calculateTotalQuantity(order))} ${translateUnit('unit', isRtl)}` : `${calculateTotalQuantity(order)} ${translateUnit('unit', isRtl)}`,
+        isRtl ? `${(calculateTotalQuantity(order))} ${translateUnit('unit', isRtl)}` : `${calculateTotalQuantity(order)} ${translateUnit('unit', isRtl)}`,
         order.date,
       ];
     });
 
     // Generate table
     generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName, calculateAdjustedTotal, calculateTotalQuantity, translateUnit);
-    generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName, calculateTotalQuantity, translateUnit);
+
     // Save the PDF
     const fileName = generateFileName(filterStatus, filterBranchName, isRtl);
     doc.save(fileName);
