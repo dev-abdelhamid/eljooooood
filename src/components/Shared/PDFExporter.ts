@@ -32,11 +32,9 @@ const formatProducts = (items: Order['items'], isRtl: boolean, translateUnit: (u
     .map((item) => {
       const quantity = isRtl ? toArabicNumerals(item.quantity) : item.quantity;
       const name = isRtl && item.productNameEn ? item.productNameEn : item.productName; // Use English name if available and isRtl
-      return isRtl
-        ? `${quantity} ${translateUnit(item.unit, isRtl)} ${name}`
-        : `${quantity} ${translateUnit(item.unit, isRtl)} ${name}`;
+      return `${quantity} ${translateUnit(item.unit, isRtl)} ${name}`; // Fixed: Removed unnecessary ternary operator
     })
-    .join('  +  ');
+    .join(' + ');
 };
 
 // Convert array buffer to base64 for font embedding
@@ -185,7 +183,7 @@ const generatePDFTable = (
   translateUnit: (unit: string, isRtl: boolean) => string
 ) => {
   const processedHeaders = isRtl ? headers.map(header => doc.processArabic(header)) : headers;
-  const processedData = data.map(row => isRtl ? row.map((cell: string) => doc.processArabic(cell)) : row);
+  const processedData = data.map(row => isRtl ? row.map((cell: string) => doc.processArabic(String(cell))) : row); // Fixed: Ensure cell is string
 
   autoTable(doc, {
     head: [isRtl ? processedHeaders.slice().reverse() : processedHeaders],
@@ -338,7 +336,7 @@ export const exportToPDF = async (
         statusTranslations[order.status] || order.status,
         formatProducts(order.items, isRtl, translateUnit),
         formattedTotalAmount,
-        isRtl ? `${toArabicNumerals(calculateTotalQuantity(order))} ${translateUnit('unit', isRtl)}` : `${calculateTotalQuantity(order)} ${translateUnit('unit, isRtl)}`,
+        isRtl ? `${toArabicNumerals(calculateTotalQuantity(order))} ${translateUnit('unit', isRtl)}` : `${calculateTotalQuantity(order)} ${translateUnit('unit', isRtl)}`, // Fixed: Corrected translateUnit call
         order.date,
       ];
     });
