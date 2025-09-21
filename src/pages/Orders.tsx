@@ -923,7 +923,7 @@ export const Orders: React.FC = () => {
             {state.loading ? (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-3">
                 {state.viewMode === 'card' ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1  gap-3">
                     {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)}
                   </div>
                 ) : (
