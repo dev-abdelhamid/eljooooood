@@ -84,6 +84,7 @@ const generateFileName = (filterStatus: string, filterBranchName: string, isRtl:
 const generatePDFHeader = (
   doc: jsPDF,
   isRtl: boolean,
+  t : (key: string) => string,
   title: string,
   filterStatus: string,
   filterBranchName: string,
@@ -253,6 +254,7 @@ export const exportToPDF = async (
     generatePDFHeader(
       doc,
       isRtl,
+      (key: string) => key, // Provide a dummy translation function or replace with your actual 't' function
       isRtl ? 'تقرير الطلبات' : 'Orders Report',
       filterStatus,
       filterBranchName,
