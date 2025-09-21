@@ -1,9 +1,8 @@
 import React, { memo } from 'react';
 import { Button } from '../UI/Button';
-import { Eye, Truck } from 'lucide-react';
 import { Order } from '../../types/types';
 
-const STATUS_COLORS = {
+const STATUS_COLORS: Record<string, { color: string; label: string }> = {
   pending: { color: 'bg-yellow-100 text-yellow-800', label: 'pending' },
   approved: { color: 'bg-teal-100 text-teal-800', label: 'approved' },
   in_production: { color: 'bg-purple-100 text-purple-800', label: 'in_production' },
@@ -29,7 +28,7 @@ interface Props {
   viewOrder: (order: Order) => void;
   openConfirmDeliveryModal: (order: Order) => void;
   openReturnModal: (order: Order, itemId: string) => void;
-  user: any;
+  user: { id: string; role: string; branchId: string } | null;
   submitting: string | null;
 }
 
@@ -51,6 +50,9 @@ const OrderTable: React.FC<Props> = memo(
         </thead>
         <tbody className="divide-y divide-gray-100">
           {orders.map((order, i) => {
+            if (!order || !order.id || !order.orderNumber) {
+              return null;
+            }
             const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS.pending;
             return (
               <tr key={order.id} className="hover:bg-gray-50 transition-colors">
@@ -76,11 +78,13 @@ const OrderTable: React.FC<Props> = memo(
                   </span>
                 </td>
                 <td className="px-4 py-2 text-sm text-gray-600 text-right truncate">
-                  {order.items.map(item => `(${item.quantity} ${t(`${item.unit || 'unit'}`)}  ${getFirstTwoWords(item.productName)})`).join(' + ')}
+                  {order.items?.length > 0
+                    ? order.items.map(item => `(${item.quantity} ${t(`${item.unit || 'unit'}`)} ${getFirstTwoWords(item.productName)})`).join(' + ')
+                    : isRtl ? 'لا توجد منتجات' : 'No products'}
                 </td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{calculateAdjustedTotal(order)}</td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{calculateTotalQuantity(order)}</td>
-                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{order.date}</td>
+                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{order.date || 'N/A'}</td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-right">
                   <div className="flex gap-2 justify-end">
                     <Button
@@ -92,7 +96,7 @@ const OrderTable: React.FC<Props> = memo(
                     >
                       {isRtl ? 'عرض' : 'View'}
                     </Button>
-                    {order.status === 'in_transit' && user?.role === 'branch' && order.branch._id === user.branchId && (
+                    {order.status === 'in_transit' && user?.role === 'branch' && order.branch?._id === user.branchId && (
                       <Button
                         variant="success"
                         size="sm"
@@ -104,7 +108,7 @@ const OrderTable: React.FC<Props> = memo(
                         {isRtl ? 'تأكيد التسليم' : 'Confirm Delivery'}
                       </Button>
                     )}
-                    {order.status === 'delivered' && user?.role === 'branch' && order.branch._id === user.branchId && (
+                    {order.status === 'delivered' && user?.role === 'branch' && order.branch?._id === user.branchId && order.items?.[0]?.itemId && (
                       <Button
                         variant="secondary"
                         size="sm"

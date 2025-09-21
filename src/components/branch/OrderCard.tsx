@@ -4,7 +4,7 @@ import { Eye, Truck, Clock, Package, Check, AlertCircle } from 'lucide-react';
 import { Order } from '../../types/types';
 import { motion } from 'framer-motion';
 
-const STATUS_COLORS = {
+const STATUS_COLORS: Record<string, { color: string; icon: React.ElementType; label: string; progress: number }> = {
   pending: { color: 'bg-yellow-100 text-yellow-800', icon: Clock, label: 'pending', progress: 0 },
   approved: { color: 'bg-teal-100 text-teal-800', icon: Check, label: 'approved', progress: 25 },
   in_production: { color: 'bg-purple-100 text-purple-800', icon: Package, label: 'in_production', progress: 50 },
@@ -29,12 +29,17 @@ interface Props {
   viewOrder: (order: Order) => void;
   openConfirmDeliveryModal: (order: Order) => void;
   openReturnModal: (order: Order, itemId: string) => void;
-  user: any;
+  user: { id: string; role: string; branchId: string } | null;
   submitting: string | null;
 }
 
 const OrderCard: React.FC<Props> = memo(
   ({ order, t, isRtl, calculateAdjustedTotal, calculateTotalQuantity, viewOrder, openConfirmDeliveryModal, openReturnModal, user, submitting }) => {
+    // Guard against invalid order
+    if (!order || !order.id || !order.orderNumber) {
+      return null;
+    }
+
     const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS.pending;
     const StatusIcon = statusInfo.icon;
 
@@ -88,14 +93,15 @@ const OrderCard: React.FC<Props> = memo(
               </div>
               <div>
                 <p className="text-xs text-gray-500">{isRtl ? 'التاريخ' : 'Date'}</p>
-                <p className="text-sm font-medium text-gray-800">{order.date}</p>
+                <p className="text-sm font-medium text-gray-800">{order.date || 'N/A'}</p>
               </div>
-            
             </div>
             <div className="mt-2 p-2 bg-gray-50 rounded-md">
               <p className="text-xs font-medium text-gray-800">{isRtl ? 'المنتجات' : 'Products'}:</p>
               <p className="text-sm text-gray-700">
-                {order.items.map(item => `(${item.quantity} ${t(`${item.unit || 'unit'}`)}  ${getFirstTwoWords(item.productName)})`).join(' + ')}
+                {order.items?.length > 0
+                  ? order.items.map(item => `(${item.quantity} ${t(`${item.unit || 'unit'}`)} ${getFirstTwoWords(item.productName)})`).join(' + ')
+                  : isRtl ? 'لا توجد منتجات' : 'No products'}
               </p>
             </div>
             {order.returns?.length > 0 && (
@@ -105,11 +111,11 @@ const OrderCard: React.FC<Props> = memo(
                   <p key={i} className="text-xs text-amber-700">
                     {isRtl
                       ? `إرجاع ${r.items
-                          .map(item => `${item.quantity} ${(`سبب الارجاع : ${item.reason}`)}`)
-                          .join(', ')} - ${(` الحالة:${r.status}`)}`
+                          .map(item => `${item.quantity} ${t(`سبب الارجاع: ${item.reason}`)}`)
+                          .join(', ')} - ${t(` الحالة: ${r.status}`)}`
                       : `Return ${r.items
-                          .map(item => `${item.quantity} ${(`return resons :${item.reason}`)}`)
-                          .join(', ')} - ${(`status: ${r.status}`)}`}
+                          .map(item => `${item.quantity} ${t(`return_reason: ${item.reason}`)}`)
+                          .join(', ')} - ${t(`status: ${r.status}`)}`}
                   </p>
                 ))}
               </div>
@@ -143,7 +149,7 @@ const OrderCard: React.FC<Props> = memo(
                   {isRtl ? 'تأكيد التسليم' : 'Confirm Delivery'}
                 </Button>
               )}
-              {order.status === 'delivered' && user?.role === 'branch' && order.branch?._id === user.branchId && (
+              {order.status === 'delivered' && user?.role === 'branch' && order.branch?._id === user.branchId && order.items?.[0]?.itemId && (
                 <Button
                   variant="secondary"
                   size="sm"
