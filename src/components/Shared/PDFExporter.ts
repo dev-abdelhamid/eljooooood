@@ -189,13 +189,13 @@ const generatePDFTable = (
       fillColor: [245, 245, 245],
     },
     columnStyles: {
-      0: { cellWidth: 25 }, // Order Number
-      1: { cellWidth: 30 }, // Branch
-      2: { cellWidth: 25 }, // Status
+      0: { cellWidth: 30 }, // Order Number
+      1: { cellWidth: 20 }, // Branch
+      2: { cellWidth: 30 }, // Status
       3: { cellWidth: 'auto' }, // Products
-      4: { cellWidth: 30 }, // Total Amount
-      5: { cellWidth: 25 }, // Total Quantity
-      6: { cellWidth: 35 }, // Date
+      4: { cellWidth: 20 }, // Total Amount
+      5: { cellWidth: 16 }, // Total Quantity
+      6: { cellWidth: 42 }, // Date
     },
     styles: {
       overflow: 'linebreak',
