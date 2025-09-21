@@ -919,11 +919,11 @@ export const Orders: React.FC = () => {
               </Button>
             </div>
           </Card>
-          <div ref={listRef} className="mt-6 min-h-[500px]">
+          <div ref={listRef} className="mt-6 min-h-[300px]">
             {state.loading ? (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-3">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-1">
                 {state.viewMode === 'card' ? (
-                  <div className="grid grid-cols-1  gap-3">
+                  <div className="grid grid-cols-1  gap-1">
                     {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)}
                   </div>
                 ) : (
@@ -979,7 +979,7 @@ export const Orders: React.FC = () => {
                         onNavigateToDetails={handleNavigateToDetails}
                       />
                     ) : (
-                      <div className="grid grid-cols-1 gap-3">
+                      <div className="grid grid-cols-1 gap-1">
                         {paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber).map(order => (
                           <OrderCard
                             key={order.id}
