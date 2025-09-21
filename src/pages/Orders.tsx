@@ -18,7 +18,7 @@ import { Order, Chef, Branch, AssignChefsForm } from '../types/types';
 import { useNavigate } from 'react-router-dom';
 import { exportToPDF } from '../components/Shared/PDFExporter';
 import { OrderCardSkeleton } from '../components/Shared/OrderSkeletons';
-import  OrderTableSkeleton  from '../components/Shared/OrderTableSkeleton';
+import  { OrderTableSkeleton }  from '../components/Shared/OrderSkeletons';
 import Pagination from '../components/Shared/Pagination';
 
 const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
