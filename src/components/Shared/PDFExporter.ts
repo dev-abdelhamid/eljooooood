@@ -3,155 +3,173 @@ import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
 import { Order } from '../../types/types';
 
-// Convert numbers to Arabic numerals
+// Convert numbers to Arabic numerals for RTL support
 const toArabicNumerals = (number: string | number): string => {
   const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
   return String(number).replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
 };
 
-// Format price correctly
-const formatPrice = (amount: number, isRtl: boolean): string => {
-  const formatted = amount.toFixed(2).replace('.', ',');
-  const arabicNumber = toArabicNumerals(formatted);
-  return isRtl ? `${arabicNumber} ر.س.` : `SAR ${formatted}`;
+// Format price with proper currency and Arabic numerals
+const formatPrice = (amount: number | undefined | null, isRtl: boolean): string => {
+  const validAmount = (typeof amount === 'number' && !isNaN(amount) && amount >= 0) ? amount : 0;
+  const formatted = validAmount.toFixed(2).replace('.', ',');
+  const arabicNumber = isRtl ? toArabicNumerals(formatted) : formatted;
+  return isRtl ? `${arabicNumber} ر.س` : `${formatted} SAR`;
 };
 
-// Format products for Arabic and English with proper structure
-const formatProducts = (items: Order['items'], isRtl: boolean, translateUnit: (unit: string, isRtl: boolean) => string): string => {
+// Format products list for display in table
+const formatProducts = (
+  items: Order['items'],
+  isRtl: boolean,
+  translateUnit: (unit: string, isRtl: boolean) => string
+): string => {
   return items
     .map((item) => {
       const quantity = isRtl ? toArabicNumerals(item.quantity) : item.quantity;
-      return isRtl
-        ? `(${quantity} ${translateUnit(item.unit, isRtl)} ${item.productName})`
-        : `(${item.productName} ${quantity} ${translateUnit(item.unit, isRtl)})`;
+      return `${item.productName} (${quantity} ${translateUnit(item.unit, isRtl)})`;
     })
-    .join(isRtl ? ' + ' : ', '); // Use '+' for Arabic, ',' for English
+    .join(isRtl ? '  +  ' : ' + ');
 };
 
-// Convert array buffer to base64
+// Convert array buffer to base64 for font embedding
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-  let binary = '';
   const bytes = new Uint8Array(buffer);
+  let binary = '';
   for (let i = 0; i < bytes.length; i++) {
     binary += String.fromCharCode(bytes[i]);
   }
   return window.btoa(binary);
 };
 
-// Load Arabic font (Amiri as fallback if Alexandria fails)
-const loadFont = async (doc: jsPDF, fontName: string, fontUrl: string): Promise<boolean> => {
+// Load Amiri font (regular and bold) for Arabic rendering
+const loadFont = async (doc: jsPDF): Promise<boolean> => {
+  const fontName = 'Amiri';
+  const fontUrls = {
+    regular: '/fonts/Amiri-Regular.ttf',
+    bold: '/fonts/Amiri-Bold.ttf',
+  };
+
   try {
-    const fontBytes = await fetch(fontUrl).then((res) => {
-      if (!res.ok) throw new Error('فشل تحميل الخط');
+    // Load regular font
+    const regularFontBytes = await fetch(fontUrls.regular).then((res) => {
+      if (!res.ok) throw new Error('فشل تحميل الخط Amiri العادي');
       return res.arrayBuffer();
     });
-    doc.addFileToVFS(`${fontName}-Regular.ttf`, arrayBufferToBase64(fontBytes));
+    doc.addFileToVFS(`${fontName}-Regular.ttf`, arrayBufferToBase64(regularFontBytes));
     doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
-    doc.setFont(fontName);
+
+    // Load bold font
+    const boldFontBytes = await fetch(fontUrls.bold).then((res) => {
+      if (!res.ok) throw new Error('فشل تحميل الخط Amiri الغامق');
+      return res.arrayBuffer();
+    });
+    doc.addFileToVFS(`${fontName}-Bold.ttf`, arrayBufferToBase64(boldFontBytes));
+    doc.addFont(`${fontName}-Bold.ttf`, fontName, 'bold');
+
+    doc.setFont(fontName, 'normal');
     return true;
-  } catch (fontError) {
-    console.error('خطأ تحميل الخط:', fontError);
-    // Fallback to Amiri font
-    const fallbackFontUrl = '/fonts/Amiri-Regular.ttf';
-    try {
-      const fontBytes = await fetch(fallbackFontUrl).then((res) => {
-        if (!res.ok) throw new Error('فشل تحميل خط الاحتياط');
-        return res.arrayBuffer();
-      });
-      doc.addFileToVFS('Amiri-Regular.ttf', arrayBufferToBase64(fontBytes));
-      doc.addFont('Amiri-Regular.ttf', 'Amiri', 'normal');
-      doc.setFont('Amiri');
-      return true;
-    } catch (fallbackError) {
-      console.error('خطأ تحميل خط الاحتياط:', fallbackError);
-      doc.setFont('helvetica');
-      return false;
-    }
+  } catch (error) {
+    console.error('خطأ تحميل الخط:', error);
+    doc.setFont('helvetica', 'normal');
+    toast.error(isRtl ? 'فشل تحميل خط Amiri، يتم استخدام Helvetica' : 'Failed to load Amiri font, using Helvetica', {
+      position: isRtl ? 'top-left' : 'top-right',
+      autoClose: 3000,
+    });
+    return false;
   }
 };
 
 // Generate dynamic file name based on filters
-const generateFileName = (filterStatus: string, filterBranch: string, isRtl: boolean): string => {
+const generateFileName = (filterStatus: string, filterBranchName: string, isRtl: boolean): string => {
   const date = new Date().toISOString().split('T')[0];
-  const status = isRtl
-    ? filterStatus
-      ? { pending: 'قيد_الانتظار', approved: 'تم_الموافقة', in_production: 'في_الإنتاج', completed: 'مكتمل', in_transit: 'في_النقل', delivered: 'تم_التسليم', cancelled: 'ملغى' }[filterStatus] || 'الكل'
-      : 'الكل'
-    : filterStatus || 'all';
-  const branch = filterBranch ? filterBranch.replace(/\s+/g, '_') : (isRtl ? 'جميع_الفروع' : 'all_branches');
-  return `Orders_${status}_${branch}_${date}.pdf`;
+  const statusTranslations = {
+    pending: isRtl ? 'الطلبات_قيد_الانتظار' : 'Pending_Orders',
+    approved: isRtl ? 'الطلبات_المعتمدة' : 'Approved_Orders',
+    in_production: isRtl ? 'الطلبات_في_الإنتاج' : 'In_Production_Orders',
+    completed: isRtl ? 'الطلبات_المكتملة' : 'Completed_Orders',
+    in_transit: isRtl ? 'الطلبات_في_النقل' : 'In_Transit_Orders',
+    delivered: isRtl ? 'الطلبات_المسلمة' : 'Delivered_Orders',
+    cancelled: isRtl ? 'الطلبات_الملغاة' : 'Cancelled_Orders',
+    '': isRtl ? 'جميع_الطلبات' : 'All_Orders',
+  };
+  const status = statusTranslations[filterStatus as keyof typeof statusTranslations] || statusTranslations[''];
+  const branch = filterBranchName ? `_${filterBranchName.replace(/\s+/g, '_')}` : '';
+  return `${status}${branch}_${date}.pdf`;
 };
 
-// Generate PDF header with filter information
+// Generate PDF header with filter information and footer
 const generatePDFHeader = (
   doc: jsPDF,
   isRtl: boolean,
   title: string,
   filterStatus: string,
-  filterBranch: string,
+  filterBranchName: string,
   totalOrders: number,
   totalQuantity: number,
-  totalAmount: number
+  totalAmount: number,
+  fontName: string,
+  fontLoaded: boolean
 ) => {
-  doc.setFontSize(18);
-  doc.setTextColor(33, 33, 33);
   const pageWidth = doc.internal.pageSize.width;
   const pageHeight = doc.internal.pageSize.height;
+  doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
 
-  // Add main title
-  doc.text(title, isRtl ? pageWidth - 20 : 20, 15, {
+  // Main title
+  doc.setFontSize(18);
+  doc.setTextColor(33, 33, 33);
+  doc.text(isRtl ? doc.processArabic(title) : title, isRtl ? pageWidth - 20 : 20, 15, {
     align: isRtl ? 'right' : 'left',
   });
 
-  // Add filter information
+  // Filter information and statistics
   doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
   const statusTranslations = {
-    pending: 'قيد الانتظار',
-    approved: 'تم الموافقة',
-    in_production: 'في الإنتاج',
-    completed: 'مكتمل',
-    in_transit: 'في النقل',
-    delivered: 'تم التسليم',
-    cancelled: 'ملغى',
+    pending: isRtl ? 'قيد الانتظار' : 'Pending',
+    approved: isRtl ? 'تم الموافقة' : 'Approved',
+    in_production: isRtl ? 'في الإنتاج' : 'In Production',
+    completed: isRtl ? 'مكتمل' : 'Completed',
+    in_transit: isRtl ? 'في النقل' : 'In Transit',
+    delivered: isRtl ? 'تم التسليم' : 'Delivered',
+    cancelled: isRtl ? 'ملغى' : 'Cancelled',
+    '': isRtl ? 'الكل' : 'All',
   };
   const filterInfo = isRtl
-    ? `الحالة: ${filterStatus ? statusTranslations[filterStatus] || 'الكل' : 'الكل'} | الفرع: ${filterBranch || 'جميع الفروع'}`
-    : `Status: ${filterStatus || 'All'} | Branch: ${filterBranch || 'All Branches'}`;
-  doc.text(filterInfo, isRtl ? pageWidth - 20 : 20, 25, {
-    align: isRtl ? 'right' : 'left',
-  });
-
-  // Add total statistics
-  doc.setFontSize(9);
+    ? doc.processArabic(`الحالة: ${statusTranslations[filterStatus as keyof typeof statusTranslations] || 'الكل'} | الفرع: ${filterBranchName || 'جميع الفروع'}`)
+    : `Status: ${statusTranslations[filterStatus as keyof typeof statusTranslations] || 'All'} | Branch: ${filterBranchName || 'All Branches'}`;
   const stats = isRtl
-    ? `إجمالي الطلبات: ${toArabicNumerals(totalOrders)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${formatPrice(totalAmount, isRtl)}`
+    ? doc.processArabic(`إجمالي الطلبات: ${toArabicNumerals(totalOrders)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${formatPrice(totalAmount, isRtl)}`)
     : `Total Orders: ${totalOrders} | Total Quantity: ${totalQuantity} units | Total Amount: ${formatPrice(totalAmount, isRtl)}`;
-  doc.text(stats, isRtl ? pageWidth - 20 : 20, 35, {
-    align: isRtl ? 'right' : 'left',
-  });
 
-  // Add separator line
+  doc.text(filterInfo, isRtl ? 20 : pageWidth - 20, 25, { align: isRtl ? 'left' : 'right' });
+  doc.text(stats, isRtl ? pageWidth - 20 : 20, 25, { align: isRtl ? 'right' : 'left' });
+
+  // Separator line
   doc.setLineWidth(0.5);
-  doc.setDrawColor(200, 200, 200);
-  doc.line(20, 40, pageWidth - 20, 40);
+  doc.setDrawColor(255, 193, 7);
+  doc.line(20, 30, pageWidth - 20, 30);
 
-  // Add footer with page number
+  // Footer with page numbers and generation info
   const pageCount = doc.getNumberOfPages();
+  const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
-    doc.text(
-      isRtl ? `صفحة ${toArabicNumerals(i)} من ${toArabicNumerals(pageCount)}` : `Page ${i} of ${pageCount}`,
-      isRtl ? pageWidth - 20 : 20,
-      pageHeight - 10,
-      { align: isRtl ? 'right' : 'left' }
-    );
+    const footerText = isRtl
+      ? doc.processArabic(`تم الإنشاء بواسطة نظام إدارة الجودياء - ${currentDate}`)
+      : `Generated by elgoodia Management System - ${currentDate}`;
+    doc.text(footerText, pageWidth / 2, pageHeight - 10, { align: 'center' });
+    const pageNumber = isRtl ? doc.processArabic(`صفحة ${toArabicNumerals(i)} من ${toArabicNumerals(pageCount)}`) : `Page ${i} of ${pageCount}`;
+    doc.text(pageNumber, isRtl ? 20 : pageWidth - 20, pageHeight - 10, { align: isRtl ? 'left' : 'right' });
   }
 };
 
-// Generate PDF table with improved text handling
+// Generate PDF table with proper styling
 const generatePDFTable = (
   doc: jsPDF,
   headers: string[],
@@ -163,54 +181,69 @@ const generatePDFTable = (
   calculateTotalQuantity: (order: Order) => number,
   translateUnit: (unit: string, isRtl: boolean) => string
 ) => {
+  const processedHeaders = isRtl ? headers.map(header => doc.processArabic(header)) : headers;
+  const processedData = data.map(row => isRtl ? row.map((cell: string) => doc.processArabic(cell)) : row);
+
   autoTable(doc, {
-    head: [isRtl ? headers.reverse() : headers],
-    body: isRtl ? data.map((row) => row.reverse()) : data,
+    head: [isRtl ? processedHeaders.slice().reverse() : processedHeaders],
+    body: isRtl ? processedData.map(row => row.slice().reverse()) : processedData,
     theme: 'grid',
-    startY: 45,
+    startY: 35,
     margin: { left: 15, right: 15 },
     headStyles: {
-      fillColor: [40, 74, 94],
-      textColor: [255, 255, 255],
+      fillColor: [255, 193, 7],
+      textColor: [33, 33, 33],
       fontSize: 10,
       halign: isRtl ? 'right' : 'left',
-      font: fontLoaded ? fontName : 'Amiri',
-      cellPadding: 5,
-      textDirection: isRtl ? 'rtl' : 'ltr',
+      font: fontLoaded ? fontName : 'helvetica',
+      fontStyle: 'bold',
+      cellPadding: 4,
+      minCellHeight: 8,
     },
     bodyStyles: {
       fontSize: 9,
       halign: isRtl ? 'right' : 'left',
-      font: fontLoaded ? fontName : 'Amiri',
-      cellPadding: 5,
+      font: fontLoaded ? fontName : 'helvetica',
+      fontStyle: 'normal',
+      cellPadding: 4,
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
-      textDirection: isRtl ? 'rtl' : 'ltr',
-      fillColor: [245, 245, 245],
+      fillColor: [255, 255, 255],
+      minCellHeight: 6,
     },
     alternateRowStyles: {
-      fillColor: [255, 255, 255],
+      fillColor: [245, 245, 245],
     },
     columnStyles: {
-      0: { cellWidth: 25 }, // Order Number
-      1: { cellWidth: 25 }, // Branch
-      2: { cellWidth: 25 }, // Status
-      3: { cellWidth: 100 }, // Products (wider for long text)
-      4: { cellWidth: 25 }, // Total Amount
+      0: { cellWidth: 30 }, // Order Number
+      1: { cellWidth: 20 }, // Branch
+      2: { cellWidth: 30 }, // Status
+      3: { cellWidth: 'auto' }, // Products
+      4: { cellWidth: 25, fontStyle: 'bold' }, // Total Amount (bold)
       5: { cellWidth: 20 }, // Total Quantity
-      6: { cellWidth: 35 }, // Date
+      6: { cellWidth: 30 }, // Date
     },
     styles: {
       overflow: 'linebreak',
       cellWidth: 'wrap',
-      minCellHeight: 15,
+      font: fontLoaded ? fontName : 'helvetica',
+      halign: isRtl ? 'right' : 'left',
+      valign: 'middle',
     },
     didParseCell: (data) => {
       data.cell.styles.halign = isRtl ? 'right' : 'left';
-      data.cell.styles.textDirection = isRtl ? 'rtl' : 'ltr';
-      if (data.column.index === 3) {
-        data.cell.styles.cellPadding = { top: 5, right: 5, bottom: 5, left: 5 };
+      if (data.column.index === (isRtl ? headers.length - 5 : 4)) { // Total Amount column
+        const rawValue = data.cell.text[0];
+        const cleanedValue = rawValue.replace(/[^0-9.,]/g, '').replace(',', '.');
+        const parsedValue = parseFloat(cleanedValue);
+        if (!rawValue || rawValue.includes('NaN') || isNaN(parsedValue) || parsedValue < 0) {
+          console.warn(`Invalid total amount for order ${data.row.raw[0]}: rawValue=${rawValue}, parsedValue=${parsedValue}`);
+          data.cell.text[0] = formatPrice(0, isRtl);
+        }
       }
+    },
+    didDrawPage: (data) => {
+      doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
     },
   });
 };
@@ -223,22 +256,40 @@ export const exportToPDF = async (
   calculateTotalQuantity: (order: Order) => number,
   translateUnit: (unit: string, isRtl: boolean) => string,
   filterStatus: string = '',
-  filterBranch: string = ''
+  filterBranchName: string = ''
 ) => {
   try {
     const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
-    doc.setLanguage('ar'); // Set language to Arabic for RTL support
+    doc.setLanguage(isRtl ? 'ar' : 'en');
+    const fontName = 'Amiri';
+    const fontLoaded = await loadFont(doc);
 
-    const fontName = 'Alexandria';
-    const fontUrl = '/fonts/Alexandria-Regular.ttf'; // Path to Alexandria font
-    const fontLoaded = await loadFont(doc, fontName, fontUrl);
+    // Filter orders based on status and branch
+    const filteredOrders = orders.filter(
+      (order) =>
+        (!filterStatus || order.status === filterStatus) &&
+        (!filterBranchName || order.branchName === filterBranchName)
+    );
+
+    if (filteredOrders.length === 0) {
+      toast.warn(isRtl ? 'لا توجد طلبات للتصدير' : 'No orders to export', {
+        position: isRtl ? 'top-left' : 'top-right',
+        autoClose: 3000,
+      });
+      return;
+    }
 
     // Calculate statistics
-    const totalOrders = orders.length;
-    const totalQuantity = orders.reduce((sum, order) => sum + calculateTotalQuantity(order), 0);
-    const totalAmount = orders.reduce((sum, order) => {
-      const amountStr = calculateAdjustedTotal(order).replace(/[^0-9.]/g, '');
-      return sum + (parseFloat(amountStr) || 0);
+    const totalOrders = filteredOrders.length;
+    const totalQuantity = filteredOrders.reduce((sum, order) => sum + calculateTotalQuantity(order), 0);
+    const totalAmount = filteredOrders.reduce((sum, order) => {
+      const amountStr = calculateAdjustedTotal(order).replace(/[^0-9.,]/g, '').replace(',', '.');
+      const parsedAmount = parseFloat(amountStr);
+      if (isNaN(parsedAmount) || parsedAmount < 0) {
+        console.warn(`Invalid amount for order ${order.orderNumber}: amountStr=${amountStr}, parsedAmount=${parsedAmount}`);
+        return sum;
+      }
+      return sum + parsedAmount;
     }, 0);
 
     // Generate header
@@ -247,10 +298,12 @@ export const exportToPDF = async (
       isRtl,
       isRtl ? 'تقرير الطلبات' : 'Orders Report',
       filterStatus,
-      filterBranch,
+      filterBranchName,
       totalOrders,
       totalQuantity,
-      totalAmount
+      totalAmount,
+      fontName,
+      fontLoaded
     );
 
     // Prepare table headers
@@ -264,28 +317,32 @@ export const exportToPDF = async (
       isRtl ? 'التاريخ' : 'Date',
     ];
 
-    // Translate statuses
-    const statusTranslations: Record<string, string> = {
-      pending: 'قيد الانتظار',
-      approved: 'تم الموافقة',
-      in_production: 'في الإنتاج',
-      completed: 'مكتمل',
-      in_transit: 'في النقل',
-      delivered: 'تم التسليم',
-      cancelled: 'ملغى',
-    };
-
     // Prepare table data
-    const data = orders.map((order) => {
-      const productsStr = formatProducts(order.items, isRtl, translateUnit);
-      const totalQuantity = isRtl ? toArabicNumerals(calculateTotalQuantity(order)) : calculateTotalQuantity(order);
+    const data = filteredOrders.map((order) => {
+      const statusTranslations = {
+        pending: isRtl ? 'قيد الانتظار' : 'Pending',
+        approved: isRtl ? 'تم الموافقة' : 'Approved',
+        in_production: isRtl ? 'في الإنتاج' : 'In Production',
+        completed: isRtl ? 'مكتمل' : 'Completed',
+        in_transit: isRtl ? 'في النقل' : 'In Transit',
+        delivered: isRtl ? 'تم التسليم' : 'Delivered',
+        cancelled: isRtl ? 'ملغى' : 'Cancelled',
+      };
+      const totalAmountStr = calculateAdjustedTotal(order);
+      const cleanedAmount = totalAmountStr.replace(/[^0-9.,]/g, '').replace(',', '.');
+      const parsedAmount = parseFloat(cleanedAmount);
+      const formattedTotalAmount = (isNaN(parsedAmount) || parsedAmount < 0)
+        ? formatPrice(0, isRtl)
+        : formatPrice(parsedAmount, isRtl);
       return [
-        order.orderNumber,
+        isRtl ? toArabicNumerals(order.orderNumber) : order.orderNumber,
         order.branchName,
-        isRtl ? statusTranslations[order.status] || order.status : order.status,
-        productsStr,
-        calculateAdjustedTotal(order),
-        `${totalQuantity} ${isRtl ? 'وحدة' : 'units'}`,
+        statusTranslations[order.status] || order.status,
+        formatProducts(order.items, isRtl, translateUnit),
+        formattedTotalAmount,
+        isRtl
+          ? `${toArabicNumerals(calculateTotalQuantity(order))} ${translateUnit('unit', isRtl)}`
+          : `${calculateTotalQuantity(order)} ${translateUnit('unit', isRtl)}`,
         order.date,
       ];
     });
@@ -293,17 +350,17 @@ export const exportToPDF = async (
     // Generate table
     generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName, calculateAdjustedTotal, calculateTotalQuantity, translateUnit);
 
-    // Save the file
-    const fileName = generateFileName(filterStatus, filterBranch, isRtl);
+    // Save the PDF
+    const fileName = generateFileName(filterStatus, filterBranchName, isRtl);
     doc.save(fileName);
 
-    toast.success(isRtl ? 'تم تصدير PDF بنجاح' : 'PDF export successful', {
+    toast.success(isRtl ? 'تم تصدير ملف PDF بنجاح' : 'PDF exported successfully', {
       position: isRtl ? 'top-left' : 'top-right',
       autoClose: 3000,
     });
-  } catch (err: any) {
-    console.error('خطأ تصدير PDF:', err.message);
-    toast.error(isRtl ? `خطأ في تصدير PDF: ${err.message}` : `PDF export error: ${err.message}`, {
+  } catch (error: any) {
+    console.error('Error exporting PDF:', error.message);
+    toast.error(isRtl ? `فشل في تصدير ملف PDF: ${error.message}` : `Failed to export PDF: ${error.message}`, {
       position: isRtl ? 'top-left' : 'top-right',
       autoClose: 3000,
     });
