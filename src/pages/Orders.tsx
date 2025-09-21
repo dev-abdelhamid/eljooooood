@@ -18,7 +18,7 @@ import { Order, Chef, Branch, AssignChefsForm } from '../types/types';
 import { useNavigate } from 'react-router-dom';
 import { exportToPDF } from '../components/Shared/PDFExporter';
 import { OrderCardSkeleton } from '../components/Shared/OrderSkeletons';
-import { OrderTableSkeleton } from '../components/Shared/OrderSkeletons';
+import  { OrderTableSkeleton }  from '../components/Shared/OrderSkeletons';
 import Pagination from '../components/Shared/Pagination';
 
 const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
@@ -182,11 +182,11 @@ const reducer = (state: State, action: Action): State => {
                 ret.returnId === action.returnId ? { ...ret, status: action.status! } : ret
               ),
               adjustedTotal: action.status === 'approved'
-                ? (order.adjustedTotal - (order.returns.find(r => r.returnId === action.returnId)?.items.reduce((sum, item) => {
+                ? order.adjustedTotal - (order.returns.find(r => r.returnId === action.returnId)?.items.reduce((sum, item) => {
                     const orderItem = order.items.find(i => i.productId === item.productId);
-                    return sum + (orderItem ? (orderItem.price * item.quantity) / 100 : 0); // Divide by 100
-                  }, 0) || 0)) / 100 // Divide by 100
-                : order.adjustedTotal / 100, // Divide by 100
+                    return sum + (orderItem ? orderItem.price * item.quantity : 0);
+                  }, 0) || 0)
+                : order.adjustedTotal,
             }
           : order
       ),
@@ -197,11 +197,11 @@ const reducer = (state: State, action: Action): State => {
               ret.returnId === action.returnId ? { ...ret, status: action.status! } : ret
             ),
             adjustedTotal: action.status === 'approved'
-              ? (state.selectedOrder.adjustedTotal - (state.selectedOrder.returns.find(r => r.returnId === action.returnId)?.items.reduce((sum, item) => {
+              ? state.selectedOrder.adjustedTotal - (state.selectedOrder.returns.find(r => r.returnId === action.returnId)?.items.reduce((sum, item) => {
                   const orderItem = state.selectedOrder.items.find(i => i.productId === item.productId);
-                  return sum + (orderItem ? (orderItem.price * item.quantity) / 100 : 0); // Divide by 100
-                }, 0) || 0)) / 100 // Divide by 100
-              : state.selectedOrder.adjustedTotal / 100, // Divide by 100
+                  return sum + (orderItem ? orderItem.price * item.quantity : 0);
+                }, 0) || 0)
+              : state.selectedOrder.adjustedTotal,
           }
         : state.selectedOrder,
     };
@@ -251,10 +251,7 @@ const translateUnit = (unit: string, isRtl: boolean) => {
 };
 
 // Converts Western digits to Arabic-Indic numerals
-const toArabicNumerals = (number: string | number): string => {
-  const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-  return String(number).replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
-};
+
 
 const exportToExcel = (orders: Order[], isRtl: boolean, calculateAdjustedTotal: (order: Order) => string, calculateTotalQuantity: (order: Order) => number, translateUnit: (unit: string, isRtl: boolean) => string) => {
   const headers = [
@@ -267,12 +264,12 @@ const exportToExcel = (orders: Order[], isRtl: boolean, calculateAdjustedTotal: 
     isRtl ? 'التاريخ' : 'Date',
   ];
   const data = orders.map(order => {
-    const productsStr = order.items.map(i => `${isRtl && i.productNameEn ? i.productNameEn : i.productName} (${isRtl ? toArabicNumerals(i.quantity) : i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ');
+    const productsStr = order.items.map(i => `${i.productName} (${isRtl ? (i.quantity) : i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ');
     const totalAmount = calculateAdjustedTotal(order);
-    const totalQuantity = `${isRtl ? toArabicNumerals(calculateTotalQuantity(order)) : calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`;
+    const totalQuantity = `${isRtl ? (calculateTotalQuantity(order)) : calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`;
     const statusLabel = isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status;
     return {
-      [headers[0]]: order.orderNumber,
+      [headers[0]]: isRtl ? (order.orderNumber) : order.orderNumber,
       [headers[1]]: order.branchName,
       [headers[2]]: statusLabel,
       [headers[3]]: productsStr,
@@ -326,14 +323,20 @@ export const Orders: React.FC = () => {
         .reduce((sum, ret) => {
           const returnTotal = ret.items.reduce((retSum, item) => {
             const orderItem = order.items.find(i => i.productId === item.productId);
-            return retSum + (orderItem ? (orderItem.price * item.quantity) / 100 : 0); // Divide by 100
+            return retSum + (orderItem ? orderItem.price * item.quantity : 0);
           }, 0);
           return sum + returnTotal;
         }, 0);
-      const adjusted = ((order.adjustedTotal || order.totalAmount || 0) - approvedReturnsTotal) / 100; // Divide by 100
-      return adjusted.toString(); // Return as string without extra formatting
+      const adjusted = (order.adjustedTotal || order.totalAmount || 0) - approvedReturnsTotal;
+      const formatted = adjusted.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
+        style: 'currency',
+        currency: 'SAR',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+      return isRtl ? formatted.replace(/\d/g, (d) => String.fromCharCode(0x0660 + parseInt(d))) : formatted;
     },
-    []
+    [isRtl]
   );
 
   const handleNavigateToDetails = useCallback((orderId: string) => {
@@ -380,7 +383,6 @@ export const Orders: React.FC = () => {
               _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
               productId: item.product?._id || 'unknown',
               productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              productNameEn: item.product?.nameEn, // Added for English product names
               quantity: Number(item.quantity) || 1,
               price: Number(item.price) || 0,
               unit: item.product?.unit || 'unit',
@@ -413,8 +415,8 @@ export const Orders: React.FC = () => {
             }))
           : [],
         status: order.status || 'pending',
-        totalAmount: Number(order.totalAmount) / 100 || 0, // Divide by 100
-        adjustedTotal: Number(order.adjustedTotal) / 100 || 0, // Divide by 100
+        totalAmount: Number(order.totalAmount) || 0,
+        adjustedTotal: Number(order.adjustedTotal) || 0,
         date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
         requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : undefined,
         notes: order.notes || '',
@@ -514,9 +516,8 @@ export const Orders: React.FC = () => {
                   _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
                   productId: item.product?._id || 'unknown',
                   productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                  productNameEn: item.product?.nameEn, // Added for English product names
                   quantity: Number(item.quantity) || 1,
-                  price: Number(item.price) / 100 || 0, // Divide by 100
+                  price: Number(item.price) || 0,
                   unit: item.product?.unit || 'unit',
                   department: item.product?.department ? { _id: item.product.department._id, name: item.product.department.name || (isRtl ? 'غير معروف' : 'Unknown') } : { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' },
                   assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || item.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), department: item.assignedTo.department } : undefined,
@@ -547,8 +548,8 @@ export const Orders: React.FC = () => {
                 }))
               : [],
             status: order.status || 'pending',
-            totalAmount: Number(order.totalAmount) / 100 || 0, // Divide by 100
-            adjustedTotal: Number(order.adjustedTotal) / 100 || 0, // Divide by 100
+            totalAmount: Number(order.totalAmount) || 0,
+            adjustedTotal: Number(order.adjustedTotal) || 0,
             date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
             requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : undefined,
             notes: order.notes || '',
@@ -810,13 +811,12 @@ export const Orders: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => fetchData(), 100); // Add slight delay to avoid flashing
-    return () => clearTimeout(timer);
+    fetchData();
   }, [fetchData]);
 
   return (
     <div className="px-2 py-4">
-      <Suspense fallback={<div className="text-center text-gray-500">{isRtl ? 'جارٍ التحميل...' : 'Loading...'}</div>}>
+      <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: 'easeOut' }} className="mb-6">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <div className="w-full sm:w-auto text-center sm:text-start">
@@ -856,17 +856,17 @@ export const Orders: React.FC = () => {
               </Button>
             </div>
           </div>
-          <Card className="p-3 mt-6 bg-white shadow-md border border-gray-200">
+          <Card className="p-3 mt-6 bg-white shadow-md  border border-gray-200">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
-                <div className="relative">
+                <div className="relative ">
                   <Search className={`w-4 h-4 text-gray-500 absolute top-2 ${isRtl ? 'left-2' : 'right-2'}`} />
                   <Input
                     value={state.searchQuery}
                     onChange={(e) => handleSearchChange(e?.target?.value || '')}
                     placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
-                    className={`w-full ${isRtl ? 'pl-8' : 'pr-8'} rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200`}
+                    className={`w-full ${isRtl ? 'pl-8 ' : 'pr-8'} rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200`}
                   />
                 </div>
               </div>
@@ -906,7 +906,7 @@ export const Orders: React.FC = () => {
             </div>
             <div className={`flex flex-col sm:flex-row justify-between items-center gap-3 mt-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
               <div className="text-xs text-center text-gray-600">
-                {isRtl ? `عدد الطلبات: ${toArabicNumerals(filteredOrders.length)}` : `Orders count: ${filteredOrders.length}`}
+                {isRtl ? `عدد الطلبات: ${(filteredOrders.length)}` : `Orders count: ${filteredOrders.length}`}
               </div>
               <Button
                 variant="secondary"
@@ -923,7 +923,7 @@ export const Orders: React.FC = () => {
             {state.loading ? (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-1">
                 {state.viewMode === 'card' ? (
-                  <div className="grid grid-cols-1 gap-1">
+                  <div className="grid grid-cols-1  gap-1">
                     {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)}
                   </div>
                 ) : (
