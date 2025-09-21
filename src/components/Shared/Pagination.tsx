@@ -94,7 +94,7 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, isRtl,
           aria-label={typeof page === 'number' ? `${paginationText.page} ${page}` : undefined}
           aria-current={page === currentPage ? 'page' : undefined}
         >
-          {isRtl && typeof page === 'number' ? toArabicNumerals(page) : page}
+          {isRtl && typeof page === 'number' ? (page) : page}
         </Button>
       ))}
 
