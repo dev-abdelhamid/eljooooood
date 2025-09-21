@@ -16,19 +16,17 @@ const formatPrice = (amount: number | undefined, isRtl: boolean): string => {
   const arabicNumber = isRtl ? toArabicNumerals(formatted) : formatted;
   return isRtl ? `${arabicNumber} ر.س` : `${formatted} SAR`;
 };
-
 // Format products for Arabic and English with correct separator
 const formatProducts = (items: Order['items'], isRtl: boolean, translateUnit: (unit: string, isRtl: boolean) => string): string => {
   return items
     .map((item) => {
       const quantity = isRtl ? toArabicNumerals(item.quantity) : item.quantity;
       return isRtl
-        ? `${item.productName} ${translateUnit(item.unit, isRtl)} ${quantity}`
-        : `${item.productName} x ${quantity} ${translateUnit(item.unit, isRtl)}`;
+        ? `${quantity} ${translateUnit(item.unit, isRtl)} ${item.productName}`
+        : `${quantity} ${translateUnit(item.unit, isRtl)} ${item.productName}`;
     })
     .join('  +  ');
 };
-
 // Convert array buffer to base64 for font embedding
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   let binary = '';
