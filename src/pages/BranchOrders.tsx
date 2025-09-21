@@ -20,7 +20,6 @@ import { Order, ReturnForm, OrderStatus, ItemStatus } from '../components/branch
 import { formatDate } from '../utils/formatDate';
 import OrderCardSkeleton from '../components/branch/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/branch/OrderTableSkeleton';
-import { exportToPDF } from '../components/branch/PDFExporter';
 
 // Lazy-loaded components
 const OrderTable = lazy(() => import('../components/branch/OrderTable'));
@@ -695,7 +694,7 @@ const BranchOrders: React.FC = () => {
     ws['!cols'] = [
       { wch: 15 }, // Order Number
       { wch: 15 }, // Status
-      { wch: 50 }, // Products
+      { wch: 40 }, // Products
       { wch: 20 }, // Total Amount
       { wch: 15 }, // Total Quantity
       { wch: 20 }, // Date
@@ -724,8 +723,8 @@ const BranchOrders: React.FC = () => {
       doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
       doc.setFont(fontName);
 
-      doc.setFontSize(12);
-      doc.text(isRtl ? 'قائمة الطلبات' : 'Orders List', isRtl ? doc.internal.pageSize.width - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
+      doc.setFontSize(16);
+      doc.text(isRtl ? 'الطلبات' : 'Orders', isRtl ? doc.internal.pageSize.width - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
 
       const headers = [
         isRtl ? 'رقم الطلب' : 'Order Number',
@@ -740,7 +739,7 @@ const BranchOrders: React.FC = () => {
       const data = state.orders.map(order => [
         order.orderNumber,
         t(`orders.status_${order.status}`) || order.status,
-        order.items.map(item => `(${item.quantity} ${t(`units.${item.unit || 'unit'}`) || item.unit} × ${getFirstTwoWords(item.productName)})`).join(' + '),
+        order.items.map(item => `(${item.quantity} ${t(`${item.unit || 'unit'}`) || item.unit} × ${getFirstTwoWords(item.productName)})`).join(' + '),
         calculateAdjustedTotal(order),
         calculateTotalQuantity(order).toString(),
         order.date,
@@ -751,32 +750,17 @@ const BranchOrders: React.FC = () => {
         head: [isRtl ? headers.reverse() : headers],
         body: isRtl ? data.map(row => row.reverse()) : data,
         theme: 'grid',
-        headStyles: { 
-          fillColor: [255, 193, 7], 
-          textColor: 255, 
-          fontSize: 9, 
-          halign: isRtl ? 'right' : 'left', 
-          font: fontName, 
-          cellPadding: 2,
-          minCellHeight: 8,
-        },
-        bodyStyles: { 
-          fontSize: 8, 
-          halign: isRtl ? 'right' : 'left', 
-          font: fontName, 
-          cellPadding: 2, 
-          textColor: [33, 33, 33],
-          minCellHeight: 6,
-        },
-        margin: { top: 20, left: 10, right: 10 },
+        headStyles: { fillColor: [255, 193, 7], textColor: 255, fontSize: 10, halign: isRtl ? 'right' : 'left', font: fontName, cellPadding: 3 },
+        bodyStyles: { fontSize: 8, halign: isRtl ? 'right' : 'left', font: fontName, cellPadding: 3, textColor: [33, 33, 33] },
+        margin: { top: 25, left: 10, right: 10 },
         columnStyles: {
-          0: { cellWidth: 30 },
-          1: { cellWidth: 25 },
-          2: { cellWidth: 110 },
-          3: { cellWidth: 30 },
-          4: { cellWidth: 25 },
-          5: { cellWidth: 35 },
-          6: { cellWidth: 25 },
+          0: { cellWidth: 25 },
+          1: { cellWidth: 20 },
+          2: { cellWidth: 100 },
+          3: { cellWidth: 25 },
+          4: { cellWidth: 20 },
+          5: { cellWidth: 30 },
+          6: { cellWidth: 20 },
         },
         didParseCell: data => {
           if (data.section === 'body' && data.column.index === 3 && isRtl) {
@@ -799,13 +783,7 @@ const BranchOrders: React.FC = () => {
             { align: isRtl ? 'left' : 'right' }
           );
         },
-        styles: { 
-          overflow: 'linebreak', 
-          font: fontName, 
-          fontSize: 8, 
-          cellPadding: 2, 
-          halign: isRtl ? 'right' : 'left' 
-        },
+        styles: { overflow: 'linebreak', font: fontName, fontSize: 8, cellPadding: 3, halign: isRtl ? 'right' : 'left' },
       });
 
       doc.save('BranchOrders.pdf');
@@ -1129,7 +1107,7 @@ const BranchOrders: React.FC = () => {
                 <Select
                   options={statusOptions.map(opt => ({
                     value: opt.value,
-                    label: t(`orders.status_${opt.value}`) || (isRtl ? 'جميع الحالات' : 'All Statuses'),
+                    label: t(`orders.status_${opt.value}`) || (isRtl ? 'كل الحالات' : 'All Statuses'),
                   }))}
                   value={state.filterStatus || ''}
                   onChange={(value: string) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
@@ -1172,6 +1150,7 @@ const BranchOrders: React.FC = () => {
                   variant="primary"
                   onClick={() => fetchData()}
                   className="mt-3 bg-amber-500 hover:bg-amber-600 text-white rounded-md px-4 py-1.5 text-xs shadow-sm"
+                  aria-label={isRtl ? 'إعادة المحاولة' : 'Retry'}
                 >
                   {isRtl ? 'إعادة المحاولة' : 'Retry'}
                 </Button>
