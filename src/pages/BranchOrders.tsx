@@ -649,6 +649,9 @@ const BranchOrders: React.FC = () => {
 
   // Calculate adjusted total for an order
   const calculateAdjustedTotal = useCallback((order: Order) => {
+    if (!order || !order.items || !Array.isArray(order.items)) {
+      return isRtl ? '٠٫٠٠ ر.س' : '0.00 SAR';
+    }
     const approvedReturnsTotal = (order.returns || []).filter(ret => ret.status === 'approved').reduce((sum, ret) => {
       const returnTotal = ret.items.reduce((retSum, item) => {
         const orderItem = order.items.find(i => i.productId === item.productId);
@@ -656,7 +659,8 @@ const BranchOrders: React.FC = () => {
       }, 0);
       return sum + returnTotal;
     }, 0);
-    return (order.totalAmount - approvedReturnsTotal).toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
+    const amount = Number(order.totalAmount) - approvedReturnsTotal;
+    return amount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
       style: 'currency',
       currency: 'SAR',
       minimumFractionDigits: 2,
@@ -666,7 +670,7 @@ const BranchOrders: React.FC = () => {
 
   // Calculate total quantity for an order
   const calculateTotalQuantity = useCallback((order: Order) => {
-    return order.items.reduce((sum, item) => sum + item.quantity, 0);
+    return order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   }, []);
 
   // Export to Excel
@@ -712,12 +716,18 @@ const BranchOrders: React.FC = () => {
       const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
       doc.setLanguage(isRtl ? 'ar' : 'en');
 
-      const fontUrl = '/fonts/Alexandria-Regular.ttf';
-      const fontName = 'Alexandria';
-      const fontBytes = await fetch(fontUrl).then(res => {
+      const fontUrl = '/fonts/Amiri-Regular.ttf'; // Changed to Amiri for better Arabic support
+      const fontName = 'Amiri';
+      let fontBytes;
+      try {
+        const res = await fetch(fontUrl);
         if (!res.ok) throw new Error('Failed to fetch font');
-        return res.arrayBuffer();
-      });
+        fontBytes = await res.arrayBuffer();
+      } catch (fetchErr) {
+        console.error('Failed to load font:', fetchErr);
+        toast.error(isRtl ? 'فشل في تحميل الخط للـ PDF' : 'Failed to load font for PDF', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+        return;
+      }
       const base64Font = arrayBufferToBase64(fontBytes);
       doc.addFileToVFS(`${fontName}-Regular.ttf`, base64Font);
       doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
@@ -727,19 +737,19 @@ const BranchOrders: React.FC = () => {
       doc.text(isRtl ? 'الطلبات' : 'Orders', isRtl ? doc.internal.pageSize.width - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
 
       const headers = [
-        isRtl ? 'رقم الطلب' : 'Order Number',
-        isRtl ? 'الحالة' : 'Status',
-        isRtl ? 'المنتجات' : 'Products',
-        isRtl ? 'إجمالي المبلغ' : 'Total Amount',
-        isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
-        isRtl ? 'التاريخ' : 'Date',
-        isRtl ? 'الأولوية' : 'Priority',
+        'رقم الطلب',
+        'الحالة',
+        'المنتجات',
+        'إجمالي المبلغ',
+        'الكمية الإجمالية',
+        'التاريخ',
+        'الأولوية',
       ];
 
       const data = state.orders.map(order => [
         order.orderNumber,
         t(`orders.status_${order.status}`) || order.status,
-        order.items.map(item => `(${item.quantity} ${t(`${item.unit || 'unit'}`) || item.unit} × ${getFirstTwoWords(item.productName)})`).join(' + '),
+        order.items.map(item => `(${item.quantity} ${t(`units.${item.unit || 'unit'}`) || item.unit} × ${getFirstTwoWords(item.productName)})`).join(' + '),
         calculateAdjustedTotal(order),
         calculateTotalQuantity(order).toString(),
         order.date,
@@ -747,24 +757,45 @@ const BranchOrders: React.FC = () => {
       ]);
 
       autoTable(doc, {
-        head: [isRtl ? headers.reverse() : headers],
-        body: isRtl ? data.map(row => row.reverse()) : data,
+        head: [isRtl ? headers : headers.reverse()],
+        body: isRtl ? data : data.map(row => row.reverse()),
         theme: 'grid',
-        headStyles: { fillColor: [255, 193, 7], textColor: 255, fontSize: 10, halign: isRtl ? 'right' : 'left', font: fontName, cellPadding: 3 },
-        bodyStyles: { fontSize: 8, halign: isRtl ? 'right' : 'left', font: fontName, cellPadding: 3, textColor: [33, 33, 33] },
-        margin: { top: 25, left: 10, right: 10 },
-        columnStyles: {
-          0: { cellWidth: 25 },
-          1: { cellWidth: 20 },
-          2: { cellWidth: 100 },
-          3: { cellWidth: 25 },
-          4: { cellWidth: 20 },
-          5: { cellWidth: 30 },
-          6: { cellWidth: 20 },
+        headStyles: { 
+          fillColor: [255, 193, 7], 
+          textColor: 255, 
+          fontSize: 10, 
+          halign: isRtl ? 'right' : 'left', 
+          font: fontName, 
+          cellPadding: 3 
+        },
+        bodyStyles: { 
+          fontSize: 8, 
+          halign: isRtl ? 'right' : 'left', 
+          font: fontName, 
+          cellPadding: 3, 
+          textColor: [33, 33, 33] 
+        },
+        margin: { top: 25, left: isRtl ? 20 : 10, right: isRtl ? 10 : 20 },
+        columnStyles: isRtl ? {
+          0: { cellWidth: 20, halign: 'right' },
+          1: { cellWidth: 20, halign: 'right' },
+          2: { cellWidth: 100, halign: 'right' },
+          3: { cellWidth: 25, halign: 'right' },
+          4: { cellWidth: 20, halign: 'right' },
+          5: { cellWidth: 30, halign: 'right' },
+          6: { cellWidth: 20, halign: 'right' },
+        } : {
+          0: { cellWidth: 20, halign: 'left' },
+          1: { cellWidth: 20, halign: 'left' },
+          2: { cellWidth: 100, halign: 'left' },
+          3: { cellWidth: 25, halign: 'left' },
+          4: { cellWidth: 20, halign: 'left' },
+          5: { cellWidth: 30, halign: 'left' },
+          6: { cellWidth: 20, halign: 'left' },
         },
         didParseCell: data => {
           if (data.section === 'body' && data.column.index === 3 && isRtl) {
-            data.cell.text = [data.cell.raw.toString().replace(/(\d+\.\d{2})/, ' $1 ر.س')];
+            data.cell.text = [data.cell.raw.replace(/([\d,.]+)/, match => match.split('').reverse().join('') + ' ر.س')];
           }
         },
         didDrawPage: data => {
@@ -918,7 +949,7 @@ const BranchOrders: React.FC = () => {
 
         // Confirm delivery with userId as string
         console.log('Calling ordersAPI.confirmDelivery:', { orderId, userId: user.id });
-        await ordersAPI.confirmDelivery(orderId, user.id); // Fixed: Pass user.id as string
+        await ordersAPI.confirmDelivery(orderId, user.id);
 
         // Update inventory using bulkCreate
         const inventoryItems = order.items.map(item => ({
