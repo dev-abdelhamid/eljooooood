@@ -18,11 +18,10 @@ const fromArabicNumerals = (str: string): string => {
   return str.replace(/[٠-٩]/g, (digit) => arabicMap[digit] || digit);
 };
 
-// Format price with proper currency and Arabic numerals
+// Format price without extra zeros or formatting
 const formatPrice = (amount: number | undefined, isRtl: boolean): string => {
-  const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
-  // Ensure the number is formatted correctly without extra zeros
-  const formatted = Number(validAmount); // Fixed: Use Number() to avoid extra zeros
+  const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? Math.round(amount) : 0; // Round to avoid decimals
+  const formatted = String(validAmount); // No extra zeros or commas
   const arabicNumber = isRtl ? toArabicNumerals(formatted) : formatted;
   return isRtl ? `${arabicNumber} ر.س` : `${formatted} SAR`;
 };
@@ -281,7 +280,7 @@ export const exportToPDF = async (
     const totalAmount = filteredOrders.reduce((sum, order) => {
       const amountStr = calculateAdjustedTotal(order);
       const numericStr = fromArabicNumerals(amountStr);
-      const cleaned = numericStr.replace(/[^0-9.,]/g, '').replace(',', '.');
+      const cleaned = numericStr.replace(/[^0-9]/g, ''); // Remove everything except numbers
       return sum + (cleaned && !isNaN(parseFloat(cleaned)) ? parseFloat(cleaned) : 0);
     }, 0);
 
@@ -327,7 +326,7 @@ export const exportToPDF = async (
         formattedTotalAmount = formatPrice(0, isRtl);
       } else {
         const numericStr = fromArabicNumerals(totalAmountStr);
-        const cleaned = numericStr.replace(/[^0-9.,]/g, '').replace(',', '.');
+        const cleaned = numericStr.replace(/[^0-9]/g, ''); // Remove everything except numbers
         const parsedAmount = parseFloat(cleaned);
         formattedTotalAmount = isNaN(parsedAmount) ? formatPrice(0, isRtl) : formatPrice(parsedAmount, isRtl);
       }
