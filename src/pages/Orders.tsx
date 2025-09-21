@@ -71,7 +71,7 @@ const initialState: State = {
   sortBy: 'date',
   sortOrder: 'desc',
   currentPage: 1,
-  loading: true,
+  loading: false,
   error: '',
   submitting: null,
   socketConnected: false,
@@ -81,7 +81,7 @@ const initialState: State = {
 
 const reducer = (state: State, action: Action): State => {
   switch (action.type) {
-    case 'SET_ORDERS': return { ...state, orders: action.payload, error: '', currentPage: 1 };
+    case 'SET_ORDERS': return { ...state, orders: action.payload, error: '', currentPage: 1, loading: false };
     case 'ADD_ORDER': return { ...state, orders: [action.payload, ...state.orders.filter(o => o.id !== action.payload.id)] };
     case 'SET_SELECTED_ORDER': return { ...state, selectedOrder: action.payload };
     case 'SET_CHEFS': return { ...state, chefs: action.payload };
@@ -92,9 +92,9 @@ const reducer = (state: State, action: Action): State => {
     case 'SET_FILTER_BRANCH': return { ...state, filterBranch: action.payload, currentPage: 1 };
     case 'SET_SEARCH_QUERY': return { ...state, searchQuery: action.payload, currentPage: 1 };
     case 'SET_SORT': return { ...state, sortBy: action.by ?? 'date', sortOrder: action.order ?? 'desc', currentPage: 1 };
-    case 'SET_PAGE': return { ...state, currentPage: action.payload };
+    case 'SET_PAGE': return { ...state, currentPage: action.payload, loading: true };
     case 'SET_LOADING': return { ...state, loading: action.payload };
-    case 'SET_ERROR': return { ...state, error: action.payload };
+    case 'SET_ERROR': return { ...state, error: action.payload, loading: false };
     case 'SET_SUBMITTING': return { ...state, submitting: action.payload };
     case 'SET_SOCKET_CONNECTED': return { ...state, socketConnected: action.payload };
     case 'SET_SOCKET_ERROR': return { ...state, socketError: action.payload };
@@ -209,7 +209,7 @@ const reducer = (state: State, action: Action): State => {
   }
 };
 
-const ORDERS_PER_PAGE = { card: 12, table: 50 };
+const ORDERS_PER_PAGE = { card: 12, table: 10 }; // Reduced table rows for consistency
 const validTransitions: Record<Order['status'], Order['status'][]> = {
   pending: ['approved', 'cancelled'],
   approved: ['in_production', 'cancelled'],
@@ -249,7 +249,6 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
 
-// Converts Western digits to Arabic-Indic numerals
 function toArabicNumerals(num: number | string): string {
   return num
     .toString()
@@ -451,11 +450,9 @@ export const Orders: React.FC = () => {
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
       }
-      dispatch({ type: 'SET_LOADING', payload: true });
       const cacheKey = `${user.id}-${state.filterStatus}-${state.filterBranch}-${state.currentPage}-${state.viewMode}`;
-      if (cacheRef.current.has(cacheKey) ) {
+      if (cacheRef.current.has(cacheKey)) {
         dispatch({ type: 'SET_ORDERS', payload: cacheRef.current.get(cacheKey)! });
-        dispatch({ type: 'SET_LOADING', payload: false });
         return;
       }
       try {
@@ -537,7 +534,6 @@ export const Orders: React.FC = () => {
                 }))
               : [],
           }));
-        cacheRef.current.clear();
         cacheRef.current.set(cacheKey, mappedOrders);
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
         dispatch({
@@ -574,8 +570,6 @@ export const Orders: React.FC = () => {
           : isRtl ? `خطأ في جلب الطلبات: ${err.message}` : `Error fetching orders: ${err.message}`;
         dispatch({ type: 'SET_ERROR', payload: errorMessage });
         toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
-      } finally {
-        dispatch({ type: 'SET_LOADING', payload: false });
       }
     },
     [user, state.filterStatus, state.filterBranch, state.currentPage, state.viewMode, state.sortBy, state.sortOrder, isRtl, language]
@@ -625,23 +619,21 @@ export const Orders: React.FC = () => {
 
   const filteredOrders = useMemo(
     () =>
-      state.orders
-        .filter(
-          order =>
-            order.orderNumber.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.branchName.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            (order.notes || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.createdBy.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.items.some(item => item.productName.toLowerCase().includes(state.searchQuery.toLowerCase()))
-        )
-        .filter(
-          order =>
-            (!state.filterStatus || order.status === state.filterStatus) &&
-            (!state.filterBranch || order.branchId === state.filterBranch) &&
-            (user?.role === 'production' && user?.department
-              ? order.items.some(item => item.department._id === user.department._id)
-              : true)
-        ),
+      state.orders.filter(
+        order =>
+          order.orderNumber.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+          order.branchName.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+          (order.notes || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+          order.createdBy.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+          order.items.some(item => item.productName.toLowerCase().includes(state.searchQuery.toLowerCase()))
+      ).filter(
+        order =>
+          (!state.filterStatus || order.status === state.filterStatus) &&
+          (!state.filterBranch || order.branchId === state.filterBranch) &&
+          (user?.role === 'production' && user?.department
+            ? order.items.some(item => item.department._id === user.department._id)
+            : true)
+      ),
     [state.orders, state.searchQuery, state.filterStatus, state.filterBranch, user]
   );
 
@@ -816,33 +808,30 @@ export const Orders: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (state.currentPage !== 1 || state.filterStatus || state.filterBranch || state.searchQuery) {
+      fetchData();
+    }
+  }, [fetchData, state.currentPage, state.filterStatus, state.filterBranch, state.searchQuery]);
 
   return (
     <div className="px-4 py-6 min-h-screen bg-gray-50">
-      <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
+      <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} rows={ORDERS_PER_PAGE.table} />}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-6">
-          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                <ShoppingCart className="w-6 h-6 text-amber-600" />
-                {isRtl ? 'الطلبات' : 'Orders'}
-              </h1>
-              <p className="text-sm text-gray-500 mt-1">{isRtl ? 'إدارة طلبات الإنتاج' : 'Manage production orders'}</p>
+          <div className={`flex flex-col sm:flex-row justify-between items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <div className="flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5 text-amber-600" />
+              <h1 className="text-xl font-bold text-gray-800 text-center sm:text-start">{isRtl ? 'الطلبات' : 'Orders'}</h1>
             </div>
-            <div className="flex gap-3 flex-wrap">
+            <div className="flex gap-2 flex-wrap justify-center">
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
                 onClick={state.orders.length > 0 ? exportToExcel : undefined}
-                className={`flex items-center gap-1.5 ${
-                  state.orders.length > 0 ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-lg px-4 py-2 text-sm shadow-md transition-colors duration-200`}
+                className={`flex items-center gap-1.5 ${state.orders.length > 0 ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'} rounded-lg px-3 py-1.5 text-xs shadow-sm transition-colors duration-200`}
                 disabled={state.orders.length === 0}
                 aria-label={isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
               >
-                <Download className="w-5 h-5" />
-                {isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
+                <Download className="w-4 h-4" />
+                {isRtl ? 'Excel' : 'Excel'}
               </Button>
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
@@ -850,42 +839,40 @@ export const Orders: React.FC = () => {
                   const filterBranchName = state.branches.find(b => b._id === state.filterBranch)?.name || '';
                   exportToPDF(state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, state.filterStatus, filterBranchName);
                 } : undefined}
-                className={`flex items-center gap-1.5 ${
-                  state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-lg px-4 py-2 text-sm shadow-md transition-colors duration-200`}
+                className={`flex items-center gap-1.5 ${state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'} rounded-lg px-3 py-1.5 text-xs shadow-sm transition-colors duration-200`}
                 disabled={state.orders.length === 0}
                 aria-label={isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
               >
-                <Download className="w-5 h-5" />
-                {isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
+                <Download className="w-4 h-4" />
+                {isRtl ? 'PDF' : 'PDF'}
               </Button>
               <Button
                 variant="secondary"
                 onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' })}
-                className="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-4 py-2 text-sm shadow-md transition-colors duration-200"
+                className="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-3 py-1.5 text-xs shadow-sm transition-colors duration-200"
                 aria-label={state.viewMode === 'card' ? (isRtl ? 'عرض كجدول' : 'View as Table') : (isRtl ? 'عرض كبطاقات' : 'View as Cards')}
               >
-                {state.viewMode === 'card' ? <Table2 className="w-5 h-5" /> : <Grid className="w-5 h-5" />}
-                {state.viewMode === 'card' ? (isRtl ? 'عرض كجدول' : 'View as Table') : (isRtl ? 'عرض كبطاقات' : 'View as Cards')}
+                {state.viewMode === 'card' ? <Table2 className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
+                {state.viewMode === 'card' ? (isRtl ? 'جدول' : 'Table') : (isRtl ? 'بطاقات' : 'Cards')}
               </Button>
             </div>
           </div>
-          <Card className="p-4 mt-6 bg-white shadow-lg rounded-lg border border-gray-100">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="p-4 mt-4 bg-white shadow-md rounded-lg border border-gray-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
                 <div className="relative">
-                  <Search className={`w-5 h-5 text-gray-500 absolute top-2.5 ${isRtl ? 'right-3' : 'left-3'}`} />
+                  <Search className={`w-4 h-4 text-gray-500 absolute top-2.5 ${isRtl ? 'right-3' : 'left-3'}`} />
                   <Input
                     value={state.searchQuery}
                     onChange={(e) => handleSearchChange(e?.target?.value || '')}
                     placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
-                    className={`w-full ${isRtl ? 'pr-10' : 'pl-10'} rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200`}
+                    className={`w-full ${isRtl ? 'pr-9 pl-3' : 'pl-9 pr-3'} rounded-lg border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200 py-1.5`}
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
                 <Select
                   options={statusOptions.map(opt => ({
                     value: opt.value,
@@ -893,20 +880,20 @@ export const Orders: React.FC = () => {
                   }))}
                   value={state.filterStatus}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
+                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200 py-1.5"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الفرع' : 'Filter by Branch'}</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{isRtl ? 'تصفية حسب الفرع' : 'Filter by Branch'}</label>
                 <Select
                   options={[{ value: '', label: isRtl ? 'جميع الفروع' : 'All Branches' }, ...state.branches.map(b => ({ value: b._id, label: b.name }))]}
                   value={state.filterBranch}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_BRANCH', payload: value })}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
+                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200 py-1.5"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
+                <label className="block text-xs font-medium text-gray-600 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
                 <Select
                   options={sortOptions.map(opt => ({
                     value: opt.value,
@@ -914,36 +901,36 @@ export const Orders: React.FC = () => {
                   }))}
                   value={state.sortBy}
                   onChange={(value) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
+                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200 py-1.5"
                 />
               </div>
             </div>
-            <div className="text-sm text-center text-gray-500 mt-4">
-              {isRtl ? `عدد الطلبات: ${(filteredOrders.length)}` : `Orders count: ${filteredOrders.length}`}
+            <div className="text-xs text-center text-gray-500 mt-3">
+              {isRtl ? `عدد الطلبات: ${toArabicNumerals(filteredOrders.length)}` : `Orders count: ${filteredOrders.length}`}
             </div>
           </Card>
-          <div ref={listRef} className="mt-6 min-h-[500px]">
+          <div ref={listRef} className="mt-6 min-h-[400px]">
             {state.loading ? (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-4">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-3">
                 {state.viewMode === 'card' ? (
-                  <div className="grid grid-cols-1 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)}
                   </div>
                 ) : (
-                  <OrderTableSkeleton isRtl={isRtl} />
+                  <OrderTableSkeleton isRtl={isRtl} rows={ORDERS_PER_PAGE.table} />
                 )}
               </motion.div>
             ) : state.error ? (
               <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="mt-6">
-                <Card className="p-6 max-w-md mx-auto text-center bg-red-50 shadow-lg rounded-lg border border-red-100">
+                <Card className="p-5 max-w-md mx-auto text-center bg-red-50 shadow-md rounded-lg border border-red-100">
                   <div className={`flex items-center justify-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                    <AlertCircle className="w-6 h-6 text-red-600" />
-                    <p className="text-sm font-medium text-red-600">{state.error}</p>
+                    <AlertCircle className="w-5 h-5 text-red-600" />
+                    <p className="text-xs font-medium text-red-600">{state.error}</p>
                   </div>
                   <Button
                     variant="primary"
                     onClick={() => fetchData()}
-                    className="mt-4 bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-4 py-2 text-sm shadow-md transition-colors duration-200"
+                    className="mt-3 bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-3 py-1.5 text-xs shadow-sm transition-colors duration-200"
                     aria-label={isRtl ? 'إعادة المحاولة' : 'Retry'}
                   >
                     {isRtl ? 'إعادة المحاولة' : 'Retry'}
@@ -954,10 +941,10 @@ export const Orders: React.FC = () => {
               <AnimatePresence mode="wait">
                 {paginatedOrders.length === 0 ? (
                   <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-6">
-                    <Card className="p-8 text-center bg-white shadow-lg rounded-lg border border-gray-100">
-                      <ShoppingCart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                      <h3 className="text-lg font-medium text-gray-800 mb-2">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
-                      <p className="text-sm text-gray-500">
+                    <Card className="p-6 text-center bg-white shadow-md rounded-lg border border-gray-100">
+                      <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+                      <h3 className="text-base font-medium text-gray-800 mb-2">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
+                      <p className="text-xs text-gray-500">
                         {state.filterStatus || state.filterBranch || state.searchQuery
                           ? isRtl ? 'لا توجد طلبات مطابقة' : 'No matching orders'
                           : isRtl ? 'لا توجد طلبات بعد' : 'No orders yet'}
@@ -965,7 +952,7 @@ export const Orders: React.FC = () => {
                     </Card>
                   </motion.div>
                 ) : (
-                  <motion.div key="orders-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="space-y-4">
+                  <motion.div key="orders-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="space-y-3">
                     {state.viewMode === 'table' ? (
                       <OrderTable
                         orders={paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber)}
@@ -982,7 +969,7 @@ export const Orders: React.FC = () => {
                         onNavigateToDetails={handleNavigateToDetails}
                       />
                     ) : (
-                      <div className="grid grid-cols-1 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         {paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber).map(order => (
                           <OrderCard
                             key={order.id}
