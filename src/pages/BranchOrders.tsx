@@ -30,26 +30,40 @@ const ConfirmDeliveryModal = lazy(() => import('../components/branch/ConfirmDeli
 const ReturnModal = lazy(() => import('../components/branch/ReturnModal'));
 
 // إعداد خط الأسكندرية لـ pdfmake
-const loadFont = async () => {
+const loadFont = async (): Promise<boolean> => {
   try {
     const fontUrl = '/fonts/Alexandria-Regular.ttf';
     const response = await fetch(fontUrl);
     if (!response.ok) throw new Error('Failed to load Alexandria font');
     const fontArrayBuffer = await response.arrayBuffer();
     const base64Font = arrayBufferToBase64(fontArrayBuffer);
-    pdfMake.vfs = {
-      ...pdfFonts.pdfMake.vfs,
-      'Alexandria-Regular.ttf': base64Font,
-    };
+
+    // التأكد من أن vfs معرف
+    pdfMake.vfs = pdfMake.vfs || {};
+    pdfMake.vfs['Alexandria-Regular.ttf'] = base64Font;
+
+    // إضافة خطوط Roboto الافتراضية إذا لم تكن موجودة
+    if (!pdfMake.vfs['Roboto-Regular.ttf']) {
+      pdfMake.vfs = { ...pdfMake.vfs, ...pdfFonts.pdfMake.vfs };
+    }
+
+    // تعريف الخطوط
     pdfMake.fonts = {
       Alexandria: {
         normal: 'Alexandria-Regular.ttf',
-        // لا نعين bold أو italics لتجنب الخطأ
+      },
+      Roboto: {
+        normal: 'Roboto-Regular.ttf',
+        bold: 'Roboto-Medium.ttf',
+        italics: 'Roboto-Italic.ttf',
+        bolditalics: 'Roboto-MediumItalic.ttf',
       },
     };
+    return true;
   } catch (err) {
     console.error('Font loading error:', err);
-    // الرجوع إلى خط افتراضي في حالة فشل تحميل الخط
+    // الرجوع إلى خط Roboto الافتراضي فقط
+    pdfMake.vfs = pdfFonts.pdfMake.vfs;
     pdfMake.fonts = {
       Roboto: {
         normal: 'Roboto-Regular.ttf',
@@ -58,6 +72,7 @@ const loadFont = async () => {
         bolditalics: 'Roboto-MediumItalic.ttf',
       },
     };
+    return false;
   }
 };
 
@@ -91,6 +106,7 @@ interface State {
   socketError: string | null;
   viewMode: 'card' | 'table';
   inventory: any[];
+  fontLoaded: boolean;
 }
 
 interface Action {
@@ -128,6 +144,7 @@ const initialState: State = {
   socketError: null,
   viewMode: 'card',
   inventory: [],
+  fontLoaded: false,
 };
 
 // دالة Reducer
@@ -270,6 +287,8 @@ const reducer = (state: State, action: Action): State => {
           item.productId === action.payload.productId ? { ...item, currentStock: action.payload.quantity } : item
         ),
       };
+    case 'SET_FONT_LOADED':
+      return { ...state, fontLoaded: action.payload };
     default:
       return state;
   }
@@ -318,7 +337,11 @@ const BranchOrders: React.FC = () => {
 
   // تحميل الخط عند تحميل المكون
   useEffect(() => {
-    loadFont();
+    const initializeFonts = async () => {
+      const fontLoaded = await loadFont();
+      dispatch({ type: 'SET_FONT_LOADED', payload: fontLoaded });
+    };
+    initializeFonts();
   }, []);
 
   // تهيئة مستمعي WebSocket
@@ -683,7 +706,7 @@ const BranchOrders: React.FC = () => {
       }
     },
     [user, state.filterStatus, state.currentPage, state.viewMode, state.searchQuery, state.sortBy, state.sortOrder, isRtl, t, language]
-  );
+);
 
   // حساب إجمالي المبلغ المعدل
   const calculateAdjustedTotal = useCallback((order: Order) => {
@@ -746,6 +769,12 @@ const BranchOrders: React.FC = () => {
 
   // تصدير إلى PDF باستخدام pdfmake
   const exportToPDF = useCallback(async () => {
+    if (!state.fontLoaded) {
+      toast.error(isRtl ? 'فشل تحميل الخط، جاري استخدام الخط الافتراضي' : 'Failed to load font, using default font', {
+        position: isRtl ? 'top-left' : 'top-right',
+        autoClose: 3000,
+      });
+    }
     setIsExporting(true);
     try {
       const headers = [
@@ -775,7 +804,7 @@ const BranchOrders: React.FC = () => {
         pageSize: 'A4',
         pageMargins: [20, 20, 20, 20],
         defaultStyle: {
-          font: 'Alexandria',
+          font: state.fontLoaded ? 'Alexandria' : 'Roboto',
           fontSize: 10,
           alignment: isRtl ? 'right' : 'left',
         },
@@ -843,17 +872,17 @@ const BranchOrders: React.FC = () => {
         styles: {
           header: {
             fontSize: 14,
-            font: 'Alexandria',
+            font: state.fontLoaded ? 'Alexandria' : 'Roboto',
             margin: [0, 0, 0, 10],
           },
           subheader: {
             fontSize: 10,
-            font: 'Alexandria',
+            font: state.fontLoaded ? 'Alexandria' : 'Roboto',
             margin: [0, 0, 0, 10],
           },
           tableHeader: {
             fontSize: 10,
-            font: 'Alexandria',
+            font: state.fontLoaded ? 'Alexandria' : 'Roboto',
             color: 'white',
             fillColor: '#FFC107',
             alignment: isRtl ? 'right' : 'left',
@@ -870,7 +899,7 @@ const BranchOrders: React.FC = () => {
     } finally {
       setIsExporting(false);
     }
-  }, [state.orders, t, isRtl, language, calculateAdjustedTotal, calculateTotalQuantity, state.filterStatus, user]);
+  }, [state.orders, t, isRtl, language, calculateAdjustedTotal, calculateTotalQuantity, state.filterStatus, user, state.fontLoaded]);
 
   // معالجة البحث
   const handleSearchChange = useCallback(
