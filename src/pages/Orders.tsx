@@ -249,6 +249,13 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
 
+// Converts Western digits to Arabic-Indic numerals
+function toArabicNumerals(num: number | string): string {
+  return num
+    .toString()
+    .replace(/\d/g, (d) => String.fromCharCode(0x0660 + Number(d)));
+}
+
 export const Orders: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
