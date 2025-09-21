@@ -10,9 +10,8 @@ pdfMake.fonts = {
     normal: 'Cairo-Regular.ttf',
     bold: 'Cairo-Bold.ttf',
   },
-  Roboto: {
-    normal: 'Roboto-Regular.ttf',
-    bold: 'Roboto-Bold.ttf',
+  Amiri: {
+    normal: 'Amiri-Regular.ttf',
   },
 };
 

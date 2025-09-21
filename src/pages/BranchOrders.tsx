@@ -692,13 +692,13 @@ const BranchOrders: React.FC = () => {
     const ws = XLSX.utils.json_to_sheet(isRtl ? data.map(row => Object.fromEntries(Object.entries(row).reverse())) : data, { header: headers });
     if (isRtl) ws['!views'] = [{ RTL: true }];
     ws['!cols'] = [
-      { wch: 15 }, // Order Number
-      { wch: 15 }, // Status
-      { wch: 40 }, // Products
-      { wch: 20 }, // Total Amount
-      { wch: 15 }, // Total Quantity
-      { wch: 20 }, // Date
-      { wch: 15 }, // Priority
+      { wch: 20 }, // Order Number
+      { wch: 20 }, // Status
+      { wch: 50 }, // Products
+      { wch: 25 }, // Total Amount
+      { wch: 20 }, // Total Quantity
+      { wch: 25 }, // Date
+      { wch: 20 }, // Priority
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, isRtl ? 'الطلبات' : 'Orders');
@@ -712,8 +712,8 @@ const BranchOrders: React.FC = () => {
       const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
       doc.setLanguage(isRtl ? 'ar' : 'en');
 
-      const fontUrl = '/fonts/Amiri-Regular.ttf';
-      const fontName = 'Amiri';
+      const fontUrl = '/fonts/Khandr-Regular.ttf';
+      const fontName = 'Khandr';
       const fontBytes = await fetch(fontUrl).then(res => {
         if (!res.ok) throw new Error('Failed to fetch font');
         return res.arrayBuffer();
@@ -723,8 +723,8 @@ const BranchOrders: React.FC = () => {
       doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
       doc.setFont(fontName);
 
-      doc.setFontSize(16);
-      doc.text(isRtl ? 'الطلبات' : 'Orders', isRtl ? doc.internal.pageSize.width - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
+      doc.setFontSize(14);
+      doc.text(isRtl ? 'قائمة الطلبات' : 'Orders List', isRtl ? doc.internal.pageSize.width - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
 
       const headers = [
         isRtl ? 'رقم الطلب' : 'Order Number',
@@ -749,18 +749,33 @@ const BranchOrders: React.FC = () => {
       autoTable(doc, {
         head: [isRtl ? headers.reverse() : headers],
         body: isRtl ? data.map(row => row.reverse()) : data,
-        theme: 'grid',
-        headStyles: { fillColor: [255, 193, 7], textColor: 255, fontSize: 10, halign: isRtl ? 'right' : 'left', font: fontName, cellPadding: 3 },
-        bodyStyles: { fontSize: 8, halign: isRtl ? 'right' : 'left', font: fontName, cellPadding: 3, textColor: [33, 33, 33] },
-        margin: { top: 25, left: 10, right: 10 },
+        theme: 'striped',
+        headStyles: { 
+          fillColor: [255, 193, 7], 
+          textColor: 255, 
+          fontSize: 9, 
+          halign: isRtl ? 'right' : 'left', 
+          font: fontName, 
+          cellPadding: 2,
+          minCellHeight: 8,
+        },
+        bodyStyles: { 
+          fontSize: 8, 
+          halign: isRtl ? 'right' : 'left', 
+          font: fontName, 
+          cellPadding: 2, 
+          textColor: [33, 33, 33],
+          minCellHeight: 6,
+        },
+        margin: { top: 20, left: 15, right: 15 },
         columnStyles: {
-          0: { cellWidth: 25 },
-          1: { cellWidth: 20 },
-          2: { cellWidth: 100 },
-          3: { cellWidth: 25 },
-          4: { cellWidth: 20 },
-          5: { cellWidth: 30 },
-          6: { cellWidth: 20 },
+          0: { cellWidth: 30 },
+          1: { cellWidth: 25 },
+          2: { cellWidth: 110 },
+          3: { cellWidth: 30 },
+          4: { cellWidth: 25 },
+          5: { cellWidth: 35 },
+          6: { cellWidth: 25 },
         },
         didParseCell: data => {
           if (data.section === 'body' && data.column.index === 3 && isRtl) {
@@ -772,18 +787,24 @@ const BranchOrders: React.FC = () => {
           doc.setFontSize(8);
           doc.text(
             isRtl ? `تم الإنشاء في: ${formatDate(new Date(), language)}` : `Generated on: ${formatDate(new Date(), language)}`,
-            isRtl ? doc.internal.pageSize.width - 10 : 10,
+            isRtl ? doc.internal.pageSize.width - 15 : 15,
             doc.internal.pageSize.height - 10,
             { align: isRtl ? 'right' : 'left' }
           );
           doc.text(
             isRtl ? `الصفحة ${data.pageNumber}` : `Page ${data.pageNumber}`,
-            isRtl ? 10 : doc.internal.pageSize.width - 30,
+            isRtl ? 15 : doc.internal.pageSize.width - 30,
             doc.internal.pageSize.height - 10,
             { align: isRtl ? 'left' : 'right' }
           );
         },
-        styles: { overflow: 'linebreak', font: fontName, fontSize: 8, cellPadding: 3, halign: isRtl ? 'right' : 'left' },
+        styles: { 
+          overflow: 'linebreak', 
+          font: fontName, 
+          fontSize: 8, 
+          cellPadding: 2, 
+          halign: isRtl ? 'right' : 'left' 
+        },
       });
 
       doc.save('BranchOrders.pdf');
@@ -918,7 +939,7 @@ const BranchOrders: React.FC = () => {
 
         // Confirm delivery with userId as string
         console.log('Calling ordersAPI.confirmDelivery:', { orderId, userId: user.id });
-        await ordersAPI.confirmDelivery(orderId, user.id); // Fixed: Pass user.id as string
+        await ordersAPI.confirmDelivery(orderId, user.id);
 
         // Update inventory using bulkCreate
         const inventoryItems = order.items.map(item => ({
@@ -1012,7 +1033,6 @@ const BranchOrders: React.FC = () => {
     [t, isRtl, playNotificationSound, user, socket, isConnected, emit]
   );
 
-  // Update order status
   const updateOrderStatus = useCallback(
     async (orderId: string, status: OrderStatus) => {
       if (!user?.branchId) {
@@ -1048,75 +1068,86 @@ const BranchOrders: React.FC = () => {
 
   // Render
   return (
-    <div className="px-4 py-6 min-h-screen " dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="px-6 py-8 min-h-screen font-khandr" dir={isRtl ? 'rtl' : 'ltr'}>
+      <style jsx>{`
+        @font-face {
+          font-family: 'Khandr';
+          src: url('/fonts/Khandr-Regular.ttf') format('truetype');
+          font-weight: normal;
+          font-style: normal;
+        }
+        .font-khandr {
+          font-family: 'Khandr', sans-serif;
+        }
+      `}</style>
       <Suspense fallback={<LoadingSpinner size="lg" />}>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-8">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-6">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <div>
-              <h1 className="text-xl sm:text-xl font-bold text-gray-800 flex items-center gap-3">
-                <ShoppingCart className="w-8 h-8 text-amber-600" />
-                {isRtl ? 'الطلبات' : 'Orders'}
+              <h1 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+                <ShoppingCart className="w-6 h-6 text-amber-600" />
+                {isRtl ? 'إدارة الطلبات' : 'Orders Management'}
               </h1>
-              <p className="text-sm text-gray-500 mt-1">{isRtl ? 'إدارة طلبات الفرع' : 'Manage branch orders'}</p>
+              <p className="text-xs text-gray-500 mt-1">{isRtl ? 'إدارة طلبات الفروع بكفاءة' : 'Manage branch orders efficiently'}</p>
             </div>
-            <div className="flex gap-3 flex-wrap">
+            <div className="flex gap-2 flex-wrap">
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
                 onClick={state.orders.length > 0 ? exportToExcel : undefined}
-                className={`flex items-center gap-2 ${
+                className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-md shadow-sm ${
                   state.orders.length > 0 ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-lg px-4 py-2 text-sm shadow-sm`}
+                }`}
                 disabled={state.orders.length === 0}
               >
-                <Download className="w-5 h-5" />
-                {isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
+                <Download className="w-4 h-4" />
+                {isRtl ? 'تصدير Excel' : 'Export Excel'}
               </Button>
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
                 onClick={state.orders.length > 0 ? exportToPDF : undefined}
-                className={`flex items-center gap-2 ${
+                className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-md shadow-sm ${
                   state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-lg px-4 py-2 text-sm shadow-sm`}
+                }`}
                 disabled={state.orders.length === 0}
               >
-                <Upload className="w-5 h-5" />
-                {isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
+                <Upload className="w-4 h-4" />
+                {isRtl ? 'تصدير PDF' : 'Export PDF'}
               </Button>
               <Button
                 variant="secondary"
                 onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' })}
-                className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-4 py-2 text-sm shadow-sm"
+                className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 text-sm px-3 py-1.5 rounded-md shadow-sm"
               >
-                {state.viewMode === 'card' ? <Table2 className="w-5 h-5" /> : <Grid className="w-5 h-5" />}
-                {isRtl ? (state.viewMode === 'card' ? 'عرض كجدول' : 'عرض كبطاقات') : state.viewMode === 'card' ? 'View as Table' : 'View as Cards'}
+                {state.viewMode === 'card' ? <Table2 className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
+                {isRtl ? (state.viewMode === 'card' ? 'عرض جدول' : 'عرض بطاقات') : state.viewMode === 'card' ? 'Table View' : 'Card View'}
               </Button>
             </div>
           </div>
-          <Card className="p-4 sm:p-6 mt-6 bg-white shadow-lg rounded-lg border border-gray-100">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <Card className="p-4 mt-4 bg-white shadow-md rounded-lg border border-gray-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'البحث' : 'Search'}</label>
                 <SearchInput
                   value={state.searchQuery}
                   onChange={handleSearchChange}
-                  placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                  placeholder={isRtl ? 'ابحث برقم الطلب أو المنتج...' : 'Search by order or product...'}
+                  className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية الحالة' : 'Filter Status'}</label>
                 <Select
                   options={statusOptions.map(opt => ({
                     value: opt.value,
-                    label: t(`orders.status_${opt.value}`) || (isRtl ? 'كل الحالات' : 'All Statuses'),
+                    label: t(`orders.status_${opt.value}`) || (isRtl ? 'جميع الحالات' : 'All Statuses'),
                   }))}
                   value={state.filterStatus || ''}
                   onChange={(value: string) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                  className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'الترتيب حسب' : 'Sort By'}</label>
                 <Select
                   options={sortOptions.map(opt => ({
                     value: opt.value,
@@ -1124,12 +1155,12 @@ const BranchOrders: React.FC = () => {
                   }))}
                   value={state.sortBy}
                   onChange={(value: string) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                  className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
                 />
               </div>
             </div>
-            <div className="text-sm text-center text-gray-500 mt-4">
-              {isRtl ? `عدد الطلبات: ${filteredOrders.length}` : `Orders count: ${filteredOrders.length}`}
+            <div className="text-xs text-center text-gray-500 mt-3">
+              {isRtl ? `إجمالي الطلبات: ${filteredOrders.length}` : `Total Orders: ${filteredOrders.length}`}
             </div>
           </Card>
           {state.loading ? (
@@ -1142,15 +1173,15 @@ const BranchOrders: React.FC = () => {
             </motion.div>
           ) : state.error && state.orders.length === 0 ? (
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="mt-6">
-              <Card className="p-6 max-w-md mx-auto text-center bg-red-50 shadow-lg rounded-lg border border-red-100">
+              <Card className="p-6 max-w-md mx-auto text-center bg-red-50 shadow-md rounded-lg border border-red-100">
                 <div className={`flex items-center justify-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  <AlertCircle className="w-6 h-6 text-red-600" />
-                  <p className="text-lg font-medium text-red-600">{state.error}</p>
+                  <AlertCircle className="w-5 h-5 text-red-600" />
+                  <p className="text-base font-medium text-red-600">{state.error}</p>
                 </div>
                 <Button
                   variant="primary"
                   onClick={() => fetchData()}
-                  className="mt-4 bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-6 py-2 text-sm shadow-sm"
+                  className="mt-3 bg-amber-500 hover:bg-amber-600 text-white rounded-md px-4 py-1.5 text-sm shadow-sm"
                 >
                   {isRtl ? 'إعادة المحاولة' : 'Retry'}
                 </Button>
@@ -1160,38 +1191,40 @@ const BranchOrders: React.FC = () => {
             <AnimatePresence>
               {paginatedOrders.length === 0 ? (
                 <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-6">
-                  <Card className="p-8 sm:p-12 text-center bg-white shadow-lg rounded-lg border border-gray-100">
-                    <ShoppingCart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-800 mb-2">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
-                    <p className="text-sm text-gray-500">
+                  <Card className="p-8 text-center bg-white shadow-md rounded-lg border border-gray-100">
+                    <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+                    <h3 className="text-base font-medium text-gray-800 mb-2">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
+                    <p className="text-xs text-gray-500">
                       {state.filterStatus || state.searchQuery
                         ? isRtl
                           ? 'لا توجد طلبات مطابقة'
                           : 'No matching orders'
                         : isRtl
-                        ? 'لا توجد طلبات بعد'
+                        ? 'لم يتم تسجيل طلبات بعد'
                         : 'No orders yet'}
                     </p>
                   </Card>
                 </motion.div>
               ) : state.viewMode === 'table' ? (
                 <motion.div key="table-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-6">
-                  <OrderTable
-                    orders={paginatedOrders.filter(o => o && o.id && o.branch && o.branch._id)}
-                    t={t}
-                    isRtl={isRtl}
-                    calculateAdjustedTotal={calculateAdjustedTotal}
-                    calculateTotalQuantity={calculateTotalQuantity}
-                    startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
-                    viewOrder={viewOrder}
-                    openConfirmDeliveryModal={openConfirmDeliveryModal}
-                    openReturnModal={openReturnModal}
-                    user={user}
-                    submitting={state.submitting}
-                  />
+                  <div className="max-w-6xl mx-auto">
+                    <OrderTable
+                      orders={paginatedOrders.filter(o => o && o.id && o.branch && o.branch._id)}
+                      t={t}
+                      isRtl={isRtl}
+                      calculateAdjustedTotal={calculateAdjustedTotal}
+                      calculateTotalQuantity={calculateTotalQuantity}
+                      startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
+                      viewOrder={viewOrder}
+                      openConfirmDeliveryModal={openConfirmDeliveryModal}
+                      openReturnModal={openReturnModal}
+                      user={user}
+                      submitting={state.submitting}
+                    />
+                  </div>
                 </motion.div>
               ) : (
-                <motion.div key="card-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="space-y-4 mt-6">
+                <motion.div key="card-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="space-y-4 mt-6 max-w-6xl mx-auto">
                   {paginatedOrders.filter(o => o && o.id && o.branch && o.branch._id).map(order => (
                     <OrderCard
                       key={order.id}
@@ -1212,7 +1245,7 @@ const BranchOrders: React.FC = () => {
             </AnimatePresence>
           )}
           {paginatedOrders.length > 0 && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="mt-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="mt-6 max-w-6xl mx-auto">
               <Pagination
                 currentPage={state.currentPage}
                 totalPages={Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode])}
