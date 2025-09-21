@@ -16,7 +16,7 @@ import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { Order, Chef, Branch, AssignChefsForm } from '../types/types';
 import { useNavigate } from 'react-router-dom';
-import { exportToPDF } from '../components/Shared/PDFExporter';
+import { exportToPDF } from '../components/Shared/PDFExporter';  // استدعاء الدالة المحسنة
 import { OrderTableSkeleton, OrderCardSkeleton } from '../components/Shared/OrderSkeletons';
 import Pagination from '../components/Shared/Pagination';
 
@@ -141,7 +141,7 @@ const reducer = (state: State, action: Action): State => {
                   ? {
                       ...i,
                       assignedTo: assignment.assignedTo
-                        ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name || assignment.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), department: assignment.assignedTo.department }
+                        ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name || assignment.assignedTo.username || (state.isRtl ? 'غير معروف' : 'Unknown'), department: assignment.assignedTo.department }
                         : undefined,
                       status: assignment.status || i.status,
                     }
@@ -160,7 +160,7 @@ const reducer = (state: State, action: Action): State => {
                 ? {
                     ...i,
                     assignedTo: assignment.assignedTo
-                      ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name || assignment.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), department: assignment.assignedTo.department }
+                      ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name || assignment.assignedTo.username || (state.isRtl ? 'غير معروف' : 'Unknown'), department: assignment.assignedTo.department }
                       : undefined,
                     status: assignment.status || i.status,
                   }
@@ -210,6 +210,7 @@ const reducer = (state: State, action: Action): State => {
 };
 
 const ORDERS_PER_PAGE = { card: 12, table: 50 };
+
 const validTransitions: Record<Order['status'], Order['status'][]> = {
   pending: ['approved', 'cancelled'],
   approved: ['in_production', 'cancelled'],
@@ -219,6 +220,7 @@ const validTransitions: Record<Order['status'], Order['status'][]> = {
   delivered: [],
   cancelled: [],
 };
+
 const statusOptions = [
   { value: '', label: 'all_statuses' },
   { value: 'pending', label: 'pending' },
@@ -229,6 +231,7 @@ const statusOptions = [
   { value: 'delivered', label: 'delivered' },
   { value: 'cancelled', label: 'cancelled' },
 ];
+
 const sortOptions = [
   { value: 'date', label: 'sort_date' },
   { value: 'totalAmount', label: 'sort_total_amount' },
@@ -254,7 +257,7 @@ export const Orders: React.FC = () => {
   const isRtl = language === 'ar';
   const { user } = useAuth();
   const { socket, isConnected, emit } = useSocket();
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, { ...initialState, isRtl });  // أضفت isRtl للـ state عشان سهولة
   const stateRef = useRef(state);
   const cacheRef = useRef<Map<string, Order[]>>(new Map());
   const listRef = useRef<HTMLDivElement>(null);
@@ -301,29 +304,36 @@ export const Orders: React.FC = () => {
       dispatch({ type: 'SET_LOADING', payload: false });
       return;
     }
+
     if (!socket) return;
+
     socket.on('connect', () => {
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
       dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
     });
+
     socket.on('connect_error', (err) => {
       console.error('Socket connect error:', err.message);
       dispatch({ type: 'SET_SOCKET_ERROR', payload: isRtl ? 'خطأ في الاتصال' : 'Connection error' });
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
     });
+
     socket.on('reconnect', (attempt) => {
       console.log(`[${new Date().toISOString()}] Socket reconnected after ${attempt} attempts`);
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
     });
+
     socket.on('disconnect', (reason) => {
       console.log(`[${new Date().toISOString()}] Socket disconnected: ${reason}`);
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
     });
+
     socket.on('newOrder', (order: any) => {
       if (!order || !order._id || !order.orderNumber) {
         console.warn('Invalid new order data:', order);
         return;
       }
+
       const mappedOrder: Order = {
         id: order._id,
         orderNumber: order.orderNumber,
@@ -386,9 +396,11 @@ export const Orders: React.FC = () => {
             }))
           : [],
       };
+
       dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
       playNotificationSound('/sounds/new-order.mp3', [200, 100, 200]);
     });
+
     socket.on('orderStatusUpdated', ({ orderId, status }: { orderId: string; status: Order['status'] }) => {
       if (!orderId || !status) {
         console.warn('Invalid order status update data:', { orderId, status });
@@ -396,6 +408,7 @@ export const Orders: React.FC = () => {
       }
       dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
     });
+
     socket.on('itemStatusUpdated', ({ orderId, itemId, status }: { orderId: string; itemId: string; status: string }) => {
       if (!orderId || !itemId || !status) {
         console.warn('Invalid item status update data:', { orderId, itemId, status });
@@ -403,17 +416,19 @@ export const Orders: React.FC = () => {
       }
       dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
     });
+
     socket.on('returnStatusUpdated', ({ orderId, returnId, status }: { orderId: string; returnId: string; status: string }) => {
       if (!orderId || !returnId || !status) {
         console.warn('Invalid return status update data:', { orderId, returnId, status });
         return;
       }
       dispatch({ type: 'RETURN_STATUS_UPDATED', orderId, returnId, status });
-      toast.info(isRtl ? `تم تحديث حالة الإرجاع إلى: ${isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', rejected: 'مرفوض', processed: 'معالج'}[status] : status}` : `Return status updated to: ${status}`, {
+      toast.info(isRtl ? `تم تحديث حالة الإرجاع إلى: ${statusTranslations[status] || status}` : `Return status updated to: ${status}`, {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
       });
     });
+
     socket.on('taskAssigned', ({ orderId, items }: { orderId: string; items: any[] }) => {
       if (!orderId || !items) {
         console.warn('Invalid task assigned data:', { orderId, items });
@@ -425,6 +440,7 @@ export const Orders: React.FC = () => {
         autoClose: 3000,
       });
     });
+
     return () => {
       socket.off('connect');
       socket.off('connect_error');
@@ -443,13 +459,16 @@ export const Orders: React.FC = () => {
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
       }
+
       dispatch({ type: 'SET_LOADING', payload: true });
+
       const cacheKey = `${user.id}-${state.filterStatus}-${state.filterBranch}-${state.currentPage}-${state.viewMode}-${state.searchQuery}`;
       if (cacheRef.current.has(cacheKey)) {
         dispatch({ type: 'SET_ORDERS', payload: cacheRef.current.get(cacheKey)! });
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
       }
+
       try {
         const query: Record<string, any> = {
           page: state.currentPage,
@@ -461,11 +480,13 @@ export const Orders: React.FC = () => {
         if (state.filterBranch) query.branch = state.filterBranch;
         if (state.searchQuery.trim()) query.search = state.searchQuery.trim();
         if (user.role === 'production' && user.department) query.department = user.department._id;
+
         const [ordersResponse, chefsResponse, branchesResponse] = await Promise.all([
           ordersAPI.getAll(query),
           chefsAPI.getAll(),
           branchesAPI.getAll(),
         ]);
+
         const mappedOrders: Order[] = ordersResponse
           .filter((order: any) => order && order._id && order.orderNumber)
           .map((order: any) => ({
@@ -530,6 +551,7 @@ export const Orders: React.FC = () => {
                 }))
               : [],
           }));
+
         cacheRef.current.clear();
         cacheRef.current.set(cacheKey, mappedOrders);
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
@@ -585,7 +607,9 @@ export const Orders: React.FC = () => {
       isRtl ? 'التاريخ' : 'Date',
     ];
     const data = state.orders.map(order => {
-      const productsStr = order.items.map(i => `${i.productName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ');
+      const productsStr = order.items.map(i => isRtl 
+        ? `(${toArabicNumerals(i.quantity)} ${translateUnit(i.unit, isRtl)} ${i.productName})` 
+        : `${i.productName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(' + ');
       return {
         [headers[0]]: order.orderNumber,
         [headers[1]]: order.branchName,
@@ -609,10 +633,9 @@ export const Orders: React.FC = () => {
   }, [state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity]);
 
   const handleSearchChange = useMemo(
-    () =>
-      debounce((value: string) => {
-        dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
-      }, 300),
+    () => debounce((value: string) => {
+      dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
+    }, 300),
     []
   );
 
@@ -823,9 +846,7 @@ export const Orders: React.FC = () => {
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
                 onClick={state.orders.length > 0 ? exportToExcel : undefined}
-                className={`flex items-center gap-1.5 ${
-                  state.orders.length > 0 ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-md px-3 py-1.5 text-xs shadow-sm`}
+                className={`flex items-center gap-1.5 ${state.orders.length > 0 ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'} rounded-md px-3 py-1.5 text-xs shadow-sm`}
                 disabled={state.orders.length === 0}
                 aria-label={isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
               >
@@ -834,10 +855,8 @@ export const Orders: React.FC = () => {
               </Button>
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
-                onClick={state.orders.length > 0 ? () => exportToPDF(state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit) : undefined}
-                className={`flex items-center gap-1.5 ${
-                  state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-md px-3 py-1.5 text-xs shadow-sm`}
+                onClick={state.orders.length > 0 ? () => exportToPDF(state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, state.filterStatus, state.filterBranch) : undefined}
+                className={`flex items-center gap-1.5 ${state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'} rounded-md px-3 py-1.5 text-xs shadow-sm`}
                 disabled={state.orders.length === 0}
                 aria-label={isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
               >
