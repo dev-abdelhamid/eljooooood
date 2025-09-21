@@ -118,8 +118,8 @@ const generatePDFHeader = (
     ? doc.processArabic(`الحالة: ${filterStatus ? statusTranslations[filterStatus as keyof typeof statusTranslations] || 'الكل' : 'الكل'} | الفرع: ${filterBranchName || 'جميع الفروع'}`)
     : `Status: ${filterStatus ? statusTranslations[filterStatus as keyof typeof statusTranslations] || 'All' : 'All'} | Branch: ${filterBranchName || 'All Branches'}`;
   const stats = isRtl
-    ? doc.processArabic(`إجمالي الطلبات: ${toArabicNumerals(totalOrders)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${formatPrice(totalAmount, isRtl)}`)
-    : `Total Orders: ${totalOrders} | Total Quantity: ${totalQuantity} units | Total Amount: ${formatPrice(totalAmount, isRtl)}`;
+    ? doc.processArabic(`إجمالي الطلبات: ${toArabicNumerals(totalOrders)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة  }`)
+    : `Total Orders: ${totalOrders} | Total Quantity: ${totalQuantity} units }`;
 
   // Position filter info on the left and stats on the right
   doc.text(filterInfo, isRtl ? 20 : pageWidth - 100, 20, { align: isRtl ? 'left' : 'right' });
