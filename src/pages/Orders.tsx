@@ -446,7 +446,7 @@ export const Orders: React.FC = () => {
       }
       dispatch({ type: 'SET_LOADING', payload: true });
       const cacheKey = `${user.id}-${state.filterStatus}-${state.filterBranch}-${state.currentPage}-${state.viewMode}-${state.searchQuery}`;
-      if (cacheRef.current.has(cacheKey)) {
+      if (cacheRef.current.has(cacheKey) ) {
         dispatch({ type: 'SET_ORDERS', payload: cacheRef.current.get(cacheKey)! });
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
@@ -837,17 +837,7 @@ export const Orders: React.FC = () => {
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
                 onClick={state.orders.length > 0 ? () => {
                   const filterBranchName = state.branches.find(b => b._id === state.filterBranch)?.name || '';
-                  const statusTranslations = {
-                    pending: isRtl ? 'قيد الانتظار' : 'pending',
-                    approved: isRtl ? 'تم الموافقة' : 'approved',
-                    in_production: isRtl ? 'في الإنتاج' : 'in_production',
-                    completed: isRtl ? 'مكتمل' : 'completed',
-                    in_transit: isRtl ? 'في النقل' : 'in_transit',
-                    delivered: isRtl ? 'تم التسليم' : 'delivered',
-                    cancelled: isRtl ? 'ملغى' : 'cancelled',
-                  };
-                  const filterStatus = isRtl ? (state.filterStatus ? statusTranslations[state.filterStatus as keyof typeof statusTranslations] : '') : state.filterStatus;
-                  exportToPDF(state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, filterStatus, filterBranchName);
+                  exportToPDF(state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, state.filterStatus, filterBranchName);
                 } : undefined}
                 className={`flex items-center gap-1.5 ${
                   state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
@@ -953,81 +943,82 @@ export const Orders: React.FC = () => {
                   <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-4">
                     <Card className="p-6 sm:p-8 text-center bg-white shadow-md rounded-md border border-gray-100">
                       <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-<p className="text-sm font-medium text-gray-800 mb-2">{isRtl ? 'لا توجد طلبات متاحة' : 'No orders available'}</p>
-                      <p className="text-xs text-gray-500">{isRtl ? 'حاول تعديل الفلاتر أو إضافة طلبات جديدة' : 'Try adjusting filters or adding new orders'}</p>
+                      <h3 className="text-sm font-medium text-gray-800 mb-2">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
+                      <p className="text-xs text-gray-500">
+                        {state.filterStatus || state.filterBranch || state.searchQuery
+                          ? isRtl ? 'لا توجد طلبات مطابقة' : 'No matching orders'
+                          : isRtl ? 'لا توجد طلبات بعد' : 'No orders yet'}
+                      </p>
                     </Card>
                   </motion.div>
+                ) : state.viewMode === 'table' ? (
+                  <motion.div key="table-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-4">
+                    <OrderTable
+                      orders={paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber)}
+                      isRtl={isRtl}
+                      t={t}
+                      calculateAdjustedTotal={calculateAdjustedTotal}
+                      calculateTotalQuantity={calculateTotalQuantity}
+                      translateUnit={translateUnit}
+                      updateOrderStatus={updateOrderStatus}
+                      openAssignModal={openAssignModal}
+                      startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
+                      user={user}
+                      submitting={state.submitting}
+                      onNavigateToDetails={handleNavigateToDetails}
+                    />
+                  </motion.div>
                 ) : (
-                  <motion.div
-                    key="orders-list"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="mt-4"
-                  >
-                    {state.viewMode === 'card' ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {paginatedOrders.map((order) => (
-                          <OrderCard
-                            key={order.id}
-                            order={order}
-                            isRtl={isRtl}
-                            translateUnit={translateUnit}
-                            calculateAdjustedTotal={calculateAdjustedTotal}
-                            calculateTotalQuantity={calculateTotalQuantity}
-                            onStatusChange={updateOrderStatus}
-                            onItemStatusChange={updateItemStatus}
-                            onAssignChefs={openAssignModal}
-                            onClick={() => handleNavigateToDetails(order.id)}
-                            isSubmitting={state.submitting === order.id}
-                          />
-                        ))}
-                      </div>
-                    ) : (
-                      <OrderTable
-                        orders={paginatedOrders}
+                  <motion.div key="card-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="space-y-3 mt-4">
+                    {paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber).map(order => (
+                      <OrderCard
+                        key={order.id}
+                        order={order}
                         isRtl={isRtl}
-                        translateUnit={translateUnit}
                         calculateAdjustedTotal={calculateAdjustedTotal}
                         calculateTotalQuantity={calculateTotalQuantity}
-                        onStatusChange={updateOrderStatus}
-                        onItemStatusChange={updateItemStatus}
-                        onAssignChefs={openAssignModal}
-                        onRowClick={handleNavigateToDetails}
-                        isSubmitting={state.submitting}
+                        translateUnit={translateUnit}
+                        updateOrderStatus={updateOrderStatus}
+                        openAssignModal={openAssignModal}
+                        submitting={state.submitting}
+                        onNavigateToDetails={handleNavigateToDetails}
                       />
-                    )}
+                    ))}
+                  </motion.div>
+                )}
+                {paginatedOrders.length > 0 && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="mt-4">
                     <Pagination
                       currentPage={state.currentPage}
-                      totalItems={filteredOrders.length}
-                      itemsPerPage={ORDERS_PER_PAGE[state.viewMode]}
-                      onPageChange={handlePageChange}
+                      totalPages={Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode])}
                       isRtl={isRtl}
+                      handlePageChange={handlePageChange}
                     />
                   </motion.div>
                 )}
+                <AssignChefsModal
+                  isOpen={state.isAssignModalOpen}
+                  onClose={() => {
+                    dispatch({ type: 'SET_MODAL', modal: 'assign', isOpen: false });
+                    dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
+                    dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
+                  }}
+                  selectedOrder={state.selectedOrder}
+                  chefs={state.chefs}
+                  assignFormData={state.assignFormData}
+                  setAssignForm={(data) => dispatch({ type: 'SET_ASSIGN_FORM', payload: data })}
+                  assignChefs={assignChefs}
+                  error={state.error}
+                  submitting={state.submitting}
+                  isRtl={isRtl}
+                />
               </AnimatePresence>
             )}
           </div>
         </motion.div>
       </Suspense>
-      <AnimatePresence>
-        {state.isAssignModalOpen && state.selectedOrder && (
-          <Suspense fallback={<div className="fixed inset-0 flex items-center justify-center bg-black/50"><div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin"></div></div>}>
-            <AssignChefsModal
-              order={state.selectedOrder}
-              chefs={state.chefs}
-              assignFormData={state.assignFormData}
-              onSubmit={assignChefs}
-              onClose={() => dispatch({ type: 'SET_MODAL', modal: 'assign', isOpen: false })}
-              translateUnit={translateUnit}
-              isRtl={isRtl}
-              isSubmitting={state.submitting === state.selectedOrder.id}
-            />
-          </Suspense>
-        )}
-      </AnimatePresence>
     </div>
   );
 };
+
+export default Orders;
