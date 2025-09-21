@@ -38,28 +38,44 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   return window.btoa(binary);
 };
 
-// Load Amiri font for reliable Arabic rendering
-const loadFont = async (doc: jsPDF): Promise<boolean> => {
-  const fontName = 'Amiri';
-  const fontUrl = '/fonts/Amiri-Regular.ttf';
-  try {
-    const fontBytes = await fetch(fontUrl).then((res) => {
-      if (!res.ok) throw new Error('فشل تحميل الخط Amiri');
-      return res.arrayBuffer();
-    });
-    doc.addFileToVFS(`${fontName}-Regular.ttf`, arrayBufferToBase64(fontBytes));
-    doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
-    doc.setFont(fontName, 'normal');
-    return true;
-  } catch (error) {
-    console.error('خطأ تحميل الخط:', error);
+// Load Alexandria and Amiri fonts for reliable Arabic rendering
+const loadFonts = async (doc: jsPDF): Promise<{ fontName: string; fontLoaded: boolean }> => {
+  const fonts = [
+    { name: 'Alexandria', url: '/fonts/Alexandria-Regular.ttf' },
+    { name: 'Amiri', url: '/fonts/Amiri-Regular.ttf' },
+  ];
+  let fontName = 'Amiri'; // Default to Amiri
+  let fontLoaded = false;
+
+  for (const font of fonts) {
+    try {
+      const fontBytes = await fetch(font.url).then((res) => {
+        if (!res.ok) throw new Error(`فشل تحميل الخط ${font.name}`);
+        return res.arrayBuffer();
+      });
+      doc.addFileToVFS(`${font.name}-Regular.ttf`, arrayBufferToBase64(fontBytes));
+      doc.addFont(`${font.name}-Regular.ttf`, font.name, 'normal');
+      fontName = font.name;
+      fontLoaded = true;
+      break; // Use the first successfully loaded font
+    } catch (error) {
+      console.error(`خطأ تحميل الخط ${font.name}:`, error);
+      toast.error(`فشل تحميل الخط ${font.name}، جاري المحاولة مع خط آخر`, {
+        position: 'top-right',
+        autoClose: 3000,
+      });
+    }
+  }
+
+  if (!fontLoaded) {
     doc.setFont('helvetica', 'normal');
-    toast.error('فشل تحميل الخط Amiri، استخدام خط افتراضي', {
+    toast.error('فشل تحميل كل الخطوط، استخدام خط افتراضي', {
       position: 'top-right',
       autoClose: 3000,
     });
-    return false;
   }
+
+  return { fontName, fontLoaded };
 };
 
 // Generate dynamic file name based on filters
@@ -186,15 +202,25 @@ const generatePDFTable = (
     alternateRowStyles: {
       fillColor: [255, 255, 255],
     },
-    columnStyles: {
-      0: { cellWidth: 25 }, // Order Number
-      1: { cellWidth: 30 }, // Branch
-      2: { cellWidth: 25 }, // Status
-      3: { cellWidth: 'auto' }, // Products
-      4: { cellWidth: 30 }, // Total Amount
-      5: { cellWidth: 25 }, // Total Quantity
-      6: { cellWidth: 35 }, // Date
-    },
+    columnStyles: isRtl
+      ? {
+          0: { cellWidth: 25 }, // Order Number
+          1: { cellWidth: 30 }, // Branch
+          2: { cellWidth: 25 }, // Status
+          3: { cellWidth: 'auto' }, // Products
+          4: { cellWidth: 30 }, // Total Amount
+          5: { cellWidth: 25 }, // Total Quantity
+          6: { cellWidth: 35 }, // Date
+        }
+      : {
+          6: { cellWidth: 25 }, // Order Number (reversed)
+          5: { cellWidth: 30 }, // Branch
+          4: { cellWidth: 25 }, // Status
+          3: { cellWidth: 'auto' }, // Products
+          2: { cellWidth: 30 }, // Total Amount
+          1: { cellWidth: 25 }, // Total Quantity
+          0: { cellWidth: 35 }, // Date
+        },
     styles: {
       overflow: 'linebreak',
       cellWidth: 'wrap',
@@ -226,9 +252,9 @@ export const exportToPDF = async (
   try {
     const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
 
-    // Load Amiri font
-    const fontName = 'Amiri';
-    const fontLoaded = await loadFont(doc);
+    // Load fonts (Alexandria first, Amiri as fallback)
+    const { fontName, fontLoaded } = await loadFonts(doc);
+    doc.setLanguage('ar'); // Set language to Arabic for proper RTL rendering
 
     // Filter orders
     const filteredOrders = orders.filter(

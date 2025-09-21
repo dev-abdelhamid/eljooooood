@@ -2,6 +2,11 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Order } from '../../types/types';
 
+
+
+
+
+
 const loadFont = async (fontName: string, fontUrl: string): Promise<string | null> => {
   try {
     const response = await fetch(fontUrl);
