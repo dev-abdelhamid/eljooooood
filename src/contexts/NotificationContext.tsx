@@ -365,55 +365,54 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           roles: ['admin', 'branch'],
         },
       },
-     {
-  name: 'taskAssigned',
-  handler: (notification: any) => {
-    console.log(`[${new Date().toISOString()}] taskAssigned - Received data:`, JSON.stringify(notification, null, 2));
-    const data: SocketEventData = notification.data || notification;
-    if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName) {
-      console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, data);
-      return;
-    }
-    if (!['admin', 'production', 'chef'].includes(user.role)) return;
-    if (user.role === 'chef' && !data.items.some((item: any) => item.assignedTo?._id === user._id)) return;
-    const eventId = data.eventId || crypto.randomUUID();
-    if (notificationIds.current.has(eventId)) return;
-    notificationIds.current.add(eventId);
-    data.items.forEach((item: any) => {
-      // تعديل: استخدام item._id بدلاً من item.itemId، وitem.product.name بدلاً من item.productName، وجعل username اختياريًا
-      if (!item._id || !item.product?.name || !item.quantity || !(item.assignedTo?.name || item.assignedTo?.username)) {
-        console.warn(`[${new Date().toISOString()}] Invalid item data for notification:`, item);
-        return;
-      }
-      const itemEventId = `${eventId}-${item._id}`;
-      if (notificationIds.current.has(itemEventId)) return;
-      notificationIds.current.add(itemEventId);
-      addNotification({
-        _id: itemEventId,
-        type: 'info',
-        message: t('notifications.task_assigned_to_chef', {
-          chefName: item.assignedTo.name || item.assignedTo.username || t('chefs.unknown'),
-          productName: item.product?.name || t('products.unknown'),
-          quantity: item.quantity || 'غير معروف',
-          unit: translateUnit(item.unit || item.product?.unit),
-          orderNumber: data.orderNumber,
-          branchName: data.branchName || t('branches.unknown'),
-        }),
-        data: { orderId: data.orderId, itemId: item._id, eventId: itemEventId },
-        read: false,
-        createdAt: new Date().toISOString(),
-        sound: '/sounds/notification.mp3',
-        vibrate: [400, 100, 400],
-      });
-    });
-  },
-  config: {
-    type: 'TASK_ASSIGNED',
-    sound: '/sounds/notification.mp3',
-    vibrate: [400, 100, 400],
-    roles: ['admin', 'production', 'chef'],
-  },
-},
+      {
+        name: 'taskAssigned',
+        handler: (notification: any) => {
+          console.log(`[${new Date().toISOString()}] taskAssigned - Received data:`, JSON.stringify(notification, null, 2));
+          const data: SocketEventData = notification.data || notification;
+          if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName) {
+            console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, data);
+            return;
+          }
+          if (!['admin', 'production', 'chef'].includes(user.role)) return;
+          if (user.role === 'chef' && !data.items.some((item: any) => item.assignedTo?._id === user._id)) return;
+          const eventId = data.eventId || crypto.randomUUID();
+          if (notificationIds.current.has(eventId)) return;
+          notificationIds.current.add(eventId);
+          data.items.forEach((item: any) => {
+            if (!item._id || !item.product?.name || !item.quantity || !(item.assignedTo?.name || item.assignedTo?.username)) {
+              console.warn(`[${new Date().toISOString()}] Invalid item data for notification:`, item);
+              return;
+            }
+            const itemEventId = `${eventId}-${item._id}`;
+            if (notificationIds.current.has(itemEventId)) return;
+            notificationIds.current.add(itemEventId);
+            addNotification({
+              _id: itemEventId,
+              type: 'info',
+              message: t('notifications.task_assigned_to_chef', {
+                chefName: item.assignedTo.name || item.assignedTo.username || t('chefs.unknown'),
+                productName: item.product?.name || t('products.unknown'),
+                quantity: item.quantity || 'غير معروف',
+                unit: translateUnit(item.unit || item.product?.unit),
+                orderNumber: data.orderNumber,
+                branchName: data.branchName || t('branches.unknown'),
+              }),
+              data: { orderId: data.orderId, itemId: item._id, eventId: itemEventId },
+              read: false,
+              createdAt: new Date().toISOString(),
+              sound: '/sounds/notification.mp3',
+              vibrate: [400, 100, 400],
+            });
+          });
+        },
+        config: {
+          type: 'TASK_ASSIGNED',
+          sound: '/sounds/notification.mp3',
+          vibrate: [400, 100, 400],
+          roles: ['admin', 'production', 'chef'], // استبعد 'branch'
+        },
+      },
       {
         name: 'itemStatusUpdated',
         handler: async (data: SocketEventData) => {
@@ -662,7 +661,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           type: 'MISSING_ASSIGNMENTS',
           sound: '/sounds/notification.mp3',
           vibrate: [300, 100, 300],
-          roles: ['admin', 'production'],
+          roles: ['admin', 'production'], // استبعد 'branch'
         },
       },
       {
