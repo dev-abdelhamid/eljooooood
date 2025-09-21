@@ -268,6 +268,8 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   return window.btoa(binary);
 };
 
+const reverseString = (str: string) => str.split('').reverse().join('');
+
 // Main component
 const BranchOrders: React.FC = () => {
   const { t, language } = useLanguage();
@@ -551,7 +553,7 @@ const BranchOrders: React.FC = () => {
 
       dispatch({ type: 'SET_LOADING', payload: true });
       const cacheKey = `${user.branchId}-${state.filterStatus}-${state.currentPage}-${state.viewMode}`;
-      if (cacheRef.current.has(cacheKey)) {
+      if (cacheRef.current.has(cacheKey) ) {
         dispatch({ type: 'SET_ORDERS', payload: cacheRef.current.get(cacheKey)! });
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
@@ -656,7 +658,8 @@ const BranchOrders: React.FC = () => {
       }, 0);
       return sum + returnTotal;
     }, 0);
-    return (order.totalAmount - approvedReturnsTotal).toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
+    const amount = order.totalAmount - approvedReturnsTotal;
+    return amount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
       style: 'currency',
       currency: 'SAR',
       minimumFractionDigits: 2,
@@ -714,10 +717,16 @@ const BranchOrders: React.FC = () => {
 
       const fontUrl = '/fonts/Alexandria-Regular.ttf';
       const fontName = 'Alexandria';
-      const fontBytes = await fetch(fontUrl).then(res => {
+      let fontBytes;
+      try {
+        const res = await fetch(fontUrl);
         if (!res.ok) throw new Error('Failed to fetch font');
-        return res.arrayBuffer();
-      });
+        fontBytes = await res.arrayBuffer();
+      } catch (fetchErr) {
+        console.error('Failed to load font:', fetchErr);
+        toast.error(isRtl ? 'فشل في تحميل الخط للـ PDF' : 'Failed to load font for PDF', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+        return;
+      }
       const base64Font = arrayBufferToBase64(fontBytes);
       doc.addFileToVFS(`${fontName}-Regular.ttf`, base64Font);
       doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
@@ -763,8 +772,11 @@ const BranchOrders: React.FC = () => {
           6: { cellWidth: 20 },
         },
         didParseCell: data => {
-          if (data.section === 'body' && data.column.index === 3 && isRtl) {
-            data.cell.text = [data.cell.raw.toString().replace(/(\d+\.\d{2})/, ' $1 ر.س')];
+          if (isRtl && data.cell.text.length > 0) {
+            data.cell.text = data.cell.text.map(reverseString);
+            if (data.column.index === 3 || data.column.index === 4) {
+              data.cell.text = data.cell.text.map(txt => txt.replace(/[\d.,]+/g, reverseString));
+            }
           }
         },
         didDrawPage: data => {
