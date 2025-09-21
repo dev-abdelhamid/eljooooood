@@ -1,5 +1,5 @@
 import pdfMake from 'pdfmake/build/pdfmake';
-import pdfFonts from '../Shared/vfs_fonts';
+import pdfFonts from './vfs_fonts';
 import { toast } from 'react-toastify';
 import { Order } from '../../types/types';
 
