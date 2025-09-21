@@ -12,7 +12,7 @@ import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
-import { jsPDF } from 'jspdf';
+import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
@@ -712,8 +712,8 @@ const BranchOrders: React.FC = () => {
       const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
       doc.setLanguage(isRtl ? 'ar' : 'en');
 
-      const fontUrl = '/fonts/Alexandria-Regular.ttf';
-      const fontName = 'Alexandria';
+      const fontUrl = '/fonts/Amiri-Regular.ttf';
+      const fontName = 'Amiri';
       const fontBytes = await fetch(fontUrl).then(res => {
         if (!res.ok) throw new Error('Failed to fetch font');
         return res.arrayBuffer();
@@ -1012,6 +1012,7 @@ const BranchOrders: React.FC = () => {
     [t, isRtl, playNotificationSound, user, socket, isConnected, emit]
   );
 
+  // Update order status
   const updateOrderStatus = useCallback(
     async (orderId: string, status: OrderStatus) => {
       if (!user?.branchId) {
@@ -1047,63 +1048,63 @@ const BranchOrders: React.FC = () => {
 
   // Render
   return (
-    <div className="px-4 py-6 min-h-screen bg-gray-50" dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="px-4 py-6 min-h-screen " dir={isRtl ? 'rtl' : 'ltr'}>
       <Suspense fallback={<LoadingSpinner size="lg" />}>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-6">
-          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-8">
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-800 flex items-center gap-2">
-                <ShoppingCart className="w-6 h-6 text-amber-600" />
+              <h1 className="text-xl sm:text-xl font-bold text-gray-800 flex items-center gap-3">
+                <ShoppingCart className="w-8 h-8 text-amber-600" />
                 {isRtl ? 'الطلبات' : 'Orders'}
               </h1>
-              <p className="text-xs text-gray-500 mt-1">{isRtl ? 'إدارة طلبات الفرع' : 'Manage branch orders'}</p>
+              <p className="text-sm text-gray-500 mt-1">{isRtl ? 'إدارة طلبات الفرع' : 'Manage branch orders'}</p>
             </div>
-            <div className="flex gap-2 flex-wrap">
+            <div className="flex gap-3 flex-wrap">
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
                 onClick={state.orders.length > 0 ? exportToExcel : undefined}
-                className={`flex items-center gap-1.5 ${
+                className={`flex items-center gap-2 ${
                   state.orders.length > 0 ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-md px-3 py-1.5 text-xs shadow-sm`}
+                } rounded-lg px-4 py-2 text-sm shadow-sm`}
                 disabled={state.orders.length === 0}
               >
-                <Download className="w-4 h-4" />
+                <Download className="w-5 h-5" />
                 {isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
               </Button>
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
                 onClick={state.orders.length > 0 ? exportToPDF : undefined}
-                className={`flex items-center gap-1.5 ${
+                className={`flex items-center gap-2 ${
                   state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-md px-3 py-1.5 text-xs shadow-sm`}
+                } rounded-lg px-4 py-2 text-sm shadow-sm`}
                 disabled={state.orders.length === 0}
               >
-                <Upload className="w-4 h-4" />
+                <Upload className="w-5 h-5" />
                 {isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
               </Button>
               <Button
                 variant="secondary"
                 onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' })}
-                className="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md px-3 py-1.5 text-xs shadow-sm"
+                className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-4 py-2 text-sm shadow-sm"
               >
-                {state.viewMode === 'card' ? <Table2 className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
+                {state.viewMode === 'card' ? <Table2 className="w-5 h-5" /> : <Grid className="w-5 h-5" />}
                 {isRtl ? (state.viewMode === 'card' ? 'عرض كجدول' : 'عرض كبطاقات') : state.viewMode === 'card' ? 'View as Table' : 'View as Cards'}
               </Button>
             </div>
           </div>
-          <Card className="p-3 sm:p-4 mt-4 bg-white shadow-md rounded-md border border-gray-100">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <Card className="p-4 sm:p-6 mt-6 bg-white shadow-lg rounded-lg border border-gray-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
                 <SearchInput
                   value={state.searchQuery}
                   onChange={handleSearchChange}
                   placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
-                  className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
+                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
                 <Select
                   options={statusOptions.map(opt => ({
                     value: opt.value,
@@ -1111,11 +1112,11 @@ const BranchOrders: React.FC = () => {
                   }))}
                   value={state.filterStatus || ''}
                   onChange={(value: string) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
-                  className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
+                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
                 <Select
                   options={sortOptions.map(opt => ({
                     value: opt.value,
@@ -1123,16 +1124,16 @@ const BranchOrders: React.FC = () => {
                   }))}
                   value={state.sortBy}
                   onChange={(value: string) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
-                  className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
+                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
                 />
               </div>
             </div>
-            <div className="text-xs text-center text-gray-500 mt-3">
+            <div className="text-sm text-center text-gray-500 mt-4">
               {isRtl ? `عدد الطلبات: ${filteredOrders.length}` : `Orders count: ${filteredOrders.length}`}
             </div>
           </Card>
           {state.loading ? (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-3 mt-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-4 mt-6">
               {state.viewMode === 'card' ? (
                 Array(6).fill(null).map((_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)
               ) : (
@@ -1140,17 +1141,16 @@ const BranchOrders: React.FC = () => {
               )}
             </motion.div>
           ) : state.error && state.orders.length === 0 ? (
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="mt-4">
-              <Card className="p-4 max-w-md mx-auto text-center bg-red-50 shadow-md rounded-md border border-red-100">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="mt-6">
+              <Card className="p-6 max-w-md mx-auto text-center bg-red-50 shadow-lg rounded-lg border border-red-100">
                 <div className={`flex items-center justify-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  <AlertCircle className="w-5 h-5 text-red-600" />
-                  <p className="text-sm font-medium text-red-600">{state.error}</p>
+                  <AlertCircle className="w-6 h-6 text-red-600" />
+                  <p className="text-lg font-medium text-red-600">{state.error}</p>
                 </div>
                 <Button
                   variant="primary"
                   onClick={() => fetchData()}
-                  className="mt-3 bg-amber-500 hover:bg-amber-600 text-white rounded-md px-4 py-1.5 text-xs shadow-sm"
-                  aria-label={isRtl ? 'إعادة المحاولة' : 'Retry'}
+                  className="mt-4 bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-6 py-2 text-sm shadow-sm"
                 >
                   {isRtl ? 'إعادة المحاولة' : 'Retry'}
                 </Button>
@@ -1159,37 +1159,39 @@ const BranchOrders: React.FC = () => {
           ) : (
             <AnimatePresence>
               {paginatedOrders.length === 0 ? (
-                <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-4">
-                  <Card className="p-6 text-center bg-white shadow-md rounded-md border border-gray-100">
-                    <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-                    <h3 className="text-sm font-medium text-gray-800 mb-2">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
-                    <p className="text-xs text-gray-500">
+                <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-6">
+                  <Card className="p-8 sm:p-12 text-center bg-white shadow-lg rounded-lg border border-gray-100">
+                    <ShoppingCart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-800 mb-2">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
+                    <p className="text-sm text-gray-500">
                       {state.filterStatus || state.searchQuery
-                        ? isRtl ? 'لا توجد طلبات مطابقة' : 'No matching orders'
-                        : isRtl ? 'لم يتم تسجيل طلبات بعد' : 'No orders yet'}
+                        ? isRtl
+                          ? 'لا توجد طلبات مطابقة'
+                          : 'No matching orders'
+                        : isRtl
+                        ? 'لا توجد طلبات بعد'
+                        : 'No orders yet'}
                     </p>
                   </Card>
                 </motion.div>
               ) : state.viewMode === 'table' ? (
-                <motion.div key="table-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-4">
-                  <div className="w-full">
-                    <OrderTable
-                      orders={paginatedOrders.filter(o => o && o.id && o.branch && o.branch._id)}
-                      t={t}
-                      isRtl={isRtl}
-                      calculateAdjustedTotal={calculateAdjustedTotal}
-                      calculateTotalQuantity={calculateTotalQuantity}
-                      startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
-                      viewOrder={viewOrder}
-                      openConfirmDeliveryModal={openConfirmDeliveryModal}
-                      openReturnModal={openReturnModal}
-                      user={user}
-                      submitting={state.submitting}
-                    />
-                  </div>
+                <motion.div key="table-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-6">
+                  <OrderTable
+                    orders={paginatedOrders.filter(o => o && o.id && o.branch && o.branch._id)}
+                    t={t}
+                    isRtl={isRtl}
+                    calculateAdjustedTotal={calculateAdjustedTotal}
+                    calculateTotalQuantity={calculateTotalQuantity}
+                    startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
+                    viewOrder={viewOrder}
+                    openConfirmDeliveryModal={openConfirmDeliveryModal}
+                    openReturnModal={openReturnModal}
+                    user={user}
+                    submitting={state.submitting}
+                  />
                 </motion.div>
               ) : (
-                <motion.div key="card-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="space-y-3 mt-4 w-full">
+                <motion.div key="card-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="space-y-4 mt-6">
                   {paginatedOrders.filter(o => o && o.id && o.branch && o.branch._id).map(order => (
                     <OrderCard
                       key={order.id}
@@ -1210,7 +1212,7 @@ const BranchOrders: React.FC = () => {
             </AnimatePresence>
           )}
           {paginatedOrders.length > 0 && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="mt-4 w-full">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="mt-6">
               <Pagination
                 currentPage={state.currentPage}
                 totalPages={Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode])}
