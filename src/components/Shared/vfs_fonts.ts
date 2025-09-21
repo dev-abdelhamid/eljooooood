@@ -1,6 +1,6 @@
-import CairoRegular from './Cairo-Regular.ttf';
-import CairoBold from './Cairo-Bold.ttf';
-import AmiriRegular from './Amiri-Regular.ttf';
+import CairoRegular from '../../../public/fonts/Cairo-Regular.ttf';
+import CairoBold from '../../../public/fonts/Cairo-Bold.ttf';
+import AmiriRegular from '../../../public/fonts/Amiri-Regular.ttf';
 
 export default {
   pdfMake: {
