@@ -6,30 +6,30 @@ import { Card } from '../../components/UI/Card';
 
 export const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
   <motion.div
-    initial={{ opacity: 0, y: 10 }}
+    initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.4, ease: 'easeOut' }}
-    className="overflow-x-auto bg-white shadow-sm rounded-xl border border-gray-100"
+    transition={{ duration: 0.3 }}
+    className="overflow-x-auto bg-white shadow-md rounded-lg border border-gray-100"
   >
     <table className="min-w-full">
       <thead>
         <tr className={isRtl ? 'flex-row-reverse' : ''}>
           {Array(7).fill(0).map((_, index) => (
-            <th key={index} className="px-4 py-3">
-              <Skeleton width={80} height={14} baseColor="#f0f2f5" highlightColor="#e2e8f0" duration={1.2} />
+            <th key={index} className="px-3 py-2">
+              <Skeleton width={80} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
             </th>
           ))}
         </tr>
       </thead>
       <tbody>
-        {Array(3).fill(0).map((_, rowIndex) => (
+        {Array(5).fill(0).map((_, rowIndex) => (
           <tr
             key={rowIndex}
             className={`hover:bg-gray-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}
           >
             {Array(7).fill(0).map((_, cellIndex) => (
-              <td key={cellIndex} className="px-4 py-3">
-                <Skeleton width={100} height={14} baseColor="#f0f2f5" highlightColor="#e2e8f0" duration={1.2} />
+              <td key={cellIndex} className="px-3 py-2">
+                <Skeleton width={100} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
               </td>
             ))}
           </tr>
@@ -40,33 +40,28 @@ export const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
 );
 
 export const OrderCardSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
-  <Card className="p-4 mb-2 bg-white shadow-sm rounded-xl border border-gray-100 hover:shadow-md transition-shadow duration-300 max-w-3xl mx-auto">
-    <motion.div
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.4, ease: 'easeOut' }}
-      className="flex flex-col gap-3"
-    >
+  <Card className="p-3 mb-3 bg-white shadow-md rounded-lg border border-gray-100 hover:shadow-lg transition-shadow">
+    <div className="flex flex-col gap-2">
       <div className={`flex items-center ${isRtl ? 'justify-end' : 'justify-between'}`}>
-        <Skeleton width={140} height={16} baseColor="#f0f2f5" highlightColor="#e2e8f0" duration={1.2} />
-        <Skeleton width={60} height={16} baseColor="#f0f2f5" highlightColor="#e2e8f0" duration={1.2} />
+        <Skeleton width={160} height={18} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
+        <Skeleton width={70} height={18} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
       </div>
-      <Skeleton width={100} height={12} baseColor="#f0f2f5" highlightColor="#e2e8f0" duration={1.2} />
-      <Skeleton width="100%" height={4} baseColor="#f0f2f5" highlightColor="#e2e8f0" duration={1.2} />
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <Skeleton width={120} height={12} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
+      <Skeleton width="100%" height={5} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {Array(4).fill(0).map((_, index) => (
           <div key={index}>
-            <Skeleton width={50} height={12} baseColor="#f0f2f5" highlightColor="#e2e8f0" duration={1.2} />
-            <Skeleton width={80} height={14} baseColor="#f0f2f5" highlightColor="#e2e8f0" duration={1.2} />
+            <Skeleton width={60} height={12} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
+            <Skeleton width={90} height={16} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
           </div>
         ))}
       </div>
-      <Skeleton width="100%" height={24} baseColor="#f0f2f5" highlightColor="#e2e8f0" duration={1.2} />
+      <Skeleton width="100%" height={28} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
       <div className={`flex gap-2 ${isRtl ? 'justify-end' : 'justify-start'}`}>
         {Array(2).fill(0).map((_, index) => (
-          <Skeleton key={index} width={60} height={24} baseColor="#f0f2f5" highlightColor="#e2e8f0" duration={1.2} />
+          <Skeleton key={index} width={70} height={24} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
         ))}
       </div>
-    </motion.div>
+    </div>
   </Card>
 );
