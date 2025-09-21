@@ -280,7 +280,8 @@ export const Orders: React.FC = () => {
           }, 0);
           return sum + returnTotal;
         }, 0);
-      return (order.adjustedTotal || order.totalAmount - approvedReturnsTotal).toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
+      const adjusted = order.adjustedTotal || order.totalAmount - approvedReturnsTotal;
+      return adjusted.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
         style: 'currency',
         currency: 'SAR',
         minimumFractionDigits: 2,
@@ -445,7 +446,7 @@ export const Orders: React.FC = () => {
       }
       dispatch({ type: 'SET_LOADING', payload: true });
       const cacheKey = `${user.id}-${state.filterStatus}-${state.filterBranch}-${state.currentPage}-${state.viewMode}-${state.searchQuery}`;
-      if (cacheRef.current.has(cacheKey)) {
+      if (cacheRef.current.has(cacheKey) ) {
         dispatch({ type: 'SET_ORDERS', payload: cacheRef.current.get(cacheKey)! });
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
@@ -834,7 +835,10 @@ export const Orders: React.FC = () => {
               </Button>
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
-                onClick={state.orders.length > 0 ? () => exportToPDF(state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, state.filterStatus, state.filterBranch) : undefined}
+                onClick={state.orders.length > 0 ? () => {
+                  const filterBranchName = state.branches.find(b => b._id === state.filterBranch)?.name || '';
+                  exportToPDF(state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, state.filterStatus, filterBranchName);
+                } : undefined}
                 className={`flex items-center gap-1.5 ${
                   state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
                 } rounded-md px-3 py-1.5 text-xs shadow-sm`}
@@ -1015,4 +1019,6 @@ export const Orders: React.FC = () => {
       </Suspense>
     </div>
   );
-}
+};
+
+export default Orders;
