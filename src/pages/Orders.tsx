@@ -37,7 +37,6 @@ interface State {
   sortBy: 'date' | 'totalAmount' | 'priority';
   sortOrder: 'asc' | 'desc';
   currentPage: number;
-  totalPages: number;
   loading: boolean;
   error: string;
   submitting: string | null;
@@ -72,7 +71,6 @@ const initialState: State = {
   sortBy: 'date',
   sortOrder: 'desc',
   currentPage: 1,
-  totalPages: 1,
   loading: true,
   error: '',
   submitting: null,
@@ -83,7 +81,7 @@ const initialState: State = {
 
 const reducer = (state: State, action: Action): State => {
   switch (action.type) {
-    case 'SET_ORDERS': return { ...state, orders: action.payload.orders, totalPages: action.payload.totalPages, error: '', currentPage: 1 };
+    case 'SET_ORDERS': return { ...state, orders: action.payload, error: '', currentPage: 1 };
     case 'ADD_ORDER': return { ...state, orders: [action.payload, ...state.orders.filter(o => o.id !== action.payload.id)] };
     case 'SET_SELECTED_ORDER': return { ...state, selectedOrder: action.payload };
     case 'SET_CHEFS': return { ...state, chefs: action.payload };
@@ -94,8 +92,7 @@ const reducer = (state: State, action: Action): State => {
     case 'SET_FILTER_BRANCH': return { ...state, filterBranch: action.payload, currentPage: 1 };
     case 'SET_SEARCH_QUERY': return { ...state, searchQuery: action.payload, currentPage: 1 };
     case 'SET_SORT': return { ...state, sortBy: action.by ?? 'date', sortOrder: action.order ?? 'desc', currentPage: 1 };
-    case 'SET_PAGE': return { ...state, currentPage: Math.max(1, Math.min(action.payload, state.totalPages)) };
-    case 'SET_TOTAL_PAGES': return { ...state, totalPages: action.payload, currentPage: Math.max(1, Math.min(state.currentPage, action.payload)) };
+    case 'SET_PAGE': return { ...state, currentPage: action.payload };
     case 'SET_LOADING': return { ...state, loading: action.payload };
     case 'SET_ERROR': return { ...state, error: action.payload };
     case 'SET_SUBMITTING': return { ...state, submitting: action.payload };
@@ -144,7 +141,7 @@ const reducer = (state: State, action: Action): State => {
                   ? {
                       ...i,
                       assignedTo: assignment.assignedTo
-                        ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name || assignment.assignedTo.username || (state.isRtl ? 'غير معروف' : 'Unknown'), department: assignment.assignedTo.department }
+                        ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name || assignment.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), department: assignment.assignedTo.department }
                         : undefined,
                       status: assignment.status || i.status,
                     }
@@ -163,7 +160,7 @@ const reducer = (state: State, action: Action): State => {
                 ? {
                     ...i,
                     assignedTo: assignment.assignedTo
-                      ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name || assignment.assignedTo.username || (state.isRtl ? 'غير معروف' : 'Unknown'), department: assignment.assignedTo.department }
+                      ? { _id: assignment.assignedTo._id, name: assignment.assignedTo.name || assignment.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), department: assignment.assignedTo.department }
                       : undefined,
                     status: assignment.status || i.status,
                   }
@@ -251,6 +248,13 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   };
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
+
+// Converts Western digits to Arabic-Indic numerals
+function toArabicNumerals(num: number | string): string {
+  return num
+    .toString()
+    .replace(/\d/g, (d) => String.fromCharCode(0x0660 + Number(d)));
+}
 
 export const Orders: React.FC = () => {
   const { t, language } = useLanguage();
@@ -391,7 +395,6 @@ export const Orders: React.FC = () => {
           : [],
       };
       dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
-      dispatch({ type: 'SET_TOTAL_PAGES', payload: Math.ceil((state.orders.length + 1) / ORDERS_PER_PAGE[state.viewMode]) });
       playNotificationSound('/sounds/new-order.mp3', [200, 100, 200]);
     });
     socket.on('orderStatusUpdated', ({ orderId, status }: { orderId: string; status: Order['status'] }) => {
@@ -433,15 +436,13 @@ export const Orders: React.FC = () => {
     return () => {
       socket.off('connect');
       socket.off('connect_error');
-      socket.off('reconnect');
-      socket.off('disconnect');
       socket.off('newOrder');
       socket.off('orderStatusUpdated');
       socket.off('itemStatusUpdated');
       socket.off('returnStatusUpdated');
       socket.off('taskAssigned');
     };
-  }, [user, socket, isRtl, language, playNotificationSound, state.orders.length, state.viewMode]);
+  }, [user, socket, isRtl, language, playNotificationSound]);
 
   const fetchData = useCallback(
     async (retryCount = 0) => {
@@ -451,10 +452,9 @@ export const Orders: React.FC = () => {
         return;
       }
       dispatch({ type: 'SET_LOADING', payload: true });
-      const cacheKey = `${user.id}-${state.filterStatus}-${state.filterBranch}-${state.sortBy}-${state.sortOrder}-${state.searchQuery}-${state.viewMode}-${state.currentPage}`;
-      if (cacheRef.current.has(cacheKey)) {
-        const cachedData = cacheRef.current.get(cacheKey)!;
-        dispatch({ type: 'SET_ORDERS', payload: { orders: cachedData, totalPages: Math.ceil(cachedData.length / ORDERS_PER_PAGE[state.viewMode]) } });
+      const cacheKey = `${user.id}-${state.filterStatus}-${state.filterBranch}-${state.currentPage}-${state.viewMode}`;
+      if (cacheRef.current.has(cacheKey) ) {
+        dispatch({ type: 'SET_ORDERS', payload: cacheRef.current.get(cacheKey)! });
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
       }
@@ -464,7 +464,6 @@ export const Orders: React.FC = () => {
           limit: ORDERS_PER_PAGE[state.viewMode],
           sortBy: state.sortBy,
           sortOrder: state.sortOrder,
-          search: state.searchQuery || undefined,
         };
         if (state.filterStatus) query.status = state.filterStatus;
         if (state.filterBranch) query.branch = state.filterBranch;
@@ -474,9 +473,7 @@ export const Orders: React.FC = () => {
           chefsAPI.getAll(),
           branchesAPI.getAll(),
         ]);
-        const totalOrders = ordersResponse.total || ordersResponse.length || 0;
-        const totalPages = Math.ceil(totalOrders / ORDERS_PER_PAGE[state.viewMode]);
-        const mappedOrders: Order[] = ordersResponse.data
+        const mappedOrders: Order[] = ordersResponse
           .filter((order: any) => order && order._id && order.orderNumber)
           .map((order: any) => ({
             id: order._id,
@@ -542,7 +539,7 @@ export const Orders: React.FC = () => {
           }));
         cacheRef.current.clear();
         cacheRef.current.set(cacheKey, mappedOrders);
-        dispatch({ type: 'SET_ORDERS', payload: { orders: mappedOrders, totalPages } });
+        dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
         dispatch({
           type: 'SET_CHEFS',
           payload: chefsResponse
@@ -581,7 +578,7 @@ export const Orders: React.FC = () => {
         dispatch({ type: 'SET_LOADING', payload: false });
       }
     },
-    [user, state.filterStatus, state.filterBranch, state.searchQuery, state.sortBy, state.sortOrder, state.viewMode, state.currentPage, isRtl, language]
+    [user, state.filterStatus, state.filterBranch, state.currentPage, state.viewMode, state.sortBy, state.sortOrder, isRtl, language]
   );
 
   const exportToExcel = useCallback(() => {
@@ -602,7 +599,7 @@ export const Orders: React.FC = () => {
         [headers[2]]: isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status,
         [headers[3]]: productsStr,
         [headers[4]]: calculateAdjustedTotal(order),
-        [headers[5]]: `${calculateTotalQuantity(order)} ${translateUnit('unit', isRtl)}`,
+        [headers[5]]: `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
         [headers[6]]: order.date,
       };
     });
@@ -619,30 +616,32 @@ export const Orders: React.FC = () => {
   }, [state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity]);
 
   const handleSearchChange = useMemo(
-    () => debounce((value: string) => {
-      dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
-    }, 300),
+    () =>
+      debounce((value: string) => {
+        dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
+      }, 300),
     []
   );
 
   const filteredOrders = useMemo(
-    () => state.orders
-      .filter(
-        order =>
-          order.orderNumber.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-          order.branchName.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-          (order.notes || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-          order.createdBy.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-          order.items.some(item => item.productName.toLowerCase().includes(state.searchQuery.toLowerCase()))
-      )
-      .filter(
-        order =>
-          (!state.filterStatus || order.status === state.filterStatus) &&
-          (!state.filterBranch || order.branchId === state.filterBranch) &&
-          (user?.role === 'production' && user?.department
-            ? order.items.some(item => item.department._id === user.department._id)
-            : true)
-      ),
+    () =>
+      state.orders
+        .filter(
+          order =>
+            order.orderNumber.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            order.branchName.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            (order.notes || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            order.createdBy.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            order.items.some(item => item.productName.toLowerCase().includes(state.searchQuery.toLowerCase()))
+        )
+        .filter(
+          order =>
+            (!state.filterStatus || order.status === state.filterStatus) &&
+            (!state.filterBranch || order.branchId === state.filterBranch) &&
+            (user?.role === 'production' && user?.department
+              ? order.items.some(item => item.department._id === user.department._id)
+              : true)
+        ),
     [state.orders, state.searchQuery, state.filterStatus, state.filterBranch, user]
   );
 
@@ -654,29 +653,24 @@ export const Orders: React.FC = () => {
           ? new Date(a.date).getTime() - new Date(b.date).getTime()
           : new Date(b.date).getTime() - new Date(a.date).getTime();
       } else if (state.sortBy === 'totalAmount') {
-        const aAmount = parseFloat(calculateAdjustedTotal(a).replace(/[^0-9.]/g, '')) || 0;
-        const bAmount = parseFloat(calculateAdjustedTotal(b).replace(/[^0-9.]/g, '')) || 0;
-        return state.sortOrder === 'asc' ? aAmount - bAmount : bAmount - aAmount;
+        return state.sortOrder === 'asc' ? a.adjustedTotal - b.adjustedTotal : b.adjustedTotal - a.adjustedTotal;
       } else {
         return state.sortOrder === 'asc'
           ? priorityOrder[a.priority] - priorityOrder[b.priority]
           : priorityOrder[b.priority] - priorityOrder[a.priority];
       }
     });
-  }, [filteredOrders, state.sortBy, state.sortOrder, calculateAdjustedTotal]);
+  }, [filteredOrders, state.sortBy, state.sortOrder]);
 
   const paginatedOrders = useMemo(
     () => sortedOrders.slice((state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode], state.currentPage * ORDERS_PER_PAGE[state.viewMode]),
     [sortedOrders, state.currentPage, state.viewMode]
   );
 
-  const handlePageChange = useCallback((page: number) => {
-    if (page < 1 || page > state.totalPages) return;
-    dispatch({ type: 'SET_PAGE', payload: page });
-    if (listRef.current) {
-      listRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, [state.totalPages]);
+  const totalPages = useMemo(
+    () => Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode]),
+    [sortedOrders, state.viewMode]
+  );
 
   const updateOrderStatus = useCallback(
     async (orderId: string, newStatus: Order['status']) => {
@@ -814,6 +808,13 @@ export const Orders: React.FC = () => {
     [isRtl]
   );
 
+  const handlePageChange = useCallback((page: number) => {
+    dispatch({ type: 'SET_PAGE', payload: page });
+    if (listRef.current) {
+      listRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -880,7 +881,6 @@ export const Orders: React.FC = () => {
                     onChange={(e) => handleSearchChange(e?.target?.value || '')}
                     placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
                     className={`w-full ${isRtl ? 'pr-10' : 'pl-10'} rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200`}
-                    aria-label={isRtl ? 'بحث الطلبات' : 'Search orders'}
                   />
                 </div>
               </div>
@@ -894,7 +894,6 @@ export const Orders: React.FC = () => {
                   value={state.filterStatus}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
                   className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
-                  aria-label={isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}
                 />
               </div>
               <div>
@@ -904,45 +903,31 @@ export const Orders: React.FC = () => {
                   value={state.filterBranch}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_BRANCH', payload: value })}
                   className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
-                  aria-label={isRtl ? 'تصفية حسب الفرع' : 'Filter by Branch'}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
-                <div className="flex items-center gap-2">
-                  <Select
-                    options={sortOptions.map(opt => ({
-                      value: opt.value,
-                      label: isRtl ? { date: 'التاريخ', totalAmount: 'إجمالي المبلغ', priority: 'الأولوية' }[opt.value] : { date: 'Date', totalAmount: 'Total Amount', priority: 'Priority' }[opt.value],
-                    }))}
-                    value={state.sortBy}
-                    onChange={(value) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
-                    className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
-                    aria-label={isRtl ? 'ترتيب حسب' : 'Sort By'}
-                  />
-                  <Button
-                    variant="secondary"
-                    onClick={() => dispatch({ type: 'SET_SORT', by: state.sortBy, order: state.sortOrder === 'asc' ? 'desc' : 'asc' })}
-                    className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg shadow-md transition-colors duration-200"
-                    aria-label={isRtl ? `ترتيب ${state.sortOrder === 'asc' ? 'تنازلي' : 'تصاعدي'}` : `Sort ${state.sortOrder === 'asc' ? 'Descending' : 'Ascending'}`}
-                  >
-                    {state.sortOrder === 'asc' ? '↑' : '↓'}
-                  </Button>
-                </div>
+                <Select
+                  options={sortOptions.map(opt => ({
+                    value: opt.value,
+                    label: isRtl ? { date: 'التاريخ', totalAmount: 'إجمالي المبلغ', priority: 'الأولوية' }[opt.value] : { date: 'Date', totalAmount: 'Total Amount', priority: 'Priority' }[opt.value],
+                  }))}
+                  value={state.sortBy}
+                  onChange={(value) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
+                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
+                />
               </div>
             </div>
             <div className="text-sm text-center text-gray-500 mt-4">
-              {isRtl ? `عدد الطلبات: ${filteredOrders.length.toLocaleString('ar-SA')}` : `Orders count: ${filteredOrders.length}`}
+              {isRtl ? `عدد الطلبات: ${toArabicNumerals(filteredOrders.length)}` : `Orders count: ${filteredOrders.length}`}
             </div>
           </Card>
           <div ref={listRef} className="mt-6 min-h-[500px]">
             {state.loading ? (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-4">
                 {state.viewMode === 'card' ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => (
-                      <OrderCardSkeleton key={i} isRtl={isRtl} />
-                    ))}
+                  <div className="grid grid-cols-1 gap-4">
+                    {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)}
                   </div>
                 ) : (
                   <OrderTableSkeleton isRtl={isRtl} />
@@ -997,7 +982,7 @@ export const Orders: React.FC = () => {
                         onNavigateToDetails={handleNavigateToDetails}
                       />
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 gap-4">
                         {paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber).map(order => (
                           <OrderCard
                             key={order.id}
@@ -1014,10 +999,10 @@ export const Orders: React.FC = () => {
                         ))}
                       </div>
                     )}
-                    {state.totalPages > 1 && (
+                    {totalPages > 1 && (
                       <Pagination
                         currentPage={state.currentPage}
-                        totalPages={state.totalPages}
+                        totalPages={totalPages}
                         isRtl={isRtl}
                         handlePageChange={handlePageChange}
                       />
