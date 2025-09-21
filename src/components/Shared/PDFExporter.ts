@@ -23,10 +23,10 @@ const formatProducts = (items: Order['items'], isRtl: boolean, translateUnit: (u
     .map((item) => {
       const quantity = isRtl ? toArabicNumerals(item.quantity) : item.quantity;
       return isRtl
-        ? `${quantity} ${translateUnit(item.unit, isRtl)} ${item.productName}`
-        : `${quantity} ${translateUnit(item.unit, isRtl)} x ${item.productName}`;
+        ? `${item.productName} (${quantity} ${translateUnit(item.unit, isRtl)})`
+        : `${item.productName} (${quantity} ${translateUnit(item.unit, isRtl)})`;
     })
-    .join('  ++  ');
+    .join(isRtl ? '، ' : ', ');
 };
 
 // Convert array buffer to base64 for font embedding
@@ -48,8 +48,8 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
       if (!res.ok) throw new Error('فشل تحميل الخط Amiri');
       return res.arrayBuffer();
     });
-    doc.addFileToVFS(`${fontName}-Regular.ttf`, arrayBufferToBase64(fontBytes));
-    doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
+    doc.addFileToVFS(`${fontName}-normal.ttf`, arrayBufferToBase64(fontBytes));
+    doc.addFont(`${fontName}-normal.ttf`, fontName, 'normal');
     doc.setFont(fontName, 'normal');
     return true;
   } catch (error) {
@@ -84,7 +84,6 @@ const generateFileName = (filterStatus: string, filterBranchName: string, isRtl:
 const generatePDFHeader = (
   doc: jsPDF,
   isRtl: boolean,
-  t : (key: string) => string,
   title: string,
   filterStatus: string,
   filterBranchName: string,
@@ -101,7 +100,7 @@ const generatePDFHeader = (
   const pageHeight = doc.internal.pageSize.height;
 
   // Add main title
-  doc.text(title, isRtl ? pageWidth - 20 : 20, 12, { align: isRtl ? 'right' : 'left' });
+  doc.text(isRtl ? doc.processArabic(title) : title, isRtl ? pageWidth - 20 : 20, 12, { align: isRtl ? 'right' : 'left' });
 
   // Add filter information
   doc.setFontSize(10);
@@ -116,14 +115,14 @@ const generatePDFHeader = (
     cancelled: isRtl ? 'ملغى' : 'Cancelled',
   };
   const filterInfo = isRtl
-    ? `الحالة: ${filterStatus ? statusTranslations[filterStatus as keyof typeof statusTranslations] || 'الكل' : 'الكل'} | الفرع: ${filterBranchName || 'جميع الفروع'}`
+    ? doc.processArabic(`الحالة: ${filterStatus ? statusTranslations[filterStatus as keyof typeof statusTranslations] || 'الكل' : 'الكل'} | الفرع: ${filterBranchName || 'جميع الفروع'}`)
     : `Status: ${filterStatus ? statusTranslations[filterStatus as keyof typeof statusTranslations] || 'All' : 'All'} | Branch: ${filterBranchName || 'All Branches'}`;
   doc.text(filterInfo, isRtl ? pageWidth - 20 : 20, 20, { align: isRtl ? 'right' : 'left' });
 
   // Add total statistics with Arabic numerals
   doc.setFontSize(9);
   const stats = isRtl
-    ? `إجمالي الطلبات: ${toArabicNumerals(totalOrders)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${formatPrice(totalAmount, isRtl)}`
+    ? doc.processArabic(`إجمالي الطلبات: ${toArabicNumerals(totalOrders)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${formatPrice(totalAmount, isRtl)}`)
     : `Total Orders: ${totalOrders} | Total Quantity: ${totalQuantity} units | Total Amount: ${formatPrice(totalAmount, isRtl)}`;
   doc.text(stats, isRtl ? pageWidth - 20 : 20, 28, { align: isRtl ? 'right' : 'left' });
 
@@ -139,12 +138,8 @@ const generatePDFHeader = (
     doc.setFontSize(8);
     doc.setTextColor(150, 150, 150);
     doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
-    doc.text(
-      isRtl ? `صفحة ${toArabicNumerals(i)} من ${toArabicNumerals(pageCount)}` : `Page ${i} of ${pageCount}`,
-      isRtl ? pageWidth - 20 : 20,
-      pageHeight - 10,
-      { align: isRtl ? 'right' : 'left' }
-    );
+    const pageText = isRtl ? doc.processArabic(`صفحة ${toArabicNumerals(i)} من ${toArabicNumerals(pageCount)}`) : `Page ${i} of ${pageCount}`;
+    doc.text(pageText, isRtl ? pageWidth - 20 : 20, pageHeight - 10, { align: isRtl ? 'right' : 'left' });
   }
 };
 
@@ -160,9 +155,12 @@ const generatePDFTable = (
   calculateTotalQuantity: (order: Order) => number,
   translateUnit: (unit: string, isRtl: boolean) => string
 ) => {
+  const processedHeaders = isRtl ? headers.map(header => doc.processArabic(header)) : headers;
+  const processedData = data.map(row => isRtl ? row.map((cell: string) => doc.processArabic(cell)) : row);
+
   autoTable(doc, {
-    head: [isRtl ? headers.slice().reverse() : headers],
-    body: isRtl ? data.map(row => row.slice().reverse()) : data,
+    head: [isRtl ? processedHeaders.slice().reverse() : processedHeaders],
+    body: isRtl ? processedData.map(row => row.slice().reverse()) : processedData,
     theme: 'grid',
     startY: 35,
     margin: { left: 15, right: 15 },
@@ -172,6 +170,7 @@ const generatePDFTable = (
       fontSize: 10,
       halign: isRtl ? 'right' : 'left',
       font: fontLoaded ? fontName : 'helvetica',
+      fontStyle: 'normal', // Critical for custom fonts
       cellPadding: 4,
       minCellHeight: 8,
     },
@@ -179,6 +178,7 @@ const generatePDFTable = (
       fontSize: 9,
       halign: isRtl ? 'right' : 'left',
       font: fontLoaded ? fontName : 'helvetica',
+      fontStyle: 'normal',
       cellPadding: 4,
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
@@ -203,6 +203,7 @@ const generatePDFTable = (
       font: fontLoaded ? fontName : 'helvetica',
       halign: isRtl ? 'right' : 'left',
       valign: 'middle',
+      fontStyle: 'normal',
     },
     didParseCell: (data) => {
       data.cell.styles.halign = isRtl ? 'right' : 'left';
@@ -210,6 +211,10 @@ const generatePDFTable = (
         if (!data.cell.text[0] || data.cell.text[0].includes('NaN')) {
           data.cell.text[0] = formatPrice(0, isRtl);
         }
+      }
+      // Process Arabic text in cells
+      if (isRtl) {
+        data.cell.text = data.cell.text.map(text => doc.processArabic(text));
       }
     },
     didDrawPage: () => {
@@ -254,7 +259,6 @@ export const exportToPDF = async (
     generatePDFHeader(
       doc,
       isRtl,
-      (key: string) => key, // Provide a dummy translation function or replace with your actual 't' function
       isRtl ? 'تقرير الطلبات' : 'Orders Report',
       filterStatus,
       filterBranchName,

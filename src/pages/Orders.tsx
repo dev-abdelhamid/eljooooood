@@ -287,7 +287,7 @@ export const Orders: React.FC = () => {
           }, 0);
           return sum + returnTotal;
         }, 0);
-      const adjusted = order.adjustedTotal || order.totalAmount - approvedReturnsTotal;
+      const adjusted = (order.adjustedTotal || order.totalAmount || 0) - approvedReturnsTotal;
       return adjusted.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
         style: 'currency',
         currency: 'SAR',
@@ -452,7 +452,7 @@ export const Orders: React.FC = () => {
         return;
       }
       dispatch({ type: 'SET_LOADING', payload: true });
-      const cacheKey = `${user.id}-${state.filterStatus}-${state.filterBranch}-${state.currentPage}-${state.viewMode}-${state.searchQuery}`;
+      const cacheKey = `${user.id}-${state.filterStatus}-${state.filterBranch}-${state.currentPage}-${state.viewMode}`;
       if (cacheRef.current.has(cacheKey) ) {
         dispatch({ type: 'SET_ORDERS', payload: cacheRef.current.get(cacheKey)! });
         dispatch({ type: 'SET_LOADING', payload: false });
@@ -467,7 +467,6 @@ export const Orders: React.FC = () => {
         };
         if (state.filterStatus) query.status = state.filterStatus;
         if (state.filterBranch) query.branch = state.filterBranch;
-        if (state.searchQuery.trim()) query.search = state.searchQuery.trim();
         if (user.role === 'production' && user.department) query.department = user.department._id;
         const [ordersResponse, chefsResponse, branchesResponse] = await Promise.all([
           ordersAPI.getAll(query),
@@ -579,7 +578,7 @@ export const Orders: React.FC = () => {
         dispatch({ type: 'SET_LOADING', payload: false });
       }
     },
-    [user, state.filterStatus, state.filterBranch, state.currentPage, state.viewMode, state.searchQuery, state.sortBy, state.sortOrder, isRtl, language]
+    [user, state.filterStatus, state.filterBranch, state.currentPage, state.viewMode, state.sortBy, state.sortOrder, isRtl, language]
   );
 
   const exportToExcel = useCallback(() => {
@@ -923,11 +922,13 @@ export const Orders: React.FC = () => {
               {isRtl ? `عدد الطلبات: ${toArabicNumerals(filteredOrders.length)}` : `Orders count: ${filteredOrders.length}`}
             </div>
           </Card>
-          <div ref={listRef} className="mt-6">
+          <div ref={listRef} className="mt-6 min-h-[500px]">
             {state.loading ? (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-4">
                 {state.viewMode === 'card' ? (
-                  Array(6).fill(null).map((_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)}
+                  </div>
                 ) : (
                   <OrderTableSkeleton isRtl={isRtl} />
                 )}
@@ -950,7 +951,7 @@ export const Orders: React.FC = () => {
                 </Card>
               </motion.div>
             ) : (
-              <AnimatePresence>
+              <AnimatePresence mode="wait">
                 {paginatedOrders.length === 0 ? (
                   <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-6">
                     <Card className="p-8 text-center bg-white shadow-lg rounded-lg border border-gray-100">
@@ -981,20 +982,22 @@ export const Orders: React.FC = () => {
                         onNavigateToDetails={handleNavigateToDetails}
                       />
                     ) : (
-                      paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber).map(order => (
-                        <OrderCard
-                          key={order.id}
-                          order={order}
-                          isRtl={isRtl}
-                          calculateAdjustedTotal={calculateAdjustedTotal}
-                          calculateTotalQuantity={calculateTotalQuantity}
-                          translateUnit={translateUnit}
-                          updateOrderStatus={updateOrderStatus}
-                          openAssignModal={openAssignModal}
-                          submitting={state.submitting}
-                          onNavigateToDetails={handleNavigateToDetails}
-                        />
-                      ))
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber).map(order => (
+                          <OrderCard
+                            key={order.id}
+                            order={order}
+                            isRtl={isRtl}
+                            calculateAdjustedTotal={calculateAdjustedTotal}
+                            calculateTotalQuantity={calculateTotalQuantity}
+                            translateUnit={translateUnit}
+                            updateOrderStatus={updateOrderStatus}
+                            openAssignModal={openAssignModal}
+                            submitting={state.submitting}
+                            onNavigateToDetails={handleNavigateToDetails}
+                          />
+                        ))}
+                      </div>
                     )}
                     {totalPages > 1 && (
                       <Pagination
