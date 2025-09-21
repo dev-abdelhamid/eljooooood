@@ -236,7 +236,7 @@ const generatePDFTable = (
       1: { cellWidth: 20 , fontStyle: 'bold'  }, // Branch
       2: { cellWidth: 30 , fontStyle: 'bold' }, // Status
       3: { cellWidth: 'auto' , fontStyle: 'bold' }, // Products
-      4: { cellWidth: 20, fontStyle: 'bold',   halign: isRtl ? 'left' : 'left' }, // Total Amount (bold)
+      4: { cellWidth: 20, fontStyle: 'bold',   halign: isRtl ? 'left' : 'right' }, // Total Amount (bold)
       5: { cellWidth: 16 , fontStyle: 'bold' }, // Total Quantity
       6: { cellWidth: 42 , fontStyle: 'bold' }, // Date
     },
