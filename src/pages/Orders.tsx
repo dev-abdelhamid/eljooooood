@@ -17,7 +17,8 @@ import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { Order, Chef, Branch, AssignChefsForm } from '../types/types';
 import { useNavigate } from 'react-router-dom';
 import { exportToPDF } from '../components/Shared/PDFExporter';
-import { OrderTableSkeleton, OrderCardSkeleton } from '../components/Shared/OrderSkeletons';
+import { OrderCardSkeleton } from '../components/Shared/OrderSkeletons';
+import  OrderTableSkeleton  from '../components/Shared/OrderTableSkeleton';
 import Pagination from '../components/Shared/Pagination';
 
 const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
@@ -861,9 +862,9 @@ export const Orders: React.FC = () => {
           </div>
           <Card className="p-3 mt-6 bg-white shadow-md rounded-xl border border-gray-200">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className=" flex flex-row-reverse  items-center w-full">
+              <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
-                <div className="relative">
+                <div className="relative flex flex-row-reverse">
                   <Search className={`w-4 h-4 text-gray-500 absolute top-2 ${isRtl ? 'right-2' : 'left-2'}`} />
                   <Input
                     value={state.searchQuery}
