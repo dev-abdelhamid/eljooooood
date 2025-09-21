@@ -18,17 +18,27 @@ const fromArabicNumerals = (str: string): string => {
   return str.replace(/[٠-٩]/g, (digit) => arabicMap[digit] || digit);
 };
 
-// Format price to match calculateAdjustedTotal in Orders.tsx, removing any parentheses
+// Format price to match calculateAdjustedTotal in Orders.tsx
 const formatPrice = (amount: number | undefined, isRtl: boolean): string => {
-  const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
+  const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0; // No division by 100
   const formatted = validAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
     style: 'currency',
     currency: 'SAR',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-  const result = isRtl ? formatted.replace(/\d/g, (d) => String.fromCharCode(0x0660 + parseInt(d))) : formatted;
-  return result.replace(/[()]/g, ''); // Remove any parentheses
+  return isRtl ? formatted.replace(/\d/g, (d) => String.fromCharCode(0x0660 + parseInt(d))) : formatted;
+};
+
+// Reverse Arabic price string to fix display order
+const reverseArabicPrice = (price: string): string => {
+  // Split price into parts (number and currency symbol)
+  const parts = price.split(' ');
+  if (parts.length === 2) {
+    // For Arabic, reverse the number part and append the currency symbol
+    return `${parts[0].split('').reverse().join('')} ${parts[1]}`;
+  }
+  return price.split('').reverse().join('');
 };
 
 // Format products for Arabic and English with correct separator
@@ -176,7 +186,7 @@ const generatePDFHeader = (
   }
 };
 
-// Generate PDF table with correct Arabic headers and bold price
+// Generate PDF table with correct Arabic headers and reversed price for Arabic
 const generatePDFTable = (
   doc: jsPDF,
   headers: string[],
@@ -243,6 +253,9 @@ const generatePDFTable = (
       if (data.column.index === (isRtl ? headers.length - 5 : 4)) { // Total Amount column
         if (!data.cell.text[0] || data.cell.text[0].includes('NaN')) {
           data.cell.text[0] = formatPrice(0, isRtl);
+        } else if (isRtl) {
+          // Reverse the price text for Arabic to fix display order
+          data.cell.text[0] = reverseArabicPrice(data.cell.text[0]);
         }
         data.cell.styles.fontStyle = 'bold'; // Ensure bold for price
       }
@@ -328,7 +341,7 @@ export const exportToPDF = async (
       if (totalAmountStr.includes('NaN')) {
         formattedTotalAmount = formatPrice(0, isRtl);
       } else {
-        formattedTotalAmount = totalAmountStr.replace(/[()]/g, ''); // Remove any parentheses
+        formattedTotalAmount = totalAmountStr; // Use the formatted string from calculateAdjustedTotal
       }
       return [
         order.orderNumber, // Always use Latin numerals for orderNumber
