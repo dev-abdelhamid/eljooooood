@@ -10,8 +10,9 @@ const toArabicNumerals = (number: string | number): string => {
 };
 
 // Format price with proper currency and Arabic numerals
-const formatPrice = (amount: number, isRtl: boolean): string => {
-  const formatted = amount.toFixed(2).replace('.', ',');
+const formatPrice = (amount: number | undefined, isRtl: boolean): string => {
+  const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
+  const formatted = validAmount.toFixed(2).replace('.', ',');
   const arabicNumber = isRtl ? toArabicNumerals(formatted) : formatted;
   return isRtl ? `${arabicNumber} ر.س` : `SAR ${formatted}`;
 };
@@ -171,6 +172,7 @@ const generatePDFTable = (
       halign: isRtl ? 'right' : 'left',
       font: fontLoaded ? fontName : 'helvetica',
       cellPadding: 4,
+      minCellHeight: 8,
     },
     bodyStyles: {
       fontSize: 9,
@@ -180,6 +182,7 @@ const generatePDFTable = (
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
       fillColor: [255, 255, 255],
+      minCellHeight: 6,
     },
     alternateRowStyles: {
       fillColor: [245, 245, 245],
@@ -196,14 +199,20 @@ const generatePDFTable = (
     styles: {
       overflow: 'linebreak',
       cellWidth: 'wrap',
-      minCellHeight: 10,
       font: fontLoaded ? fontName : 'helvetica',
+      halign: isRtl ? 'right' : 'left',
+      valign: 'middle',
     },
     didParseCell: (data) => {
       data.cell.styles.halign = isRtl ? 'right' : 'left';
-      if (data.column.index === (isRtl ? headers.length - 5 : 4) && !data.cell.text[0]) {
-        data.cell.text[0] = formatPrice(0, isRtl);
+      if (data.column.index === (isRtl ? headers.length - 5 : 4)) { // Total Amount column
+        if (!data.cell.text[0] || data.cell.text[0].includes('NaN')) {
+          data.cell.text[0] = formatPrice(0, isRtl);
+        }
       }
+    },
+    didDrawPage: () => {
+      doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
     },
   });
 };
@@ -237,7 +246,7 @@ export const exportToPDF = async (
     const totalQuantity = filteredOrders.reduce((sum, order) => sum + calculateTotalQuantity(order), 0);
     const totalAmount = filteredOrders.reduce((sum, order) => {
       const amountStr = calculateAdjustedTotal(order).replace(/[^0-9.,]/g, '').replace(',', '.');
-      return sum + (amountStr ? parseFloat(amountStr) : 0);
+      return sum + (amountStr && !isNaN(parseFloat(amountStr)) ? parseFloat(amountStr) : 0);
     }, 0);
 
     // Generate header
@@ -276,12 +285,14 @@ export const exportToPDF = async (
         delivered: isRtl ? 'تم التسليم' : 'Delivered',
         cancelled: isRtl ? 'ملغى' : 'Cancelled',
       };
+      const totalAmountStr = calculateAdjustedTotal(order);
+      const formattedTotalAmount = totalAmountStr.includes('NaN') ? formatPrice(0, isRtl) : totalAmountStr;
       return [
         isRtl ? toArabicNumerals(order.orderNumber) : order.orderNumber,
         order.branchName,
         statusTranslations[order.status] || order.status,
         formatProducts(order.items, isRtl, translateUnit),
-        calculateAdjustedTotal(order),
+        formattedTotalAmount,
         isRtl ? `${toArabicNumerals(calculateTotalQuantity(order))} ${translateUnit('unit', isRtl)}` : `${calculateTotalQuantity(order)} ${translateUnit('unit', isRtl)}`,
         order.date,
       ];
