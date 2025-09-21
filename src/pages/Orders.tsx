@@ -834,7 +834,7 @@ export const Orders: React.FC = () => {
               </Button>
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
-                onClick={state.orders.length > 0 ? () => exportToPDF(state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit) : undefined}
+                onClick={state.orders.length > 0 ? () => exportToPDF(state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, state.filterStatus, state.filterBranch) : undefined}
                 className={`flex items-center gap-1.5 ${
                   state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
                 } rounded-md px-3 py-1.5 text-xs shadow-sm`}
@@ -1015,6 +1015,4 @@ export const Orders: React.FC = () => {
       </Suspense>
     </div>
   );
-};
-
-export default Orders;
+}

@@ -21,7 +21,6 @@ const formatProducts = (items: Order['items'], isRtl: boolean, translateUnit: (u
   return items
     .map((item) => {
       const quantity = isRtl ? toArabicNumerals(item.quantity) : item.quantity;
-      // Ensure correct order and parentheses for Arabic (improved RTL support)
       return isRtl
         ? `${item.productName} (${quantity} ${translateUnit(item.unit, isRtl)})`
         : `${item.productName} (${quantity} ${translateUnit(item.unit, isRtl)})`;
@@ -39,10 +38,10 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   return window.btoa(binary);
 };
 
-// Load Amiri font for reliable Arabic rendering (improved error handling)
+// Load Amiri font for reliable Arabic rendering
 const loadFont = async (doc: jsPDF): Promise<boolean> => {
   const fontName = 'Amiri';
-  const fontUrl = '/fonts/Amiri-Regular.ttf'; // تأكد إن الخط موجود في public/fonts
+  const fontUrl = '/fonts/Amiri-Regular.ttf'; // Ensure font is in public/fonts
   try {
     const fontBytes = await fetch(fontUrl).then((res) => {
       if (!res.ok) throw new Error('فشل تحميل الخط Amiri');
@@ -50,11 +49,11 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
     });
     doc.addFileToVFS(`${fontName}-Regular.ttf`, arrayBufferToBase64(fontBytes));
     doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
-    doc.setFont(fontName, 'normal'); // Set font explicitly
+    doc.setFont(fontName, 'normal');
     return true;
   } catch (error) {
     console.error('خطأ تحميل الخط:', error);
-    doc.setFont('helvetica', 'normal'); // Fallback
+    doc.setFont('helvetica', 'normal');
     toast.error('فشل تحميل الخط Amiri، استخدام خط افتراضي (قد يسبب مشاكل في العربية)', {
       position: 'top-right',
       autoClose: 3000,
@@ -63,7 +62,7 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
   }
 };
 
-// Generate dynamic file name based on filters (improved as per request)
+// Generate dynamic file name based on filters
 const generateFileName = (filterStatus: string, filterBranch: string, isRtl: boolean): string => {
   const date = new Date().toISOString().split('T')[0];
   const statusTranslations = {
@@ -80,7 +79,7 @@ const generateFileName = (filterStatus: string, filterBranch: string, isRtl: boo
   return `${status}${branch}_${date}.pdf`;
 };
 
-// Generate PDF header with filter information and yellow theme (ensure font is set for Arabic)
+// Generate PDF header with filter information and yellow theme
 const generatePDFHeader = (
   doc: jsPDF,
   isRtl: boolean,
@@ -93,18 +92,18 @@ const generatePDFHeader = (
   fontName: string,
   fontLoaded: boolean
 ) => {
-  doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal'); // Ensure font is set before text
+  doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
   doc.setFontSize(18);
-  doc.setTextColor(33, 33, 33); // Dark gray for title
+  doc.setTextColor(33, 33, 33);
   const pageWidth = doc.internal.pageSize.width;
   const pageHeight = doc.internal.pageSize.height;
 
-  // Add main title with RTL support
+  // Add main title
   doc.text(title, isRtl ? pageWidth - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
 
-  // Add filter information (improved clarity)
+  // Add filter information
   doc.setFontSize(10);
-  doc.setTextColor(100, 100, 100); // Light gray for filter info
+  doc.setTextColor(100, 100, 100);
   const statusTranslations = {
     pending: 'قيد الانتظار',
     approved: 'المعتمدة',
@@ -128,7 +127,7 @@ const generatePDFHeader = (
 
   // Add separator line in yellow
   doc.setLineWidth(0.5);
-  doc.setDrawColor(255, 193, 7); // Yellow (#FFC107)
+  doc.setDrawColor(255, 193, 7);
   doc.line(20, 40, pageWidth - 20, 40);
 
   // Add footer with page number
@@ -136,8 +135,8 @@ const generatePDFHeader = (
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setFontSize(8);
-    doc.setTextColor(150, 150, 150); // Light gray for footer
-    doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal'); // Re-set font for footer
+    doc.setTextColor(150, 150, 150);
+    doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
     doc.text(
       isRtl ? `صفحة ${toArabicNumerals(i)} من ${toArabicNumerals(pageCount)}` : `Page ${i} of ${pageCount}`,
       isRtl ? pageWidth - 20 : 20,
@@ -147,7 +146,7 @@ const generatePDFHeader = (
   }
 };
 
-// Generate PDF table with yellow-themed styling and correct Arabic headers (improved RTL)
+// Generate PDF table with yellow-themed styling and correct Arabic headers
 const generatePDFTable = (
   doc: jsPDF,
   headers: string[],
@@ -160,13 +159,13 @@ const generatePDFTable = (
   translateUnit: (unit: string, isRtl: boolean) => string
 ) => {
   autoTable(doc, {
-    head: [isRtl ? headers : headers.reverse()], // Reverse for LTR
+    head: [isRtl ? headers : headers.reverse()],
     body: isRtl ? data : data.map((row) => row.reverse()),
     theme: 'grid',
     startY: 45,
     margin: { left: 15, right: 15 },
     headStyles: {
-      fillColor: [255, 193, 7], // Yellow
+      fillColor: [255, 193, 7],
       textColor: [33, 33, 33],
       fontSize: 10,
       halign: isRtl ? 'right' : 'left',
@@ -182,19 +181,19 @@ const generatePDFTable = (
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
       textDirection: isRtl ? 'rtl' : 'ltr',
-      fillColor: [255, 245, 195], // Light yellow
+      fillColor: [255, 245, 195],
     },
     alternateRowStyles: {
       fillColor: [255, 255, 255],
     },
     columnStyles: {
-      0: { cellWidth: 25 }, // Order Number
-      1: { cellWidth: 30 }, // Branch (wider for branch names)
-      2: { cellWidth: 25 }, // Status
-      3: { cellWidth: 'auto' }, // Products (auto for long text)
-      4: { cellWidth: 25 }, // Total Amount
-      5: { cellWidth: 25 }, // Total Quantity
-      6: { cellWidth: 35 }, // Date
+      0: { cellWidth: 25 },
+      1: { cellWidth: 30 },
+      2: { cellWidth: 25 },
+      3: { cellWidth: 'auto' },
+      4: { cellWidth: 25 },
+      5: { cellWidth: 25 },
+      6: { cellWidth: 35 },
     },
     styles: {
       overflow: 'linebreak',
@@ -205,13 +204,13 @@ const generatePDFTable = (
       data.cell.styles.halign = isRtl ? 'right' : 'left';
       data.cell.styles.textDirection = isRtl ? 'rtl' : 'ltr';
       if (data.column.index === 3) {
-        data.cell.styles.cellPadding = { top: 5, right: 5, bottom: 5, left: 5 }; // Extra padding
+        data.cell.styles.cellPadding = { top: 5, right: 5, bottom: 5, left: 5 };
       }
     },
   });
 };
 
-// Main export function (removed setRtl and setLanguage to fix error)
+// Main export function
 export const exportToPDF = async (
   orders: Order[],
   isRtl: boolean,
@@ -257,7 +256,7 @@ export const exportToPDF = async (
       fontLoaded
     );
 
-    // Prepare table headers (these should now render correctly with font)
+    // Prepare table headers
     const headers = [
       'رقم الطلب',
       'الفرع',
