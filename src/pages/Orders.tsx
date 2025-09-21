@@ -6,7 +6,7 @@ import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Select } from '../components/UI/Select';
 import { Input } from '../components/UI/Input';
-import { ShoppingCart, AlertCircle, Search, Table2, Grid, Download } from 'lucide-react';
+import { ShoppingCart, AlertCircle, Search, Table2, Grid, Download, Loader2 } from 'lucide-react';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -17,8 +17,7 @@ import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { Order, Chef, Branch, AssignChefsForm } from '../types/types';
 import { useNavigate } from 'react-router-dom';
 import { exportToPDF } from '../components/Shared/PDFExporter';
-import { OrderCardSkeleton } from '../components/Shared/OrderSkeletons';
-import  { OrderTableSkeleton }  from '../components/Shared/OrderSkeletons';
+import { OrderCardSkeleton, OrderTableSkeleton } from '../components/Shared/OrderSkeletons';
 import Pagination from '../components/Shared/Pagination';
 
 const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
@@ -39,6 +38,7 @@ interface State {
   sortOrder: 'asc' | 'desc';
   currentPage: number;
   loading: boolean;
+  searchLoading: boolean;
   error: string;
   submitting: string | null;
   socketConnected: boolean;
@@ -73,6 +73,7 @@ const initialState: State = {
   sortOrder: 'desc',
   currentPage: 1,
   loading: true,
+  searchLoading: false,
   error: '',
   submitting: null,
   socketConnected: false,
@@ -95,6 +96,7 @@ const reducer = (state: State, action: Action): State => {
     case 'SET_SORT': return { ...state, sortBy: action.by ?? 'date', sortOrder: action.order ?? 'desc', currentPage: 1 };
     case 'SET_PAGE': return { ...state, currentPage: action.payload };
     case 'SET_LOADING': return { ...state, loading: action.payload };
+    case 'SET_SEARCH_LOADING': return { ...state, searchLoading: action.payload };
     case 'SET_ERROR': return { ...state, error: action.payload };
     case 'SET_SUBMITTING': return { ...state, submitting: action.payload };
     case 'SET_SOCKET_CONNECTED': return { ...state, socketConnected: action.payload };
@@ -210,7 +212,7 @@ const reducer = (state: State, action: Action): State => {
   }
 };
 
-const ORDERS_PER_PAGE = { card: 12, table: 50 };
+const ORDERS_PER_PAGE = { card: 6, table: 20 };
 const validTransitions: Record<Order['status'], Order['status'][]> = {
   pending: ['approved', 'cancelled'],
   approved: ['in_production', 'cancelled'],
@@ -250,9 +252,6 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
 
-// Converts Western digits to Arabic-Indic numerals
-
-
 const exportToExcel = (orders: Order[], isRtl: boolean, calculateAdjustedTotal: (order: Order) => string, calculateTotalQuantity: (order: Order) => number, translateUnit: (unit: string, isRtl: boolean) => string) => {
   const headers = [
     isRtl ? 'رقم الطلب' : 'Order Number',
@@ -273,7 +272,7 @@ const exportToExcel = (orders: Order[], isRtl: boolean, calculateAdjustedTotal: 
       [headers[1]]: order.branchName,
       [headers[2]]: statusLabel,
       [headers[3]]: productsStr,
-      [headers[4]]: isRtl ? totalAmount + ' ر.س' : totalAmount,
+      [headers[4]]: isRtl ? (totalAmount.replace(/[^0-9.]/g, '')) + ' ر.س' : totalAmount,
       [headers[5]]: totalQuantity,
       [headers[6]]: order.date,
     };
@@ -293,7 +292,7 @@ const exportToExcel = (orders: Order[], isRtl: boolean, calculateAdjustedTotal: 
   XLSX.writeFile(wb, 'Orders.xlsx');
   toast.success(isRtl ? 'تم تصدير الملف بنجاح' : 'Export successful', {
     position: isRtl ? 'top-left' : 'top-right',
-    autoClose: 3000,
+    autoClose: 2000,
   });
 };
 
@@ -343,6 +342,331 @@ export const Orders: React.FC = () => {
     navigate(`/orders/${orderId}`);
     window.scrollTo(0, 0);
   }, [navigate]);
+
+  const fetchData = useCallback(
+    async (retryCount = 0, searchQuery = state.searchQuery) => {
+      if (!user || !['admin', 'production'].includes(user.role)) {
+        dispatch({ type: 'SET_ERROR', payload: isRtl ? 'غير مصرح للوصول' : 'Unauthorized access' });
+        dispatch({ type: 'SET_LOADING', payload: false });
+        return;
+      }
+      dispatch({ type: 'SET_LOADING', payload: true });
+      dispatch({ type: 'SET_SEARCH_LOADING', payload: !!searchQuery });
+      try {
+        const query: Record<string, any> = {
+          sortBy: state.sortBy,
+          sortOrder: state.sortOrder,
+        };
+        if (user.role === 'production' && user.department) query.department = user.department._id;
+        if (searchQuery) query.search = searchQuery;
+        const [ordersResponse, chefsResponse, branchesResponse] = await Promise.all([
+          ordersAPI.getAll(query),
+          chefsAPI.getAll(),
+          branchesAPI.getAll(),
+        ]);
+        const mappedOrders: Order[] = ordersResponse
+          .filter((order: any) => order && order._id && order.orderNumber)
+          .map((order: any) => ({
+            id: order._id,
+            orderNumber: order.orderNumber,
+            branchId: order.branch?._id || 'unknown',
+            branchName: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+            items: Array.isArray(order.items)
+              ? order.items.map((item: any) => ({
+                  _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
+                  productId: item.product?._id || 'unknown',
+                  productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                  quantity: Number(item.quantity) || 1,
+                  price: Number(item.price) || 0,
+                  unit: item.product?.unit || 'unit',
+                  department: item.product?.department ? { _id: item.product.department._id, name: item.product.department.name || (isRtl ? 'غير معروف' : 'Unknown') } : { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' },
+                  assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || item.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), department: item.assignedTo.department } : undefined,
+                  status: item.status || 'pending',
+                  returnedQuantity: Number(item.returnedQuantity) || 0,
+                  returnReason: item.returnReason || '',
+                  startedAt: item.startedAt ? new Date(item.startedAt) : undefined,
+                  completedAt: item.completedAt ? new Date(item.completedAt) : undefined,
+                }))
+              : [],
+            returns: Array.isArray(order.returns)
+              ? order.returns.map((ret: any) => ({
+                  returnId: ret._id || `temp-${Math.random().toString(36).substring(2)}`,
+                  returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
+                  items: Array.isArray(ret.items)
+                    ? ret.items.map((item: any) => ({
+                        productId: item.product?._id || 'unknown',
+                        productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                        quantity: Number(item.quantity) || 0,
+                        reason: item.reason || (isRtl ? 'غير محدد' : 'Unspecified'),
+                        unit: item.product?.unit || 'unit',
+                      }))
+                    : [],
+                  status: ret.status || 'pending',
+                  reviewNotes: ret.notes || '',
+                  createdAt: formatDate(ret.createdAt ? new Date(ret.createdAt) : new Date(), language),
+                  createdBy: ret.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                }))
+              : [],
+            status: order.status || 'pending',
+            totalAmount: Number(order.totalAmount) || 0,
+            adjustedTotal: Number(order.adjustedTotal) || 0,
+            date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
+            requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : undefined,
+            notes: order.notes || '',
+            priority: order.priority || 'medium',
+            createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+            approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
+            approvedAt: order.approvedAt ? new Date(order.approvedAt) : undefined,
+            deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : undefined,
+            transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : undefined,
+            statusHistory: Array.isArray(order.statusHistory)
+              ? order.statusHistory.map((history: any) => ({
+                  status: history.status || 'pending',
+                  changedBy: history.changedBy?.name || 'unknown',
+                  changedAt: formatDate(history.changedAt ? new Date(history.changedAt) : new Date(), language),
+                  notes: history.notes || '',
+                }))
+              : [],
+          }));
+        dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
+        dispatch({
+          type: 'SET_CHEFS',
+          payload: chefsResponse
+            .filter((chef: any) => chef && chef.user?._id)
+            .map((chef: any) => ({
+              _id: chef._id,
+              userId: chef.user._id,
+              name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
+              department: chef.department ? { _id: chef.department._id, name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown') } : null,
+              status: chef.status || 'active',
+            })),
+        });
+        dispatch({
+          type: 'SET_BRANCHES',
+          payload: branchesResponse
+            .filter((branch: any) => branch && branch._id)
+            .map((branch: any) => ({
+              _id: branch._id,
+              name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
+            }))
+            .sort((a: Branch, b: Branch) => a.name.localeCompare(b.name, language)),
+        });
+        dispatch({ type: 'SET_ERROR', payload: '' });
+      } catch (err: any) {
+        console.error('Fetch data error:', err.message);
+        if (retryCount < 2) {
+          setTimeout(() => fetchData(retryCount + 1, searchQuery), 1000);
+          return;
+        }
+        const errorMessage = err.response?.status === 404
+          ? isRtl ? 'لم يتم العثور على طلبات' : 'No orders found'
+          : isRtl ? `خطأ في جلب الطلبات: ${err.message}` : `Error fetching orders: ${err.message}`;
+        dispatch({ type: 'SET_ERROR', payload: errorMessage });
+        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
+      } finally {
+        dispatch({ type: 'SET_LOADING', payload: false });
+        dispatch({ type: 'SET_SEARCH_LOADING', payload: false });
+      }
+    },
+    [user, state.sortBy, state.sortOrder, isRtl, language, state.searchQuery]
+  );
+
+  const handleSearchChange = useMemo(
+    () =>
+      debounce((value: string) => {
+        dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
+        fetchData(0, value);
+      }, 500),
+    [fetchData]
+  );
+
+  const filteredOrders = useMemo(
+    () =>
+      state.orders
+        .filter(
+          order =>
+            (!state.filterStatus || order.status === state.filterStatus) &&
+            (!state.filterBranch || order.branchId === state.filterBranch) &&
+            (user?.role === 'production' && user?.department
+              ? order.items.some(item => item.department._id === user.department._id)
+              : true)
+        ),
+    [state.orders, state.filterStatus, state.filterBranch, user]
+  );
+
+  const sortedOrders = useMemo(() => {
+    const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 };
+    return [...filteredOrders].sort((a, b) => {
+      if (state.sortBy === 'date') {
+        return state.sortOrder === 'asc'
+          ? new Date(a.date).getTime() - new Date(b.date).getTime()
+          : new Date(b.date).getTime() - new Date(a.date).getTime();
+      } else if (state.sortBy === 'totalAmount') {
+        return state.sortOrder === 'asc' ? a.adjustedTotal - b.adjustedTotal : b.adjustedTotal - a.adjustedTotal;
+      } else {
+        return state.sortOrder === 'asc'
+          ? priorityOrder[a.priority] - priorityOrder[b.priority]
+          : priorityOrder[b.priority] - priorityOrder[a.priority];
+      }
+    });
+  }, [filteredOrders, state.sortBy, state.sortOrder]);
+
+  const paginatedOrders = useMemo(
+    () => sortedOrders.slice((state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode], state.currentPage * ORDERS_PER_PAGE[state.viewMode]),
+    [sortedOrders, state.currentPage, state.viewMode]
+  );
+
+  const totalPages = useMemo(
+    () => Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode]),
+    [sortedOrders, state.viewMode]
+  );
+
+  const updateOrderStatus = useCallback(
+    async (orderId: string, newStatus: Order['status']) => {
+      const order = state.orders.find(o => o.id === orderId);
+      if (!order || !validTransitions[order.status].includes(newStatus)) {
+        toast.error(isRtl ? 'انتقال غير صالح' : 'Invalid transition', {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 2000,
+        });
+        return;
+      }
+      dispatch({ type: 'SET_SUBMITTING', payload: orderId });
+      try {
+        await ordersAPI.updateStatus(orderId, { status: newStatus });
+        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: newStatus });
+        if (socket && isConnected) {
+          emit('orderStatusUpdated', { orderId, status: newStatus });
+        }
+        toast.success(isRtl ? `تم تحديث الحالة إلى ${newStatus}` : `Order status updated to: ${newStatus}`, {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 2000,
+        });
+      } catch (err: any) {
+        console.error('Update order status error:', err.message);
+        toast.error(isRtl ? `فشل في تحديث الحالة: ${err.message}` : `Failed to update status: ${err.message}`, {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 2000,
+        });
+      } finally {
+        dispatch({ type: 'SET_SUBMITTING', payload: null });
+      }
+    },
+    [state.orders, isRtl, socket, isConnected, emit]
+  );
+
+  const updateItemStatus = useCallback(
+    async (orderId: string, itemId: string, status: Order['items'][0]['status']) => {
+      if (!user?.id) {
+        toast.error(isRtl ? 'لا يوجد مستخدم مرتبط' : 'No user associated', {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 2000,
+        });
+        return;
+      }
+      dispatch({ type: 'SET_SUBMITTING', payload: orderId });
+      try {
+        await ordersAPI.updateItemStatus(orderId, itemId, { status });
+        dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
+        if (socket && isConnected) {
+          emit('itemStatusUpdated', { orderId, itemId, status });
+        }
+        toast.success(isRtl ? `تم تحديث حالة العنصر إلى: ${status}` : `Item status updated to: ${status}`, {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 2000,
+        });
+      } catch (err: any) {
+        console.error('Update item status error:', err.message);
+        toast.error(isRtl ? `فشل في تحديث حالة العنصر: ${err.message}` : `Failed to update item status: ${err.message}`, {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 2000,
+        });
+      } finally {
+        dispatch({ type: 'SET_SUBMITTING', payload: null });
+      }
+    },
+    [isRtl, user, socket, isConnected, emit]
+  );
+
+  const assignChefs = useCallback(
+    async (orderId: string) => {
+      if (!user?.id || state.assignFormData.items.some(item => !item.assignedTo)) {
+        toast.error(isRtl ? 'يرجى تعيين شيف واحد على الأقل' : 'Please assign at least one chef', {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 2000,
+        });
+        return;
+      }
+      dispatch({ type: 'SET_SUBMITTING', payload: orderId });
+      try {
+        await ordersAPI.assignChef(orderId, { items: state.assignFormData.items });
+        const items = state.assignFormData.items.map(item => ({
+          _id: item.itemId,
+          assignedTo: state.chefs.find(chef => chef.userId === item.assignedTo) || { _id: item.assignedTo, name: isRtl ? 'غير معروف' : 'Unknown', department: { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' } },
+          status: 'assigned',
+        }));
+        dispatch({ type: 'TASK_ASSIGNED', orderId, items });
+        dispatch({ type: 'SET_MODAL', modal: 'assign', isOpen: false });
+        dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
+        if (socket && isConnected) {
+          emit('taskAssigned', { orderId, items });
+        }
+        toast.success(isRtl ? 'تم تعيين الشيفات بنجاح' : 'Chefs assigned successfully', {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 2000,
+        });
+      } catch (err: any) {
+        console.error('Assign chefs error:', err.message);
+        toast.error(isRtl ? `فشل في تعيين الشيفات: ${err.message}` : `Failed to assign chefs: ${err.message}`, {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 2000,
+        });
+      } finally {
+        dispatch({ type: 'SET_SUBMITTING', payload: null });
+      }
+    },
+    [user, state.assignFormData, state.chefs, socket, isConnected, emit, isRtl]
+  );
+
+  const openAssignModal = useCallback(
+    (order: Order) => {
+      if (order.status !== 'approved') {
+        toast.error(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved', {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 2000,
+        });
+        return;
+      }
+      dispatch({ type: 'SET_SELECTED_ORDER', payload: order });
+      dispatch({
+        type: 'SET_ASSIGN_FORM',
+        payload: {
+          items: order.items
+            .filter(item => !item.assignedTo)
+            .map(item => ({
+              itemId: item._id,
+              assignedTo: '',
+              product: item.productName,
+              quantity: item.quantity,
+              unit: item.unit || 'unit',
+            })),
+        },
+      });
+      dispatch({ type: 'SET_MODAL', modal: 'assign', isOpen: true });
+    },
+    [isRtl]
+  );
+
+  const handlePageChange = useCallback((page: number) => {
+    dispatch({ type: 'SET_PAGE', payload: page });
+    if (listRef.current) {
+      listRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   useEffect(() => {
     if (!user || !['admin', 'production'].includes(user.role)) {
@@ -460,7 +784,7 @@ export const Orders: React.FC = () => {
       dispatch({ type: 'RETURN_STATUS_UPDATED', orderId, returnId, status });
       toast.info(isRtl ? `تم تحديث حالة الإرجاع إلى: ${isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', rejected: 'مرفوض', processed: 'معالج'}[status] : status}` : `Return status updated to: ${status}`, {
         position: isRtl ? 'top-left' : 'top-right',
-        autoClose: 3000,
+        autoClose: 2000,
       });
     });
     socket.on('taskAssigned', ({ orderId, items }: { orderId: string; items: any[] }) => {
@@ -471,7 +795,7 @@ export const Orders: React.FC = () => {
       dispatch({ type: 'TASK_ASSIGNED', orderId, items });
       toast.info(isRtl ? 'تم تعيين الشيفات' : 'Chefs assigned', {
         position: isRtl ? 'top-left' : 'top-right',
-        autoClose: 3000,
+        autoClose: 2000,
       });
     });
     return () => {
@@ -485,359 +809,35 @@ export const Orders: React.FC = () => {
     };
   }, [user, socket, isRtl, language, playNotificationSound]);
 
-  const fetchData = useCallback(
-    async (retryCount = 0) => {
-      if (!user || !['admin', 'production'].includes(user.role)) {
-        dispatch({ type: 'SET_ERROR', payload: isRtl ? 'غير مصرح للوصول' : 'Unauthorized access' });
-        dispatch({ type: 'SET_LOADING', payload: false });
-        return;
-      }
-      dispatch({ type: 'SET_LOADING', payload: true });
-      try {
-        const query: Record<string, any> = {
-          sortBy: state.sortBy,
-          sortOrder: state.sortOrder,
-        };
-        if (user.role === 'production' && user.department) query.department = user.department._id;
-        const [ordersResponse, chefsResponse, branchesResponse] = await Promise.all([
-          ordersAPI.getAll(query),
-          chefsAPI.getAll(),
-          branchesAPI.getAll(),
-        ]);
-        const mappedOrders: Order[] = ordersResponse
-          .filter((order: any) => order && order._id && order.orderNumber)
-          .map((order: any) => ({
-            id: order._id,
-            orderNumber: order.orderNumber,
-            branchId: order.branch?._id || 'unknown',
-            branchName: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-            items: Array.isArray(order.items)
-              ? order.items.map((item: any) => ({
-                  _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
-                  productId: item.product?._id || 'unknown',
-                  productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                  quantity: Number(item.quantity) || 1,
-                  price: Number(item.price) || 0,
-                  unit: item.product?.unit || 'unit',
-                  department: item.product?.department ? { _id: item.product.department._id, name: item.product.department.name || (isRtl ? 'غير معروف' : 'Unknown') } : { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' },
-                  assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || item.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), department: item.assignedTo.department } : undefined,
-                  status: item.status || 'pending',
-                  returnedQuantity: Number(item.returnedQuantity) || 0,
-                  returnReason: item.returnReason || '',
-                  startedAt: item.startedAt ? new Date(item.startedAt) : undefined,
-                  completedAt: item.completedAt ? new Date(item.completedAt) : undefined,
-                }))
-              : [],
-            returns: Array.isArray(order.returns)
-              ? order.returns.map((ret: any) => ({
-                  returnId: ret._id || `temp-${Math.random().toString(36).substring(2)}`,
-                  returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
-                  items: Array.isArray(ret.items)
-                    ? ret.items.map((item: any) => ({
-                        productId: item.product?._id || 'unknown',
-                        productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                        quantity: Number(item.quantity) || 0,
-                        reason: item.reason || (isRtl ? 'غير محدد' : 'Unspecified'),
-                        unit: item.product?.unit || 'unit',
-                      }))
-                    : [],
-                  status: ret.status || 'pending',
-                  reviewNotes: ret.notes || '',
-                  createdAt: formatDate(ret.createdAt ? new Date(ret.createdAt) : new Date(), language),
-                  createdBy: ret.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                }))
-              : [],
-            status: order.status || 'pending',
-            totalAmount: Number(order.totalAmount) || 0,
-            adjustedTotal: Number(order.adjustedTotal) || 0,
-            date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
-            requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : undefined,
-            notes: order.notes || '',
-            priority: order.priority || 'medium',
-            createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-            approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
-            approvedAt: order.approvedAt ? new Date(order.approvedAt) : undefined,
-            deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : undefined,
-            transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : undefined,
-            statusHistory: Array.isArray(order.statusHistory)
-              ? order.statusHistory.map((history: any) => ({
-                  status: history.status || 'pending',
-                  changedBy: history.changedBy?.name || 'unknown',
-                  changedAt: formatDate(history.changedAt ? new Date(history.changedAt) : new Date(), language),
-                  notes: history.notes || '',
-                }))
-              : [],
-          }));
-        dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
-        dispatch({
-          type: 'SET_CHEFS',
-          payload: chefsResponse
-            .filter((chef: any) => chef && chef.user?._id)
-            .map((chef: any) => ({
-              _id: chef._id,
-              userId: chef.user._id,
-              name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              department: chef.department ? { _id: chef.department._id, name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown') } : null,
-              status: chef.status || 'active',
-            })),
-        });
-        dispatch({
-          type: 'SET_BRANCHES',
-          payload: branchesResponse
-            .filter((branch: any) => branch && branch._id)
-            .map((branch: any) => ({
-              _id: branch._id,
-              name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
-            }))
-            .sort((a: Branch, b: Branch) => a.name.localeCompare(b.name, language)),
-        });
-        dispatch({ type: 'SET_ERROR', payload: '' });
-      } catch (err: any) {
-        console.error('Fetch data error:', err.message);
-        if (retryCount < 2) {
-          setTimeout(() => fetchData(retryCount + 1), 1000);
-          return;
-        }
-        const errorMessage = err.response?.status === 404
-          ? isRtl ? 'لم يتم العثور على طلبات' : 'No orders found'
-          : isRtl ? `خطأ في جلب الطلبات: ${err.message}` : `Error fetching orders: ${err.message}`;
-        dispatch({ type: 'SET_ERROR', payload: errorMessage });
-        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
-      } finally {
-        dispatch({ type: 'SET_LOADING', payload: false });
-      }
-    },
-    [user, state.sortBy, state.sortOrder, isRtl, language]
-  );
-
-  const handleSearchChange = useMemo(
-    () =>
-      debounce((value: string) => {
-        dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
-      }, 300),
-    []
-  );
-
-  const filteredOrders = useMemo(
-    () =>
-      state.orders
-        .filter(
-          order =>
-            order.orderNumber.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.branchName.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            (order.notes || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.createdBy.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.items.some(item => item.productName.toLowerCase().includes(state.searchQuery.toLowerCase()))
-        )
-        .filter(
-          order =>
-            (!state.filterStatus || order.status === state.filterStatus) &&
-            (!state.filterBranch || order.branchId === state.filterBranch) &&
-            (user?.role === 'production' && user?.department
-              ? order.items.some(item => item.department._id === user.department._id)
-              : true)
-        ),
-    [state.orders, state.searchQuery, state.filterStatus, state.filterBranch, user]
-  );
-
-  const sortedOrders = useMemo(() => {
-    const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 };
-    return [...filteredOrders].sort((a, b) => {
-      if (state.sortBy === 'date') {
-        return state.sortOrder === 'asc'
-          ? new Date(a.date).getTime() - new Date(b.date).getTime()
-          : new Date(b.date).getTime() - new Date(a.date).getTime();
-      } else if (state.sortBy === 'totalAmount') {
-        return state.sortOrder === 'asc' ? a.adjustedTotal - b.adjustedTotal : b.adjustedTotal - a.adjustedTotal;
-      } else {
-        return state.sortOrder === 'asc'
-          ? priorityOrder[a.priority] - priorityOrder[b.priority]
-          : priorityOrder[b.priority] - priorityOrder[a.priority];
-      }
-    });
-  }, [filteredOrders, state.sortBy, state.sortOrder]);
-
-  const paginatedOrders = useMemo(
-    () => sortedOrders.slice((state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode], state.currentPage * ORDERS_PER_PAGE[state.viewMode]),
-    [sortedOrders, state.currentPage, state.viewMode]
-  );
-
-  const totalPages = useMemo(
-    () => Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode]),
-    [sortedOrders, state.viewMode]
-  );
-
-  const updateOrderStatus = useCallback(
-    async (orderId: string, newStatus: Order['status']) => {
-      const order = state.orders.find(o => o.id === orderId);
-      if (!order || !validTransitions[order.status].includes(newStatus)) {
-        toast.error(isRtl ? 'انتقال غير صالح' : 'Invalid transition', {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        });
-        return;
-      }
-      dispatch({ type: 'SET_SUBMITTING', payload: orderId });
-      try {
-        await ordersAPI.updateStatus(orderId, { status: newStatus });
-        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: newStatus });
-        if (socket && isConnected) {
-          emit('orderStatusUpdated', { orderId, status: newStatus });
-        }
-        toast.success(isRtl ? `تم تحديث الحالة إلى ${newStatus}` : `Order status updated to: ${newStatus}`, {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        });
-      } catch (err: any) {
-        console.error('Update order status error:', err.message);
-        toast.error(isRtl ? `فشل في تحديث الحالة: ${err.message}` : `Failed to update status: ${err.message}`, {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        });
-      } finally {
-        dispatch({ type: 'SET_SUBMITTING', payload: null });
-      }
-    },
-    [state.orders, isRtl, socket, isConnected, emit]
-  );
-
-  const updateItemStatus = useCallback(
-    async (orderId: string, itemId: string, status: Order['items'][0]['status']) => {
-      if (!user?.id) {
-        toast.error(isRtl ? 'لا يوجد مستخدم مرتبط' : 'No user associated', {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        });
-        return;
-      }
-      dispatch({ type: 'SET_SUBMITTING', payload: orderId });
-      try {
-        await ordersAPI.updateItemStatus(orderId, itemId, { status });
-        dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
-        if (socket && isConnected) {
-          emit('itemStatusUpdated', { orderId, itemId, status });
-        }
-        toast.success(isRtl ? `تم تحديث حالة العنصر إلى: ${status}` : `Item status updated to: ${status}`, {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        });
-      } catch (err: any) {
-        console.error('Update item status error:', err.message);
-        toast.error(isRtl ? `فشل في تحديث حالة العنصر: ${err.message}` : `Failed to update item status: ${err.message}`, {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        });
-      } finally {
-        dispatch({ type: 'SET_SUBMITTING', payload: null });
-      }
-    },
-    [isRtl, user, socket, isConnected, emit]
-  );
-
-  const assignChefs = useCallback(
-    async (orderId: string) => {
-      if (!user?.id || state.assignFormData.items.some(item => !item.assignedTo)) {
-        toast.error(isRtl ? 'يرجى تعيين شيف واحد على الأقل' : 'Please assign at least one chef', {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        });
-        return;
-      }
-      dispatch({ type: 'SET_SUBMITTING', payload: orderId });
-      try {
-        await ordersAPI.assignChef(orderId, { items: state.assignFormData.items });
-        const items = state.assignFormData.items.map(item => ({
-          _id: item.itemId,
-          assignedTo: state.chefs.find(chef => chef.userId === item.assignedTo) || { _id: item.assignedTo, name: isRtl ? 'غير معروف' : 'Unknown', department: { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' } },
-          status: 'assigned',
-        }));
-        dispatch({ type: 'TASK_ASSIGNED', orderId, items });
-        dispatch({ type: 'SET_MODAL', modal: 'assign', isOpen: false });
-        dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
-        if (socket && isConnected) {
-          emit('taskAssigned', { orderId, items });
-        }
-        toast.success(isRtl ? 'تم تعيين الشيفات بنجاح' : 'Chefs assigned successfully', {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        });
-      } catch (err: any) {
-        console.error('Assign chefs error:', err.message);
-        toast.error(isRtl ? `فشل في تعيين الشيفات: ${err.message}` : `Failed to assign chefs: ${err.message}`, {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        });
-      } finally {
-        dispatch({ type: 'SET_SUBMITTING', payload: null });
-      }
-    },
-    [user, state.assignFormData, state.chefs, socket, isConnected, emit, isRtl]
-  );
-
-  const openAssignModal = useCallback(
-    (order: Order) => {
-      if (order.status !== 'approved') {
-        toast.error(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved', {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        });
-        return;
-      }
-      dispatch({ type: 'SET_SELECTED_ORDER', payload: order });
-      dispatch({
-        type: 'SET_ASSIGN_FORM',
-        payload: {
-          items: order.items
-            .filter(item => !item.assignedTo)
-            .map(item => ({
-              itemId: item._id,
-              assignedTo: '',
-              product: item.productName,
-              quantity: item.quantity,
-              unit: item.unit || 'unit',
-            })),
-        },
-      });
-      dispatch({ type: 'SET_MODAL', modal: 'assign', isOpen: true });
-    },
-    [isRtl]
-  );
-
-  const handlePageChange = useCallback((page: number) => {
-    dispatch({ type: 'SET_PAGE', payload: page });
-    if (listRef.current) {
-      listRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
   return (
-    <div className="px-2 py-4">
-      <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: 'easeOut' }} className="mb-6">
+    <div className="px-4 py-6 min-h-screen bg-gray-50">
+      <Suspense fallback={<OrderCardSkeleton isRtl={isRtl} />}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5, ease: 'easeOut' }}
+          className="max-w-5xl mx-auto"
+        >
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <div className="w-full sm:w-auto text-center sm:text-start">
-              <h1 className="text-xl font-bold text-gray-900 flex items-center justify-center sm:justify-start gap-2">
-                <ShoppingCart className="w-5 h-5 text-amber-700" />
+              <h1 className="text-2xl font-bold text-gray-900 flex items-center justify-center sm:justify-start gap-2">
+                <ShoppingCart className="w-6 h-6 text-amber-600" />
                 {isRtl ? 'الطلبات' : 'Orders'}
               </h1>
-              <p className="text-xs text-gray-600 mt-1">{isRtl ? 'إدارة طلبات الإنتاج' : 'Manage production orders'}</p>
+              <p className="text-sm text-gray-600 mt-1">{isRtl ? 'إدارة طلبات الإنتاج' : 'Manage production orders'}</p>
             </div>
             <div className="flex gap-2 flex-wrap justify-center sm:justify-end w-full sm:w-auto">
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
                 onClick={state.orders.length > 0 ? () => exportToExcel(filteredOrders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit) : undefined}
-                className={`flex items-center gap-1 ${
+                className={`flex items-center gap-1.5 ${
                   state.orders.length > 0 ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300`}
+                } rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300`}
                 disabled={state.orders.length === 0}
                 aria-label={isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
               >
                 <Download className="w-4 h-4" />
-                {isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
+                {isRtl ? 'Excel' : 'Excel'}
               </Button>
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
@@ -845,33 +845,37 @@ export const Orders: React.FC = () => {
                   const filterBranchName = state.branches.find(b => b._id === state.filterBranch)?.name || '';
                   exportToPDF(filteredOrders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, state.filterStatus, filterBranchName);
                 } : undefined}
-                className={`flex items-center gap-1 ${
+                className={`flex items-center gap-1.5 ${
                   state.orders.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300`}
+                } rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300`}
                 disabled={state.orders.length === 0}
                 aria-label={isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
               >
                 <Download className="w-4 h-4" />
-                {isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
+                {isRtl ? 'PDF' : 'PDF'}
               </Button>
             </div>
           </div>
-          <Card className="p-3 mt-6 bg-white shadow-md rounded-xl border border-gray-200">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
-                <div className="relative ">
-                  <Search className={`w-4 h-4 text-gray-500 absolute top-2 ${isRtl ? 'left-2' : 'right-2'}`} />
+          <Card className="p-4 mt-6 bg-white shadow-md rounded-xl border border-gray-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
+                <div className="relative flex flex-row-reverse">
+                  {state.searchLoading ? (
+                    <Loader2 className={`w-4 h-4 text-gray-500 absolute top-2.5 animate-spin ${isRtl ? 'right-2' : 'left-2'}`} />
+                  ) : (
+                    <Search className={`w-4 h-4 text-gray-500 absolute top-2.5 ${isRtl ? 'right-2' : 'left-2'}`} />
+                  )}
                   <Input
                     value={state.searchQuery}
                     onChange={(e) => handleSearchChange(e?.target?.value || '')}
                     placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
-                    className={`w-full ${isRtl ? 'pl-8 ' : 'pr-8'} rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200`}
+                    className={`w-full ${isRtl ? 'pr-9' : 'pl-9'} rounded-full border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200`}
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
                 <Select
                   options={statusOptions.map(opt => ({
                     value: opt.value,
@@ -879,20 +883,20 @@ export const Orders: React.FC = () => {
                   }))}
                   value={state.filterStatus}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
-                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
+                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الفرع' : 'Filter by Branch'}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الفرع' : 'Filter by Branch'}</label>
                 <Select
                   options={[{ value: '', label: isRtl ? 'جميع الفروع' : 'All Branches' }, ...state.branches.map(b => ({ value: b._id, label: b.name }))]}
                   value={state.filterBranch}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_BRANCH', payload: value })}
-                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
+                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
                 <Select
                   options={sortOptions.map(opt => ({
                     value: opt.value,
@@ -900,47 +904,59 @@ export const Orders: React.FC = () => {
                   }))}
                   value={state.sortBy}
                   onChange={(value) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
-                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
+                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
                 />
               </div>
             </div>
             <div className={`flex flex-col sm:flex-row justify-between items-center gap-3 mt-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-              <div className="text-xs text-center text-gray-600">
-                {isRtl ? `عدد الطلبات: ${(filteredOrders.length)}` : `Orders count: ${filteredOrders.length}`}
+              <div className="text-sm text-gray-600">
+                {isRtl ? `عدد الطلبات: ${filteredOrders.length}` : `Orders count: ${filteredOrders.length}`}
               </div>
               <Button
                 variant="secondary"
                 onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' })}
-                className="flex items-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300"
+                className="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300"
                 aria-label={state.viewMode === 'card' ? (isRtl ? 'عرض كجدول' : 'View as Table') : (isRtl ? 'عرض كبطاقات' : 'View as Cards')}
               >
                 {state.viewMode === 'card' ? <Table2 className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
-                {state.viewMode === 'card' ? (isRtl ? 'عرض كجدول' : 'View as Table') : (isRtl ? 'عرض كبطاقات' : 'View as Cards')}
+                {state.viewMode === 'card' ? (isRtl ? 'جدول' : 'Table') : (isRtl ? 'بطاقات' : 'Cards')}
               </Button>
             </div>
           </Card>
-          <div ref={listRef} className="mt-6 min-h-[500px]">
+          <div ref={listRef} className="mt-6 min-h-[400px]">
             {state.loading ? (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-3">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
+                className="space-y-2 max-w-3xl mx-auto"
+              >
                 {state.viewMode === 'card' ? (
-                  <div className="grid grid-cols-1  gap-3">
-                    {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)}
+                  <div className="grid grid-cols-1 gap-2">
+                    {Array.from({ length: 3 }, (_, i) => (
+                      <OrderCardSkeleton key={i} isRtl={isRtl} />
+                    ))}
                   </div>
                 ) : (
-                  <OrderTableSkeleton isRtl={isRtl} rows={ORDERS_PER_PAGE.table} />
+                  <OrderTableSkeleton isRtl={isRtl} />
                 )}
               </motion.div>
             ) : state.error ? (
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="mt-6">
-                <Card className="p-5 max-w-md mx-auto text-center bg-red-50 shadow-md rounded-xl border border-red-100">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.4, ease: 'easeOut' }}
+                className="mt-6 max-w-md mx-auto"
+              >
+                <Card className="p-6 text-center bg-red-50 shadow-md rounded-xl border border-red-100">
                   <div className={`flex items-center justify-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
                     <AlertCircle className="w-5 h-5 text-red-600" />
-                    <p className="text-xs font-medium text-red-600">{state.error}</p>
+                    <p className="text-sm font-medium text-red-600">{state.error}</p>
                   </div>
                   <Button
                     variant="primary"
                     onClick={() => fetchData()}
-                    className="mt-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300"
+                    className="mt-4 bg-amber-600 hover:bg-amber-700 text-white rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300"
                     aria-label={isRtl ? 'إعادة المحاولة' : 'Retry'}
                   >
                     {isRtl ? 'إعادة المحاولة' : 'Retry'}
@@ -950,11 +966,18 @@ export const Orders: React.FC = () => {
             ) : (
               <AnimatePresence mode="wait">
                 {paginatedOrders.length === 0 ? (
-                  <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-6">
+                  <motion.div
+                    key="no-orders"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.4, ease: 'easeOut' }}
+                    className="mt-6 max-w-md mx-auto"
+                  >
                     <Card className="p-6 text-center bg-white shadow-md rounded-xl border border-gray-100">
                       <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-                      <h3 className="text-base font-medium text-gray-800 mb-1">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
-                      <p className="text-xs text-gray-500">
+                      <h3 className="text-lg font-medium text-gray-800 mb-1">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
+                      <p className="text-sm text-gray-500">
                         {state.filterStatus || state.filterBranch || state.searchQuery
                           ? isRtl ? 'لا توجد طلبات مطابقة' : 'No matching orders'
                           : isRtl ? 'لا توجد طلبات بعد' : 'No orders yet'}
@@ -962,7 +985,14 @@ export const Orders: React.FC = () => {
                     </Card>
                   </motion.div>
                 ) : (
-                  <motion.div key="orders-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="space-y-3">
+                  <motion.div
+                    key="orders-view"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.4, ease: 'easeOut' }}
+                    className="space-y-2 max-w-3xl mx-auto"
+                  >
                     {state.viewMode === 'table' ? (
                       <OrderTable
                         orders={paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber)}
@@ -979,7 +1009,7 @@ export const Orders: React.FC = () => {
                         onNavigateToDetails={handleNavigateToDetails}
                       />
                     ) : (
-                      <div className="grid grid-cols-1 gap-3">
+                      <div className="grid grid-cols-1 gap-2">
                         {paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber).map(order => (
                           <OrderCard
                             key={order.id}
