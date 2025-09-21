@@ -251,11 +251,7 @@ const translateUnit = (unit: string, isRtl: boolean) => {
 };
 
 // Converts Western digits to Arabic-Indic numerals
-function toArabicNumerals(num: number | string): string {
-  return num
-    .toString()
-    .replace(/\d/g, (d) => String.fromCharCode(0x0660 + Number(d)));
-}
+
 
 const exportToExcel = (orders: Order[], isRtl: boolean, calculateAdjustedTotal: (order: Order) => string, calculateTotalQuantity: (order: Order) => number, translateUnit: (unit: string, isRtl: boolean) => string) => {
   const headers = [
@@ -268,16 +264,16 @@ const exportToExcel = (orders: Order[], isRtl: boolean, calculateAdjustedTotal: 
     isRtl ? 'التاريخ' : 'Date',
   ];
   const data = orders.map(order => {
-    const productsStr = order.items.map(i => `${i.productName} (${isRtl ? toArabicNumerals(i.quantity) : i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ');
+    const productsStr = order.items.map(i => `${i.productName} (${isRtl ? (i.quantity) : i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ');
     const totalAmount = calculateAdjustedTotal(order);
-    const totalQuantity = `${isRtl ? toArabicNumerals(calculateTotalQuantity(order)) : calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`;
+    const totalQuantity = `${isRtl ? (calculateTotalQuantity(order)) : calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`;
     const statusLabel = isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status;
     return {
-      [headers[0]]: isRtl ? toArabicNumerals(order.orderNumber) : order.orderNumber,
+      [headers[0]]: isRtl ? (order.orderNumber) : order.orderNumber,
       [headers[1]]: order.branchName,
       [headers[2]]: statusLabel,
       [headers[3]]: productsStr,
-      [headers[4]]: isRtl ? toArabicNumerals(totalAmount.replace(/[^0-9.]/g, '')) + ' ر.س' : totalAmount,
+      [headers[4]]: isRtl ? (totalAmount.replace(/[^0-9.]/g, '')) + ' ر.س' : totalAmount,
       [headers[5]]: totalQuantity,
       [headers[6]]: order.date,
     };
@@ -910,7 +906,7 @@ export const Orders: React.FC = () => {
             </div>
             <div className={`flex flex-col sm:flex-row justify-between items-center gap-3 mt-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
               <div className="text-xs text-center text-gray-600">
-                {isRtl ? `عدد الطلبات: ${toArabicNumerals(filteredOrders.length)}` : `Orders count: ${filteredOrders.length}`}
+                {isRtl ? `عدد الطلبات: ${(filteredOrders.length)}` : `Orders count: ${filteredOrders.length}`}
               </div>
               <Button
                 variant="secondary"
