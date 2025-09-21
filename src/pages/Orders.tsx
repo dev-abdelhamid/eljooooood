@@ -1,3 +1,5 @@
+
+// Orders.tsx
 import React, { useReducer, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,11 +21,9 @@ import { useNavigate } from 'react-router-dom';
 import { exportToPDF } from '../components/Shared/PDFExporter';
 import { OrderTableSkeleton, OrderCardSkeleton } from '../components/Shared/OrderSkeletons';
 import Pagination from '../components/Shared/Pagination';
-
 const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
 const OrderTable = lazy(() => import('../components/Shared/OrderTable'));
 const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
-
 interface State {
   orders: Order[];
   selectedOrder: Order | null;
@@ -44,7 +44,6 @@ interface State {
   socketError: string | null;
   viewMode: 'card' | 'table';
 }
-
 interface Action {
   type: string;
   payload?: any;
@@ -57,7 +56,6 @@ interface Action {
   isOpen?: boolean;
   modal?: string;
 }
-
 const initialState: State = {
   orders: [],
   selectedOrder: null,
@@ -78,7 +76,6 @@ const initialState: State = {
   socketError: null,
   viewMode: 'card',
 };
-
 const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case 'SET_ORDERS': return { ...state, orders: action.payload, error: '', currentPage: 1 };
@@ -208,9 +205,7 @@ const reducer = (state: State, action: Action): State => {
     default: return state;
   }
 };
-
 const ORDERS_PER_PAGE = { card: 12, table: 50 };
-
 const validTransitions: Record<Order['status'], Order['status'][]> = {
   pending: ['approved', 'cancelled'],
   approved: ['in_production', 'cancelled'],
@@ -220,7 +215,6 @@ const validTransitions: Record<Order['status'], Order['status'][]> = {
   delivered: [],
   cancelled: [],
 };
-
 const statusOptions = [
   { value: '', label: 'all_statuses' },
   { value: 'pending', label: 'pending' },
@@ -231,13 +225,11 @@ const statusOptions = [
   { value: 'delivered', label: 'delivered' },
   { value: 'cancelled', label: 'cancelled' },
 ];
-
 const sortOptions = [
   { value: 'date', label: 'sort_date' },
   { value: 'totalAmount', label: 'sort_total_amount' },
   { value: 'priority', label: 'sort_priority' },
 ];
-
 const translateUnit = (unit: string, isRtl: boolean) => {
   const translations: Record<string, { ar: string; en: string }> = {
     'كيلو': { ar: 'كيلو', en: 'kg' },
@@ -251,7 +243,6 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   };
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
-
 export const Orders: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
@@ -263,15 +254,12 @@ export const Orders: React.FC = () => {
   const listRef = useRef<HTMLDivElement>(null);
   const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
   const navigate = useNavigate();
-
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
-
   const calculateTotalQuantity = useCallback((order: Order) => {
     return order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   }, []);
-
   const calculateAdjustedTotal = useCallback(
     (order: Order) => {
       const approvedReturnsTotal = order.returns
@@ -292,12 +280,10 @@ export const Orders: React.FC = () => {
     },
     [isRtl]
   );
-
   const handleNavigateToDetails = useCallback((orderId: string) => {
     navigate(`/orders/${orderId}`);
     window.scrollTo(0, 0);
   }, [navigate]);
-
   useEffect(() => {
     if (!user || !['admin', 'production'].includes(user.role)) {
       dispatch({ type: 'SET_ERROR', payload: isRtl ? 'غير مصرح للوصول' : 'Unauthorized access' });
@@ -305,28 +291,23 @@ export const Orders: React.FC = () => {
       return;
     }
     if (!socket) return;
-
     socket.on('connect', () => {
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
       dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
     });
-
     socket.on('connect_error', (err) => {
       console.error('Socket connect error:', err.message);
       dispatch({ type: 'SET_SOCKET_ERROR', payload: isRtl ? 'خطأ في الاتصال' : 'Connection error' });
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
     });
-
     socket.on('reconnect', (attempt) => {
       console.log(`[${new Date().toISOString()}] Socket reconnected after ${attempt} attempts`);
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
     });
-
     socket.on('disconnect', (reason) => {
       console.log(`[${new Date().toISOString()}] Socket disconnected: ${reason}`);
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
     });
-
     socket.on('newOrder', (order: any) => {
       if (!order || !order._id || !order.orderNumber) {
         console.warn('Invalid new order data:', order);
@@ -395,54 +376,44 @@ export const Orders: React.FC = () => {
           : [],
       };
       dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
-      cacheRef.current.clear(); // Clear cache on new order
       playNotificationSound('/sounds/new-order.mp3', [200, 100, 200]);
     });
-
     socket.on('orderStatusUpdated', ({ orderId, status }: { orderId: string; status: Order['status'] }) => {
       if (!orderId || !status) {
         console.warn('Invalid order status update data:', { orderId, status });
         return;
       }
       dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
-      cacheRef.current.clear(); // Clear cache on status update
     });
-
     socket.on('itemStatusUpdated', ({ orderId, itemId, status }: { orderId: string; itemId: string; status: string }) => {
       if (!orderId || !itemId || !status) {
         console.warn('Invalid item status update data:', { orderId, itemId, status });
         return;
       }
       dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
-      cacheRef.current.clear(); // Clear cache on item status update
     });
-
     socket.on('returnStatusUpdated', ({ orderId, returnId, status }: { orderId: string; returnId: string; status: string }) => {
       if (!orderId || !returnId || !status) {
         console.warn('Invalid return status update data:', { orderId, returnId, status });
         return;
       }
       dispatch({ type: 'RETURN_STATUS_UPDATED', orderId, returnId, status });
-      cacheRef.current.clear(); // Clear cache on return status update
       toast.info(isRtl ? `تم تحديث حالة الإرجاع إلى: ${isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', rejected: 'مرفوض', processed: 'معالج'}[status] : status}` : `Return status updated to: ${status}`, {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
       });
     });
-
     socket.on('taskAssigned', ({ orderId, items }: { orderId: string; items: any[] }) => {
       if (!orderId || !items) {
         console.warn('Invalid task assigned data:', { orderId, items });
         return;
       }
       dispatch({ type: 'TASK_ASSIGNED', orderId, items });
-      cacheRef.current.clear(); // Clear cache on task assignment
       toast.info(isRtl ? 'تم تعيين الشيفات' : 'Chefs assigned', {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
       });
     });
-
     return () => {
       socket.off('connect');
       socket.off('connect_error');
@@ -453,7 +424,6 @@ export const Orders: React.FC = () => {
       socket.off('taskAssigned');
     };
   }, [user, socket, isRtl, language, playNotificationSound]);
-
   const fetchData = useCallback(
     async (retryCount = 0) => {
       if (!user || !['admin', 'production'].includes(user.role)) {
@@ -462,14 +432,12 @@ export const Orders: React.FC = () => {
         return;
       }
       dispatch({ type: 'SET_LOADING', payload: true });
-
-      const cacheKey = `${user.id}-${state.filterStatus}-${state.filterBranch}-${state.currentPage}-${state.viewMode}-${state.searchQuery}-${state.sortBy}-${state.sortOrder}`;
+      const cacheKey = `${user.id}-${state.filterStatus}-${state.filterBranch}-${state.currentPage}-${state.viewMode}-${state.searchQuery}`;
       if (cacheRef.current.has(cacheKey)) {
         dispatch({ type: 'SET_ORDERS', payload: cacheRef.current.get(cacheKey)! });
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
       }
-
       try {
         const query: Record<string, any> = {
           page: state.currentPage,
@@ -481,13 +449,11 @@ export const Orders: React.FC = () => {
         if (state.filterBranch) query.branch = state.filterBranch;
         if (state.searchQuery.trim()) query.search = state.searchQuery.trim();
         if (user.role === 'production' && user.department) query.department = user.department._id;
-
         const [ordersResponse, chefsResponse, branchesResponse] = await Promise.all([
           ordersAPI.getAll(query),
           chefsAPI.getAll(),
           branchesAPI.getAll(),
         ]);
-
         const mappedOrders: Order[] = ordersResponse
           .filter((order: any) => order && order._id && order.orderNumber)
           .map((order: any) => ({
@@ -552,8 +518,7 @@ export const Orders: React.FC = () => {
                 }))
               : [],
           }));
-
-        cacheRef.current.clear(); // Clear cache before setting new data
+        cacheRef.current.clear();
         cacheRef.current.set(cacheKey, mappedOrders);
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
         dispatch({
@@ -596,7 +561,6 @@ export const Orders: React.FC = () => {
     },
     [user, state.filterStatus, state.filterBranch, state.currentPage, state.viewMode, state.searchQuery, state.sortBy, state.sortOrder, isRtl, language]
   );
-
   const exportToExcel = useCallback(() => {
     const headers = [
       isRtl ? 'رقم الطلب' : 'Order Number',
@@ -630,16 +594,13 @@ export const Orders: React.FC = () => {
       autoClose: 3000,
     });
   }, [state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity]);
-
   const handleSearchChange = useMemo(
     () =>
       debounce((value: string) => {
         dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
-        cacheRef.current.clear(); // Clear cache on search change
       }, 300),
     []
   );
-
   const filteredOrders = useMemo(
     () =>
       state.orders
@@ -661,7 +622,6 @@ export const Orders: React.FC = () => {
         ),
     [state.orders, state.searchQuery, state.filterStatus, state.filterBranch, user]
   );
-
   const sortedOrders = useMemo(() => {
     const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 };
     return [...filteredOrders].sort((a, b) => {
@@ -678,12 +638,10 @@ export const Orders: React.FC = () => {
       }
     });
   }, [filteredOrders, state.sortBy, state.sortOrder]);
-
   const paginatedOrders = useMemo(
     () => sortedOrders.slice((state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode], state.currentPage * ORDERS_PER_PAGE[state.viewMode]),
     [sortedOrders, state.currentPage, state.viewMode]
   );
-
   const updateOrderStatus = useCallback(
     async (orderId: string, newStatus: Order['status']) => {
       const order = state.orders.find(o => o.id === orderId);
@@ -698,7 +656,6 @@ export const Orders: React.FC = () => {
       try {
         await ordersAPI.updateStatus(orderId, { status: newStatus });
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: newStatus });
-        cacheRef.current.clear(); // Clear cache on status update
         if (socket && isConnected) {
           emit('orderStatusUpdated', { orderId, status: newStatus });
         }
@@ -718,7 +675,6 @@ export const Orders: React.FC = () => {
     },
     [state.orders, isRtl, socket, isConnected, emit]
   );
-
   const updateItemStatus = useCallback(
     async (orderId: string, itemId: string, status: Order['items'][0]['status']) => {
       if (!user?.id) {
@@ -732,7 +688,6 @@ export const Orders: React.FC = () => {
       try {
         await ordersAPI.updateItemStatus(orderId, itemId, { status });
         dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
-        cacheRef.current.clear(); // Clear cache on item status update
         if (socket && isConnected) {
           emit('itemStatusUpdated', { orderId, itemId, status });
         }
@@ -752,7 +707,6 @@ export const Orders: React.FC = () => {
     },
     [isRtl, user, socket, isConnected, emit]
   );
-
   const assignChefs = useCallback(
     async (orderId: string) => {
       if (!user?.id || state.assignFormData.items.some(item => !item.assignedTo)) {
@@ -773,7 +727,6 @@ export const Orders: React.FC = () => {
         dispatch({ type: 'TASK_ASSIGNED', orderId, items });
         dispatch({ type: 'SET_MODAL', modal: 'assign', isOpen: false });
         dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
-        cacheRef.current.clear(); // Clear cache on task assignment
         if (socket && isConnected) {
           emit('taskAssigned', { orderId, items });
         }
@@ -793,7 +746,6 @@ export const Orders: React.FC = () => {
     },
     [user, state.assignFormData, state.chefs, socket, isConnected, emit, isRtl]
   );
-
   const openAssignModal = useCallback(
     (order: Order) => {
       if (order.status !== 'approved') {
@@ -822,18 +774,15 @@ export const Orders: React.FC = () => {
     },
     [isRtl]
   );
-
   const handlePageChange = useCallback((page: number) => {
     dispatch({ type: 'SET_PAGE', payload: page });
     if (listRef.current) {
       listRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, []);
-
   useEffect(() => {
     fetchData();
   }, [fetchData]);
-
   return (
     <div className="px-2 py-4 min-h-screen bg-gray-50">
       <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
@@ -861,7 +810,7 @@ export const Orders: React.FC = () => {
               </Button>
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
-                onClick={state.orders.length > 0 ? () => exportToPDF(state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit) : undefined}
+                onClick={state.orders.length > 0 ? () => exportToPDF(state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, state.filterStatus, state.filterBranch) : undefined}
                 className={`flex items-center gap-1.5 ${
                   state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
                 } rounded-md px-3 py-1.5 text-xs shadow-sm`}
@@ -1042,6 +991,5 @@ export const Orders: React.FC = () => {
       </Suspense>
     </div>
   );
-}
-
+};
 export default Orders;
