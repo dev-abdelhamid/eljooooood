@@ -18,30 +18,17 @@ const fromArabicNumerals = (str: string): string => {
   return str.replace(/[٠-٩]/g, (digit) => arabicMap[digit] || digit);
 };
 
-// Format price to match Orders.tsx, with different formatting for stats
-const formatPrice = (amount: number | undefined, isRtl: boolean, isStats: boolean = false): string => {
-  const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount / 100 : 0; // Divide by 100 to convert halala to riyal
-  let formatted: string;
-  if (isStats) {
-    // For stats in header: no currency symbol at start for Arabic, add it manually at end
-    formatted = validAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-    formatted = isRtl ? `${toArabicNumerals(formatted)} ر.س` : `${formatted} SAR`;
-  } else {
-    // For table: match calculateAdjustedTotal
-    formatted = validAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
-      style: 'currency',
-      currency: 'SAR',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-    if (isRtl) {
-      formatted = formatted.replace(/\d/g, (d) => String.fromCharCode(0x0660 + parseInt(d)));
-    }
-  }
-  return formatted;
+// Format price to match calculateAdjustedTotal in Orders.tsx, removing any parentheses
+const formatPrice = (amount: number | undefined, isRtl: boolean): string => {
+  const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
+  const formatted = validAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
+    style: 'currency',
+    currency: 'SAR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const result = isRtl ? formatted.replace(/\d/g, (d) => String.fromCharCode(0x0660 + parseInt(d))) : formatted;
+  return result.replace(/[()]/g, ''); // Remove any parentheses
 };
 
 // Format products for Arabic and English with correct separator
@@ -154,9 +141,12 @@ const generatePDFHeader = (
   const filterInfo = isRtl
     ? `الحالة: ${filterStatus ? statusTranslations[filterStatus as keyof typeof statusTranslations] || 'الكل' : 'الكل'} | الفرع: ${filterBranchName || 'جميع الفروع'}`
     : `Status: ${filterStatus ? statusTranslations[filterStatus as keyof typeof statusTranslations] || 'All' : 'All'} | Branch: ${filterBranchName || 'All Branches'}`;
-  const stats = isRtl
-    ? `إجمالي الطلبات: ${toArabicNumerals(totalOrders)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${formatPrice(totalAmount, isRtl, true)}`
-    : `Total Orders: ${totalOrders} | Total Quantity: ${totalQuantity} units | Total Amount: ${formatPrice(totalAmount, isRtl, true)}`;
+  const statsParts = [
+    isRtl ? `إجمالي الطلبات: ${toArabicNumerals(totalOrders)}` : `Total Orders: ${totalOrders}`,
+    isRtl ? `إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة` : `Total Quantity: ${totalQuantity} units`,
+    isRtl ? `إجمالي المبلغ: ${formatPrice(totalAmount, isRtl)}` : `Total Amount: ${formatPrice(totalAmount, isRtl)}`,
+  ];
+  const stats = isRtl ? statsParts.join(' | ') : statsParts.join(' | ');
 
   // Position filter info and stats correctly
   doc.text(filterInfo, isRtl ? pageWidth - 20 : 20, 20, { align: isRtl ? 'right' : 'left' });
@@ -198,8 +188,8 @@ const generatePDFTable = (
   calculateTotalQuantity: (order: Order) => number,
   translateUnit: (unit: string, isRtl: boolean) => string
 ) => {
-  const processedHeaders = isRtl ? headers.map(header => doc.processArabic(header)) : headers;
-  const processedData = data.map(row => isRtl ? row.map((cell: string) => doc.processArabic(String(cell))) : row);
+  const processedHeaders = isRtl ? headers : headers;
+  const processedData = data.map(row => isRtl ? row : row);
 
   autoTable(doc, {
     head: [isRtl ? processedHeaders.slice().reverse() : processedHeaders],
@@ -255,9 +245,6 @@ const generatePDFTable = (
           data.cell.text[0] = formatPrice(0, isRtl);
         }
         data.cell.styles.fontStyle = 'bold'; // Ensure bold for price
-      }
-      if (isRtl) {
-        data.cell.text = data.cell.text.map(text => doc.processArabic(text));
       }
     },
     didDrawPage: () => {
@@ -341,7 +328,7 @@ export const exportToPDF = async (
       if (totalAmountStr.includes('NaN')) {
         formattedTotalAmount = formatPrice(0, isRtl);
       } else {
-        formattedTotalAmount = totalAmountStr; // Use the formatted string from calculateAdjustedTotal
+        formattedTotalAmount = totalAmountStr.replace(/[()]/g, ''); // Remove any parentheses
       }
       return [
         order.orderNumber, // Always use Latin numerals for orderNumber
