@@ -105,17 +105,17 @@ const generatePDFHeader = (
   doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
   const statusTranslations = {
-    pending: 'قيد الانتظار',
-    approved: 'المعتمدة',
-    in_production: 'في الإنتاج',
-    completed: 'مكتمل',
-    in_transit: 'في النقل',
-    delivered: 'تم التسليم',
-    cancelled: 'ملغى',
+    pending: isRtl ? 'قيد الانتظار' : 'Pending',
+    approved: isRtl ? 'تم الموافقة' : 'Approved',
+    in_production: isRtl ? 'في الإنتاج' : 'In Production',
+    completed: isRtl ? 'مكتمل' : 'Completed',
+    in_transit: isRtl ? 'في النقل' : 'In Transit',
+    delivered: isRtl ? 'تم التسليم' : 'Delivered',
+    cancelled: isRtl ? 'ملغى' : 'Cancelled',
   };
   const filterInfo = isRtl
     ? `الحالة: ${filterStatus ? statusTranslations[filterStatus as keyof typeof statusTranslations] || 'الكل' : 'الكل'} | الفرع: ${filterBranchName || 'جميع الفروع'}`
-    : `Status: ${filterStatus || 'All'} | Branch: ${filterBranchName || 'All Branches'}`;
+    : `Status: ${filterStatus ? statusTranslations[filterStatus as keyof typeof statusTranslations] || 'All' : 'All'} | Branch: ${filterBranchName || 'All Branches'}`;
   doc.text(filterInfo, isRtl ? pageWidth - 20 : 20, 20, { align: isRtl ? 'right' : 'left' });
 
   // Add total statistics with Arabic numerals
@@ -125,7 +125,7 @@ const generatePDFHeader = (
     : `Total Orders: ${totalOrders} | Total Quantity: ${totalQuantity} units | Total Amount: ${formatPrice(totalAmount, isRtl)}`;
   doc.text(stats, isRtl ? pageWidth - 20 : 20, 28, { align: isRtl ? 'right' : 'left' });
 
-  // Add separator line in yellow
+  // Add separator line
   doc.setLineWidth(0.5);
   doc.setDrawColor(255, 193, 7);
   doc.line(20, 32, pageWidth - 20, 32);
@@ -159,8 +159,8 @@ const generatePDFTable = (
   translateUnit: (unit: string, isRtl: boolean) => string
 ) => {
   autoTable(doc, {
-    head: [headers], // Headers are already in correct order for RTL
-    body: data, // Data is prepared in correct order
+    head: [isRtl ? headers.slice().reverse() : headers],
+    body: isRtl ? data.map(row => row.slice().reverse()) : data,
     theme: 'grid',
     startY: 35,
     margin: { left: 15, right: 15 },
@@ -170,21 +170,19 @@ const generatePDFTable = (
       fontSize: 10,
       halign: isRtl ? 'right' : 'left',
       font: fontLoaded ? fontName : 'helvetica',
-      cellPadding: 5,
-      textDirection: isRtl ? 'ltr' : 'rtl',
+      cellPadding: 4,
     },
     bodyStyles: {
       fontSize: 9,
       halign: isRtl ? 'right' : 'left',
       font: fontLoaded ? fontName : 'helvetica',
-      cellPadding: 5,
+      cellPadding: 4,
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
-      textDirection: isRtl ? 'ltr' : 'rtl',
-      fillColor: [255, 245, 195],
+      fillColor: [255, 255, 255],
     },
     alternateRowStyles: {
-      fillColor: [255, 255, 255],
+      fillColor: [245, 245, 245],
     },
     columnStyles: {
       0: { cellWidth: 25 }, // Order Number
@@ -198,13 +196,13 @@ const generatePDFTable = (
     styles: {
       overflow: 'linebreak',
       cellWidth: 'wrap',
-      minCellHeight: 12,
+      minCellHeight: 10,
+      font: fontLoaded ? fontName : 'helvetica',
     },
     didParseCell: (data) => {
-      data.cell.styles.halign = isRtl ? 'left' : 'right';
-      data.cell.styles.textDirection = isRtl ? 'rtl' : 'ltr';
-      if (data.column.index === 4 && !data.cell.text[0]) {
-        data.cell.text[0] = formatPrice(0, isRtl); // Fallback if total amount is empty
+      data.cell.styles.halign = isRtl ? 'right' : 'left';
+      if (data.column.index === (isRtl ? headers.length - 5 : 4) && !data.cell.text[0]) {
+        data.cell.text[0] = formatPrice(0, isRtl);
       }
     },
   });
@@ -238,7 +236,7 @@ export const exportToPDF = async (
     const totalOrders = filteredOrders.length;
     const totalQuantity = filteredOrders.reduce((sum, order) => sum + calculateTotalQuantity(order), 0);
     const totalAmount = filteredOrders.reduce((sum, order) => {
-      const amountStr = calculateAdjustedTotal(order).replace(/[^0-9.]/g, '');
+      const amountStr = calculateAdjustedTotal(order).replace(/[^0-9.,]/g, '').replace(',', '.');
       return sum + (amountStr ? parseFloat(amountStr) : 0);
     }, 0);
 
@@ -258,38 +256,33 @@ export const exportToPDF = async (
 
     // Prepare table headers
     const headers = [
-      'رقم الطلب',
-      'الفرع',
-      'الحالة',
-      'المنتجات',
-      'إجمالي المبلغ',
-      'الكمية الإجمالية',
-      'التاريخ',
+      isRtl ? 'رقم الطلب' : 'Order Number',
+      isRtl ? 'الفرع' : 'Branch',
+      isRtl ? 'الحالة' : 'Status',
+      isRtl ? 'المنتجات' : 'Products',
+      isRtl ? 'إجمالي المبلغ' : 'Total Amount',
+      isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
+      isRtl ? 'التاريخ' : 'Date',
     ];
-
-    // Translate statuses
-    const statusTranslations: Record<string, string> = {
-      pending: 'قيد الانتظار',
-      approved: 'تم الموافقة',
-      in_production: 'في الإنتاج',
-      completed: 'مكتمل',
-      in_transit: 'في النقل',
-      delivered: 'تم التسليم',
-      cancelled: 'ملغى',
-    };
 
     // Prepare table data
     const data = filteredOrders.map((order) => {
-      const productsStr = formatProducts(order.items, isRtl, translateUnit);
-      const totalQuantityStr = isRtl ? toArabicNumerals(calculateTotalQuantity(order)) : calculateTotalQuantity(order);
-      const adjustedTotalStr = calculateAdjustedTotal(order) || formatPrice(0, isRtl);
+      const statusTranslations = {
+        pending: isRtl ? 'قيد الانتظار' : 'Pending',
+        approved: isRtl ? 'تم الموافقة' : 'Approved',
+        in_production: isRtl ? 'في الإنتاج' : 'In Production',
+        completed: isRtl ? 'مكتمل' : 'Completed',
+        in_transit: isRtl ? 'في النقل' : 'In Transit',
+        delivered: isRtl ? 'تم التسليم' : 'Delivered',
+        cancelled: isRtl ? 'ملغى' : 'Cancelled',
+      };
       return [
         isRtl ? toArabicNumerals(order.orderNumber) : order.orderNumber,
         order.branchName,
-        isRtl ? statusTranslations[order.status] || order.status : order.status,
-        productsStr,
-        adjustedTotalStr,
-        `${totalQuantityStr} ${isRtl ? 'وحدة' : 'units'}`,
+        statusTranslations[order.status] || order.status,
+        formatProducts(order.items, isRtl, translateUnit),
+        calculateAdjustedTotal(order),
+        isRtl ? `${toArabicNumerals(calculateTotalQuantity(order))} ${translateUnit('unit', isRtl)}` : `${calculateTotalQuantity(order)} ${translateUnit('unit', isRtl)}`,
         order.date,
       ];
     });
@@ -297,17 +290,17 @@ export const exportToPDF = async (
     // Generate table
     generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName, calculateAdjustedTotal, calculateTotalQuantity, translateUnit);
 
-    // Save the file
+    // Save the PDF
     const fileName = generateFileName(filterStatus, filterBranchName, isRtl);
     doc.save(fileName);
 
-    toast.success(isRtl ? 'تم تصدير PDF بنجاح' : 'PDF export successful', {
+    toast.success(isRtl ? 'تم تصدير ملف PDF بنجاح' : 'PDF exported successfully', {
       position: isRtl ? 'top-left' : 'top-right',
       autoClose: 3000,
     });
-  } catch (err: any) {
-    console.error('خطأ تصدير PDF:', err.message);
-    toast.error(isRtl ? `خطأ في تصدير PDF: ${err.message}` : `PDF export error: ${err.message}`, {
+  } catch (error) {
+    console.error('Error exporting PDF:', error);
+    toast.error(isRtl ? 'فشل في تصدير ملف PDF' : 'Failed to export PDF', {
       position: isRtl ? 'top-left' : 'top-right',
       autoClose: 3000,
     });
