@@ -1,4 +1,4 @@
-import React, { useReducer, useEffect, useMemo, useCallback, lazy, Suspense, useRef, useState } from 'react';
+import React, { useReducer, useEffect, useMemo, useCallback, lazy, Suspense, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
@@ -12,12 +12,12 @@ import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
-import pdfMake from 'pdfmake/build/pdfmake';
-import pdfFonts from 'pdfmake/build/vfs_fonts';
-import { Order, ReturnForm, OrderStatus, ItemStatus } from '../components/branch/types';
-import { formatDate } from '../utils/formatDate';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
+import { Order, ReturnForm, OrderStatus, ItemStatus } from '../components/branch/types';
+import { formatDate } from '../utils/formatDate';
 import OrderCardSkeleton from '../components/branch/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/branch/OrderTableSkeleton';
 
@@ -29,64 +29,7 @@ const ViewModal = lazy(() => import('../components/branch/ViewModal'));
 const ConfirmDeliveryModal = lazy(() => import('../components/branch/ConfirmDeliveryModal'));
 const ReturnModal = lazy(() => import('../components/branch/ReturnModal'));
 
-// إعداد خط الأسكندرية لـ pdfmake
-const loadFont = async (): Promise<boolean> => {
-  try {
-    const fontUrl = '/fonts/Alexandria-Regular.ttf';
-    const response = await fetch(fontUrl);
-    if (!response.ok) throw new Error('Failed to load Alexandria font');
-    const fontArrayBuffer = await response.arrayBuffer();
-    const base64Font = arrayBufferToBase64(fontArrayBuffer);
-
-    // التأكد من أن vfs معرف
-    pdfMake.vfs = pdfMake.vfs || {};
-    pdfMake.vfs['Alexandria-Regular.ttf'] = base64Font;
-
-    // إضافة خطوط Roboto الافتراضية إذا لم تكن موجودة
-    if (!pdfMake.vfs['Roboto-Regular.ttf']) {
-      pdfMake.vfs = { ...pdfMake.vfs, ...pdfFonts.pdfMake.vfs };
-    }
-
-    // تعريف الخطوط
-    pdfMake.fonts = {
-      Alexandria: {
-        normal: 'Alexandria-Regular.ttf',
-      },
-      Roboto: {
-        normal: 'Roboto-Regular.ttf',
-        bold: 'Roboto-Medium.ttf',
-        italics: 'Roboto-Italic.ttf',
-        bolditalics: 'Roboto-MediumItalic.ttf',
-      },
-    };
-    return true;
-  } catch (err) {
-    console.error('Font loading error:', err);
-    // الرجوع إلى خط Roboto الافتراضي فقط
-    pdfMake.vfs = pdfFonts.pdfMake.vfs;
-    pdfMake.fonts = {
-      Roboto: {
-        normal: 'Roboto-Regular.ttf',
-        bold: 'Roboto-Medium.ttf',
-        italics: 'Roboto-Italic.ttf',
-        bolditalics: 'Roboto-MediumItalic.ttf',
-      },
-    };
-    return false;
-  }
-};
-
-// تحويل ArrayBuffer إلى Base64
-const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return window.btoa(binary);
-};
-
-// واجهات الحالة والإجراءات
+// State and Action interfaces
 interface State {
   orders: Order[];
   selectedOrder: Order | null;
@@ -106,7 +49,6 @@ interface State {
   socketError: string | null;
   viewMode: 'card' | 'table';
   inventory: any[];
-  fontLoaded: boolean;
 }
 
 interface Action {
@@ -124,7 +66,7 @@ interface Action {
   order?: 'asc' | 'desc';
 }
 
-// الحالة الافتراضية
+// Initial state
 const initialState: State = {
   orders: [],
   selectedOrder: null,
@@ -144,10 +86,9 @@ const initialState: State = {
   socketError: null,
   viewMode: 'card',
   inventory: [],
-  fontLoaded: false,
 };
 
-// دالة Reducer
+// Reducer function
 const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case 'SET_ORDERS':
@@ -287,15 +228,14 @@ const reducer = (state: State, action: Action): State => {
           item.productId === action.payload.productId ? { ...item, currentStock: action.payload.quantity } : item
         ),
       };
-    case 'SET_FONT_LOADED':
-      return { ...state, fontLoaded: action.payload };
     default:
       return state;
   }
 };
 
-// الثوابت
+// Constants
 const ORDERS_PER_PAGE = { card: 12, table: 50 };
+
 const statusOptions = [
   { value: '', label: 'all_statuses' },
   { value: OrderStatus.Pending, label: 'pending' },
@@ -306,19 +246,29 @@ const statusOptions = [
   { value: OrderStatus.Delivered, label: 'delivered' },
   { value: OrderStatus.Cancelled, label: 'cancelled' },
 ];
+
 const sortOptions = [
   { value: 'date', label: 'sort_date' },
   { value: 'totalAmount', label: 'sort_total_amount' },
 ];
 
-// دالة لأخذ أول كلمتين من اسم المنتج
+// Utility functions
 const getFirstTwoWords = (name: string | undefined | null): string => {
   if (!name) return 'غير معروف';
   const words = name.trim().split(' ');
   return words.slice(0, 2).join(' ');
 };
 
-// المكون الرئيسي
+const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+};
+
+// Main component
 const BranchOrders: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
@@ -327,30 +277,21 @@ const BranchOrders: React.FC = () => {
   const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
   const cacheRef = useRef<Map<string, Order[]>>(new Map());
-  const [isExporting, setIsExporting] = useState(false);
   const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
 
-  // تحديث stateRef عند تغيير الحالة
+  // Update stateRef when state changes
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
-  // تحميل الخط عند تحميل المكون
-  useEffect(() => {
-    const initializeFonts = async () => {
-      const fontLoaded = await loadFont();
-      dispatch({ type: 'SET_FONT_LOADED', payload: fontLoaded });
-    };
-    initializeFonts();
-  }, []);
-
-  // تهيئة مستمعي WebSocket
+  // Initialize WebSocket listeners
   useEffect(() => {
     if (!user?.branchId || user.role !== 'branch') {
       dispatch({ type: 'SET_ERROR', payload: isRtl ? 'لا يوجد فرع مرتبط' : 'No branch associated' });
       dispatch({ type: 'SET_LOADING', payload: false });
       return;
     }
+
     if (!socket) return;
 
     socket.on('connect', () => {
@@ -597,7 +538,7 @@ const BranchOrders: React.FC = () => {
     };
   }, [user, t, isRtl, language, socket, emit, playNotificationSound]);
 
-  // جلب البيانات مع التخزين المؤقت
+  // Fetch orders with caching
   const fetchData = useCallback(
     async (retryCount = 0) => {
       if (!user?.branchId || user.role !== 'branch') {
@@ -626,9 +567,8 @@ const BranchOrders: React.FC = () => {
           sortBy: state.sortBy,
           sortOrder: state.sortOrder,
         });
-
+        console.log('Orders API response:', response);
         if (!Array.isArray(response)) throw new Error('Invalid response format');
-
         const mappedOrders: Order[] = response
           .filter((order: any) => order && order._id && order.branch && order.branch._id)
           .map((order: any) => ({
@@ -687,7 +627,6 @@ const BranchOrders: React.FC = () => {
                 }))
               : [],
           }));
-
         cacheRef.current.set(cacheKey, mappedOrders);
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
         dispatch({ type: 'SET_ERROR', payload: '' });
@@ -706,9 +645,9 @@ const BranchOrders: React.FC = () => {
       }
     },
     [user, state.filterStatus, state.currentPage, state.viewMode, state.searchQuery, state.sortBy, state.sortOrder, isRtl, t, language]
-);
+  );
 
-  // حساب إجمالي المبلغ المعدل
+  // Calculate adjusted total for an order
   const calculateAdjustedTotal = useCallback((order: Order) => {
     const approvedReturnsTotal = (order.returns || []).filter(ret => ret.status === 'approved').reduce((sum, ret) => {
       const returnTotal = ret.items.reduce((retSum, item) => {
@@ -725,12 +664,12 @@ const BranchOrders: React.FC = () => {
     });
   }, [isRtl]);
 
-  // حساب الكمية الإجمالية
+  // Calculate total quantity for an order
   const calculateTotalQuantity = useCallback((order: Order) => {
     return order.items.reduce((sum, item) => sum + item.quantity, 0);
   }, []);
 
-  // تصدير إلى Excel
+  // Export to Excel
   const exportToExcel = useCallback(() => {
     const headers = [
       isRtl ? 'رقم الطلب' : 'Order Number',
@@ -753,13 +692,13 @@ const BranchOrders: React.FC = () => {
     const ws = XLSX.utils.json_to_sheet(isRtl ? data.map(row => Object.fromEntries(Object.entries(row).reverse())) : data, { header: headers });
     if (isRtl) ws['!views'] = [{ RTL: true }];
     ws['!cols'] = [
-      { wch: 15 },
-      { wch: 15 },
-      { wch: 40 },
-      { wch: 20 },
-      { wch: 15 },
-      { wch: 20 },
-      { wch: 15 },
+      { wch: 15 }, // Order Number
+      { wch: 15 }, // Status
+      { wch: 40 }, // Products
+      { wch: 20 }, // Total Amount
+      { wch: 15 }, // Total Quantity
+      { wch: 20 }, // Date
+      { wch: 15 }, // Priority
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, isRtl ? 'الطلبات' : 'Orders');
@@ -767,141 +706,95 @@ const BranchOrders: React.FC = () => {
     toast.success(isRtl ? 'تم تصدير الملف بنجاح' : 'Export successful', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
   }, [state.orders, t, isRtl, calculateAdjustedTotal, calculateTotalQuantity]);
 
-  // تصدير إلى PDF باستخدام pdfmake
+  // Export to PDF
   const exportToPDF = useCallback(async () => {
-    if (!state.fontLoaded) {
-      toast.error(isRtl ? 'فشل تحميل الخط، جاري استخدام الخط الافتراضي' : 'Failed to load font, using default font', {
-        position: isRtl ? 'top-left' : 'top-right',
-        autoClose: 3000,
-      });
-    }
-    setIsExporting(true);
     try {
+      const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
+      doc.setLanguage(isRtl ? 'ar' : 'en');
+
+      const fontUrl = '/fonts/Alexandria-Regular.ttf';
+      const fontName = 'Alexandria';
+      const fontBytes = await fetch(fontUrl).then(res => {
+        if (!res.ok) throw new Error('Failed to fetch font');
+        return res.arrayBuffer();
+      });
+      const base64Font = arrayBufferToBase64(fontBytes);
+      doc.addFileToVFS(`${fontName}-Regular.ttf`, base64Font);
+      doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
+      doc.setFont(fontName);
+
+      doc.setFontSize(16);
+      doc.text(isRtl ? 'الطلبات' : 'Orders', isRtl ? doc.internal.pageSize.width - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
+
       const headers = [
-        isRtl ? t('orders.order_number') || 'رقم الطلب' : t('orders.order_number') || 'Order Number',
-        isRtl ? t('orders.status') || 'الحالة' : t('orders.status') || 'Status',
-        isRtl ? t('orders.products') || 'المنتجات' : t('orders.products') || 'Products',
-        isRtl ? t('orders.total_amount') || 'إجمالي المبلغ' : t('orders.total_amount') || 'Total Amount',
-        isRtl ? t('orders.total_quantity') || 'الكمية الإجمالية' : t('orders.total_quantity') || 'Total Quantity',
-        isRtl ? t('orders.date') || 'التاريخ' : t('orders.date') || 'Date',
-        isRtl ? t('orders.priority') || 'الأولوية' : t('orders.priority') || 'Priority',
+        isRtl ? 'رقم الطلب' : 'Order Number',
+        isRtl ? 'الحالة' : 'Status',
+        isRtl ? 'المنتجات' : 'Products',
+        isRtl ? 'إجمالي المبلغ' : 'Total Amount',
+        isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
+        isRtl ? 'التاريخ' : 'Date',
+        isRtl ? 'الأولوية' : 'Priority',
       ];
 
-      const body = state.orders.map(order => [
+      const data = state.orders.map(order => [
         order.orderNumber,
         t(`orders.status_${order.status}`) || order.status,
-        order.items
-          .map(item => `(${item.quantity} ${t(`units.${item.unit || 'unit'}`) || item.unit} × ${getFirstTwoWords(item.productName)})`)
-          .join(' + '),
+        order.items.map(item => `(${item.quantity} ${t(`${item.unit || 'unit'}`) || item.unit} × ${getFirstTwoWords(item.productName)})`).join(' + '),
         calculateAdjustedTotal(order),
         calculateTotalQuantity(order).toString(),
         order.date,
         t(`orders.priority_${order.priority}`) || order.priority,
       ]);
 
-      const documentDefinition = {
-        pageOrientation: 'landscape',
-        pageSize: 'A4',
-        pageMargins: [20, 20, 20, 20],
-        defaultStyle: {
-          font: state.fontLoaded ? 'Alexandria' : 'Roboto',
-          fontSize: 10,
-          alignment: isRtl ? 'right' : 'left',
+      autoTable(doc, {
+        head: [isRtl ? headers.reverse() : headers],
+        body: isRtl ? data.map(row => row.reverse()) : data,
+        theme: 'grid',
+        headStyles: { fillColor: [255, 193, 7], textColor: 255, fontSize: 10, halign: isRtl ? 'right' : 'left', font: fontName, cellPadding: 3 },
+        bodyStyles: { fontSize: 8, halign: isRtl ? 'right' : 'left', font: fontName, cellPadding: 3, textColor: [33, 33, 33] },
+        margin: { top: 25, left: 10, right: 10 },
+        columnStyles: {
+          0: { cellWidth: 25 },
+          1: { cellWidth: 20 },
+          2: { cellWidth: 100 },
+          3: { cellWidth: 25 },
+          4: { cellWidth: 20 },
+          5: { cellWidth: 30 },
+          6: { cellWidth: 20 },
         },
-        content: [
-          {
-            text: isRtl ? t('orders.report_title') || 'تقرير الطلبات' : t('orders.report_title') || 'Orders Report',
-            style: 'header',
-            alignment: isRtl ? 'right' : 'left',
-            margin: [0, 0, 0, 10],
-          },
-          {
-            text: [
-              isRtl ? `${t('orders.status_label') || 'الحالة'}: ${state.filterStatus || t('orders.all_statuses') || 'الكل'}` : `Status: ${state.filterStatus || t('orders.all_statuses') || 'All'}`,
-              ' | ',
-              isRtl ? `${t('orders.branch_label') || 'الفرع'}: ${user?.branchName || t('orders.all_branches') || 'الكل'}` : `Branch: ${user?.branchName || t('orders.all_branches') || 'All'}`,
-            ].filter(Boolean).join(''),
-            style: 'subheader',
-            alignment: isRtl ? 'right' : 'left',
-            margin: [0, 0, 0, 10],
-          },
-          {
-            table: {
-              headerRows: 1,
-              widths: [50, 40, 150, 50, 40, 60, 40],
-              body: [
-                headers.map(header => ({
-                  text: header,
-                  style: 'tableHeader',
-                  alignment: isRtl ? 'right' : 'left',
-                })),
-                ...body.map(row => row.map(cell => ({
-                  text: cell,
-                  alignment: isRtl ? 'right' : 'left',
-                }))),
-              ],
-            },
-            layout: {
-              fillColor: function (rowIndex: number) {
-                return rowIndex % 2 === 0 ? '#F5F5F5' : null;
-              },
-              hLineWidth: function () { return 0.5; },
-              vLineWidth: function () { return 0.5; },
-              hLineColor: function () { return '#CCCCCC'; },
-              vLineColor: function () { return '#CCCCCC'; },
-            },
-          },
-        ],
-        footer: function (currentPage: number, pageCount: number) {
-          return {
-            columns: [
-              {
-                text: isRtl ? `تم الإنشاء في: ${formatDate(new Date(), language)}` : `Generated on: ${formatDate(new Date(), language)}`,
-                alignment: isRtl ? 'right' : 'left',
-                margin: [20, 0],
-              },
-              {
-                text: isRtl ? `الصفحة ${currentPage} من ${pageCount}` : `Page ${currentPage} of ${pageCount}`,
-                alignment: isRtl ? 'left' : 'right',
-                margin: [0, 0, 20, 0],
-              },
-            ],
-            margin: [0, 10],
-          };
+        didParseCell: data => {
+          if (data.section === 'body' && data.column.index === 3 && isRtl) {
+            data.cell.text = [data.cell.raw.toString().replace(/(\d+\.\d{2})/, ' $1 ر.س')];
+          }
         },
-        styles: {
-          header: {
-            fontSize: 14,
-            font: state.fontLoaded ? 'Alexandria' : 'Roboto',
-            margin: [0, 0, 0, 10],
-          },
-          subheader: {
-            fontSize: 10,
-            font: state.fontLoaded ? 'Alexandria' : 'Roboto',
-            margin: [0, 0, 0, 10],
-          },
-          tableHeader: {
-            fontSize: 10,
-            font: state.fontLoaded ? 'Alexandria' : 'Roboto',
-            color: 'white',
-            fillColor: '#FFC107',
-            alignment: isRtl ? 'right' : 'left',
-          },
+        didDrawPage: data => {
+          doc.setFont(fontName);
+          doc.setFontSize(8);
+          doc.text(
+            isRtl ? `تم الإنشاء في: ${formatDate(new Date(), language)}` : `Generated on: ${formatDate(new Date(), language)}`,
+            isRtl ? doc.internal.pageSize.width - 10 : 10,
+            doc.internal.pageSize.height - 10,
+            { align: isRtl ? 'right' : 'left' }
+          );
+          doc.text(
+            isRtl ? `الصفحة ${data.pageNumber}` : `Page ${data.pageNumber}`,
+            isRtl ? 10 : doc.internal.pageSize.width - 30,
+            doc.internal.pageSize.height - 10,
+            { align: isRtl ? 'left' : 'right' }
+          );
         },
-        direction: isRtl ? 'rtl' : 'ltr',
-      };
+        styles: { overflow: 'linebreak', font: fontName, fontSize: 8, cellPadding: 3, halign: isRtl ? 'right' : 'left' },
+      });
 
-      pdfMake.createPdf(documentDefinition).download('BranchOrders.pdf');
+      doc.save('BranchOrders.pdf');
       toast.success(isRtl ? 'تم تصدير PDF بنجاح' : 'PDF export successful', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
     } catch (err) {
       console.error('PDF export error:', err);
       toast.error(isRtl ? 'خطأ في تصدير PDF' : 'PDF export error', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
-    } finally {
-      setIsExporting(false);
     }
-  }, [state.orders, t, isRtl, language, calculateAdjustedTotal, calculateTotalQuantity, state.filterStatus, user, state.fontLoaded]);
+  }, [state.orders, t, isRtl, language, calculateAdjustedTotal, calculateTotalQuantity]);
 
-  // معالجة البحث
+  // Search handling
   const handleSearchChange = useCallback(
     debounce((value: string) => {
       dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
@@ -909,7 +802,7 @@ const BranchOrders: React.FC = () => {
     []
   );
 
-  // تصفية وترتيب وتقسيم الطلبات
+  // Filtered, sorted, and paginated orders
   const filteredOrders = useMemo(
     () =>
       state.orders.filter(
@@ -943,7 +836,7 @@ const BranchOrders: React.FC = () => {
     [sortedOrders, state.currentPage, state.viewMode]
   );
 
-  // إجراءات الطلبات
+  // Order actions
   const viewOrder = useCallback((order: Order) => {
     dispatch({ type: 'SET_SELECTED_ORDER', payload: order });
     dispatch({ type: 'SET_MODAL', modal: 'view', isOpen: true });
@@ -1016,17 +909,25 @@ const BranchOrders: React.FC = () => {
         if (!order || !Array.isArray(order.items)) {
           throw new Error(isRtl ? 'بيانات الطلب غير صالحة' : 'Invalid order data');
         }
+
+        // Validate product IDs
         const invalidItems = order.items.filter(item => !item.product?._id);
         if (invalidItems.length > 0) {
           throw new Error(isRtl ? 'بعض العناصر تحتوي على معرفات منتجات غير صالحة' : 'Some items have invalid product IDs');
         }
-        await ordersAPI.confirmDelivery(orderId, user.id);
+
+        // Confirm delivery with userId as string
+        console.log('Calling ordersAPI.confirmDelivery:', { orderId, userId: user.id });
+        await ordersAPI.confirmDelivery(orderId, user.id); // Fixed: Pass user.id as string
+
+        // Update inventory using bulkCreate
         const inventoryItems = order.items.map(item => ({
           productId: item.product._id,
           currentStock: item.quantity,
           minStockLevel: 0,
           maxStockLevel: 1000,
         }));
+
         try {
           await inventoryAPI.bulkCreate({
             branchId: user.branchId,
@@ -1050,6 +951,7 @@ const BranchOrders: React.FC = () => {
                   throw getError;
                 }
               }
+
               if (inventoryItem) {
                 try {
                   await inventoryAPI.updateStock(inventoryItem._id, {
@@ -1092,6 +994,7 @@ const BranchOrders: React.FC = () => {
             }
           }
         }
+
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: OrderStatus.Delivered });
         if (socket && isConnected) {
           emit('orderStatusUpdated', { orderId, status: OrderStatus.Delivered });
@@ -1109,7 +1012,6 @@ const BranchOrders: React.FC = () => {
     [t, isRtl, playNotificationSound, user, socket, isConnected, emit]
   );
 
-  // تحديث حالة الطلب
   const updateOrderStatus = useCallback(
     async (orderId: string, status: OrderStatus) => {
       if (!user?.branchId) {
@@ -1137,71 +1039,71 @@ const BranchOrders: React.FC = () => {
     [t, isRtl, user, socket, isConnected, emit]
   );
 
-  // تنظيف التخزين المؤقت عند تغيير المستخدم أو الفرع
+  // Clear cache on user or branch change
   useEffect(() => {
     cacheRef.current.clear();
     fetchData();
   }, [user?.branchId, fetchData]);
 
-  // التصيير
+  // Render
   return (
     <div className="px-4 py-6 min-h-screen bg-gray-50" dir={isRtl ? 'rtl' : 'ltr'}>
-      <Suspense fallback={<LoadingSpinner size="lg" className="flex justify-center items-center h-screen" />}>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-8">
-          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+      <Suspense fallback={<LoadingSpinner size="lg" />}>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-6">
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <div>
-              <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
-                <ShoppingCart className="w-8 h-8 text-amber-600" />
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-800 flex items-center gap-2">
+                <ShoppingCart className="w-6 h-6 text-amber-600" />
                 {isRtl ? 'الطلبات' : 'Orders'}
               </h1>
-              <p className="text-sm text-gray-500 mt-1">{isRtl ? 'إدارة طلبات الفرع' : 'Manage branch orders'}</p>
+              <p className="text-xs text-gray-500 mt-1">{isRtl ? 'إدارة طلبات الفرع' : 'Manage branch orders'}</p>
             </div>
-            <div className="flex gap-3 flex-wrap">
+            <div className="flex gap-2 flex-wrap">
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
                 onClick={state.orders.length > 0 ? exportToExcel : undefined}
-                className={`flex items-center gap-2 ${
+                className={`flex items-center gap-1.5 ${
                   state.orders.length > 0 ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-lg px-4 py-2 text-sm shadow-sm`}
+                } rounded-md px-3 py-1.5 text-xs shadow-sm`}
                 disabled={state.orders.length === 0}
               >
-                <Download className="w-5 h-5" />
+                <Download className="w-4 h-4" />
                 {isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
               </Button>
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
-                onClick={state.orders.length > 0 && !isExporting ? exportToPDF : undefined}
-                className={`flex items-center gap-2 ${
-                  state.orders.length > 0 && !isExporting ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-lg px-4 py-2 text-sm shadow-sm`}
-                disabled={state.orders.length === 0 || isExporting}
+                onClick={state.orders.length > 0 ? exportToPDF : undefined}
+                className={`flex items-center gap-1.5 ${
+                  state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                } rounded-md px-3 py-1.5 text-xs shadow-sm`}
+                disabled={state.orders.length === 0}
               >
-                {isExporting ? <LoadingSpinner size="sm" /> : <Upload className="w-5 h-5" />}
-                {isRtl ? (isExporting ? 'جاري التصدير...' : 'تصدير إلى PDF') : isExporting ? 'Exporting...' : 'Export to PDF'}
+                <Upload className="w-4 h-4" />
+                {isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
               </Button>
               <Button
                 variant="secondary"
                 onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' })}
-                className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-4 py-2 text-sm shadow-sm"
+                className="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-md px-3 py-1.5 text-xs shadow-sm"
               >
-                {state.viewMode === 'card' ? <Table2 className="w-5 h-5" /> : <Grid className="w-5 h-5" />}
+                {state.viewMode === 'card' ? <Table2 className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
                 {isRtl ? (state.viewMode === 'card' ? 'عرض كجدول' : 'عرض كبطاقات') : state.viewMode === 'card' ? 'View as Table' : 'View as Cards'}
               </Button>
             </div>
           </div>
-          <Card className="p-4 sm:p-6 mt-6 bg-white shadow-lg rounded-lg border border-gray-100">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <Card className="p-3 sm:p-4 mt-4 bg-white shadow-md rounded-md border border-gray-100">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
                 <SearchInput
                   value={state.searchQuery}
                   onChange={handleSearchChange}
                   placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                  className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
                 <Select
                   options={statusOptions.map(opt => ({
                     value: opt.value,
@@ -1209,11 +1111,11 @@ const BranchOrders: React.FC = () => {
                   }))}
                   value={state.filterStatus || ''}
                   onChange={(value: string) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                  className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
                 <Select
                   options={sortOptions.map(opt => ({
                     value: opt.value,
@@ -1221,33 +1123,34 @@ const BranchOrders: React.FC = () => {
                   }))}
                   value={state.sortBy}
                   onChange={(value: string) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                  className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs shadow-sm"
                 />
               </div>
             </div>
-            <div className="text-sm text-center text-gray-500 mt-4">
+            <div className="text-xs text-center text-gray-500 mt-3">
               {isRtl ? `عدد الطلبات: ${filteredOrders.length}` : `Orders count: ${filteredOrders.length}`}
             </div>
           </Card>
           {state.loading ? (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-4 mt-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-3 mt-4">
               {state.viewMode === 'card' ? (
                 Array(6).fill(null).map((_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)
               ) : (
-                <OrderTableSkeleton isRtl={isRtl} rows={10} />
+                <OrderTableSkeleton isRtl={isRtl} />
               )}
             </motion.div>
           ) : state.error && state.orders.length === 0 ? (
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="mt-6">
-              <Card className="p-6 max-w-md mx-auto text-center bg-red-50 shadow-lg rounded-lg border border-red-100">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="mt-4">
+              <Card className="p-4 max-w-md mx-auto text-center bg-red-50 shadow-md rounded-md border border-red-100">
                 <div className={`flex items-center justify-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  <AlertCircle className="w-6 h-6 text-red-600" />
-                  <p className="text-lg font-medium text-red-600">{state.error}</p>
+                  <AlertCircle className="w-5 h-5 text-red-600" />
+                  <p className="text-sm font-medium text-red-600">{state.error}</p>
                 </div>
                 <Button
                   variant="primary"
                   onClick={() => fetchData()}
-                  className="mt-4 bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-6 py-2 text-sm shadow-sm"
+                  className="mt-3 bg-amber-500 hover:bg-amber-600 text-white rounded-md px-4 py-1.5 text-xs shadow-sm"
+                  aria-label={isRtl ? 'إعادة المحاولة' : 'Retry'}
                 >
                   {isRtl ? 'إعادة المحاولة' : 'Retry'}
                 </Button>
@@ -1256,39 +1159,37 @@ const BranchOrders: React.FC = () => {
           ) : (
             <AnimatePresence>
               {paginatedOrders.length === 0 ? (
-                <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-6">
-                  <Card className="p-8 sm:p-12 text-center bg-white shadow-lg rounded-lg border border-gray-100">
-                    <ShoppingCart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-800 mb-2">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
-                    <p className="text-sm text-gray-500">
+                <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-4">
+                  <Card className="p-6 text-center bg-white shadow-md rounded-md border border-gray-100">
+                    <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+                    <h3 className="text-sm font-medium text-gray-800 mb-2">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
+                    <p className="text-xs text-gray-500">
                       {state.filterStatus || state.searchQuery
-                        ? isRtl
-                          ? 'لا توجد طلبات مطابقة'
-                          : 'No matching orders'
-                        : isRtl
-                        ? 'لا توجد طلبات بعد'
-                        : 'No orders yet'}
+                        ? isRtl ? 'لا توجد طلبات مطابقة' : 'No matching orders'
+                        : isRtl ? 'لم يتم تسجيل طلبات بعد' : 'No orders yet'}
                     </p>
                   </Card>
                 </motion.div>
               ) : state.viewMode === 'table' ? (
-                <motion.div key="table-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-6">
-                  <OrderTable
-                    orders={paginatedOrders.filter(o => o && o.id && o.branch && o.branch._id)}
-                    t={t}
-                    isRtl={isRtl}
-                    calculateAdjustedTotal={calculateAdjustedTotal}
-                    calculateTotalQuantity={calculateTotalQuantity}
-                    startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
-                    viewOrder={viewOrder}
-                    openConfirmDeliveryModal={openConfirmDeliveryModal}
-                    openReturnModal={openReturnModal}
-                    user={user}
-                    submitting={state.submitting}
-                  />
+                <motion.div key="table-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-4">
+                  <div className="w-full">
+                    <OrderTable
+                      orders={paginatedOrders.filter(o => o && o.id && o.branch && o.branch._id)}
+                      t={t}
+                      isRtl={isRtl}
+                      calculateAdjustedTotal={calculateAdjustedTotal}
+                      calculateTotalQuantity={calculateTotalQuantity}
+                      startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
+                      viewOrder={viewOrder}
+                      openConfirmDeliveryModal={openConfirmDeliveryModal}
+                      openReturnModal={openReturnModal}
+                      user={user}
+                      submitting={state.submitting}
+                    />
+                  </div>
                 </motion.div>
               ) : (
-                <motion.div key="card-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="space-y-4 mt-6">
+                <motion.div key="card-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="space-y-3 mt-4 w-full">
                   {paginatedOrders.filter(o => o && o.id && o.branch && o.branch._id).map(order => (
                     <OrderCard
                       key={order.id}
@@ -1309,7 +1210,7 @@ const BranchOrders: React.FC = () => {
             </AnimatePresence>
           )}
           {paginatedOrders.length > 0 && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="mt-6">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="mt-4 w-full">
               <Pagination
                 currentPage={state.currentPage}
                 totalPages={Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode])}
