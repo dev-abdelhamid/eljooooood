@@ -16,13 +16,8 @@ const formatPrice = (amount: number, isRtl: boolean): string => {
   return isRtl ? `${arabicNumber} ر.س` : `SAR ${formatted}`;
 };
 
-// Format products for Arabic and English with correct separator
-const formatProducts = (
-  items: Order['items'],
-  isRtl: boolean,
-  translateUnit: (unit: string, isRtl: boolean) => string,
-  t: (key: string) => string
-): string => {
+// Format products for Arabic and English with correct parentheses and spacing
+const formatProducts = (items: Order['items'], isRtl: boolean, translateUnit: (unit: string, isRtl: boolean) => string): string => {
   return items
     .map((item) => {
       const quantity = isRtl ? toArabicNumerals(item.quantity) : item.quantity;
@@ -49,7 +44,7 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
   const fontUrl = '/fonts/Amiri-Regular.ttf';
   try {
     const fontBytes = await fetch(fontUrl).then((res) => {
-      if (!res.ok) throw new Error(t('font_load_error'));
+      if (!res.ok) throw new Error('فشل تحميل الخط Amiri');
       return res.arrayBuffer();
     });
     doc.addFileToVFS(`${fontName}-Regular.ttf`, arrayBufferToBase64(fontBytes));
@@ -57,10 +52,10 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
     doc.setFont(fontName, 'normal');
     return true;
   } catch (error) {
-    console.error('Font loading error:', error);
+    console.error('خطأ تحميل الخط:', error);
     doc.setFont('helvetica', 'normal');
-    toast.error(t('font_load_error'), {
-      position: isRtl ? 'top-left' : 'top-right',
+    toast.error('فشل تحميل الخط Amiri، استخدام خط افتراضي', {
+      position: 'top-right',
       autoClose: 3000,
     });
     return false;
@@ -68,18 +63,18 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
 };
 
 // Generate dynamic file name based on filters
-const generateFileName = (filterStatus: string, filterBranchName: string, isRtl: boolean, t: (key: string) => string): string => {
+const generateFileName = (filterStatus: string, filterBranchName: string, isRtl: boolean): string => {
   const date = new Date().toISOString().split('T')[0];
   const statusTranslations = {
-    pending: isRtl ? t('pending_orders') : 'Pending_Orders',
-    approved: isRtl ? t('approved_orders') : 'Approved_Orders',
-    in_production: isRtl ? t('in_production_orders') : 'In_Production_Orders',
-    completed: isRtl ? t('completed_orders') : 'Completed_Orders',
-    in_transit: isRtl ? t('in_transit_orders') : 'In_Transit_Orders',
-    delivered: isRtl ? t('delivered_orders') : 'Delivered_Orders',
-    cancelled: isRtl ? t('cancelled_orders') : 'Cancelled_Orders',
+    pending: isRtl ? 'الطلبات_قيد_الانتظار' : 'Pending_Orders',
+    approved: isRtl ? 'الطلبات_المعتمدة' : 'Approved_Orders',
+    in_production: isRtl ? 'الطلبات_في_الإنتاج' : 'In_Production_Orders',
+    completed: isRtl ? 'الطلبات_المكتملة' : 'Completed_Orders',
+    in_transit: isRtl ? 'الطلبات_في_النقل' : 'In_Transit_Orders',
+    delivered: isRtl ? 'الطلبات_المسلمة' : 'Delivered_Orders',
+    cancelled: isRtl ? 'الطلبات_الملغاة' : 'Cancelled_Orders',
   };
-  const status = statusTranslations[filterStatus as keyof typeof statusTranslations] || (isRtl ? t('all_orders') : 'All_Orders');
+  const status = statusTranslations[filterStatus as keyof typeof statusTranslations] || (isRtl ? 'جميع_الطلبات' : 'All_Orders');
   const branch = filterBranchName ? `_${filterBranchName.replace(/\s+/g, '_')}` : '';
   return `${status}${branch}_${date}.pdf`;
 };
@@ -95,8 +90,7 @@ const generatePDFHeader = (
   totalQuantity: number,
   totalAmount: number,
   fontName: string,
-  fontLoaded: boolean,
-  t: (key: string) => string
+  fontLoaded: boolean
 ) => {
   doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
   doc.setFontSize(18);
@@ -111,23 +105,23 @@ const generatePDFHeader = (
   doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
   const statusTranslations = {
-    pending: t('pending'),
-    approved: t('approved'),
-    in_production: t('in_production'),
-    completed: t('completed'),
-    in_transit: t('in_transit'),
-    delivered: t('delivered'),
-    cancelled: t('cancelled'),
+    pending: 'قيد الانتظار',
+    approved: 'المعتمدة',
+    in_production: 'في الإنتاج',
+    completed: 'مكتمل',
+    in_transit: 'في النقل',
+    delivered: 'تم التسليم',
+    cancelled: 'ملغى',
   };
   const filterInfo = isRtl
-    ? `${t('status')}: ${filterStatus ? statusTranslations[filterStatus as keyof typeof statusTranslations] || t('all') : t('all')} | ${t('branch')}: ${filterBranchName || t('all_branches')}`
+    ? `الحالة: ${filterStatus ? statusTranslations[filterStatus as keyof typeof statusTranslations] || 'الكل' : 'الكل'} | الفرع: ${filterBranchName || 'جميع الفروع'}`
     : `Status: ${filterStatus || 'All'} | Branch: ${filterBranchName || 'All Branches'}`;
   doc.text(filterInfo, isRtl ? pageWidth - 20 : 20, 20, { align: isRtl ? 'right' : 'left' });
 
   // Add total statistics with Arabic numerals
   doc.setFontSize(9);
   const stats = isRtl
-    ? `${t('total_orders')}: ${toArabicNumerals(totalOrders)} | ${t('total_quantity')}: ${toArabicNumerals(totalQuantity)} ${t('unit')} | ${t('total_amount')}: ${formatPrice(totalAmount, isRtl)}`
+    ? `إجمالي الطلبات: ${toArabicNumerals(totalOrders)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${formatPrice(totalAmount, isRtl)}`
     : `Total Orders: ${totalOrders} | Total Quantity: ${totalQuantity} units | Total Amount: ${formatPrice(totalAmount, isRtl)}`;
   doc.text(stats, isRtl ? pageWidth - 20 : 20, 28, { align: isRtl ? 'right' : 'left' });
 
@@ -144,7 +138,7 @@ const generatePDFHeader = (
     doc.setTextColor(150, 150, 150);
     doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
     doc.text(
-      isRtl ? `${t('page')} ${toArabicNumerals(i)} ${t('of')} ${toArabicNumerals(pageCount)}` : `Page ${i} of ${pageCount}`,
+      isRtl ? `صفحة ${toArabicNumerals(i)} من ${toArabicNumerals(pageCount)}` : `Page ${i} of ${pageCount}`,
       isRtl ? pageWidth - 20 : 20,
       pageHeight - 10,
       { align: isRtl ? 'right' : 'left' }
@@ -162,12 +156,11 @@ const generatePDFTable = (
   fontName: string,
   calculateAdjustedTotal: (order: Order) => string,
   calculateTotalQuantity: (order: Order) => number,
-  translateUnit: (unit: string, isRtl: boolean) => string,
-  t: (key: string) => string
+  translateUnit: (unit: string, isRtl: boolean) => string
 ) => {
   autoTable(doc, {
-    head: [headers],
-    body: data,
+    head: [isRtl ? headers : headers.reverse()],
+    body: isRtl ? data : data.map((row) => row.reverse()),
     theme: 'grid',
     startY: 35,
     margin: { left: 15, right: 15 },
@@ -210,6 +203,9 @@ const generatePDFTable = (
     didParseCell: (data) => {
       data.cell.styles.halign = isRtl ? 'right' : 'left';
       data.cell.styles.textDirection = isRtl ? 'rtl' : 'ltr';
+      if (data.column.index === 3) {
+        data.cell.styles.cellPadding = { top: 5, right: 5, bottom: 5, left: 5 };
+      }
       if (data.column.index === 4 && !data.cell.text[0]) {
         data.cell.text[0] = formatPrice(0, isRtl); // Fallback if total amount is empty
       }
@@ -224,7 +220,6 @@ export const exportToPDF = async (
   calculateAdjustedTotal: (order: Order) => string,
   calculateTotalQuantity: (order: Order) => number,
   translateUnit: (unit: string, isRtl: boolean) => string,
-  t: (key: string) => string,
   filterStatus: string = '',
   filterBranchName: string = ''
 ) => {
@@ -254,42 +249,41 @@ export const exportToPDF = async (
     generatePDFHeader(
       doc,
       isRtl,
-      t('orders_report'),
+      isRtl ? 'تقرير الطلبات' : 'Orders Report',
       filterStatus,
       filterBranchName,
       totalOrders,
       totalQuantity,
       totalAmount,
       fontName,
-      fontLoaded,
-      t
+      fontLoaded
     );
 
-    // Prepare table headers using translation function
+    // Prepare table headers
     const headers = [
-      t('order_number'),
-      t('branch'),
-      t('status'),
-      t('products'),
-      t('total_amount'),
-      t('total_quantity'),
-      t('date'),
+      'رقم الطلب',
+      'الفرع',
+      'الحالة',
+      'المنتجات',
+      'إجمالي المبلغ',
+      'الكمية الإجمالية',
+      'التاريخ',
     ];
 
     // Translate statuses
     const statusTranslations: Record<string, string> = {
-      pending: t('pending'),
-      approved: t('approved'),
-      in_production: t('in_production'),
-      completed: t('completed'),
-      in_transit: t('in_transit'),
-      delivered: t('delivered'),
-      cancelled: t('cancelled'),
+      pending: 'قيد الانتظار',
+      approved: 'تم الموافقة',
+      in_production: 'في الإنتاج',
+      completed: 'مكتمل',
+      in_transit: 'في النقل',
+      delivered: 'تم التسليم',
+      cancelled: 'ملغى',
     };
 
     // Prepare table data
     const data = filteredOrders.map((order) => {
-      const productsStr = formatProducts(order.items, isRtl, translateUnit, t);
+      const productsStr = formatProducts(order.items, isRtl, translateUnit);
       const totalQuantityStr = isRtl ? toArabicNumerals(calculateTotalQuantity(order)) : calculateTotalQuantity(order);
       const adjustedTotalStr = calculateAdjustedTotal(order) || formatPrice(0, isRtl);
       return [
@@ -298,25 +292,25 @@ export const exportToPDF = async (
         isRtl ? statusTranslations[order.status] || order.status : order.status,
         productsStr,
         adjustedTotalStr,
-        `${totalQuantityStr} ${t('unit')}`,
+        `${totalQuantityStr} ${isRtl ? 'وحدة' : 'units'}`,
         order.date,
       ];
     });
 
     // Generate table
-    generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, t);
+    generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName, calculateAdjustedTotal, calculateTotalQuantity, translateUnit);
 
     // Save the file
-    const fileName = generateFileName(filterStatus, filterBranchName, isRtl, t);
+    const fileName = generateFileName(filterStatus, filterBranchName, isRtl);
     doc.save(fileName);
 
-    toast.success(t('pdf_export_success'), {
+    toast.success(isRtl ? 'تم تصدير PDF بنجاح' : 'PDF export successful', {
       position: isRtl ? 'top-left' : 'top-right',
       autoClose: 3000,
     });
   } catch (err: any) {
-    console.error('PDF export error:', err.message);
-    toast.error(t('pdf_export_error') + `: ${err.message}`, {
+    console.error('خطأ تصدير PDF:', err.message);
+    toast.error(isRtl ? `خطأ في تصدير PDF: ${err.message}` : `PDF export error: ${err.message}`, {
       position: isRtl ? 'top-left' : 'top-right',
       autoClose: 3000,
     });
