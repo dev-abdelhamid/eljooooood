@@ -16,7 +16,7 @@ const formatPrice = (amount: number, isRtl: boolean): string => {
   return isRtl ? `${arabicNumber} ر.س` : `SAR ${formatted}`;
 };
 
-// Format products for Arabic and English with correct parentheses and spacing
+// Format products for Arabic and English with correct separator
 const formatProducts = (items: Order['items'], isRtl: boolean, translateUnit: (unit: string, isRtl: boolean) => string): string => {
   return items
     .map((item) => {
@@ -159,8 +159,8 @@ const generatePDFTable = (
   translateUnit: (unit: string, isRtl: boolean) => string
 ) => {
   autoTable(doc, {
-    head: [isRtl ? headers : headers.reverse()],
-    body: isRtl ? data : data.map((row) => row.reverse()),
+    head: [headers], // Headers are already in correct order for RTL
+    body: data, // Data is prepared in correct order
     theme: 'grid',
     startY: 35,
     margin: { left: 15, right: 15 },
@@ -203,9 +203,6 @@ const generatePDFTable = (
     didParseCell: (data) => {
       data.cell.styles.halign = isRtl ? 'right' : 'left';
       data.cell.styles.textDirection = isRtl ? 'rtl' : 'ltr';
-      if (data.column.index === 3) {
-        data.cell.styles.cellPadding = { top: 5, right: 5, bottom: 5, left: 5 };
-      }
       if (data.column.index === 4 && !data.cell.text[0]) {
         data.cell.text[0] = formatPrice(0, isRtl); // Fallback if total amount is empty
       }
