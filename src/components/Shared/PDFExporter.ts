@@ -9,12 +9,14 @@ const toArabicNumerals = (number: string | number): string => {
   return String(number).replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
 };
 
-// Format price with proper currency and Arabic numerals
-const formatPrice = (amount: number | undefined, isRtl: boolean): string => {
-  const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
-  const formatted = validAmount.toFixed(2).replace('.', ',');
-  const arabicNumber = isRtl ? (formatted) : formatted;
-  return isRtl ? ` ر.س ${arabicNumber} ` : ` ${formatted} SAR`;
+// Format price with currency symbol
+const formatPrice = (amount: number, isRtl: boolean): string => {
+  const formatted = amount.toLocaleString(isRtl ? 'ar-EG' : 'en-US', {  
+    style: 'currency',
+    currency: 'SAR',
+    minimumFractionDigits: 2,
+  });
+  return isRtl ? formatted.replace('SAR', 'ر.س') : formatted;
 };
 
 
