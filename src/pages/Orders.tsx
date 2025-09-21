@@ -273,7 +273,7 @@ const exportToExcel = (orders: Order[], isRtl: boolean, calculateAdjustedTotal: 
       [headers[1]]: order.branchName,
       [headers[2]]: statusLabel,
       [headers[3]]: productsStr,
-      [headers[4]]: isRtl ? (totalAmount.replace(/[^0-9.]/g, '')) + ' ر.س' : totalAmount,
+      [headers[4]]: isRtl ? totalAmount + ' ر.س' : totalAmount,
       [headers[5]]: totalQuantity,
       [headers[6]]: order.date,
     };
