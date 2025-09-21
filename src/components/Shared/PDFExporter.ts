@@ -249,7 +249,7 @@ const generatePDFTable = (
       fontStyle: 'normal',
     },
     didParseCell: (data) => {
-      data.cell.styles.halign = isRtl ? 'right' : 'left';
+      data.cell.styles.halign = isRtl ? 'left' : 'right';
       if (data.column.index === (isRtl ? headers.length - 5 : 4)) { // Total Amount column
         if (!data.cell.text[0] || data.cell.text[0].includes('NaN')) {
           data.cell.text[0] = formatPrice(0, isRtl);
