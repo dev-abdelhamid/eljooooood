@@ -29,38 +29,14 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, isRtl,
     navigation: isRtl ? 'تصفح الصفحات' : 'Page navigation',
   }), [isRtl, currentPage, totalPages]);
 
-  // Generate page numbers to display
-  const getPageNumbers = useMemo(() => {
-    const pages: (number | string)[] = [];
-    const maxPagesToShow = 5;
-    const startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
-    const endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
-
-    if (startPage > 1) {
-      pages.push(1);
-      if (startPage > 2) pages.push('...');
-    }
-
-    for (let i = startPage; i <= endPage; i++) {
-      pages.push(i);
-    }
-
-    if (endPage < totalPages) {
-      if (endPage < totalPages - 1) pages.push('...');
-      pages.push(totalPages);
-    }
-
-    return pages;
-  }, [currentPage, totalPages]);
-
   if (totalPages <= 1) return null;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
-      className={`flex flex-wrap justify-center items-center gap-2 mt-8 ${isRtl ? 'flex-row-reverse' : ''}`}
+      className={`flex justify-center items-center gap-3 mt-6 ${isRtl ? 'flex-row' : ''}`}
       role="navigation"
       aria-label={paginationText.navigation}
     >
@@ -69,51 +45,24 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, isRtl,
         size="sm"
         onClick={handlePrevious}
         disabled={currentPage === 1}
-        className={`disabled:opacity-50 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full w-10 h-10 flex items-center justify-center shadow-md transition-all duration-200 ${
-          isRtl ? 'ml-2' : 'mr-2'
-        }`}
+        className="disabled:opacity-50 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm shadow-sm"
         aria-label={paginationText.previous}
       >
-        {isRtl ? '›' : '‹'}
+        {paginationText.previous}
       </Button>
-
-      {getPageNumbers.map((page, index) => (
-        <Button
-          key={`${page}-${index}`}
-          variant={page === currentPage ? 'primary' : 'secondary'}
-          size="sm"
-          onClick={() => typeof page === 'number' && handlePageChange(page)}
-          disabled={typeof page !== 'number'}
-          className={`${
-            page === currentPage
-              ? 'bg-amber-500 text-white hover:bg-amber-600'
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          } rounded-full w-10 h-10 flex items-center justify-center shadow-md transition-all duration-200 ${
-            typeof page !== 'number' ? 'cursor-default' : ''
-          }`}
-          aria-label={typeof page === 'number' ? `${paginationText.page} ${page}` : undefined}
-          aria-current={page === currentPage ? 'page' : undefined}
-        >
-          {isRtl && typeof page === 'number' ? (page) : page}
-        </Button>
-      ))}
-
+      <span className="text-gray-700 text-sm font-semibold">
+        {paginationText.page}
+      </span>
       <Button
         variant="secondary"
         size="sm"
         onClick={handleNext}
         disabled={currentPage === totalPages}
-        className={`disabled:opacity-50 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full w-10 h-10 flex items-center justify-center shadow-md transition-all duration-200 ${
-          isRtl ? 'mr-2' : 'ml-2'
-        }`}
+        className="disabled:opacity-50 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg px-4 py-2 text-sm shadow-sm"
         aria-label={paginationText.next}
       >
-        {isRtl ? '‹' : '›'}
+        {paginationText.next}
       </Button>
-
-      <span className="text-sm text-gray-600 font-medium mx-3">
-        {paginationText.page}
-      </span>
     </motion.div>
   );
 };
