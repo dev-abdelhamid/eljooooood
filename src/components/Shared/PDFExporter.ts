@@ -13,7 +13,7 @@ const toArabicNumerals = (number: string | number): string => {
 const formatPrice = (amount: number | undefined, isRtl: boolean): string => {
   const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
   const formatted = validAmount.toFixed(2).replace('.', ',');
-  const arabicNumber = isRtl ? toArabicNumerals(formatted) : formatted;
+  const arabicNumber = isRtl ? (formatted) : formatted;
   return isRtl ? ` ر.س ${arabicNumber} ` : ` ${formatted} SAR`;
 };
 
