@@ -22,12 +22,71 @@ import OrderCardSkeleton from '../components/branch/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/branch/OrderTableSkeleton';
 
 // Lazy-loaded components
-const OrderTable = lazy(() => import('../components/branch/OrderTable'));
 const OrderCard = lazy(() => import('../components/branch/OrderCard'));
 const Pagination = lazy(() => import('../components/branch/Pagination'));
 const ViewModal = lazy(() => import('../components/branch/ViewModal'));
 const ConfirmDeliveryModal = lazy(() => import('../components/branch/ConfirmDeliveryModal'));
 const ReturnModal = lazy(() => import('../components/branch/ReturnModal'));
+
+// OrderTable component with fixes
+const OrderTable = ({ orders, t, isRtl, calculateAdjustedTotal, calculateTotalQuantity, startIndex, viewOrder, openConfirmDeliveryModal, openReturnModal, user, submitting }) => {
+  const headers = [
+    t('orders.order_number') || 'رقم الطلب',
+    t('orders.status') || 'الحالة',
+    t('orders.products') || 'المنتجات',
+    t('orders.total_amount') || 'إجمالي المبلغ',
+    t('orders.total_quantity') || 'الكمية الإجمالية',
+    t('orders.date') || 'التاريخ',
+    t('orders.priority') || 'الأولوية',
+    t('actions') || 'الإجراءات',
+  ];
+
+  return (
+    <div className="overflow-x-auto">
+      <table dir={isRtl ? 'rtl' : 'ltr'} className="w-full table-auto border-collapse text-center text-xs bg-white shadow-md rounded-md">
+        <thead>
+          <tr className="bg-gray-200">
+            {headers.map((header, index) => (
+              <th key={index} className="border px-4 py-2 font-bold">
+                {header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {orders.map((order, idx) => (
+            <tr key={order.id} className={idx % 2 === 0 ? 'bg-gray-50' : ''}>
+              <td className="border px-4 py-2">{order.orderNumber}</td>
+              <td className="border px-4 py-2">{t(`orders.status_${order.status}`) || order.status}</td>
+              <td className="border px-4 py-2">
+                {order.items.map(item => `(${item.quantity} ${t(`units.${item.unit || 'unit'}`) || item.unit} × ${getFirstTwoWords(item.productName)})`).join(' + ')}
+              </td>
+              <td className="border px-4 py-2">{calculateAdjustedTotal(order)}</td>
+              <td className="border px-4 py-2">{calculateTotalQuantity(order)}</td>
+              <td className="border px-4 py-2">{order.date}</td>
+              <td className="border px-4 py-2">{t(`orders.priority_${order.priority}`) || order.priority}</td>
+              <td className="border px-4 py-2 flex justify-center gap-2">
+                <Button variant="primary" onClick={() => viewOrder(order)} disabled={submitting === order.id}>
+                  {t('view') || 'عرض'}
+                </Button>
+                {order.status === OrderStatus.InTransit && (
+                  <Button variant="success" onClick={() => openConfirmDeliveryModal(order)} disabled={submitting === order.id}>
+                    {t('confirm_delivery') || 'تأكيد التسليم'}
+                  </Button>
+                )}
+                {order.items.map(item => (
+                  <Button key={item.itemId} variant="warning" onClick={() => openReturnModal(order, item.itemId)} disabled={submitting === order.id || item.returnedQuantity > 0}>
+                    {t('return_item') || 'إرجاع عنصر'}
+                  </Button>
+                ))}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
 
 // State and Action interfaces
 interface State {
@@ -538,7 +597,7 @@ const BranchOrders: React.FC = () => {
     };
   }, [user, t, isRtl, language, socket, emit, playNotificationSound]);
 
-  // Fetch orders with caching
+  // Fetch orders with caching, fetch all once
   const fetchData = useCallback(
     async (retryCount = 0) => {
       if (!user?.branchId || user.role !== 'branch') {
@@ -550,7 +609,7 @@ const BranchOrders: React.FC = () => {
       }
 
       dispatch({ type: 'SET_LOADING', payload: true });
-      const cacheKey = `${user.branchId}-${state.filterStatus}-${state.currentPage}-${state.viewMode}`;
+      const cacheKey = `${user.branchId}`;
       if (cacheRef.current.has(cacheKey)) {
         dispatch({ type: 'SET_ORDERS', payload: cacheRef.current.get(cacheKey)! });
         dispatch({ type: 'SET_LOADING', payload: false });
@@ -560,12 +619,6 @@ const BranchOrders: React.FC = () => {
       try {
         const response = await ordersAPI.getAll({
           branch: user.branchId,
-          status: state.filterStatus || undefined,
-          page: state.currentPage,
-          limit: ORDERS_PER_PAGE[state.viewMode],
-          search: state.searchQuery || undefined,
-          sortBy: state.sortBy,
-          sortOrder: state.sortOrder,
         });
         console.log('Orders API response:', response);
         if (!Array.isArray(response)) throw new Error('Invalid response format');
@@ -644,7 +697,7 @@ const BranchOrders: React.FC = () => {
         dispatch({ type: 'SET_LOADING', payload: false });
       }
     },
-    [user, state.filterStatus, state.currentPage, state.viewMode, state.searchQuery, state.sortBy, state.sortOrder, isRtl, t, language]
+    [user, isRtl, t, language]
   );
 
   // Calculate adjusted total for an order
@@ -673,7 +726,7 @@ const BranchOrders: React.FC = () => {
     return order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   }, []);
 
-  // Export to Excel
+  // Export to Excel with dynamic filename
   const exportToExcel = useCallback(() => {
     const headers = [
       isRtl ? 'رقم الطلب' : 'Order Number',
@@ -684,7 +737,7 @@ const BranchOrders: React.FC = () => {
       isRtl ? 'التاريخ' : 'Date',
       isRtl ? 'الأولوية' : 'Priority',
     ];
-    const data = state.orders.map(order => ({
+    const data = filteredOrders.map(order => ({
       [headers[0]]: order.orderNumber,
       [headers[1]]: t(`orders.status_${order.status}`) || order.status,
       [headers[2]]: order.items.map(item => `(${item.quantity} ${t(`units.${item.unit || 'unit'}`) || item.unit} × ${getFirstTwoWords(item.productName)})`).join(' + '),
@@ -696,41 +749,48 @@ const BranchOrders: React.FC = () => {
     const ws = XLSX.utils.json_to_sheet(isRtl ? data.map(row => Object.fromEntries(Object.entries(row).reverse())) : data, { header: headers });
     if (isRtl) ws['!views'] = [{ RTL: true }];
     ws['!cols'] = [
-      { wch: 15 }, // Order Number
-      { wch: 15 }, // Status
-      { wch: 40 }, // Products
-      { wch: 20 }, // Total Amount
-      { wch: 15 }, // Total Quantity
-      { wch: 20 }, // Date
-      { wch: 15 }, // Priority
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 40 },
+      { wch: 20 },
+      { wch: 15 },
+      { wch: 20 },
+      { wch: 15 },
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, isRtl ? 'الطلبات' : 'Orders');
-    XLSX.writeFile(wb, 'BranchOrders.xlsx');
+    let fileName = 'BranchOrders';
+    if (state.filterStatus) fileName += `_${t(`orders.status_${state.filterStatus}`) || state.filterStatus}`;
+    if (state.searchQuery) fileName += `_${state.searchQuery.replace(/\s+/g, '_')}`;
+    fileName += '.xlsx';
+    XLSX.writeFile(wb, fileName);
     toast.success(isRtl ? 'تم تصدير الملف بنجاح' : 'Export successful', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
-  }, [state.orders, t, isRtl, calculateAdjustedTotal, calculateTotalQuantity]);
+  }, [filteredOrders, t, isRtl, calculateAdjustedTotal, calculateTotalQuantity, state.filterStatus, state.searchQuery]);
 
-  // Export to PDF
+  // Export to PDF with dynamic filename and bold font
   const exportToPDF = useCallback(async () => {
     try {
       const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
       doc.setLanguage(isRtl ? 'ar' : 'en');
 
-      const fontUrl = '/fonts/Amiri-Regular.ttf'; // Changed to Amiri for better Arabic support
+      const fontUrl = '/fonts/Amiri-Regular.ttf';
+      const boldFontUrl = '/fonts/Amiri-Bold.ttf';
       const fontName = 'Amiri';
-      let fontBytes;
-      try {
-        const res = await fetch(fontUrl);
-        if (!res.ok) throw new Error('Failed to fetch font');
-        fontBytes = await res.arrayBuffer();
-      } catch (fetchErr) {
-        console.error('Failed to load font:', fetchErr);
-        toast.error(isRtl ? 'فشل في تحميل الخط للـ PDF' : 'Failed to load font for PDF', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
-        return;
-      }
+
+      const [fontBytes, boldFontBytes] = await Promise.all([
+        fetch(fontUrl).then(res => { if (!res.ok) throw new Error('Failed to fetch regular font'); return res.arrayBuffer(); }),
+        fetch(boldFontUrl).then(res => { if (!res.ok) throw new Error('Failed to fetch bold font'); return res.arrayBuffer(); }),
+      ]);
+
       const base64Font = arrayBufferToBase64(fontBytes);
+      const base64BoldFont = arrayBufferToBase64(boldFontBytes);
+
       doc.addFileToVFS(`${fontName}-Regular.ttf`, base64Font);
       doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
+
+      doc.addFileToVFS(`${fontName}-Bold.ttf`, base64BoldFont);
+      doc.addFont(`${fontName}-Bold.ttf`, fontName, 'bold');
+
       doc.setFont(fontName);
 
       doc.setFontSize(16);
@@ -746,7 +806,7 @@ const BranchOrders: React.FC = () => {
         'الأولوية',
       ];
 
-      const data = state.orders.map(order => [
+      const data = filteredOrders.map(order => [
         order.orderNumber,
         t(`orders.status_${order.status}`) || order.status,
         order.items.map(item => `(${item.quantity} ${t(`units.${item.unit || 'unit'}`) || item.unit} × ${getFirstTwoWords(item.productName)})`).join(' + '),
@@ -766,6 +826,7 @@ const BranchOrders: React.FC = () => {
           fontSize: 10, 
           halign: isRtl ? 'right' : 'left', 
           font: fontName, 
+          fontStyle: 'bold',
           cellPadding: 3 
         },
         bodyStyles: { 
@@ -817,13 +878,17 @@ const BranchOrders: React.FC = () => {
         styles: { overflow: 'linebreak', font: fontName, fontSize: 8, cellPadding: 3, halign: isRtl ? 'right' : 'left' },
       });
 
-      doc.save('BranchOrders.pdf');
+      let fileName = 'BranchOrders';
+      if (state.filterStatus) fileName += `_${t(`orders.status_${state.filterStatus}`) || state.filterStatus}`;
+      if (state.searchQuery) fileName += `_${state.searchQuery.replace(/\s+/g, '_')}`;
+      fileName += '.pdf';
+      doc.save(fileName);
       toast.success(isRtl ? 'تم تصدير PDF بنجاح' : 'PDF export successful', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
     } catch (err) {
       console.error('PDF export error:', err);
       toast.error(isRtl ? 'خطأ في تصدير PDF' : 'PDF export error', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
     }
-  }, [state.orders, t, isRtl, language, calculateAdjustedTotal, calculateTotalQuantity]);
+  }, [filteredOrders, t, isRtl, language, calculateAdjustedTotal, calculateTotalQuantity, state.filterStatus, state.searchQuery]);
 
   // Search handling
   const handleSearchChange = useCallback(
@@ -833,7 +898,7 @@ const BranchOrders: React.FC = () => {
     []
   );
 
-  // Filtered, sorted, and paginated orders
+  // Filtered, sorted, and paginated orders - all client-side
   const filteredOrders = useMemo(
     () =>
       state.orders.filter(
@@ -1070,11 +1135,10 @@ const BranchOrders: React.FC = () => {
     [t, isRtl, user, socket, isConnected, emit]
   );
 
-  // Clear cache on user or branch change
+  // Fetch all orders once on mount
   useEffect(() => {
-    cacheRef.current.clear();
     fetchData();
-  }, [user?.branchId, fetchData]);
+  }, [fetchData]);
 
   // Render
   return (
@@ -1091,23 +1155,23 @@ const BranchOrders: React.FC = () => {
             </div>
             <div className="flex gap-2 flex-wrap">
               <Button
-                variant={state.orders.length > 0 ? 'primary' : 'secondary'}
-                onClick={state.orders.length > 0 ? exportToExcel : undefined}
+                variant={filteredOrders.length > 0 ? 'primary' : 'secondary'}
+                onClick={filteredOrders.length > 0 ? exportToExcel : undefined}
                 className={`flex items-center gap-1.5 ${
-                  state.orders.length > 0 ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                  filteredOrders.length > 0 ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
                 } rounded-md px-3 py-1.5 text-xs shadow-sm`}
-                disabled={state.orders.length === 0}
+                disabled={filteredOrders.length === 0}
               >
                 <Download className="w-4 h-4" />
                 {isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
               </Button>
               <Button
-                variant={state.orders.length > 0 ? 'primary' : 'secondary'}
-                onClick={state.orders.length > 0 ? exportToPDF : undefined}
+                variant={filteredOrders.length > 0 ? 'primary' : 'secondary'}
+                onClick={filteredOrders.length > 0 ? exportToPDF : undefined}
                 className={`flex items-center gap-1.5 ${
-                  state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                  filteredOrders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
                 } rounded-md px-3 py-1.5 text-xs shadow-sm`}
-                disabled={state.orders.length === 0}
+                disabled={filteredOrders.length === 0}
               >
                 <Upload className="w-4 h-4" />
                 {isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
@@ -1203,7 +1267,7 @@ const BranchOrders: React.FC = () => {
                 </motion.div>
               ) : state.viewMode === 'table' ? (
                 <motion.div key="table-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-4">
-                  <div className="w-full">
+                  <div className="w-full mx-auto">
                     <OrderTable
                       orders={paginatedOrders.filter(o => o && o.id && o.branch && o.branch._id)}
                       t={t}
