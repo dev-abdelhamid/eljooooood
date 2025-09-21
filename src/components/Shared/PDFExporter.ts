@@ -151,7 +151,6 @@ const generatePDFTable = (
   isRtl: boolean,
   fontLoaded: boolean,
   fontName: string,
-  calculateAdjustedTotal: (order: Order) => string,
   calculateTotalQuantity: (order: Order) => number,
   translateUnit: (unit: string, isRtl: boolean) => string
 ) => {
@@ -306,7 +305,7 @@ export const exportToPDF = async (
 
     // Generate table
     generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName, calculateAdjustedTotal, calculateTotalQuantity, translateUnit);
-
+    generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName, calculateTotalQuantity, translateUnit);
     // Save the PDF
     const fileName = generateFileName(filterStatus, filterBranchName, isRtl);
     doc.save(fileName);
