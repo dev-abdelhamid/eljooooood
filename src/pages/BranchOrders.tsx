@@ -1,12 +1,12 @@
 import React, { useReducer, useEffect, useMemo, useCallback, lazy, Suspense, useRef, useState } from 'react';
-import { useLanguage } from '../contexts/LanguageContext';
-import { useAuth } from '../contexts/AuthContext';
-import { useSocket } from '../contexts/SocketContext';
-import { ordersAPI, inventoryAPI, returnsAPI } from '../services/api';
-import { Card } from '../components/UI/Card';
-import { Button } from '../components/UI/Button';
-import { Select } from '../components/UI/Select';
-import SearchInput from '../components/UI/SearchInput';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { useSocket } from '@/contexts/SocketContext';
+import { ordersAPI, inventoryAPI, returnsAPI } from '@/services/api';
+import { Card } from '@/components/UI/Card';
+import { Button } from '@/components/UI/Button';
+import { Select } from '@/components/UI/Select';
+import SearchInput from '@/components/UI/SearchInput';
 import { ShoppingCart, Download, Upload, Table2, Grid, AlertCircle } from 'lucide-react';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -14,20 +14,20 @@ import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
 import pdfMake from 'pdfmake/build/pdfmake';
 import pdfFonts from 'pdfmake/build/vfs_fonts';
-import { Order, ReturnForm, OrderStatus, ItemStatus } from '../components/branch/types';
-import { formatDate } from '../utils/formatDate';
-import { LoadingSpinner } from '../components/UI/LoadingSpinner';
-import { useOrderNotifications } from '../hooks/useOrderNotifications';
-import OrderCardSkeleton from '../components/branch/OrderCardSkeleton';
-import OrderTableSkeleton from '../components/branch/OrderTableSkeleton';
+import { Order, ReturnForm, OrderStatus, ItemStatus } from '@/components/branch/types';
+import { formatDate } from '@/utils/formatDate';
+import { LoadingSpinner } from '@/components/UI/LoadingSpinner';
+import { useOrderNotifications } from '@/hooks/useOrderNotifications';
+import OrderCardSkeleton from '@/components/branch/OrderCardSkeleton';
+import OrderTableSkeleton from '@/components/branch/OrderTableSkeleton';
 
 // Lazy-loaded components
-const OrderTable = lazy(() => import('../components/branch/OrderTable'));
-const OrderCard = lazy(() => import('../components/branch/OrderCard'));
-const Pagination = lazy(() => import('../components/branch/Pagination'));
-const ViewModal = lazy(() => import('../components/branch/ViewModal'));
-const ConfirmDeliveryModal = lazy(() => import('../components/branch/ConfirmDeliveryModal'));
-const ReturnModal = lazy(() => import('../components/branch/ReturnModal'));
+const OrderTable = lazy(() => import('@/components/branch/OrderTable'));
+const OrderCard = lazy(() => import('@/components/branch/OrderCard'));
+const Pagination = lazy(() => import('@/components/branch/Pagination'));
+const ViewModal = lazy(() => import('@/components/branch/ViewModal'));
+const ConfirmDeliveryModal = lazy(() => import('@/components/branch/ConfirmDeliveryModal'));
+const ReturnModal = lazy(() => import('@/components/branch/ReturnModal'));
 
 // إعداد خط الأسكندرية لـ pdfmake
 const loadFont = async () => {
@@ -44,13 +44,20 @@ const loadFont = async () => {
     pdfMake.fonts = {
       Alexandria: {
         normal: 'Alexandria-Regular.ttf',
-        bold: 'Alexandria-Regular.ttf',
-        italics: 'Alexandria-Regular.ttf',
-        bolditalics: 'Alexandria-Regular.ttf',
+        // لا نعين bold أو italics لتجنب الخطأ
       },
     };
   } catch (err) {
     console.error('Font loading error:', err);
+    // الرجوع إلى خط افتراضي في حالة فشل تحميل الخط
+    pdfMake.fonts = {
+      Roboto: {
+        normal: 'Roboto-Regular.ttf',
+        bold: 'Roboto-Medium.ttf',
+        italics: 'Roboto-Italic.ttf',
+        bolditalics: 'Roboto-MediumItalic.ttf',
+      },
+    };
   }
 };
 
@@ -836,16 +843,17 @@ const BranchOrders: React.FC = () => {
         styles: {
           header: {
             fontSize: 14,
-            bold: true,
+            font: 'Alexandria',
             margin: [0, 0, 0, 10],
           },
           subheader: {
             fontSize: 10,
+            font: 'Alexandria',
             margin: [0, 0, 0, 10],
           },
           tableHeader: {
-            bold: true,
             fontSize: 10,
+            font: 'Alexandria',
             color: 'white',
             fillColor: '#FFC107',
             alignment: isRtl ? 'right' : 'left',
