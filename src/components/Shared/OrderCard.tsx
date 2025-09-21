@@ -169,8 +169,13 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                               <p className="text-xs font-medium text-gray-900 truncate flex-1">
                                 {item.productName} ({item.quantity} {translateUnit(item.unit, isRtl)})
                               </p>
-                                                           <p className="text-xs font-semibold  px-1.5 py-0.5 text-teal-600">{item.price} {isRtl ? 'ريال' : 'SAR'}</p>
-
+  <span
+                                className={`px-1.5 py-0.5 rounded-full text-xs font-small flex items-center gap-1 ${itemStatusInfo.color} ${
+                                  isRtl ? 'flex-row-reverse' : ''
+                                }`}
+                              >
+                                {isRtl ? { pending: 'قيد الانتظار', assigned: 'معين', in_progress: 'قيد التقدم', completed: 'مكتمل' }[item.status] : itemStatusInfo.label}
+                              </span>
                             </div>
                             <div className="flex items-center justify-between gap-2 mt-1">
                               {item.assignedTo && (
@@ -180,13 +185,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                                     : `Assigned to: Chef ${item.assignedTo.name} (${item.department?.name || 'Unknown'})`}
                                 </p>
                               )}
-                               <span
-                                className={`px-1.5 py-0.5 rounded-full text-xs font-small flex items-center gap-1 ${itemStatusInfo.color} ${
-                                  isRtl ? 'flex-row-reverse' : ''
-                                }`}
-                              >
-                                {isRtl ? { pending: 'قيد الانتظار', assigned: 'معين', in_progress: 'قيد التقدم', completed: 'مكتمل' }[item.status] : itemStatusInfo.label}
-                              </span>
+                             
                             </div>
                           </motion.div>
                         );
