@@ -15,8 +15,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 interface Branch {
   _id: string;
   name: string;
-  nameEn?: string;
-  displayName: string;
   code: string;
   address: string;
   city: string;
@@ -25,8 +23,6 @@ interface Branch {
   user?: {
     _id: string;
     name: string;
-    nameEn?: string;
-    displayName: string;
     username: string;
     email?: string;
     phone?: string;
@@ -36,8 +32,6 @@ interface Branch {
   createdBy?: {
     _id: string;
     name: string;
-    nameEn?: string;
-    displayName: string;
     username: string;
   };
 }
@@ -60,7 +54,6 @@ export function Branches() {
 
   const [formData, setFormData] = useState({
     name: '',
-    nameEn: '',
     code: '',
     address: '',
     city: '',
@@ -68,11 +61,9 @@ export function Branches() {
     isActive: true,
     user: {
       name: '',
-      nameEn: '',
       username: '',
       email: '',
       phone: '',
-      password: '',
       isActive: true,
     },
   });
@@ -87,7 +78,7 @@ export function Branches() {
 
     setLoading(true);
     try {
-      const branches = await branchesAPI.getAll({ status: filterStatus === 'all' ? undefined : filterStatus, isRtl: isRtl.toString() });
+      const branches = await branchesAPI.getAll({ status: filterStatus === 'all' ? undefined : filterStatus });
       setBranches(Array.isArray(branches) ? branches : []);
       setError('');
     } catch (err: any) {
@@ -106,7 +97,7 @@ export function Branches() {
   const filteredBranches = branches.filter(
     (branch) =>
       branch &&
-      (branch.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (branch.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         branch.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         branch.city?.toLowerCase().includes(searchTerm.toLowerCase()))
   );
@@ -123,7 +114,6 @@ export function Branches() {
   const openAddModal = () => {
     setFormData({
       name: '',
-      nameEn: '',
       code: '',
       address: '',
       city: '',
@@ -131,11 +121,9 @@ export function Branches() {
       isActive: true,
       user: {
         name: '',
-        nameEn: '',
         username: '',
         email: '',
         phone: '',
-        password: '',
         isActive: true,
       },
     });
@@ -148,7 +136,6 @@ export function Branches() {
   const openEditModal = (branch: Branch) => {
     setFormData({
       name: branch.name,
-      nameEn: branch.nameEn || '',
       code: branch.code,
       address: branch.address,
       city: branch.city,
@@ -156,11 +143,9 @@ export function Branches() {
       isActive: branch.isActive,
       user: {
         name: branch.user?.name || '',
-        nameEn: branch.user?.nameEn || '',
         username: branch.user?.username || '',
         email: branch.user?.email || '',
         phone: branch.user?.phone || '',
-        password: '',
         isActive: branch.user?.isActive ?? true,
       },
     });
@@ -179,11 +164,11 @@ export function Branches() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.code || !formData.address || !formData.city || (!isEditMode && (!formData.user.username || !formData.user.name || !formData.user.password))) {
+    if (!formData.name || !formData.code || !formData.address || !formData.city || (!isEditMode && (!formData.user.username || !formData.user.name))) {
       setError(
         isEditMode
           ? t('branches.requiredFieldsEdit') || 'الاسم، الكود، العنوان، والمدينة مطلوبة'
-          : t('branches.requiredFields') || 'الاسم، الكود، العنوان، المدينة، اسم المستخدم، واسم المستخدم للفرع، وكلمة المرور مطلوبة'
+          : t('branches.requiredFields') || 'الاسم، الكود، العنوان، المدينة، اسم المستخدم، واسم المستخدم للفرع مطلوبة'
       );
       toast.error(t('branches.requiredFields'), { position: isRtl ? 'top-left' : 'top-right' });
       return;
@@ -201,21 +186,27 @@ export function Branches() {
     try {
       const branchData = {
         name: formData.name.trim(),
-        nameEn: formData.nameEn.trim() || undefined,
         code: formData.code.trim(),
         address: formData.address.trim(),
         city: formData.city.trim(),
         phone: formData.phone.trim() || undefined,
         isActive: formData.isActive,
-        user: {
-          name: formData.user.name.trim(),
-          nameEn: formData.user.nameEn.trim() || undefined,
-          username: formData.user.username.trim(),
-          email: formData.user.email.trim() || undefined,
-          phone: formData.user.phone.trim() || undefined,
-          isActive: formData.user.isActive,
-          ...(isEditMode ? {} : { password: formData.user.password }),
-        },
+        user: isEditMode
+          ? {
+              name: formData.user.name.trim(),
+              username: formData.user.username.trim(),
+              email: formData.user.email.trim() || undefined,
+              phone: formData.user.phone.trim() || undefined,
+              isActive: formData.user.isActive,
+            }
+          : {
+              name: formData.user.name.trim(),
+              username: formData.user.username.trim(),
+              email: formData.user.email.trim() || undefined,
+              phone: formData.user.phone.trim() || undefined,
+              isActive: formData.user.isActive,
+              password: formData.user.password,
+            },
       };
 
       if (isEditMode && selectedBranchId) {
@@ -231,12 +222,12 @@ export function Branches() {
         if (
           newBranch &&
           typeof newBranch === 'object' &&
-          newBranch._id &&
-          newBranch.name &&
-          newBranch.code &&
-          newBranch.address &&
-          newBranch.city &&
-          typeof newBranch.isActive === 'boolean'
+          (newBranch as Branch)._id &&
+          (newBranch as Branch).name &&
+          (newBranch as Branch).code &&
+          (newBranch as Branch).address &&
+          (newBranch as Branch).city &&
+          typeof (newBranch as Branch).isActive === 'boolean'
         ) {
           setBranches([...branches, newBranch as Branch]);
           toast.success(t('branches.added') || 'تم إضافة الفرع بنجاح', {
@@ -326,14 +317,16 @@ export function Branches() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen ">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div className={`mx-auto min-h-screen ${isRtl ? 'rtl' : 'ltr'}`}>
+    <div
+      className={`mx-auto  min-h-screen  ${isRtl ? 'rtl' : 'ltr'}`}
+    >
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -469,7 +462,7 @@ export function Branches() {
               <Card className="bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-lg text-amber-900 truncate">{branch.displayName}</h3>
+                    <h3 className="font-semibold text-lg text-amber-900 truncate">{branch.name}</h3>
                     <MapPin className="w-6 h-6 text-amber-600" />
                   </div>
                   <p className="text-sm text-gray-600">{t('branches.code') || 'الكود'}: {branch.code}</p>
@@ -481,8 +474,8 @@ export function Branches() {
                   </p>
                   {branch.user && (
                     <div className="mt-3 pt-3 border-t border-amber-100">
-                      <p className="text-sm text-gray-600">{t('branches.user') || 'المستخدم'}: {branch.user.displayName}</p>
-                      <p className="text-sm text-gray-600">{t('branches.username') || 'اسم المستخدم'}: {branch.user.username}</p>
+                      <p className="text-sm text-gray-600">{t('branches.user') || 'المستخدم'}: {branch.user.name || '-'}</p>
+                      <p className="text-sm text-gray-600">{t('branches.username') || 'اسم المستخدم'}: {branch.user.username || '-'}</p>
                       <p className="text-sm text-gray-600">{t('branches.email') || 'الإيميل'}: {branch.user.email || '-'}</p>
                       <p className="text-sm text-gray-600">{t('branches.userPhone') || 'هاتف المستخدم'}: {branch.user.phone || '-'}</p>
                       <p className={`text-sm font-medium ${branch.user.isActive ? 'text-green-600' : 'text-red-600'}`}>
@@ -492,7 +485,7 @@ export function Branches() {
                   )}
                   {branch.createdBy && (
                     <p className="text-sm text-gray-600 mt-2">
-                      {t('branches.createdBy') || 'تم الإنشاء بواسطة'}: {branch.createdBy.displayName}
+                      {t('branches.createdBy') || 'تم الإنشاء بواسطة'}: {branch.createdBy.name || '-'}
                     </p>
                   )}
                   {user?.role === 'admin' && (
@@ -551,13 +544,6 @@ export function Branches() {
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
-                label={t('branches.nameEn') || 'اسم الفرع (إنجليزي)'}
-                value={formData.nameEn}
-                onChange={(value) => setFormData({ ...formData, nameEn: value })}
-                placeholder={t('branches.nameEnPlaceholder') || 'Enter branch name (English)'}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
                 label={t('branches.code') || 'كود الفرع'}
                 value={formData.code}
                 onChange={(value) => setFormData({ ...formData, code: value })}
@@ -607,13 +593,6 @@ export function Branches() {
                 onChange={(value) => setFormData({ ...formData, user: { ...formData.user, name: value } })}
                 placeholder={t('branches.userNamePlaceholder') || 'أدخل اسم المستخدم'}
                 required={!isEditMode}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t('branches.userNameEn') || 'اسم المستخدم (إنجليزي)'}
-                value={formData.user.nameEn}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, nameEn: value } })}
-                placeholder={t('branches.userNameEnPlaceholder') || 'Enter user name (English)'}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
