@@ -979,7 +979,7 @@ export const Orders: React.FC = () => {
                         onNavigateToDetails={handleNavigateToDetails}
                       />
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 gap-3">
                         {paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber).map(order => (
                           <OrderCard
                             key={order.id}
