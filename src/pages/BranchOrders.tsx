@@ -20,6 +20,7 @@ import { Order, ReturnForm, OrderStatus, ItemStatus } from '../components/branch
 import { formatDate } from '../utils/formatDate';
 import OrderCardSkeleton from '../components/branch/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/branch/OrderTableSkeleton';
+import { exportToPDF } from '../components/branch/PDFExporter';
 
 // Lazy-loaded components
 const OrderTable = lazy(() => import('../components/branch/OrderTable'));
