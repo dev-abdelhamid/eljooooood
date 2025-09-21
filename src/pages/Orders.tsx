@@ -815,7 +815,7 @@ export const Orders: React.FC = () => {
   }, [fetchData]);
 
   return (
-    <div className="px-2 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-amber-50">
+    <div className="px-2 py-4">
       <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: 'easeOut' }} className="mb-6">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
@@ -860,13 +860,13 @@ export const Orders: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
-                <div className="relative flex flex-row-reverse">
-                  <Search className={`w-4 h-4 text-gray-500 absolute top-2 ${isRtl ? 'right-2' : 'left-2'}`} />
+                <div className="relative ">
+                  <Search className={`w-4 h-4 text-gray-500 absolute top-2 ${isRtl ? 'left-2' : 'right-2'}`} />
                   <Input
                     value={state.searchQuery}
                     onChange={(e) => handleSearchChange(e?.target?.value || '')}
                     placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
-                    className={`w-full ${isRtl ? 'pr-8 ' : 'pl-8'} rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200`}
+                    className={`w-full ${isRtl ? 'pl-8 ' : 'pr-8'} rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200`}
                   />
                 </div>
               </div>
