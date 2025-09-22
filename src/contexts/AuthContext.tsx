@@ -6,14 +6,19 @@ export interface User {
   username: string;
   role: 'admin' | 'branch' | 'chef' | 'production';
   name: string;
+  nameEn?: string;
+  email?: string;
+  phone?: string;
   branch?: string;
   department?: string;
+  isActive?: boolean;
 }
 
 interface AuthContextType {
   user: User | null;
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
+  updateUser: (userData: Partial<User>) => void;
   isAuthenticated: boolean;
 }
 
@@ -31,7 +36,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           const response = await authAPI.getProfile();
           if (response.success) {
-            setUser(response.user);
+            setUser({
+              id: response.user._id,
+              username: response.user.username,
+              role: response.user.role,
+              name: response.user.name,
+              nameEn: response.user.nameEn,
+              email: response.user.email,
+              phone: response.user.phone,
+              branch: response.user.branch?._id,
+              department: response.user.department?._id,
+              isActive: response.user.isActive,
+            });
             setIsAuthenticated(true);
           }
         } catch (error) {
@@ -52,7 +68,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (response.success) {
         localStorage.setItem('token', response.token);
         localStorage.setItem('user', JSON.stringify(response.user));
-        setUser(response.user);
+        setUser({
+          id: response.user._id,
+          username: response.user.username,
+          role: response.user.role,
+          name: response.user.name,
+          nameEn: response.user.nameEn,
+          email: response.user.email,
+          phone: response.user.phone,
+          branch: response.user.branch?._id,
+          department: response.user.department?._id,
+          isActive: response.user.isActive,
+        });
         setIsAuthenticated(true);
         return true;
       }
@@ -70,6 +97,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('user');
   };
 
+  const updateUser = (userData: Partial<User>) => {
+    setUser((prev) => (prev ? { ...prev, ...userData } : null));
+    localStorage.setItem('user', JSON.stringify({ ...user, ...userData }));
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 flex items-center justify-center">
@@ -84,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated }}>
+    <AuthContext.Provider value={{ user, login, logout, updateUser, isAuthenticated }}>
       {children}
     </AuthContext.Provider>
   );
