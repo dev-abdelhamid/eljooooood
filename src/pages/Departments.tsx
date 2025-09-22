@@ -19,12 +19,81 @@ interface Department {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  displayName: string;
 }
 
+const translations = {
+  ar: {
+    manage: 'إدارة الأقسام',
+    add: 'إضافة قسم',
+    addFirst: 'إضافة أول قسم',
+    noDepartments: 'لا توجد أقسام',
+    noMatch: 'لا توجد أقسام مطابقة',
+    empty: 'لا توجد أقسام متاحة',
+    searchPlaceholder: 'ابحث عن الأقسام...',
+    name: 'اسم القسم (عربي)',
+    nameEn: 'اسم القسم (إنجليزي)',
+    code: 'كود القسم',
+    description: 'الوصف',
+    namePlaceholder: 'أدخل اسم القسم',
+    nameEnPlaceholder: 'أدخل اسم القسم بالإنجليزية',
+    codePlaceholder: 'أدخل كود القسم',
+    descriptionPlaceholder: 'أدخل الوصف',
+    edit: 'تعديل القسم',
+    update: 'تحديث',
+    saveError: 'خطأ في حفظ القسم',
+    delete: 'حذف',
+    deleteConfirm: 'هل أنت متأكد من حذف هذا القسم؟',
+    deleteError: 'خطأ في الحذف: لا يمكن حذف قسم مرتبط بمنتجات أو شيفات نشطة',
+    deleted: 'تم الحذف بنجاح',
+    unauthorized: 'غير مصرح لك',
+    fetchError: 'خطأ في جلب البيانات',
+    active: 'نشط',
+    inactive: 'غير نشط',
+    status: 'الحالة',
+    createdAt: 'تاريخ الإنشاء',
+    updatedAt: 'تاريخ التحديث',
+    cancel: 'إلغاء',
+  },
+  en: {
+    manage: 'Manage Departments',
+    add: 'Add Department',
+    addFirst: 'Add First Department',
+    noDepartments: 'No Departments Found',
+    noMatch: 'No Matching Departments',
+    empty: 'No Departments Available',
+    searchPlaceholder: 'Search departments...',
+    name: 'Department Name (Arabic)',
+    nameEn: 'Department Name (English)',
+    code: 'Department Code',
+    description: 'Description',
+    namePlaceholder: 'Enter department name',
+    nameEnPlaceholder: 'Enter department name in English',
+    codePlaceholder: 'Enter department code',
+    descriptionPlaceholder: 'Enter description',
+    edit: 'Edit Department',
+    update: 'Update',
+    saveError: 'Error saving department',
+    delete: 'Delete',
+    deleteConfirm: 'Are you sure you want to delete this department?',
+    deleteError: 'Error deleting: Cannot delete department linked to active products or chefs',
+    deleted: 'Deleted successfully',
+    unauthorized: 'Unauthorized access',
+    fetchError: 'Error fetching data',
+    active: 'Active',
+    inactive: 'Inactive',
+    status: 'Status',
+    createdAt: 'Created At',
+    updatedAt: 'Updated At',
+    cancel: 'Cancel',
+  },
+};
+
 export function Departments() {
-  const { t, language } = useLanguage();
+  const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
+  const t = translations[isRtl ? 'ar' : 'en'];
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
@@ -42,8 +111,8 @@ export function Departments() {
   useEffect(() => {
     const fetchData = async () => {
       if (!user || !['admin'].includes(user.role)) {
-        setError(t('departments.unauthorized'));
-        toast.error(t('departments.unauthorized'), { position: isRtl ? 'top-right' : 'top-left' });
+        setError(t.unauthorized);
+        toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
         setLoading(false);
         return;
       }
@@ -53,7 +122,7 @@ export function Departments() {
         console.log(`[${new Date().toISOString()}] Fetching departments with params:`, { searchTerm, isRtl });
         const departmentsResponse = await departmentAPI.getAll({ isRtl });
         console.log(`[${new Date().toISOString()}] Departments response:`, departmentsResponse);
-        const data = departmentsResponse.data || (Array.isArray(departmentsResponse) ? departmentsResponse : []);
+        const data = Array.isArray(departmentsResponse.data) ? departmentsResponse.data : departmentsResponse.data || [];
         setDepartments(data.map((dept: any) => ({
           id: dept._id,
           name: dept.name,
@@ -63,6 +132,7 @@ export function Departments() {
           isActive: dept.isActive,
           createdAt: dept.createdAt,
           updatedAt: dept.updatedAt,
+          displayName: dept.displayName || (isRtl ? dept.name : dept.nameEn || dept.name),
         })));
         setError('');
       } catch (err: any) {
@@ -72,8 +142,8 @@ export function Departments() {
           message: err.message,
           url: err.config?.url,
         });
-        setError(err.message || t('departments.fetchError'));
-        toast.error(err.message || t('departments.fetchError'), { position: isRtl ? 'top-right' : 'top-left' });
+        setError(err.message || t.fetchError);
+        toast.error(err.message || t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
       } finally {
         setLoading(false);
       }
@@ -83,14 +153,14 @@ export function Departments() {
 
   const filteredDepartments = departments.filter(
     (department) =>
-      (isRtl ? department.name : department.nameEn || department.name).toLowerCase().includes(searchTerm.toLowerCase()) ||
+      department.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       department.code.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const openModal = (department?: Department) => {
     if (!user || !['admin'].includes(user.role)) {
-      setError(t('departments.unauthorized'));
-      toast.error(t('departments.unauthorized'), { position: isRtl ? 'top-right' : 'top-left' });
+      setError(t.unauthorized);
+      toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
     if (department) {
@@ -138,9 +208,10 @@ export function Departments() {
             id: updatedDepartment._id,
             createdAt: updatedDepartment.createdAt,
             updatedAt: updatedDepartment.updatedAt,
+            displayName: updatedDepartment.displayName || (isRtl ? updatedDepartment.name : updatedDepartment.nameEn || updatedDepartment.name),
           } : d))
         );
-        toast.success(t('departments.updated'), { position: isRtl ? 'top-right' : 'top-left' });
+        toast.success(t.update, { position: isRtl ? 'top-right' : 'top-left' });
       } else {
         const newDepartment = await departmentAPI.create(departmentData);
         setDepartments([...departments, {
@@ -148,32 +219,33 @@ export function Departments() {
           id: newDepartment._id,
           createdAt: newDepartment.createdAt,
           updatedAt: newDepartment.updatedAt,
+          displayName: newDepartment.displayName || (isRtl ? newDepartment.name : newDepartment.nameEn || newDepartment.name),
         }]);
-        toast.success(t('departments.added'), { position: isRtl ? 'top-right' : 'top-left' });
+        toast.success(t.add, { position: isRtl ? 'top-right' : 'top-left' });
       }
       closeModal();
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Submit error:`, err);
-      setError(err.message || t('departments.saveError'));
-      toast.error(err.message || t('departments.saveError'), { position: isRtl ? 'top-right' : 'top-left' });
+      setError(err.message || t.saveError);
+      toast.error(err.message || t.saveError, { position: isRtl ? 'top-right' : 'top-left' });
     }
   };
 
   const deleteDepartment = async (id: string) => {
     if (!user || !['admin'].includes(user.role)) {
-      setError(t('departments.unauthorized'));
-      toast.error(t('departments.unauthorized'), { position: isRtl ? 'top-right' : 'top-left' });
+      setError(t.unauthorized);
+      toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
-    if (confirm(t('departments.deleteConfirm'))) {
+    if (confirm(t.deleteConfirm)) {
       try {
         await departmentAPI.delete(id);
         setDepartments(departments.filter((d) => d.id !== id));
-        toast.success(t('departments.deleted'), { position: isRtl ? 'top-right' : 'top-left' });
+        toast.success(t.deleted, { position: isRtl ? 'top-right' : 'top-left' });
       } catch (err: any) {
         console.error(`[${new Date().toISOString()}] Delete error:`, err);
-        setError(err.message || t('departments.deleteError'));
-        toast.error(err.message || t('departments.deleteError'), { position: isRtl ? 'top-right' : 'top-left' });
+        setError(err.message || t.deleteError);
+        toast.error(err.message || t.deleteError, { position: isRtl ? 'top-right' : 'top-left' });
       }
     }
   };
@@ -191,7 +263,7 @@ export function Departments() {
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold text-gray-800 flex items-center gap-2">
           <Layers className="w-6 h-6 text-blue-500" />
-          {t('departments.manage')}
+          {t.manage}
         </h1>
         {user?.role === 'admin' && (
           <Button
@@ -200,7 +272,7 @@ export function Departments() {
             onClick={() => openModal()}
             className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-4 py-2"
           >
-            {t('departments.add')}
+            {t.add}
           </Button>
         )}
       </div>
@@ -217,10 +289,10 @@ export function Departments() {
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
           <Input
             value={searchTerm}
-            onChange={setSearchTerm}
-            placeholder={t('departments.searchPlaceholder')}
+            onChange={(value) => setSearchTerm(value)}
+            placeholder={t.searchPlaceholder}
             className="pl-10 border-gray-300 rounded-md focus:ring-blue-500"
-            aria-label={t('departments.searchPlaceholder')}
+            aria-label={t.searchPlaceholder}
           />
         </div>
       </Card>
@@ -229,8 +301,8 @@ export function Departments() {
         {filteredDepartments.length === 0 ? (
           <Card className="p-6 text-center bg-white rounded-md shadow-sm">
             <Layers className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-            <h3 className="text-lg font-medium text-gray-800">{t('departments.noDepartments')}</h3>
-            <p className="text-gray-500">{searchTerm ? t('departments.noMatch') : t('departments.empty')}</p>
+            <h3 className="text-lg font-medium text-gray-800">{t.noDepartments}</h3>
+            <p className="text-gray-500">{searchTerm ? t.noMatch : t.empty}</p>
             {user?.role === 'admin' && !searchTerm && (
               <Button
                 variant="primary"
@@ -238,7 +310,7 @@ export function Departments() {
                 onClick={() => openModal()}
                 className="mt-4 bg-blue-500 hover:bg-blue-600 text-white rounded-md px-4 py-2"
               >
-                {t('departments.addFirst')}
+                {t.addFirst}
               </Button>
             )}
           </Card>
@@ -246,31 +318,31 @@ export function Departments() {
           filteredDepartments.map((department) => (
             <Card key={department.id} className="bg-white rounded-md shadow-sm hover:shadow-md transition-shadow">
               <div className="p-4">
-                <h3 className="font-medium text-gray-800">{isRtl ? department.name : department.nameEn || department.name}</h3>
-                <p className="text-sm text-gray-500">{t('departments.code')}: {department.code}</p>
+                <h3 className="font-medium text-gray-800">{department.displayName}</h3>
+                <p className="text-sm text-gray-500">{t.code}: {department.code}</p>
                 {department.description && <p className="text-xs text-gray-400 mt-1">{department.description}</p>}
                 <p className="text-sm text-blue-500">
-                  {t('departments.status')}: {department.isActive ? t('departments.active') : t('departments.inactive')}
+                  {t.status}: {department.isActive ? t.active : t.inactive}
                 </p>
                 <p className="text-xs text-gray-400 mt-1">
-                  {t('departments.createdAt')}: {new Date(department.createdAt).toLocaleString()}
+                  {t.createdAt}: {new Date(department.createdAt).toLocaleString()}
                 </p>
                 <p className="text-xs text-gray-400 mt-1">
-                  {t('departments.updatedAt')}: {new Date(department.updatedAt).toLocaleString()}
+                  {t.updatedAt}: {new Date(department.updatedAt).toLocaleString()}
                 </p>
                 {user?.role === 'admin' && (
                   <div className="flex gap-2 mt-3">
                     <button
                       onClick={() => openModal(department)}
                       className="text-blue-500 hover:text-blue-700"
-                      title={t('departments.edit')}
+                      title={t.edit}
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => deleteDepartment(department.id)}
                       className="text-red-500 hover:text-red-700"
-                      title={t('departments.delete')}
+                      title={t.delete}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -285,40 +357,40 @@ export function Departments() {
       <Modal
         isOpen={isModalOpen}
         onClose={closeModal}
-        title={editingDepartment ? t('departments.edit') : t('departments.add')}
+        title={editingDepartment ? t.edit : t.add}
         size="md"
       >
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
           <div className="grid grid-cols-1 gap-4">
             <Input
-              label={t('departments.name')}
+              label={t.name}
               value={formData.name}
               onChange={(value) => setFormData({ ...formData, name: value })}
-              placeholder={t('departments.namePlaceholder')}
+              placeholder={t.namePlaceholder}
               required
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />
             <Input
-              label={t('departments.nameEn')}
+              label={t.nameEn}
               value={formData.nameEn}
               onChange={(value) => setFormData({ ...formData, nameEn: value })}
-              placeholder={t('departments.nameEnPlaceholder')}
+              placeholder={t.nameEnPlaceholder}
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />
             <Input
-              label={t('departments.code')}
+              label={t.code}
               value={formData.code}
               onChange={(value) => setFormData({ ...formData, code: value })}
-              placeholder={t('departments.codePlaceholder')}
+              placeholder={t.codePlaceholder}
               required
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('departments.description')}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t.description}</label>
               <textarea
                 value={formData.description}
                 onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder={t('departments.descriptionPlaceholder')}
+                placeholder={t.descriptionPlaceholder}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 rows={3}
               />
@@ -332,7 +404,7 @@ export function Departments() {
           )}
           <div className="flex gap-3">
             <Button type="submit" variant="primary" className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-4 py-2">
-              {editingDepartment ? t('departments.update') : t('departments.add')}
+              {editingDepartment ? t.update : t.add}
             </Button>
             <Button
               type="button"
@@ -340,7 +412,7 @@ export function Departments() {
               onClick={closeModal}
               className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-4 py-2"
             >
-              {t('cancel')}
+              {t.cancel}
             </Button>
           </div>
         </form>
