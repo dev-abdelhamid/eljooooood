@@ -68,10 +68,14 @@ api.interceptors.response.use(
           window.location.href = '/login';
           return Promise.reject({ message: 'التوكن منتهي الصلاحية ولا يوجد توكن منعش', status: 401 });
         }
-        const response = await axios.post<{ accessToken: string; refreshToken?: string }>(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
-        const { accessToken, refreshToken: newRefreshToken } = response.data;
+        const response = await axios.post<{ accessToken: string; refreshToken?: string; user: any }>(
+          `${API_BASE_URL}/auth/refresh-token`,
+          { refreshToken }
+        );
+        const { accessToken, refreshToken: newRefreshToken, user } = response.data;
         localStorage.setItem('token', accessToken);
         if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
+        if (user) localStorage.setItem('user', JSON.stringify(user));
         console.log(`[${new Date().toISOString()}] Token refreshed successfully`);
         originalRequest.headers.Authorization = `Bearer ${accessToken}`;
         return api(originalRequest);
@@ -108,15 +112,17 @@ export const authAPI = {
     return {
       ...response,
       user: {
-        ...(response as any).user,
-        _id: (response as any).user.id || (response as any).user._id,
+        ...response.user,
+        id: response.user.id || response.user._id,
       },
     };
   },
-  updateProfile: async (data: { name?: string; nameEn?: string; password?: string }) => {
-    const response = await api.put('/auth/profile', {
+  updateProfile: async (data: { name?: string; nameEn?: string; email?: string; phone?: string; password?: string }) => {
+    const response = await api.put('/auth/update-profile', {
       name: data.name?.trim(),
       nameEn: data.nameEn?.trim(),
+      email: data.email?.trim(),
+      phone: data.phone?.trim(),
       password: data.password,
     });
     console.log(`[${new Date().toISOString()}] Update profile response:`, response);
@@ -129,6 +135,7 @@ export const authAPI = {
   },
 };
 
+// بقية الـ APIs (productsAPI, branchesAPI, usersAPI, إلخ) تبقى زي ما هي
 export const productsAPI = {
   getAll: async (params: { department?: string; search?: string; page?: number; limit?: number; isRtl?: boolean } = {}) => {
     const response = await api.get('/products', { params });
@@ -205,7 +212,7 @@ export const productsAPI = {
   },
 };
 
-// Other APIs remain unchanged
+// بقية الـ APIs (branchesAPI, usersAPI, ordersAPI, departmentAPI, chefsAPI, إلخ) تبقى زي ما هي
 export const branchesAPI = {
   getAll: async () => {
     const response = await api.get('/branches');
@@ -434,6 +441,7 @@ export const usersAPI = {
   },
 };
 
+// بقية الـ APIs (ordersAPI, departmentAPI, chefsAPI, productionAssignmentsAPI, inventoryAPI, factoryInventoryAPI, notificationsAPI, returnsAPI, salesAPI) تبقى زي ما هي
 export const ordersAPI = {
   create: async (orderData: {
     orderNumber: string;
@@ -686,9 +694,6 @@ export const productionAssignmentsAPI = {
     return response;
   },
 };
-
-
-
 
 export const inventoryAPI = {
   getInventory: async (params = {}) => {
