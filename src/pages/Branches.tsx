@@ -15,7 +15,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 interface Branch {
   _id: string;
   name: string;
-  nameEn?: string;
   code: string;
   address: string;
   city: string;
@@ -24,29 +23,26 @@ interface Branch {
   user?: {
     _id: string;
     name: string;
-    nameEn?: string;
     username: string;
     email?: string;
     phone?: string;
     isActive: boolean;
+    branch: string;
   };
   createdBy?: {
     _id: string;
     name: string;
-    nameEn?: string;
     username: string;
   };
 }
 
-export const Branches: React.FC = () => {
+export function Branches() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
   const [branches, setBranches] = useState<Branch[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -54,42 +50,45 @@ export const Branches: React.FC = () => {
   const [selectedBranchId, setSelectedBranchId] = useState<string | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [resetPasswordData, setResetPasswordData] = useState({ password: '', confirmPassword: '' });
+
   const [formData, setFormData] = useState({
     name: '',
-    nameEn: '',
     code: '',
     address: '',
     city: '',
     phone: '',
     isActive: true,
-    user: { name: '', nameEn: '', username: '', email: '', phone: '', password: '', isActive: true },
+    user: {
+      name: '',
+      username: '',
+      email: '',
+      phone: '',
+      isActive: true,
+    },
   });
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const fetchData = useCallback(async () => {
     if (!user || user.role !== 'admin') {
       setError(t('branches.unauthorized') || 'غير مصرح لك بالوصول');
       setLoading(false);
-      toast.error(t('branches.unauthorized'), { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(t('branches.unauthorized'), { position: isRtl ? 'top-left' : 'top-right' });
       return;
     }
 
     setLoading(true);
     try {
-      const response = await branchesAPI.getAll({ status: filterStatus === 'all' ? undefined : filterStatus, page, limit: 10 });
-      setBranches(Array.isArray(response.data) ? response.data : []);
-      setTotalPages(response.totalPages || 1);
+      const branches = await branchesAPI.getAll({ status: filterStatus === 'all' ? undefined : filterStatus });
+      setBranches(Array.isArray(branches) ? branches : []);
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Fetch error:`, err);
       setError(err.response?.data?.message || t('branches.fetchError') || 'حدث خطأ أثناء جلب البيانات');
-      toast.error(t('branches.fetchError'), { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(t('branches.fetchError'), { position: isRtl ? 'top-left' : 'top-right' });
     } finally {
       setLoading(false);
     }
-  }, [t, user, filterStatus, page, isRtl]);
+  }, [t, user, filterStatus, isRtl]);
 
   useEffect(() => {
     fetchData();
@@ -98,7 +97,7 @@ export const Branches: React.FC = () => {
   const filteredBranches = branches.filter(
     (branch) =>
       branch &&
-      ((isRtl ? branch.name : branch.nameEn || branch.name)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (branch.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         branch.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         branch.city?.toLowerCase().includes(searchTerm.toLowerCase()))
   );
@@ -112,45 +111,31 @@ export const Branches: React.FC = () => {
     }
   };
 
-  const validateForm = () => {
-    const errors: Record<string, string> = {};
-    if (!formData.name) errors.name = t('branches.nameRequired') || 'اسم الفرع مطلوب';
-    if (!formData.nameEn) errors.nameEn = t('branches.nameEnRequired') || 'اسم الفرع بالإنجليزية مطلوب';
-    if (!formData.code) errors.code = t('branches.codeRequired') || 'كود الفرع مطلوب';
-    if (!formData.address) errors.address = t('branches.addressRequired') || 'العنوان مطلوب';
-    if (!formData.city) errors.city = t('branches.cityRequired') || 'المدينة مطلوبة';
-    if (!isEditMode) {
-      if (!formData.user.name) errors.userName = t('branches.userNameRequired') || 'اسم المستخدم مطلوب';
-      if (!formData.user.nameEn) errors.userNameEn = t('branches.userNameEnRequired') || 'اسم المستخدم بالإنجليزية مطلوب';
-      if (!formData.user.username) errors.username = t('branches.usernameRequired') || 'اسم المستخدم للفرع مطلوب';
-      if (!formData.user.password) errors.password = t('branches.passwordRequired') || 'كلمة المرور مطلوبة';
-    }
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
   const openAddModal = () => {
     setFormData({
       name: '',
-      nameEn: '',
       code: '',
       address: '',
       city: '',
       phone: '',
       isActive: true,
-      user: { name: '', nameEn: '', username: '', email: '', phone: '', password: '', isActive: true },
+      user: {
+        name: '',
+        username: '',
+        email: '',
+        phone: '',
+        isActive: true,
+      },
     });
     setIsEditMode(false);
     setSelectedBranchId(null);
     setIsModalOpen(true);
-    setFormErrors({});
     setError('');
   };
 
   const openEditModal = (branch: Branch) => {
     setFormData({
       name: branch.name,
-      nameEn: branch.nameEn || '',
       code: branch.code,
       address: branch.address,
       city: branch.city,
@@ -158,18 +143,15 @@ export const Branches: React.FC = () => {
       isActive: branch.isActive,
       user: {
         name: branch.user?.name || '',
-        nameEn: branch.user?.nameEn || '',
         username: branch.user?.username || '',
         email: branch.user?.email || '',
         phone: branch.user?.phone || '',
-        password: '',
         isActive: branch.user?.isActive ?? true,
       },
     });
     setIsEditMode(true);
     setSelectedBranchId(branch._id);
     setIsModalOpen(true);
-    setFormErrors({});
     setError('');
   };
 
@@ -180,16 +162,15 @@ export const Branches: React.FC = () => {
     setError('');
   };
 
-  const openDeleteModal = (branchId: string) => {
-    setSelectedBranchId(branchId);
-    setIsDeleteModalOpen(true);
-    setError('');
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) {
-      toast.error(t('branches.requiredFields') || 'يرجى ملء جميع الحقول المطلوبة', { position: isRtl ? 'top-right' : 'top-left' });
+    if (!formData.name || !formData.code || !formData.address || !formData.city || (!isEditMode && (!formData.user.username || !formData.user.name))) {
+      setError(
+        isEditMode
+          ? t('branches.requiredFieldsEdit') || 'الاسم، الكود، العنوان، والمدينة مطلوبة'
+          : t('branches.requiredFields') || 'الاسم، الكود، العنوان، المدينة، اسم المستخدم، واسم المستخدم للفرع مطلوبة'
+      );
+      toast.error(t('branches.requiredFields'), { position: isRtl ? 'top-left' : 'top-right' });
       return;
     }
 
@@ -197,7 +178,7 @@ export const Branches: React.FC = () => {
       const isEmailAvailable = await checkEmailAvailability(formData.user.email);
       if (!isEmailAvailable) {
         setError(t('branches.emailExists') || 'الإيميل مستخدم بالفعل، اختر إيميل آخر');
-        toast.error(t('branches.emailExists'), { position: isRtl ? 'top-right' : 'top-left' });
+        toast.error(t('branches.emailExists'), { position: isRtl ? 'top-left' : 'top-right' });
         return;
       }
     }
@@ -205,7 +186,6 @@ export const Branches: React.FC = () => {
     try {
       const branchData = {
         name: formData.name.trim(),
-        nameEn: formData.nameEn.trim(),
         code: formData.code.trim(),
         address: formData.address.trim(),
         city: formData.city.trim(),
@@ -214,7 +194,6 @@ export const Branches: React.FC = () => {
         user: isEditMode
           ? {
               name: formData.user.name.trim(),
-              nameEn: formData.user.nameEn.trim(),
               username: formData.user.username.trim(),
               email: formData.user.email.trim() || undefined,
               phone: formData.user.phone.trim() || undefined,
@@ -222,23 +201,42 @@ export const Branches: React.FC = () => {
             }
           : {
               name: formData.user.name.trim(),
-              nameEn: formData.user.nameEn.trim(),
               username: formData.user.username.trim(),
               email: formData.user.email.trim() || undefined,
               phone: formData.user.phone.trim() || undefined,
-              password: formData.user.password.trim(),
               isActive: formData.user.isActive,
+              password: formData.user.password,
             },
       };
 
       if (isEditMode && selectedBranchId) {
-        await branchesAPI.update(selectedBranchId, branchData);
-        setBranches(branches.map((b) => (b._id === selectedBranchId ? { ...b, ...branchData } : b)));
-        toast.success(t('branches.updated') || 'تم تحديث الفرع بنجاح', { position: isRtl ? 'top-right' : 'top-left' });
+        const updatedBranchResponse = await branchesAPI.update(selectedBranchId, branchData);
+        const updatedBranch = updatedBranchResponse.data ? updatedBranchResponse.data : updatedBranchResponse;
+        setBranches(branches.map((b) => (b._id === selectedBranchId ? { ...b, ...updatedBranch } : b)));
+        toast.success(t('branches.updated') || 'تم تحديث الفرع بنجاح', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
       } else {
         const response = await branchesAPI.create(branchData);
-        setBranches([...branches, response]);
-        toast.success(t('branches.added') || 'تم إضافة الفرع بنجاح', { position: isRtl ? 'top-right' : 'top-left' });
+        const newBranch = response.data ? response.data : response;
+        if (
+          newBranch &&
+          typeof newBranch === 'object' &&
+          (newBranch as Branch)._id &&
+          (newBranch as Branch).name &&
+          (newBranch as Branch).code &&
+          (newBranch as Branch).address &&
+          (newBranch as Branch).city &&
+          typeof (newBranch as Branch).isActive === 'boolean'
+        ) {
+          setBranches([...branches, newBranch as Branch]);
+          toast.success(t('branches.added') || 'تم إضافة الفرع بنجاح', {
+            position: isRtl ? 'top-left' : 'top-right',
+          });
+        } else {
+          setError(t('branches.createError') || 'حدث خطأ أثناء إضافة الفرع');
+          toast.error(t('branches.createError'), { position: isRtl ? 'top-left' : 'top-right' });
+        }
       }
       setIsModalOpen(false);
       setError('');
@@ -254,10 +252,10 @@ export const Branches: React.FC = () => {
             ? t('branches.usernameExists') || 'اسم المستخدم مستخدم بالفعل، اختر اسمًا آخر'
             : message.includes('الإيميل')
             ? t('branches.emailExists') || 'الإيميل مستخدم بالفعل، اختر إيميل آخر'
-            : message;
+            : message || errorMessage;
       }
       setError(errorMessage);
-      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
     }
   };
 
@@ -265,17 +263,17 @@ export const Branches: React.FC = () => {
     e.preventDefault();
     if (!resetPasswordData.password || !resetPasswordData.confirmPassword) {
       setError(t('branches.passwordRequired') || 'كلمة المرور وتأكيدها مطلوبان');
-      toast.error(t('branches.passwordRequired'), { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(t('branches.passwordRequired'), { position: isRtl ? 'top-left' : 'top-right' });
       return;
     }
     if (resetPasswordData.password !== resetPasswordData.confirmPassword) {
       setError(t('branches.passwordMismatch') || 'كلمة المرور وتأكيدها غير متطابقتين');
-      toast.error(t('branches.passwordMismatch'), { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(t('branches.passwordMismatch'), { position: isRtl ? 'top-left' : 'top-right' });
       return;
     }
     if (resetPasswordData.password.length < 6) {
       setError(t('branches.passwordTooShort') || 'كلمة المرور يجب أن تكون 6 أحرف على الأقل');
-      toast.error(t('branches.passwordTooShort'), { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(t('branches.passwordTooShort'), { position: isRtl ? 'top-left' : 'top-right' });
       return;
     }
 
@@ -284,23 +282,24 @@ export const Branches: React.FC = () => {
       setIsResetPasswordModalOpen(false);
       setResetPasswordData({ password: '', confirmPassword: '' });
       toast.success(t('branches.passwordResetSuccess') || 'تم إعادة تعيين كلمة المرور بنجاح', {
-        position: isRtl ? 'top-right' : 'top-left',
+        position: isRtl ? 'top-left' : 'top-right',
       });
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Reset password error:`, err);
       const errorMessage = err.response?.data?.message || t('branches.passwordResetError') || 'حدث خطأ أثناء إعادة تعيين كلمة المرور';
       setError(errorMessage);
-      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
     }
   };
 
-  const handleDelete = async () => {
-    if (!selectedBranchId) return;
+  const handleDelete = async (branchId: string) => {
+    if (!window.confirm(t('branches.confirmDelete') || 'هل أنت متأكد من حذف هذا الفرع؟')) return;
     try {
-      await branchesAPI.delete(selectedBranchId);
-      setBranches(branches.filter((b) => b._id !== selectedBranchId));
-      toast.success(t('branches.deleted') || 'تم حذف الفرع بنجاح', { position: isRtl ? 'top-right' : 'top-left' });
-      setIsDeleteModalOpen(false);
+      await branchesAPI.delete(branchId);
+      setBranches(branches.filter((b) => b._id !== branchId));
+      toast.success(t('branches.deleted') || 'تم حذف الفرع بنجاح', {
+        position: isRtl ? 'top-left' : 'top-right',
+      });
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Delete error:`, err);
@@ -309,23 +308,25 @@ export const Branches: React.FC = () => {
         errorMessage =
           err.response.data.message === 'Cannot delete branch with associated orders or inventory'
             ? t('branches.deleteRestricted') || 'لا يمكن حذف الفرع لوجود طلبات أو مخزون مرتبط'
-            : err.response.data.message;
+            : err.response.data.message || errorMessage;
       }
       setError(errorMessage);
-      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen ">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div className={`mx-auto p-4 sm:p-6 min-h-screen ${isRtl ? 'rtl' : 'ltr'}`}>
+    <div
+      className={`mx-auto  min-h-screen  ${isRtl ? 'rtl' : 'ltr'}`}
+    >
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -422,27 +423,6 @@ export const Branches: React.FC = () => {
             </motion.div>
           )}
         </AnimatePresence>
-        <div className="flex justify-center mt-6">
-          <Button
-            variant="outline"
-            onClick={() => setPage((p) => Math.max(p - 1, 1))}
-            disabled={page === 1}
-            className="mx-2 px-4 py-2 bg-amber-100 text-amber-800 disabled:opacity-50"
-          >
-            {t('branches.previous') || 'السابق'}
-          </Button>
-          <span className="px-4 py-2 text-amber-900">
-            {t('branches.page') || 'صفحة'} {page} {t('branches.of') || 'من'} {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-            disabled={page === totalPages}
-            className="mx-2 px-4 py-2 bg-amber-100 text-amber-800 disabled:opacity-50"
-          >
-            {t('branches.next') || 'التالي'}
-          </Button>
-        </div>
       </Card>
 
       <motion.div
@@ -482,7 +462,7 @@ export const Branches: React.FC = () => {
               <Card className="bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-lg text-amber-900 truncate">{isRtl ? branch.name : branch.nameEn || branch.name}</h3>
+                    <h3 className="font-semibold text-lg text-amber-900 truncate">{branch.name}</h3>
                     <MapPin className="w-6 h-6 text-amber-600" />
                   </div>
                   <p className="text-sm text-gray-600">{t('branches.code') || 'الكود'}: {branch.code}</p>
@@ -494,8 +474,8 @@ export const Branches: React.FC = () => {
                   </p>
                   {branch.user && (
                     <div className="mt-3 pt-3 border-t border-amber-100">
-                      <p className="text-sm text-gray-600">{t('branches.user') || 'المستخدم'}: {isRtl ? branch.user.name : branch.user.nameEn || branch.user.name}</p>
-                      <p className="text-sm text-gray-600">{t('branches.username') || 'اسم المستخدم'}: {branch.user.username}</p>
+                      <p className="text-sm text-gray-600">{t('branches.user') || 'المستخدم'}: {branch.user.name || '-'}</p>
+                      <p className="text-sm text-gray-600">{t('branches.username') || 'اسم المستخدم'}: {branch.user.username || '-'}</p>
                       <p className="text-sm text-gray-600">{t('branches.email') || 'الإيميل'}: {branch.user.email || '-'}</p>
                       <p className="text-sm text-gray-600">{t('branches.userPhone') || 'هاتف المستخدم'}: {branch.user.phone || '-'}</p>
                       <p className={`text-sm font-medium ${branch.user.isActive ? 'text-green-600' : 'text-red-600'}`}>
@@ -505,7 +485,7 @@ export const Branches: React.FC = () => {
                   )}
                   {branch.createdBy && (
                     <p className="text-sm text-gray-600 mt-2">
-                      {t('branches.createdBy') || 'تم الإنشاء بواسطة'}: {isRtl ? branch.createdBy.name : branch.createdBy.nameEn || branch.createdBy.name}
+                      {t('branches.createdBy') || 'تم الإنشاء بواسطة'}: {branch.createdBy.name || '-'}
                     </p>
                   )}
                   {user?.role === 'admin' && (
@@ -513,24 +493,21 @@ export const Branches: React.FC = () => {
                       <button
                         onClick={() => openEditModal(branch)}
                         className="text-amber-600 hover:text-amber-800 transition-colors"
-                        data-tooltip-id={`edit-${branch._id}`}
-                        data-tooltip-content={t('branches.edit') || 'تعديل الفرع'}
+                        title={t('branches.edit') || 'تعديل الفرع'}
                       >
                         <Edit2 className="w-5 h-5" />
                       </button>
                       <button
                         onClick={() => openResetPasswordModal(branch)}
                         className="text-blue-500 hover:text-blue-700 transition-colors"
-                        data-tooltip-id={`reset-${branch._id}`}
-                        data-tooltip-content={t('branches.resetPassword') || 'إعادة تعيين كلمة المرور'}
+                        title={t('branches.resetPassword') || 'إعادة تعيين كلمة المرور'}
                       >
                         <Key className="w-5 h-5" />
                       </button>
                       <button
-                        onClick={() => openDeleteModal(branch._id)}
+                        onClick={() => handleDelete(branch._id)}
                         className="text-red-500 hover:text-red-700 transition-colors"
-                        data-tooltip-id={`delete-${branch._id}`}
-                        data-tooltip-content={t('branches.delete') || 'حذف الفرع'}
+                        title={t('branches.delete') || 'حذف الفرع'}
                       >
                         <Trash2 className="w-5 h-5" />
                       </button>
@@ -549,7 +526,7 @@ export const Branches: React.FC = () => {
         title={isEditMode ? t('branches.edit') || 'تعديل الفرع' : t('branches.add') || 'إضافة فرع'}
         size="lg"
       >
-        <form onSubmit={handleSubmit} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
+        <form onSubmit={handleSubmit} className="space-y-6">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -559,21 +536,11 @@ export const Branches: React.FC = () => {
             <div className="space-y-6">
               <h3 className="text-lg font-semibold text-amber-900">{t('branches.branchDetails') || 'تفاصيل الفرع'}</h3>
               <Input
-                label={t('branches.name') || 'اسم الفرع (عربي)'}
+                label={t('branches.name') || 'اسم الفرع'}
                 value={formData.name}
                 onChange={(value) => setFormData({ ...formData, name: value })}
                 placeholder={t('branches.namePlaceholder') || 'أدخل اسم الفرع'}
                 required
-                error={formErrors.name}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t('branches.nameEn') || 'اسم الفرع (إنجليزي)'}
-                value={formData.nameEn}
-                onChange={(value) => setFormData({ ...formData, nameEn: value })}
-                placeholder={t('branches.nameEnPlaceholder') || 'أدخل اسم الفرع بالإنجليزية'}
-                required
-                error={formErrors.nameEn}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
@@ -582,7 +549,6 @@ export const Branches: React.FC = () => {
                 onChange={(value) => setFormData({ ...formData, code: value })}
                 placeholder={t('branches.codePlaceholder') || 'أدخل كود الفرع'}
                 required
-                error={formErrors.code}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
@@ -591,7 +557,6 @@ export const Branches: React.FC = () => {
                 onChange={(value) => setFormData({ ...formData, address: value })}
                 placeholder={t('branches.addressPlaceholder') || 'أدخل العنوان'}
                 required
-                error={formErrors.address}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
@@ -600,7 +565,6 @@ export const Branches: React.FC = () => {
                 onChange={(value) => setFormData({ ...formData, city: value })}
                 placeholder={t('branches.cityPlaceholder') || 'أدخل المدينة'}
                 required
-                error={formErrors.city}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
@@ -624,21 +588,11 @@ export const Branches: React.FC = () => {
             <div className="space-y-6">
               <h3 className="text-lg font-semibold text-amber-900">{t('branches.userDetails') || 'تفاصيل المستخدم'}</h3>
               <Input
-                label={t('branches.userName') || 'اسم المستخدم (عربي)'}
+                label={t('branches.userName') || 'اسم المستخدم'}
                 value={formData.user.name}
                 onChange={(value) => setFormData({ ...formData, user: { ...formData.user, name: value } })}
                 placeholder={t('branches.userNamePlaceholder') || 'أدخل اسم المستخدم'}
                 required={!isEditMode}
-                error={formErrors.userName}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t('branches.userNameEn') || 'اسم المستخدم (إنجليزي)'}
-                value={formData.user.nameEn}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, nameEn: value } })}
-                placeholder={t('branches.userNameEnPlaceholder') || 'أدخل اسم المستخدم بالإنجليزية'}
-                required={!isEditMode}
-                error={formErrors.userNameEn}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
@@ -647,7 +601,6 @@ export const Branches: React.FC = () => {
                 onChange={(value) => setFormData({ ...formData, user: { ...formData.user, username: value } })}
                 placeholder={t('branches.usernamePlaceholder') || 'أدخل اسم المستخدم للفرع'}
                 required={!isEditMode}
-                error={formErrors.username}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
@@ -682,7 +635,6 @@ export const Branches: React.FC = () => {
                   placeholder={t('branches.passwordPlaceholder') || 'أدخل كلمة المرور للفرع'}
                   type="password"
                   required
-                  error={formErrors.password}
                   className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
                 />
               )}
@@ -727,7 +679,7 @@ export const Branches: React.FC = () => {
         title={t('branches.resetPassword') || 'إعادة تعيين كلمة المرور'}
         size="sm"
       >
-        <form onSubmit={handleResetPassword} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
+        <form onSubmit={handleResetPassword} className="space-y-6">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -785,50 +737,6 @@ export const Branches: React.FC = () => {
           </div>
         </form>
       </Modal>
-
-      <Modal
-        isOpen={isDeleteModalOpen}
-        onClose={() => setIsDeleteModalOpen(false)}
-        title={t('branches.confirmDelete') || 'تأكيد حذف الفرع'}
-        size="sm"
-      >
-        <div className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-          <p className="text-gray-600">{t('branches.deleteWarning') || 'هل أنت متأكد من حذف هذا الفرع؟ لا يمكن التراجع عن هذا الإجراء.'}</p>
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3"
-              >
-                <AlertCircle className="w-5 h-5 text-red-600" />
-                <span className="text-red-600 font-medium">{error}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <div className="flex gap-4 mt-6">
-            <Button
-              type="button"
-              variant="danger"
-              onClick={handleDelete}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
-            >
-              {t('branches.delete') || 'حذف'}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setIsDeleteModalOpen(false)}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
-            >
-              {t('cancel') || 'إلغاء'}
-            </Button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
-};
-
-export default Branches;
+}
