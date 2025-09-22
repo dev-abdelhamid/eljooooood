@@ -1,19 +1,46 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { authAPI } from '../services/api';
 
+interface Branch {
+  id: string;
+  name: string;
+  nameEn?: string;
+  code: string;
+  address: string;
+  city: string;
+  phone?: string;
+}
+
+interface Department {
+  id: string;
+  name: string;
+  nameEn?: string;
+  code: string;
+  description?: string;
+}
+
 export interface User {
   id: string;
   username: string;
   role: 'admin' | 'branch' | 'chef' | 'production';
   name: string;
-  branch?: string;
-  department?: string;
+  nameEn?: string;
+  email?: string;
+  phone?: string;
+  isActive: boolean;
+  lastLogin?: string;
+  createdAt: string;
+  updatedAt: string;
+  branch?: Branch;
+  department?: Department;
+  permissions: string[];
 }
 
 interface AuthContextType {
   user: User | null;
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => void;
+  updateUser: (user: User) => void;
   isAuthenticated: boolean;
 }
 
@@ -33,11 +60,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (response.success) {
             setUser(response.user);
             setIsAuthenticated(true);
+            localStorage.setItem('user', JSON.stringify(response.user));
           }
         } catch (error) {
           console.error('Auth initialization error:', error);
           localStorage.removeItem('token');
           localStorage.removeItem('user');
+          localStorage.removeItem('refreshToken');
         }
       }
       setLoading(false);
@@ -51,6 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await authAPI.login({ username, password });
       if (response.success) {
         localStorage.setItem('token', response.token);
+        localStorage.setItem('refreshToken', response.refreshToken);
         localStorage.setItem('user', JSON.stringify(response.user));
         setUser(response.user);
         setIsAuthenticated(true);
@@ -68,6 +98,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsAuthenticated(false);
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    localStorage.removeItem('refreshToken');
+  };
+
+  const updateUser = (updatedUser: User) => {
+    setUser(updatedUser);
+    localStorage.setItem('user', JSON.stringify(updatedUser));
   };
 
   if (loading) {
@@ -84,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated }}>
+    <AuthContext.Provider value={{ user, login, logout, updateUser, isAuthenticated }}>
       {children}
     </AuthContext.Provider>
   );
