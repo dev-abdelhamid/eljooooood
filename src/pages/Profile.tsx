@@ -9,6 +9,7 @@ import { Modal } from '../components/UI/Modal';
 import { AlertCircle, Edit2, Key, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
+import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 
 interface ProfileData {
   _id: string;
