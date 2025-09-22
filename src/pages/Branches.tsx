@@ -38,7 +38,7 @@ interface Branch {
   };
 }
 
-const Branches: React.FC = () => {
+export const Branches: React.FC = () => {
   const { t, language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';

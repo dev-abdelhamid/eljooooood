@@ -36,7 +36,7 @@ interface Department {
   name: string;
 }
 
-const Users: React.FC = () => {
+export const Users: React.FC = () => {
   const { t, language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
