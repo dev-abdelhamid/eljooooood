@@ -8,7 +8,7 @@ import { Input } from '../components/UI/Input';
 import { Select } from '../components/UI/Select';
 import { Modal } from '../components/UI/Modal';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
-import { User, Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key } from 'lucide-react';
+import { User, Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key, Eye } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -65,11 +65,12 @@ const translations = {
     username: 'اسم المستخدم',
     email: 'الإيميل',
     phone: 'الهاتف',
+    branch: 'الفرع',
     department: 'القسم',
     createdAt: 'تاريخ الإنشاء',
     updatedAt: 'تاريخ التحديث',
     edit: 'تعديل',
-    resetPassword: 'إعادة تعيين كلمة المرور',
+    resetPassword: 'تغيير كلمة المرور',
     delete: 'حذف',
     name: 'اسم المستخدم (عربي)',
     nameEn: 'اسم المستخدم (إنجليزي)',
@@ -112,6 +113,8 @@ const translations = {
     deleteError: 'حدث خطأ أثناء حذف المستخدم',
     deleted: 'تم حذف المستخدم بنجاح',
     profile: 'عرض التفاصيل',
+    viewCurrentPassword: 'عرض كلمة المرور الحالية',
+    currentPasswordNotAvailable: 'كلمة المرور الحالية غير متاحة للعرض لأسباب أمنية.',
   },
   en: {
     manage: 'Manage Users',
@@ -139,11 +142,12 @@ const translations = {
     username: 'Username',
     email: 'Email',
     phone: 'Phone',
+    branch: 'Branch',
     department: 'Department',
     createdAt: 'Created At',
     updatedAt: 'Updated At',
     edit: 'Edit',
-    resetPassword: 'Reset Password',
+    resetPassword: 'Change Password',
     delete: 'Delete',
     name: 'User Name (Arabic)',
     nameEn: 'User Name (English)',
@@ -186,12 +190,14 @@ const translations = {
     deleteError: 'An error occurred while deleting the user',
     deleted: 'User deleted successfully',
     profile: 'View Details',
+    viewCurrentPassword: 'View Current Password',
+    currentPasswordNotAvailable: 'Current password is not available for view due to security reasons.',
   },
 };
 
 export const Users: React.FC = () => {
   const { language } = useLanguage();
-  const { user } = useAuth();
+  const { user: loggedInUser } = useAuth();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   const [users, setUsers] = useState<User[]>([]);
@@ -225,9 +231,10 @@ export const Users: React.FC = () => {
     isActive: true,
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [showPassword, setShowPassword] = useState(false);
 
   const fetchData = useCallback(async () => {
-    if (!user || user.role !== 'admin') {
+    if (!loggedInUser || loggedInUser.role !== 'admin') {
       setError(t.unauthorized);
       setLoading(false);
       toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
@@ -247,12 +254,13 @@ export const Users: React.FC = () => {
       setTotalPages(usersResponse.totalPages || Math.ceil(usersResponse.length / 10));
       setError('');
     } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] Fetch error:`, err);
       setError(err.message || t.fetchError);
       toast.error(t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
     } finally {
       setLoading(false);
     }
-  }, [user, filterStatus, filterRole, page, t, isRtl]);
+  }, [loggedInUser, filterStatus, filterRole, page, t, isRtl]);
 
   useEffect(() => {
     fetchData();
@@ -401,7 +409,7 @@ export const Users: React.FC = () => {
     }
 
     try {
-      await usersAPI.resetPassword(selectedUser!._id, resetPasswordData.password);
+      await usersAPI.resetPassword(selectedUser!._id, { password: resetPasswordData.password });
       setIsResetPasswordModalOpen(false);
       setResetPasswordData({ password: '', confirmPassword: '' });
       toast.success(t.passwordResetSuccess, { position: isRtl ? 'top-right' : 'top-left' });
@@ -447,7 +455,7 @@ export const Users: React.FC = () => {
           <User className="w-6 h-6 text-amber-600" />
           {t.manage}
         </h1>
-        {user?.role === 'admin' && (
+        {loggedInUser?.role === 'admin' && (
           <Button
             variant="primary"
             icon={Plus}
@@ -595,11 +603,11 @@ export const Users: React.FC = () => {
         {filteredUsers.length === 0 ? (
           <Card className="p-6 text-center bg-white rounded-xl shadow-sm col-span-full">
             <User className="w-10 h-10 text-amber-400 mx-auto mb-3" />
-            <h3 className="text-lg font-semibold text-gray-800">{t.noUsers}</h3>
+            <h3 className="text-base font-semibold text-gray-800">{t.noUsers}</h3>
             <p className="text-gray-500 text-sm mt-2">
               {searchTerm || filterStatus !== 'all' || filterRole !== 'all' ? t.noMatch : t.empty}
             </p>
-            {user?.role === 'admin' && !searchTerm && filterStatus === 'all' && filterRole === 'all' && (
+            {loggedInUser?.role === 'admin' && !searchTerm && filterStatus === 'all' && filterRole === 'all' && (
               <Button
                 variant="primary"
                 icon={Plus}
@@ -624,18 +632,18 @@ export const Users: React.FC = () => {
                     <h3 className="font-semibold text-base text-gray-800 truncate">{isRtl ? user.name : user.nameEn || user.name}</h3>
                     <User className="w-5 h-5 text-amber-600" />
                   </div>
-                  <div className="space-y-1 text-sm">
-                    <p className="text-gray-600 flex"><span className="w-20 font-medium">{t.username}:</span> <span className="truncate">{user.username}</span></p>
-                    <p className="text-gray-600 flex"><span className="w-20 font-medium">{t.email}:</span> <span className="truncate">{user.email || '-'}</span></p>
-                    <p className="text-gray-600 flex"><span className="w-20 font-medium">{t.phone}:</span> <span>{user.phone || '-'}</span></p>
-                    <p className="text-gray-600 flex"><span className="w-20 font-medium">{t.role}:</span> <span>{t[user.role]}</span></p>
-                    <p className="text-gray-600 flex"><span className="w-20 font-medium">{t.branch}:</span> <span>{user.branch ? (isRtl ? user.branch.name : user.branch.nameEn || user.branch.name) : '-'}</span></p>
-                    <p className="text-gray-600 flex"><span className="w-20 font-medium">{t.department}:</span> <span>{user.department?.name || '-'}</span></p>
+                  <div className="space-y-1 text-xs">
+                    <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.username}:</span> <span className="truncate">{user.username}</span></p>
+                    <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.email}:</span> <span className="truncate">{user.email || '-'}</span></p>
+                    <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.phone}:</span> <span>{user.phone || '-'}</span></p>
+                    <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.role}:</span> <span>{t[user.role]}</span></p>
+                    <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.branch}:</span> <span>{user.branch ? (isRtl ? user.branch.name : user.branch.nameEn || user.branch.name) : '-'}</span></p>
+                    <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.department}:</span> <span>{user.department?.name || '-'}</span></p>
                     <p className={`flex ${user.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                      <span className="w-20 font-medium">{t.status}:</span> <span>{user.isActive ? t.active : t.inactive}</span>
+                      <span className="w-16 font-medium">{t.status}:</span> <span>{user.isActive ? t.active : t.inactive}</span>
                     </p>
                   </div>
-                  {user?.role === 'admin' && (
+                  {loggedInUser?.role === 'admin' && (
                     <div className="flex gap-2 mt-3">
                       <Button
                         variant="outline"
@@ -793,7 +801,7 @@ export const Users: React.FC = () => {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
+                className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
               >
                 <AlertCircle className="w-5 h-5 text-red-500" />
                 <span className="text-red-500 text-sm font-medium">{error}</span>
@@ -833,44 +841,48 @@ export const Users: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-800">{isRtl ? selectedUser.name : selectedUser.nameEn || selectedUser.name}</h3>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-              <div className="flex">
-                <span className="w-24 font-medium text-gray-600">{t.username}:</span>
-                <span className="text-gray-800">{selectedUser.username}</span>
+              <div className="flex flex-row items-center gap-2">
+                <span className="w-20 font-medium text-gray-600">{t.username}:</span>
+                <span className="text-gray-800 truncate">{selectedUser.username}</span>
               </div>
-              <div className="flex">
-                <span className="w-24 font-medium text-gray-600">{t.email}:</span>
-                <span className="text-gray-800">{selectedUser.email || '-'}</span>
+              <div className="flex flex-row items-center gap-2">
+                <span className="w-20 font-medium text-gray-600">{t.email}:</span>
+                <span className="text-gray-800 truncate">{selectedUser.email || '-'}</span>
               </div>
-              <div className="flex">
-                <span className="w-24 font-medium text-gray-600">{t.phone}:</span>
+              <div className="flex flex-row items-center gap-2">
+                <span className="w-20 font-medium text-gray-600">{t.phone}:</span>
                 <span className="text-gray-800">{selectedUser.phone || '-'}</span>
               </div>
-              <div className="flex">
-                <span className="w-24 font-medium text-gray-600">{t.role}:</span>
+              <div className="flex flex-row items-center gap-2">
+                <span className="w-20 font-medium text-gray-600">{t.role}:</span>
                 <span className="text-gray-800">{t[selectedUser.role]}</span>
               </div>
-              <div className="flex">
-                <span className="w-24 font-medium text-gray-600">{t.branch}:</span>
+              <div className="flex flex-row items-center gap-2">
+                <span className="w-20 font-medium text-gray-600">{t.branch}:</span>
                 <span className="text-gray-800">{selectedUser.branch ? (isRtl ? selectedUser.branch.name : selectedUser.branch.nameEn || selectedUser.branch.name) : '-'}</span>
               </div>
-              <div className="flex">
-                <span className="w-24 font-medium text-gray-600">{t.department}:</span>
+              <div className="flex flex-row items-center gap-2">
+                <span className="w-20 font-medium text-gray-600">{t.department}:</span>
                 <span className="text-gray-800">{selectedUser.department?.name || '-'}</span>
               </div>
-              <div className="flex">
-                <span className="w-24 font-medium text-gray-600">{t.status}:</span>
+              <div className="flex flex-row items-center gap-2">
+                <span className="w-20 font-medium text-gray-600">{t.status}:</span>
                 <span className={`font-medium ${selectedUser.isActive ? 'text-green-600' : 'text-red-600'}`}>
                   {selectedUser.isActive ? t.active : t.inactive}
                 </span>
               </div>
-              <div className="flex">
-                <span className="w-24 font-medium text-gray-600">{t.createdAt}:</span>
+              <div className="flex flex-row items-center gap-2">
+                <span className="w-20 font-medium text-gray-600">{t.createdAt}:</span>
                 <span className="text-gray-800">{new Date(selectedUser.createdAt).toLocaleString()}</span>
               </div>
-              <div className="flex">
-                <span className="w-24 font-medium text-gray-600">{t.updatedAt}:</span>
+              <div className="flex flex-row items-center gap-2">
+                <span className="w-20 font-medium text-gray-600">{t.updatedAt}:</span>
                 <span className="text-gray-800">{new Date(selectedUser.updatedAt).toLocaleString()}</span>
               </div>
+            </div>
+            <div className="mt-4 p-3 bg-gray-100 rounded-lg flex flex-col gap-2">
+              <p className="text-sm text-gray-600 font-medium">{t.viewCurrentPassword}</p>
+              <p className="text-gray-800 text-sm">{t.currentPasswordNotAvailable}</p>
             </div>
             <Button
               variant="secondary"
@@ -921,7 +933,7 @@ export const Users: React.FC = () => {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
+                className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
               >
                 <AlertCircle className="w-5 h-5 text-red-500" />
                 <span className="text-red-500 text-sm font-medium">{error}</span>
@@ -962,7 +974,7 @@ export const Users: React.FC = () => {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
+                className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
               >
                 <AlertCircle className="w-5 h-5 text-red-500" />
                 <span className="text-red-500 text-sm font-medium">{error}</span>
