@@ -1,17 +1,16 @@
-
 import axios from 'axios';
 import { notificationsAPI } from './notifications';
 import { returnsAPI } from './returnsAPI';
 import { salesAPI } from './salesAPI';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
-const isRtl = localStorage.getItem('language') === 'ar'; // Assuming language is stored in localStorage
+const isRtl = localStorage.getItem('language') === 'ar';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
-  params: { isRtl: isRtl.toString() }, // Add isRtl globally
+  params: { isRtl: isRtl.toString() },
 });
 
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
@@ -69,12 +68,17 @@ api.interceptors.response.use(
           window.location.href = '/login';
           return Promise.reject({ message: 'التوكن منتهي الصلاحية ولا يوجد توكن منعش', status: 401 });
         }
-        const response = await axios.post<{ accessToken: string; refreshToken?: string }>(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
-        const { accessToken, refreshToken: newRefreshToken } = response.data;
-        localStorage.setItem('token', accessToken);
+        const response = await axios.post<{ token: string; refreshToken?: string; user: any }>(
+          `${API_BASE_URL}/auth/refresh-token`,
+          { refreshToken },
+          { params: { isRtl: isRtl.toString() } }
+        );
+        const { token, refreshToken: newRefreshToken, user } = response.data;
+        localStorage.setItem('token', token);
         if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
+        localStorage.setItem('user', JSON.stringify(user));
         console.log(`[${new Date().toISOString()}] Token refreshed successfully`);
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        originalRequest.headers.Authorization = `Bearer ${token}`;
         return api(originalRequest);
       } catch (refreshError) {
         console.error(`[${new Date().toISOString()}] Refresh token failed:`, refreshError);
@@ -99,24 +103,19 @@ export const authAPI = {
     return response;
   },
   refreshToken: async (refreshToken: string) => {
-    const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
+    const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken }, { params: { isRtl: isRtl.toString() } });
     console.log(`[${new Date().toISOString()}] Refresh token response:`, response.data);
     return response.data;
   },
   getProfile: async () => {
     const response = await api.get('/auth/profile');
     console.log(`[${new Date().toISOString()}] Profile response:`, response);
-    return {
-      ...response,
-      user: {
-        ...(response as any).user,
-        _id: (response as any).user.id || (response as any).user._id,
-      },
-    };
+    return response;
   },
-  updateProfile: async (data: { name?: string; password?: string }) => {
+ updateProfile: async (data: { name?: string; nameEn?: string; password?: string }) => {
     const response = await api.put('/auth/profile', {
       name: data.name?.trim(),
+      nameEn: data.nameEn?.trim(),
       password: data.password,
     });
     console.log(`[${new Date().toISOString()}] Update profile response:`, response);
@@ -129,6 +128,7 @@ export const authAPI = {
   },
 };
 
+// بقية الـ APIs (branchesAPI, usersAPI, ordersAPI, إلخ) تبقى زي ما هي
 export const branchesAPI = {
   getAll: async () => {
     const response = await api.get('/branches');
@@ -245,6 +245,7 @@ export const branchesAPI = {
   },
 };
 
+// بقية الـ APIs (usersAPI, ordersAPI, productsAPI, departmentAPI, chefsAPI, إلخ) تبقى زي ما هي
 export const usersAPI = {
   getAll: async () => {
     const response = await api.get('/users');
@@ -357,6 +358,7 @@ export const usersAPI = {
   },
 };
 
+// بقية الـ APIs (ordersAPI, productsAPI, departmentAPI, chefsAPI, إلخ) تبقى زي ما هي
 export const ordersAPI = {
   create: async (orderData: {
     orderNumber: string;
@@ -434,6 +436,7 @@ export const ordersAPI = {
   },
 };
 
+// بقية الـ APIs (productsAPI, departmentAPI, chefsAPI, إلخ) تبقى زي ما هي
 export const productsAPI = {
   getAll: async (params: { department?: string; search?: string; page?: number; limit?: number } = {}) => {
     const response = await api.get('/products', { params });
@@ -508,22 +511,24 @@ export const departmentAPI = {
     console.log(`[${new Date().toISOString()}] departmentAPI.getAll - Response:`, response);
     return response;
   },
-  create: async (departmentData: { name: string; code: string; description?: string }) => {
+  create: async (departmentData: { name: string; nameEn?: string; code: string; description?: string }) => {
     const response = await api.post('/departments', {
       name: departmentData.name.trim(),
+      nameEn: departmentData.nameEn?.trim(),
       code: departmentData.code.trim(),
       description: departmentData.description?.trim(),
     });
     console.log(`[${new Date().toISOString()}] departmentAPI.create - Response:`, response);
     return response;
   },
-  update: async (id: string, departmentData: Partial<{ name: string; code: string; description: string }>) => {
+  update: async (id: string, departmentData: Partial<{ name: string; nameEn?: string; code: string; description: string }>) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] departmentAPI.update - Invalid department ID:`, id);
       throw new Error('Invalid department ID');
     }
     const response = await api.put(`/departments/${id}`, {
       name: departmentData.name?.trim(),
+      nameEn: departmentData.nameEn?.trim(),
       code: departmentData.code?.trim(),
       description: departmentData.description?.trim(),
     });
@@ -549,7 +554,7 @@ export const chefsAPI = {
   },
   getByUserId: async (userId: string) => {
     if (!isValidObjectId(userId)) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.getByUserId - Invalid user ID:`, id);
+      console.error(`[${new Date().toISOString()}] chefsAPI.getByUserId - Invalid user ID:`, userId);
       throw new Error('Invalid user ID');
     }
     const response = await api.get(`/chefs/by-user/${userId}`);
@@ -559,6 +564,7 @@ export const chefsAPI = {
   create: async (chefData: {
     user: {
       name: string;
+      nameEn?: string;
       username: string;
       email: string;
       phone: string;
@@ -570,6 +576,7 @@ export const chefsAPI = {
     const response = await api.post('/chefs', {
       user: {
         name: chefData.user.name.trim(),
+        nameEn: chefData.user.nameEn?.trim(),
         username: chefData.user.username.trim(),
         email: chefData.user.email.trim(),
         phone: chefData.user.phone.trim(),
@@ -601,6 +608,7 @@ export const chefsAPI = {
   },
 };
 
+// بقية الـ APIs (productionAssignmentsAPI, inventoryAPI, factoryInventoryAPI, إلخ) تبقى زي ما هي
 export const productionAssignmentsAPI = {
   create: async (assignmentData: {
     order: string;
@@ -644,10 +652,6 @@ export const productionAssignmentsAPI = {
     return response;
   },
 };
-
-
-
-
 
 export const inventoryAPI = {
   getInventory: async (params = {}) => {
