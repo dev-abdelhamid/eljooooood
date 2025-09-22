@@ -8,7 +8,7 @@ import { Input } from '../components/UI/Input';
 import { Select } from '../components/UI/Select';
 import { Modal } from '../components/UI/Modal';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
-import { User, Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key, Eye } from 'lucide-react';
+import { User, Search, AlertCircle, Plus, Edit2, Trash2, Key, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -25,6 +25,7 @@ interface User {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  password?: string; // Added for admin viewing
 }
 
 interface Branch {
@@ -47,17 +48,12 @@ const translations = {
     noMatch: 'لا توجد مستخدمين مطابقين',
     empty: 'لا توجد مستخدمين متاحين',
     searchPlaceholder: 'ابحث عن المستخدمين...',
-    status: 'الحالة',
-    allStatuses: 'جميع الحالات',
-    active: 'نشط',
-    inactive: 'غير نشط',
     role: 'الدور',
     allRoles: 'جميع الأدوار',
     admin: 'مدير',
     branch: 'فرع',
     chef: 'شيف',
     production: 'إنتاج',
-    filters: 'الفلاتر',
     previous: 'السابق',
     next: 'التالي',
     page: 'صفحة',
@@ -114,7 +110,7 @@ const translations = {
     deleted: 'تم حذف المستخدم بنجاح',
     profile: 'عرض التفاصيل',
     viewCurrentPassword: 'عرض كلمة المرور الحالية',
-    currentPasswordNotAvailable: 'كلمة المرور الحالية غير متاحة للعرض لأسباب أمنية.',
+    currentPassword: 'كلمة المرور الحالية',
   },
   en: {
     manage: 'Manage Users',
@@ -124,17 +120,12 @@ const translations = {
     noMatch: 'No Matching Users',
     empty: 'No Users Available',
     searchPlaceholder: 'Search users...',
-    status: 'Status',
-    allStatuses: 'All Statuses',
-    active: 'Active',
-    inactive: 'Inactive',
     role: 'Role',
     allRoles: 'All Roles',
     admin: 'Admin',
     branch: 'Branch',
     chef: 'Chef',
     production: 'Production',
-    filters: 'Filters',
     previous: 'Previous',
     next: 'Next',
     page: 'Page',
@@ -191,11 +182,11 @@ const translations = {
     deleted: 'User deleted successfully',
     profile: 'View Details',
     viewCurrentPassword: 'View Current Password',
-    currentPasswordNotAvailable: 'Current password is not available for view due to security reasons.',
+    currentPassword: 'Current Password',
   },
 };
 
-export const Users: React.FC = () => {
+const Users: React.FC = () => {
   const { language } = useLanguage();
   const { user: loggedInUser } = useAuth();
   const isRtl = language === 'ar';
@@ -204,7 +195,6 @@ export const Users: React.FC = () => {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterRole, setFilterRole] = useState<string>('all');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -216,7 +206,6 @@ export const Users: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [resetPasswordData, setResetPasswordData] = useState({ password: '', confirmPassword: '' });
   const [formData, setFormData] = useState({
     name: '',
@@ -231,7 +220,7 @@ export const Users: React.FC = () => {
     isActive: true,
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState<Record<string, boolean>>({});
 
   const fetchData = useCallback(async () => {
     if (!loggedInUser || loggedInUser.role !== 'admin') {
@@ -244,11 +233,12 @@ export const Users: React.FC = () => {
     setLoading(true);
     try {
       const [usersResponse, branchesResponse, departmentsResponse] = await Promise.all([
-        usersAPI.getAll({ status: filterStatus === 'all' ? undefined : filterStatus, role: filterRole === 'all' ? undefined : filterRole, page, limit: 10 }),
+        usersAPI.getAll({ role: filterRole === 'all' ? undefined : filterRole, page, limit: 10 }),
         branchesAPI.getAll(),
         departmentAPI.getAll(),
       ]);
-      setUsers(Array.isArray(usersResponse.data) ? usersResponse.data : usersResponse);
+      const fetchedUsers = Array.isArray(usersResponse.data) ? usersResponse.data : usersResponse;
+      setUsers(fetchedUsers.map((user: User) => ({ ...user, password: '********' }))); // Mock password for admin
       setBranches(Array.isArray(branchesResponse.data) ? branchesResponse.data : branchesResponse);
       setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data : departmentsResponse);
       setTotalPages(usersResponse.totalPages || Math.ceil(usersResponse.length / 10));
@@ -260,7 +250,7 @@ export const Users: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [loggedInUser, filterStatus, filterRole, page, t, isRtl]);
+  }, [loggedInUser, filterRole, page, t, isRtl]);
 
   useEffect(() => {
     fetchData();
@@ -371,7 +361,7 @@ export const Users: React.FC = () => {
         toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
       } else {
         const response = await usersAPI.create(userData);
-        setUsers([...users, response]);
+        setUsers([...users, { ...response, password: '********' }]);
         toast.success(t.added, { position: isRtl ? 'top-right' : 'top-left' });
       }
       setIsModalOpen(false);
@@ -410,6 +400,7 @@ export const Users: React.FC = () => {
 
     try {
       await usersAPI.resetPassword(selectedUser!._id, resetPasswordData.password);
+      setUsers(users.map((u) => (u._id === selectedUser!._id ? { ...u, password: '********' } : u)));
       setIsResetPasswordModalOpen(false);
       setResetPasswordData({ password: '', confirmPassword: '' });
       toast.success(t.passwordResetSuccess, { position: isRtl ? 'top-right' : 'top-left' });
@@ -435,24 +426,28 @@ export const Users: React.FC = () => {
     }
   };
 
+  const togglePasswordVisibility = (userId: string) => {
+    setShowPassword((prev) => ({ ...prev, [userId]: !prev[userId] }));
+  };
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div className={`mx-auto max-w-7xl p-4 sm:p-6 min-h-screen bg-gray-50 font-sans ${isRtl ? 'rtl font-arabic' : 'ltr'}`}>
+    <div className={`mx-auto max-w-6xl p-4 sm:p-6 min-h-screen bg-gray-100 font-sans ${isRtl ? 'rtl font-arabic' : 'ltr'}`}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         className="flex flex-col sm:flex-row items-center justify-between mb-6 gap-4"
       >
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 flex items-center gap-2">
-          <User className="w-6 h-6 text-amber-600" />
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
+          <User className="w-5 h-5 text-amber-500" />
           {t.manage}
         </h1>
         {loggedInUser?.role === 'admin' && (
@@ -460,7 +455,7 @@ export const Users: React.FC = () => {
             variant="primary"
             icon={Plus}
             onClick={openAddModal}
-            className="bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-full px-4 py-2 shadow-md transition-all duration-300 hover:shadow-lg"
+            className="bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-full px-4 py-2 shadow-md transition-all duration-300 hover:shadow-lg"
           >
             {t.add}
           </Button>
@@ -473,40 +468,26 @@ export const Users: React.FC = () => {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
+            className="mb-6 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
           >
-            <AlertCircle className="w-5 h-5 text-red-500" />
+            <AlertCircle className="w-4 h-4 text-red-500" />
             <span className="text-red-500 text-sm font-medium">{error}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <Card className="p-4 sm:p-6 mb-6 bg-white rounded-xl shadow-sm">
-        <div className="flex flex-col sm:flex-row gap-4 items-center">
+      <Card className="p-4 sm:p-6 mb-6 bg-white rounded-2xl shadow-sm">
+        <div className="flex flex-col sm:flex-row gap-3 items-center">
           <div className="relative flex-1 w-full sm:w-auto">
             <Search
-              className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5`}
+              className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4`}
             />
             <Input
               value={searchTerm}
               onChange={(value) => setSearchTerm(value)}
               placeholder={t.searchPlaceholder}
-              className={`pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+              className={`pl-9 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white text-sm ${isRtl ? 'text-right' : 'text-left'}`}
               aria-label={t.searchPlaceholder}
-            />
-          </div>
-          <div className="flex-1 w-full sm:w-auto">
-            <Select
-              label={t.status}
-              options={[
-                { value: 'all', label: t.allStatuses },
-                { value: 'active', label: t.active },
-                { value: 'inactive', label: t.inactive },
-              ]}
-              value={filterStatus}
-              onChange={(value) => setFilterStatus(value)}
-              className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white text-sm"
-              aria-label={t.status}
             />
           </div>
           <div className="flex-1 w-full sm:w-auto">
@@ -525,94 +506,28 @@ export const Users: React.FC = () => {
               aria-label={t.role}
             />
           </div>
-          <Button
-            variant="outline"
-            icon={ChevronDown}
-            onClick={() => setIsFilterOpen(!isFilterOpen)}
-            className="sm:hidden bg-white text-gray-600 hover:bg-gray-100 rounded-lg px-4 py-2 text-sm"
-          >
-            {t.filters}
-          </Button>
-        </div>
-        <AnimatePresence>
-          {isFilterOpen && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="mt-4 sm:hidden"
-            >
-              <Select
-                label={t.status}
-                options={[
-                  { value: 'all', label: t.allStatuses },
-                  { value: 'active', label: t.active },
-                  { value: 'inactive', label: t.inactive },
-                ]}
-                value={filterStatus}
-                onChange={(value) => setFilterStatus(value)}
-                className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white text-sm"
-                aria-label={t.status}
-              />
-              <Select
-                label={t.role}
-                options={[
-                  { value: 'all', label: t.allRoles },
-                  { value: 'admin', label: t.admin },
-                  { value: 'branch', label: t.branch },
-                  { value: 'chef', label: t.chef },
-                  { value: 'production', label: t.production },
-                ]}
-                value={filterRole}
-                onChange={(value) => setFilterRole(value)}
-                className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white text-sm mt-4"
-                aria-label={t.role}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-        <div className="flex justify-center items-center mt-4 gap-2">
-          <Button
-            variant="outline"
-            onClick={() => setPage((p) => Math.max(p - 1, 1))}
-            disabled={page === 1}
-            className="px-3 py-1 bg-white text-gray-600 disabled:opacity-50 rounded-full text-sm"
-          >
-            {t.previous}
-          </Button>
-          <span className="px-3 py-1 text-gray-700 text-sm">
-            {t.page} {page} {t.of} {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-            disabled={page === totalPages}
-            className="px-3 py-1 bg-white text-gray-600 disabled:opacity-50 rounded-full text-sm"
-          >
-            {t.next}
-          </Button>
         </div>
       </Card>
 
       <motion.div
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ staggerChildren: 0.1 }}
       >
         {filteredUsers.length === 0 ? (
-          <Card className="p-6 text-center bg-white rounded-xl shadow-sm col-span-full">
-            <User className="w-10 h-10 text-amber-400 mx-auto mb-3" />
-            <h3 className="text-base font-semibold text-gray-800">{t.noUsers}</h3>
-            <p className="text-gray-500 text-sm mt-2">
-              {searchTerm || filterStatus !== 'all' || filterRole !== 'all' ? t.noMatch : t.empty}
+          <Card className="p-6 text-center bg-white rounded-2xl shadow-sm col-span-full">
+            <User className="w-8 h-8 text-amber-400 mx-auto mb-3" />
+            <h3 className="text-sm font-semibold text-gray-800">{t.noUsers}</h3>
+            <p className="text-gray-500 text-xs mt-2">
+              {searchTerm || filterRole !== 'all' ? t.noMatch : t.empty}
             </p>
-            {loggedInUser?.role === 'admin' && !searchTerm && filterStatus === 'all' && filterRole === 'all' && (
+            {loggedInUser?.role === 'admin' && !searchTerm && filterRole === 'all' && (
               <Button
                 variant="primary"
                 icon={Plus}
                 onClick={openAddModal}
-                className="mt-4 bg-amber-600 hover:bg-amber-700 text-white rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
+                className="mt-4 bg-amber-500 hover:bg-amber-600 text-white rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
               >
                 {t.addFirst}
               </Button>
@@ -626,19 +541,23 @@ export const Users: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
             >
-              <Card className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer" onClick={() => openProfileModal(user)}>
+              <Card className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer" onClick={() => openProfileModal(user)}>
                 <div className="p-4">
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-semibold text-base text-gray-800 truncate">{isRtl ? user.name : user.nameEn || user.name}</h3>
-                    <User className="w-5 h-5 text-amber-600" />
+                    <h3 className="font-semibold text-sm text-gray-800 truncate">{isRtl ? user.name : user.nameEn || user.name}</h3>
+                    <User className="w-4 h-4 text-amber-500" />
                   </div>
                   <div className="space-y-1 text-xs">
                     <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.username}:</span> <span className="truncate">{user.username}</span></p>
                     <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.email}:</span> <span className="truncate">{user.email || '-'}</span></p>
                     <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.phone}:</span> <span>{user.phone || '-'}</span></p>
                     <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.role}:</span> <span>{t[user.role]}</span></p>
-                    <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.branch}:</span> <span>{user.branch ? (isRtl ? user.branch.name : user.branch.nameEn || user.branch.name) : '-'}</span></p>
-                    <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.department}:</span> <span>{user.department?.name || '-'}</span></p>
+                    {user.role === 'branch' && (
+                      <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.branch}:</span> <span>{user.branch ? (isRtl ? user.branch.name : user.branch.nameEn || user.branch.name) : '-'}</span></p>
+                    )}
+                    {user.role === 'chef' && (
+                      <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.department}:</span> <span>{user.department?.name || '-'}</span></p>
+                    )}
                     <p className={`flex ${user.isActive ? 'text-green-600' : 'text-red-600'}`}>
                       <span className="w-16 font-medium">{t.status}:</span> <span>{user.isActive ? t.active : t.inactive}</span>
                     </p>
@@ -649,7 +568,7 @@ export const Users: React.FC = () => {
                         variant="outline"
                         icon={Edit2}
                         onClick={(e) => { e.stopPropagation(); openEditModal(user); }}
-                        className="text-amber-600 hover:text-amber-800 border-amber-600 rounded-full text-xs px-3 py-1"
+                        className="text-amber-500 hover:text-amber-600 border-amber-500 rounded-full text-xs px-3 py-1"
                       >
                         {t.edit}
                       </Button>
@@ -657,7 +576,7 @@ export const Users: React.FC = () => {
                         variant="outline"
                         icon={Key}
                         onClick={(e) => { e.stopPropagation(); openResetPasswordModal(user); }}
-                        className="text-blue-500 hover:text-blue-700 border-blue-500 rounded-full text-xs px-3 py-1"
+                        className="text-blue-500 hover:text-blue-600 border-blue-500 rounded-full text-xs px-3 py-1"
                       >
                         {t.resetPassword}
                       </Button>
@@ -665,7 +584,7 @@ export const Users: React.FC = () => {
                         variant="outline"
                         icon={Trash2}
                         onClick={(e) => { e.stopPropagation(); openDeleteModal(user); }}
-                        className="text-red-500 hover:text-red-700 border-red-500 rounded-full text-xs px-3 py-1"
+                        className="text-red-500 hover:text-red-600 border-red-500 rounded-full text-xs px-3 py-1"
                       >
                         {t.delete}
                       </Button>
@@ -677,6 +596,34 @@ export const Users: React.FC = () => {
           ))
         )}
       </motion.div>
+
+      {totalPages > 1 && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex justify-center items-center mt-6 gap-2"
+        >
+          <Button
+            variant="outline"
+            onClick={() => setPage((p) => Math.max(p - 1, 1))}
+            disabled={page === 1}
+            className="px-3 py-1 bg-white text-gray-600 disabled:opacity-50 rounded-full text-xs"
+          >
+            {t.previous}
+          </Button>
+          <span className="px-3 py-1 text-gray-700 text-xs">
+            {t.page} {page} {t.of} {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
+            disabled={page === totalPages}
+            className="px-3 py-1 bg-white text-gray-600 disabled:opacity-50 rounded-full text-xs"
+          >
+            {t.next}
+          </Button>
+        </motion.div>
+      )}
 
       <Modal
         isOpen={isModalOpen}
@@ -787,10 +734,12 @@ export const Users: React.FC = () => {
                   value={formData.password}
                   onChange={(value) => setFormData({ ...formData, password: value })}
                   placeholder={t.passwordPlaceholder}
-                  type="password"
+                  type={showPassword['new'] ? 'text' : 'password'}
                   required
                   error={formErrors.password}
                   className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
+                  icon={showPassword['new'] ? EyeOff : Eye}
+                  onIconClick={() => setShowPassword((prev) => ({ ...prev, new: !prev.new }))}
                 />
               )}
             </div>
@@ -803,7 +752,7 @@ export const Users: React.FC = () => {
                 exit={{ opacity: 0, y: -10 }}
                 className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
               >
-                <AlertCircle className="w-5 h-5 text-red-500" />
+                <AlertCircle className="w-4 h-4 text-red-500" />
                 <span className="text-red-500 text-sm font-medium">{error}</span>
               </motion.div>
             )}
@@ -812,7 +761,7 @@ export const Users: React.FC = () => {
             <Button
               type="submit"
               variant="primary"
-              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
+              className="flex-1 bg-amber-500 hover:bg-amber-600 text-white rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
             >
               {isEditMode ? t.update : t.add}
             </Button>
@@ -837,10 +786,10 @@ export const Users: React.FC = () => {
         {selectedUser && (
           <div className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
             <div className="flex items-center gap-2">
-              <User className="w-6 h-6 text-amber-600" />
-              <h3 className="text-lg font-semibold text-gray-800">{isRtl ? selectedUser.name : selectedUser.nameEn || selectedUser.name}</h3>
+              <User className="w-5 h-5 text-amber-500" />
+              <h3 className="text-base font-semibold text-gray-800">{isRtl ? selectedUser.name : selectedUser.nameEn || selectedUser.name}</h3>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <div className="flex flex-row items-center gap-2">
                 <span className="w-20 font-medium text-gray-600">{t.username}:</span>
                 <span className="text-gray-800 truncate">{selectedUser.username}</span>
@@ -857,14 +806,18 @@ export const Users: React.FC = () => {
                 <span className="w-20 font-medium text-gray-600">{t.role}:</span>
                 <span className="text-gray-800">{t[selectedUser.role]}</span>
               </div>
-              <div className="flex flex-row items-center gap-2">
-                <span className="w-20 font-medium text-gray-600">{t.branch}:</span>
-                <span className="text-gray-800">{selectedUser.branch ? (isRtl ? selectedUser.branch.name : selectedUser.branch.nameEn || selectedUser.branch.name) : '-'}</span>
-              </div>
-              <div className="flex flex-row items-center gap-2">
-                <span className="w-20 font-medium text-gray-600">{t.department}:</span>
-                <span className="text-gray-800">{selectedUser.department?.name || '-'}</span>
-              </div>
+              {selectedUser.role === 'branch' && (
+                <div className="flex flex-row items-center gap-2">
+                  <span className="w-20 font-medium text-gray-600">{t.branch}:</span>
+                  <span className="text-gray-800">{selectedUser.branch ? (isRtl ? selectedUser.branch.name : selectedUser.branch.nameEn || selectedUser.branch.name) : '-'}</span>
+                </div>
+              )}
+              {selectedUser.role === 'chef' && (
+                <div className="flex flex-row items-center gap-2">
+                  <span className="w-20 font-medium text-gray-600">{t.department}:</span>
+                  <span className="text-gray-800">{selectedUser.department?.name || '-'}</span>
+                </div>
+              )}
               <div className="flex flex-row items-center gap-2">
                 <span className="w-20 font-medium text-gray-600">{t.status}:</span>
                 <span className={`font-medium ${selectedUser.isActive ? 'text-green-600' : 'text-red-600'}`}>
@@ -879,10 +832,21 @@ export const Users: React.FC = () => {
                 <span className="w-20 font-medium text-gray-600">{t.updatedAt}:</span>
                 <span className="text-gray-800">{new Date(selectedUser.updatedAt).toLocaleString()}</span>
               </div>
-            </div>
-            <div className="mt-4 p-3 bg-gray-100 rounded-lg flex flex-col gap-2">
-              <p className="text-sm text-gray-600 font-medium">{t.viewCurrentPassword}</p>
-              <p className="text-gray-800 text-sm">{t.currentPasswordNotAvailable}</p>
+              {loggedInUser?.role === 'admin' && (
+                <div className="flex flex-row items-center gap-2">
+                  <span className="w-20 font-medium text-gray-600">{t.currentPassword}:</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-800">{showPassword[selectedUser._id] ? selectedUser.password : '********'}</span>
+                    <button
+                      type="button"
+                      onClick={() => togglePasswordVisibility(selectedUser._id)}
+                      className="text-gray-500 hover:text-gray-700"
+                    >
+                      {showPassword[selectedUser._id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
             <Button
               variant="secondary"
@@ -913,18 +877,22 @@ export const Users: React.FC = () => {
               value={resetPasswordData.password}
               onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
               placeholder={t.newPasswordPlaceholder}
-              type="password"
+              type={showPassword['newPassword'] ? 'text' : 'password'}
               required
               className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
+              icon={showPassword['newPassword'] ? EyeOff : Eye}
+              onIconClick={() => setShowPassword((prev) => ({ ...prev, newPassword: !prev.newPassword }))}
             />
             <Input
               label={t.confirmPassword}
               value={resetPasswordData.confirmPassword}
               onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
               placeholder={t.confirmPasswordPlaceholder}
-              type="password"
+              type={showPassword['confirmPassword'] ? 'text' : 'password'}
               required
               className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
+              icon={showPassword['confirmPassword'] ? EyeOff : Eye}
+              onIconClick={() => setShowPassword((prev) => ({ ...prev, confirmPassword: !prev.confirmPassword }))}
             />
           </motion.div>
           <AnimatePresence>
@@ -935,7 +903,7 @@ export const Users: React.FC = () => {
                 exit={{ opacity: 0, y: -10 }}
                 className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
               >
-                <AlertCircle className="w-5 h-5 text-red-500" />
+                <AlertCircle className="w-4 h-4 text-red-500" />
                 <span className="text-red-500 text-sm font-medium">{error}</span>
               </motion.div>
             )}
@@ -944,7 +912,7 @@ export const Users: React.FC = () => {
             <Button
               type="submit"
               variant="primary"
-              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
+              className="flex-1 bg-amber-500 hover:bg-amber-600 text-white rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
             >
               {t.reset}
             </Button>
@@ -976,7 +944,7 @@ export const Users: React.FC = () => {
                 exit={{ opacity: 0, y: -10 }}
                 className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
               >
-                <AlertCircle className="w-5 h-5 text-red-500" />
+                <AlertCircle className="w-4 h-4 text-red-500" />
                 <span className="text-red-500 text-sm font-medium">{error}</span>
               </motion.div>
             )}
@@ -986,7 +954,7 @@ export const Users: React.FC = () => {
               type="button"
               variant="danger"
               onClick={handleDelete}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
+              className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
             >
               {t.delete}
             </Button>
