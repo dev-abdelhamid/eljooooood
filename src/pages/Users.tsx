@@ -186,7 +186,7 @@ const translations = {
   },
 };
 
-const Users: React.FC = () => {
+export const Users: React.FC = () => {
   const { language } = useLanguage();
   const { user: loggedInUser } = useAuth();
   const isRtl = language === 'ar';
