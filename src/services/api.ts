@@ -108,15 +108,17 @@ export const authAPI = {
     return {
       ...response,
       user: {
-        ...(response as any).user,
-        _id: (response as any).user.id || (response as any).user._id,
+        ...response.user,
+        id: response.user.id || response.user._id,
       },
     };
   },
-  updateProfile: async (data: { name?: string; nameEn?: string; password?: string }) => {
-    const response = await api.put('/auth/profile', {
+  updateProfile: async (data: { name?: string; nameEn?: string; email?: string; phone?: string; password?: string }) => {
+    const response = await api.put('/auth/update-profile', {
       name: data.name?.trim(),
       nameEn: data.nameEn?.trim(),
+      email: data.email?.trim(),
+      phone: data.phone?.trim(),
       password: data.password,
     });
     console.log(`[${new Date().toISOString()}] Update profile response:`, response);
