@@ -12,26 +12,31 @@ import { ChefHat, Search, AlertCircle, Plus, Edit2, Trash2, Key, Eye, EyeOff } f
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 
+interface Department {
+  id: string;
+  name: string;
+  nameEn?: string;
+  code: string;
+  description?: string;
+}
+
 interface Chef {
-  _id: string;
+  id: string;
   user: {
-    _id: string;
+    id: string;
     name: string;
     nameEn?: string;
     username: string;
     email?: string;
     phone?: string;
     isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
   } | null;
-  department: { _id: string; name: string } | null;
+  department: Department | null;
   createdAt: string;
   updatedAt: string;
   password?: string; // For admin view only
-}
-
-interface Department {
-  _id: string;
-  name: string;
 }
 
 const translations = {
@@ -214,17 +219,47 @@ export function Chefs() {
     setLoading(true);
     try {
       const [chefsResponse, departmentsResponse] = await Promise.all([
-        chefsAPI.getAll({ page, limit: 10 }),
-        departmentAPI.getAll(),
+        chefsAPI.getAll({ page, limit: 10, isRtl }),
+        departmentAPI.getAll({ isRtl }),
       ]);
       const fetchedChefs = Array.isArray(chefsResponse.data) ? chefsResponse.data : chefsResponse;
-      setChefs(fetchedChefs.map((chef: Chef) => ({ ...chef, password: '********' })));
-      setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data : departmentsResponse);
+      setChefs(fetchedChefs.map((chef: any) => ({
+        id: chef._id,
+        user: {
+          id: chef.user._id,
+          name: chef.user.name,
+          nameEn: chef.user.nameEn,
+          username: chef.user.username,
+          email: chef.user.email,
+          phone: chef.user.phone,
+          isActive: chef.user.isActive,
+          createdAt: chef.user.createdAt,
+          updatedAt: chef.user.updatedAt,
+        },
+        department: chef.department ? {
+          id: chef.department._id,
+          name: chef.department.name,
+          nameEn: chef.department.nameEn,
+          code: chef.department.code,
+          description: chef.department.description,
+        } : null,
+        createdAt: chef.createdAt,
+        updatedAt: chef.updatedAt,
+        password: '********',
+      })));
+      setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data.map((dept: any) => ({
+        id: dept._id,
+        name: dept.name,
+        nameEn: dept.nameEn,
+        code: dept.code,
+        description: dept.description,
+      })) : departmentsResponse);
       setTotalPages(chefsResponse.totalPages || Math.ceil(fetchedChefs.length / 10));
       setError('');
     } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] Fetch error:`, err);
       setError(err.message || t.fetchError);
-      toast.error(t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(err.message || t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
     } finally {
       setLoading(false);
     }
@@ -265,7 +300,7 @@ export function Chefs() {
       username: '',
       email: '',
       phone: '',
-      department: departments[0]._id,
+      department: departments[0].id,
       password: '',
       isActive: true,
     });
@@ -283,7 +318,7 @@ export function Chefs() {
       username: chef.user?.username || '',
       email: chef.user?.email || '',
       phone: chef.user?.phone || '',
-      department: chef.department?._id || '',
+      department: chef.department?.id || '',
       password: '',
       isActive: chef.user?.isActive ?? true,
     });
@@ -335,23 +370,63 @@ export function Chefs() {
       };
 
       if (isEditMode && selectedChef) {
-        const updatedChef = await chefsAPI.update(selectedChef._id, chefData);
-        setChefs(chefs.map((c) => (c._id === selectedChef._id ? { ...updatedChef, password: '********' } : c)));
+        const updatedChef = await chefsAPI.update(selectedChef.id, chefData);
+        setChefs(chefs.map((c) => (c.id === selectedChef.id ? {
+          ...c,
+          user: {
+            ...c.user!,
+            ...updatedChef.user,
+            id: updatedChef.user._id,
+            createdAt: updatedChef.user.createdAt,
+            updatedAt: updatedChef.user.updatedAt,
+          },
+          department: updatedChef.department ? {
+            id: updatedChef.department._id,
+            name: updatedChef.department.name,
+            nameEn: updatedChef.department.nameEn,
+            code: updatedChef.department.code,
+            description: updatedChef.department.description,
+          } : null,
+          createdAt: updatedChef.createdAt,
+          updatedAt: updatedChef.updatedAt,
+        } : c)));
         toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
       } else {
         const newChef = await chefsAPI.create(chefData);
-        setChefs([...chefs, { ...newChef, password: '********' }]);
+        setChefs([...chefs, {
+          id: newChef._id,
+          user: {
+            id: newChef.user._id,
+            name: newChef.user.name,
+            nameEn: newChef.user.nameEn,
+            username: newChef.user.username,
+            email: newChef.user.email,
+            phone: newChef.user.phone,
+            isActive: newChef.user.isActive,
+            createdAt: newChef.user.createdAt,
+            updatedAt: newChef.user.updatedAt,
+          },
+          department: newChef.department ? {
+            id: newChef.department._id,
+            name: newChef.department.name,
+            nameEn: newChef.department.nameEn,
+            code: newChef.department.code,
+            description: newChef.department.description,
+          } : null,
+          createdAt: newChef.createdAt,
+          updatedAt: newChef.updatedAt,
+          password: '********',
+        }]);
         toast.success(t.added, { position: isRtl ? 'top-right' : 'top-left' });
       }
       setIsModalOpen(false);
       setError('');
     } catch (err: any) {
       let errorMessage = isEditMode ? t.updateError : t.createError;
-      if (err.response?.data?.message) {
-        const message = err.response.data.message;
+      if (err.message) {
         errorMessage =
-          message === 'Username already exists' ? t.usernameExists :
-          message.includes('email') ? t.emailExists : message;
+          err.message.includes('Username') ? t.usernameExists :
+          err.message.includes('email') ? t.emailExists : err.message;
       }
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
@@ -377,8 +452,8 @@ export function Chefs() {
     }
 
     try {
-      await chefsAPI.resetPassword(selectedChef!._id, resetPasswordData.password);
-      setChefs(chefs.map((c) => (c._id === selectedChef!._id ? { ...c, password: '********' } : c)));
+      await authAPI.updateProfile({ password: resetPasswordData.password }, selectedChef!.user!.id);
+      setChefs(chefs.map((c) => (c.id === selectedChef!.id ? { ...c, password: '********' } : c)));
       setIsResetPasswordModalOpen(false);
       setResetPasswordData({ password: '', confirmPassword: '' });
       toast.success(t.passwordResetSuccess, { position: isRtl ? 'top-right' : 'top-left' });
@@ -392,8 +467,8 @@ export function Chefs() {
   const handleDelete = async () => {
     if (!selectedChef) return;
     try {
-      await chefsAPI.delete(selectedChef._id);
-      setChefs(chefs.filter((c) => c._id !== selectedChef._id));
+      await chefsAPI.delete(selectedChef.id);
+      setChefs(chefs.filter((c) => c.id !== selectedChef.id));
       toast.success(t.deleted, { position: isRtl ? 'top-right' : 'top-left' });
       setIsDeleteModalOpen(false);
       setError('');
@@ -496,7 +571,7 @@ export function Chefs() {
         ) : (
           filteredChefs.map((chef) => (
             <motion.div
-              key={chef._id}
+              key={chef.id}
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
@@ -511,10 +586,12 @@ export function Chefs() {
                     <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.username}:</span> <span className="truncate">{chef.user?.username || '-'}</span></p>
                     <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.email}:</span> <span className="truncate">{chef.user?.email || '-'}</span></p>
                     <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.phone}:</span> <span>{chef.user?.phone || '-'}</span></p>
-                    <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.department}:</span> <span>{chef.department?.name || '-'}</span></p>
+                    <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.department}:</span> <span>{isRtl ? chef.department?.name : chef.department?.nameEn || chef.department?.name || '-'}</span></p>
                     <p className={`flex ${chef.user?.isActive ? 'text-green-600' : 'text-red-600'}`}>
                       <span className="w-16 font-medium">{t.status}:</span> <span>{chef.user?.isActive ? t.active : t.inactive}</span>
                     </p>
+                    <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.createdAt}:</span> <span>{new Date(chef.createdAt).toLocaleString()}</span></p>
+                    <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.updatedAt}:</span> <span>{new Date(chef.updatedAt).toLocaleString()}</span></p>
                   </div>
                   {loggedInUser?.role === 'admin' && (
                     <div className="flex gap-2 mt-3">
@@ -638,7 +715,7 @@ export function Chefs() {
             <div className="space-y-4">
               <Select
                 label={t.department}
-                options={departments.map((dept) => ({ value: dept._id, label: dept.name }))}
+                options={departments.map((dept) => ({ value: dept.id, label: isRtl ? dept.name : dept.nameEn || dept.name }))}
                 value={formData.department}
                 onChange={(value) => setFormData({ ...formData, department: value })}
                 placeholder={t.departmentPlaceholder}
@@ -732,7 +809,7 @@ export function Chefs() {
               </div>
               <div className="flex flex-row items-center gap-2">
                 <span className="w-20 font-medium text-gray-600">{t.department}:</span>
-                <span className="text-gray-800">{selectedChef.department?.name || '-'}</span>
+                <span className="text-gray-800">{isRtl ? selectedChef.department?.name : selectedChef.department?.nameEn || selectedChef.department?.name || '-'}</span>
               </div>
               <div className="flex flex-row items-center gap-2">
                 <span className="w-20 font-medium text-gray-600">{t.status}:</span>
@@ -752,9 +829,9 @@ export function Chefs() {
                 <div className="flex flex-row items-center gap-2">
                   <span className="w-20 font-medium text-gray-600">{t.currentPassword}:</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-gray-800">{showPassword[selectedChef._id] ? selectedChef.password : '********'}</span>
-                    <button type="button" onClick={() => togglePasswordVisibility(selectedChef._id)} className="text-gray-500 hover:text-gray-700">
-                      {showPassword[selectedChef._id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    <span className="text-gray-800">{showPassword[selectedChef.id] ? selectedChef.password : '********'}</span>
+                    <button type="button" onClick={() => togglePasswordVisibility(selectedChef.id)} className="text-gray-500 hover:text-gray-700">
+                      {showPassword[selectedChef.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                 </div>

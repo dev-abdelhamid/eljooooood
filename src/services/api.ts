@@ -112,7 +112,7 @@ export const authAPI = {
     console.log(`[${new Date().toISOString()}] Profile response:`, response);
     return response;
   },
-  updateProfile: async (data: { name?: string; nameEn?: string; password?: string }) => {
+ updateProfile: async (data: { name?: string; nameEn?: string; password?: string }) => {
     const response = await api.put('/auth/profile', {
       name: data.name?.trim(),
       nameEn: data.nameEn?.trim(),
