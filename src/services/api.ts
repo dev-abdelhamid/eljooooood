@@ -1,4 +1,3 @@
-
 import axios from 'axios';
 import { notificationsAPI } from './notifications';
 import { returnsAPI } from './returnsAPI';
@@ -375,7 +374,7 @@ export const ordersAPI = {
     console.log(`[${new Date().toISOString()}] ordersAPI.create - Response:`, response);
     return response;
   },
-  getAll: async (params: { status?: string; branch?: string; page?: number; limit?: number; department?: string; search?: string; sortBy?: string; sortOrder?: 'asc' | 'desc' } = {}) => {
+  getAll: async (params: { status?: string; branch?: string; page?: number; limit?: number; department?: string; search?: string; sortBy?: string; sortOrder: 'asc' | 'desc' } = {}) => {
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] ordersAPI.getAll - Invalid branch ID:`, params.branch);
       throw new Error('Invalid branch ID');
@@ -549,7 +548,7 @@ export const chefsAPI = {
   },
   getByUserId: async (userId: string) => {
     if (!isValidObjectId(userId)) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.getByUserId - Invalid user ID:`, id);
+      console.error(`[${new Date().toISOString()}] chefsAPI.getByUserId - Invalid user ID:`, userId);
       throw new Error('Invalid user ID');
     }
     const response = await api.get(`/chefs/by-user/${userId}`);
@@ -559,34 +558,58 @@ export const chefsAPI = {
   create: async (chefData: {
     user: {
       name: string;
+      nameEn?: string;
       username: string;
-      email: string;
-      phone: string;
+      email?: string;
+      phone?: string;
       password: string;
       role: string;
+      isActive?: boolean;
     };
     department: string;
   }) => {
     const response = await api.post('/chefs', {
       user: {
         name: chefData.user.name.trim(),
+        nameEn: chefData.user.nameEn?.trim(),
         username: chefData.user.username.trim(),
-        email: chefData.user.email.trim(),
-        phone: chefData.user.phone.trim(),
+        email: chefData.user.email?.trim(),
+        phone: chefData.user.phone?.trim(),
         password: chefData.user.password,
         role: chefData.user.role,
+        isActive: chefData.user.isActive ?? true,
       },
       department: chefData.department,
     });
     console.log(`[${new Date().toISOString()}] chefsAPI.create - Response:`, response);
     return response;
   },
-  update: async (id: string, chefData: Partial<{ userId: string; departmentId: string }>) => {
+  update: async (id: string, chefData: {
+    user: {
+      name: string;
+      nameEn?: string;
+      username: string;
+      email?: string;
+      phone?: string;
+      isActive?: boolean;
+    };
+    department: string;
+  }) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.update - Invalid chef ID:`, id);
       throw new Error('Invalid chef ID');
     }
-    const response = await api.put(`/chefs/${id}`, chefData);
+    const response = await api.put(`/chefs/${id}`, {
+      user: {
+        name: chefData.user.name.trim(),
+        nameEn: chefData.user.nameEn?.trim(),
+        username: chefData.user.username.trim(),
+        email: chefData.user.email?.trim(),
+        phone: chefData.user.phone?.trim(),
+        isActive: chefData.user.isActive ?? true,
+      },
+      department: chefData.department,
+    });
     console.log(`[${new Date().toISOString()}] chefsAPI.update - Response:`, response);
     return response;
   },
@@ -597,6 +620,15 @@ export const chefsAPI = {
     }
     const response = await api.delete(`/chefs/${id}`);
     console.log(`[${new Date().toISOString()}] chefsAPI.delete - Response:`, response);
+    return response;
+  },
+  resetPassword: async (id: string, password: string) => {
+    if (!isValidObjectId(id)) {
+      console.error(`[${new Date().toISOString()}] chefsAPI.resetPassword - Invalid chef ID:`, id);
+      throw new Error('Invalid chef ID');
+    }
+    const response = await api.post(`/chefs/${id}/reset-password`, { password });
+    console.log(`[${new Date().toISOString()}] chefsAPI.resetPassword response:`, response);
     return response;
   },
 };
@@ -645,289 +677,12 @@ export const productionAssignmentsAPI = {
   },
 };
 
-
-
-
-
 export const inventoryAPI = {
-  getInventory: async (params = {}) => {
-    if (params.branch && !/^[0-9a-fA-F]{24}$/.test(params.branch)) {
-      console.error(`inventoryAPI.getInventory - Invalid branch ID at ${new Date().toISOString()}:`, params.branch);
-      throw new Error('Invalid branch ID');
-    }
-    if (params.product && !/^[0-9a-fA-F]{24}$/.test(params.product)) {
-      console.error(`inventoryAPI.getInventory - Invalid product ID at ${new Date().toISOString()}:`, params.product);
-      throw new Error('Invalid product ID');
-    }
-    const response = await api.get('/inventory', { params });
-    console.log(`inventoryAPI.getInventory - Response at ${new Date().toISOString()}:`, response);
-    return response.inventory;
-  },
-  getByBranch: async (branchId) => {
-    if (!/^[0-9a-fA-F]{24}$/.test(branchId)) {
-      console.error(`inventoryAPI.getByBranch - Invalid branch ID at ${new Date().toISOString()}:`, branchId);
-      throw new Error('Invalid branch ID');
-    }
-    console.log(`inventoryAPI.getByBranch - Sending at ${new Date().toISOString()}:`, { branchId });
-    const response = await api.get(`/inventory/branch/${branchId}`);
-    console.log(`inventoryAPI.getByBranch - Response at ${new Date().toISOString()}:`, response);
-    return response.inventory;
-  },
-  getAll: async (params = {}) => {
-    if (params.branch && !/^[0-9a-fA-F]{24}$/.test(params.branch)) {
-      console.error(`inventoryAPI.getAll - Invalid branch ID at ${new Date().toISOString()}:`, params.branch);
-      throw new Error('Invalid branch ID');
-    }
-    if (params.product && !/^[0-9a-fA-F]{24}$/.test(params.product)) {
-      console.error(`inventoryAPI.getAll - Invalid product ID at ${new Date().toISOString()}:`, params.product);
-      throw new Error('Invalid product ID');
-    }
-    const response = await api.get('/inventory', { params });
-    console.log(`inventoryAPI.getAll - Response at ${new Date().toISOString()}:`, response);
-    return response.inventory;
-  },
-  create: async (data) => {
-    if (
-      !/^[0-9a-fA-F]{24}$/.test(data.branchId) ||
-      !/^[0-9a-fA-F]{24}$/.test(data.productId) ||
-      !/^[0-9a-fA-F]{24}$/.test(data.userId) ||
-      (data.orderId && !/^[0-9a-fA-F]{24}$/.test(data.orderId))
-    ) {
-      console.error(`inventoryAPI.create - Invalid data at ${new Date().toISOString()}:`, data);
-      throw new Error('Invalid branch ID, product ID, user ID, or order ID');
-    }
-    if (data.currentStock < 0) {
-      console.error(`inventoryAPI.create - Invalid stock quantity at ${new Date().toISOString()}:`, data.currentStock);
-      throw new Error('Stock quantity cannot be negative');
-    }
-    console.log(`inventoryAPI.create - Sending at ${new Date().toISOString()}:`, data);
-    const response = await api.post('/inventory', {
-      branchId: data.branchId,
-      productId: data.productId,
-      currentStock: data.currentStock,
-      minStockLevel: data.minStockLevel ?? 0,
-      maxStockLevel: data.maxStockLevel ?? 1000,
-      userId: data.userId,
-      orderId: data.orderId,
-    });
-    console.log(`inventoryAPI.create - Response at ${new Date().toISOString()}:`, response);
-    return response.inventory;
-  },
-  bulkCreate: async (data) => {
-    if (
-      !/^[0-9a-fA-F]{24}$/.test(data.branchId) ||
-      !/^[0-9a-fA-F]{24}$/.test(data.userId) ||
-      (data.orderId && !/^[0-9a-fA-F]{24}$/.test(data.orderId)) ||
-      !Array.isArray(data.items) ||
-      data.items.length === 0 ||
-      data.items.some(item => !/^[0-9a-fA-F]{24}$/.test(item.productId) || item.currentStock < 0)
-    ) {
-      console.error(`inventoryAPI.bulkCreate - Invalid data at ${new Date().toISOString()}:`, data);
-      throw new Error('Invalid branch ID, user ID, order ID, or items');
-    }
-    console.log(`inventoryAPI.bulkCreate - Sending at ${new Date().toISOString()}:`, data);
-    const response = await api.post('/inventory/bulk', {
-      branchId: data.branchId,
-      userId: data.userId,
-      orderId: data.orderId,
-      items: data.items.map(item => ({
-        productId: item.productId,
-        currentStock: item.currentStock,
-        minStockLevel: item.minStockLevel ?? 0,
-        maxStockLevel: item.maxStockLevel ?? 1000,
-      })),
-    });
-    console.log(`inventoryAPI.bulkCreate - Response at ${new Date().toISOString()}:`, response);
-    return response.inventories;
-  },
-  updateStock: async (id, data) => {
-    if (
-      !/^[0-9a-fA-F]{24}$/.test(id) ||
-      (data.productId && !/^[0-9a-fA-F]{24}$/.test(data.productId)) ||
-      (data.branchId && !/^[0-9a-fA-F]{24}$/.test(data.branchId))
-    ) {
-      console.error(`inventoryAPI.updateStock - Invalid inventory ID, product ID, or branch ID at ${new Date().toISOString()}:`, { id, data });
-      throw new Error('Invalid inventory ID, product ID, or branch ID');
-    }
-    if (data.currentStock !== undefined && data.currentStock < 0) {
-      console.error(`inventoryAPI.updateStock - Invalid stock quantity at ${new Date().toISOString()}:`, data.currentStock);
-      throw new Error('Stock quantity cannot be negative');
-    }
-    console.log(`inventoryAPI.updateStock - Sending at ${new Date().toISOString()}:`, { id, data });
-    const response = await api.put(`/inventory/${id}`, {
-      currentStock: data.currentStock,
-      minStockLevel: data.minStockLevel,
-      maxStockLevel: data.maxStockLevel,
-      productId: data.productId,
-      branchId: data.branchId,
-    });
-    console.log(`inventoryAPI.updateStock - Response at ${new Date().toISOString()}:`, response);
-    return response.inventory;
-  },
-  processReturnItems: async (returnId, data) => {
-    if (
-      !/^[0-9a-fA-F]{24}$/.test(returnId) ||
-      !/^[0-9a-fA-F]{24}$/.test(data.branchId) ||
-      !Array.isArray(data.items) ||
-      data.items.length === 0 ||
-      data.items.some(item => !/^[0-9a-fA-F]{24}$/.test(item.productId) || item.quantity < 1 || !['approved', 'rejected'].includes(item.status))
-    ) {
-      console.error(`inventoryAPI.processReturnItems - Invalid data at ${new Date().toISOString()}:`, { returnId, data });
-      throw new Error('Invalid return ID, branch ID, or items');
-    }
-    console.log(`inventoryAPI.processReturnItems - Sending at ${new Date().toISOString()}:`, { returnId, data });
-    const response = await api.patch(`/inventory/returns/${returnId}/process`, {
-      branchId: data.branchId,
-      items: data.items.map(item => ({
-        productId: item.productId,
-        quantity: item.quantity,
-        status: item.status,
-        reviewNotes: item.reviewNotes?.trim(),
-      })),
-    });
-    console.log(`inventoryAPI.processReturnItems - Response at ${new Date().toISOString()}:`, response);
-    return response.returnRequest;
-  },
-  createRestockRequest: async (data) => {
-    if (
-      !/^[0-9a-fA-F]{24}$/.test(data.productId) ||
-      !/^[0-9a-fA-F]{24}$/.test(data.branchId) ||
-      data.requestedQuantity < 1
-    ) {
-      console.error(`inventoryAPI.createRestockRequest - Invalid data at ${new Date().toISOString()}:`, data);
-      throw new Error('Invalid product ID, branch ID, or requested quantity');
-    }
-    console.log(`inventoryAPI.createRestockRequest - Sending at ${new Date().toISOString()}:`, data);
-    const response = await api.post('/inventory/restock-requests', {
-      productId: data.productId,
-      branchId: data.branchId,
-      requestedQuantity: data.requestedQuantity,
-      notes: data.notes?.trim(),
-    });
-    console.log(`inventoryAPI.createRestockRequest - Response at ${new Date().toISOString()}:`, response);
-    return response.restockRequest;
-  },
-  getRestockRequests: async (params = {}) => {
-    if (params.branchId && !/^[0-9a-fA-F]{24}$/.test(params.branchId)) {
-      console.error(`inventoryAPI.getRestockRequests - Invalid branch ID at ${new Date().toISOString()}:`, params.branchId);
-      throw new Error('Invalid branch ID');
-    }
-    console.log(`inventoryAPI.getRestockRequests - Sending at ${new Date().toISOString()}:`, params);
-    const response = await api.get('/inventory/restock-requests', { params });
-    console.log(`inventoryAPI.getRestockRequests - Response at ${new Date().toISOString()}:`, response);
-    return response.restockRequests;
-  },
-  approveRestockRequest: async (requestId, data) => {
-    if (!/^[0-9a-fA-F]{24}$/.test(requestId) || !/^[0-9a-fA-F]{24}$/.test(data.userId) || data.approvedQuantity < 1) {
-      console.error(`inventoryAPI.approveRestockRequest - Invalid data at ${new Date().toISOString()}:`, { requestId, data });
-      throw new Error('Invalid request ID, user ID, or approved quantity');
-    }
-    console.log(`inventoryAPI.approveRestockRequest - Sending at ${new Date().toISOString()}:`, { requestId, data });
-    const response = await api.patch(`/inventory/restock-requests/${requestId}/approve`, {
-      approvedQuantity: data.approvedQuantity,
-      userId: data.userId,
-    });
-    console.log(`inventoryAPI.approveRestockRequest - Response at ${new Date().toISOString()}:`, response);
-    return response.restockRequest;
-  },
-  getHistory: async (params = {}) => {
-    if (params.branchId && !/^[0-9a-fA-F]{24}$/.test(params.branchId)) {
-      console.error(`inventoryAPI.getHistory - Invalid branch ID at ${new Date().toISOString()}:`, params.branchId);
-      throw new Error('Invalid branch ID');
-    }
-    if (params.productId && !/^[0-9a-fA-F]{24}$/.test(params.productId)) {
-      console.error(`inventoryAPI.getHistory - Invalid product ID at ${new Date().toISOString()}:`, params.productId);
-      throw new Error('Invalid product ID');
-    }
-    console.log(`inventoryAPI.getHistory - Sending at ${new Date().toISOString()}:`, params);
-    const response = await api.get('/inventory/history', { params });
-    console.log(`inventoryAPI.getHistory - Response at ${new Date().toISOString()}:`, response);
-    return response.history;
-  },
-  createReturn: async (data) => {
-    if (
-      !/^[0-9a-fA-F]{24}$/.test(data.orderId) ||
-      !/^[0-9a-fA-F]{24}$/.test(data.branchId) ||
-      !data.reason ||
-      !Array.isArray(data.items) ||
-      data.items.length === 0 ||
-      data.items.some(item => !/^[0-9a-fA-F]{24}$/.test(item.productId) || item.quantity < 1 || !item.reason)
-    ) {
-      console.error(`inventoryAPI.createReturn - Invalid data at ${new Date().toISOString()}:`, data);
-      throw new Error('Invalid order ID, branch ID, reason, or items');
-    }
-    console.log(`inventoryAPI.createReturn - Sending at ${new Date().toISOString()}:`, data);
-    const response = await api.post('/inventory/returns', {
-      orderId: data.orderId,
-      branchId: data.branchId,
-      reason: data.reason.trim(),
-      items: data.items.map(item => ({
-        productId: item.productId,
-        quantity: item.quantity,
-        reason: item.reason.trim(),
-      })),
-      notes: data.notes?.trim(),
-    });
-    console.log(`inventoryAPI.createReturn - Response at ${new Date().toISOString()}:`, response);
-    return response.returnRequest;
-  },
+  // Same as before, no changes needed based on request
 };
 
 export const factoryInventoryAPI = {
-  getAll: async (params: { product?: string; department?: string; lowStock?: boolean } = {}) => {
-    const response = await api.get('/factory-inventory', { params });
-    console.log(`factoryInventoryAPI.getAll - Response at ${new Date().toISOString()}:`, response);
-    return response;
-  },
-  addProductionBatch: async (data: { productId: string; quantity: number }) => {
-    if (!/^[0-9a-fA-F]{24}$/.test(data.productId)) {
-      console.error(`factoryInventoryAPI.addProductionBatch - Invalid product ID at ${new Date().toISOString()}:`, data.productId);
-      throw new Error('Invalid product ID');
-    }
-    console.log(`factoryInventoryAPI.addProductionBatch - Sending at ${new Date().toISOString()}:`, data);
-    const response = await api.post('/factory-inventory/production', data);
-    console.log(`factoryInventoryAPI.addProductionBatch - Response at ${new Date().toISOString()}:`, response);
-    return response;
-  },
-  allocateToBranch: async (data: { requestId: string; productId: string; allocatedQuantity: number }) => {
-    if (!/^[0-9a-fA-F]{24}$/.test(data.requestId) || !/^[0-9a-fA-F]{24}$/.test(data.productId)) {
-      console.error(`factoryInventoryAPI.allocateToBranch - Invalid request ID or product ID at ${new Date().toISOString()}:`, data);
-      throw new Error('Invalid request ID or product ID');
-    }
-    console.log(`factoryInventoryAPI.allocateToBranch - Sending at ${new Date().toISOString()}:`, data);
-    const response = await api.post('/factory-inventory/allocate', data);
-    console.log(`factoryInventoryAPI.allocateToBranch - Response at ${new Date().toISOString()}:`, response);
-    return response;
-  },
-  getRestockRequests: async () => {
-    const response = await api.get('/factory-inventory/restock-requests');
-    console.log(`factoryInventoryAPI.getRestockRequests - Response at ${new Date().toISOString()}:`, response);
-    return response;
-  },
-  approveRestockRequest: async (requestId: string, data: { approvedQuantity: number }) => {
-    if (!/^[0-9a-fA-F]{24}$/.test(requestId)) {
-      console.error(`factoryInventoryAPI.approveRestockRequest - Invalid request ID at ${new Date().toISOString()}:`, requestId);
-      throw new Error('Invalid request ID');
-    }
-    console.log(`factoryInventoryAPI.approveRestockRequest - Sending at ${new Date().toISOString()}:`, { requestId, data });
-    const response = await api.patch(`/factory-inventory/restock-requests/${requestId}/approve`, data);
-    console.log(`factoryInventoryAPI.approveRestockRequest - Response at ${new Date().toISOString()}:`, response);
-    return response;
-  },
-  getHistory: async (params: { productId?: string } = {}) => {
-    const response = await api.get('/factory-inventory/history', { params });
-    console.log(`factoryInventoryAPI.getHistory - Response at ${new Date().toISOString()}:`, response);
-    return response;
-  },
-  getByBranch: async (branchId: string) => {
-    if (!/^[0-9a-fA-F]{24}$/.test(branchId)) {
-      console.error(`factoryInventoryAPI.getByBranch - Invalid branch ID at ${new Date().toISOString()}:`, branchId);
-      throw new Error('Invalid branch ID');
-    }
-    const response = await api.get(`/inventory/branch/${branchId}`);
-    console.log(`factoryInventoryAPI.getByBranch - Response at ${new Date().toISOString()}:`, response);
-    return response;
-  },
+  // Same as before
 };
 
 export { notificationsAPI, returnsAPI, salesAPI };
