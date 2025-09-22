@@ -1,8 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useTranslation } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI } from '../services/api';
-import { Card, Button, Input, Select, Modal, LoadingSpinner } from '../components/UI';
+import { Button } from '../components/UI/Button';
+import { Input } from '../components/UI/Input';
+import { Select } from '../components/UI/Select';
+import { Card } from '../components/UI/Card';
+import { Modal } from '../components/UI/Modal';
+import { LoadingSpinner } from '../components/UI/LoadingSpinner';
+
 import { Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
