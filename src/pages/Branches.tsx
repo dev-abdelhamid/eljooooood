@@ -1,14 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useLanguage } from '../contexts/LanguageContext';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI } from '../services/api';
-import { Card } from '../components/UI/Card';
-import { Button } from '../components/UI/Button';
-import { Input } from '../components/UI/Input';
-import { Select } from '../components/UI/Select';
-import { Modal } from '../components/UI/Modal';
-import { LoadingSpinner } from '../components/UI/LoadingSpinner';
-import { MapPin, Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key } from 'lucide-react';
+import { Card, Button, Input, Select, Modal, LoadingSpinner } from '../components/UI';
+import { Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -21,7 +16,6 @@ interface Branch {
   address: string;
   city: string;
   phone?: string;
-  isActive: boolean;
   user?: {
     _id: string;
     name: string;
@@ -31,21 +25,15 @@ interface Branch {
     email?: string;
     phone?: string;
     isActive: boolean;
-    branch: string;
   };
-  createdBy?: {
-    _id: string;
-    name: string;
-    nameEn?: string;
-    displayName: string;
-    username: string;
-  };
+  createdBy: { _id: string; name: string; nameEn?: string; displayName: string; username: string };
+  isActive: boolean;
 }
 
 export function Branches() {
-  const { t, language } = useLanguage();
+  const { t, i18n } = useTranslation();
   const { user } = useAuth();
-  const isRtl = language === 'ar';
+  const isRtl = i18n.language === 'ar';
   const [branches, setBranches] = useState<Branch[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -65,21 +53,20 @@ export function Branches() {
     address: '',
     city: '',
     phone: '',
-    isActive: true,
     user: {
       name: '',
       nameEn: '',
       username: '',
       email: '',
       phone: '',
-      password: '',
       isActive: true,
+      password: '',
     },
   });
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (signal: AbortSignal) => {
     if (!user || user.role !== 'admin') {
-      setError(t('branches.unauthorized') || 'غير مصرح لك بالوصول');
+      setError(t('branches.unauthorized'));
       setLoading(false);
       toast.error(t('branches.unauthorized'), { position: isRtl ? 'top-left' : 'top-right' });
       return;
@@ -87,677 +74,413 @@ export function Branches() {
 
     setLoading(true);
     try {
-      const branches = await branchesAPI.getAll({ status: filterStatus === 'all' ? undefined : filterStatus, isRtl: isRtl.toString() });
-      setBranches(Array.isArray(branches) ? branches : []);
+      const response = await branchesAPI.getAll({ signal });
+      setBranches(Array.isArray(response) ? response : []);
       setError('');
     } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.log('Fetch aborted');
+        return;
+      }
       console.error(`[${new Date().toISOString()}] Fetch error:`, err);
-      setError(err.response?.data?.message || t('branches.fetchError') || 'حدث خطأ أثناء جلب البيانات');
+      setError(err.response?.data?.message || t('branches.fetchError'));
       toast.error(t('branches.fetchError'), { position: isRtl ? 'top-left' : 'top-right' });
     } finally {
       setLoading(false);
     }
-  }, [t, user, filterStatus, isRtl]);
+  }, [t, user, isRtl]);
 
   useEffect(() => {
-    fetchData();
+    const controller = new AbortController();
+    fetchData(controller.signal);
+    return () => controller.abort();
   }, [fetchData]);
 
-  const filteredBranches = branches.filter(
-    (branch) =>
-      branch &&
-      (branch.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        branch.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        branch.city?.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
-
-  const checkEmailAvailability = async (email: string) => {
-    try {
-      const response = await branchesAPI.checkEmail(email);
-      return response.available;
-    } catch {
-      return false;
-    }
-  };
-
-  const openAddModal = () => {
-    setFormData({
-      name: '',
-      nameEn: '',
-      code: '',
-      address: '',
-      city: '',
-      phone: '',
-      isActive: true,
-      user: {
-        name: '',
-        nameEn: '',
-        username: '',
-        email: '',
-        phone: '',
-        password: '',
-        isActive: true,
-      },
-    });
-    setIsEditMode(false);
-    setSelectedBranchId(null);
-    setIsModalOpen(true);
-    setError('');
-  };
-
-  const openEditModal = (branch: Branch) => {
-    setFormData({
-      name: branch.name,
-      nameEn: branch.nameEn || '',
-      code: branch.code,
-      address: branch.address,
-      city: branch.city,
-      phone: branch.phone || '',
-      isActive: branch.isActive,
-      user: {
-        name: branch.user?.name || '',
-        nameEn: branch.user?.nameEn || '',
-        username: branch.user?.username || '',
-        email: branch.user?.email || '',
-        phone: branch.user?.phone || '',
-        password: '',
-        isActive: branch.user?.isActive ?? true,
-      },
-    });
-    setIsEditMode(true);
-    setSelectedBranchId(branch._id);
-    setIsModalOpen(true);
-    setError('');
-  };
-
-  const openResetPasswordModal = (branch: Branch) => {
-    setSelectedBranchId(branch._id);
-    setResetPasswordData({ password: '', confirmPassword: '' });
-    setIsResetPasswordModalOpen(true);
-    setError('');
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.name || !formData.code || !formData.address || !formData.city || (!isEditMode && (!formData.user.username || !formData.user.name || !formData.user.password))) {
-      setError(
-        isEditMode
-          ? t('branches.requiredFieldsEdit') || 'الاسم، الكود، العنوان، والمدينة مطلوبة'
-          : t('branches.requiredFields') || 'الاسم، الكود، العنوان، المدينة، اسم المستخدم، واسم المستخدم للفرع، وكلمة المرور مطلوبة'
-      );
+  const handleAddEditBranch = async () => {
+    if (!formData.name || !formData.code || !formData.address || !formData.city || !formData.user.name || !formData.user.username || (!isEditMode && !formData.user.password)) {
       toast.error(t('branches.requiredFields'), { position: isRtl ? 'top-left' : 'top-right' });
       return;
     }
 
-    if (!isEditMode && formData.user.email) {
-      const isEmailAvailable = await checkEmailAvailability(formData.user.email);
-      if (!isEmailAvailable) {
-        setError(t('branches.emailExists') || 'الإيميل مستخدم بالفعل، اختر إيميل آخر');
-        toast.error(t('branches.emailExists'), { position: isRtl ? 'top-left' : 'top-right' });
-        return;
-      }
+    if (!isEditMode && formData.user.password !== formData.user.confirmPassword) {
+      toast.error(t('branches.passwordMismatch'), { position: isRtl ? 'top-left' : 'top-right' });
+      return;
     }
 
     try {
       const branchData = {
-        name: formData.name.trim(),
-        nameEn: formData.nameEn.trim() || undefined,
-        code: formData.code.trim(),
-        address: formData.address.trim(),
-        city: formData.city.trim(),
-        phone: formData.phone.trim() || undefined,
-        isActive: formData.isActive,
+        name: formData.name,
+        nameEn: formData.nameEn || undefined,
+        code: formData.code,
+        address: formData.address,
+        city: formData.city,
+        phone: formData.phone || undefined,
         user: {
-          name: formData.user.name.trim(),
-          nameEn: formData.user.nameEn.trim() || undefined,
-          username: formData.user.username.trim(),
-          email: formData.user.email.trim() || undefined,
-          phone: formData.user.phone.trim() || undefined,
+          name: formData.user.name,
+          nameEn: formData.user.nameEn || undefined,
+          username: formData.user.username,
+          email: formData.user.email || undefined,
+          phone: formData.user.phone || undefined,
           isActive: formData.user.isActive,
-          ...(isEditMode ? {} : { password: formData.user.password }),
+          password: formData.user.password || undefined,
         },
       };
 
       if (isEditMode && selectedBranchId) {
-        const updatedBranchResponse = await branchesAPI.update(selectedBranchId, branchData);
-        const updatedBranch = updatedBranchResponse.data ? updatedBranchResponse.data : updatedBranchResponse;
-        setBranches(branches.map((b) => (b._id === selectedBranchId ? { ...b, ...updatedBranch } : b)));
-        toast.success(t('branches.updated') || 'تم تحديث الفرع بنجاح', {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
+        await branchesAPI.update(selectedBranchId, branchData);
+        toast.success(t('branches.updated'), { position: isRtl ? 'top-left' : 'top-right' });
       } else {
-        const response = await branchesAPI.create(branchData);
-        const newBranch = response.data ? response.data : response;
-        if (
-          newBranch &&
-          typeof newBranch === 'object' &&
-          newBranch._id &&
-          newBranch.name &&
-          newBranch.code &&
-          newBranch.address &&
-          newBranch.city &&
-          typeof newBranch.isActive === 'boolean'
-        ) {
-          setBranches([...branches, newBranch as Branch]);
-          toast.success(t('branches.added') || 'تم إضافة الفرع بنجاح', {
-            position: isRtl ? 'top-left' : 'top-right',
-          });
-        } else {
-          setError(t('branches.createError') || 'حدث خطأ أثناء إضافة الفرع');
-          toast.error(t('branches.createError'), { position: isRtl ? 'top-left' : 'top-right' });
-        }
+        await branchesAPI.create(branchData);
+        toast.success(t('branches.added'), { position: isRtl ? 'top-left' : 'top-right' });
       }
+
       setIsModalOpen(false);
-      setError('');
+      setFormData({
+        name: '',
+        nameEn: '',
+        code: '',
+        address: '',
+        city: '',
+        phone: '',
+        user: { name: '', nameEn: '', username: '', email: '', phone: '', isActive: true, password: '' },
+      });
+      fetchData(new AbortController().signal);
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Submit error:`, err);
-      let errorMessage = t(isEditMode ? 'branches.updateError' : 'branches.createError') || 'حدث خطأ أثناء معالجة الفرع';
-      if (err.response?.data?.message) {
-        const message = err.response.data.message;
-        errorMessage =
-          message === 'Branch code already exists'
-            ? t('branches.codeExists') || 'هذا الكود مستخدم بالفعل، اختر كودًا آخر'
-            : message === 'Username already exists'
-            ? t('branches.usernameExists') || 'اسم المستخدم مستخدم بالفعل، اختر اسمًا آخر'
-            : message.includes('الإيميل')
-            ? t('branches.emailExists') || 'الإيميل مستخدم بالفعل، اختر إيميل آخر'
-            : message || errorMessage;
-      }
-      setError(errorMessage);
-      toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
+      console.error(`[${new Date().toISOString()}] Add/Edit branch error:`, err);
+      toast.error(err.response?.data?.message || t(isEditMode ? 'branches.updateError' : 'branches.createError'), {
+        position: isRtl ? 'top-left' : 'top-right',
+      });
     }
   };
 
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!resetPasswordData.password || !resetPasswordData.confirmPassword) {
-      setError(t('branches.passwordRequired') || 'كلمة المرور وتأكيدها مطلوبان');
-      toast.error(t('branches.passwordRequired'), { position: isRtl ? 'top-left' : 'top-right' });
-      return;
+  const handleDeleteBranch = async (id: string) => {
+    if (!window.confirm(t('branches.confirmDelete'))) return;
+
+    try {
+      await branchesAPI.delete(id);
+      toast.success(t('branches.deleted'), { position: isRtl ? 'top-left' : 'top-right' });
+      fetchData(new AbortController().signal);
+    } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] Delete branch error:`, err);
+      toast.error(err.response?.data?.message || t('branches.deleteError'), {
+        position: isRtl ? 'top-left' : 'top-right',
+      });
     }
-    if (resetPasswordData.password !== resetPasswordData.confirmPassword) {
-      setError(t('branches.passwordMismatch') || 'كلمة المرور وتأكيدها غير متطابقتين');
+  };
+
+  const handleResetPassword = async () => {
+    if (!resetPasswordData.password || resetPasswordData.password !== resetPasswordData.confirmPassword) {
       toast.error(t('branches.passwordMismatch'), { position: isRtl ? 'top-left' : 'top-right' });
       return;
     }
-    if (resetPasswordData.password.length < 6) {
-      setError(t('branches.passwordTooShort') || 'كلمة المرور يجب أن تكون 6 أحرف على الأقل');
-      toast.error(t('branches.passwordTooShort'), { position: isRtl ? 'top-left' : 'top-right' });
-      return;
-    }
 
     try {
-      await branchesAPI.resetBranchPassword(selectedBranchId!, { password: resetPasswordData.password });
+      await branchesAPI.resetPassword(selectedBranchId!, { password: resetPasswordData.password });
+      toast.success(t('branches.passwordResetSuccess'), { position: isRtl ? 'top-left' : 'top-right' });
       setIsResetPasswordModalOpen(false);
       setResetPasswordData({ password: '', confirmPassword: '' });
-      toast.success(t('branches.passwordResetSuccess') || 'تم إعادة تعيين كلمة المرور بنجاح', {
-        position: isRtl ? 'top-left' : 'top-right',
-      });
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Reset password error:`, err);
-      const errorMessage = err.response?.data?.message || t('branches.passwordResetError') || 'حدث خطأ أثناء إعادة تعيين كلمة المرور';
-      setError(errorMessage);
-      toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
-    }
-  };
-
-  const handleDelete = async (branchId: string) => {
-    if (!window.confirm(t('branches.confirmDelete') || 'هل أنت متأكد من حذف هذا الفرع؟')) return;
-    try {
-      await branchesAPI.delete(branchId);
-      setBranches(branches.filter((b) => b._id !== branchId));
-      toast.success(t('branches.deleted') || 'تم حذف الفرع بنجاح', {
+      toast.error(err.response?.data?.message || t('branches.passwordResetError'), {
         position: isRtl ? 'top-left' : 'top-right',
       });
-      setError('');
-    } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Delete error:`, err);
-      let errorMessage = t('branches.deleteError') || 'حدث خطأ أثناء حذف الفرع';
-      if (err.response?.data?.message) {
-        errorMessage =
-          err.response.data.message === 'Cannot delete branch with associated orders or inventory'
-            ? t('branches.deleteRestricted') || 'لا يمكن حذف الفرع لوجود طلبات أو مخزون مرتبط'
-            : err.response.data.message || errorMessage;
-      }
-      setError(errorMessage);
-      toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
+  const filteredBranches = branches.filter(
+    (branch) =>
+      (branch.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        branch.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        branch.user?.displayName.toLowerCase().includes(searchTerm.toLowerCase())) &&
+      (filterStatus === 'all' || (filterStatus === 'active' && branch.isActive) || (filterStatus === 'inactive' && !branch.isActive))
+  );
 
   return (
-    <div className={`mx-auto min-h-screen ${isRtl ? 'rtl' : 'ltr'}`}>
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4"
-      >
-        <h1 className="text-3xl sm:text-4xl font-bold text-amber-900 flex items-center justify-center sm:justify-start gap-3">
-          <MapPin className="w-8 h-8 text-amber-600" />
-          {t('branches.manage') || 'إدارة الفروع'}
-        </h1>
-        {user?.role === 'admin' && (
-          <Button
-            variant="primary"
-            icon={Plus}
-            onClick={openAddModal}
-            className="bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
-          >
-            {t('branches.add') || 'إضافة فرع'}
-          </Button>
-        )}
-      </motion.div>
+    <motion.div className="p-6 bg-gray-100 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">{t('branches.title')}</h1>
+        <Button
+          onClick={() => {
+            setIsModalOpen(true);
+            setIsEditMode(false);
+            setFormData({
+              name: '',
+              nameEn: '',
+              code: '',
+              address: '',
+              city: '',
+              phone: '',
+              user: { name: '', nameEn: '', username: '', email: '', phone: '', isActive: true, password: '' },
+            });
+          }}
+          className="bg-blue-600 text-white hover:bg-blue-700"
+        >
+          <Plus className="w-5 h-5 mr-2" /> {t('branches.add')}
+        </Button>
+      </div>
+
+      <div className="mb-4 flex flex-col sm:flex-row gap-4">
+        <div className="relative flex-1">
+          <Search className="absolute top-3 left-3 w-5 h-5 text-gray-400" />
+          <Input
+            placeholder={t('branches.searchPlaceholder')}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <Button onClick={() => setIsFilterOpen(!isFilterOpen)} className="bg-gray-200 hover:bg-gray-300">
+          {t('branches.filters')} <ChevronDown className="w-5 h-5 ml-2" />
+        </Button>
+      </div>
 
       <AnimatePresence>
-        {error && (
+        {isFilterOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="mb-8 p-4 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3 shadow-sm"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="mb-4"
           >
-            <AlertCircle className="w-5 h-5 text-red-600" />
-            <span className="text-red-600 font-medium">{error}</span>
+            <Select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              options={[
+                { value: 'all', label: t('branches.allStatuses') },
+                { value: 'active', label: t('branches.active') },
+                { value: 'inactive', label: t('branches.inactive') },
+              ]}
+            />
           </motion.div>
         )}
       </AnimatePresence>
 
-      <Card className="p-6 mb-8 bg-white rounded-lg shadow-md">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
-            <Search
-              className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-amber-500 w-5 h-5`}
-            />
-            <Input
-              value={searchTerm}
-              onChange={(value) => setSearchTerm(value)}
-              placeholder={t('branches.searchPlaceholder') || 'ابحث عن الفروع...'}
-              className={`pl-10 pr-4 py-2 border border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50 ${isRtl ? 'text-right' : 'text-left'}`}
-              aria-label={t('branches.searchPlaceholder') || 'ابحث عن الفروع'}
-            />
-          </div>
-          <div className="relative flex-1">
-            <Select
-              label={t('branches.status') || 'الحالة'}
-              options={[
-                { value: 'all', label: t('branches.allStatuses') || 'جميع الحالات' },
-                { value: 'active', label: t('branches.active') || 'نشط' },
-                { value: 'inactive', label: t('branches.inactive') || 'غير نشط' },
-              ]}
-              value={filterStatus}
-              onChange={(value) => setFilterStatus(value)}
-              className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50"
-              aria-label={t('branches.status') || 'الحالة'}
-            />
-          </div>
+      {loading && <LoadingSpinner size="lg" />}
+      {error && (
+        <div className="bg-red-100 text-red-700 p-4 rounded mb-4 flex items-center">
+          <AlertCircle className="w-5 h-5 mr-2" /> {error}
+        </div>
+      )}
+
+      {filteredBranches.length === 0 && !loading && (
+        <div className="text-center py-10">
+          <p className="text-gray-500">{t('branches.empty')}</p>
           <Button
-            variant="outline"
-            icon={ChevronDown}
-            onClick={() => setIsFilterOpen(!isFilterOpen)}
-            className="sm:hidden bg-amber-100 text-amber-800 hover:bg-amber-200 rounded-lg px-4 py-2"
+            onClick={() => setIsModalOpen(true)}
+            className="mt-4 bg-blue-600 text-white hover:bg-blue-700"
           >
-            {t('branches.filters') || 'الفلاتر'}
+            {t('branches.addFirst')}
           </Button>
         </div>
-        <AnimatePresence>
-          {isFilterOpen && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              className="mt-4 sm:hidden"
-            >
-              <Select
-                label={t('branches.status') || 'الحالة'}
-                options={[
-                  { value: 'all', label: t('branches.allStatuses') || 'جميع الحالات' },
-                  { value: 'active', label: t('branches.active') || 'نشط' },
-                  { value: 'inactive', label: t('branches.inactive') || 'غير نشط' },
-                ]}
-                value={filterStatus}
-                onChange={(value) => setFilterStatus(value)}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50"
-                aria-label={t('branches.status') || 'الحالة'}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </Card>
+      )}
 
-      <motion.div
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ staggerChildren: 0.1 }}
-      >
-        {filteredBranches.length === 0 ? (
-          <Card className="p-8 text-center bg-white rounded-lg shadow-md col-span-full">
-            <MapPin className="w-12 h-12 text-amber-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-amber-900">{t('branches.noBranches') || 'لا توجد فروع'}</h3>
-            <p className="text-gray-600 mt-2">
-              {searchTerm || filterStatus !== 'all'
-                ? t('branches.noMatch') || 'لا توجد فروع مطابقة'
-                : t('branches.empty') || 'لا توجد فروع متاحة'}
-            </p>
-            {user?.role === 'admin' && !searchTerm && filterStatus === 'all' && (
-              <Button
-                variant="primary"
-                icon={Plus}
-                onClick={openAddModal}
-                className="mt-6 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
-              >
-                {t('branches.addFirst') || 'إضافة أول فرع'}
-              </Button>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredBranches.map((branch) => (
+          <Card key={branch._id} className="p-4">
+            <h2 className="text-lg font-semibold">{branch.displayName}</h2>
+            <p>{t('branches.code')}: {branch.code}</p>
+            <p>{t('branches.address')}: {branch.address}</p>
+            <p>{t('branches.city')}: {branch.city}</p>
+            {branch.phone && <p>{t('branches.phone')}: {branch.phone}</p>}
+            {branch.user && (
+              <>
+                <p>{t('branches.user')}: {branch.user.displayName}</p>
+                {branch.user.email && <p>{t('branches.email')}: {branch.user.email}</p>}
+                {branch.user.phone && <p>{t('branches.userPhone')}: {branch.user.phone}</p>}
+                <p>{t('branches.userStatus')}: {branch.user.isActive ? t('branches.active') : t('branches.inactive')}</p>
+              </>
             )}
+            <p>{t('branches.createdBy')}: {branch.createdBy.displayName}</p>
+            <div className="mt-4 flex gap-2">
+              <Button
+                onClick={() => {
+                  setIsModalOpen(true);
+                  setIsEditMode(true);
+                  setSelectedBranchId(branch._id);
+                  setFormData({
+                    name: branch.name,
+                    nameEn: branch.nameEn || '',
+                    code: branch.code,
+                    address: branch.address,
+                    city: branch.city,
+                    phone: branch.phone || '',
+                    user: {
+                      name: branch.user?.name || '',
+                      nameEn: branch.user?.nameEn || '',
+                      username: branch.user?.username || '',
+                      email: branch.user?.email || '',
+                      phone: branch.user?.phone || '',
+                      isActive: branch.user?.isActive ?? true,
+                      password: '',
+                    },
+                  });
+                }}
+                className="bg-yellow-500 text-white hover:bg-yellow-600"
+              >
+                <Edit2 className="w-5 h-5 mr-2" /> {t('branches.edit')}
+              </Button>
+              <Button
+                onClick={() => {
+                  setSelectedBranchId(branch._id);
+                  setIsResetPasswordModalOpen(true);
+                }}
+                className="bg-purple-500 text-white hover:bg-purple-600"
+              >
+                <Key className="w-5 h-5 mr-2" /> {t('branches.resetPassword')}
+              </Button>
+              <Button
+                onClick={() => handleDeleteBranch(branch._id)}
+                className="bg-red-500 text-white hover:bg-red-600"
+              >
+                <Trash2 className="w-5 h-5 mr-2" /> {t('branches.delete')}
+              </Button>
+            </div>
           </Card>
-        ) : (
-          filteredBranches.map((branch) => (
-            <motion.div
-              key={branch._id}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-            >
-              <Card className="bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-lg text-amber-900 truncate">{branch.displayName}</h3>
-                    <MapPin className="w-6 h-6 text-amber-600" />
-                  </div>
-                  <p className="text-sm text-gray-600">{t('branches.code') || 'الكود'}: {branch.code}</p>
-                  <p className="text-sm text-gray-600">{t('branches.address') || 'العنوان'}: {branch.address}</p>
-                  <p className="text-sm text-gray-600">{t('branches.city') || 'المدينة'}: {branch.city}</p>
-                  <p className="text-sm text-gray-600">{t('branches.phone') || 'الهاتف'}: {branch.phone || '-'}</p>
-                  <p className={`text-sm font-medium ${branch.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                    {t('branches.status') || 'الحالة'}: {branch.isActive ? t('branches.active') || 'نشط' : t('branches.inactive') || 'غير نشط'}
-                  </p>
-                  {branch.user && (
-                    <div className="mt-3 pt-3 border-t border-amber-100">
-                      <p className="text-sm text-gray-600">{t('branches.user') || 'المستخدم'}: {branch.user.displayName}</p>
-                      <p className="text-sm text-gray-600">{t('branches.username') || 'اسم المستخدم'}: {branch.user.username}</p>
-                      <p className="text-sm text-gray-600">{t('branches.email') || 'الإيميل'}: {branch.user.email || '-'}</p>
-                      <p className="text-sm text-gray-600">{t('branches.userPhone') || 'هاتف المستخدم'}: {branch.user.phone || '-'}</p>
-                      <p className={`text-sm font-medium ${branch.user.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                        {t('branches.userStatus') || 'حالة المستخدم'}: {branch.user.isActive ? t('branches.active') || 'نشط' : t('branches.inactive') || 'غير نشط'}
-                      </p>
-                    </div>
-                  )}
-                  {branch.createdBy && (
-                    <p className="text-sm text-gray-600 mt-2">
-                      {t('branches.createdBy') || 'تم الإنشاء بواسطة'}: {branch.createdBy.displayName}
-                    </p>
-                  )}
-                  {user?.role === 'admin' && (
-                    <div className="flex gap-3 mt-4">
-                      <button
-                        onClick={() => openEditModal(branch)}
-                        className="text-amber-600 hover:text-amber-800 transition-colors"
-                        title={t('branches.edit') || 'تعديل الفرع'}
-                      >
-                        <Edit2 className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => openResetPasswordModal(branch)}
-                        className="text-blue-500 hover:text-blue-700 transition-colors"
-                        title={t('branches.resetPassword') || 'إعادة تعيين كلمة المرور'}
-                      >
-                        <Key className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(branch._id)}
-                        className="text-red-500 hover:text-red-700 transition-colors"
-                        title={t('branches.delete') || 'حذف الفرع'}
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </Card>
-            </motion.div>
-          ))
-        )}
-      </motion.div>
+        ))}
+      </div>
 
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={isEditMode ? t('branches.edit') || 'تعديل الفرع' : t('branches.add') || 'إضافة فرع'}
-        size="lg"
+        title={isEditMode ? t('branches.edit') : t('branches.add')}
       >
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="grid grid-cols-1 sm:grid-cols-2 gap-6"
-          >
-            <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-amber-900">{t('branches.branchDetails') || 'تفاصيل الفرع'}</h3>
+        <div className="space-y-4">
+          <Input
+            label={t('branches.namePlaceholder')}
+            value={formData.name}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            required
+          />
+          <Input
+            label={t('branches.nameEnPlaceholder')}
+            value={formData.nameEn}
+            onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
+          />
+          <Input
+            label={t('branches.codePlaceholder')}
+            value={formData.code}
+            onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+            required
+          />
+          <Input
+            label={t('branches.addressPlaceholder')}
+            value={formData.address}
+            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+            required
+          />
+          <Input
+            label={t('branches.cityPlaceholder')}
+            value={formData.city}
+            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+            required
+          />
+          <Input
+            label={t('branches.phonePlaceholder')}
+            value={formData.phone}
+            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+          />
+          <h3 className="font-semibold mt-4">{t('branches.user')}</h3>
+          <Input
+            label={t('branches.userNamePlaceholder')}
+            value={formData.user.name}
+            onChange={(e) => setFormData({ ...formData, user: { ...formData.user, name: e.target.value } })}
+            required
+          />
+          <Input
+            label={t('branches.userNameEnPlaceholder')}
+            value={formData.user.nameEn}
+            onChange={(e) => setFormData({ ...formData, user: { ...formData.user, nameEn: e.target.value } })}
+          />
+          <Input
+            label={t('branches.usernamePlaceholder')}
+            value={formData.user.username}
+            onChange={(e) => setFormData({ ...formData, user: { ...formData.user, username: e.target.value } })}
+            required
+          />
+          <Input
+            label={t('branches.emailPlaceholder')}
+            value={formData.user.email}
+            onChange={(e) => setFormData({ ...formData, user: { ...formData.user, email: e.target.value } })}
+            type="email"
+          />
+          <Input
+            label={t('branches.userPhonePlaceholder')}
+            value={formData.user.phone}
+            onChange={(e) => setFormData({ ...formData, user: { ...formData.user, phone: e.target.value } })}
+          />
+          <Select
+            label={t('branches.userStatus')}
+            value={formData.user.isActive ? 'active' : 'inactive'}
+            onChange={(e) =>
+              setFormData({ ...formData, user: { ...formData.user, isActive: e.target.value === 'active' } })
+            }
+            options={[
+              { value: 'active', label: t('branches.active') },
+              { value: 'inactive', label: t('branches.inactive') },
+            ]}
+          />
+          {!isEditMode && (
+            <>
               <Input
-                label={t('branches.name') || 'اسم الفرع'}
-                value={formData.name}
-                onChange={(value) => setFormData({ ...formData, name: value })}
-                placeholder={t('branches.namePlaceholder') || 'أدخل اسم الفرع'}
+                label={t('branches.passwordPlaceholder')}
+                value={formData.user.password}
+                onChange={(e) => setFormData({ ...formData, user: { ...formData.user, password: e.target.value } })}
+                type="password"
                 required
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
-                label={t('branches.nameEn') || 'اسم الفرع (إنجليزي)'}
-                value={formData.nameEn}
-                onChange={(value) => setFormData({ ...formData, nameEn: value })}
-                placeholder={t('branches.nameEnPlaceholder') || 'Enter branch name (English)'}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t('branches.code') || 'كود الفرع'}
-                value={formData.code}
-                onChange={(value) => setFormData({ ...formData, code: value })}
-                placeholder={t('branches.codePlaceholder') || 'أدخل كود الفرع'}
+                label={t('branches.confirmPasswordPlaceholder')}
+                value={formData.user.confirmPassword || ''}
+                onChange={(e) => setFormData({ ...formData, user: { ...formData.user, confirmPassword: e.target.value } })}
+                type="password"
                 required
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
-              <Input
-                label={t('branches.address') || 'العنوان'}
-                value={formData.address}
-                onChange={(value) => setFormData({ ...formData, address: value })}
-                placeholder={t('branches.addressPlaceholder') || 'أدخل العنوان'}
-                required
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t('branches.city') || 'المدينة'}
-                value={formData.city}
-                onChange={(value) => setFormData({ ...formData, city: value })}
-                placeholder={t('branches.cityPlaceholder') || 'أدخل المدينة'}
-                required
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t('branches.phone') || 'الهاتف'}
-                value={formData.phone}
-                onChange={(value) => setFormData({ ...formData, phone: value })}
-                placeholder={t('branches.phonePlaceholder') || 'أدخل رقم الهاتف'}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Select
-                label={t('branches.status') || 'الحالة'}
-                options={[
-                  { value: true, label: t('branches.active') || 'نشط' },
-                  { value: false, label: t('branches.inactive') || 'غير نشط' },
-                ]}
-                value={formData.isActive}
-                onChange={(value) => setFormData({ ...formData, isActive: value === 'true' })}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-            </div>
-            <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-amber-900">{t('branches.userDetails') || 'تفاصيل المستخدم'}</h3>
-              <Input
-                label={t('branches.userName') || 'اسم المستخدم'}
-                value={formData.user.name}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, name: value } })}
-                placeholder={t('branches.userNamePlaceholder') || 'أدخل اسم المستخدم'}
-                required={!isEditMode}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t('branches.userNameEn') || 'اسم المستخدم (إنجليزي)'}
-                value={formData.user.nameEn}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, nameEn: value } })}
-                placeholder={t('branches.userNameEnPlaceholder') || 'Enter user name (English)'}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t('branches.username') || 'اسم المستخدم للفرع'}
-                value={formData.user.username}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, username: value } })}
-                placeholder={t('branches.usernamePlaceholder') || 'أدخل اسم المستخدم للفرع'}
-                required={!isEditMode}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t('branches.email') || 'الإيميل'}
-                value={formData.user.email}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, email: value } })}
-                placeholder={t('branches.emailPlaceholder') || 'أدخل الإيميل'}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t('branches.userPhone') || 'هاتف المستخدم'}
-                value={formData.user.phone}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, phone: value } })}
-                placeholder={t('branches.userPhonePlaceholder') || 'أدخل رقم هاتف المستخدم'}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Select
-                label={t('branches.userStatus') || 'حالة المستخدم'}
-                options={[
-                  { value: true, label: t('branches.active') || 'نشط' },
-                  { value: false, label: t('branches.inactive') || 'غير نشط' },
-                ]}
-                value={formData.user.isActive}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, isActive: value === 'true' } })}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              {!isEditMode && (
-                <Input
-                  label={t('branches.password') || 'كلمة المرور للفرع'}
-                  value={formData.user.password}
-                  onChange={(value) => setFormData({ ...formData, user: { ...formData.user, password: value } })}
-                  placeholder={t('branches.passwordPlaceholder') || 'أدخل كلمة المرور للفرع'}
-                  type="password"
-                  required
-                  className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                />
-              )}
-            </div>
-          </motion.div>
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3"
-              >
-                <AlertCircle className="w-5 h-5 text-red-600" />
-                <span className="text-red-600 font-medium">{error}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <div className="flex gap-4 mt-6">
-            <Button
-              type="submit"
-              variant="primary"
-              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
-            >
-              {isEditMode ? t('branches.update') || 'تحديث الفرع' : t('branches.add') || 'إضافة الفرع'}
+            </>
+          )}
+          <div className="flex gap-4 mt-4">
+            <Button onClick={handleAddEditBranch} className="bg-blue-600 text-white hover:bg-blue-700">
+              {isEditMode ? t('branches.update') : t('branches.add')}
             </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setIsModalOpen(false)}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
-            >
-              {t('cancel') || 'إلغاء'}
+            <Button onClick={() => setIsModalOpen(false)} className="bg-gray-300 hover:bg-gray-400">
+              {t('branches.cancel')}
             </Button>
           </div>
-        </form>
+        </div>
       </Modal>
 
       <Modal
         isOpen={isResetPasswordModalOpen}
         onClose={() => setIsResetPasswordModalOpen(false)}
-        title={t('branches.resetPassword') || 'إعادة تعيين كلمة المرور'}
-        size="sm"
+        title={t('branches.resetPassword')}
       >
-        <form onSubmit={handleResetPassword} className="space-y-6">
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="space-y-6"
-          >
-            <Input
-              label={t('branches.newPassword') || 'كلمة المرور الجديدة'}
-              value={resetPasswordData.password}
-              onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
-              placeholder={t('branches.newPasswordPlaceholder') || 'أدخل كلمة المرور الجديدة'}
-              type="password"
-              required
-              className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-            />
-            <Input
-              label={t('branches.confirmPassword') || 'تأكيد كلمة المرور'}
-              value={resetPasswordData.confirmPassword}
-              onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
-              placeholder={t('branches.confirmPasswordPlaceholder') || 'أدخل تأكيد كلمة المرور'}
-              type="password"
-              required
-              className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-            />
-          </motion.div>
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3"
-              >
-                <AlertCircle className="w-5 h-5 text-red-600" />
-                <span className="text-red-600 font-medium">{error}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <div className="flex gap-4 mt-6">
-            <Button
-              type="submit"
-              variant="primary"
-              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
-            >
-              {t('branches.reset') || 'إعادة تعيين'}
+        <div className="space-y-4">
+          <Input
+            label={t('branches.newPasswordPlaceholder')}
+            value={resetPasswordData.password}
+            onChange={(e) => setResetPasswordData({ ...resetPasswordData, password: e.target.value })}
+            type="password"
+            required
+          />
+          <Input
+            label={t('branches.confirmPasswordPlaceholder')}
+            value={resetPasswordData.confirmPassword}
+            onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
+            type="password"
+            required
+          />
+          <div className="flex gap-4 mt-4">
+            <Button onClick={handleResetPassword} className="bg-blue-600 text-white hover:bg-blue-700">
+              {t('branches.reset')}
             </Button>
             <Button
-              type="button"
-              variant="secondary"
               onClick={() => setIsResetPasswordModalOpen(false)}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+              className="bg-gray-300 hover:bg-gray-400"
             >
-              {t('cancel') || 'إلغاء'}
+              {t('branches.cancel')}
             </Button>
           </div>
-        </form>
+        </div>
       </Modal>
-    </div>
+    </motion.div>
   );
 }
