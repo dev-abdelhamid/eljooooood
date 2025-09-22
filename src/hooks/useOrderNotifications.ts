@@ -562,9 +562,20 @@ export const useOrderNotifications = (
                 : [],
             };
             dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'delivered', payload: mappedOrder });
-           
+            addNotification({
+              _id: data.eventId || crypto.randomUUID(),
+              type: 'success',
+              message: t('notifications.order_delivered', {
+                orderNumber: data.orderNumber,
+                branchName: data.branchName || t('branches.unknown'),
+              }),
+              data: { orderId: data.orderId, eventId: data.eventId },
+              read: false,
+              createdAt: new Date().toISOString(),
+              sound: '/sounds/notification.mp3',
+              vibrate: [400, 100, 400],
+            });
           } catch (err) {
-            console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
           }
         },
         config: {
