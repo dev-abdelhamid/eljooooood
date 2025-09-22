@@ -63,7 +63,7 @@ export function Sidebar({
       { path: '/returns', icon: RefreshCcw, label: t('returns') },
       { path: '/sales', icon: TrendingUp, label: t('sales') },
       { path: '/reports', icon: BarChart2, label: t('reports') },
-      { path: '/settings', icon: Settings2, label: t('settings') },
+      { path: '/profile', icon: Settings2, label: t('settings') },
     ];
 
     const branchItems = [
@@ -72,10 +72,14 @@ export function Sidebar({
       { path: '/branch-sales', icon: TrendingUp, label: t('sales.review') },
       { path: '/branch-returns', icon: RefreshCcw, label: t('returns.review') },
       { path: '/branch-inventory', icon: Warehouse, label: t('inventory') },
+            { path: '/profile', icon: Settings2, label: t('settings') },
+
     ];
 
     const chefItems = [
       { path: '/production-tasks', icon: ListTodo, label: t('productionTasks') },
+            { path: '/profile', icon: Settings2, label: t('settings') },
+
     ];
 
     const productionItems = [
@@ -83,6 +87,8 @@ export function Sidebar({
       { path: '/orders', icon: ShoppingBag, label: t('orders') },
       { path: '/returns', icon: RefreshCcw, label: t('returns') },
       { path: '/reports', icon: BarChart2, label: t('reports') },
+            { path: '/profile', icon: Settings2, label: t('settings') },
+
     ];
 
     let roleItems = [];
