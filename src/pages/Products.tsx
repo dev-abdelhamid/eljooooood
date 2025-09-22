@@ -3,7 +3,6 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { productsAPI, departmentAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
-import { motion } from 'framer-motion';
 import { Button } from '../components/UI/Button';
 import { Input } from '../components/UI/Input';
 import { Select } from '../components/UI/Select';
@@ -13,21 +12,28 @@ import { Package, Plus, Edit2, Trash2, Search, AlertCircle } from 'lucide-react'
 import { toast } from 'react-toastify';
 
 interface Product {
-  _id: string;
+  id: string;
   name: string;
   nameEn?: string;
   code: string;
-  department: { _id: string; name: string; nameEn?: string };
+  department: { id: string; name: string; nameEn?: string; displayName: string };
   price: number;
   unit: string;
   unitEn?: string;
   description?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  displayName: string;
+  displayUnit: string;
 }
 
 interface Department {
-  _id: string;
+  id: string;
   name: string;
   nameEn?: string;
+  code: string;
+  displayName: string;
 }
 
 const translations = {
@@ -45,28 +51,31 @@ const translations = {
     department: 'القسم',
     price: 'السعر',
     unit: 'الوحدة',
+    unitEn: 'الوحدة (إنجليزي)',
     description: 'الوصف',
-    noDepartment: 'لا يوجد قسم',
     namePlaceholder: 'أدخل اسم المنتج',
     nameEnPlaceholder: 'أدخل اسم المنتج بالإنجليزية',
     codePlaceholder: 'أدخل كود المنتج',
-    selectDepartment: 'اختر القسم',
+    departmentPlaceholder: 'اختر القسم',
     pricePlaceholder: 'أدخل السعر',
     unitPlaceholder: 'اختر الوحدة',
+    unitEnPlaceholder: 'أدخل الوحدة بالإنجليزية',
     descriptionPlaceholder: 'أدخل الوصف',
     edit: 'تعديل المنتج',
+    update: 'تحديث',
     saveError: 'خطأ في حفظ المنتج',
     delete: 'حذف',
     deleteConfirm: 'هل أنت متأكد من حذف هذا المنتج؟',
     deleteError: 'خطأ في الحذف',
+    deleted: 'تم الحذف بنجاح',
     unauthorized: 'غير مصرح لك',
     fetchError: 'خطأ في جلب البيانات',
-    units: {
-      kilo: 'كيلو',
-      piece: 'قطعة',
-      pack: 'علبة',
-      tray: 'صينية',
-    },
+    active: 'نشط',
+    inactive: 'غير نشط',
+    status: 'الحالة',
+    createdAt: 'تاريخ الإنشاء',
+    updatedAt: 'تاريخ التحديث',
+    cancel: 'إلغاء',
   },
   en: {
     manage: 'Manage Products',
@@ -82,30 +91,40 @@ const translations = {
     department: 'Department',
     price: 'Price',
     unit: 'Unit',
+    unitEn: 'Unit (English)',
     description: 'Description',
-    noDepartment: 'No Department',
     namePlaceholder: 'Enter product name',
     nameEnPlaceholder: 'Enter product name in English',
     codePlaceholder: 'Enter product code',
-    selectDepartment: 'Select department',
+    departmentPlaceholder: 'Select department',
     pricePlaceholder: 'Enter price',
     unitPlaceholder: 'Select unit',
+    unitEnPlaceholder: 'Enter unit in English',
     descriptionPlaceholder: 'Enter description',
     edit: 'Edit Product',
+    update: 'Update',
     saveError: 'Error saving product',
     delete: 'Delete',
     deleteConfirm: 'Are you sure you want to delete this product?',
-    deleteError: 'Error deleting product',
+    deleteError: 'Error deleting',
+    deleted: 'Deleted successfully',
     unauthorized: 'Unauthorized access',
     fetchError: 'Error fetching data',
-    units: {
-      kilo: 'Kilo',
-      piece: 'Piece',
-      pack: 'Pack',
-      tray: 'Tray',
-    },
+    active: 'Active',
+    inactive: 'Inactive',
+    status: 'Status',
+    createdAt: 'Created At',
+    updatedAt: 'Updated At',
+    cancel: 'Cancel',
   },
 };
+
+const unitOptions = [
+  { value: 'كيلو', label: 'كيلو', labelEn: 'Kilo' },
+  { value: 'قطعة', label: 'قطعة', labelEn: 'Piece' },
+  { value: 'علبة', label: 'علبة', labelEn: 'Pack' },
+  { value: 'صينية', label: 'صينية', labelEn: 'Tray' },
+];
 
 export function Products() {
   const { language } = useLanguage();
@@ -117,7 +136,7 @@ export function Products() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterDepartment, setFilterDepartment] = useState('');
+  const [selectedDepartment, setSelectedDepartment] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -127,8 +146,8 @@ export function Products() {
     code: '',
     department: '',
     price: '',
-    unit: 'قطعة',
-    unitEn: 'Piece',
+    unit: '',
+    unitEn: '',
     description: '',
   });
 
@@ -136,53 +155,75 @@ export function Products() {
     const fetchData = async () => {
       if (!user || !['admin'].includes(user.role)) {
         setError(t.unauthorized);
-        setLoading(false);
         toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
+        setLoading(false);
         return;
       }
 
       setLoading(true);
       try {
-        console.log('Fetching products with params:', { filterDepartment, searchTerm, isRtl });
-        console.log('API URL:', import.meta.env.VITE_API_URL);
+        console.log(`[${new Date().toISOString()}] Fetching products with params:`, { searchTerm, department: selectedDepartment, isRtl });
         const [productsResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 100, isRtl }).catch((err) => {
-            console.error('Products API error:', err);
-            throw err;
-          }),
-          departmentAPI.getAll({ isRtl }).catch((err) => {
-            console.error('Departments API error:', err);
-            throw err;
-          }),
+          productsAPI.getAll({ search: searchTerm, department: selectedDepartment, isRtl }),
+          departmentAPI.getAll({ isRtl }),
         ]);
-        console.log('Products response:', productsResponse);
-        console.log('Departments response:', departmentsResponse);
+        console.log(`[${new Date().toISOString()}] Products response:`, productsResponse);
+        console.log(`[${new Date().toISOString()}] Departments response:`, departmentsResponse);
 
-        const departmentsArray = Array.isArray(departmentsResponse.data) ? departmentsResponse.data : [];
-        setProducts(Array.isArray(productsResponse.data) ? productsResponse.data : []);
-        setDepartments(departmentsArray);
+        const productsData = Array.isArray(productsResponse.data) ? productsResponse.data : productsResponse.data || [];
+        const departmentsData = Array.isArray(departmentsResponse.data) ? departmentsResponse.data : departmentsResponse.data || [];
+
+        setProducts(productsData.map((prod: any) => ({
+          id: prod._id,
+          name: prod.name,
+          nameEn: prod.nameEn,
+          code: prod.code,
+          department: {
+            id: prod.department._id,
+            name: prod.department.name,
+            nameEn: prod.department.nameEn,
+            displayName: prod.department.displayName || (isRtl ? prod.department.name : prod.department.nameEn || prod.department.name),
+          },
+          price: prod.price,
+          unit: prod.unit,
+          unitEn: prod.unitEn,
+          description: prod.description,
+          isActive: prod.isActive,
+          createdAt: prod.createdAt,
+          updatedAt: prod.updatedAt,
+          displayName: prod.displayName || (isRtl ? prod.name : prod.nameEn || prod.name),
+          displayUnit: prod.displayUnit || (isRtl ? prod.unit : prod.unitEn || prod.unit),
+        })));
+
+        setDepartments(departmentsData.map((dept: any) => ({
+          id: dept._id,
+          name: dept.name,
+          nameEn: dept.nameEn,
+          code: dept.code,
+          displayName: dept.displayName || (isRtl ? dept.name : dept.nameEn || dept.name),
+        })));
+
         setError('');
       } catch (err: any) {
-        console.error('Fetch error:', err);
+        console.error(`[${new Date().toISOString()}] Fetch error:`, err);
         console.error('Error details:', {
-          status: err.response?.status,
-          data: err.response?.data,
+          status: err.status,
+          message: err.message,
           url: err.config?.url,
         });
-        setError(err.response?.data?.message || t.fetchError);
-        toast.error(err.response?.data?.message || t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
+        setError(err.message || t.fetchError);
+        toast.error(err.message || t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [t, user, filterDepartment, searchTerm, isRtl]);
+  }, [t, user, isRtl, searchTerm, selectedDepartment]);
 
   const filteredProducts = products.filter(
     (product) =>
-      ((isRtl ? product.name : product.nameEn || product.name).toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.code.toLowerCase().includes(searchTerm.toLowerCase())) &&
-      (filterDepartment === '' || product.department._id === filterDepartment)
+      product.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.code.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const openModal = (product?: Product) => {
@@ -197,10 +238,10 @@ export function Products() {
         name: product.name,
         nameEn: product.nameEn || '',
         code: product.code,
-        department: product.department._id,
+        department: product.department.id,
         price: product.price.toString(),
         unit: product.unit,
-        unitEn: product.unitEn || t.units[product.unit === 'كيلو' ? 'kilo' : product.unit === 'قطعة' ? 'piece' : product.unit === 'علبة' ? 'pack' : 'tray'],
+        unitEn: product.unitEn || '',
         description: product.description || '',
       });
     } else {
@@ -209,10 +250,10 @@ export function Products() {
         name: '',
         nameEn: '',
         code: '',
-        department: departments[0]?._id || '',
+        department: '',
         price: '',
-        unit: 'قطعة',
-        unitEn: 'Piece',
+        unit: '',
+        unitEn: '',
         description: '',
       });
     }
@@ -235,28 +276,53 @@ export function Products() {
         department: formData.department,
         price: parseFloat(formData.price),
         unit: formData.unit,
-        unitEn: formData.unitEn,
+        unitEn: formData.unitEn.trim() || undefined,
         description: formData.description.trim() || undefined,
       };
-      console.log('Submitting product:', productData);
+      console.log(`[${new Date().toISOString()}] Submitting product:`, productData);
       if (editingProduct) {
-        const updatedProduct = await productsAPI.update(editingProduct._id, productData);
+        const updatedProduct = await productsAPI.update(editingProduct.id, productData);
         setProducts(
-          products.map((p) =>
-            p._id === editingProduct._id ? { ...updatedProduct, department: departments.find((d) => d._id === formData.department)! } : p
-          )
+          products.map((p) => (p.id === editingProduct.id ? {
+            ...p,
+            ...updatedProduct,
+            id: updatedProduct._id,
+            department: {
+              id: updatedProduct.department._id,
+              name: updatedProduct.department.name,
+              nameEn: updatedProduct.department.nameEn,
+              displayName: updatedProduct.department.displayName || (isRtl ? updatedProduct.department.name : updatedProduct.department.nameEn || updatedProduct.department.name),
+            },
+            createdAt: updatedProduct.createdAt,
+            updatedAt: updatedProduct.updatedAt,
+            displayName: updatedProduct.displayName || (isRtl ? updatedProduct.name : updatedProduct.nameEn || updatedProduct.name),
+            displayUnit: updatedProduct.displayUnit || (isRtl ? updatedProduct.unit : updatedProduct.unitEn || updatedProduct.unit),
+          } : p))
         );
-        toast.success(t.edit, { position: isRtl ? 'top-right' : 'top-left' });
+        toast.success(t.update, { position: isRtl ? 'top-right' : 'top-left' });
       } else {
         const newProduct = await productsAPI.create(productData);
-        setProducts([...products, { ...newProduct, department: departments.find((d) => d._id === formData.department)! }]);
+        setProducts([...products, {
+          ...newProduct,
+          id: newProduct._id,
+          department: {
+            id: newProduct.department._id,
+            name: newProduct.department.name,
+            nameEn: newProduct.department.nameEn,
+            displayName: newProduct.department.displayName || (isRtl ? newProduct.department.name : newProduct.department.nameEn || newProduct.department.name),
+          },
+          createdAt: newProduct.createdAt,
+          updatedAt: newProduct.updatedAt,
+          displayName: newProduct.displayName || (isRtl ? newProduct.name : newProduct.nameEn || newProduct.name),
+          displayUnit: newProduct.displayUnit || (isRtl ? newProduct.unit : newProduct.unitEn || newProduct.unit),
+        }]);
         toast.success(t.add, { position: isRtl ? 'top-right' : 'top-left' });
       }
       closeModal();
     } catch (err: any) {
-      console.error('Submit error:', err);
-      setError(err.response?.data?.message || t.saveError);
-      toast.error(err.response?.data?.message || t.saveError, { position: isRtl ? 'top-right' : 'top-left' });
+      console.error(`[${new Date().toISOString()}] Submit error:`, err);
+      setError(err.message || t.saveError);
+      toast.error(err.message || t.saveError, { position: isRtl ? 'top-right' : 'top-left' });
     }
   };
 
@@ -269,34 +335,29 @@ export function Products() {
     if (confirm(t.deleteConfirm)) {
       try {
         await productsAPI.delete(id);
-        setProducts(products.filter((p) => p._id !== id));
-        toast.success(t.delete, { position: isRtl ? 'top-right' : 'top-left' });
+        setProducts(products.filter((p) => p.id !== id));
+        toast.success(t.deleted, { position: isRtl ? 'top-right' : 'top-left' });
       } catch (err: any) {
-        console.error('Delete error:', err);
-        setError(err.response?.data?.message || t.deleteError);
-        toast.error(err.response?.data?.message || t.deleteError, { position: isRtl ? 'top-right' : 'top-left' });
+        console.error(`[${new Date().toISOString()}] Delete error:`, err);
+        setError(err.message || t.deleteError);
+        toast.error(err.message || t.deleteError, { position: isRtl ? 'top-right' : 'top-left' });
       }
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-7xl p-4 sm:p-6 min-h-screen bg-gray-100" dir={isRtl ? 'rtl' : 'ltr'}>
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4"
-      >
-        <h1 className="text-xl sm:text-2xl font-bold text-amber-900 flex items-center justify-center sm:justify-start gap-3">
-          <Package className="w-6 h-6 text-amber-600" />
+    <div className="container mx-auto px-4 py-6 min-h-screen bg-gray-50" dir={isRtl ? 'rtl' : 'ltr'}>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-semibold text-gray-800 flex items-center gap-2">
+          <Package className="w-6 h-6 text-blue-500" />
           {t.manage}
         </h1>
         {user?.role === 'admin' && (
@@ -304,12 +365,12 @@ export function Products() {
             variant="primary"
             icon={Plus}
             onClick={() => openModal()}
-            className="bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-4 py-2 shadow-md transition-transform transform hover:scale-105"
+            className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-4 py-2"
           >
             {t.add}
           </Button>
         )}
-      </motion.div>
+      </div>
 
       {error && (
         <div className="mb-6 p-4 bg-red-100 border border-red-300 rounded-md flex items-center gap-2">
@@ -319,41 +380,72 @@ export function Products() {
       )}
 
       <Card className="p-4 mb-6 bg-white rounded-md shadow-sm">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="relative">
-            <Search className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5`} />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <Input
               value={searchTerm}
-              onChange={setSearchTerm}
+              onChange={(value) => setSearchTerm(value)}
               placeholder={t.searchPlaceholder}
-              className={`pl-10 pr-4 py-2 border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 ${isRtl ? 'text-right' : 'text-left'}`}
+              className="pl-10 border-gray-300 rounded-md focus:ring-blue-500"
               aria-label={t.searchPlaceholder}
             />
           </div>
           <Select
             label={t.department}
-            options={[{ value: '', label: t.selectDepartment }, ...(Array.isArray(departments) ? departments.map((d) => ({ value: d._id, label: isRtl ? d.name : d.nameEn || d.name })) : [])]}
-            value={filterDepartment}
-            onChange={setFilterDepartment}
+            value={selectedDepartment}
+            onChange={(value) => setSelectedDepartment(value)}
+            options={[
+              { value: '', label: isRtl ? 'جميع الأقسام' : 'All Departments' },
+              ...departments.map((dept) => ({
+                value: dept.id,
+                label: dept.displayName,
+              })),
+            ]}
+            placeholder={t.departmentPlaceholder}
             className="border-gray-300 rounded-md focus:ring-blue-500"
-            aria-label={t.department}
           />
         </div>
       </Card>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredProducts.map((product) => (
-          <Card key={product._id} className="bg-white rounded-md shadow-sm hover:shadow-md transition-shadow">
-            <div className="p-4">
-              <h3 className="font-medium text-gray-800">{isRtl ? product.name : product.nameEn || product.name}</h3>
-              <p className="text-sm text-gray-500">{t.code}: {product.code}</p>
-              <p className="text-sm text-blue-500">{isRtl ? product.department?.name : product.department?.nameEn || product.department?.name || t.noDepartment}</p>
-              <p className="text-sm text-gray-500">{t.unit}: {isRtl ? product.unit : product.unitEn || t.units[product.unit === 'كيلو' ? 'kilo' : product.unit === 'قطعة' ? 'piece' : product.unit === 'علبة' ? 'pack' : 'tray']}</p>
-              {product.description && <p className="text-xs text-gray-400 mt-1">{product.description}</p>}
-              <div className="flex items-center justify-between mt-3">
-                <span className="text-lg font-semibold text-gray-800">{product.price} {t.currency}</span>
+        {filteredProducts.length === 0 ? (
+          <Card className="p-6 text-center bg-white rounded-md shadow-sm">
+            <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+            <h3 className="text-lg font-medium text-gray-800">{t.noProducts}</h3>
+            <p className="text-gray-500">{searchTerm || selectedDepartment ? t.noMatch : t.empty}</p>
+            {user?.role === 'admin' && !searchTerm && !selectedDepartment && (
+              <Button
+                variant="primary"
+                icon={Plus}
+                onClick={() => openModal()}
+                className="mt-4 bg-blue-500 hover:bg-blue-600 text-white rounded-md px-4 py-2"
+              >
+                {t.addFirst}
+              </Button>
+            )}
+          </Card>
+        ) : (
+          filteredProducts.map((product) => (
+            <Card key={product.id} className="bg-white rounded-md shadow-sm hover:shadow-md transition-shadow">
+              <div className="p-4">
+                <h3 className="font-medium text-gray-800">{product.displayName}</h3>
+                <p className="text-sm text-gray-500">{t.code}: {product.code}</p>
+                <p className="text-sm text-gray-500">{t.department}: {product.department.displayName}</p>
+                <p className="text-sm text-gray-500">{t.price}: {product.price}</p>
+                <p className="text-sm text-gray-500">{t.unit}: {product.displayUnit}</p>
+                {product.description && <p className="text-xs text-gray-400 mt-1">{product.description}</p>}
+                <p className="text-sm text-blue-500">
+                  {t.status}: {product.isActive ? t.active : t.inactive}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {t.createdAt}: {new Date(product.createdAt).toLocaleString()}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {t.updatedAt}: {new Date(product.updatedAt).toLocaleString()}
+                </p>
                 {user?.role === 'admin' && (
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 mt-3">
                     <button
                       onClick={() => openModal(product)}
                       className="text-blue-500 hover:text-blue-700"
@@ -362,7 +454,7 @@ export function Products() {
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => deleteProduct(product._id)}
+                      onClick={() => deleteProduct(product.id)}
                       className="text-red-500 hover:text-red-700"
                       title={t.delete}
                     >
@@ -371,37 +463,19 @@ export function Products() {
                   </div>
                 )}
               </div>
-            </div>
-          </Card>
-        ))}
+            </Card>
+          ))
+        )}
       </div>
-
-      {filteredProducts.length === 0 && (
-        <Card className="p-6 text-center bg-white rounded-md shadow-sm">
-          <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-          <h3 className="text-lg font-medium text-gray-800">{t.noProducts}</h3>
-          <p className="text-gray-500">{searchTerm || filterDepartment ? t.noMatch : t.empty}</p>
-          {user?.role === 'admin' && !searchTerm && !filterDepartment && (
-            <Button
-              variant="primary"
-              icon={Plus}
-              onClick={() => openModal()}
-              className="mt-4 bg-blue-500 hover:bg-blue-600 text-white rounded-md px-4 py-2"
-            >
-              {t.addFirst}
-            </Button>
-          )}
-        </Card>
-      )}
 
       <Modal
         isOpen={isModalOpen}
         onClose={closeModal}
         title={editingProduct ? t.edit : t.add}
-        size="md"
+        size="lg"
       >
         <form onSubmit={handleSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
-          <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
               label={t.name}
               value={formData.name}
@@ -427,69 +501,70 @@ export function Products() {
             />
             <Select
               label={t.department}
-              options={[{ value: '', label: t.selectDepartment }, ...(Array.isArray(departments) ? departments.map((d) => ({ value: d._id, label: isRtl ? d.name : d.nameEn || d.name })) : [])]}
               value={formData.department}
               onChange={(value) => setFormData({ ...formData, department: value })}
+              options={departments.map((dept) => ({
+                value: dept.id,
+                label: dept.displayName,
+              }))}
+              placeholder={t.departmentPlaceholder}
               required
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />
             <Input
               label={t.price}
-              type="number"
               value={formData.price}
               onChange={(value) => setFormData({ ...formData, price: value })}
               placeholder={t.pricePlaceholder}
+              type="number"
               required
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />
             <Select
               label={t.unit}
-              options={[
-                { value: 'كيلو', label: t.units.kilo },
-                { value: 'قطعة', label: t.units.piece },
-                { value: 'علبة', label: t.units.pack },
-                { value: 'صينية', label: t.units.tray },
-              ]}
               value={formData.unit}
-              onChange={(value) => {
-                const unitEnMap: { [key: string]: string } = {
-                  'كيلو': 'Kilo',
-                  'قطعة': 'Piece',
-                  'علبة': 'Pack',
-                  'صينية': 'Tray',
-                };
-                setFormData({ ...formData, unit: value, unitEn: unitEnMap[value] });
-              }}
+              onChange={(value) => setFormData({ ...formData, unit: value, unitEn: unitOptions.find((opt) => opt.value === value)?.labelEn || '' })}
+              options={unitOptions.map((opt) => ({
+                value: opt.value,
+                label: isRtl ? opt.label : opt.labelEn,
+              }))}
+              placeholder={t.unitPlaceholder}
               required
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />
             <Input
-              label={t.description}
-              value={formData.description}
-              onChange={(value) => setFormData({ ...formData, description: value })}
-              placeholder={t.descriptionPlaceholder}
+              label={t.unitEn}
+              value={formData.unitEn}
+              onChange={(value) => setFormData({ ...formData, unitEn: value })}
+              placeholder={t.unitEnPlaceholder}
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />
+            <div className="sm:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t.description}</label>
+              <textarea
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder={t.descriptionPlaceholder}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                rows={3}
+              />
+            </div>
           </div>
           {error && (
-            <div className="p-4 bg-red-100 border border-red-300 rounded-md flex items-center gap-2">
+            <div className="p-2 bg-red-100 border border-red-300 rounded-md flex items-center gap-2">
               <AlertCircle className="w-5 h-5 text-red-600" />
               <span className="text-red-600">{error}</span>
             </div>
           )}
-          <div className="flex gap-3 mt-4">
-            <Button
-              type="submit"
-              variant="primary"
-              className="flex-1 bg-blue-500 hover:bg-blue-600 text-white rounded-md px-4 py-2"
-            >
-              {editingProduct ? t.edit : t.add}
+          <div className="flex gap-3">
+            <Button type="submit" variant="primary" className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-4 py-2">
+              {editingProduct ? t.update : t.add}
             </Button>
             <Button
               type="button"
               variant="secondary"
               onClick={closeModal}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-4 py-2"
+              className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-4 py-2"
             >
               {t.cancel}
             </Button>
