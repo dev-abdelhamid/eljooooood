@@ -409,7 +409,7 @@ export const Users: React.FC = () => {
     }
 
     try {
-      await usersAPI.resetPassword(selectedUser!._id, { password: resetPasswordData.password });
+      await usersAPI.resetPassword(selectedUser!._id, resetPasswordData.password);
       setIsResetPasswordModalOpen(false);
       setResetPasswordData({ password: '', confirmPassword: '' });
       toast.success(t.passwordResetSuccess, { position: isRtl ? 'top-right' : 'top-left' });
