@@ -111,12 +111,8 @@ const translations = {
     profile: 'عرض التفاصيل',
     viewCurrentPassword: 'عرض كلمة المرور الحالية',
     currentPassword: 'كلمة المرور الحالية',
-    status: 'الحالة',
-    active: 'نشط',
-    inactive: 'غير نشط',
   },
   en: {
-    // Similar to ar, but in English
     manage: 'Manage Users',
     add: 'Add User',
     addFirst: 'Add First User',
@@ -187,9 +183,6 @@ const translations = {
     profile: 'View Details',
     viewCurrentPassword: 'View Current Password',
     currentPassword: 'Current Password',
-    status: 'Status',
-    active: 'Active',
-    inactive: 'Inactive',
   },
 };
 
@@ -245,12 +238,13 @@ export const Users: React.FC = () => {
         departmentAPI.getAll(),
       ]);
       const fetchedUsers = Array.isArray(usersResponse.data) ? usersResponse.data : usersResponse;
-      setUsers(fetchedUsers.map((user: User) => ({ ...user, password: '********' })));
+      setUsers(fetchedUsers.map((user: User) => ({ ...user, password: '********' }))); // Mock password for admin
       setBranches(Array.isArray(branchesResponse.data) ? branchesResponse.data : branchesResponse);
       setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data : departmentsResponse);
-      setTotalPages(usersResponse.totalPages || Math.ceil(fetchedUsers.length / 10));
+      setTotalPages(usersResponse.totalPages || Math.ceil(usersResponse.length / 10));
       setError('');
     } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] Fetch error:`, err);
       setError(err.message || t.fetchError);
       toast.error(t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
     } finally {
@@ -372,7 +366,6 @@ export const Users: React.FC = () => {
       }
       setIsModalOpen(false);
       setError('');
-      fetchData(); // Refresh after change
     } catch (err: any) {
       let errorMessage = isEditMode ? t.updateError : t.createError;
       if (err.response?.data?.message) {
@@ -446,7 +439,7 @@ export const Users: React.FC = () => {
   }
 
   return (
-    <div className={`mx-auto max-w-6xl p-4 sm:p-6 min-h-screen bg-gray-100 font-sans ${isRtl ? 'rtl font-arabic' : 'ltr'}`}>
+    <div className={`mx-auto max-w-6xl p-4 sm:p-6 min-h-screen bg-gray-100 font-sans`}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -873,34 +866,48 @@ export const Users: React.FC = () => {
         size="sm"
       >
         <form onSubmit={handleResetPassword} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
-          <Input
-            label={t.newPassword}
-            value={resetPasswordData.password}
-            onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
-            placeholder={t.newPasswordPlaceholder}
-            type={showPassword['newPassword'] ? 'text' : 'password'}
-            required
-            className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
-            icon={showPassword['newPassword'] ? EyeOff : Eye}
-            onIconClick={() => setShowPassword((prev) => ({ ...prev, newPassword: !prev.newPassword }))}
-          />
-          <Input
-            label={t.confirmPassword}
-            value={resetPasswordData.confirmPassword}
-            onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
-            placeholder={t.confirmPasswordPlaceholder}
-            type={showPassword['confirmPassword'] ? 'text' : 'password'}
-            required
-            className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
-            icon={showPassword['confirmPassword'] ? EyeOff : Eye}
-            onIconClick={() => setShowPassword((prev) => ({ ...prev, confirmPassword: !prev.confirmPassword }))}
-          />
-          {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm">
-              <AlertCircle className="w-4 h-4 text-red-500" />
-              <span className="text-red-500 text-sm font-medium">{error}</span>
-            </div>
-          )}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className="space-y-4"
+          >
+            <Input
+              label={t.newPassword}
+              value={resetPasswordData.password}
+              onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
+              placeholder={t.newPasswordPlaceholder}
+              type={showPassword['newPassword'] ? 'text' : 'password'}
+              required
+              className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
+              icon={showPassword['newPassword'] ? EyeOff : Eye}
+              onIconClick={() => setShowPassword((prev) => ({ ...prev, newPassword: !prev.newPassword }))}
+            />
+            <Input
+              label={t.confirmPassword}
+              value={resetPasswordData.confirmPassword}
+              onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
+              placeholder={t.confirmPasswordPlaceholder}
+              type={showPassword['confirmPassword'] ? 'text' : 'password'}
+              required
+              className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
+              icon={showPassword['confirmPassword'] ? EyeOff : Eye}
+              onIconClick={() => setShowPassword((prev) => ({ ...prev, confirmPassword: !prev.confirmPassword }))}
+            />
+          </motion.div>
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
+              >
+                <AlertCircle className="w-4 h-4 text-red-500" />
+                <span className="text-red-500 text-sm font-medium">{error}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <div className="flex gap-3 mt-4">
             <Button
               type="submit"
@@ -929,12 +936,19 @@ export const Users: React.FC = () => {
       >
         <div className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
           <p className="text-gray-600 text-sm">{t.deleteWarning}</p>
-          {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm">
-              <AlertCircle className="w-4 h-4 text-red-500" />
-              <span className="text-red-500 text-sm font-medium">{error}</span>
-            </div>
-          )}
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
+              >
+                <AlertCircle className="w-4 h-4 text-red-500" />
+                <span className="text-red-500 text-sm font-medium">{error}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <div className="flex gap-3 mt-4">
             <Button
               type="button"
