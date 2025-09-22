@@ -23,6 +23,8 @@ interface User {
   branch?: { _id: string; name: string; nameEn?: string };
   department?: { _id: string; name: string };
   isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface Branch {
@@ -36,10 +38,164 @@ interface Department {
   name: string;
 }
 
-export const Users: React.FC = () => {
-  const { t, language } = useLanguage();
+const translations = {
+  ar: {
+    manage: 'إدارة المستخدمين',
+    add: 'إضافة مستخدم',
+    addFirst: 'إضافة أول مستخدم',
+    noUsers: 'لا توجد مستخدمين',
+    noMatch: 'لا توجد مستخدمين مطابقين',
+    empty: 'لا توجد مستخدمين متاحين',
+    searchPlaceholder: 'ابحث عن المستخدمين...',
+    status: 'الحالة',
+    allStatuses: 'جميع الحالات',
+    active: 'نشط',
+    inactive: 'غير نشط',
+    role: 'الدور',
+    allRoles: 'جميع الأدوار',
+    admin: 'مدير',
+    branch: 'فرع',
+    chef: 'شيف',
+    production: 'إنتاج',
+    filters: 'الفلاتر',
+    previous: 'السابق',
+    next: 'التالي',
+    page: 'صفحة',
+    of: 'من',
+    username: 'اسم المستخدم',
+    email: 'الإيميل',
+    phone: 'الهاتف',
+    branch: 'الفرع',
+    department: 'القسم',
+    createdAt: 'تاريخ الإنشاء',
+    updatedAt: 'تاريخ التحديث',
+    edit: 'تعديل',
+    resetPassword: 'إعادة تعيين كلمة المرور',
+    delete: 'حذف',
+    name: 'اسم المستخدم (عربي)',
+    nameEn: 'اسم المستخدم (إنجليزي)',
+    nameRequired: 'اسم المستخدم مطلوب',
+    nameEnRequired: 'اسم المستخدم بالإنجليزية مطلوب',
+    usernameRequired: 'اسم المستخدم للدخول مطلوب',
+    passwordRequired: 'كلمة المرور مطلوبة',
+    branchRequired: 'الفرع مطلوب',
+    departmentRequired: 'القسم مطلوب',
+    namePlaceholder: 'أدخل اسم المستخدم',
+    nameEnPlaceholder: 'أدخل اسم المستخدم بالإنجليزية',
+    usernamePlaceholder: 'أدخل اسم المستخدم للدخول',
+    emailPlaceholder: 'أدخل الإيميل',
+    phonePlaceholder: 'أدخل رقم الهاتف',
+    branchPlaceholder: 'اختر الفرع',
+    departmentPlaceholder: 'اختر القسم',
+    passwordPlaceholder: 'أدخل كلمة المرور',
+    update: 'تحديث المستخدم',
+    requiredFields: 'يرجى ملء جميع الحقول المطلوبة',
+    usernameExists: 'اسم المستخدم مستخدم بالفعل، اختر اسمًا آخر',
+    emailExists: 'الإيميل مستخدم بالفعل، اختر إيميل آخر',
+    unauthorized: 'غير مصرح لك بالوصول',
+    fetchError: 'حدث خطأ أثناء جلب البيانات',
+    updateError: 'حدث خطأ أثناء تحديث المستخدم',
+    createError: 'حدث خطأ أثناء إنشاء المستخدم',
+    added: 'تم إضافة المستخدم بنجاح',
+    updated: 'تم تحديث المستخدم بنجاح',
+    newPassword: 'كلمة المرور الجديدة',
+    confirmPassword: 'تأكيد كلمة المرور',
+    newPasswordPlaceholder: 'أدخل كلمة المرور الجديدة',
+    confirmPasswordPlaceholder: 'أدخل تأكيد كلمة المرور',
+    passwordMismatch: 'كلمة المرور وتأكيدها غير متطابقتين',
+    passwordTooShort: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل',
+    passwordResetSuccess: 'تم إعادة تعيين كلمة المرور بنجاح',
+    passwordResetError: 'حدث خطأ أثناء إعادة تعيين كلمة المرور',
+    reset: 'إعادة تعيين',
+    cancel: 'إلغاء',
+    confirmDelete: 'تأكيد حذف المستخدم',
+    deleteWarning: 'هل أنت متأكد من حذف هذا المستخدم؟ لا يمكن التراجع عن هذا الإجراء.',
+    deleteError: 'حدث خطأ أثناء حذف المستخدم',
+    deleted: 'تم حذف المستخدم بنجاح',
+    profile: 'عرض التفاصيل',
+  },
+  en: {
+    manage: 'Manage Users',
+    add: 'Add User',
+    addFirst: 'Add First User',
+    noUsers: 'No Users Found',
+    noMatch: 'No Matching Users',
+    empty: 'No Users Available',
+    searchPlaceholder: 'Search users...',
+    status: 'Status',
+    allStatuses: 'All Statuses',
+    active: 'Active',
+    inactive: 'Inactive',
+    role: 'Role',
+    allRoles: 'All Roles',
+    admin: 'Admin',
+    branch: 'Branch',
+    chef: 'Chef',
+    production: 'Production',
+    filters: 'Filters',
+    previous: 'Previous',
+    next: 'Next',
+    page: 'Page',
+    of: 'of',
+    username: 'Username',
+    email: 'Email',
+    phone: 'Phone',
+    branch: 'Branch',
+    department: 'Department',
+    createdAt: 'Created At',
+    updatedAt: 'Updated At',
+    edit: 'Edit',
+    resetPassword: 'Reset Password',
+    delete: 'Delete',
+    name: 'User Name (Arabic)',
+    nameEn: 'User Name (English)',
+    nameRequired: 'User name is required',
+    nameEnRequired: 'User name in English is required',
+    usernameRequired: 'Username is required',
+    passwordRequired: 'Password is required',
+    branchRequired: 'Branch is required',
+    departmentRequired: 'Department is required',
+    namePlaceholder: 'Enter user name',
+    nameEnPlaceholder: 'Enter user name in English',
+    usernamePlaceholder: 'Enter username',
+    emailPlaceholder: 'Enter email',
+    phonePlaceholder: 'Enter phone number',
+    branchPlaceholder: 'Select branch',
+    departmentPlaceholder: 'Select department',
+    passwordPlaceholder: 'Enter password',
+    update: 'Update User',
+    requiredFields: 'Please fill all required fields',
+    usernameExists: 'Username is already in use, choose another',
+    emailExists: 'Email is already in use, choose another',
+    unauthorized: 'You are not authorized to access',
+    fetchError: 'An error occurred while fetching data',
+    updateError: 'An error occurred while updating the user',
+    createError: 'An error occurred while creating the user',
+    added: 'User added successfully',
+    updated: 'User updated successfully',
+    newPassword: 'New Password',
+    confirmPassword: 'Confirm Password',
+    newPasswordPlaceholder: 'Enter new password',
+    confirmPasswordPlaceholder: 'Enter confirm password',
+    passwordMismatch: 'Password and confirmation do not match',
+    passwordTooShort: 'Password must be at least 6 characters',
+    passwordResetSuccess: 'Password reset successfully',
+    passwordResetError: 'An error occurred while resetting the password',
+    reset: 'Reset',
+    cancel: 'Cancel',
+    confirmDelete: 'Confirm User Deletion',
+    deleteWarning: 'Are you sure you want to delete this user? This action cannot be undone.',
+    deleteError: 'An error occurred while deleting the user',
+    deleted: 'User deleted successfully',
+    profile: 'View Details',
+  },
+};
+
+const Users: React.FC = () => {
+  const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
+  const t = translations[isRtl ? 'ar' : 'en'];
   const [users, setUsers] = useState<User[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -52,10 +208,11 @@ export const Users: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [resetPasswordData, setResetPasswordData] = useState({ password: '', confirmPassword: '' });
   const [formData, setFormData] = useState({
     name: '',
@@ -73,9 +230,9 @@ export const Users: React.FC = () => {
 
   const fetchData = useCallback(async () => {
     if (!user || user.role !== 'admin') {
-      setError(t('users.unauthorized') || 'غير مصرح لك بالوصول');
+      setError(t.unauthorized);
       setLoading(false);
-      toast.error(t('users.unauthorized'), { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
 
@@ -86,19 +243,22 @@ export const Users: React.FC = () => {
         branchesAPI.getAll(),
         departmentAPI.getAll(),
       ]);
-      setUsers(Array.isArray(usersResponse.data) ? usersResponse.data : []);
-      setBranches(Array.isArray(branchesResponse.data) ? branchesResponse.data : []);
-      setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data : []);
-      setTotalPages(usersResponse.totalPages || 1);
+      console.log(`[${new Date().toISOString()}] Users API response:`, usersResponse);
+      console.log(`[${new Date().toISOString()}] Branches API response:`, branchesResponse);
+      console.log(`[${new Date().toISOString()}] Departments API response:`, departmentsResponse);
+      setUsers(Array.isArray(usersResponse.data) ? usersResponse.data : usersResponse);
+      setBranches(Array.isArray(branchesResponse.data) ? branchesResponse.data : branchesResponse);
+      setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data : departmentsResponse);
+      setTotalPages(usersResponse.totalPages || Math.ceil(usersResponse.length / 10));
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Fetch error:`, err);
-      setError(err.response?.data?.message || t('users.fetchError') || 'حدث خطأ أثناء جلب البيانات');
-      toast.error(t('users.fetchError'), { position: isRtl ? 'top-right' : 'top-left' });
+      setError(err.message || t.fetchError);
+      toast.error(t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
     } finally {
       setLoading(false);
     }
-  }, [t, user, filterStatus, filterRole, page, isRtl]);
+  }, [user, filterStatus, filterRole, page, t, isRtl]);
 
   useEffect(() => {
     fetchData();
@@ -114,12 +274,12 @@ export const Users: React.FC = () => {
 
   const validateForm = () => {
     const errors: Record<string, string> = {};
-    if (!formData.name) errors.name = t('users.nameRequired') || 'اسم المستخدم مطلوب';
-    if (!formData.nameEn) errors.nameEn = t('users.nameEnRequired') || 'اسم المستخدم بالإنجليزية مطلوب';
-    if (!formData.username) errors.username = t('users.usernameRequired') || 'اسم المستخدم للدخول مطلوب';
-    if (!isEditMode && !formData.password) errors.password = t('users.passwordRequired') || 'كلمة المرور مطلوبة';
-    if (formData.role === 'branch' && !formData.branch) errors.branch = t('users.branchRequired') || 'الفرع مطلوب';
-    if (formData.role === 'chef' && !formData.department) errors.department = t('users.departmentRequired') || 'القسم مطلوب';
+    if (!formData.name) errors.name = t.nameRequired;
+    if (!formData.nameEn) errors.nameEn = t.nameEnRequired;
+    if (!formData.username) errors.username = t.usernameRequired;
+    if (!isEditMode && !formData.password) errors.password = t.passwordRequired;
+    if (formData.role === 'branch' && !formData.branch) errors.branch = t.branchRequired;
+    if (formData.role === 'chef' && !formData.department) errors.department = t.departmentRequired;
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -138,7 +298,7 @@ export const Users: React.FC = () => {
       isActive: true,
     });
     setIsEditMode(false);
-    setSelectedUserId(null);
+    setSelectedUser(null);
     setIsModalOpen(true);
     setFormErrors({});
     setError('');
@@ -158,21 +318,26 @@ export const Users: React.FC = () => {
       isActive: user.isActive,
     });
     setIsEditMode(true);
-    setSelectedUserId(user._id);
+    setSelectedUser(user);
     setIsModalOpen(true);
     setFormErrors({});
     setError('');
   };
 
+  const openProfileModal = (user: User) => {
+    setSelectedUser(user);
+    setIsProfileModalOpen(true);
+  };
+
   const openResetPasswordModal = (user: User) => {
-    setSelectedUserId(user._id);
+    setSelectedUser(user);
     setResetPasswordData({ password: '', confirmPassword: '' });
     setIsResetPasswordModalOpen(true);
     setError('');
   };
 
-  const openDeleteModal = (userId: string) => {
-    setSelectedUserId(userId);
+  const openDeleteModal = (user: User) => {
+    setSelectedUser(user);
     setIsDeleteModalOpen(true);
     setError('');
   };
@@ -180,7 +345,7 @@ export const Users: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validateForm()) {
-      toast.error(t('users.requiredFields') || 'يرجى ملء جميع الحقول المطلوبة', { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(t.requiredFields, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
 
@@ -198,28 +363,26 @@ export const Users: React.FC = () => {
         ...(isEditMode ? {} : { password: formData.password.trim() }),
       };
 
-      if (isEditMode && selectedUserId) {
-        await usersAPI.update(selectedUserId, userData);
-        setUsers(users.map((u) => (u._id === selectedUserId ? { ...u, ...userData } : u)));
-        toast.success(t('users.updated') || 'تم تحديث المستخدم بنجاح', { position: isRtl ? 'top-right' : 'top-left' });
+      if (isEditMode && selectedUser) {
+        await usersAPI.update(selectedUser._id, userData);
+        setUsers(users.map((u) => (u._id === selectedUser._id ? { ...u, ...userData } : u)));
+        toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
       } else {
         const response = await usersAPI.create(userData);
         setUsers([...users, response]);
-        toast.success(t('users.added') || 'تم إضافة المستخدم بنجاح', { position: isRtl ? 'top-right' : 'top-left' });
+        toast.success(t.added, { position: isRtl ? 'top-right' : 'top-left' });
       }
       setIsModalOpen(false);
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Submit error:`, err);
-      let errorMessage = t(isEditMode ? 'users.updateError' : 'users.createError') || 'حدث خطأ أثناء معالجة المستخدم';
+      let errorMessage = isEditMode ? t.updateError : t.createError;
       if (err.response?.data?.message) {
         const message = err.response.data.message;
         errorMessage =
-          message === 'Username already exists'
-            ? t('users.usernameExists') || 'اسم المستخدم مستخدم بالفعل، اختر اسمًا آخر'
-            : message.includes('الإيميل')
-            ? t('users.emailExists') || 'الإيميل مستخدم بالفعل، اختر إيميل آخر'
-            : message;
+          message === 'Username already exists' ? t.usernameExists :
+          message.includes('الإيميل') || message.includes('email') ? t.emailExists :
+          message;
       }
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
@@ -229,47 +392,45 @@ export const Users: React.FC = () => {
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!resetPasswordData.password || !resetPasswordData.confirmPassword) {
-      setError(t('users.passwordRequired') || 'كلمة المرور وتأكيدها مطلوبان');
-      toast.error(t('users.passwordRequired'), { position: isRtl ? 'top-right' : 'top-left' });
+      setError(t.passwordRequired);
+      toast.error(t.passwordRequired, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
     if (resetPasswordData.password !== resetPasswordData.confirmPassword) {
-      setError(t('users.passwordMismatch') || 'كلمة المرور وتأكيدها غير متطابقتين');
-      toast.error(t('users.passwordMismatch'), { position: isRtl ? 'top-right' : 'top-left' });
+      setError(t.passwordMismatch);
+      toast.error(t.passwordMismatch, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
     if (resetPasswordData.password.length < 6) {
-      setError(t('users.passwordTooShort') || 'كلمة المرور يجب أن تكون 6 أحرف على الأقل');
-      toast.error(t('users.passwordTooShort'), { position: isRtl ? 'top-right' : 'top-left' });
+      setError(t.passwordTooShort);
+      toast.error(t.passwordTooShort, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
 
     try {
-      await usersAPI.resetPassword(selectedUserId!, { password: resetPasswordData.password });
+      await usersAPI.resetPassword(selectedUser!._id, { password: resetPasswordData.password });
       setIsResetPasswordModalOpen(false);
       setResetPasswordData({ password: '', confirmPassword: '' });
-      toast.success(t('users.passwordResetSuccess') || 'تم إعادة تعيين كلمة المرور بنجاح', {
-        position: isRtl ? 'top-right' : 'top-left',
-      });
+      toast.success(t.passwordResetSuccess, { position: isRtl ? 'top-right' : 'top-left' });
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Reset password error:`, err);
-      const errorMessage = err.response?.data?.message || t('users.passwordResetError') || 'حدث خطأ أثناء إعادة تعيين كلمة المرور';
+      const errorMessage = err.message || t.passwordResetError;
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
     }
   };
 
   const handleDelete = async () => {
-    if (!selectedUserId) return;
+    if (!selectedUser) return;
     try {
-      await usersAPI.delete(selectedUserId);
-      setUsers(users.filter((u) => u._id !== selectedUserId));
-      toast.success(t('users.deleted') || 'تم حذف المستخدم بنجاح', { position: isRtl ? 'top-right' : 'top-left' });
+      await usersAPI.delete(selectedUser._id);
+      setUsers(users.filter((u) => u._id !== selectedUser._id));
+      toast.success(t.deleted, { position: isRtl ? 'top-right' : 'top-left' });
       setIsDeleteModalOpen(false);
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Delete error:`, err);
-      const errorMessage = err.response?.data?.message || t('users.deleteError') || 'حدث خطأ أثناء حذف المستخدم';
+      const errorMessage = err.message || t.deleteError;
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
     }
@@ -284,7 +445,7 @@ export const Users: React.FC = () => {
   }
 
   return (
-    <div className={`mx-auto p-4 sm:p-6 min-h-screen ${isRtl ? 'rtl' : 'ltr'}`}>
+    <div className={`mx-auto p-4 sm:p-6 min-h-screen bg-gray-100 ${isRtl ? 'rtl font-arabic' : 'ltr font-sans'}`}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -293,7 +454,7 @@ export const Users: React.FC = () => {
       >
         <h1 className="text-3xl sm:text-4xl font-bold text-amber-900 flex items-center justify-center sm:justify-start gap-3">
           <User className="w-8 h-8 text-amber-600" />
-          {t('users.manage') || 'إدارة المستخدمين'}
+          {t.manage}
         </h1>
         {user?.role === 'admin' && (
           <Button
@@ -302,7 +463,7 @@ export const Users: React.FC = () => {
             onClick={openAddModal}
             className="bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
           >
-            {t('users.add') || 'إضافة مستخدم'}
+            {t.add}
           </Button>
         )}
       </motion.div>
@@ -330,39 +491,39 @@ export const Users: React.FC = () => {
             <Input
               value={searchTerm}
               onChange={(value) => setSearchTerm(value)}
-              placeholder={t('users.searchPlaceholder') || 'ابحث عن المستخدمين...'}
+              placeholder={t.searchPlaceholder}
               className={`pl-10 pr-4 py-2 border border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50 ${isRtl ? 'text-right' : 'text-left'}`}
-              aria-label={t('users.searchPlaceholder') || 'ابحث عن المستخدمين'}
+              aria-label={t.searchPlaceholder}
             />
           </div>
           <div className="relative flex-1">
             <Select
-              label={t('users.status') || 'الحالة'}
+              label={t.status}
               options={[
-                { value: 'all', label: t('users.allStatuses') || 'جميع الحالات' },
-                { value: 'active', label: t('users.active') || 'نشط' },
-                { value: 'inactive', label: t('users.inactive') || 'غير نشط' },
+                { value: 'all', label: t.allStatuses },
+                { value: 'active', label: t.active },
+                { value: 'inactive', label: t.inactive },
               ]}
               value={filterStatus}
               onChange={(value) => setFilterStatus(value)}
               className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50"
-              aria-label={t('users.status') || 'الحالة'}
+              aria-label={t.status}
             />
           </div>
           <div className="relative flex-1">
             <Select
-              label={t('users.role') || 'الدور'}
+              label={t.role}
               options={[
-                { value: 'all', label: t('users.allRoles') || 'جميع الأدوار' },
-                { value: 'admin', label: t('users.admin') || 'مدير' },
-                { value: 'branch', label: t('users.branch') || 'فرع' },
-                { value: 'chef', label: t('users.chef') || 'شيف' },
-                { value: 'production', label: t('users.production') || 'إنتاج' },
+                { value: 'all', label: t.allRoles },
+                { value: 'admin', label: t.admin },
+                { value: 'branch', label: t.branch },
+                { value: 'chef', label: t.chef },
+                { value: 'production', label: t.production },
               ]}
               value={filterRole}
               onChange={(value) => setFilterRole(value)}
               className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50"
-              aria-label={t('users.role') || 'الدور'}
+              aria-label={t.role}
             />
           </div>
           <Button
@@ -371,7 +532,7 @@ export const Users: React.FC = () => {
             onClick={() => setIsFilterOpen(!isFilterOpen)}
             className="sm:hidden bg-amber-100 text-amber-800 hover:bg-amber-200 rounded-lg px-4 py-2"
           >
-            {t('users.filters') || 'الفلاتر'}
+            {t.filters}
           </Button>
         </div>
         <AnimatePresence>
@@ -380,33 +541,33 @@ export const Users: React.FC = () => {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="mt-4 sm:hidden space-y-4"
+              className="mt-4 sm:hidden"
             >
               <Select
-                label={t('users.status') || 'الحالة'}
+                label={t.status}
                 options={[
-                  { value: 'all', label: t('users.allStatuses') || 'جميع الحالات' },
-                  { value: 'active', label: t('users.active') || 'نشط' },
-                  { value: 'inactive', label: t('users.inactive') || 'غير نشط' },
+                  { value: 'all', label: t.allStatuses },
+                  { value: 'active', label: t.active },
+                  { value: 'inactive', label: t.inactive },
                 ]}
                 value={filterStatus}
                 onChange={(value) => setFilterStatus(value)}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50"
-                aria-label={t('users.status') || 'الحالة'}
+                aria-label={t.status}
               />
               <Select
-                label={t('users.role') || 'الدور'}
+                label={t.role}
                 options={[
-                  { value: 'all', label: t('users.allRoles') || 'جميع الأدوار' },
-                  { value: 'admin', label: t('users.admin') || 'مدير' },
-                  { value: 'branch', label: t('users.branch') || 'فرع' },
-                  { value: 'chef', label: t('users.chef') || 'شيف' },
-                  { value: 'production', label: t('users.production') || 'إنتاج' },
+                  { value: 'all', label: t.allRoles },
+                  { value: 'admin', label: t.admin },
+                  { value: 'branch', label: t.branch },
+                  { value: 'chef', label: t.chef },
+                  { value: 'production', label: t.production },
                 ]}
                 value={filterRole}
                 onChange={(value) => setFilterRole(value)}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50"
-                aria-label={t('users.role') || 'الدور'}
+                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50 mt-4"
+                aria-label={t.role}
               />
             </motion.div>
           )}
@@ -418,10 +579,10 @@ export const Users: React.FC = () => {
             disabled={page === 1}
             className="mx-2 px-4 py-2 bg-amber-100 text-amber-800 disabled:opacity-50"
           >
-            {t('users.previous') || 'السابق'}
+            {t.previous}
           </Button>
           <span className="px-4 py-2 text-amber-900">
-            {t('users.page') || 'صفحة'} {page} {t('users.of') || 'من'} {totalPages}
+            {t.page} {page} {t.of} {totalPages}
           </span>
           <Button
             variant="outline"
@@ -429,7 +590,7 @@ export const Users: React.FC = () => {
             disabled={page === totalPages}
             className="mx-2 px-4 py-2 bg-amber-100 text-amber-800 disabled:opacity-50"
           >
-            {t('users.next') || 'التالي'}
+            {t.next}
           </Button>
         </div>
       </Card>
@@ -443,11 +604,9 @@ export const Users: React.FC = () => {
         {filteredUsers.length === 0 ? (
           <Card className="p-8 text-center bg-white rounded-lg shadow-md col-span-full">
             <User className="w-12 h-12 text-amber-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-amber-900">{t('users.noUsers') || 'لا توجد مستخدمين'}</h3>
+            <h3 className="text-xl font-semibold text-amber-900">{t.noUsers}</h3>
             <p className="text-gray-600 mt-2">
-              {searchTerm || filterStatus !== 'all' || filterRole !== 'all'
-                ? t('users.noMatch') || 'لا توجد مستخدمين مطابقين'
-                : t('users.empty') || 'لا توجد مستخدمين متاحين'}
+              {searchTerm || filterStatus !== 'all' || filterRole !== 'all' ? t.noMatch : t.empty}
             </p>
             {user?.role === 'admin' && !searchTerm && filterStatus === 'all' && filterRole === 'all' && (
               <Button
@@ -456,7 +615,7 @@ export const Users: React.FC = () => {
                 onClick={openAddModal}
                 className="mt-6 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
               >
-                {t('users.addFirst') || 'إضافة أول مستخدم'}
+                {t.addFirst}
               </Button>
             )}
           </Card>
@@ -468,51 +627,47 @@ export const Users: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
             >
-              <Card className="bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
+              <Card className="bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer" onClick={() => openProfileModal(user)}>
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="font-semibold text-lg text-amber-900 truncate">{isRtl ? user.name : user.nameEn || user.name}</h3>
                     <User className="w-6 h-6 text-amber-600" />
                   </div>
-                  <p className="text-sm text-gray-600">{t('users.username') || 'اسم المستخدم'}: {user.username}</p>
-                  <p className="text-sm text-gray-600">{t('users.email') || 'الإيميل'}: {user.email || '-'}</p>
-                  <p className="text-sm text-gray-600">{t('users.phone') || 'الهاتف'}: {user.phone || '-'}</p>
-                  <p className="text-sm text-gray-600">{t('users.role') || 'الدور'}: {t(`users.${user.role}`) || user.role}</p>
-                  {user.branch && (
-                    <p className="text-sm text-gray-600">{t('users.branch') || 'الفرع'}: {isRtl ? user.branch.name : user.branch.nameEn || user.branch.name}</p>
-                  )}
-                  {user.department && (
-                    <p className="text-sm text-gray-600">{t('users.department') || 'القسم'}: {user.department.name}</p>
-                  )}
+                  <p className="text-sm text-gray-600">{t.username}: {user.username}</p>
+                  <p className="text-sm text-gray-600">{t.email}: {user.email || '-'}</p>
+                  <p className="text-sm text-gray-600">{t.phone}: {user.phone || '-'}</p>
+                  <p className="text-sm text-gray-600">{t.role}: {t[user.role]}</p>
+                  <p className="text-sm text-gray-600">{t.branch}: {user.branch ? (isRtl ? user.branch.name : user.branch.nameEn || user.branch.name) : '-'}</p>
+                  <p className="text-sm text-gray-600">{t.department}: {user.department?.name || '-'}</p>
                   <p className={`text-sm font-medium ${user.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                    {t('users.status') || 'الحالة'}: {user.isActive ? t('users.active') || 'نشط' : t('users.inactive') || 'غير نشط'}
+                    {t.status}: {user.isActive ? t.active : t.inactive}
                   </p>
                   {user?.role === 'admin' && (
                     <div className="flex gap-3 mt-4">
-                      <button
-                        onClick={() => openEditModal(user)}
-                        className="text-amber-600 hover:text-amber-800 transition-colors"
-                        data-tooltip-id={`edit-${user._id}`}
-                        data-tooltip-content={t('users.edit') || 'تعديل المستخدم'}
+                      <Button
+                        variant="outline"
+                        icon={Edit2}
+                        onClick={(e) => { e.stopPropagation(); openEditModal(user); }}
+                        className="text-amber-600 hover:text-amber-800 border-amber-600"
                       >
-                        <Edit2 className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => openResetPasswordModal(user)}
-                        className="text-blue-500 hover:text-blue-700 transition-colors"
-                        data-tooltip-id={`reset-${user._id}`}
-                        data-tooltip-content={t('users.resetPassword') || 'إعادة تعيين كلمة المرور'}
+                        {t.edit}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        icon={Key}
+                        onClick={(e) => { e.stopPropagation(); openResetPasswordModal(user); }}
+                        className="text-blue-500 hover:text-blue-700 border-blue-500"
                       >
-                        <Key className="w-5 h-5" />
-                      </button>
-                      <button
-                        onClick={() => openDeleteModal(user._id)}
-                        className="text-red-500 hover:text-red-700 transition-colors"
-                        data-tooltip-id={`delete-${user._id}`}
-                        data-tooltip-content={t('users.delete') || 'حذف المستخدم'}
+                        {t.resetPassword}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        icon={Trash2}
+                        onClick={(e) => { e.stopPropagation(); openDeleteModal(user); }}
+                        className="text-red-500 hover:text-red-700 border-red-500"
                       >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
+                        {t.delete}
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -525,7 +680,7 @@ export const Users: React.FC = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={isEditMode ? t('users.edit') || 'تعديل المستخدم' : t('users.add') || 'إضافة مستخدم'}
+        title={isEditMode ? t.edit : t.add}
         size="lg"
       >
         <form onSubmit={handleSubmit} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
@@ -536,73 +691,68 @@ export const Users: React.FC = () => {
             className="grid grid-cols-1 sm:grid-cols-2 gap-6"
           >
             <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-amber-900">{t('users.userDetails') || 'تفاصيل المستخدم'}</h3>
               <Input
-                label={t('users.name') || 'اسم المستخدم (عربي)'}
+                label={t.name}
                 value={formData.name}
                 onChange={(value) => setFormData({ ...formData, name: value })}
-                placeholder={t('users.namePlaceholder') || 'أدخل اسم المستخدم'}
+                placeholder={t.namePlaceholder}
                 required
                 error={formErrors.name}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
-                label={t('users.nameEn') || 'اسم المستخدم (إنجليزي)'}
+                label={t.nameEn}
                 value={formData.nameEn}
                 onChange={(value) => setFormData({ ...formData, nameEn: value })}
-                placeholder={t('users.nameEnPlaceholder') || 'أدخل اسم المستخدم بالإنجليزية'}
+                placeholder={t.nameEnPlaceholder}
                 required
                 error={formErrors.nameEn}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
-                label={t('users.username') || 'اسم المستخدم للدخول'}
+                label={t.username}
                 value={formData.username}
                 onChange={(value) => setFormData({ ...formData, username: value })}
-                placeholder={t('users.usernamePlaceholder') || 'أدخل اسم المستخدم للدخول'}
+                placeholder={t.usernamePlaceholder}
                 required
                 error={formErrors.username}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
-                label={t('users.email') || 'الإيميل'}
+                label={t.email}
                 value={formData.email}
                 onChange={(value) => setFormData({ ...formData, email: value })}
-                placeholder={t('users.emailPlaceholder') || 'أدخل الإيميل'}
+                placeholder={t.emailPlaceholder}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
-                label={t('users.phone') || 'الهاتف'}
+                label={t.phone}
                 value={formData.phone}
                 onChange={(value) => setFormData({ ...formData, phone: value })}
-                placeholder={t('users.phonePlaceholder') || 'أدخل رقم الهاتف'}
+                placeholder={t.phonePlaceholder}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
             </div>
             <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-amber-900">{t('users.roleDetails') || 'تفاصيل الدور'}</h3>
               <Select
-                label={t('users.role') || 'الدور'}
+                label={t.role}
                 options={[
-                  { value: 'admin', label: t('users.admin') || 'مدير' },
-                  { value: 'branch', label: t('users.branch') || 'فرع' },
-                  { value: 'chef', label: t('users.chef') || 'شيف' },
-                  { value: 'production', label: t('users.production') || 'إنتاج' },
+                  { value: 'admin', label: t.admin },
+                  { value: 'branch', label: t.branch },
+                  { value: 'chef', label: t.chef },
+                  { value: 'production', label: t.production },
                 ]}
                 value={formData.role}
-                onChange={(value) => setFormData({ ...formData, role: value as 'admin' | 'branch' | 'chef' | 'production', branch: '', department: '' })}
+                onChange={(value) => setFormData({ ...formData, role: value as 'admin' | 'branch' | 'chef' | 'production', branch: value === 'branch' ? formData.branch : '', department: value === 'chef' ? formData.department : '' })}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               {formData.role === 'branch' && (
                 <Select
-                  label={t('users.branch') || 'الفرع'}
-                  options={branches.map((branch) => ({
-                    value: branch._id,
-                    label: isRtl ? branch.name : branch.nameEn || branch.name,
-                  }))}
+                  label={t.branch}
+                  options={branches.map((branch) => ({ value: branch._id, label: isRtl ? branch.name : branch.nameEn || branch.name }))}
                   value={formData.branch}
                   onChange={(value) => setFormData({ ...formData, branch: value })}
-                  placeholder={t('users.branchPlaceholder') || 'اختر الفرع'}
+                  placeholder={t.branchPlaceholder}
                   required
                   error={formErrors.branch}
                   className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
@@ -610,24 +760,21 @@ export const Users: React.FC = () => {
               )}
               {formData.role === 'chef' && (
                 <Select
-                  label={t('users.department') || 'القسم'}
-                  options={departments.map((dept) => ({
-                    value: dept._id,
-                    label: dept.name,
-                  }))}
+                  label={t.department}
+                  options={departments.map((dept) => ({ value: dept._id, label: dept.name }))}
                   value={formData.department}
                   onChange={(value) => setFormData({ ...formData, department: value })}
-                  placeholder={t('users.departmentPlaceholder') || 'اختر القسم'}
+                  placeholder={t.departmentPlaceholder}
                   required
                   error={formErrors.department}
                   className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
                 />
               )}
               <Select
-                label={t('users.status') || 'الحالة'}
+                label={t.status}
                 options={[
-                  { value: true, label: t('users.active') || 'نشط' },
-                  { value: false, label: t('users.inactive') || 'غير نشط' },
+                  { value: true, label: t.active },
+                  { value: false, label: t.inactive },
                 ]}
                 value={formData.isActive}
                 onChange={(value) => setFormData({ ...formData, isActive: value === 'true' })}
@@ -635,10 +782,10 @@ export const Users: React.FC = () => {
               />
               {!isEditMode && (
                 <Input
-                  label={t('users.password') || 'كلمة المرور'}
+                  label={t.password}
                   value={formData.password}
                   onChange={(value) => setFormData({ ...formData, password: value })}
-                  placeholder={t('users.passwordPlaceholder') || 'أدخل كلمة المرور'}
+                  placeholder={t.passwordPlaceholder}
                   type="password"
                   required
                   error={formErrors.password}
@@ -666,7 +813,7 @@ export const Users: React.FC = () => {
               variant="primary"
               className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
             >
-              {isEditMode ? t('users.update') || 'تحديث المستخدم' : t('users.add') || 'إضافة المستخدم'}
+              {isEditMode ? t.update : t.add}
             </Button>
             <Button
               type="button"
@@ -674,16 +821,79 @@ export const Users: React.FC = () => {
               onClick={() => setIsModalOpen(false)}
               className="flex-1 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
             >
-              {t('cancel') || 'إلغاء'}
+              {t.cancel}
             </Button>
           </div>
         </form>
       </Modal>
 
       <Modal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        title={t.profile}
+        size="md"
+      >
+        {selectedUser && (
+          <div className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
+            <div className="flex items-center gap-3">
+              <User className="w-8 h-8 text-amber-600" />
+              <h3 className="text-xl font-semibold text-amber-900">{isRtl ? selectedUser.name : selectedUser.nameEn || selectedUser.name}</h3>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-gray-600 font-medium">{t.username}</p>
+                <p className="text-gray-800">{selectedUser.username}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 font-medium">{t.email}</p>
+                <p className="text-gray-800">{selectedUser.email || '-'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 font-medium">{t.phone}</p>
+                <p className="text-gray-800">{selectedUser.phone || '-'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 font-medium">{t.role}</p>
+                <p className="text-gray-800">{t[selectedUser.role]}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 font-medium">{t.branch}</p>
+                <p className="text-gray-800">{selectedUser.branch ? (isRtl ? selectedUser.branch.name : selectedUser.branch.nameEn || selectedUser.branch.name) : '-'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 font-medium">{t.department}</p>
+                <p className="text-gray-800">{selectedUser.department?.name || '-'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 font-medium">{t.status}</p>
+                <p className={`font-medium ${selectedUser.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                  {selectedUser.isActive ? t.active : t.inactive}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 font-medium">{t.createdAt}</p>
+                <p className="text-gray-800">{new Date(selectedUser.createdAt).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 font-medium">{t.updatedAt}</p>
+                <p className="text-gray-800">{new Date(selectedUser.updatedAt).toLocaleString()}</p>
+              </div>
+            </div>
+            <Button
+              variant="secondary"
+              onClick={() => setIsProfileModalOpen(false)}
+              className="mt-6 w-full bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+            >
+              {t.cancel}
+            </Button>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
         isOpen={isResetPasswordModalOpen}
         onClose={() => setIsResetPasswordModalOpen(false)}
-        title={t('users.resetPassword') || 'إعادة تعيين كلمة المرور'}
+        title={t.resetPassword}
         size="sm"
       >
         <form onSubmit={handleResetPassword} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
@@ -694,19 +904,19 @@ export const Users: React.FC = () => {
             className="space-y-6"
           >
             <Input
-              label={t('users.newPassword') || 'كلمة المرور الجديدة'}
+              label={t.newPassword}
               value={resetPasswordData.password}
               onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
-              placeholder={t('users.newPasswordPlaceholder') || 'أدخل كلمة المرور الجديدة'}
+              placeholder={t.newPasswordPlaceholder}
               type="password"
               required
               className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
             />
             <Input
-              label={t('users.confirmPassword') || 'تأكيد كلمة المرور'}
+              label={t.confirmPassword}
               value={resetPasswordData.confirmPassword}
               onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
-              placeholder={t('users.confirmPasswordPlaceholder') || 'أدخل تأكيد كلمة المرور'}
+              placeholder={t.confirmPasswordPlaceholder}
               type="password"
               required
               className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
@@ -731,7 +941,7 @@ export const Users: React.FC = () => {
               variant="primary"
               className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
             >
-              {t('users.reset') || 'إعادة تعيين'}
+              {t.reset}
             </Button>
             <Button
               type="button"
@@ -739,7 +949,7 @@ export const Users: React.FC = () => {
               onClick={() => setIsResetPasswordModalOpen(false)}
               className="flex-1 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
             >
-              {t('cancel') || 'إلغاء'}
+              {t.cancel}
             </Button>
           </div>
         </form>
@@ -748,11 +958,11 @@ export const Users: React.FC = () => {
       <Modal
         isOpen={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}
-        title={t('users.confirmDelete') || 'تأكيد حذف المستخدم'}
+        title={t.confirmDelete}
         size="sm"
       >
         <div className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-          <p className="text-gray-600">{t('users.deleteWarning') || 'هل أنت متأكد من حذف هذا المستخدم؟ لا يمكن التراجع عن هذا الإجراء.'}</p>
+          <p className="text-gray-600">{t.deleteWarning}</p>
           <AnimatePresence>
             {error && (
               <motion.div
@@ -773,7 +983,7 @@ export const Users: React.FC = () => {
               onClick={handleDelete}
               className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
             >
-              {t('users.delete') || 'حذف'}
+              {t.delete}
             </Button>
             <Button
               type="button"
@@ -781,7 +991,7 @@ export const Users: React.FC = () => {
               onClick={() => setIsDeleteModalOpen(false)}
               className="flex-1 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
             >
-              {t('cancel') || 'إلغاء'}
+              {t.cancel}
             </Button>
           </div>
         </div>
