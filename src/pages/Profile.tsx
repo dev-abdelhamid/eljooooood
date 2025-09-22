@@ -11,6 +11,30 @@ import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 
+interface Department {
+  _id: string;
+  name: string;
+  nameEn?: string;
+  code: string;
+  description?: string;
+}
+
+interface Branch {
+  _id: string;
+  name: string;
+  nameEn?: string;
+  code: string;
+  address: string;
+  city: string;
+  phone?: string;
+}
+
+interface ChefProfile {
+  _id: string;
+  status: 'active' | 'inactive';
+  department?: Department;
+}
+
 interface ProfileData {
   _id: string;
   name: string;
@@ -19,11 +43,13 @@ interface ProfileData {
   email?: string;
   phone?: string;
   role: 'admin' | 'branch' | 'chef' | 'production';
-  branch?: { _id: string; name: string; nameEn?: string };
-  department?: { _id: string; name: string };
+  branch?: Branch;
+  department?: Department;
+  chefProfile?: ChefProfile;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+  permissions: string[];
 }
 
 const translations = {
@@ -36,7 +62,13 @@ const translations = {
     phone: 'الهاتف',
     role: 'الدور',
     branch: 'الفرع',
+    branchCode: 'كود الفرع',
+    branchAddress: 'عنوان الفرع',
+    branchCity: 'المدينة',
     department: 'القسم',
+    departmentCode: 'كود القسم',
+    departmentDescription: 'وصف القسم',
+    chefStatus: 'حالة الشيف',
     status: 'الحالة',
     active: 'نشط',
     inactive: 'غير نشط',
@@ -51,6 +83,8 @@ const translations = {
     passwordMismatch: 'كلمات المرور غير متطابقة',
     passwordTooShort: 'كلمة المرور قصيرة جدًا (6 أحرف على الأقل)',
     passwordRequired: 'كلمة المرور مطلوبة',
+    nameRequired: 'الاسم مطلوب',
+    nameEnRequired: 'الاسم الإنجليزي مطلوب',
     cancel: 'إلغاء',
     save: 'حفظ',
   },
@@ -63,7 +97,13 @@ const translations = {
     phone: 'Phone',
     role: 'Role',
     branch: 'Branch',
+    branchCode: 'Branch Code',
+    branchAddress: 'Branch Address',
+    branchCity: 'City',
     department: 'Department',
+    departmentCode: 'Department Code',
+    departmentDescription: 'Department Description',
+    chefStatus: 'Chef Status',
     status: 'Status',
     active: 'Active',
     inactive: 'Inactive',
@@ -78,6 +118,8 @@ const translations = {
     passwordMismatch: 'Passwords do not match',
     passwordTooShort: 'Password too short (at least 6 characters)',
     passwordRequired: 'Password is required',
+    nameRequired: 'Name is required',
+    nameEnRequired: 'English name is required',
     cancel: 'Cancel',
     save: 'Save',
   },
@@ -107,19 +149,19 @@ export function Profile() {
         setFormData({ name: response.user.name, nameEn: response.user.nameEn || '' });
         setError('');
       } catch (err: any) {
-        setError(err.message || 'خطأ في جلب الملف الشخصي');
-        toast.error('خطأ في جلب الملف الشخصي', { position: isRtl ? 'top-right' : 'top-left' });
+        setError(err.message || t.updateError);
+        toast.error(t.updateError, { position: isRtl ? 'top-right' : 'top-left' });
       } finally {
         setLoading(false);
       }
     };
     fetchProfile();
-  }, [isRtl]);
+  }, [isRtl, t.updateError]);
 
   const validateNameForm = () => {
     const errors: Record<string, string> = {};
-    if (!formData.name) errors.name = t.nameRequired || 'Name is required';
-    if (!formData.nameEn) errors.nameEn = t.nameEnRequired || 'English name is required';
+    if (!formData.name) errors.name = t.nameRequired;
+    if (!formData.nameEn) errors.nameEn = t.nameEnRequired;
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -129,7 +171,7 @@ export function Profile() {
     if (!passwordData.password) errors.password = t.passwordRequired;
     if (!passwordData.confirmPassword) errors.confirmPassword = t.passwordRequired;
     if (passwordData.password !== passwordData.confirmPassword) errors.confirmPassword = t.passwordMismatch;
-    if (passwordData.password.length < 6) errors.password = t.passwordTooShort;
+    if (passwordData.password && passwordData.password.length < 6) errors.password = t.passwordTooShort;
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -140,7 +182,7 @@ export function Profile() {
     try {
       const response = await authAPI.updateProfile({ name: formData.name, nameEn: formData.nameEn });
       setProfile(response.user);
-      updateUser(response.user); // Update auth context
+      updateUser(response.user);
       setIsEditModalOpen(false);
       toast.success(t.updateSuccess, { position: isRtl ? 'top-right' : 'top-left' });
     } catch (err: any) {
@@ -153,7 +195,9 @@ export function Profile() {
     e.preventDefault();
     if (!validatePasswordForm()) return;
     try {
-      await authAPI.updateProfile({ password: passwordData.password });
+      const response = await authAPI.updateProfile({ password: passwordData.password });
+      setProfile(response.user);
+      updateUser(response.user);
       setIsChangePasswordModalOpen(false);
       setPasswordData({ password: '', confirmPassword: '' });
       toast.success(t.updateSuccess, { position: isRtl ? 'top-right' : 'top-left' });
@@ -207,18 +251,50 @@ export function Profile() {
           </div>
           <div>
             <p className="font-medium text-gray-600">{t.role}</p>
-            <p className="text-gray-800">{t[profile.role]}</p>
+            <p className="text-gray-800">{t[profile.role] || profile.role}</p>
           </div>
-          {profile.role === 'branch' && (
-            <div>
-              <p className="font-medium text-gray-600">{t.branch}</p>
-              <p className="text-gray-800">{profile.branch ? (isRtl ? profile.branch.name : profile.branch.nameEn || profile.branch.name) : '-'}</p>
-            </div>
+          {profile.branch && (
+            <>
+              <div>
+                <p className="font-medium text-gray-600">{t.branch}</p>
+                <p className="text-gray-800">{isRtl ? profile.branch.name : profile.branch.nameEn || profile.branch.name}</p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-600">{t.branchCode}</p>
+                <p className="text-gray-800">{profile.branch.code || '-'}</p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-600">{t.branchAddress}</p>
+                <p className="text-gray-800">{profile.branch.address || '-'}</p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-600">{t.branchCity}</p>
+                <p className="text-gray-800">{profile.branch.city || '-'}</p>
+              </div>
+            </>
           )}
-          {profile.role === 'chef' && (
+          {profile.department && (
+            <>
+              <div>
+                <p className="font-medium text-gray-600">{t.department}</p>
+                <p className="text-gray-800">{isRtl ? profile.department.name : profile.department.nameEn || profile.department.name}</p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-600">{t.departmentCode}</p>
+                <p className="text-gray-800">{profile.department.code || '-'}</p>
+              </div>
+              <div>
+                <p className="font-medium text-gray-600">{t.departmentDescription}</p>
+                <p className="text-gray-800">{profile.department.description || '-'}</p>
+              </div>
+            </>
+          )}
+          {profile.chefProfile && (
             <div>
-              <p className="font-medium text-gray-600">{t.department}</p>
-              <p className="text-gray-800">{profile.department?.name || '-'}</p>
+              <p className="font-medium text-gray-600">{t.chefStatus}</p>
+              <p className={`font-medium ${profile.chefProfile.status === 'active' ? 'text-green-600' : 'text-red-600'}`}>
+                {profile.chefProfile.status === 'active' ? t.active : t.inactive}
+              </p>
             </div>
           )}
           <div>
@@ -286,7 +362,11 @@ export function Profile() {
             </div>
           )}
           <div className="flex gap-3">
-            <Button type="submit" variant="primary" className="flex-1 bg-amber-500 hover:bg-amber-600 text-white rounded-full px-4 py-2 text-sm">
+            <Button
+              type="submit"
+              variant="primary"
+              className="flex-1 bg-amber-500 hover:bg-amber-600 text-white rounded-full px-4 py-2 text-sm"
+            >
               {t.save}
             </Button>
             <Button
@@ -337,7 +417,11 @@ export function Profile() {
             </div>
           )}
           <div className="flex gap-3">
-            <Button type="submit" variant="primary" className="flex-1 bg-blue-500 hover:bg-blue-600 text-white rounded-full px-4 py-2 text-sm">
+            <Button
+              type="submit"
+              variant="primary"
+              className="flex-1 bg-blue-500 hover:bg-blue-600 text-white rounded-full px-4 py-2 text-sm"
+            >
               {t.save}
             </Button>
             <Button
