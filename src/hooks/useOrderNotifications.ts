@@ -576,6 +576,7 @@ export const useOrderNotifications = (
               vibrate: [400, 100, 400],
             });
           } catch (err) {
+            console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
           }
         },
         config: {
