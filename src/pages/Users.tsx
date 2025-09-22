@@ -65,7 +65,6 @@ const translations = {
     username: 'اسم المستخدم',
     email: 'الإيميل',
     phone: 'الهاتف',
-    branch: 'الفرع',
     department: 'القسم',
     createdAt: 'تاريخ الإنشاء',
     updatedAt: 'تاريخ التحديث',
@@ -140,7 +139,6 @@ const translations = {
     username: 'Username',
     email: 'Email',
     phone: 'Phone',
-    branch: 'Branch',
     department: 'Department',
     createdAt: 'Created At',
     updatedAt: 'Updated At',
@@ -191,7 +189,7 @@ const translations = {
   },
 };
 
-const Users: React.FC = () => {
+export const Users: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
