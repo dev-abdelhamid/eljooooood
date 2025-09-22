@@ -9,6 +9,7 @@ import 'react-toastify/dist/ReactToastify.css';
 import { Layout } from './components/Layout/Layout';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
+import { Profile } from './pages/Profile';
 import { Products } from './pages/Products';
 import { Orders } from './pages/Orders';
 import { OrderDetailsPage } from './pages/OrderDetailsPage';
@@ -81,6 +82,7 @@ function AppContent() {
                   <Route path="/chefstatics" element={<Chefstatics />} />
                   <Route path="/chefs" element={<Chefs />} />
                   <Route path="/users" element={<Users />} />
+                  <Route path="/profile" element={<Profile />} />
                   <Route path="/departments" element={<Departments />} />
                   <Route path="/inventory" element={<div className="p-8 text-center">قريباً: إدارة المخزون</div>} />
                   <Route path="/sales" element={<SalesReport />} />
