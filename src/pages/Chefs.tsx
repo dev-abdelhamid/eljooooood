@@ -265,59 +265,9 @@ export function Chefs() {
     }
   }, [loggedInUser, page, t, isRtl]);
 
-  // Fetch chef profile by userId
-  const fetchChefByUserId = useCallback(async (userId: string) => {
-    if (!loggedInUser || loggedInUser.role !== 'admin') {
-      setError(t.unauthorized);
-      toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
-      return null;
-    }
-    try {
-      const chefResponse = await chefsAPI.getByUserId(userId, { isRtl });
-      return {
-        id: chefResponse._id,
-        user: {
-          id: chefResponse.user._id,
-          name: chefResponse.user.name,
-          nameEn: chefResponse.user.nameEn,
-          username: chefResponse.user.username,
-          email: chefResponse.user.email,
-          phone: chefResponse.user.phone,
-          isActive: chefResponse.user.isActive,
-          createdAt: chefResponse.user.createdAt,
-          updatedAt: chefResponse.user.updatedAt,
-        },
-        department: chefResponse.department ? {
-          id: chefResponse.department._id,
-          name: chefResponse.department.name,
-          nameEn: chefResponse.department.nameEn,
-          code: chefResponse.department.code,
-          description: chefResponse.department.description,
-        } : null,
-        createdAt: chefResponse.createdAt,
-        updatedAt: chefResponse.updatedAt,
-        password: '********',
-      };
-    } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Fetch chef by userId error:`, err);
-      setError(err.message || t.fetchError);
-      toast.error(err.message || t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
-      return null;
-    }
-  }, [loggedInUser, t, isRtl]);
-
   useEffect(() => {
     fetchData();
-    // Fetch logged-in user's chef profile if they are a chef
-    if (loggedInUser?.role === 'chef' && loggedInUser.id) {
-      fetchChefByUserId(loggedInUser.id).then((chef) => {
-        if (chef) {
-          setSelectedChef(chef);
-          setIsProfileModalOpen(true);
-        }
-      });
-    }
-  }, [fetchData, fetchChefByUserId, loggedInUser]);
+  }, [fetchData]);
 
   const filteredChefs = chefs.filter(
     (chef) =>
