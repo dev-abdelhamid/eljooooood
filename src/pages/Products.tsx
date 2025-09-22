@@ -165,7 +165,7 @@ export function Products() {
         console.log(`[${new Date().toISOString()}] Fetching products with params:`, { searchTerm, department: selectedDepartment, isRtl });
         const [productsResponse, departmentsResponse] = await Promise.all([
           productsAPI.getAll({ search: searchTerm, department: selectedDepartment, isRtl }),
-          departmentAPI.getAll({ isRtl }),
+          departmentAPI.getAll(),
         ]);
         console.log(`[${new Date().toISOString()}] Products response:`, productsResponse);
         console.log(`[${new Date().toISOString()}] Departments response:`, departmentsResponse);
@@ -206,11 +206,6 @@ export function Products() {
         setError('');
       } catch (err: any) {
         console.error(`[${new Date().toISOString()}] Fetch error:`, err);
-        console.error('Error details:', {
-          status: err.status,
-          message: err.message,
-          url: err.config?.url,
-        });
         setError(err.message || t.fetchError);
         toast.error(err.message || t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
       } finally {
@@ -557,7 +552,11 @@ export function Products() {
             </div>
           )}
           <div className="flex gap-3">
-            <Button type="submit" variant="primary" className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-4 py-2">
+            <Button
+              type="submit"
+              variant="primary"
+              className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-4 py-2"
+            >
               {editingProduct ? t.update : t.add}
             </Button>
             <Button

@@ -137,11 +137,6 @@ export function Departments() {
         setError('');
       } catch (err: any) {
         console.error(`[${new Date().toISOString()}] Fetch error:`, err);
-        console.error('Error details:', {
-          status: err.status,
-          message: err.message,
-          url: err.config?.url,
-        });
         setError(err.message || t.fetchError);
         toast.error(err.message || t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
       } finally {
