@@ -53,7 +53,8 @@ export function Departments() {
         console.log(`[${new Date().toISOString()}] Fetching departments with params:`, { searchTerm, isRtl });
         const departmentsResponse = await departmentAPI.getAll({ isRtl });
         console.log(`[${new Date().toISOString()}] Departments response:`, departmentsResponse);
-        setDepartments(departmentsResponse.data.map((dept: any) => ({
+        const data = departmentsResponse.data || (Array.isArray(departmentsResponse) ? departmentsResponse : []);
+        setDepartments(data.map((dept: any) => ({
           id: dept._id,
           name: dept.name,
           nameEn: dept.nameEn,
