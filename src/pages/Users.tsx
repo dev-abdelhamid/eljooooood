@@ -241,16 +241,12 @@ export const Users: React.FC = () => {
         branchesAPI.getAll(),
         departmentAPI.getAll(),
       ]);
-      console.log(`[${new Date().toISOString()}] Users API response:`, usersResponse);
-      console.log(`[${new Date().toISOString()}] Branches API response:`, branchesResponse);
-      console.log(`[${new Date().toISOString()}] Departments API response:`, departmentsResponse);
       setUsers(Array.isArray(usersResponse.data) ? usersResponse.data : usersResponse);
       setBranches(Array.isArray(branchesResponse.data) ? branchesResponse.data : branchesResponse);
       setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data : departmentsResponse);
       setTotalPages(usersResponse.totalPages || Math.ceil(usersResponse.length / 10));
       setError('');
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Fetch error:`, err);
       setError(err.message || t.fetchError);
       toast.error(t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
     } finally {
@@ -373,7 +369,6 @@ export const Users: React.FC = () => {
       setIsModalOpen(false);
       setError('');
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Submit error:`, err);
       let errorMessage = isEditMode ? t.updateError : t.createError;
       if (err.response?.data?.message) {
         const message = err.response.data.message;
@@ -406,12 +401,11 @@ export const Users: React.FC = () => {
     }
 
     try {
-      await usersAPI.resetPassword(selectedUser!._id, { password: resetPasswordData.password });
+      await usersAPI.resetPassword(selectedUser!._id, resetPasswordData.password);
       setIsResetPasswordModalOpen(false);
       setResetPasswordData({ password: '', confirmPassword: '' });
       toast.success(t.passwordResetSuccess, { position: isRtl ? 'top-right' : 'top-left' });
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Reset password error:`, err);
       const errorMessage = err.message || t.passwordResetError;
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
@@ -427,7 +421,6 @@ export const Users: React.FC = () => {
       setIsDeleteModalOpen(false);
       setError('');
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Delete error:`, err);
       const errorMessage = err.message || t.deleteError;
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
@@ -436,22 +429,22 @@ export const Users: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div className={`mx-auto p-4 sm:p-6 min-h-screen bg-gray-100 ${isRtl ? 'rtl font-arabic' : 'ltr font-sans'}`}>
+    <div className={`mx-auto max-w-7xl p-4 sm:p-6 min-h-screen bg-gray-50 font-sans ${isRtl ? 'rtl font-arabic' : 'ltr'}`}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4"
+        className="flex flex-col sm:flex-row items-center justify-between mb-6 gap-4"
       >
-        <h1 className="text-3xl sm:text-4xl font-bold text-amber-900 flex items-center justify-center sm:justify-start gap-3">
-          <User className="w-8 h-8 text-amber-600" />
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 flex items-center gap-2">
+          <User className="w-6 h-6 text-amber-600" />
           {t.manage}
         </h1>
         {user?.role === 'admin' && (
@@ -459,7 +452,7 @@ export const Users: React.FC = () => {
             variant="primary"
             icon={Plus}
             onClick={openAddModal}
-            className="bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+            className="bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-full px-4 py-2 shadow-md transition-all duration-300 hover:shadow-lg"
           >
             {t.add}
           </Button>
@@ -472,29 +465,29 @@ export const Users: React.FC = () => {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="mb-8 p-4 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3 shadow-sm"
+            className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
           >
-            <AlertCircle className="w-5 h-5 text-red-600" />
-            <span className="text-red-600 font-medium">{error}</span>
+            <AlertCircle className="w-5 h-5 text-red-500" />
+            <span className="text-red-500 text-sm font-medium">{error}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <Card className="p-6 mb-8 bg-white rounded-lg shadow-md">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="relative flex-1">
+      <Card className="p-4 sm:p-6 mb-6 bg-white rounded-xl shadow-sm">
+        <div className="flex flex-col sm:flex-row gap-4 items-center">
+          <div className="relative flex-1 w-full sm:w-auto">
             <Search
-              className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-amber-500 w-5 h-5`}
+              className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5`}
             />
             <Input
               value={searchTerm}
               onChange={(value) => setSearchTerm(value)}
               placeholder={t.searchPlaceholder}
-              className={`pl-10 pr-4 py-2 border border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50 ${isRtl ? 'text-right' : 'text-left'}`}
+              className={`pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white text-sm ${isRtl ? 'text-right' : 'text-left'}`}
               aria-label={t.searchPlaceholder}
             />
           </div>
-          <div className="relative flex-1">
+          <div className="flex-1 w-full sm:w-auto">
             <Select
               label={t.status}
               options={[
@@ -504,11 +497,11 @@ export const Users: React.FC = () => {
               ]}
               value={filterStatus}
               onChange={(value) => setFilterStatus(value)}
-              className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50"
+              className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white text-sm"
               aria-label={t.status}
             />
           </div>
-          <div className="relative flex-1">
+          <div className="flex-1 w-full sm:w-auto">
             <Select
               label={t.role}
               options={[
@@ -520,7 +513,7 @@ export const Users: React.FC = () => {
               ]}
               value={filterRole}
               onChange={(value) => setFilterRole(value)}
-              className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50"
+              className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white text-sm"
               aria-label={t.role}
             />
           </div>
@@ -528,7 +521,7 @@ export const Users: React.FC = () => {
             variant="outline"
             icon={ChevronDown}
             onClick={() => setIsFilterOpen(!isFilterOpen)}
-            className="sm:hidden bg-amber-100 text-amber-800 hover:bg-amber-200 rounded-lg px-4 py-2"
+            className="sm:hidden bg-white text-gray-600 hover:bg-gray-100 rounded-lg px-4 py-2 text-sm"
           >
             {t.filters}
           </Button>
@@ -550,7 +543,7 @@ export const Users: React.FC = () => {
                 ]}
                 value={filterStatus}
                 onChange={(value) => setFilterStatus(value)}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50"
+                className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white text-sm"
                 aria-label={t.status}
               />
               <Select
@@ -564,29 +557,29 @@ export const Users: React.FC = () => {
                 ]}
                 value={filterRole}
                 onChange={(value) => setFilterRole(value)}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50 mt-4"
+                className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white text-sm mt-4"
                 aria-label={t.role}
               />
             </motion.div>
           )}
         </AnimatePresence>
-        <div className="flex justify-center mt-6">
+        <div className="flex justify-center items-center mt-4 gap-2">
           <Button
             variant="outline"
             onClick={() => setPage((p) => Math.max(p - 1, 1))}
             disabled={page === 1}
-            className="mx-2 px-4 py-2 bg-amber-100 text-amber-800 disabled:opacity-50"
+            className="px-3 py-1 bg-white text-gray-600 disabled:opacity-50 rounded-full text-sm"
           >
             {t.previous}
           </Button>
-          <span className="px-4 py-2 text-amber-900">
+          <span className="px-3 py-1 text-gray-700 text-sm">
             {t.page} {page} {t.of} {totalPages}
           </span>
           <Button
             variant="outline"
             onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
             disabled={page === totalPages}
-            className="mx-2 px-4 py-2 bg-amber-100 text-amber-800 disabled:opacity-50"
+            className="px-3 py-1 bg-white text-gray-600 disabled:opacity-50 rounded-full text-sm"
           >
             {t.next}
           </Button>
@@ -594,16 +587,16 @@ export const Users: React.FC = () => {
       </Card>
 
       <motion.div
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ staggerChildren: 0.1 }}
       >
         {filteredUsers.length === 0 ? (
-          <Card className="p-8 text-center bg-white rounded-lg shadow-md col-span-full">
-            <User className="w-12 h-12 text-amber-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-amber-900">{t.noUsers}</h3>
-            <p className="text-gray-600 mt-2">
+          <Card className="p-6 text-center bg-white rounded-xl shadow-sm col-span-full">
+            <User className="w-10 h-10 text-amber-400 mx-auto mb-3" />
+            <h3 className="text-lg font-semibold text-gray-800">{t.noUsers}</h3>
+            <p className="text-gray-500 text-sm mt-2">
               {searchTerm || filterStatus !== 'all' || filterRole !== 'all' ? t.noMatch : t.empty}
             </p>
             {user?.role === 'admin' && !searchTerm && filterStatus === 'all' && filterRole === 'all' && (
@@ -611,7 +604,7 @@ export const Users: React.FC = () => {
                 variant="primary"
                 icon={Plus}
                 onClick={openAddModal}
-                className="mt-6 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+                className="mt-4 bg-amber-600 hover:bg-amber-700 text-white rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
               >
                 {t.addFirst}
               </Button>
@@ -625,28 +618,30 @@ export const Users: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
             >
-              <Card className="bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer" onClick={() => openProfileModal(user)}>
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-lg text-amber-900 truncate">{isRtl ? user.name : user.nameEn || user.name}</h3>
-                    <User className="w-6 h-6 text-amber-600" />
+              <Card className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer" onClick={() => openProfileModal(user)}>
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold text-base text-gray-800 truncate">{isRtl ? user.name : user.nameEn || user.name}</h3>
+                    <User className="w-5 h-5 text-amber-600" />
                   </div>
-                  <p className="text-sm text-gray-600">{t.username}: {user.username}</p>
-                  <p className="text-sm text-gray-600">{t.email}: {user.email || '-'}</p>
-                  <p className="text-sm text-gray-600">{t.phone}: {user.phone || '-'}</p>
-                  <p className="text-sm text-gray-600">{t.role}: {t[user.role]}</p>
-                  <p className="text-sm text-gray-600">{t.branch}: {user.branch ? (isRtl ? user.branch.name : user.branch.nameEn || user.branch.name) : '-'}</p>
-                  <p className="text-sm text-gray-600">{t.department}: {user.department?.name || '-'}</p>
-                  <p className={`text-sm font-medium ${user.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                    {t.status}: {user.isActive ? t.active : t.inactive}
-                  </p>
+                  <div className="space-y-1 text-sm">
+                    <p className="text-gray-600 flex"><span className="w-20 font-medium">{t.username}:</span> <span className="truncate">{user.username}</span></p>
+                    <p className="text-gray-600 flex"><span className="w-20 font-medium">{t.email}:</span> <span className="truncate">{user.email || '-'}</span></p>
+                    <p className="text-gray-600 flex"><span className="w-20 font-medium">{t.phone}:</span> <span>{user.phone || '-'}</span></p>
+                    <p className="text-gray-600 flex"><span className="w-20 font-medium">{t.role}:</span> <span>{t[user.role]}</span></p>
+                    <p className="text-gray-600 flex"><span className="w-20 font-medium">{t.branch}:</span> <span>{user.branch ? (isRtl ? user.branch.name : user.branch.nameEn || user.branch.name) : '-'}</span></p>
+                    <p className="text-gray-600 flex"><span className="w-20 font-medium">{t.department}:</span> <span>{user.department?.name || '-'}</span></p>
+                    <p className={`flex ${user.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                      <span className="w-20 font-medium">{t.status}:</span> <span>{user.isActive ? t.active : t.inactive}</span>
+                    </p>
+                  </div>
                   {user?.role === 'admin' && (
-                    <div className="flex gap-3 mt-4">
+                    <div className="flex gap-2 mt-3">
                       <Button
                         variant="outline"
                         icon={Edit2}
                         onClick={(e) => { e.stopPropagation(); openEditModal(user); }}
-                        className="text-amber-600 hover:text-amber-800 border-amber-600"
+                        className="text-amber-600 hover:text-amber-800 border-amber-600 rounded-full text-xs px-3 py-1"
                       >
                         {t.edit}
                       </Button>
@@ -654,7 +649,7 @@ export const Users: React.FC = () => {
                         variant="outline"
                         icon={Key}
                         onClick={(e) => { e.stopPropagation(); openResetPasswordModal(user); }}
-                        className="text-blue-500 hover:text-blue-700 border-blue-500"
+                        className="text-blue-500 hover:text-blue-700 border-blue-500 rounded-full text-xs px-3 py-1"
                       >
                         {t.resetPassword}
                       </Button>
@@ -662,7 +657,7 @@ export const Users: React.FC = () => {
                         variant="outline"
                         icon={Trash2}
                         onClick={(e) => { e.stopPropagation(); openDeleteModal(user); }}
-                        className="text-red-500 hover:text-red-700 border-red-500"
+                        className="text-red-500 hover:text-red-700 border-red-500 rounded-full text-xs px-3 py-1"
                       >
                         {t.delete}
                       </Button>
@@ -681,14 +676,14 @@ export const Users: React.FC = () => {
         title={isEditMode ? t.edit : t.add}
         size="lg"
       >
-        <form onSubmit={handleSubmit} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
+        <form onSubmit={handleSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
-            className="grid grid-cols-1 sm:grid-cols-2 gap-6"
+            className="grid grid-cols-1 sm:grid-cols-2 gap-4"
           >
-            <div className="space-y-6">
+            <div className="space-y-4">
               <Input
                 label={t.name}
                 value={formData.name}
@@ -696,7 +691,7 @@ export const Users: React.FC = () => {
                 placeholder={t.namePlaceholder}
                 required
                 error={formErrors.name}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+                className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
               />
               <Input
                 label={t.nameEn}
@@ -705,7 +700,7 @@ export const Users: React.FC = () => {
                 placeholder={t.nameEnPlaceholder}
                 required
                 error={formErrors.nameEn}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+                className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
               />
               <Input
                 label={t.username}
@@ -714,24 +709,24 @@ export const Users: React.FC = () => {
                 placeholder={t.usernamePlaceholder}
                 required
                 error={formErrors.username}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+                className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
               />
               <Input
                 label={t.email}
                 value={formData.email}
                 onChange={(value) => setFormData({ ...formData, email: value })}
                 placeholder={t.emailPlaceholder}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+                className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
               />
               <Input
                 label={t.phone}
                 value={formData.phone}
                 onChange={(value) => setFormData({ ...formData, phone: value })}
                 placeholder={t.phonePlaceholder}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+                className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
               />
             </div>
-            <div className="space-y-6">
+            <div className="space-y-4">
               <Select
                 label={t.role}
                 options={[
@@ -742,7 +737,7 @@ export const Users: React.FC = () => {
                 ]}
                 value={formData.role}
                 onChange={(value) => setFormData({ ...formData, role: value as 'admin' | 'branch' | 'chef' | 'production', branch: value === 'branch' ? formData.branch : '', department: value === 'chef' ? formData.department : '' })}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+                className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
               />
               {formData.role === 'branch' && (
                 <Select
@@ -753,7 +748,7 @@ export const Users: React.FC = () => {
                   placeholder={t.branchPlaceholder}
                   required
                   error={formErrors.branch}
-                  className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+                  className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
                 />
               )}
               {formData.role === 'chef' && (
@@ -765,7 +760,7 @@ export const Users: React.FC = () => {
                   placeholder={t.departmentPlaceholder}
                   required
                   error={formErrors.department}
-                  className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+                  className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
                 />
               )}
               <Select
@@ -776,7 +771,7 @@ export const Users: React.FC = () => {
                 ]}
                 value={formData.isActive}
                 onChange={(value) => setFormData({ ...formData, isActive: value === 'true' })}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+                className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
               />
               {!isEditMode && (
                 <Input
@@ -787,7 +782,7 @@ export const Users: React.FC = () => {
                   type="password"
                   required
                   error={formErrors.password}
-                  className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+                  className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
                 />
               )}
             </div>
@@ -798,18 +793,18 @@ export const Users: React.FC = () => {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3"
+                className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
               >
-                <AlertCircle className="w-5 h-5 text-red-600" />
-                <span className="text-red-600 font-medium">{error}</span>
+                <AlertCircle className="w-5 h-5 text-red-500" />
+                <span className="text-red-500 text-sm font-medium">{error}</span>
               </motion.div>
             )}
           </AnimatePresence>
-          <div className="flex gap-4 mt-6">
+          <div className="flex gap-3 mt-4">
             <Button
               type="submit"
               variant="primary"
-              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
             >
               {isEditMode ? t.update : t.add}
             </Button>
@@ -817,7 +812,7 @@ export const Users: React.FC = () => {
               type="button"
               variant="secondary"
               onClick={() => setIsModalOpen(false)}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+              className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
             >
               {t.cancel}
             </Button>
@@ -832,55 +827,55 @@ export const Users: React.FC = () => {
         size="md"
       >
         {selectedUser && (
-          <div className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-            <div className="flex items-center gap-3">
-              <User className="w-8 h-8 text-amber-600" />
-              <h3 className="text-xl font-semibold text-amber-900">{isRtl ? selectedUser.name : selectedUser.nameEn || selectedUser.name}</h3>
+          <div className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
+            <div className="flex items-center gap-2">
+              <User className="w-6 h-6 text-amber-600" />
+              <h3 className="text-lg font-semibold text-gray-800">{isRtl ? selectedUser.name : selectedUser.nameEn || selectedUser.name}</h3>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.username}</p>
-                <p className="text-gray-800">{selectedUser.username}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              <div className="flex">
+                <span className="w-24 font-medium text-gray-600">{t.username}:</span>
+                <span className="text-gray-800">{selectedUser.username}</span>
               </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.email}</p>
-                <p className="text-gray-800">{selectedUser.email || '-'}</p>
+              <div className="flex">
+                <span className="w-24 font-medium text-gray-600">{t.email}:</span>
+                <span className="text-gray-800">{selectedUser.email || '-'}</span>
               </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.phone}</p>
-                <p className="text-gray-800">{selectedUser.phone || '-'}</p>
+              <div className="flex">
+                <span className="w-24 font-medium text-gray-600">{t.phone}:</span>
+                <span className="text-gray-800">{selectedUser.phone || '-'}</span>
               </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.role}</p>
-                <p className="text-gray-800">{t[selectedUser.role]}</p>
+              <div className="flex">
+                <span className="w-24 font-medium text-gray-600">{t.role}:</span>
+                <span className="text-gray-800">{t[selectedUser.role]}</span>
               </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.branch}</p>
-                <p className="text-gray-800">{selectedUser.branch ? (isRtl ? selectedUser.branch.name : selectedUser.branch.nameEn || selectedUser.branch.name) : '-'}</p>
+              <div className="flex">
+                <span className="w-24 font-medium text-gray-600">{t.branch}:</span>
+                <span className="text-gray-800">{selectedUser.branch ? (isRtl ? selectedUser.branch.name : selectedUser.branch.nameEn || selectedUser.branch.name) : '-'}</span>
               </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.department}</p>
-                <p className="text-gray-800">{selectedUser.department?.name || '-'}</p>
+              <div className="flex">
+                <span className="w-24 font-medium text-gray-600">{t.department}:</span>
+                <span className="text-gray-800">{selectedUser.department?.name || '-'}</span>
               </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.status}</p>
-                <p className={`font-medium ${selectedUser.isActive ? 'text-green-600' : 'text-red-600'}`}>
+              <div className="flex">
+                <span className="w-24 font-medium text-gray-600">{t.status}:</span>
+                <span className={`font-medium ${selectedUser.isActive ? 'text-green-600' : 'text-red-600'}`}>
                   {selectedUser.isActive ? t.active : t.inactive}
-                </p>
+                </span>
               </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.createdAt}</p>
-                <p className="text-gray-800">{new Date(selectedUser.createdAt).toLocaleString()}</p>
+              <div className="flex">
+                <span className="w-24 font-medium text-gray-600">{t.createdAt}:</span>
+                <span className="text-gray-800">{new Date(selectedUser.createdAt).toLocaleString()}</span>
               </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.updatedAt}</p>
-                <p className="text-gray-800">{new Date(selectedUser.updatedAt).toLocaleString()}</p>
+              <div className="flex">
+                <span className="w-24 font-medium text-gray-600">{t.updatedAt}:</span>
+                <span className="text-gray-800">{new Date(selectedUser.updatedAt).toLocaleString()}</span>
               </div>
             </div>
             <Button
               variant="secondary"
               onClick={() => setIsProfileModalOpen(false)}
-              className="mt-6 w-full bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+              className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
             >
               {t.cancel}
             </Button>
@@ -894,12 +889,12 @@ export const Users: React.FC = () => {
         title={t.resetPassword}
         size="sm"
       >
-        <form onSubmit={handleResetPassword} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
+        <form onSubmit={handleResetPassword} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
-            className="space-y-6"
+            className="space-y-4"
           >
             <Input
               label={t.newPassword}
@@ -908,7 +903,7 @@ export const Users: React.FC = () => {
               placeholder={t.newPasswordPlaceholder}
               type="password"
               required
-              className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
             />
             <Input
               label={t.confirmPassword}
@@ -917,7 +912,7 @@ export const Users: React.FC = () => {
               placeholder={t.confirmPasswordPlaceholder}
               type="password"
               required
-              className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
             />
           </motion.div>
           <AnimatePresence>
@@ -926,18 +921,18 @@ export const Users: React.FC = () => {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3"
+                className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
               >
-                <AlertCircle className="w-5 h-5 text-red-600" />
-                <span className="text-red-600 font-medium">{error}</span>
+                <AlertCircle className="w-5 h-5 text-red-500" />
+                <span className="text-red-500 text-sm font-medium">{error}</span>
               </motion.div>
             )}
           </AnimatePresence>
-          <div className="flex gap-4 mt-6">
+          <div className="flex gap-3 mt-4">
             <Button
               type="submit"
               variant="primary"
-              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
             >
               {t.reset}
             </Button>
@@ -945,7 +940,7 @@ export const Users: React.FC = () => {
               type="button"
               variant="secondary"
               onClick={() => setIsResetPasswordModalOpen(false)}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+              className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
             >
               {t.cancel}
             </Button>
@@ -959,27 +954,27 @@ export const Users: React.FC = () => {
         title={t.confirmDelete}
         size="sm"
       >
-        <div className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-          <p className="text-gray-600">{t.deleteWarning}</p>
+        <div className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
+          <p className="text-gray-600 text-sm">{t.deleteWarning}</p>
           <AnimatePresence>
             {error && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3"
+                className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
               >
-                <AlertCircle className="w-5 h-5 text-red-600" />
-                <span className="text-red-600 font-medium">{error}</span>
+                <AlertCircle className="w-5 h-5 text-red-500" />
+                <span className="text-red-500 text-sm font-medium">{error}</span>
               </motion.div>
             )}
           </AnimatePresence>
-          <div className="flex gap-4 mt-6">
+          <div className="flex gap-3 mt-4">
             <Button
               type="button"
               variant="danger"
               onClick={handleDelete}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+              className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
             >
               {t.delete}
             </Button>
@@ -987,7 +982,7 @@ export const Users: React.FC = () => {
               type="button"
               variant="secondary"
               onClick={() => setIsDeleteModalOpen(false)}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+              className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
             >
               {t.cancel}
             </Button>
