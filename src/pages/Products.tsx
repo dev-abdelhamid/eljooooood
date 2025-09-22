@@ -3,7 +3,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { productsAPI, departmentAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
-import { motion } from 'framer-motion';
+import { motion } from 'framer-motion'; 
 import { Button } from '../components/UI/Button';
 import { Input } from '../components/UI/Input';
 import { Select } from '../components/UI/Select';
@@ -14,9 +14,8 @@ import { Package, Plus, Edit2, Trash2, Search, AlertCircle } from 'lucide-react'
 interface Product {
   _id: string;
   name: string;
-  nameEn?: string;
   code: string;
-  department: { _id: string; name: string; nameEn?: string };
+  department: { _id: string; name: string };
   price: number;
   unit: string;
   description?: string;
@@ -25,13 +24,11 @@ interface Product {
 interface Department {
   _id: string;
   name: string;
-  nameEn?: string;
 }
 
 export function Products() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
-  const isRtl = language === 'ar';
   const [products, setProducts] = useState<Product[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -43,7 +40,6 @@ export function Products() {
 
   const [formData, setFormData] = useState({
     name: '',
-    nameEn: '',
     code: '',
     department: '',
     price: '',
@@ -61,26 +57,44 @@ export function Products() {
 
       setLoading(true);
       try {
+        console.log('Fetching products with params:', { filterDepartment, searchTerm });
+        console.log('API URL:', import.meta.env.VITE_API_URL);
         const [productsResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 100, isRtl }),
-          departmentAPI.getAll({ isRtl }),
+          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 100 }).catch((err) => {
+            console.error('Products API error:', err);
+            throw err;
+          }),
+          departmentAPI.getAll().catch((err) => {
+            console.error('Departments API error:', err);
+            throw err;
+          }),
         ]);
+        console.log('Products response:', productsResponse);
+        console.log('Departments response:', departmentsResponse);
+
+        // التأكد إن departmentsResponse هو array
+        const departmentsArray = Array.isArray(departmentsResponse) ? departmentsResponse : [];
         setProducts(Array.isArray(productsResponse) ? productsResponse : []);
-        setDepartments(Array.isArray(departmentsResponse) ? departmentsResponse : []);
+        setDepartments(departmentsArray);
         setError('');
       } catch (err: any) {
         console.error('Fetch error:', err);
+        console.error('Error details:', {
+          status: err.response?.status,
+          data: err.response?.data,
+          url: err.config?.url,
+        });
         setError(err.response?.data?.message || t('products.fetchError'));
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [t, user, filterDepartment, searchTerm, isRtl]);
+  }, [t, user, filterDepartment, searchTerm]);
 
   const filteredProducts = products.filter(
     (product) =>
-      ((isRtl ? product.name : product.nameEn || product.name).toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         product.code.toLowerCase().includes(searchTerm.toLowerCase())) &&
       (filterDepartment === '' || product.department._id === filterDepartment)
   );
@@ -94,7 +108,6 @@ export function Products() {
       setEditingProduct(product);
       setFormData({
         name: product.name,
-        nameEn: product.nameEn || '',
         code: product.code,
         department: product.department._id,
         price: product.price.toString(),
@@ -105,7 +118,6 @@ export function Products() {
       setEditingProduct(null);
       setFormData({
         name: '',
-        nameEn: '',
         code: '',
         department: departments[0]?._id || '',
         price: '',
@@ -127,13 +139,13 @@ export function Products() {
     try {
       const productData = {
         name: formData.name,
-        nameEn: formData.nameEn || undefined,
         code: formData.code,
         department: formData.department,
         price: parseFloat(formData.price),
         unit: formData.unit,
         description: formData.description || undefined,
       };
+      console.log('Submitting product:', productData);
       if (editingProduct) {
         const updatedProduct = await productsAPI.update(editingProduct._id, productData);
         setProducts(
@@ -170,21 +182,21 @@ export function Products() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen ">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
-      <motion.div
+    <div className=" mx-auto min-h-screen" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+        <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4"
       >
-        <h1 className="text-3xl sm:text-4xl font-bold text-amber-900 flex items-center justify-center sm:justify-start gap-3">
+          <h1 className="text-3xl sm:text-4xl font-bold text-amber-900 flex items-center justify-center sm:justify-start gap-3">
           <Package className="w-8 h-8 text-amber-600" />
           {t('products.manage')}
         </h1>
@@ -221,7 +233,7 @@ export function Products() {
           </div>
           <Select
             label={t('orders.department')}
-            options={[{ value: '', label: t('orders.allDepartments') }, ...departments.map((d) => ({ value: d._id, label: isRtl ? d.name : d.nameEn || d.name }))]}
+            options={[{ value: '', label: t('orders.allDepartments') }, ...(Array.isArray(departments) ? departments.map((d) => ({ value: d._id, label: d.name })) : [])]}
             value={filterDepartment}
             onChange={setFilterDepartment}
             className="border-gray-300 rounded-md focus:ring-blue-500"
@@ -234,9 +246,9 @@ export function Products() {
         {filteredProducts.map((product) => (
           <Card key={product._id} className="bg-white rounded-md shadow-sm hover:shadow-md transition-shadow">
             <div className="p-4">
-              <h3 className="font-medium text-gray-800">{isRtl ? product.name : product.nameEn || product.name}</h3>
+              <h3 className="font-medium text-gray-800">{product.name}</h3>
               <p className="text-sm text-gray-500">{t('products.code')}: {product.code}</p>
-              <p className="text-sm text-blue-500">{product.department ? (isRtl ? product.department.name : product.department.nameEn || product.department.name) : t('products.noDepartment')}</p>
+              <p className="text-sm text-blue-500">{product.department?.name || t('products.noDepartment')}</p>
               {product.description && <p className="text-xs text-gray-400 mt-1">{product.description}</p>}
               <div className="flex items-center justify-between mt-3">
                 <span className="text-lg font-semibold text-gray-800">{product.price} {t('orders.currency')}</span>
@@ -299,13 +311,6 @@ export function Products() {
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />
             <Input
-              label={t('products.nameEn')}
-              value={formData.nameEn}
-              onChange={(value) => setFormData({ ...formData, nameEn: value })}
-              placeholder={t('products.nameEnPlaceholder')}
-              className="border-gray-300 rounded-md focus:ring-blue-500"
-            />
-            <Input
               label={t('products.code')}
               value={formData.code}
               onChange={(value) => setFormData({ ...formData, code: value })}
@@ -315,7 +320,7 @@ export function Products() {
             />
             <Select
               label={t('products.department')}
-              options={[{ value: '', label: t('products.selectDepartment') }, ...departments.map((d) => ({ value: d._id, label: isRtl ? d.name : d.nameEn || d.name }))]}
+              options={[{ value: '', label: t('products.selectDepartment') }, ...(Array.isArray(departments) ? departments.map((d) => ({ value: d._id, label: d.name })) : [])]}
               value={formData.department}
               onChange={(value) => setFormData({ ...formData, department: value })}
               required
@@ -377,4 +382,4 @@ export function Products() {
       </Modal>
     </div>
   );
-};
+}
