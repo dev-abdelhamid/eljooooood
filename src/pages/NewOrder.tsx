@@ -11,21 +11,25 @@ import { toast } from 'react-toastify';
 interface Product {
   _id: string;
   name: string;
+  nameEn?: string;
   code: string;
-  department: { _id: string; name: string };
+  department: { _id: string; name: string; nameEn?: string };
   price: number;
   unit: string;
+  unitEn?: string;
   description?: string;
 }
 
 interface Branch {
   _id: string;
   name: string;
+  nameEn?: string;
 }
 
 interface Department {
   _id: string;
   name: string;
+  nameEn?: string;
 }
 
 interface OrderItem {
@@ -61,6 +65,8 @@ export function NewOrder() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   const priorityOptions = useMemo(
     () => [
@@ -77,6 +83,7 @@ export function NewOrder() {
   const debouncedSearch = useCallback(
     debounce((value: string) => {
       setSearchTerm(value);
+      setCurrentPage(1);
     }, 300),
     []
   );
@@ -91,18 +98,18 @@ export function NewOrder() {
     const loadData = async () => {
       try {
         setLoading((prev) => ({ ...prev, products: true, branches: true, departments: true }));
-
         const [productsResponse, branchesResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ limit: 100, department: filterDepartment, search: searchTerm }).finally(() =>
+          productsAPI.getAll({ limit: 12, page: currentPage, department: filterDepartment, search: searchTerm }).finally(() =>
             setLoading((prev) => ({ ...prev, products: false }))
           ),
           branchesAPI.getAll().finally(() => setLoading((prev) => ({ ...prev, branches: false }))),
-          departmentAPI.getAll().finally(() => setLoading((prev) => ({ ...prev, departments: false }))),
+          departmentAPI.getAll({ limit: 100 }).finally(() => setLoading((prev) => ({ ...prev, departments: false }))),
         ]);
 
-        setProducts(Array.isArray(productsResponse) ? productsResponse : []);
+        setProducts(productsResponse.data);
+        setTotalPages(productsResponse.totalPages);
         setBranches(Array.isArray(branchesResponse) ? branchesResponse : []);
-        setDepartments(Array.isArray(departmentsResponse) ? departmentsResponse : []);
+        setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data : []);
         if (user?.role === 'branch' && user?.branchId) {
           setBranch(user.branchId.toString());
         }
@@ -111,9 +118,8 @@ export function NewOrder() {
         setError(err.response?.data?.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
       }
     };
-
     loadData();
-  }, [isRtl, user, navigate, filterDepartment, searchTerm]);
+  }, [isRtl, user, navigate, filterDepartment, searchTerm, currentPage]);
 
   useEffect(() => {
     socket.on('connect', () => {
@@ -138,11 +144,11 @@ export function NewOrder() {
     () =>
       products.filter(
         (product) =>
-          (product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          ((language === 'ar' ? product.name : product.nameEn || product.name).toLowerCase().includes(searchTerm.toLowerCase()) ||
             product.code.toLowerCase().includes(searchTerm.toLowerCase())) &&
           (filterDepartment === '' || product.department._id === filterDepartment)
       ),
-    [products, searchTerm, filterDepartment]
+    [products, searchTerm, filterDepartment, language]
   );
 
   const addToOrder = useCallback((product: Product) => {
@@ -191,7 +197,7 @@ export function NewOrder() {
         setError(isRtl ? 'السلة فارغة' : 'Cart is empty');
         return;
       }
-      if (!branch && user?.role !== 'admin') {
+      if (!branch && user?.role === 'admin') {
         setError(isRtl ? 'الفرع مطلوب' : 'Branch is required');
         return;
       }
@@ -208,20 +214,22 @@ export function NewOrder() {
         orderNumber: `ORD-${Date.now()}`,
         branchId: user?.role === 'branch' ? user?.branchId?.toString() : branch,
         items: orderItems.map((item) => ({
-          product: item.productId,
+          productId: item.productId,
           quantity: item.quantity,
           price: item.price,
         })),
         status: 'pending',
-        notes,
+        notes: notes.trim() || undefined,
         priority,
+        requestedDeliveryDate: new Date().toISOString(),
       };
       const response = await ordersAPI.create(orderData);
       socket.emit('newOrderFromBranch', response);
-      setTimeout(() => navigate('/orders/new'), 1000);
+      setToastState({ message: isRtl ? 'تم إنشاء الطلب بنجاح' : 'Order created successfully', type: 'success' });
+      setTimeout(() => navigate('/orders'), 1000);
     } catch (err: any) {
       setError(err.response?.data?.message || (isRtl ? 'خطأ في إنشاء الطلب' : 'Error creating order'));
-      setToastState({ message: isRtl ? 'خطأ في إنشاء الطلب' : 'Error creating order', type: 'error' });
+      setToastState({ message: err.response?.data?.message || (isRtl ? 'خطأ في إنشاء الطلب' : 'Error creating order'), type: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -233,7 +241,7 @@ export function NewOrder() {
 
   if (loading.products || loading.branches || loading.departments) {
     return (
-      <div className="flex items-center justify-center min-h-screen ">
+      <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
       </div>
     );
@@ -241,7 +249,7 @@ export function NewOrder() {
 
   return (
     <div
-      className=" mx-auto px-4 py-8 min-h-screen  h-screen overflow-auto"
+      className="mx-auto px-4 py-8 min-h-screen h-screen overflow-auto"
       dir={isRtl ? 'rtl' : 'ltr'}
     >
       {/* Toast Notification */}
@@ -279,10 +287,10 @@ export function NewOrder() {
                 {orderItems.map((item) => (
                   <li key={item.productId} className="flex justify-between text-sm text-gray-700">
                     <span>
-                      {item.product.name} (x{item.quantity})
+                      {language === 'ar' ? item.product.name : (item.product.nameEn || item.product.name)} (x{item.quantity})
                     </span>
                     <span>
-                      {(item.price * item.quantity).toFixed(2)} {isRtl ? 'ريال ' : 'SAR'}
+                      {(item.price * item.quantity).toFixed(2)} {isRtl ? 'ريال' : 'SAR'}
                     </span>
                   </li>
                 ))}
@@ -290,7 +298,7 @@ export function NewOrder() {
               <div className="mt-4 font-semibold text-gray-800 text-sm">
                 <span>{isRtl ? 'الإجمالي النهائي' : 'Final Total'}: </span>
                 <span className="text-teal-600">
-                  {getTotalAmount} {isRtl ? 'ريال ' : 'SAR'}
+                  {getTotalAmount} {isRtl ? 'ريال' : 'SAR'}
                 </span>
               </div>
             </div>
@@ -316,7 +324,7 @@ export function NewOrder() {
       )}
 
       {/* Header */}
-      <div className="mb-8 ">
+      <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
           <ShoppingCart className="w-8 h-8 text-amber-600" />
           {isRtl ? 'إنشاء طلب جديد' : 'Create New Order'}
@@ -372,13 +380,12 @@ export function NewOrder() {
                 <option value="">{isRtl ? 'كل الأقسام' : 'All Departments'}</option>
                 {departments.map((d) => (
                   <option key={d._id} value={d._id}>
-                    {d.name}
+                    {language === 'ar' ? d.name : (d.nameEn || d.name)}
                   </option>
                 ))}
               </select>
             </div>
           </div>
-
           {loading.products ? (
             <div className="p-6 text-center bg-white rounded-2xl shadow-md">
               <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-amber-600 mx-auto"></div>
@@ -399,20 +406,23 @@ export function NewOrder() {
                   >
                     <div className="space-y-3">
                       <div className="flex items-center justify-between gap-4">
-                        <h3 className="font-semibold text-gray-900 text-base truncate">{product.name}</h3>
+                        <h3 className="font-semibold text-gray-900 text-base truncate">
+                          {language === 'ar' ? product.name : (product.nameEn || product.name)}
+                        </h3>
                         <p className="text-xs text-gray-500">{product.code}</p>
                       </div>
-                      <p className="text-sm text-amber-600">{product.department?.name || (isRtl ? 'بدون قسم' : 'No Department')}</p>
+                      <p className="text-sm text-amber-600">
+                        {language === 'ar' ? product.department.name : (product.department.nameEn || product.department.name)}
+                      </p>
                       <p className="font-semibold text-gray-900 text-sm">
-                        {product.price} {isRtl ? 'ريال ' : 'SAR'} / {product.unit}
+                        {product.price} {isRtl ? 'ريال' : 'SAR'} / {language === 'ar' ? product.unit : (product.unitEn || product.unit)}
                       </p>
                       {product.description && (
                         <p className="text-xs text-gray-600 line-clamp-2">{product.description}</p>
                       )}
                       <div className="flex justify-end gap-2">
                         {cartItem ? (
-                          <>
-                          <div className='flex items-center justify-center align-center gap-2'>
+                          <div className="flex items-center gap-2">
                             <button
                               onClick={() => updateQuantity(product._id, cartItem.quantity - 1)}
                               className="w-8 h-8 bg-gray-200 rounded-full hover:bg-gray-300 transition-colors flex items-center justify-center"
@@ -428,8 +438,7 @@ export function NewOrder() {
                             >
                               <Plus className="w-4 h-4 text-white" />
                             </button>
-                           </ div>
-                          </>
+                          </div>
                         ) : (
                           <button
                             onClick={() => addToOrder(product)}
@@ -446,9 +455,32 @@ export function NewOrder() {
               })}
             </div>
           )}
+          {totalPages > 1 && (
+            <div className="flex justify-center mt-6">
+              <button
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="mx-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full transition-colors text-sm"
+                aria-label={isRtl ? 'السابق' : 'Previous'}
+              >
+                {isRtl ? 'السابق' : 'Previous'}
+              </button>
+              <span className="mx-4 self-center text-sm">
+                {isRtl ? `الصفحة ${currentPage} من ${totalPages}` : `Page ${currentPage} of ${totalPages}`}
+              </span>
+              <button
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="mx-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full transition-colors text-sm"
+                aria-label={isRtl ? 'التالي' : 'Next'}
+              >
+                {isRtl ? 'التالي' : 'Next'}
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* Order Summary and Form (Sticky on Large Screens) */}
+        {/* Order Summary and Form */}
         <div className="lg:sticky lg:top-8 space-y-4 max-h-[calc(100vh-2rem)] overflow-y-auto" ref={summaryRef}>
           <div className="p-6 bg-white rounded-2xl shadow-md">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{isRtl ? 'ملخص الطلب' : 'Order Summary'}</h3>
@@ -462,9 +494,11 @@ export function NewOrder() {
                     className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                   >
                     <div className="flex-1">
-                      <p className="font-medium text-gray-900 text-sm">{item.product.name}</p>
+                      <p className="font-medium text-gray-900 text-sm">
+                        {language === 'ar' ? item.product.name : (item.product.nameEn || item.product.name)}
+                      </p>
                       <p className="text-xs text-gray-600">
-                        {item.price} {isRtl ? 'ريال ' : 'SAR'} / {item.product.unit}
+                        {item.price} {isRtl ? 'ريال' : 'SAR'} / {language === 'ar' ? item.product.unit : (item.product.unitEn || item.product.unit)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -497,14 +531,13 @@ export function NewOrder() {
                   <div className="flex justify-between font-semibold text-gray-900 text-sm">
                     <span>{isRtl ? 'الإجمالي النهائي' : 'Final Total'}:</span>
                     <span className="text-teal-600">
-                      {getTotalAmount} {isRtl ? 'ريال سعودي' : 'SAR'}
+                      {getTotalAmount} {isRtl ? 'ريال' : 'SAR'}
                     </span>
                   </div>
                 </div>
               </div>
             )}
           </div>
-
           <div className="p-6 bg-white rounded-2xl shadow-md">
             <form onSubmit={handleSubmit} className="space-y-4">
               {user?.role === 'admin' && (
@@ -523,7 +556,7 @@ export function NewOrder() {
                     <option value="">{isRtl ? 'اختر الفرع' : 'Select Branch'}</option>
                     {branches.map((b) => (
                       <option key={b._id} value={b._id}>
-                        {b.name}
+                        {language === 'ar' ? b.name : (b.nameEn || b.name)}
                       </option>
                     ))}
                   </select>
