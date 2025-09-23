@@ -13,23 +13,27 @@ interface Product {
   name: string;
   nameEn?: string;
   code: string;
-  department: { _id: string; name: string; nameEn?: string };
+  department: { _id: string; name: string; nameEn?: string; displayName: string };
   price: number;
   unit: string;
   unitEn?: string;
   description?: string;
+  displayName: string;
+  displayUnit: string;
 }
 
 interface Branch {
   _id: string;
   name: string;
   nameEn?: string;
+  displayName: string;
 }
 
 interface Department {
   _id: string;
   name: string;
   nameEn?: string;
+  displayName: string;
 }
 
 interface OrderItem {
@@ -78,7 +82,7 @@ export function NewOrder() {
     [isRtl]
   );
 
-  const socket = useMemo(() => io('https://eljoodia-server-production.up.railway.app'), []);
+  const socket = useMemo(() => io(import.meta.env.VITE_API_URL || 'https://eljoodia-server-production.up.railway.app'), []);
 
   const debouncedSearch = useCallback(
     debounce((value: string) => {
@@ -115,7 +119,7 @@ export function NewOrder() {
         }
         setError('');
       } catch (err: any) {
-        setError(err.response?.data?.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
+        setError(err.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
       }
     };
     loadData();
@@ -144,11 +148,11 @@ export function NewOrder() {
     () =>
       products.filter(
         (product) =>
-          ((language === 'ar' ? product.name : product.nameEn || product.name).toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (product.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
             product.code.toLowerCase().includes(searchTerm.toLowerCase())) &&
           (filterDepartment === '' || product.department._id === filterDepartment)
       ),
-    [products, searchTerm, filterDepartment, language]
+    [products, searchTerm, filterDepartment]
   );
 
   const addToOrder = useCallback((product: Product) => {
@@ -228,8 +232,8 @@ export function NewOrder() {
       setToastState({ message: isRtl ? 'تم إنشاء الطلب بنجاح' : 'Order created successfully', type: 'success' });
       setTimeout(() => navigate('/orders'), 1000);
     } catch (err: any) {
-      setError(err.response?.data?.message || (isRtl ? 'خطأ في إنشاء الطلب' : 'Error creating order'));
-      setToastState({ message: err.response?.data?.message || (isRtl ? 'خطأ في إنشاء الطلب' : 'Error creating order'), type: 'error' });
+      setError(err.message || (isRtl ? 'خطأ في إنشاء الطلب' : 'Error creating order'));
+      setToastState({ message: err.message || (isRtl ? 'خطأ في إنشاء الطلب' : 'Error creating order'), type: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -252,7 +256,6 @@ export function NewOrder() {
       className="mx-auto px-4 py-8 min-h-screen h-screen overflow-auto"
       dir={isRtl ? 'rtl' : 'ltr'}
     >
-      {/* Toast Notification */}
       {toastState && (
         <div
           className={`fixed top-4 ${isRtl ? 'right-4' : 'left-4'} z-50 p-4 rounded-lg shadow-lg transition-all duration-300 ${
@@ -273,7 +276,6 @@ export function NewOrder() {
         </div>
       )}
 
-      {/* Confirm Modal */}
       {showConfirmModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
@@ -287,7 +289,7 @@ export function NewOrder() {
                 {orderItems.map((item) => (
                   <li key={item.productId} className="flex justify-between text-sm text-gray-700">
                     <span>
-                      {language === 'ar' ? item.product.name : (item.product.nameEn || item.product.name)} (x{item.quantity})
+                      {item.product.displayName} (x{item.quantity})
                     </span>
                     <span>
                       {(item.price * item.quantity).toFixed(2)} {isRtl ? 'ريال' : 'SAR'}
@@ -323,7 +325,6 @@ export function NewOrder() {
         </div>
       )}
 
-      {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
           <ShoppingCart className="w-8 h-8 text-amber-600" />
@@ -334,7 +335,6 @@ export function NewOrder() {
         </p>
       </div>
 
-      {/* Error Message */}
       {error && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 animate-pulse">
           <AlertCircle className="w-5 h-5 text-red-600" />
@@ -342,7 +342,6 @@ export function NewOrder() {
         </div>
       )}
 
-      {/* Scroll Down Button for Small Screens */}
       {orderItems.length > 0 && (
         <div className={`lg:hidden fixed bottom-6 ${isRtl ? 'left-6' : 'right-6'} z-50`}>
           <button
@@ -355,9 +354,7 @@ export function NewOrder() {
         </div>
       )}
 
-      {/* Main Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Products Section */}
         <div className="lg:col-span-2 space-y-4">
           <div className="p-6 bg-white rounded-2xl shadow-md">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -380,7 +377,7 @@ export function NewOrder() {
                 <option value="">{isRtl ? 'كل الأقسام' : 'All Departments'}</option>
                 {departments.map((d) => (
                   <option key={d._id} value={d._id}>
-                    {language === 'ar' ? d.name : (d.nameEn || d.name)}
+                    {d.displayName}
                   </option>
                 ))}
               </select>
@@ -407,15 +404,13 @@ export function NewOrder() {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between gap-4">
                         <h3 className="font-semibold text-gray-900 text-base truncate">
-                          {language === 'ar' ? product.name : (product.nameEn || product.name)}
+                          {product.displayName}
                         </h3>
                         <p className="text-xs text-gray-500">{product.code}</p>
                       </div>
-                      <p className="text-sm text-amber-600">
-                        {language === 'ar' ? product.department.name : (product.department.nameEn || product.department.name)}
-                      </p>
+                      <p className="text-sm text-amber-600">{product.department.displayName}</p>
                       <p className="font-semibold text-gray-900 text-sm">
-                        {product.price} {isRtl ? 'ريال' : 'SAR'} / {language === 'ar' ? product.unit : (product.unitEn || product.unit)}
+                        {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
                       </p>
                       {product.description && (
                         <p className="text-xs text-gray-600 line-clamp-2">{product.description}</p>
@@ -480,7 +475,6 @@ export function NewOrder() {
           )}
         </div>
 
-        {/* Order Summary and Form */}
         <div className="lg:sticky lg:top-8 space-y-4 max-h-[calc(100vh-2rem)] overflow-y-auto" ref={summaryRef}>
           <div className="p-6 bg-white rounded-2xl shadow-md">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{isRtl ? 'ملخص الطلب' : 'Order Summary'}</h3>
@@ -494,11 +488,9 @@ export function NewOrder() {
                     className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                   >
                     <div className="flex-1">
-                      <p className="font-medium text-gray-900 text-sm">
-                        {language === 'ar' ? item.product.name : (item.product.nameEn || item.product.name)}
-                      </p>
+                      <p className="font-medium text-gray-900 text-sm">{item.product.displayName}</p>
                       <p className="text-xs text-gray-600">
-                        {item.price} {isRtl ? 'ريال' : 'SAR'} / {language === 'ar' ? item.product.unit : (item.product.unitEn || item.product.unit)}
+                        {item.price} {isRtl ? 'ريال' : 'SAR'} / {item.product.displayUnit}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -556,7 +548,7 @@ export function NewOrder() {
                     <option value="">{isRtl ? 'اختر الفرع' : 'Select Branch'}</option>
                     {branches.map((b) => (
                       <option key={b._id} value={b._id}>
-                        {language === 'ar' ? b.name : (b.nameEn || b.name)}
+                        {b.displayName}
                       </option>
                     ))}
                   </select>
