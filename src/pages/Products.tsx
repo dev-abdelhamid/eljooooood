@@ -18,7 +18,7 @@ interface Product {
   code: string;
   department: { _id: string; name: string; nameEn?: string };
   price: number;
-  unit: string;
+  unit?: string;
   unitEn?: string;
   description?: string;
   displayName: string;
@@ -29,6 +29,15 @@ interface Department {
   name: string;
   nameEn?: string;
 }
+
+// Unit mapping for frontend
+const unitOptions = [
+  { value: 'كيلو', valueEn: 'Kilo', labelAr: 'كيلو', labelEn: 'Kilo' },
+  { value: 'قطعة', valueEn: 'Piece', labelAr: 'قطعة', labelEn: 'Piece' },
+  { value: 'علبة', valueEn: 'Pack', labelAr: 'علبة', labelEn: 'Pack' },
+  { value: 'صينية', valueEn: 'Tray', labelAr: 'صينية', labelEn: 'Tray' },
+  { value: '', valueEn: '', labelAr: 'غير محدد', labelEn: 'None' },
+];
 
 export function Products() {
   const { t, language } = useLanguage();
@@ -50,8 +59,8 @@ export function Products() {
     code: '',
     department: '',
     price: '',
-    unit: 'قطعة',
-    unitEn: 'Piece',
+    unit: '',
+    unitEn: '',
     description: '',
   });
 
@@ -117,7 +126,7 @@ export function Products() {
         code: product.code,
         department: product.department._id,
         price: product.price.toString(),
-        unit: product.unit,
+        unit: product.unit || '',
         unitEn: product.unitEn || '',
         description: product.description || '',
       });
@@ -129,8 +138,8 @@ export function Products() {
         code: '',
         department: departments[0]?._id || '',
         price: '',
-        unit: 'قطعة',
-        unitEn: 'Piece',
+        unit: '',
+        unitEn: '',
         description: '',
       });
     }
@@ -152,7 +161,7 @@ export function Products() {
         code: formData.code,
         department: formData.department,
         price: parseFloat(formData.price),
-        unit: formData.unit,
+        unit: formData.unit || undefined,
         unitEn: formData.unitEn || undefined,
         description: formData.description || undefined,
       };
@@ -176,7 +185,7 @@ export function Products() {
       closeModal();
     } catch (err: any) {
       console.error('Submit error:', err);
-      setError(err.message || t('products.saveError'));
+      setError(err.response?.data?.message || t('products.saveError'));
     }
   };
 
@@ -286,7 +295,7 @@ export function Products() {
                 </p>
                 {product.description && <p className="text-xs text-gray-400 mt-1">{product.description}</p>}
                 <div className="flex items-center justify-between mt-3">
-                  <span className="text-lg font-semibold text-gray-800">{product.price} {t('products.currency')}</span>
+                  <span className="text-lg font-semibold text-gray-800">{product.price} {t('products.currency')} / {language === 'ar' ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A')}</span>
                   {user?.role === 'admin' && (
                     <div className="flex gap-2">
                       <button
@@ -382,15 +391,19 @@ export function Products() {
             />
             <Select
               label={t('products.unit')}
-              options={[
-                { value: 'كيلو', label: t('products.units.kilo'), valueEn: 'Kilogram' },
-                { value: 'قطعة', label: t('products.units.piece'), valueEn: 'Piece' },
-                { value: 'علبة', label: t('products.units.box'), valueEn: 'Box' },
-                { value: 'صينية', label: t('products.units.tray'), valueEn: 'Tray' },
-              ].map((opt) => ({ value: opt.value, label: language === 'ar' ? opt.label : opt.valueEn }))}
+              options={unitOptions.map((opt) => ({
+                value: opt.value,
+                label: language === 'ar' ? opt.labelAr : opt.labelEn
+              }))}
               value={formData.unit}
-              onChange={(value) => setFormData({ ...formData, unit: value, unitEn: (language === 'ar' ? undefined : formData.unitEn) || value })}
-              required
+              onChange={(value) => {
+                const selectedUnit = unitOptions.find(opt => opt.value === value);
+                setFormData({
+                  ...formData,
+                  unit: value,
+                  unitEn: selectedUnit ? selectedUnit.valueEn : ''
+                });
+              }}
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />
             <div>
