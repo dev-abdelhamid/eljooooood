@@ -1,37 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useLanguage } from '../contexts/LanguageContext';
-import { useAuth } from '../contexts/AuthContext';
-import { branchesAPI } from '../services/branchesAPI';
-import { Card } from '../components/UI/Card';
-import { Button } from '../components/UI/Button';
-import { Input } from '../components/UI/Input';
-import { Select } from '../components/UI/Select';
-import { Modal } from '../components/UI/Modal';
-import { LoadingSpinner } from '../components/UI/LoadingSpinner';
-import { MapPin, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key, User } from 'lucide-react';
+import { LanguageContext } from '../contexts/LanguageContext';
+import { branchesAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ArrowLeftIcon, PencilIcon, TrashIcon, KeyIcon } from '@heroicons/react/24/outline';
 
 interface Branch {
   _id: string;
   name: string;
   nameEn?: string;
-  displayName: string;
   code: string;
   address: string;
   addressEn?: string;
-  displayAddress: string;
   city: string;
   cityEn?: string;
-  displayCity: string;
   phone?: string;
-  isActive: boolean;
   user?: {
     _id: string;
     name: string;
     nameEn?: string;
-    displayName: string;
     username: string;
     email?: string;
     phone?: string;
@@ -41,211 +29,95 @@ interface Branch {
     _id: string;
     name: string;
     nameEn?: string;
-    displayName: string;
     username: string;
   };
-  createdAt: string;
-  updatedAt: string;
+  isActive: boolean;
+  displayName: string;
+  displayAddress: string;
+  displayCity: string;
 }
 
 const translations = {
   ar: {
-    manage: 'إدارة الفروع',
-    add: 'إضافة فرع',
-    addFirst: 'إضافة أول فرع',
-    noBranches: 'لا توجد فروع',
-    noMatch: 'لا توجد فروع مطابقة',
-    empty: 'لا توجد فروع متاحة',
-    searchPlaceholder: 'ابحث عن الاسم، الكود، أو المدينة...',
-    status: 'الحالة',
-    allStatuses: 'جميع الحالات',
-    active: 'نشط',
-    inactive: 'غير نشط',
-    city: 'المدينة',
-    allCities: 'جميع المدن',
+    branchDetails: 'تفاصيل الفرع',
+    name: 'الاسم',
+    nameEn: 'الاسم بالإنجليزية',
     code: 'الكود',
-    allCodes: 'جميع الأكواد',
-    filters: 'الفلاتر',
-    previous: 'السابق',
-    next: 'التالي',
-    page: 'صفحة',
-    of: 'من',
     address: 'العنوان',
-    phone: 'الهاتف',
+    addressEn: 'العنوان بالإنجليزية',
+    city: 'المدينة',
+    cityEn: 'المدينة بالإنجليزية',
+    phone: 'رقم الهاتف',
     user: 'المستخدم',
     username: 'اسم المستخدم',
     email: 'الإيميل',
-    userPhone: 'هاتف المستخدم',
-    userStatus: 'حالة المستخدم',
+    isActive: 'مفعل',
     createdBy: 'تم الإنشاء بواسطة',
-    createdAt: 'تاريخ الإنشاء',
-    updatedAt: 'تاريخ التحديث',
-    edit: 'تعديل',
+    editBranch: 'تعديل الفرع',
+    deleteBranch: 'حذف الفرع',
     resetPassword: 'إعادة تعيين كلمة المرور',
-    delete: 'حذف',
-    profile: 'عرض التفاصيل',
-    name: 'اسم الفرع (عربي)',
-    nameEn: 'اسم الفرع (إنجليزي)',
-    addressEn: 'العنوان (إنجليزي)',
-    cityEn: 'المدينة (إنجليزي)',
-    nameRequired: 'اسم الفرع مطلوب',
-    codeRequired: 'كود الفرع مطلوب',
-    addressRequired: 'العنوان مطلوب',
-    cityRequired: 'المدينة مطلوبة',
-    userName: 'اسم المستخدم (عربي)',
-    userNameEn: 'اسم المستخدم (إنجليزي)',
-    userNameRequired: 'اسم المستخدم مطلوب',
-    usernameRequired: 'اسم المستخدم للفرع مطلوب',
-    passwordRequired: 'كلمة المرور مطلوبة',
-    namePlaceholder: 'أدخل اسم الفرع',
-    nameEnPlaceholder: 'أدخل اسم الفرع بالإنجليزية',
-    addressPlaceholder: 'أدخل العنوان',
-    addressEnPlaceholder: 'أدخل العنوان بالإنجليزية',
-    cityPlaceholder: 'أدخل المدينة',
-    cityEnPlaceholder: 'أدخل المدينة بالإنجليزية',
-    phonePlaceholder: 'أدخل رقم الهاتف',
-    userNamePlaceholder: 'أدخل اسم المستخدم',
-    userNameEnPlaceholder: 'أدخل اسم المستخدم بالإنجليزية',
-    usernamePlaceholder: 'أدخل اسم المستخدم للفرع',
-    emailPlaceholder: 'أدخل الإيميل',
-    userPhonePlaceholder: 'أدخل رقم هاتف المستخدم',
-    passwordPlaceholder: 'أدخل كلمة المرور للفرع',
-    update: 'تحديث الفرع',
-    requiredFields: 'يرجى ملء جميع الحقول المطلوبة',
-    emailExists: 'الإيميل مستخدم بالفعل، اختر إيميل آخر',
-    codeExists: 'هذا الكود مستخدم بالفعل، اختر كودًا آخر',
-    usernameExists: 'اسم المستخدم مستخدم بالفعل، اختر اسمًا آخر',
-    unauthorized: 'غير مصرح لك بالوصول',
-    fetchError: 'حدث خطأ أثناء جلب البيانات',
-    updateError: 'حدث خطأ أثناء تحديث الفرع',
-    createError: 'حدث خطأ أثناء إنشاء الفرع',
-    added: 'تم إضافة الفرع بنجاح',
-    updated: 'تم تحديث الفرع بنجاح',
+    save: 'حفظ',
+    cancel: 'إلغاء',
+    back: 'رجوع',
     newPassword: 'كلمة المرور الجديدة',
     confirmPassword: 'تأكيد كلمة المرور',
-    newPasswordPlaceholder: 'أدخل كلمة المرور الجديدة',
-    confirmPasswordPlaceholder: 'أدخل تأكيد كلمة المرور',
-    passwordMismatch: 'كلمة المرور وتأكيدها غير متطابقتين',
+    passwordMismatch: 'كلمة المرور غير متطابقة',
     passwordTooShort: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل',
-    passwordResetSuccess: 'تم إعادة تعيين كلمة المرور بنجاح',
-    passwordResetError: 'حدث خطأ أثناء إعادة تعيين كلمة المرور',
-    reset: 'إعادة تعيين',
-    cancel: 'إلغاء',
-    confirmDelete: 'تأكيد حذف الفرع',
-    deleteWarning: 'هل أنت متأكد من حذف هذا الفرع؟ لا يمكن التراجع عن هذا الإجراء.',
-    deleteRestricted: 'لا يمكن حذف الفرع لوجود طلبات أو مخزون مرتبط',
-    deleteError: 'حدث خطأ أثناء حذف الفرع',
-    deleted: 'تم حذف الفرع بنجاح',
-    branchDetails: 'تفاصيل الفرع',
-    userDetails: 'تفاصيل المستخدم',
+    branchNotFound: 'الفرع غير موجود',
+    serverError: 'خطأ في السيرفر',
+    branchUpdated: 'تم تحديث الفرع بنجاح',
+    branchDeleted: 'تم حذف الفرع بنجاح',
+    passwordReset: 'تم إعادة تعيين كلمة المرور بنجاح',
+    emailInUse: 'الإيميل مستخدم بالفعل',
+    usernameInUse: 'اسم المستخدم مستخدم بالفعل',
+    codeInUse: 'كود الفرع مستخدم بالفعل',
+    requiredField: 'هذا الحقل مطلوب',
   },
   en: {
-    manage: 'Manage Branches',
-    add: 'Add Branch',
-    addFirst: 'Add First Branch',
-    noBranches: 'No Branches Found',
-    noMatch: 'No Matching Branches',
-    empty: 'No Branches Available',
-    searchPlaceholder: 'Search by name, code, or city...',
-    status: 'Status',
-    allStatuses: 'All Statuses',
-    active: 'Active',
-    inactive: 'Inactive',
-    city: 'City',
-    allCities: 'All Cities',
+    branchDetails: 'Branch Details',
+    name: 'Name',
+    nameEn: 'Name (English)',
     code: 'Code',
-    allCodes: 'All Codes',
-    filters: 'Filters',
-    previous: 'Previous',
-    next: 'Next',
-    page: 'Page',
-    of: 'of',
     address: 'Address',
+    addressEn: 'Address (English)',
+    city: 'City',
+    cityEn: 'City (English)',
     phone: 'Phone',
     user: 'User',
     username: 'Username',
     email: 'Email',
-    userPhone: 'User Phone',
-    userStatus: 'User Status',
+    isActive: 'Active',
     createdBy: 'Created By',
-    createdAt: 'Created At',
-    updatedAt: 'Updated At',
-    edit: 'Edit',
+    editBranch: 'Edit Branch',
+    deleteBranch: 'Delete Branch',
     resetPassword: 'Reset Password',
-    delete: 'Delete',
-    profile: 'View Details',
-    name: 'Branch Name (Arabic)',
-    nameEn: 'Branch Name (English)',
-    addressEn: 'Address (English)',
-    cityEn: 'City (English)',
-    nameRequired: 'Branch name is required',
-    codeRequired: 'Branch code is required',
-    addressRequired: 'Address is required',
-    cityRequired: 'City is required',
-    userName: 'User Name (Arabic)',
-    userNameEn: 'User Name (English)',
-    userNameRequired: 'User name is required',
-    usernameRequired: 'Branch username is required',
-    passwordRequired: 'Password is required',
-    namePlaceholder: 'Enter branch name',
-    nameEnPlaceholder: 'Enter branch name in English',
-    addressPlaceholder: 'Enter address',
-    addressEnPlaceholder: 'Enter address in English',
-    cityPlaceholder: 'Enter city',
-    cityEnPlaceholder: 'Enter city in English',
-    phonePlaceholder: 'Enter phone number',
-    userNamePlaceholder: 'Enter user name',
-    userNameEnPlaceholder: 'Enter user name in English',
-    usernamePlaceholder: 'Enter branch username',
-    emailPlaceholder: 'Enter email',
-    userPhonePlaceholder: 'Enter user phone number',
-    passwordPlaceholder: 'Enter branch password',
-    update: 'Update Branch',
-    requiredFields: 'Please fill all required fields',
-    emailExists: 'Email is already in use, choose another',
-    codeExists: 'This code is already in use, choose another',
-    usernameExists: 'Username is already in use, choose another',
-    unauthorized: 'You are not authorized to access',
-    fetchError: 'An error occurred while fetching data',
-    updateError: 'An error occurred while updating the branch',
-    createError: 'An error occurred while creating the branch',
-    added: 'Branch added successfully',
-    updated: 'Branch updated successfully',
+    save: 'Save',
+    cancel: 'Cancel',
+    back: 'Back',
     newPassword: 'New Password',
     confirmPassword: 'Confirm Password',
-    newPasswordPlaceholder: 'Enter new password',
-    confirmPasswordPlaceholder: 'Enter confirm password',
-    passwordMismatch: 'Password and confirmation do not match',
+    passwordMismatch: 'Passwords do not match',
     passwordTooShort: 'Password must be at least 6 characters',
-    passwordResetSuccess: 'Password reset successfully',
-    passwordResetError: 'An error occurred while resetting the password',
-    reset: 'Reset',
-    cancel: 'Cancel',
-    confirmDelete: 'Confirm Branch Deletion',
-    deleteWarning: 'Are you sure you want to delete this branch? This action cannot be undone.',
-    deleteRestricted: 'Cannot delete branch with associated orders or inventory',
-    deleteError: 'An error occurred while deleting the branch',
-    deleted: 'Branch deleted successfully',
-    branchDetails: 'Branch Details',
-    userDetails: 'User Details',
+    branchNotFound: 'Branch not found',
+    serverError: 'Server error',
+    branchUpdated: 'Branch updated successfully',
+    branchDeleted: 'Branch deleted successfully',
+    passwordReset: 'Password reset successfully',
+    emailInUse: 'Email is already in use',
+    usernameInUse: 'Username is already in use',
+    codeInUse: 'Branch code is already in use',
+    requiredField: 'This field is required',
   },
 };
 
-export const BranchProfile: React.FC = () => {
+const BranchProfile: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { language } = useLanguage();
-  const { user } = useAuth();
   const navigate = useNavigate();
-  const isRtl = language === 'ar';
+  const { isRtl } = useContext(LanguageContext);
   const t = translations[isRtl ? 'ar' : 'en'];
   const [branch, setBranch] = useState<Branch | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [resetPasswordData, setResetPasswordData] = useState({ password: '', confirmPassword: '' });
   const [formData, setFormData] = useState({
     name: '',
     nameEn: '',
@@ -255,621 +127,499 @@ export const BranchProfile: React.FC = () => {
     city: '',
     cityEn: '',
     phone: '',
-    isActive: true,
-    user: { name: '', nameEn: '', username: '', email: '', phone: '', isActive: true },
+    user: {
+      name: '',
+      nameEn: '',
+      username: '',
+      email: '',
+      phone: '',
+      isActive: true,
+    },
   });
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [passwordData, setPasswordData] = useState({
+    password: '',
+    confirmPassword: '',
+  });
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const fetchBranch = async () => {
-      setLoading(true);
       try {
-        const response = await branchesAPI.getById(id!);
-        setBranch(response);
-        setError('');
+        setLoading(true);
+        const response = await branchesAPI.getById(id!, { isRtl });
+        setBranch(response.data);
+        setFormData({
+          name: response.data.name || '',
+          nameEn: response.data.nameEn || '',
+          code: response.data.code || '',
+          address: response.data.address || '',
+          addressEn: response.data.addressEn || '',
+          city: response.data.city || '',
+          cityEn: response.data.cityEn || '',
+          phone: response.data.phone || '',
+          user: {
+            name: response.data.user?.name || '',
+            nameEn: response.data.user?.nameEn || '',
+            username: response.data.user?.username || '',
+            email: response.data.user?.email || '',
+            phone: response.data.user?.phone || '',
+            isActive: response.data.user?.isActive ?? true,
+          },
+        });
       } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Fetch branch error:`, err);
-        setError(err.message || t.fetchError);
-        toast.error(t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
+        toast.error(t.branchNotFound);
+        console.error('Fetch branch error:', err);
       } finally {
         setLoading(false);
       }
     };
-    fetchBranch();
-  }, [id, t, isRtl]);
+    if (id) fetchBranch();
+  }, [id, isRtl, t]);
 
-  const validateForm = () => {
-    const errors: Record<string, string> = {};
-    if (!formData.name) errors.name = t.nameRequired;
-    if (!formData.code) errors.code = t.codeRequired;
-    if (!formData.address) errors.address = t.addressRequired;
-    if (!formData.city) errors.city = t.cityRequired;
-    if (!formData.user.name) errors.userName = t.userNameRequired;
-    if (!formData.user.username) errors.username = t.usernameRequired;
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
+  const validateForm = async () => {
+    const newErrors: { [key: string]: string } = {};
+    if (!formData.name) newErrors.name = t.requiredField;
+    if (!formData.code) newErrors.code = t.requiredField;
+    if (!formData.address) newErrors.address = t.requiredField;
+    if (!formData.city) newErrors.city = t.requiredField;
+    if (!formData.user.name) newErrors['user.name'] = t.requiredField;
+    if (!formData.user.username) newErrors['user.username'] = t.requiredField;
+
+    if (formData.user.email) {
+      try {
+        const response = await branchesAPI.checkEmail(formData.user.email);
+        if (!response.data.available) {
+          newErrors['user.email'] = t.emailInUse;
+        }
+      } catch (err) {
+        newErrors['user.email'] = t.serverError;
+      }
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
-  const openEditModal = () => {
-    if (branch) {
-      setFormData({
-        name: branch.name,
-        nameEn: branch.nameEn || '',
-        code: branch.code,
-        address: branch.address,
-        addressEn: branch.addressEn || '',
-        city: branch.city,
-        cityEn: branch.cityEn || '',
-        phone: branch.phone || '',
-        isActive: branch.isActive,
-        user: {
-          name: branch.user?.name || '',
-          nameEn: branch.user?.nameEn || '',
-          username: branch.user?.username || '',
-          email: branch.user?.email || '',
-          phone: branch.user?.phone || '',
-          isActive: branch.user?.isActive ?? true,
-        },
-      });
-      setIsEditMode(true);
-      setIsModalOpen(true);
-      setFormErrors({});
-      setError('');
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value, type, checked } = e.target;
+    if (name.startsWith('user.')) {
+      const field = name.split('.')[1];
+      setFormData(prev => ({
+        ...prev,
+        user: { ...prev.user, [field]: type === 'checkbox' ? checked : value },
+      }));
+    } else {
+      setFormData(prev => ({ ...prev, [name]: value }));
     }
+    setErrors(prev => ({ ...prev, [name]: '' }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) {
-      toast.error(t.requiredFields, { position: isRtl ? 'top-right' : 'top-left' });
-      return;
-    }
-
-    if (formData.user.email) {
-      const isEmailAvailable = await branchesAPI.checkEmail(formData.user.email);
-      if (!isEmailAvailable.available) {
-        setError(t.emailExists);
-        toast.error(t.emailExists, { position: isRtl ? 'top-right' : 'top-left' });
-        return;
-      }
-    }
+    if (!(await validateForm())) return;
 
     try {
-      const branchData = {
-        name: formData.name.trim(),
-        nameEn: formData.nameEn.trim() || undefined,
-        code: formData.code.trim(),
-        address: formData.address.trim(),
-        addressEn: formData.addressEn.trim() || undefined,
-        city: formData.city.trim(),
-        cityEn: formData.cityEn.trim() || undefined,
-        phone: formData.phone.trim() || undefined,
-        isActive: formData.isActive,
-        user: {
-          name: formData.user.name.trim(),
-          nameEn: formData.user.nameEn.trim() || undefined,
-          username: formData.user.username.trim(),
-          email: formData.user.email.trim() || undefined,
-          phone: formData.user.phone.trim() || undefined,
-          isActive: formData.user.isActive,
-        },
-      };
-
-      const response = await branchesAPI.update(id!, branchData);
-      setBranch(response);
-      setIsModalOpen(false);
-      toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
-      setError('');
+      setLoading(true);
+      await branchesAPI.update(id!, formData, { isRtl });
+      toast.success(t.branchUpdated);
+      setIsEditModalOpen(false);
+      const response = await branchesAPI.getById(id!, { isRtl });
+      setBranch(response.data);
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Update branch error:`, err);
-      let errorMessage = t.updateError;
       if (err.response?.data?.message) {
-        const message = err.response.data.message;
-        errorMessage =
-          message === 'Branch code already exists' ? t.codeExists :
-          message === 'Username already exists' ? t.usernameExists :
-          message.includes('الإيميل') || message.includes('email') ? t.emailExists :
-          message;
+        if (err.response.data.message.includes('اسم المستخدم') || err.response.data.message.includes('Username')) {
+          setErrors({ 'user.username': t.usernameInUse });
+        } else if (err.response.data.message.includes('الإيميل') || err.response.data.message.includes('Email')) {
+          setErrors({ 'user.email': t.emailInUse });
+        } else if (err.response.data.message.includes('كود الفرع') || err.response.data.message.includes('Branch code')) {
+          setErrors({ code: t.codeInUse });
+        } else {
+          toast.error(t.serverError);
+        }
+      } else {
+        toast.error(t.serverError);
       }
-      setError(errorMessage);
-      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+      console.error('Update branch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (window.confirm(isRtl ? 'هل أنت متأكد من حذف الفرع؟' : 'Are you sure you want to delete the branch?')) {
+      try {
+        setLoading(true);
+        await branchesAPI.delete(id!);
+        toast.success(t.branchDeleted);
+        navigate('/branches');
+      } catch (err: any) {
+        toast.error(err.response?.data?.message || t.serverError);
+        console.error('Delete branch error:', err);
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!resetPasswordData.password || !resetPasswordData.confirmPassword) {
-      setError(t.passwordRequired);
-      toast.error(t.passwordRequired, { position: isRtl ? 'top-right' : 'top-left' });
+    if (passwordData.password.length < 6) {
+      toast.error(t.passwordTooShort);
       return;
     }
-    if (resetPasswordData.password !== resetPasswordData.confirmPassword) {
-      setError(t.passwordMismatch);
-      toast.error(t.passwordMismatch, { position: isRtl ? 'top-right' : 'top-left' });
+    if (passwordData.password !== passwordData.confirmPassword) {
+      toast.error(t.passwordMismatch);
       return;
     }
-    if (resetPasswordData.password.length < 6) {
-      setError(t.passwordTooShort);
-      toast.error(t.passwordTooShort, { position: isRtl ? 'top-right' : 'top-left' });
-      return;
-    }
-
     try {
-      await branchesAPI.resetPassword(id!, resetPasswordData.password);
+      setLoading(true);
+      await branchesAPI.resetPassword(id!, { password: passwordData.password });
+      toast.success(t.passwordReset);
       setIsResetPasswordModalOpen(false);
-      setResetPasswordData({ password: '', confirmPassword: '' });
-      toast.success(t.passwordResetSuccess, { position: isRtl ? 'top-right' : 'top-left' });
+      setPasswordData({ password: '', confirmPassword: '' });
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Reset password error:`, err);
-      const errorMessage = err.message || t.passwordResetError;
-      setError(errorMessage);
-      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(err.response?.data?.message || t.serverError);
+      console.error('Reset password error:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleDelete = async () => {
-    try {
-      await branchesAPI.delete(id!);
-      toast.success(t.deleted, { position: isRtl ? 'top-right' : 'top-left' });
-      setIsDeleteModalOpen(false);
-      navigate('/branches');
-    } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Delete branch error:`, err);
-      let errorMessage = t.deleteError;
-      if (err.response?.data?.message) {
-        errorMessage = err.response.data.message === 'Cannot delete branch with associated orders or inventory' ?
-          t.deleteRestricted : err.response.data.message;
-      }
-      setError(errorMessage);
-      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
-
-  if (!branch) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <Card className="p-8 text-center">
-          <AlertCircle className="w-12 h-12 text-red-400 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-amber-900">{t.fetchError}</h3>
-          <Button
-            variant="primary"
-            onClick={() => navigate('/branches')}
-            className="mt-6 px-6 py-3"
-          >
-            {t.back}
-          </Button>
-        </Card>
-      </div>
-    );
-  }
+  if (loading) return <div>{isRtl ? 'جاري التحميل...' : 'Loading...'}</div>;
+  if (!branch) return <div>{t.branchNotFound}</div>;
 
   return (
-    <div className={`min-h-screen bg-gray-50 p-4 sm:p-6 md:p-8 ${isRtl ? 'rtl font-[Noto Sans Arabic]' : 'ltr font-[Inter]'}`}>
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm p-6"
+    <div className={`max-w-4xl mx-auto p-6 ${isRtl ? 'rtl' : 'ltr'}`}>
+      <button
+        onClick={() => navigate('/branches')}
+        className="flex items-center text-amber-600 hover:text-amber-800 mb-6"
       >
-        <div className="flex items-center gap-3 mb-6">
-          <MapPin className="w-8 h-8 text-amber-600" />
-          <h1 className="text-2xl font-bold text-amber-900">{branch.displayName}</h1>
+        <ArrowLeftIcon className="w-5 h-5 mr-2" />
+        {t.back}
+      </button>
+      <h1 className="text-2xl font-bold mb-6">{t.branchDetails}</h1>
+      <div className="bg-white shadow rounded-lg p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="font-semibold">{t.name}</label>
+            <p>{branch.displayName}</p>
+          </div>
+          <div>
+            <label className="font-semibold">{t.nameEn}</label>
+            <p>{branch.nameEn || branch.name}</p>
+          </div>
+          <div>
+            <label className="font-semibold">{t.code}</label>
+            <p>{branch.code}</p>
+          </div>
+          <div>
+            <label className="font-semibold">{t.address}</label>
+            <p>{branch.displayAddress}</p>
+          </div>
+          <div>
+            <label className="font-semibold">{t.addressEn}</label>
+            <p>{branch.addressEn || branch.address}</p>
+          </div>
+          <div>
+            <label className="font-semibold">{t.city}</label>
+            <p>{branch.displayCity}</p>
+          </div>
+          <div>
+            <label className="font-semibold">{t.cityEn}</label>
+            <p>{branch.cityEn || branch.city}</p>
+          </div>
+          <div>
+            <label className="font-semibold">{t.phone}</label>
+            <p>{branch.phone || '-'}</p>
+          </div>
+          <div>
+            <label className="font-semibold">{t.user}</label>
+            <p>{branch.user ? branch.user.displayName : '-'}</p>
+          </div>
+          <div>
+            <label className="font-semibold">{t.username}</label>
+            <p>{branch.user?.username || '-'}</p>
+          </div>
+          <div>
+            <label className="font-semibold">{t.email}</label>
+            <p>{branch.user?.email || '-'}</p>
+          </div>
+          <div>
+            <label className="font-semibold">{t.isActive}</label>
+            <p>{branch.user?.isActive ? (isRtl ? 'نعم' : 'Yes') : (isRtl ? 'لا' : 'No')}</p>
+          </div>
+          <div>
+            <label className="font-semibold">{t.createdBy}</label>
+            <p>{branch.createdBy ? branch.createdBy.displayName : '-'}</p>
+          </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-          <div>
-            <p className="text-sm text-gray-600 font-medium">{t.code}</p>
-            <p className="text-gray-800">{branch.code}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600 font-medium">{t.address}</p>
-            <p className="text-gray-800">{branch.displayAddress}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600 font-medium">{t.city}</p>
-            <p className="text-gray-800">{branch.displayCity}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600 font-medium">{t.phone}</p>
-            <p className="text-gray-800">{branch.phone || '-'}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600 font-medium">{t.status}</p>
-            <p className={`font-medium ${branch.isActive ? 'text-green-600' : 'text-red-600'}`}>
-              {branch.isActive ? t.active : t.inactive}
-            </p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600 font-medium">{t.createdAt}</p>
-            <p className="text-gray-800">{new Date(branch.createdAt).toLocaleString()}</p>
-          </div>
-          <div>
-            <p className="text-sm text-gray-600 font-medium">{t.updatedAt}</p>
-            <p className="text-gray-800">{new Date(branch.updatedAt).toLocaleString()}</p>
-          </div>
-          {branch.createdBy && (
-            <div>
-              <p className="text-sm text-gray-600 font-medium">{t.createdBy}</p>
-              <p className="text-gray-800">{branch.createdBy.displayName}</p>
-            </div>
-          )}
-        </div>
-        {branch.user && (
-          <div className="border-t border-amber-100 pt-4">
-            <h2 className="text-lg font-semibold text-amber-900 mb-4">{t.userDetails}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.userName}</p>
-                <p className="text-gray-800">{branch.user.displayName}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.username}</p>
-                <p className="text-gray-800">{branch.user.username}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.email}</p>
-                <p className="text-gray-800">{branch.user.email || '-'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.userPhone}</p>
-                <p className="text-gray-800">{branch.user.phone || '-'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.userStatus}</p>
-                <p className={`font-medium ${branch.user.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                  {branch.user.isActive ? t.active : t.inactive}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-        {user?.role === 'admin' && (
-          <div className="flex gap-4 mt-6">
-            <Button
-              variant="outline"
-              icon={Edit2}
-              onClick={openEditModal}
-              className="text-amber-600 hover:text-amber-800 border-amber-600"
-            >
-              {t.edit}
-            </Button>
-            <Button
-              variant="outline"
-              icon={Key}
+        <div className="mt-6 flex space-x-4">
+          <button
+            onClick={() => setIsEditModalOpen(true)}
+            className="flex items-center px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700"
+          >
+            <PencilIcon className="w-5 h-5 mr-2" />
+            {t.editBranch}
+          </button>
+          <button
+            onClick={handleDelete}
+            className="flex items-center px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+          >
+            <TrashIcon className="w-5 h-5 mr-2" />
+            {t.deleteBranch}
+          </button>
+          {branch.user && (
+            <button
               onClick={() => setIsResetPasswordModalOpen(true)}
-              className="text-blue-500 hover:text-blue-700 border-blue-500"
+              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
             >
+              <KeyIcon className="w-5 h-5 mr-2" />
               {t.resetPassword}
-            </Button>
-            <Button
-              variant="outline"
-              icon={Trash2}
-              onClick={() => setIsDeleteModalOpen(true)}
-              className="text-red-500 hover:text-red-700 border-red-500"
-            >
-              {t.delete}
-            </Button>
-          </div>
-        )}
-        <AnimatePresence>
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="mt-6 p-4 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3"
-            >
-              <AlertCircle className="w-5 h-5 text-red-600" />
-              <span className="text-red-600 font-medium">{error}</span>
-            </motion.div>
+            </button>
           )}
-        </AnimatePresence>
-        <Button
-          variant="secondary"
-          onClick={() => navigate('/branches')}
-          className="mt-6 w-full bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
-        >
-          {t.back}
-        </Button>
-      </motion.div>
-
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={isEditMode ? t.edit : t.add}
-        size="lg"
-      >
-        <form onSubmit={handleSubmit} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="grid grid-cols-1 sm:grid-cols-2 gap-6"
-          >
-            <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-amber-900">{t.branchDetails || 'Branch Details'}</h3>
-              <Input
-                label={t.name}
-                value={formData.name}
-                onChange={(value) => setFormData({ ...formData, name: value })}
-                placeholder={t.namePlaceholder}
-                required
-                error={formErrors.name}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.nameEn}
-                value={formData.nameEn}
-                onChange={(value) => setFormData({ ...formData, nameEn: value })}
-                placeholder={t.nameEnPlaceholder}
-                required
-                error={formErrors.nameEn}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.code}
-                value={formData.code}
-                onChange={(value) => setFormData({ ...formData, code: value })}
-                placeholder={t.codePlaceholder}
-                required
-                error={formErrors.code}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.address}
-                value={formData.address}
-                onChange={(value) => setFormData({ ...formData, address: value })}
-                placeholder={t.addressPlaceholder}
-                required
-                error={formErrors.address}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.addressEn}
-                value={formData.addressEn}
-                onChange={(value) => setFormData({ ...formData, addressEn: value })}
-                placeholder={t.addressEnPlaceholder}
-                required
-                error={formErrors.addressEn}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.city}
-                value={formData.city}
-                onChange={(value) => setFormData({ ...formData, city: value })}
-                placeholder={t.cityPlaceholder}
-                required
-                error={formErrors.city}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.cityEn}
-                value={formData.cityEn}
-                onChange={(value) => setFormData({ ...formData, cityEn: value })}
-                placeholder={t.cityEnPlaceholder}
-                required
-                error={formErrors.cityEn}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.phone}
-                value={formData.phone}
-                onChange={(value) => setFormData({ ...formData, phone: value })}
-                placeholder={t.phonePlaceholder}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Select
-                label={t.status}
-                options={[
-                  { value: true, label: t.active },
-                  { value: false, label: t.inactive },
-                ]}
-                value={formData.isActive}
-                onChange={(value) => setFormData({ ...formData, isActive: value === 'true' })}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-            </div>
-            <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-amber-900">{t.userDetails || 'User Details'}</h3>
-              <Input
-                label={t.userName}
-                value={formData.user.name}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, name: value } })}
-                placeholder={t.userNamePlaceholder}
-                required={!isEditMode}
-                error={formErrors.userName}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.userNameEn}
-                value={formData.user.nameEn}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, nameEn: value } })}
-                placeholder={t.userNameEnPlaceholder}
-                required={!isEditMode}
-                error={formErrors.userNameEn}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.username}
-                value={formData.user.username}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, username: value } })}
-                placeholder={t.usernamePlaceholder}
-                required={!isEditMode}
-                error={formErrors.username}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.email}
-                value={formData.user.email}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, email: value } })}
-                placeholder={t.emailPlaceholder}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.userPhone}
-                value={formData.user.phone}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, phone: value } })}
-                placeholder={t.userPhonePlaceholder}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Select
-                label={t.userStatus}
-                options={[
-                  { value: true, label: t.active },
-                  { value: false, label: t.inactive },
-                ]}
-                value={formData.user.isActive}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, isActive: value === 'true' } })}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-            </div>
-          </motion.div>
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3"
-              >
-                <AlertCircle className="w-5 h-5 text-red-600" />
-                <span className="text-red-600 font-medium">{error}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <div className="flex gap-4 mt-6">
-            <Button
-              type="submit"
-              variant="primary"
-              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
-            >
-              {isEditMode ? t.update : t.add}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setIsModalOpen(false)}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
-            >
-              {t.cancel}
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal
-        isOpen={isResetPasswordModalOpen}
-        onClose={() => setIsResetPasswordModalOpen(false)}
-        title={t.resetPassword}
-        size="sm"
-      >
-        <form onSubmit={handleResetPassword} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="space-y-6"
-          >
-            <Input
-              label={t.newPassword}
-              value={resetPasswordData.password}
-              onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
-              placeholder={t.newPasswordPlaceholder}
-              type="password"
-              required
-              className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-            />
-            <Input
-              label={t.confirmPassword}
-              value={resetPasswordData.confirmPassword}
-              onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
-              placeholder={t.confirmPasswordPlaceholder}
-              type="password"
-              required
-              className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-            />
-          </motion.div>
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3"
-              >
-                <AlertCircle className="w-5 h-5 text-red-600" />
-                <span className="text-red-600 font-medium">{error}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <div className="flex gap-4 mt-6">
-            <Button
-              type="submit"
-              variant="primary"
-              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
-            >
-              {t.reset}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setIsResetPasswordModalOpen(false)}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
-            >
-              {t.cancel}
-            </Button>
-          </div>
-        </form>
-      </Modal>
-
-      <Modal
-        isOpen={isDeleteModalOpen}
-        onClose={() => setIsDeleteModalOpen(false)}
-        title={t.confirmDelete}
-        size="sm"
-      >
-        <div className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-          <p className="text-gray-600">{t.deleteWarning}</p>
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3"
-              >
-                <AlertCircle className="w-5 h-5 text-red-600" />
-                <span className="text-red-600 font-medium">{error}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <div className="flex gap-4 mt-6">
-            <Button
-              type="button"
-              variant="danger"
-              onClick={handleDelete}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
-            >
-              {t.delete}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setIsDeleteModalOpen(false)}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
-            >
-              {t.cancel}
-            </Button>
-          </div>
         </div>
-      </Modal>
+      </div>
+
+      <AnimatePresence>
+        {isEditModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="bg-white rounded-lg p-6 w-full max-w-md"
+            >
+              <h2 className="text-xl font-bold mb-4">{t.editBranch}</h2>
+              <form onSubmit={handleSubmit}>
+                <div className="mb-4">
+                  <label className="block font-semibold">{t.name}</label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    className={`w-full p-2 border rounded ${errors.name ? 'border-red-500' : 'border-gray-300'}`}
+                  />
+                  {errors.name && <p className="text-red-500 text-sm">{errors.name}</p>}
+                </div>
+                <div className="mb-4">
+                  <label className="block font-semibold">{t.nameEn}</label>
+                  <input
+                    type="text"
+                    name="nameEn"
+                    value={formData.nameEn}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded border-gray-300"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block font-semibold">{t.code}</label>
+                  <input
+                    type="text"
+                    name="code"
+                    value={formData.code}
+                    onChange={handleInputChange}
+                    className={`w-full p-2 border rounded ${errors.code ? 'border-red-500' : 'border-gray-300'}`}
+                  />
+                  {errors.code && <p className="text-red-500 text-sm">{errors.code}</p>}
+                </div>
+                <div className="mb-4">
+                  <label className="block font-semibold">{t.address}</label>
+                  <input
+                    type="text"
+                    name="address"
+                    value={formData.address}
+                    onChange={handleInputChange}
+                    className={`w-full p-2 border rounded ${errors.address ? 'border-red-500' : 'border-gray-300'}`}
+                  />
+                  {errors.address && <p className="text-red-500 text-sm">{errors.address}</p>}
+                </div>
+                <div className="mb-4">
+                  <label className="block font-semibold">{t.addressEn}</label>
+                  <input
+                    type="text"
+                    name="addressEn"
+                    value={formData.addressEn}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded border-gray-300"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block font-semibold">{t.city}</label>
+                  <input
+                    type="text"
+                    name="city"
+                    value={formData.city}
+                    onChange={handleInputChange}
+                    className={`w-full p-2 border rounded ${errors.city ? 'border-red-500' : 'border-gray-300'}`}
+                  />
+                  {errors.city && <p className="text-red-500 text-sm">{errors.city}</p>}
+                </div>
+                <div className="mb-4">
+                  <label className="block font-semibold">{t.cityEn}</label>
+                  <input
+                    type="text"
+                    name="cityEn"
+                    value={formData.cityEn}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded border-gray-300"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block font-semibold">{t.phone}</label>
+                  <input
+                    type="text"
+                    name="phone"
+                    value={formData.phone}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded border-gray-300"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block font-semibold">{t.user}</label>
+                  <input
+                    type="text"
+                    name="user.name"
+                    value={formData.user.name}
+                    onChange={handleInputChange}
+                    className={`w-full p-2 border rounded ${errors['user.name'] ? 'border-red-500' : 'border-gray-300'}`}
+                  />
+                  {errors['user.name'] && <p className="text-red-500 text-sm">{errors['user.name']}</p>}
+                </div>
+                <div className="mb-4">
+                  <label className="block font-semibold">{t.nameEn}</label>
+                  <input
+                    type="text"
+                    name="user.nameEn"
+                    value={formData.user.nameEn}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded border-gray-300"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block font-semibold">{t.username}</label>
+                  <input
+                    type="text"
+                    name="user.username"
+                    value={formData.user.username}
+                    onChange={handleInputChange}
+                    className={`w-full p-2 border rounded ${errors['user.username'] ? 'border-red-500' : 'border-gray-300'}`}
+                  />
+                  {errors['user.username'] && <p className="text-red-500 text-sm">{errors['user.username']}</p>}
+                </div>
+                <div className="mb-4">
+                  <label className="block font-semibold">{t.email}</label>
+                  <input
+                    type="email"
+                    name="user.email"
+                    value={formData.user.email}
+                    onChange={handleInputChange}
+                    className={`w-full p-2 border rounded ${errors['user.email'] ? 'border-red-500' : 'border-gray-300'}`}
+                  />
+                  {errors['user.email'] && <p className="text-red-500 text-sm">{errors['user.email']}</p>}
+                </div>
+                <div className="mb-4">
+                  <label className="block font-semibold">{t.phone}</label>
+                  <input
+                    type="text"
+                    name="user.phone"
+                    value={formData.user.phone}
+                    onChange={handleInputChange}
+                    className="w-full p-2 border rounded border-gray-300"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      name="user.isActive"
+                      checked={formData.user.isActive}
+                      onChange={handleInputChange}
+                      className="mr-2"
+                    />
+                    {t.isActive}
+                  </label>
+                </div>
+                <div className="flex space-x-4">
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-amber-600 text-white rounded hover:bg-amber-700"
+                    disabled={loading}
+                  >
+                    {loading ? (isRtl ? 'جاري الحفظ...' : 'Saving...') : t.save}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(false)}
+                    className="px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400"
+                  >
+                    {t.cancel}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+        {isResetPasswordModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="bg-white rounded-lg p-6 w-full max-w-md"
+            >
+              <h2 className="text-xl font-bold mb-4">{t.resetPassword}</h2>
+              <form onSubmit={handleResetPassword}>
+                <div className="mb-4">
+                  <label className="block font-semibold">{t.newPassword}</label>
+                  <input
+                    type="password"
+                    value={passwordData.password}
+                    onChange={(e) => setPasswordData({ ...passwordData, password: e.target.value })}
+                    className="w-full p-2 border rounded border-gray-300"
+                  />
+                </div>
+                <div className="mb-4">
+                  <label className="block font-semibold">{t.confirmPassword}</label>
+                  <input
+                    type="password"
+                    value={passwordData.confirmPassword}
+                    onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+                    className="w-full p-2 border rounded border-gray-300"
+                  />
+                </div>
+                <div className="flex space-x-4">
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                    disabled={loading}
+                  >
+                    {loading ? (isRtl ? 'جاري الحفظ...' : 'Saving...') : t.save}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsResetPasswordModalOpen(false)}
+                    className="px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400"
+                  >
+                    {t.cancel}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
