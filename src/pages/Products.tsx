@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { productsAPI, departmentAPI } from '../services/api';
@@ -10,27 +10,24 @@ import { Select } from '../components/UI/Select';
 import { Modal } from '../components/UI/Modal';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 import { Package, Plus, Edit2, Trash2, Search, AlertCircle } from 'lucide-react';
-import { debounce } from 'lodash';
 
 interface Product {
   _id: string;
   name: string;
   nameEn?: string;
   code: string;
-  department: { _id: string; name: string; nameEn?: string; displayName: string };
+  department: { _id: string; name: string; nameEn?: string };
   price: number;
-  unit: 'كيلو' | 'قطعة' | 'علبة' | 'صينية';
-  unitEn?: 'Kilogram' | 'Piece' | 'Box' | 'Tray';
+  unit: string;
+  unitEn?: string;
   description?: string;
   displayName: string;
-  displayUnit: string;
 }
 
 interface Department {
   _id: string;
   name: string;
   nameEn?: string;
-  displayName: string;
 }
 
 export function Products() {
@@ -43,7 +40,9 @@ export function Products() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState({ products: true, departments: true });
+  const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -51,45 +50,52 @@ export function Products() {
     code: '',
     department: '',
     price: '',
-    unit: 'قطعة' as Product['unit'],
-    unitEn: 'Piece' as Product['unitEn'],
+    unit: 'قطعة',
+    unitEn: 'Piece',
     description: '',
   });
-
-  const debouncedSearch = useCallback(
-    debounce((value: string) => setSearchTerm(value), 300),
-    []
-  );
 
   useEffect(() => {
     const fetchData = async () => {
       if (!user || !['admin'].includes(user.role)) {
         setError(t('products.unauthorized'));
-        setLoading({ products: false, departments: false });
+        setLoading(false);
         return;
       }
 
+      setLoading(true);
       try {
-        setLoading({ products: true, departments: true });
+        console.log('Fetching products with params:', { department: filterDepartment, search: searchTerm, page: currentPage, limit: 12 });
+        console.log('API URL:', import.meta.env.VITE_API_URL);
         const [productsResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 100 }).finally(() =>
-            setLoading((prev) => ({ ...prev, products: false }))
-          ),
-          departmentAPI.getAll({ limit: 100 }).finally(() =>
-            setLoading((prev) => ({ ...prev, departments: false }))
-          ),
+          productsAPI.getAll({ department: filterDepartment, search: searchTerm, page: currentPage, limit: 12 }),
+          departmentAPI.getAll({ limit: 100 }),
         ]);
+        console.log('Products response:', productsResponse);
+        console.log('Departments response:', departmentsResponse);
 
-        setProducts(productsResponse.data || []);
-        setDepartments(departmentsResponse.data || []);
+        const productsWithDisplayName = productsResponse.data.map((product: Product) => ({
+          ...product,
+          displayName: language === 'ar' ? product.name : (product.nameEn || product.name),
+        }));
+        setProducts(productsWithDisplayName);
+        setTotalPages(productsResponse.totalPages);
+        setDepartments(departmentsResponse.data);
         setError('');
       } catch (err: any) {
         console.error('Fetch error:', err);
+        console.error('Error details:', {
+          status: err.status,
+          message: err.message,
+          url: err.config?.url,
+        });
         setError(err.message || t('products.fetchError'));
+      } finally {
+        setLoading(false);
       }
     };
     fetchData();
-  }, [t, user, filterDepartment, searchTerm]);
+  }, [t, user, filterDepartment, searchTerm, currentPage]);
 
   const filteredProducts = products.filter(
     (product) =>
@@ -141,36 +147,31 @@ export function Products() {
     e.preventDefault();
     try {
       const productData = {
-        name: formData.name.trim(),
-        nameEn: formData.nameEn.trim() || undefined,
-        code: formData.code.trim(),
+        name: formData.name,
+        nameEn: formData.nameEn || undefined,
+        code: formData.code,
         department: formData.department,
         price: parseFloat(formData.price),
         unit: formData.unit,
         unitEn: formData.unitEn || undefined,
-        description: formData.description.trim() || undefined,
+        description: formData.description || undefined,
       };
-      if (isNaN(productData.price) || productData.price <= 0) {
-        throw new Error(t('products.invalidPrice'));
-      }
-      if (!['كيلو', 'قطعة', 'علبة', 'صينية'].includes(productData.unit)) {
-        throw new Error(t('products.invalidUnit'));
-      }
-      if (productData.unitEn && !['Kilogram', 'Piece', 'Box', 'Tray'].includes(productData.unitEn)) {
-        throw new Error(t('products.invalidUnitEn'));
-      }
       console.log('Submitting product:', productData);
-      let updatedProduct;
       if (editingProduct) {
-        updatedProduct = await productsAPI.update(editingProduct._id, productData);
+        const updatedProduct = await productsAPI.update(editingProduct._id, productData);
         setProducts(
           products.map((p) =>
-            p._id === editingProduct._id ? { ...updatedProduct } : p
+            p._id === editingProduct._id
+              ? { ...updatedProduct, displayName: language === 'ar' ? updatedProduct.name : (updatedProduct.nameEn || updatedProduct.name) }
+              : p
           )
         );
       } else {
-        updatedProduct = await productsAPI.create(productData);
-        setProducts([...products, updatedProduct]);
+        const newProduct = await productsAPI.create(productData);
+        setProducts([
+          ...products,
+          { ...newProduct, displayName: language === 'ar' ? newProduct.name : (newProduct.nameEn || newProduct.name) },
+        ]);
       }
       closeModal();
     } catch (err: any) {
@@ -195,7 +196,7 @@ export function Products() {
     }
   };
 
-  if (loading.products || loading.departments) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <LoadingSpinner size="lg" />
@@ -240,7 +241,7 @@ export function Products() {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <Input
               value={searchTerm}
-              onChange={debouncedSearch}
+              onChange={setSearchTerm}
               placeholder={t('products.searchPlaceholder')}
               className="pl-10 border-gray-300 rounded-md focus:ring-blue-500"
               aria-label={t('products.searchPlaceholder')}
@@ -248,7 +249,7 @@ export function Products() {
           </div>
           <Select
             label={t('products.department')}
-            options={[{ value: '', label: t('products.allDepartments') }, ...departments.map((d) => ({ value: d._id, label: d.displayName }))]}
+            options={[{ value: '', label: t('products.allDepartments') }, ...departments.map((d) => ({ value: d._id, label: language === 'ar' ? d.name : (d.nameEn || d.name) }))]}
             value={filterDepartment}
             onChange={setFilterDepartment}
             className="border-gray-300 rounded-md focus:ring-blue-500"
@@ -280,8 +281,9 @@ export function Products() {
               <div className="p-4">
                 <h3 className="font-medium text-gray-800">{product.displayName}</h3>
                 <p className="text-sm text-gray-500">{t('products.code')}: {product.code}</p>
-                <p className="text-sm text-blue-500">{t('products.department')}: {product.department.displayName}</p>
-                <p className="text-sm text-gray-500">{t('products.unit')}: {product.displayUnit}</p>
+                <p className="text-sm text-blue-500">
+                  {t('products.department')}: {language === 'ar' ? product.department.name : (product.department.nameEn || product.department.name)}
+                </p>
                 {product.description && <p className="text-xs text-gray-400 mt-1">{product.description}</p>}
                 <div className="flex items-center justify-between mt-3">
                   <span className="text-lg font-semibold text-gray-800">{product.price} {t('products.currency')}</span>
@@ -308,6 +310,26 @@ export function Products() {
             </Card>
           ))
         )}
+      </div>
+
+      <div className="flex justify-center mt-6">
+        <Button
+          variant="secondary"
+          onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+          disabled={currentPage === 1}
+          className="mx-2"
+        >
+          {t('previous')}
+        </Button>
+        <span className="mx-4 self-center">{t('page')} {currentPage} / {totalPages}</span>
+        <Button
+          variant="secondary"
+          onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+          disabled={currentPage === totalPages}
+          className="mx-2"
+        >
+          {t('next')}
+        </Button>
       </div>
 
       <Modal
@@ -343,7 +365,7 @@ export function Products() {
             />
             <Select
               label={t('products.department')}
-              options={[{ value: '', label: t('products.selectDepartment') }, ...departments.map((d) => ({ value: d._id, label: d.displayName }))]}
+              options={[{ value: '', label: t('products.selectDepartment') }, ...departments.map((d) => ({ value: d._id, label: language === 'ar' ? d.name : (d.nameEn || d.name) }))]}
               value={formData.department}
               onChange={(value) => setFormData({ ...formData, department: value })}
               required
@@ -361,24 +383,13 @@ export function Products() {
             <Select
               label={t('products.unit')}
               options={[
-                { value: 'كيلو', label: language === 'ar' ? 'كيلو' : 'Kilogram' },
-                { value: 'قطعة', label: language === 'ar' ? 'قطعة' : 'Piece' },
-                { value: 'علبة', label: language === 'ar' ? 'علبة' : 'Box' },
-                { value: 'صينية', label: language === 'ar' ? 'صينية' : 'Tray' },
-              ]}
+                { value: 'كيلو', label: t('products.units.kilo'), valueEn: 'Kilogram' },
+                { value: 'قطعة', label: t('products.units.piece'), valueEn: 'Piece' },
+                { value: 'علبة', label: t('products.units.box'), valueEn: 'Box' },
+                { value: 'صينية', label: t('products.units.tray'), valueEn: 'Tray' },
+              ].map((opt) => ({ value: opt.value, label: language === 'ar' ? opt.label : opt.valueEn }))}
               value={formData.unit}
-              onChange={(value) =>
-                setFormData({
-                  ...formData,
-                  unit: value as Product['unit'],
-                  unitEn: {
-                    'كيلو': 'Kilogram',
-                    'قطعة': 'Piece',
-                    'علبة': 'Box',
-                    'صينية': 'Tray',
-                  }[value] as Product['unitEn'],
-                })
-              }
+              onChange={(value) => setFormData({ ...formData, unit: value, unitEn: (language === 'ar' ? undefined : formData.unitEn) || value })}
               required
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />
