@@ -20,22 +20,18 @@ interface User {
   email?: string;
   phone?: string;
   role: 'admin' | 'branch' | 'chef' | 'production';
-  branch?: { _id: string; name: string; nameEn?: string; address?: string; addressEn?: string; city?: string; cityEn?: string };
+  branch?: { _id: string; name: string; nameEn?: string };
   department?: { _id: string; name: string };
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
-  password?: string;
+  password?: string; // Added for admin viewing
 }
 
 interface Branch {
   _id: string;
   name: string;
   nameEn?: string;
-  address?: string;
-  addressEn?: string;
-  city?: string;
-  cityEn?: string;
 }
 
 interface Department {
@@ -73,18 +69,12 @@ const translations = {
     delete: 'حذف',
     name: 'اسم المستخدم (عربي)',
     nameEn: 'اسم المستخدم (إنجليزي)',
-    address: 'العنوان',
-    addressEn: 'العنوان (إنجليزي)',
-    city: 'المدينة',
-    cityEn: 'المدينة (إنجليزي)',
     nameRequired: 'اسم المستخدم مطلوب',
     nameEnRequired: 'اسم المستخدم بالإنجليزية مطلوب',
     usernameRequired: 'اسم المستخدم للدخول مطلوب',
     passwordRequired: 'كلمة المرور مطلوبة',
     branchRequired: 'الفرع مطلوب',
     departmentRequired: 'القسم مطلوب',
-    addressRequired: 'العنوان مطلوب',
-    cityRequired: 'المدينة مطلوبة',
     namePlaceholder: 'أدخل اسم المستخدم',
     nameEnPlaceholder: 'أدخل اسم المستخدم بالإنجليزية',
     usernamePlaceholder: 'أدخل اسم المستخدم للدخول',
@@ -92,10 +82,6 @@ const translations = {
     phonePlaceholder: 'أدخل رقم الهاتف',
     branchPlaceholder: 'اختر الفرع',
     departmentPlaceholder: 'اختر القسم',
-    addressPlaceholder: 'أدخل العنوان',
-    addressEnPlaceholder: 'أدخل العنوان بالإنجليزية',
-    cityPlaceholder: 'أدخل المدينة',
-    cityEnPlaceholder: 'أدخل المدينة بالإنجليزية',
     passwordPlaceholder: 'أدخل كلمة المرور',
     update: 'تحديث المستخدم',
     requiredFields: 'يرجى ملء جميع الحقول المطلوبة',
@@ -129,6 +115,7 @@ const translations = {
     inactive: 'غير نشط',
   },
   en: {
+    // Similar to ar, but in English
     manage: 'Manage Users',
     add: 'Add User',
     addFirst: 'Add First User',
@@ -157,18 +144,12 @@ const translations = {
     delete: 'Delete',
     name: 'User Name (Arabic)',
     nameEn: 'User Name (English)',
-    address: 'Address',
-    addressEn: 'Address (English)',
-    city: 'City',
-    cityEn: 'City (English)',
     nameRequired: 'User name is required',
     nameEnRequired: 'User name in English is required',
     usernameRequired: 'Username is required',
     passwordRequired: 'Password is required',
     branchRequired: 'Branch is required',
     departmentRequired: 'Department is required',
-    addressRequired: 'Address is required',
-    cityRequired: 'City is required',
     namePlaceholder: 'Enter user name',
     nameEnPlaceholder: 'Enter user name in English',
     usernamePlaceholder: 'Enter username',
@@ -176,10 +157,6 @@ const translations = {
     phonePlaceholder: 'Enter phone number',
     branchPlaceholder: 'Select branch',
     departmentPlaceholder: 'Select department',
-    addressPlaceholder: 'Enter address',
-    addressEnPlaceholder: 'Enter address in English',
-    cityPlaceholder: 'Enter city',
-    cityEnPlaceholder: 'Enter city in English',
     passwordPlaceholder: 'Enter password',
     update: 'Update User',
     requiredFields: 'Please fill all required fields',
@@ -244,10 +221,6 @@ export const Users: React.FC = () => {
     role: 'admin' as 'admin' | 'branch' | 'chef' | 'production',
     branch: '',
     department: '',
-    address: '',
-    addressEn: '',
-    city: '',
-    cityEn: '',
     password: '',
     isActive: true,
   });
@@ -303,8 +276,6 @@ export const Users: React.FC = () => {
     if (!isEditMode && !formData.password) errors.password = t.passwordRequired;
     if (formData.role === 'branch' && !formData.branch) errors.branch = t.branchRequired;
     if (formData.role === 'chef' && !formData.department) errors.department = t.departmentRequired;
-    if (formData.role === 'branch' && !formData.address) errors.address = t.addressRequired;
-    if (formData.role === 'branch' && !formData.city) errors.city = t.cityRequired;
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -319,10 +290,6 @@ export const Users: React.FC = () => {
       role: 'admin',
       branch: '',
       department: '',
-      address: '',
-      addressEn: '',
-      city: '',
-      cityEn: '',
       password: '',
       isActive: true,
     });
@@ -343,10 +310,6 @@ export const Users: React.FC = () => {
       role: user.role,
       branch: user.branch?._id || '',
       department: user.department?._id || '',
-      address: user.branch?.address || '',
-      addressEn: user.branch?.addressEn || '',
-      city: user.branch?.city || '',
-      cityEn: user.branch?.cityEn || '',
       password: '',
       isActive: user.isActive,
     });
@@ -396,31 +359,18 @@ export const Users: React.FC = () => {
         ...(isEditMode ? {} : { password: formData.password.trim() }),
       };
 
-      const branchData = formData.role === 'branch' ? {
-        address: formData.address.trim(),
-        addressEn: formData.addressEn.trim() || undefined,
-        city: formData.city.trim(),
-        cityEn: formData.cityEn.trim() || undefined,
-      } : {};
-
       if (isEditMode && selectedUser) {
         await usersAPI.update(selectedUser._id, userData);
-        if (formData.role === 'branch' && formData.branch) {
-          await branchesAPI.update(formData.branch, branchData);
-        }
-        setUsers(users.map((u) => (u._id === selectedUser._id ? { ...u, ...userData, branch: { ...u.branch, ...branchData } } : u)));
+        setUsers(users.map((u) => (u._id === selectedUser._id ? { ...u, ...userData } : u)));
         toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
       } else {
         const response = await usersAPI.create(userData);
-        if (formData.role === 'branch' && formData.branch) {
-          await branchesAPI.update(formData.branch, branchData);
-        }
-        setUsers([...users, { ...response, password: '********', branch: { ...response.branch, ...branchData } }]);
+        setUsers([...users, { ...response, password: '********' }]);
         toast.success(t.added, { position: isRtl ? 'top-right' : 'top-left' });
       }
       setIsModalOpen(false);
       setError('');
-      fetchData();
+      fetchData(); // Refresh after change
     } catch (err: any) {
       let errorMessage = isEditMode ? t.updateError : t.createError;
       if (err.response?.data?.message) {
@@ -608,11 +558,7 @@ export const Users: React.FC = () => {
                     <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.phone}:</span> <span>{user.phone || '-'}</span></p>
                     <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.role}:</span> <span>{t[user.role]}</span></p>
                     {user.role === 'branch' && (
-                      <>
-                        <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.branch}:</span> <span>{user.branch ? (isRtl ? user.branch.name : user.branch.nameEn || user.branch.name) : '-'}</span></p>
-                        <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.address}:</span> <span>{user.branch ? (isRtl ? user.branch.address : user.branch.addressEn || user.branch.address) || '-' : '-'}</span></p>
-                        <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.city}:</span> <span>{user.branch ? (isRtl ? user.branch.city : user.branch.cityEn || user.branch.city) || '-' : '-'}</span></p>
-                      </>
+                      <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.branch}:</span> <span>{user.branch ? (isRtl ? user.branch.name : user.branch.nameEn || user.branch.name) : '-'}</span></p>
                     )}
                     {user.role === 'chef' && (
                       <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.department}:</span> <span>{user.department?.name || '-'}</span></p>
@@ -750,54 +696,20 @@ export const Users: React.FC = () => {
                   { value: 'production', label: t.production },
                 ]}
                 value={formData.role}
-                onChange={(value) => setFormData({ ...formData, role: value as 'admin' | 'branch' | 'chef' | 'production', branch: value === 'branch' ? formData.branch : '', department: value === 'chef' ? formData.department : '', address: value === 'branch' ? formData.address : '', addressEn: value === 'branch' ? formData.addressEn : '', city: value === 'branch' ? formData.city : '', cityEn: value === 'branch' ? formData.cityEn : '' })}
+                onChange={(value) => setFormData({ ...formData, role: value as 'admin' | 'branch' | 'chef' | 'production', branch: value === 'branch' ? formData.branch : '', department: value === 'chef' ? formData.department : '' })}
                 className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
               />
               {formData.role === 'branch' && (
-                <>
-                  <Select
-                    label={t.branch}
-                    options={branches.map((branch) => ({ value: branch._id, label: isRtl ? branch.name : branch.nameEn || branch.name }))}
-                    value={formData.branch}
-                    onChange={(value) => setFormData({ ...formData, branch: value })}
-                    placeholder={t.branchPlaceholder}
-                    required
-                    error={formErrors.branch}
-                    className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
-                  />
-                  <Input
-                    label={t.address}
-                    value={formData.address}
-                    onChange={(value) => setFormData({ ...formData, address: value })}
-                    placeholder={t.addressPlaceholder}
-                    required
-                    error={formErrors.address}
-                    className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
-                  />
-                  <Input
-                    label={t.addressEn}
-                    value={formData.addressEn}
-                    onChange={(value) => setFormData({ ...formData, addressEn: value })}
-                    placeholder={t.addressEnPlaceholder}
-                    className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
-                  />
-                  <Input
-                    label={t.city}
-                    value={formData.city}
-                    onChange={(value) => setFormData({ ...formData, city: value })}
-                    placeholder={t.cityPlaceholder}
-                    required
-                    error={formErrors.city}
-                    className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
-                  />
-                  <Input
-                    label={t.cityEn}
-                    value={formData.cityEn}
-                    onChange={(value) => setFormData({ ...formData, cityEn: value })}
-                    placeholder={t.cityEnPlaceholder}
-                    className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
-                  />
-                </>
+                <Select
+                  label={t.branch}
+                  options={branches.map((branch) => ({ value: branch._id, label: isRtl ? branch.name : branch.nameEn || branch.name }))}
+                  value={formData.branch}
+                  onChange={(value) => setFormData({ ...formData, branch: value })}
+                  placeholder={t.branchPlaceholder}
+                  required
+                  error={formErrors.branch}
+                  className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
+                />
               )}
               {formData.role === 'chef' && (
                 <Select
@@ -885,7 +797,7 @@ export const Users: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
               <div className="flex flex-row items-center gap-2">
                 <span className="w-20 font-medium text-gray-600">{t.username}:</span>
-                <span className="text-gray-800 truncate">{comparedUser.username}</span>
+                <span className="text-gray-800 truncate">{selectedUser.username}</span>
               </div>
               <div className="flex flex-row items-center gap-2">
                 <span className="w-20 font-medium text-gray-600">{t.email}:</span>
@@ -900,20 +812,10 @@ export const Users: React.FC = () => {
                 <span className="text-gray-800">{t[selectedUser.role]}</span>
               </div>
               {selectedUser.role === 'branch' && (
-                <>
-                  <div className="flex flex-row items-center gap-2">
-                    <span className="w-20 font-medium text-gray-600">{t.branch}:</span>
-                    <span className="text-gray-800">{selectedUser.branch ? (isRtl ? selectedUser.branch.name : selectedUser.branch.nameEn || selectedUser.branch.name) : '-'}</span>
-                  </div>
-                  <div className="flex flex-row items-center gap-2">
-                    <span className="w-20 font-medium text-gray-600">{t.address}:</span>
-                    <span className="text-gray-800">{selectedUser.branch ? (isRtl ? selectedUser.branch.address : selectedUser.branch.addressEn || selectedUser.branch.address) || '-' : '-'}</span>
-                  </div>
-                  <div className="flex flex-row items-center gap-2">
-                    <span className="w-20 font-medium text-gray-600">{t.city}:</span>
-                    <span className="text-gray-800">{selectedUser.branch ? (isRtl ? selectedUser.branch.city : selectedUser.branch.cityEn || selectedUser.branch.city) || '-' : '-'}</span>
-                  </div>
-                </>
+                <div className="flex flex-row items-center gap-2">
+                  <span className="w-20 font-medium text-gray-600">{t.branch}:</span>
+                  <span className="text-gray-800">{selectedUser.branch ? (isRtl ? selectedUser.branch.name : selectedUser.branch.nameEn || selectedUser.branch.name) : '-'}</span>
+                </div>
               )}
               {selectedUser.role === 'chef' && (
                 <div className="flex flex-row items-center gap-2">
@@ -991,19 +893,12 @@ export const Users: React.FC = () => {
             icon={showPassword['confirmPassword'] ? EyeOff : Eye}
             onIconClick={() => setShowPassword((prev) => ({ ...prev, confirmPassword: !prev.confirmPassword }))}
           />
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
-              >
-                <AlertCircle className="w-4 h-4 text-red-500" />
-                <span className="text-red-500 text-sm font-medium">{error}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm">
+              <AlertCircle className="w-4 h-4 text-red-500" />
+              <span className="text-red-500 text-sm font-medium">{error}</span>
+            </div>
+          )}
           <div className="flex gap-3 mt-4">
             <Button
               type="submit"
@@ -1032,19 +927,12 @@ export const Users: React.FC = () => {
       >
         <div className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
           <p className="text-gray-600 text-sm">{t.deleteWarning}</p>
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
-              >
-                <AlertCircle className="w-4 h-4 text-red-500" />
-                <span className="text-red-500 text-sm font-medium">{error}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm">
+              <AlertCircle className="w-4 h-4 text-red-500" />
+              <span className="text-red-500 text-sm font-medium">{error}</span>
+            </div>
+          )}
           <div className="flex gap-3 mt-4">
             <Button
               type="button"
