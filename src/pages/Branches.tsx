@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useReducer } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI } from '../services/api';
@@ -18,7 +18,9 @@ interface Branch {
   nameEn?: string;
   code: string;
   address: string;
+  addressEn?: string;
   city: string;
+  cityEn?: string;
   phone?: string;
   isActive: boolean;
   user?: {
@@ -40,6 +42,56 @@ interface Branch {
   updatedAt: string;
 }
 
+interface FormState {
+  name: string;
+  nameEn: string;
+  code: string;
+  address: string;
+  addressEn: string;
+  city: string;
+  cityEn: string;
+  phone: string;
+  isActive: boolean;
+  user: {
+    name: string;
+    nameEn: string;
+    username: string;
+    email: string;
+    phone: string;
+    password: string;
+    isActive: boolean;
+  };
+}
+
+type FormAction =
+  | { type: 'UPDATE_FIELD'; field: keyof FormState; value: any }
+  | { type: 'UPDATE_USER_FIELD'; field: keyof FormState['user']; value: any }
+  | { type: 'RESET' };
+
+const formReducer = (state: FormState, action: FormAction): FormState => {
+  switch (action.type) {
+    case 'UPDATE_FIELD':
+      return { ...state, [action.field]: action.value };
+    case 'UPDATE_USER_FIELD':
+      return { ...state, user: { ...state.user, [action.field]: action.value } };
+    case 'RESET':
+      return {
+        name: '',
+        nameEn: '',
+        code: '',
+        address: '',
+        addressEn: '',
+        city: '',
+        cityEn: '',
+        phone: '',
+        isActive: true,
+        user: { name: '', nameEn: '', username: '', email: '', phone: '', password: '', isActive: true },
+      };
+    default:
+      return state;
+  }
+};
+
 const translations = {
   ar: {
     manage: 'إدارة الفروع',
@@ -53,6 +105,8 @@ const translations = {
     allStatuses: 'جميع الحالات',
     active: 'نشط',
     inactive: 'غير نشط',
+    cityFilter: 'المدينة',
+    cityPlaceholder: 'ابحث حسب المدينة...',
     filters: 'الفلاتر',
     previous: 'السابق',
     next: 'التالي',
@@ -60,7 +114,9 @@ const translations = {
     of: 'من',
     code: 'الكود',
     address: 'العنوان',
+    addressEn: 'العنوان (إنجليزي)',
     city: 'المدينة',
+    cityEn: 'المدينة (إنجليزي)',
     phone: 'الهاتف',
     user: 'المستخدم',
     username: 'اسم المستخدم',
@@ -79,7 +135,9 @@ const translations = {
     nameEnRequired: 'اسم الفرع بالإنجليزية مطلوب',
     codeRequired: 'كود الفرع مطلوب',
     addressRequired: 'العنوان مطلوب',
+    addressEnRequired: 'العنوان بالإنجليزية مطلوب',
     cityRequired: 'المدينة مطلوبة',
+    cityEnRequired: 'المدينة بالإنجليزية مطلوبة',
     userName: 'اسم المستخدم (عربي)',
     userNameEn: 'اسم المستخدم (إنجليزي)',
     userNameRequired: 'اسم المستخدم مطلوب',
@@ -90,7 +148,9 @@ const translations = {
     nameEnPlaceholder: 'أدخل اسم الفرع بالإنجليزية',
     codePlaceholder: 'أدخل كود الفرع',
     addressPlaceholder: 'أدخل العنوان',
+    addressEnPlaceholder: 'أدخل العنوان بالإنجليزية',
     cityPlaceholder: 'أدخل المدينة',
+    cityEnPlaceholder: 'أدخل المدينة بالإنجليزية',
     phonePlaceholder: 'أدخل رقم الهاتف',
     userNamePlaceholder: 'أدخل اسم المستخدم',
     userNameEnPlaceholder: 'أدخل اسم المستخدم بالإنجليزية',
@@ -138,6 +198,8 @@ const translations = {
     allStatuses: 'All Statuses',
     active: 'Active',
     inactive: 'Inactive',
+    cityFilter: 'City',
+    cityPlaceholder: 'Search by city...',
     filters: 'Filters',
     previous: 'Previous',
     next: 'Next',
@@ -145,7 +207,9 @@ const translations = {
     of: 'of',
     code: 'Code',
     address: 'Address',
+    addressEn: 'Address (English)',
     city: 'City',
+    cityEn: 'City (English)',
     phone: 'Phone',
     user: 'User',
     username: 'Username',
@@ -164,7 +228,9 @@ const translations = {
     nameEnRequired: 'Branch name in English is required',
     codeRequired: 'Branch code is required',
     addressRequired: 'Address is required',
+    addressEnRequired: 'Address in English is required',
     cityRequired: 'City is required',
+    cityEnRequired: 'City in English is required',
     userName: 'User Name (Arabic)',
     userNameEn: 'User Name (English)',
     userNameRequired: 'User name is required',
@@ -175,7 +241,9 @@ const translations = {
     nameEnPlaceholder: 'Enter branch name in English',
     codePlaceholder: 'Enter branch code',
     addressPlaceholder: 'Enter address',
+    addressEnPlaceholder: 'Enter address in English',
     cityPlaceholder: 'Enter city',
+    cityEnPlaceholder: 'Enter city in English',
     phonePlaceholder: 'Enter phone number',
     userNamePlaceholder: 'Enter user name',
     userNameEnPlaceholder: 'Enter user name in English',
@@ -213,13 +281,15 @@ const translations = {
   },
 };
 
-export const Branches: React.FC = () => {
+const Branches: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
+
   const [branches, setBranches] = useState<Branch[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [cityFilter, setCityFilter] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -232,18 +302,21 @@ export const Branches: React.FC = () => {
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [resetPasswordData, setResetPasswordData] = useState({ password: '', confirmPassword: '' });
-  const [formData, setFormData] = useState({
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  const [formData, dispatchForm] = useReducer(formReducer, {
     name: '',
     nameEn: '',
     code: '',
     address: '',
+    addressEn: '',
     city: '',
+    cityEn: '',
     phone: '',
     isActive: true,
     user: { name: '', nameEn: '', username: '', email: '', phone: '', password: '', isActive: true },
   });
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!user || user.role !== 'admin') {
@@ -252,12 +325,11 @@ export const Branches: React.FC = () => {
       toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
-
     setLoading(true);
     try {
       const response = await branchesAPI.getAll({ status: filterStatus === 'all' ? undefined : filterStatus, page, limit: 10 });
       console.log(`[${new Date().toISOString()}] Branches API response:`, response);
-      const data = Array.isArray(response.data) ? response.data : response; // Handle API response inconsistencies
+      const data = Array.isArray(response.data) ? response.data : response;
       setBranches(data);
       setTotalPages(response.totalPages || Math.ceil(data.length / 10));
       setError('');
@@ -274,30 +346,34 @@ export const Branches: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
-  const filteredBranches = branches.filter(
-    (branch) =>
-      branch &&
-      ((isRtl ? branch.name : branch.nameEn || branch.name)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        branch.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        branch.city?.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const filteredBranches = useMemo(() => {
+    return branches.filter(
+      (branch) =>
+        branch &&
+        ((isRtl ? branch.name : branch.nameEn || branch.name)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          branch.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (isRtl ? branch.city : branch.cityEn || branch.city)?.toLowerCase().includes(cityFilter.toLowerCase()))
+    );
+  }, [branches, searchTerm, cityFilter, isRtl]);
 
-  const checkEmailAvailability = async (email: string) => {
+  const checkEmailAvailability = useCallback(async (email: string) => {
     try {
       const response = await branchesAPI.checkEmail(email);
       return response.available;
     } catch {
       return false;
     }
-  };
+  }, []);
 
-  const validateForm = () => {
+  const validateForm = useCallback(() => {
     const errors: Record<string, string> = {};
     if (!formData.name) errors.name = t.nameRequired;
     if (!formData.nameEn) errors.nameEn = t.nameEnRequired;
     if (!formData.code) errors.code = t.codeRequired;
     if (!formData.address) errors.address = t.addressRequired;
+    if (!formData.addressEn) errors.addressEn = t.addressEnRequired;
     if (!formData.city) errors.city = t.cityRequired;
+    if (!formData.cityEn) errors.cityEn = t.cityEnRequired;
     if (!isEditMode) {
       if (!formData.user.name) errors.userName = t.userNameRequired;
       if (!formData.user.nameEn) errors.userNameEn = t.userNameEnRequired;
@@ -306,174 +382,167 @@ export const Branches: React.FC = () => {
     }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
-  };
+  }, [formData, isEditMode, t]);
 
-  const openAddModal = () => {
-    setFormData({
-      name: '',
-      nameEn: '',
-      code: '',
-      address: '',
-      city: '',
-      phone: '',
-      isActive: true,
-      user: { name: '', nameEn: '', username: '', email: '', phone: '', password: '', isActive: true },
-    });
+  const openAddModal = useCallback(() => {
+    dispatchForm({ type: 'RESET' });
     setIsEditMode(false);
     setSelectedBranch(null);
     setIsModalOpen(true);
     setFormErrors({});
     setError('');
-  };
+  }, []);
 
-  const openEditModal = (branch: Branch) => {
-    setFormData({
-      name: branch.name,
-      nameEn: branch.nameEn || '',
-      code: branch.code,
-      address: branch.address,
-      city: branch.city,
-      phone: branch.phone || '',
-      isActive: branch.isActive,
-      user: {
-        name: branch.user?.name || '',
-        nameEn: branch.user?.nameEn || '',
-        username: branch.user?.username || '',
-        email: branch.user?.email || '',
-        phone: branch.user?.phone || '',
-        password: '',
-        isActive: branch.user?.isActive ?? true,
-      },
-    });
+  const openEditModal = useCallback((branch: Branch) => {
+    dispatchForm({ type: 'RESET' });
+    dispatchForm({ type: 'UPDATE_FIELD', field: 'name', value: branch.name });
+    dispatchForm({ type: 'UPDATE_FIELD', field: 'nameEn', value: branch.nameEn || '' });
+    dispatchForm({ type: 'UPDATE_FIELD', field: 'code', value: branch.code });
+    dispatchForm({ type: 'UPDATE_FIELD', field: 'address', value: branch.address });
+    dispatchForm({ type: 'UPDATE_FIELD', field: 'addressEn', value: branch.addressEn || '' });
+    dispatchForm({ type: 'UPDATE_FIELD', field: 'city', value: branch.city });
+    dispatchForm({ type: 'UPDATE_FIELD', field: 'cityEn', value: branch.cityEn || '' });
+    dispatchForm({ type: 'UPDATE_FIELD', field: 'phone', value: branch.phone || '' });
+    dispatchForm({ type: 'UPDATE_FIELD', field: 'isActive', value: branch.isActive });
+    dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'name', value: branch.user?.name || '' });
+    dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'nameEn', value: branch.user?.nameEn || '' });
+    dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'username', value: branch.user?.username || '' });
+    dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'email', value: branch.user?.email || '' });
+    dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'phone', value: branch.user?.phone || '' });
+    dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'isActive', value: branch.user?.isActive ?? true });
     setIsEditMode(true);
     setSelectedBranch(branch);
     setIsModalOpen(true);
     setFormErrors({});
     setError('');
-  };
+  }, []);
 
-  const openProfileModal = (branch: Branch) => {
+  const openProfileModal = useCallback((branch: Branch) => {
     setSelectedBranch(branch);
     setIsProfileModalOpen(true);
-  };
+  }, []);
 
-  const openResetPasswordModal = (branch: Branch) => {
+  const openResetPasswordModal = useCallback((branch: Branch) => {
     setSelectedBranch(branch);
     setResetPasswordData({ password: '', confirmPassword: '' });
     setIsResetPasswordModalOpen(true);
     setError('');
-  };
+  }, []);
 
-  const openDeleteModal = (branch: Branch) => {
+  const openDeleteModal = useCallback((branch: Branch) => {
     setSelectedBranch(branch);
     setIsDeleteModalOpen(true);
     setError('');
-  };
+  }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!validateForm()) {
-      toast.error(t.requiredFields, { position: isRtl ? 'top-right' : 'top-left' });
-      return;
-    }
-
-    if (!isEditMode && formData.user.email) {
-      const isEmailAvailable = await checkEmailAvailability(formData.user.email);
-      if (!isEmailAvailable) {
-        setError(t.emailExists);
-        toast.error(t.emailExists, { position: isRtl ? 'top-right' : 'top-left' });
+  const handleSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!validateForm()) {
+        toast.error(t.requiredFields, { position: isRtl ? 'top-right' : 'top-left' });
         return;
       }
-    }
-
-    try {
-      const branchData = {
-        name: formData.name.trim(),
-        nameEn: formData.nameEn.trim(),
-        code: formData.code.trim(),
-        address: formData.address.trim(),
-        city: formData.city.trim(),
-        phone: formData.phone.trim() || undefined,
-        isActive: formData.isActive,
-        user: isEditMode
-          ? {
-              name: formData.user.name.trim(),
-              nameEn: formData.user.nameEn.trim(),
-              username: formData.user.username.trim(),
-              email: formData.user.email.trim() || undefined,
-              phone: formData.user.phone.trim() || undefined,
-              isActive: formData.user.isActive,
-            }
-          : {
-              name: formData.user.name.trim(),
-              nameEn: formData.user.nameEn.trim(),
-              username: formData.user.username.trim(),
-              email: formData.user.email.trim() || undefined,
-              phone: formData.user.phone.trim() || undefined,
-              password: formData.user.password.trim(),
-              isActive: formData.user.isActive,
-            },
-      };
-
-      if (isEditMode && selectedBranch) {
-        await branchesAPI.update(selectedBranch._id, branchData);
-        setBranches(branches.map((b) => (b._id === selectedBranch._id ? { ...b, ...branchData } : b)));
-        toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
-      } else {
-        const response = await branchesAPI.create(branchData);
-        setBranches([...branches, response]);
-        toast.success(t.added, { position: isRtl ? 'top-right' : 'top-left' });
+      if (!isEditMode && formData.user.email) {
+        const isEmailAvailable = await checkEmailAvailability(formData.user.email);
+        if (!isEmailAvailable) {
+          setError(t.emailExists);
+          toast.error(t.emailExists, { position: isRtl ? 'top-right' : 'top-left' });
+          return;
+        }
       }
-      setIsModalOpen(false);
-      setError('');
-    } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Submit error:`, err);
-      let errorMessage = isEditMode ? t.updateError : t.createError;
-      if (err.response?.data?.message) {
-        const message = err.response.data.message;
-        errorMessage =
-          message === 'Branch code already exists' ? t.codeExists :
-          message === 'Username already exists' ? t.usernameExists :
-          message.includes('الإيميل') || message.includes('email') ? t.emailExists :
-          message;
+      try {
+        const branchData = {
+          name: formData.name.trim(),
+          nameEn: formData.nameEn.trim(),
+          code: formData.code.trim(),
+          address: formData.address.trim(),
+          addressEn: formData.addressEn.trim(),
+          city: formData.city.trim(),
+          cityEn: formData.cityEn.trim(),
+          phone: formData.phone.trim() || undefined,
+          isActive: formData.isActive,
+          user: isEditMode
+            ? {
+                name: formData.user.name.trim(),
+                nameEn: formData.user.nameEn.trim(),
+                username: formData.user.username.trim(),
+                email: formData.user.email.trim() || undefined,
+                phone: formData.user.phone.trim() || undefined,
+                isActive: formData.user.isActive,
+              }
+            : {
+                name: formData.user.name.trim(),
+                nameEn: formData.user.nameEn.trim(),
+                username: formData.user.username.trim(),
+                email: formData.user.email.trim() || undefined,
+                phone: formData.user.phone.trim() || undefined,
+                password: formData.user.password.trim(),
+                isActive: formData.user.isActive,
+              },
+        };
+        if (isEditMode && selectedBranch) {
+          await branchesAPI.update(selectedBranch._id, branchData);
+          setBranches(branches.map((b) => (b._id === selectedBranch._id ? { ...b, ...branchData } : b)));
+          toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
+        } else {
+          const response = await branchesAPI.create(branchData);
+          setBranches([...branches, response]);
+          toast.success(t.added, { position: isRtl ? 'top-right' : 'top-left' });
+        }
+        setIsModalOpen(false);
+        setError('');
+      } catch (err: any) {
+        console.error(`[${new Date().toISOString()}] Submit error:`, err);
+        let errorMessage = isEditMode ? t.updateError : t.createError;
+        if (err.response?.data?.message) {
+          const message = err.response.data.message;
+          errorMessage =
+            message === 'Branch code already exists' ? t.codeExists :
+            message === 'Username already exists' ? t.usernameExists :
+            message.includes('الإيميل') || message.includes('email') ? t.emailExists :
+            message;
+        }
+        setError(errorMessage);
+        toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       }
-      setError(errorMessage);
-      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
-    }
-  };
+    },
+    [formData, isEditMode, selectedBranch, branches, checkEmailAvailability, t, isRtl]
+  );
 
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!resetPasswordData.password || !resetPasswordData.confirmPassword) {
-      setError(t.passwordRequired);
-      toast.error(t.passwordRequired, { position: isRtl ? 'top-right' : 'top-left' });
-      return;
-    }
-    if (resetPasswordData.password !== resetPasswordData.confirmPassword) {
-      setError(t.passwordMismatch);
-      toast.error(t.passwordMismatch, { position: isRtl ? 'top-right' : 'top-left' });
-      return;
-    }
-    if (resetPasswordData.password.length < 6) {
-      setError(t.passwordTooShort);
-      toast.error(t.passwordTooShort, { position: isRtl ? 'top-right' : 'top-left' });
-      return;
-    }
+  const handleResetPassword = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!resetPasswordData.password || !resetPasswordData.confirmPassword) {
+        setError(t.passwordRequired);
+        toast.error(t.passwordRequired, { position: isRtl ? 'top-right' : 'top-left' });
+        return;
+      }
+      if (resetPasswordData.password !== resetPasswordData.confirmPassword) {
+        setError(t.passwordMismatch);
+        toast.error(t.passwordMismatch, { position: isRtl ? 'top-right' : 'top-left' });
+        return;
+      }
+      if (resetPasswordData.password.length < 6) {
+        setError(t.passwordTooShort);
+        toast.error(t.passwordTooShort, { position: isRtl ? 'top-right' : 'top-left' });
+        return;
+      }
+      try {
+        await branchesAPI.resetPassword(selectedBranch!._id, resetPasswordData.password);
+        setIsResetPasswordModalOpen(false);
+        setResetPasswordData({ password: '', confirmPassword: '' });
+        toast.success(t.passwordResetSuccess, { position: isRtl ? 'top-right' : 'top-left' });
+      } catch (err: any) {
+        console.error(`[${new Date().toISOString()}] Reset password error:`, err);
+        const errorMessage = err.message || t.passwordResetError;
+        setError(errorMessage);
+        toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+      }
+    },
+    [resetPasswordData, selectedBranch, t, isRtl]
+  );
 
-    try {
-      await branchesAPI.resetBranchPassword(selectedBranch!._id, { password: resetPasswordData.password });
-      setIsResetPasswordModalOpen(false);
-      setResetPasswordData({ password: '', confirmPassword: '' });
-      toast.success(t.passwordResetSuccess, { position: isRtl ? 'top-right' : 'top-left' });
-    } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Reset password error:`, err);
-      const errorMessage = err.message || t.passwordResetError;
-      setError(errorMessage);
-      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
-    }
-  };
-
-  const handleDelete = async () => {
+  const handleDelete = useCallback(async () => {
     if (!selectedBranch) return;
     try {
       await branchesAPI.delete(selectedBranch._id);
@@ -491,7 +560,49 @@ export const Branches: React.FC = () => {
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
     }
-  };
+  }, [selectedBranch, branches, t, isRtl]);
+
+  const renderPagination = useMemo(() => {
+    const pages = [];
+    const maxPagesToShow = 5;
+    const startPage = Math.max(1, page - Math.floor(maxPagesToShow / 2));
+    const endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(
+        <Button
+          key={i}
+          variant={page === i ? 'primary' : 'outline'}
+          onClick={() => setPage(i)}
+          className={`mx-1 px-4 py-2 ${page === i ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'}`}
+        >
+          {i}
+        </Button>
+      );
+    }
+
+    return (
+      <div className="flex justify-center items-center mt-6 gap-2">
+        <Button
+          variant="outline"
+          onClick={() => setPage((p) => Math.max(p - 1, 1))}
+          disabled={page === 1}
+          className="px-4 py-2 bg-amber-100 text-amber-800 disabled:opacity-50"
+        >
+          {t.previous}
+        </Button>
+        {pages}
+        <Button
+          variant="outline"
+          onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
+          disabled={page === totalPages}
+          className="px-4 py-2 bg-amber-100 text-amber-800 disabled:opacity-50"
+        >
+          {t.next}
+        </Button>
+      </div>
+    );
+  }, [page, totalPages, t]);
 
   if (loading) {
     return (
@@ -502,7 +613,7 @@ export const Branches: React.FC = () => {
   }
 
   return (
-    <div className={`mx-auto p-4 sm:p-6 min-h-screen bg-gray-100 ${isRtl ? 'rtl font-arabic' : 'ltr font-sans'}`}>
+    <div className={`mx-auto p-4 sm:p-6 min-h-screen bg-gray-50 ${isRtl ? 'rtl font-arabic' : 'ltr font-sans'}`}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -524,7 +635,6 @@ export const Branches: React.FC = () => {
           </Button>
         )}
       </motion.div>
-
       <AnimatePresence>
         {error && (
           <motion.div
@@ -538,7 +648,6 @@ export const Branches: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
-
       <Card className="p-6 mb-8 bg-white rounded-lg shadow-md">
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1">
@@ -551,6 +660,15 @@ export const Branches: React.FC = () => {
               placeholder={t.searchPlaceholder}
               className={`pl-10 pr-4 py-2 border border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50 ${isRtl ? 'text-right' : 'text-left'}`}
               aria-label={t.searchPlaceholder}
+            />
+          </div>
+          <div className="relative flex-1">
+            <Input
+              value={cityFilter}
+              onChange={(value) => setCityFilter(value)}
+              placeholder={t.cityPlaceholder}
+              className={`pl-10 pr-4 py-2 border border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50 ${isRtl ? 'text-right' : 'text-left'}`}
+              aria-label={t.cityPlaceholder}
             />
           </div>
           <div className="relative flex-1">
@@ -582,8 +700,15 @@ export const Branches: React.FC = () => {
               initial={{ height: 0, opacity: 0 }}
               animate={{ height: 'auto', opacity: 1 }}
               exit={{ height: 0, opacity: 0 }}
-              className="mt-4 sm:hidden"
+              className="mt-4 sm:hidden space-y-4"
             >
+              <Input
+                value={cityFilter}
+                onChange={(value) => setCityFilter(value)}
+                placeholder={t.cityPlaceholder}
+                className={`pl-10 pr-4 py-2 border border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50 ${isRtl ? 'text-right' : 'text-left'}`}
+                aria-label={t.cityPlaceholder}
+              />
               <Select
                 label={t.status}
                 options={[
@@ -599,29 +724,7 @@ export const Branches: React.FC = () => {
             </motion.div>
           )}
         </AnimatePresence>
-        <div className="flex justify-center mt-6">
-          <Button
-            variant="outline"
-            onClick={() => setPage((p) => Math.max(p - 1, 1))}
-            disabled={page === 1}
-            className="mx-2 px-4 py-2 bg-amber-100 text-amber-800 disabled:opacity-50"
-          >
-            {t.previous}
-          </Button>
-          <span className="px-4 py-2 text-amber-900">
-            {t.page} {page} {t.of} {totalPages}
-          </span>
-          <Button
-            variant="outline"
-            onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-            disabled={page === totalPages}
-            className="mx-2 px-4 py-2 bg-amber-100 text-amber-800 disabled:opacity-50"
-          >
-            {t.next}
-          </Button>
-        </div>
       </Card>
-
       <motion.div
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
         initial={{ opacity: 0 }}
@@ -633,9 +736,9 @@ export const Branches: React.FC = () => {
             <MapPin className="w-12 h-12 text-amber-400 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-amber-900">{t.noBranches}</h3>
             <p className="text-gray-600 mt-2">
-              {searchTerm || filterStatus !== 'all' ? t.noMatch : t.empty}
+              {searchTerm || cityFilter || filterStatus !== 'all' ? t.noMatch : t.empty}
             </p>
-            {user?.role === 'admin' && !searchTerm && filterStatus === 'all' && (
+            {user?.role === 'admin' && !searchTerm && !cityFilter && filterStatus === 'all' && (
               <Button
                 variant="primary"
                 icon={Plus}
@@ -661,8 +764,8 @@ export const Branches: React.FC = () => {
                     <MapPin className="w-6 h-6 text-amber-600" />
                   </div>
                   <p className="text-sm text-gray-600">{t.code}: {branch.code}</p>
-                  <p className="text-sm text-gray-600">{t.address}: {branch.address}</p>
-                  <p className="text-sm text-gray-600">{t.city}: {branch.city}</p>
+                  <p className="text-sm text-gray-600">{t.address}: {isRtl ? branch.address : branch.addressEn || branch.address}</p>
+                  <p className="text-sm text-gray-600">{t.city}: {isRtl ? branch.city : branch.cityEn || branch.city}</p>
                   <p className="text-sm text-gray-600">{t.phone}: {branch.phone || '-'}</p>
                   <p className={`text-sm font-medium ${branch.isActive ? 'text-green-600' : 'text-red-600'}`}>
                     {t.status}: {branch.isActive ? t.active : t.inactive}
@@ -672,7 +775,10 @@ export const Branches: React.FC = () => {
                       <Button
                         variant="outline"
                         icon={Edit2}
-                        onClick={() => openEditModal(branch)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(branch);
+                        }}
                         className="text-amber-600 hover:text-amber-800 border-amber-600"
                       >
                         {t.edit}
@@ -680,7 +786,10 @@ export const Branches: React.FC = () => {
                       <Button
                         variant="outline"
                         icon={Key}
-                        onClick={() => openResetPasswordModal(branch)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openResetPasswordModal(branch);
+                        }}
                         className="text-blue-500 hover:text-blue-700 border-blue-500"
                       >
                         {t.resetPassword}
@@ -688,10 +797,8 @@ export const Branches: React.FC = () => {
                       <Button
                         variant="outline"
                         icon={Trash2}
-                        onClick={() => {
-                          // Prevent card click when delete button is clicked
-                          // @ts-ignore
-                          if (window.event) window.event.stopPropagation();
+                        onClick={(e) => {
+                          e.stopPropagation();
                           openDeleteModal(branch);
                         }}
                         className="text-red-500 hover:text-red-700 border-red-500"
@@ -706,7 +813,7 @@ export const Branches: React.FC = () => {
           ))
         )}
       </motion.div>
-
+      {filteredBranches.length > 0 && renderPagination}
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -725,7 +832,7 @@ export const Branches: React.FC = () => {
               <Input
                 label={t.name}
                 value={formData.name}
-                onChange={(value) => setFormData({ ...formData, name: value })}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'name', value })}
                 placeholder={t.namePlaceholder}
                 required
                 error={formErrors.name}
@@ -734,7 +841,7 @@ export const Branches: React.FC = () => {
               <Input
                 label={t.nameEn}
                 value={formData.nameEn}
-                onChange={(value) => setFormData({ ...formData, nameEn: value })}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'nameEn', value })}
                 placeholder={t.nameEnPlaceholder}
                 required
                 error={formErrors.nameEn}
@@ -743,7 +850,7 @@ export const Branches: React.FC = () => {
               <Input
                 label={t.code}
                 value={formData.code}
-                onChange={(value) => setFormData({ ...formData, code: value })}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'code', value })}
                 placeholder={t.codePlaceholder}
                 required
                 error={formErrors.code}
@@ -752,25 +859,43 @@ export const Branches: React.FC = () => {
               <Input
                 label={t.address}
                 value={formData.address}
-                onChange={(value) => setFormData({ ...formData, address: value })}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'address', value })}
                 placeholder={t.addressPlaceholder}
                 required
                 error={formErrors.address}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
+                label={t.addressEn}
+                value={formData.addressEn}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'addressEn', value })}
+                placeholder={t.addressEnPlaceholder}
+                required
+                error={formErrors.addressEn}
+                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              />
+              <Input
                 label={t.city}
                 value={formData.city}
-                onChange={(value) => setFormData({ ...formData, city: value })}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'city', value })}
                 placeholder={t.cityPlaceholder}
                 required
                 error={formErrors.city}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
+                label={t.cityEn}
+                value={formData.cityEn}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'cityEn', value })}
+                placeholder={t.cityEnPlaceholder}
+                required
+                error={formErrors.cityEn}
+                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              />
+              <Input
                 label={t.phone}
                 value={formData.phone}
-                onChange={(value) => setFormData({ ...formData, phone: value })}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'phone', value })}
                 placeholder={t.phonePlaceholder}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
@@ -781,7 +906,7 @@ export const Branches: React.FC = () => {
                   { value: false, label: t.inactive },
                 ]}
                 value={formData.isActive}
-                onChange={(value) => setFormData({ ...formData, isActive: value === 'true' })}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'isActive', value: value === 'true' })}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
             </div>
@@ -790,7 +915,7 @@ export const Branches: React.FC = () => {
               <Input
                 label={t.userName}
                 value={formData.user.name}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, name: value } })}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'name', value })}
                 placeholder={t.userNamePlaceholder}
                 required={!isEditMode}
                 error={formErrors.userName}
@@ -799,7 +924,7 @@ export const Branches: React.FC = () => {
               <Input
                 label={t.userNameEn}
                 value={formData.user.nameEn}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, nameEn: value } })}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'nameEn', value })}
                 placeholder={t.userNameEnPlaceholder}
                 required={!isEditMode}
                 error={formErrors.userNameEn}
@@ -808,7 +933,7 @@ export const Branches: React.FC = () => {
               <Input
                 label={t.username}
                 value={formData.user.username}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, username: value } })}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'username', value })}
                 placeholder={t.usernamePlaceholder}
                 required={!isEditMode}
                 error={formErrors.username}
@@ -817,14 +942,14 @@ export const Branches: React.FC = () => {
               <Input
                 label={t.email}
                 value={formData.user.email}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, email: value } })}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'email', value })}
                 placeholder={t.emailPlaceholder}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
                 label={t.userPhone}
                 value={formData.user.phone}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, phone: value } })}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'phone', value })}
                 placeholder={t.userPhonePlaceholder}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
@@ -835,14 +960,14 @@ export const Branches: React.FC = () => {
                   { value: false, label: t.inactive },
                 ]}
                 value={formData.user.isActive}
-                onChange={(value) => setFormData({ ...formData, user: { ...formData.user, isActive: value === 'true' } })}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'isActive', value: value === 'true' })}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               {!isEditMode && (
                 <Input
                   label={t.password}
                   value={formData.user.password}
-                  onChange={(value) => setFormData({ ...formData, user: { ...formData.user, password: value } })}
+                  onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'password', value })}
                   placeholder={t.passwordPlaceholder}
                   type="password"
                   required
@@ -884,7 +1009,6 @@ export const Branches: React.FC = () => {
           </div>
         </form>
       </Modal>
-
       <Modal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
@@ -904,11 +1028,19 @@ export const Branches: React.FC = () => {
               </div>
               <div>
                 <p className="text-sm text-gray-600 font-medium">{t.address}</p>
-                <p className="text-gray-800">{selectedBranch.address}</p>
+                <p className="text-gray-800">{isRtl ? selectedBranch.address : selectedBranch.addressEn || selectedBranch.address}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 font-medium">{t.addressEn}</p>
+                <p className="text-gray-800">{selectedBranch.addressEn || selectedBranch.address}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600 font-medium">{t.city}</p>
-                <p className="text-gray-800">{selectedBranch.city}</p>
+                <p className="text-gray-800">{isRtl ? selectedBranch.city : selectedBranch.cityEn || selectedBranch.city}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 font-medium">{t.cityEn}</p>
+                <p className="text-gray-800">{selectedBranch.cityEn || selectedBranch.city}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600 font-medium">{t.phone}</p>
@@ -974,7 +1106,6 @@ export const Branches: React.FC = () => {
           </div>
         )}
       </Modal>
-
       <Modal
         isOpen={isResetPasswordModalOpen}
         onClose={() => setIsResetPasswordModalOpen(false)}
@@ -1039,7 +1170,6 @@ export const Branches: React.FC = () => {
           </div>
         </form>
       </Modal>
-
       <Modal
         isOpen={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}
