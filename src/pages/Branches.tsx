@@ -281,7 +281,7 @@ const translations = {
   },
 };
 
-const Branches: React.FC = () => {
+export const Branches: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
