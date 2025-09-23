@@ -3,7 +3,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { productsAPI, departmentAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
-import { motion } from 'framer-motion'; 
+import { motion } from 'framer-motion';
 import { Button } from '../components/UI/Button';
 import { Input } from '../components/UI/Input';
 import { Select } from '../components/UI/Select';
@@ -14,16 +14,20 @@ import { Package, Plus, Edit2, Trash2, Search, AlertCircle } from 'lucide-react'
 interface Product {
   _id: string;
   name: string;
+  nameEn?: string;
   code: string;
-  department: { _id: string; name: string };
+  department: { _id: string; name: string; nameEn?: string };
   price: number;
   unit: string;
+  unitEn?: string;
   description?: string;
+  displayName: string;
 }
 
 interface Department {
   _id: string;
   name: string;
+  nameEn?: string;
 }
 
 export function Products() {
@@ -37,13 +41,17 @@ export function Products() {
   const [filterDepartment, setFilterDepartment] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   const [formData, setFormData] = useState({
     name: '',
+    nameEn: '',
     code: '',
     department: '',
     price: '',
     unit: 'قطعة',
+    unitEn: 'Piece',
     description: '',
   });
 
@@ -57,44 +65,41 @@ export function Products() {
 
       setLoading(true);
       try {
-        console.log('Fetching products with params:', { filterDepartment, searchTerm });
+        console.log('Fetching products with params:', { department: filterDepartment, search: searchTerm, page: currentPage, limit: 12 });
         console.log('API URL:', import.meta.env.VITE_API_URL);
         const [productsResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 100 }).catch((err) => {
-            console.error('Products API error:', err);
-            throw err;
-          }),
-          departmentAPI.getAll().catch((err) => {
-            console.error('Departments API error:', err);
-            throw err;
-          }),
+          productsAPI.getAll({ department: filterDepartment, search: searchTerm, page: currentPage, limit: 12 }),
+          departmentAPI.getAll({ limit: 100 }),
         ]);
         console.log('Products response:', productsResponse);
         console.log('Departments response:', departmentsResponse);
 
-        // التأكد إن departmentsResponse هو array
-        const departmentsArray = Array.isArray(departmentsResponse) ? departmentsResponse : [];
-        setProducts(Array.isArray(productsResponse) ? productsResponse : []);
-        setDepartments(departmentsArray);
+        const productsWithDisplayName = productsResponse.data.map((product: Product) => ({
+          ...product,
+          displayName: language === 'ar' ? product.name : (product.nameEn || product.name),
+        }));
+        setProducts(productsWithDisplayName);
+        setTotalPages(productsResponse.totalPages);
+        setDepartments(departmentsResponse.data);
         setError('');
       } catch (err: any) {
         console.error('Fetch error:', err);
         console.error('Error details:', {
-          status: err.response?.status,
-          data: err.response?.data,
+          status: err.status,
+          message: err.message,
           url: err.config?.url,
         });
-        setError(err.response?.data?.message || t('products.fetchError'));
+        setError(err.message || t('products.fetchError'));
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [t, user, filterDepartment, searchTerm]);
+  }, [t, user, filterDepartment, searchTerm, currentPage]);
 
   const filteredProducts = products.filter(
     (product) =>
-      (product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (product.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         product.code.toLowerCase().includes(searchTerm.toLowerCase())) &&
       (filterDepartment === '' || product.department._id === filterDepartment)
   );
@@ -108,20 +113,24 @@ export function Products() {
       setEditingProduct(product);
       setFormData({
         name: product.name,
+        nameEn: product.nameEn || '',
         code: product.code,
         department: product.department._id,
         price: product.price.toString(),
         unit: product.unit,
+        unitEn: product.unitEn || '',
         description: product.description || '',
       });
     } else {
       setEditingProduct(null);
       setFormData({
         name: '',
+        nameEn: '',
         code: '',
         department: departments[0]?._id || '',
         price: '',
         unit: 'قطعة',
+        unitEn: 'Piece',
         description: '',
       });
     }
@@ -139,10 +148,12 @@ export function Products() {
     try {
       const productData = {
         name: formData.name,
+        nameEn: formData.nameEn || undefined,
         code: formData.code,
         department: formData.department,
         price: parseFloat(formData.price),
         unit: formData.unit,
+        unitEn: formData.unitEn || undefined,
         description: formData.description || undefined,
       };
       console.log('Submitting product:', productData);
@@ -150,17 +161,22 @@ export function Products() {
         const updatedProduct = await productsAPI.update(editingProduct._id, productData);
         setProducts(
           products.map((p) =>
-            p._id === editingProduct._id ? { ...updatedProduct, department: departments.find((d) => d._id === formData.department)! } : p
+            p._id === editingProduct._id
+              ? { ...updatedProduct, displayName: language === 'ar' ? updatedProduct.name : (updatedProduct.nameEn || updatedProduct.name) }
+              : p
           )
         );
       } else {
         const newProduct = await productsAPI.create(productData);
-        setProducts([...products, { ...newProduct, department: departments.find((d) => d._id === formData.department)! }]);
+        setProducts([
+          ...products,
+          { ...newProduct, displayName: language === 'ar' ? newProduct.name : (newProduct.nameEn || newProduct.name) },
+        ]);
       }
       closeModal();
     } catch (err: any) {
       console.error('Submit error:', err);
-      setError(err.response?.data?.message || t('products.saveError'));
+      setError(err.message || t('products.saveError'));
     }
   };
 
@@ -175,28 +191,28 @@ export function Products() {
         setProducts(products.filter((p) => p._id !== id));
       } catch (err: any) {
         console.error('Delete error:', err);
-        setError(err.response?.data?.message || t('products.deleteError'));
+        setError(err.message || t('products.deleteError'));
       }
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen ">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div className=" mx-auto min-h-screen" dir={language === 'ar' ? 'rtl' : 'ltr'}>
-        <motion.div
+    <div className="container mx-auto px-4 py-6 min-h-screen bg-gray-50" dir={language === 'ar' ? 'rtl' : 'ltr'}>
+      <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4"
       >
-          <h1 className="text-3xl sm:text-4xl font-bold text-amber-900 flex items-center justify-center sm:justify-start gap-3">
+        <h1 className="text-3xl sm:text-4xl font-bold text-amber-900 flex items-center justify-center sm:justify-start gap-3">
           <Package className="w-8 h-8 text-amber-600" />
           {t('products.manage')}
         </h1>
@@ -232,67 +248,89 @@ export function Products() {
             />
           </div>
           <Select
-            label={t('orders.department')}
-            options={[{ value: '', label: t('orders.allDepartments') }, ...(Array.isArray(departments) ? departments.map((d) => ({ value: d._id, label: d.name })) : [])]}
+            label={t('products.department')}
+            options={[{ value: '', label: t('products.allDepartments') }, ...departments.map((d) => ({ value: d._id, label: language === 'ar' ? d.name : (d.nameEn || d.name) }))]}
             value={filterDepartment}
             onChange={setFilterDepartment}
             className="border-gray-300 rounded-md focus:ring-blue-500"
-            aria-label={t('orders.department')}
+            aria-label={t('products.department')}
           />
         </div>
       </Card>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredProducts.map((product) => (
-          <Card key={product._id} className="bg-white rounded-md shadow-sm hover:shadow-md transition-shadow">
-            <div className="p-4">
-              <h3 className="font-medium text-gray-800">{product.name}</h3>
-              <p className="text-sm text-gray-500">{t('products.code')}: {product.code}</p>
-              <p className="text-sm text-blue-500">{product.department?.name || t('products.noDepartment')}</p>
-              {product.description && <p className="text-xs text-gray-400 mt-1">{product.description}</p>}
-              <div className="flex items-center justify-between mt-3">
-                <span className="text-lg font-semibold text-gray-800">{product.price} {t('orders.currency')}</span>
-                {user?.role === 'admin' && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => openModal(product)}
-                      className="text-blue-500 hover:text-blue-700"
-                      title={t('orders.edit')}
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => deleteProduct(product._id)}
-                      className="text-red-500 hover:text-red-700"
-                      title={t('orders.delete')}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
+        {filteredProducts.length === 0 ? (
+          <Card className="p-6 text-center bg-white rounded-md shadow-sm">
+            <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+            <h3 className="text-lg font-medium text-gray-800">{t('products.noProducts')}</h3>
+            <p className="text-gray-500">{searchTerm || filterDepartment ? t('products.noMatch') : t('products.empty')}</p>
+            {user?.role === 'admin' && !searchTerm && !filterDepartment && (
+              <Button
+                variant="primary"
+                icon={Plus}
+                onClick={() => openModal()}
+                className="mt-4 bg-blue-500 hover:bg-blue-600 text-white rounded-md px-4 py-2"
+              >
+                {t('products.addFirst')}
+              </Button>
+            )}
           </Card>
-        ))}
+        ) : (
+          filteredProducts.map((product) => (
+            <Card key={product._id} className="bg-white rounded-md shadow-sm hover:shadow-md transition-shadow">
+              <div className="p-4">
+                <h3 className="font-medium text-gray-800">{product.displayName}</h3>
+                <p className="text-sm text-gray-500">{t('products.code')}: {product.code}</p>
+                <p className="text-sm text-blue-500">
+                  {t('products.department')}: {language === 'ar' ? product.department.name : (product.department.nameEn || product.department.name)}
+                </p>
+                {product.description && <p className="text-xs text-gray-400 mt-1">{product.description}</p>}
+                <div className="flex items-center justify-between mt-3">
+                  <span className="text-lg font-semibold text-gray-800">{product.price} {t('products.currency')}</span>
+                  {user?.role === 'admin' && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => openModal(product)}
+                        className="text-blue-500 hover:text-blue-700"
+                        title={t('products.edit')}
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => deleteProduct(product._id)}
+                        className="text-red-500 hover:text-red-700"
+                        title={t('products.delete')}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
+          ))
+        )}
       </div>
 
-      {filteredProducts.length === 0 && (
-        <Card className="p-6 text-center bg-white rounded-md shadow-sm">
-          <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-          <h3 className="text-lg font-medium text-gray-800">{t('products.noProducts')}</h3>
-          <p className="text-gray-500">{searchTerm || filterDepartment ? t('products.noMatch') : t('products.empty')}</p>
-          {user?.role === 'admin' && !searchTerm && !filterDepartment && (
-            <Button
-              variant="primary"
-              icon={Plus}
-              onClick={() => openModal()}
-              className="mt-4 bg-blue-500 hover:bg-blue-600 text-white rounded-md px-4 py-2"
-            >
-              {t('products.addFirst')}
-            </Button>
-          )}
-        </Card>
-      )}
+      <div className="flex justify-center mt-6">
+        <Button
+          variant="secondary"
+          onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+          disabled={currentPage === 1}
+          className="mx-2"
+        >
+          {t('previous')}
+        </Button>
+        <span className="mx-4 self-center">{t('page')} {currentPage} / {totalPages}</span>
+        <Button
+          variant="secondary"
+          onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+          disabled={currentPage === totalPages}
+          className="mx-2"
+        >
+          {t('next')}
+        </Button>
+      </div>
 
       <Modal
         isOpen={isModalOpen}
@@ -311,6 +349,13 @@ export function Products() {
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />
             <Input
+              label={t('products.nameEn')}
+              value={formData.nameEn}
+              onChange={(value) => setFormData({ ...formData, nameEn: value })}
+              placeholder={t('products.nameEnPlaceholder')}
+              className="border-gray-300 rounded-md focus:ring-blue-500"
+            />
+            <Input
               label={t('products.code')}
               value={formData.code}
               onChange={(value) => setFormData({ ...formData, code: value })}
@@ -320,7 +365,7 @@ export function Products() {
             />
             <Select
               label={t('products.department')}
-              options={[{ value: '', label: t('products.selectDepartment') }, ...(Array.isArray(departments) ? departments.map((d) => ({ value: d._id, label: d.name })) : [])]}
+              options={[{ value: '', label: t('products.selectDepartment') }, ...departments.map((d) => ({ value: d._id, label: language === 'ar' ? d.name : (d.nameEn || d.name) }))]}
               value={formData.department}
               onChange={(value) => setFormData({ ...formData, department: value })}
               required
@@ -338,13 +383,13 @@ export function Products() {
             <Select
               label={t('products.unit')}
               options={[
-                { value: 'كيلو', label: t('products.units.kilo') },
-                { value: 'قطعة', label: t('products.units.piece') },
-                { value: 'علبة', label: t('products.units.box') },
-                { value: 'صينية', label: t('products.units.tray') },
-              ]}
+                { value: 'كيلو', label: t('products.units.kilo'), valueEn: 'Kilogram' },
+                { value: 'قطعة', label: t('products.units.piece'), valueEn: 'Piece' },
+                { value: 'علبة', label: t('products.units.box'), valueEn: 'Box' },
+                { value: 'صينية', label: t('products.units.tray'), valueEn: 'Tray' },
+              ].map((opt) => ({ value: opt.value, label: language === 'ar' ? opt.label : opt.valueEn }))}
               value={formData.unit}
-              onChange={(value) => setFormData({ ...formData, unit: value })}
+              onChange={(value) => setFormData({ ...formData, unit: value, unitEn: (language === 'ar' ? undefined : formData.unitEn) || value })}
               required
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />

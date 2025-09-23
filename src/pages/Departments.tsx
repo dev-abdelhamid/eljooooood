@@ -12,9 +12,11 @@ import { Layers, Plus, Edit2, Trash2, Search, AlertCircle } from 'lucide-react';
 interface Department {
   _id: string;
   name: string;
+  nameEn?: string;
   code: string;
   description?: string;
   isActive: boolean;
+  displayName: string;
 }
 
 export function Departments() {
@@ -26,9 +28,12 @@ export function Departments() {
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   const [formData, setFormData] = useState({
     name: '',
+    nameEn: '',
     code: '',
     description: '',
   });
@@ -37,38 +42,42 @@ export function Departments() {
     const fetchData = async () => {
       if (!user || !['admin'].includes(user.role)) {
         setError(t('departments.unauthorized'));
+        setLoading(false);
         return;
       }
 
       setLoading(true);
       try {
-        console.log('Fetching departments with params:', { searchTerm });
+        console.log('Fetching departments with params:', { page: currentPage, limit: 12, search: searchTerm });
         console.log('API URL:', import.meta.env.VITE_API_URL);
-        const departmentsResponse = await departmentAPI.getAll().catch((err) => {
-          console.error('Departments API error:', err);
-          throw err;
-        });
+        const departmentsResponse = await departmentAPI.getAll({ page: currentPage, limit: 12, search: searchTerm });
         console.log('Departments response:', departmentsResponse);
-        setDepartments(departmentsResponse);
+
+        const departmentsWithDisplayName = departmentsResponse.data.map((dept: Department) => ({
+          ...dept,
+          displayName: language === 'ar' ? dept.name : (dept.nameEn || dept.name),
+        }));
+        setDepartments(departmentsWithDisplayName);
+        setTotalPages(departmentsResponse.totalPages);
         setError('');
       } catch (err: any) {
         console.error('Fetch error:', err);
         console.error('Error details:', {
-          status: err.response?.status,
-          data: err.response?.data,
+          status: err.status,
+          message: err.message,
           url: err.config?.url,
         });
-        setError(err.response?.data?.message || t('departments.fetchError'));
+        setError(err.message || t('departments.fetchError'));
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [t, user, searchTerm]);
+  }, [t, user, searchTerm, currentPage]);
 
   const filteredDepartments = departments.filter(
     (department) =>
-      department.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      department.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       department.code.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -81,6 +90,7 @@ export function Departments() {
       setEditingDepartment(department);
       setFormData({
         name: department.name,
+        nameEn: department.nameEn || '',
         code: department.code,
         description: department.description || '',
       });
@@ -88,6 +98,7 @@ export function Departments() {
       setEditingDepartment(null);
       setFormData({
         name: '',
+        nameEn: '',
         code: '',
         description: '',
       });
@@ -106,6 +117,7 @@ export function Departments() {
     try {
       const departmentData = {
         name: formData.name,
+        nameEn: formData.nameEn || undefined,
         code: formData.code,
         description: formData.description || undefined,
       };
@@ -113,16 +125,23 @@ export function Departments() {
       if (editingDepartment) {
         const updatedDepartment = await departmentAPI.update(editingDepartment._id, departmentData);
         setDepartments(
-          departments.map((d) => (d._id === editingDepartment._id ? updatedDepartment : d))
+          departments.map((d) =>
+            d._id === editingDepartment._id
+              ? { ...updatedDepartment, displayName: language === 'ar' ? updatedDepartment.name : (updatedDepartment.nameEn || updatedDepartment.name) }
+              : d
+          )
         );
       } else {
         const newDepartment = await departmentAPI.create(departmentData);
-        setDepartments([...departments, newDepartment]);
+        setDepartments([
+          ...departments,
+          { ...newDepartment, displayName: language === 'ar' ? newDepartment.name : (newDepartment.nameEn || newDepartment.name) },
+        ]);
       }
       closeModal();
     } catch (err: any) {
       console.error('Submit error:', err);
-      setError(err.response?.data?.message || t('departments.saveError'));
+      setError(err.message || t('departments.saveError'));
     }
   };
 
@@ -137,7 +156,7 @@ export function Departments() {
         setDepartments(departments.filter((d) => d._id !== id));
       } catch (err: any) {
         console.error('Delete error:', err);
-        setError(err.response?.data?.message || t('departments.deleteError'));
+        setError(err.message || t('departments.deleteError'));
       }
     }
   };
@@ -210,7 +229,7 @@ export function Departments() {
           filteredDepartments.map((department) => (
             <Card key={department._id} className="bg-white rounded-md shadow-sm hover:shadow-md transition-shadow">
               <div className="p-4">
-                <h3 className="font-medium text-gray-800">{department.name}</h3>
+                <h3 className="font-medium text-gray-800">{department.displayName}</h3>
                 <p className="text-sm text-gray-500">{t('departments.code')}: {department.code}</p>
                 {department.description && <p className="text-xs text-gray-400 mt-1">{department.description}</p>}
                 <p className="text-sm text-blue-500">
@@ -240,6 +259,26 @@ export function Departments() {
         )}
       </div>
 
+      <div className="flex justify-center mt-6">
+        <Button
+          variant="secondary"
+          onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+          disabled={currentPage === 1}
+          className="mx-2"
+        >
+          {t('previous')}
+        </Button>
+        <span className="mx-4 self-center">{t('page')} {currentPage} / {totalPages}</span>
+        <Button
+          variant="secondary"
+          onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+          disabled={currentPage === totalPages}
+          className="mx-2"
+        >
+          {t('next')}
+        </Button>
+      </div>
+
       <Modal
         isOpen={isModalOpen}
         onClose={closeModal}
@@ -254,6 +293,13 @@ export function Departments() {
               onChange={(value) => setFormData({ ...formData, name: value })}
               placeholder={t('departments.namePlaceholder')}
               required
+              className="border-gray-300 rounded-md focus:ring-blue-500"
+            />
+            <Input
+              label={t('departments.nameEn')}
+              value={formData.nameEn}
+              onChange={(value) => setFormData({ ...formData, nameEn: value })}
+              placeholder={t('departments.nameEnPlaceholder')}
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />
             <Input
