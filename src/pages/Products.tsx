@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,7 +9,7 @@ import { Input } from '../components/UI/Input';
 import { Select } from '../components/UI/Select';
 import { Modal } from '../components/UI/Modal';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
-import { Package, Plus, Edit2, Trash2, Search, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Package, Plus, Edit2, Trash2, Search, AlertCircle } from 'lucide-react';
 
 interface Product {
   _id: string;
@@ -20,11 +19,9 @@ interface Product {
   department: { _id: string; name: string; nameEn?: string };
   price: number;
   unit: 'كيلو' | 'قطعة' | 'علبة' | 'صينية';
-  unitEn?: 'Kilo' | 'Piece' | 'Pack' | 'Tray';
+  unitEn?: 'Kilogram' | 'Piece' | 'Box' | 'Tray';
   description?: string;
-  image: string;
   displayName: string;
-  displayUnit: string;
 }
 
 interface Department {
@@ -33,12 +30,12 @@ interface Department {
   nameEn?: string;
 }
 
-const unitOptions = [
-  { value: 'كيلو', label: 'كيلو', valueEn: 'Kilo' },
-  { value: 'قطعة', label: 'قطعة', valueEn: 'Piece' },
-  { value: 'علبة', label: 'علبة', valueEn: 'Pack' },
-  { value: 'صينية', label: 'صينية', valueEn: 'Tray' },
-];
+const unitTranslations: Record<Product['unit'], { ar: string; en: string }> = {
+  'كيلو': { ar: 'كيلو', en: 'Kilogram' },
+  'قطعة': { ar: 'قطعة', en: 'Piece' },
+  'علبة': { ar: 'علبة', en: 'Box' },
+  'صينية': { ar: 'صينية', en: 'Tray' },
+};
 
 export function Products() {
   const { t, language } = useLanguage();
@@ -51,8 +48,6 @@ export function Products() {
   const [filterDepartment, setFilterDepartment] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -63,7 +58,6 @@ export function Products() {
     unit: 'قطعة' as Product['unit'],
     unitEn: 'Piece' as Product['unitEn'],
     description: '',
-    image: 'https://images.pexels.com/photos/1126359/pexels-photo-1126359.jpeg',
   });
 
   useEffect(() => {
@@ -76,17 +70,20 @@ export function Products() {
 
       setLoading(true);
       try {
-        console.log('Fetching products with params:', { department: filterDepartment, search: searchTerm, page: currentPage });
+        console.log('Fetching products with params:', { department: filterDepartment, search: searchTerm });
         console.log('API URL:', import.meta.env.VITE_API_URL);
         const [productsResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ department: filterDepartment, search: searchTerm, page: currentPage, limit: 12 }),
+          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 100 }),
           departmentAPI.getAll({ limit: 100 }),
         ]);
         console.log('Products response:', productsResponse);
         console.log('Departments response:', departmentsResponse);
 
-        setProducts(productsResponse.data);
-        setTotalPages(productsResponse.totalPages);
+        const productsWithDisplayName = productsResponse.data.map((product: Product) => ({
+          ...product,
+          displayName: language === 'ar' ? product.name : (product.nameEn || product.name),
+        }));
+        setProducts(productsWithDisplayName);
         setDepartments(departmentsResponse.data);
         setError('');
       } catch (err: any) {
@@ -102,7 +99,7 @@ export function Products() {
       }
     };
     fetchData();
-  }, [t, user, filterDepartment, searchTerm, currentPage, language]);
+  }, [t, user, filterDepartment, searchTerm, language]);
 
   const filteredProducts = products.filter(
     (product) =>
@@ -125,9 +122,8 @@ export function Products() {
         department: product.department._id,
         price: product.price.toString(),
         unit: product.unit,
-        unitEn: product.unitEn || unitOptions.find((opt) => opt.value === product.unit)?.valueEn || 'Piece',
+        unitEn: product.unitEn || unitTranslations[product.unit].en,
         description: product.description || '',
-        image: product.image,
       });
     } else {
       setEditingProduct(null);
@@ -140,7 +136,6 @@ export function Products() {
         unit: 'قطعة',
         unitEn: 'Piece',
         description: '',
-        image: 'https://images.pexels.com/photos/1126359/pexels-photo-1126359.jpeg',
       });
     }
     setIsModalOpen(true);
@@ -164,19 +159,23 @@ export function Products() {
         unit: formData.unit,
         unitEn: formData.unitEn || undefined,
         description: formData.description || undefined,
-        image: formData.image,
       };
       console.log('Submitting product:', productData);
       if (editingProduct) {
         const updatedProduct = await productsAPI.update(editingProduct._id, productData);
         setProducts(
           products.map((p) =>
-            p._id === editingProduct._id ? updatedProduct : p
+            p._id === editingProduct._id
+              ? { ...updatedProduct, displayName: language === 'ar' ? updatedProduct.name : (updatedProduct.nameEn || updatedProduct.name) }
+              : p
           )
         );
       } else {
         const newProduct = await productsAPI.create(productData);
-        setProducts([...products, newProduct]);
+        setProducts([
+          ...products,
+          { ...newProduct, displayName: language === 'ar' ? newProduct.name : (newProduct.nameEn || newProduct.name) },
+        ]);
       }
       closeModal();
     } catch (err: any) {
@@ -284,18 +283,13 @@ export function Products() {
           filteredProducts.map((product) => (
             <Card key={product._id} className="bg-white rounded-md shadow-sm hover:shadow-md transition-shadow">
               <div className="p-4">
-                <img
-                  src={product.image}
-                  alt={product.displayName}
-                  className="w-full h-32 object-cover rounded-md mb-3"
-                />
                 <h3 className="font-medium text-gray-800">{product.displayName}</h3>
                 <p className="text-sm text-gray-500">{t('products.code')}: {product.code}</p>
                 <p className="text-sm text-blue-500">
                   {t('products.department')}: {language === 'ar' ? product.department.name : (product.department.nameEn || product.department.name)}
                 </p>
                 <p className="text-sm text-gray-500">
-                  {t('products.unit')}: {product.displayUnit}
+                  {t('products.unit')}: {language === 'ar' ? unitTranslations[product.unit].ar : (product.unitEn || unitTranslations[product.unit].en)}
                 </p>
                 {product.description && <p className="text-xs text-gray-400 mt-1">{product.description}</p>}
                 <div className="flex items-center justify-between mt-3">
@@ -324,32 +318,6 @@ export function Products() {
           ))
         )}
       </div>
-
-      {totalPages > 1 && (
-        <div className="flex justify-center items-center gap-4 mt-6">
-          <Button
-            variant="secondary"
-            icon={ChevronLeft}
-            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-            disabled={currentPage === 1}
-            className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-4 py-2"
-          >
-            {t('products.previous')}
-          </Button>
-          <span className="text-gray-600">
-            {t('products.page')} {currentPage} / {totalPages}
-          </span>
-          <Button
-            variant="secondary"
-            icon={ChevronRight}
-            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-            disabled={currentPage === totalPages}
-            className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-4 py-2"
-          >
-            {t('products.next')}
-          </Button>
-        </div>
-      )}
 
       <Modal
         isOpen={isModalOpen}
@@ -401,26 +369,19 @@ export function Products() {
             />
             <Select
               label={t('products.unit')}
-              options={unitOptions.map((opt) => ({
-                value: opt.value,
-                label: language === 'ar' ? opt.label : opt.valueEn,
+              options={Object.entries(unitTranslations).map(([value, { ar, en }]) => ({
+                value,
+                label: language === 'ar' ? ar : en,
               }))}
               value={formData.unit}
               onChange={(value) =>
                 setFormData({
                   ...formData,
                   unit: value as Product['unit'],
-                  unitEn: unitOptions.find((opt) => opt.value === value)?.valueEn || 'Piece',
+                  unitEn: unitTranslations[value as Product['unit']].en,
                 })
               }
               required
-              className="border-gray-300 rounded-md focus:ring-blue-500"
-            />
-            <Input
-              label={t('products.image')}
-              value={formData.image}
-              onChange={(value) => setFormData({ ...formData, image: value })}
-              placeholder={t('products.imagePlaceholder')}
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />
             <div>
