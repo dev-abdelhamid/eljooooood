@@ -8,7 +8,7 @@ import { Input } from '../components/UI/Input';
 import { Select } from '../components/UI/Select';
 import { Modal } from '../components/UI/Modal';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
-import { MapPin, Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key, User, Eye, EyeOff } from 'lucide-react';
+import { MapPin, Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key, User } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -18,9 +18,7 @@ interface Branch {
   nameEn?: string;
   code: string;
   address: string;
-  addressEn?: string;
   city: string;
-  cityEn?: string;
   phone?: string;
   isActive: boolean;
   user?: {
@@ -62,9 +60,7 @@ const translations = {
     of: 'من',
     code: 'الكود',
     address: 'العنوان',
-    addressEn: 'العنوان (إنجليزي)',
     city: 'المدينة',
-    cityEn: 'المدينة (إنجليزي)',
     phone: 'الهاتف',
     user: 'المستخدم',
     username: 'اسم المستخدم',
@@ -94,9 +90,7 @@ const translations = {
     nameEnPlaceholder: 'أدخل اسم الفرع بالإنجليزية',
     codePlaceholder: 'أدخل كود الفرع',
     addressPlaceholder: 'أدخل العنوان',
-    addressEnPlaceholder: 'أدخل العنوان بالإنجليزية',
     cityPlaceholder: 'أدخل المدينة',
-    cityEnPlaceholder: 'أدخل المدينة بالإنجليزية',
     phonePlaceholder: 'أدخل رقم الهاتف',
     userNamePlaceholder: 'أدخل اسم المستخدم',
     userNameEnPlaceholder: 'أدخل اسم المستخدم بالإنجليزية',
@@ -151,9 +145,7 @@ const translations = {
     of: 'of',
     code: 'Code',
     address: 'Address',
-    addressEn: 'Address (English)',
     city: 'City',
-    cityEn: 'City (English)',
     phone: 'Phone',
     user: 'User',
     username: 'Username',
@@ -183,9 +175,7 @@ const translations = {
     nameEnPlaceholder: 'Enter branch name in English',
     codePlaceholder: 'Enter branch code',
     addressPlaceholder: 'Enter address',
-    addressEnPlaceholder: 'Enter address in English',
     cityPlaceholder: 'Enter city',
-    cityEnPlaceholder: 'Enter city in English',
     phonePlaceholder: 'Enter phone number',
     userNamePlaceholder: 'Enter user name',
     userNameEnPlaceholder: 'Enter user name in English',
@@ -247,16 +237,13 @@ export const Branches: React.FC = () => {
     nameEn: '',
     code: '',
     address: '',
-    addressEn: '',
     city: '',
-    cityEn: '',
     phone: '',
     isActive: true,
     user: { name: '', nameEn: '', username: '', email: '', phone: '', password: '', isActive: true },
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [showPassword, setShowPassword] = useState<Record<string, boolean>>({});
 
   const fetchData = useCallback(async () => {
     if (!user || user.role !== 'admin') {
@@ -270,7 +257,7 @@ export const Branches: React.FC = () => {
     try {
       const response = await branchesAPI.getAll({ status: filterStatus === 'all' ? undefined : filterStatus, page, limit: 10 });
       console.log(`[${new Date().toISOString()}] Branches API response:`, response);
-      const data = Array.isArray(response.data) ? response.data : response;
+      const data = Array.isArray(response.data) ? response.data : response; // Handle API response inconsistencies
       setBranches(data);
       setTotalPages(response.totalPages || Math.ceil(data.length / 10));
       setError('');
@@ -292,7 +279,7 @@ export const Branches: React.FC = () => {
       branch &&
       ((isRtl ? branch.name : branch.nameEn || branch.name)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         branch.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (isRtl ? branch.city : branch.cityEn || branch.city)?.toLowerCase().includes(searchTerm.toLowerCase()))
+        branch.city?.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const checkEmailAvailability = async (email: string) => {
@@ -327,9 +314,7 @@ export const Branches: React.FC = () => {
       nameEn: '',
       code: '',
       address: '',
-      addressEn: '',
       city: '',
-      cityEn: '',
       phone: '',
       isActive: true,
       user: { name: '', nameEn: '', username: '', email: '', phone: '', password: '', isActive: true },
@@ -339,7 +324,6 @@ export const Branches: React.FC = () => {
     setIsModalOpen(true);
     setFormErrors({});
     setError('');
-    setShowPassword({});
   };
 
   const openEditModal = (branch: Branch) => {
@@ -347,10 +331,8 @@ export const Branches: React.FC = () => {
       name: branch.name,
       nameEn: branch.nameEn || '',
       code: branch.code,
-      address: branch.address || '',
-      addressEn: branch.addressEn || '',
-      city: branch.city || '',
-      cityEn: branch.cityEn || '',
+      address: branch.address,
+      city: branch.city,
       phone: branch.phone || '',
       isActive: branch.isActive,
       user: {
@@ -368,7 +350,6 @@ export const Branches: React.FC = () => {
     setIsModalOpen(true);
     setFormErrors({});
     setError('');
-    setShowPassword({});
   };
 
   const openProfileModal = (branch: Branch) => {
@@ -381,7 +362,6 @@ export const Branches: React.FC = () => {
     setResetPasswordData({ password: '', confirmPassword: '' });
     setIsResetPasswordModalOpen(true);
     setError('');
-    setShowPassword({});
   };
 
   const openDeleteModal = (branch: Branch) => {
@@ -412,9 +392,7 @@ export const Branches: React.FC = () => {
         nameEn: formData.nameEn.trim(),
         code: formData.code.trim(),
         address: formData.address.trim(),
-        addressEn: formData.addressEn.trim() || undefined,
         city: formData.city.trim(),
-        cityEn: formData.cityEn.trim() || undefined,
         phone: formData.phone.trim() || undefined,
         isActive: formData.isActive,
         user: isEditMode
@@ -438,8 +416,8 @@ export const Branches: React.FC = () => {
       };
 
       if (isEditMode && selectedBranch) {
-        const response = await branchesAPI.update(selectedBranch._id, branchData);
-        setBranches(branches.map((b) => (b._id === selectedBranch._id ? { ...b, ...response } : b)));
+        await branchesAPI.update(selectedBranch._id, branchData);
+        setBranches(branches.map((b) => (b._id === selectedBranch._id ? { ...b, ...branchData } : b)));
         toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
       } else {
         const response = await branchesAPI.create(branchData);
@@ -513,10 +491,6 @@ export const Branches: React.FC = () => {
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
     }
-  };
-
-  const togglePasswordVisibility = (field: string) => {
-    setShowPassword((prev) => ({ ...prev, [field]: !prev[field] }));
   };
 
   if (loading) {
@@ -687,8 +661,8 @@ export const Branches: React.FC = () => {
                     <MapPin className="w-6 h-6 text-amber-600" />
                   </div>
                   <p className="text-sm text-gray-600">{t.code}: {branch.code}</p>
-                  <p className="text-sm text-gray-600">{t.address}: {isRtl ? branch.address : branch.addressEn || branch.address}</p>
-                  <p className="text-sm text-gray-600">{t.city}: {isRtl ? branch.city : branch.cityEn || branch.city}</p>
+                  <p className="text-sm text-gray-600">{t.address}: {branch.address}</p>
+                  <p className="text-sm text-gray-600">{t.city}: {branch.city}</p>
                   <p className="text-sm text-gray-600">{t.phone}: {branch.phone || '-'}</p>
                   <p className={`text-sm font-medium ${branch.isActive ? 'text-green-600' : 'text-red-600'}`}>
                     {t.status}: {branch.isActive ? t.active : t.inactive}
@@ -698,7 +672,7 @@ export const Branches: React.FC = () => {
                       <Button
                         variant="outline"
                         icon={Edit2}
-                        onClick={(e) => { e.stopPropagation(); openEditModal(branch); }}
+                        onClick={() => openEditModal(branch)}
                         className="text-amber-600 hover:text-amber-800 border-amber-600"
                       >
                         {t.edit}
@@ -706,7 +680,7 @@ export const Branches: React.FC = () => {
                       <Button
                         variant="outline"
                         icon={Key}
-                        onClick={(e) => { e.stopPropagation(); openResetPasswordModal(branch); }}
+                        onClick={() => openResetPasswordModal(branch)}
                         className="text-blue-500 hover:text-blue-700 border-blue-500"
                       >
                         {t.resetPassword}
@@ -714,7 +688,12 @@ export const Branches: React.FC = () => {
                       <Button
                         variant="outline"
                         icon={Trash2}
-                        onClick={(e) => { e.stopPropagation(); openDeleteModal(branch); }}
+                        onClick={() => {
+                          // Prevent card click when delete button is clicked
+                          // @ts-ignore
+                          if (window.event) window.event.stopPropagation();
+                          openDeleteModal(branch);
+                        }}
                         className="text-red-500 hover:text-red-700 border-red-500"
                       >
                         {t.delete}
@@ -780,26 +759,12 @@ export const Branches: React.FC = () => {
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
-                label={t.addressEn}
-                value={formData.addressEn}
-                onChange={(value) => setFormData({ ...formData, addressEn: value })}
-                placeholder={t.addressEnPlaceholder}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
                 label={t.city}
                 value={formData.city}
                 onChange={(value) => setFormData({ ...formData, city: value })}
                 placeholder={t.cityPlaceholder}
                 required
                 error={formErrors.city}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.cityEn}
-                value={formData.cityEn}
-                onChange={(value) => setFormData({ ...formData, cityEn: value })}
-                placeholder={t.cityEnPlaceholder}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
@@ -879,12 +844,10 @@ export const Branches: React.FC = () => {
                   value={formData.user.password}
                   onChange={(value) => setFormData({ ...formData, user: { ...formData.user, password: value } })}
                   placeholder={t.passwordPlaceholder}
-                  type={showPassword['password'] ? 'text' : 'password'}
+                  type="password"
                   required
                   error={formErrors.password}
                   className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                  icon={showPassword['password'] ? EyeOff : Eye}
-                  onIconClick={() => togglePasswordVisibility('password')}
                 />
               )}
             </div>
@@ -941,11 +904,11 @@ export const Branches: React.FC = () => {
               </div>
               <div>
                 <p className="text-sm text-gray-600 font-medium">{t.address}</p>
-                <p className="text-gray-800">{isRtl ? selectedBranch.address : selectedBranch.addressEn || selectedBranch.address}</p>
+                <p className="text-gray-800">{selectedBranch.address}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600 font-medium">{t.city}</p>
-                <p className="text-gray-800">{isRtl ? selectedBranch.city : selectedBranch.cityEn || selectedBranch.city}</p>
+                <p className="text-gray-800">{selectedBranch.city}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-600 font-medium">{t.phone}</p>
@@ -1030,22 +993,18 @@ export const Branches: React.FC = () => {
               value={resetPasswordData.password}
               onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
               placeholder={t.newPasswordPlaceholder}
-              type={showPassword['newPassword'] ? 'text' : 'password'}
+              type="password"
               required
               className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              icon={showPassword['newPassword'] ? EyeOff : Eye}
-              onIconClick={() => togglePasswordVisibility('newPassword')}
             />
             <Input
               label={t.confirmPassword}
               value={resetPasswordData.confirmPassword}
               onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
               placeholder={t.confirmPasswordPlaceholder}
-              type={showPassword['confirmPassword'] ? 'text' : 'password'}
+              type="password"
               required
               className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              icon={showPassword['confirmPassword'] ? EyeOff : Eye}
-              onIconClick={() => togglePasswordVisibility('confirmPassword')}
             />
           </motion.div>
           <AnimatePresence>

@@ -2,8 +2,10 @@ import axios from 'axios';
 import { notificationsAPI } from './notifications';
 import { returnsAPI } from './returnsAPI';
 import { salesAPI } from './salesAPI';
+import { usersAPI } from './usersAPI';
+import { branchesAPI } from './branchesAPI';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app:3000/api';
 const isRtl = localStorage.getItem('language') === 'ar';
 
 const api = axios.create({
@@ -203,235 +205,6 @@ export const productsAPI = {
     }
     const response = await api.delete(`/products/${id}`);
     console.log(`[${new Date().toISOString()}] productsAPI.delete - Response:`, response);
-    return response;
-  },
-};
-
-// Other APIs remain unchanged
-export const branchesAPI = {
-  getAll: async () => {
-    const response = await api.get('/branches');
-    console.log(`[${new Date().toISOString()}] Branches getAll response:`, response);
-    return response;
-  },
-  getById: async (id: string) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] Branches getById - Invalid branch ID:`, id);
-      throw new Error('Invalid branch ID');
-    }
-    const response = await api.get(`/branches/${id}`);
-    console.log(`[${new Date().toISOString()}] Branches getById response:`, response);
-    return response;
-  },
-  create: async (branchData: {
-    name: string;
-    nameEn?: string;
-    code: string;
-    address: string;
-    city: string;
-    phone?: string;
-    user: {
-      name: string;
-      nameEn?: string;
-      username: string;
-      password: string;
-      email?: string;
-      phone?: string;
-      isActive?: boolean;
-    };
-  }) => {
-    const response = await api.post('/branches', {
-      name: branchData.name.trim(),
-      nameEn: branchData.nameEn?.trim(),
-      code: branchData.code.trim(),
-      address: branchData.address.trim(),
-      city: branchData.city.trim(),
-      phone: branchData.phone?.trim(),
-      user: {
-        name: branchData.user.name.trim(),
-        nameEn: branchData.user.nameEn?.trim(),
-        username: branchData.user.username.trim(),
-        password: branchData.user.password,
-        email: branchData.user.email?.trim(),
-        phone: branchData.user.phone?.trim(),
-        isActive: branchData.user.isActive ?? true,
-      },
-    });
-    console.log(`[${new Date().toISOString()}] Branches create response:`, response);
-    return response;
-  },
-  update: async (id: string, branchData: {
-    name: string;
-    nameEn?: string;
-    code: string;
-    address: string;
-    city: string;
-    phone?: string;
-    user: {
-      name: string;
-      nameEn?: string;
-      username: string;
-      email?: string;
-      phone?: string;
-      isActive?: boolean;
-    };
-  }) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] Branches update - Invalid branch ID:`, id);
-      throw new Error('Invalid branch ID');
-    }
-    const response = await api.put(`/branches/${id}`, {
-      name: branchData.name.trim(),
-      nameEn: branchData.nameEn?.trim(),
-      code: branchData.code.trim(),
-      address: branchData.address.trim(),
-      city: branchData.city.trim(),
-      phone: branchData.phone?.trim(),
-      user: {
-        name: branchData.user.name.trim(),
-        nameEn: branchData.user.nameEn?.trim(),
-        username: branchData.user.username.trim(),
-        email: branchData.user.email?.trim(),
-        phone: branchData.user.phone?.trim(),
-        isActive: branchData.user.isActive ?? true,
-      },
-    });
-    console.log(`[${new Date().toISOString()}] Branches update response:`, response);
-    return response;
-  },
-  delete: async (id: string) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] Branches delete - Invalid branch ID:`, id);
-      throw new Error('Invalid branch ID');
-    }
-    const response = await api.delete(`/branches/${id}`);
-    console.log(`[${new Date().toISOString()}] Branches delete response:`, response);
-    return response;
-  },
-  checkEmail: async (email: string) => {
-    const response = await api.post('/branches/check-email', { email: email.trim() });
-    console.log(`[${new Date().toISOString()}] Branches checkEmail response:`, response);
-    return response;
-  },
-  resetPassword: async (id: string, password: string) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] Branches resetPassword - Invalid branch ID:`, id);
-      throw new Error('Invalid branch ID');
-    }
-    const response = await api.post(`/branches/${id}/reset-password`, { password });
-    console.log(`[${new Date().toISOString()}] Branches resetPassword response:`, response);
-    return response;
-  },
-};
-
-export const usersAPI = {
-  getAll: async () => {
-    const response = await api.get('/users');
-    console.log(`[${new Date().toISOString()}] Users getAll response:`, response);
-    return response;
-  },
-  getById: async (id: string) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] Users getById - Invalid user ID:`, id);
-      throw new Error('Invalid user ID');
-    }
-    const response = await api.get(`/users/${id}`);
-    console.log(`[${new Date().toISOString()}] Users getById response:`, response);
-    return response;
-  },
-  create: async (userData: {
-    name: string;
-    nameEn?: string;
-    username: string;
-    password: string;
-    email?: string;
-    phone?: string;
-    role: 'admin' | 'branch' | 'chef' | 'production';
-    branch?: string;
-    department?: string;
-    isActive?: boolean;
-  }) => {
-    if (userData.role === 'branch' && !isValidObjectId(userData.branch)) {
-      console.error(`[${new Date().toISOString()}] Users create - Invalid branch ID:`, userData.branch);
-      throw new Error('Invalid branch ID');
-    }
-    if (userData.role === 'chef' && !isValidObjectId(userData.department)) {
-      console.error(`[${new Date().toISOString()}] Users create - Invalid department ID:`, userData.department);
-      throw new Error('Invalid department ID');
-    }
-    const response = await api.post('/users', {
-      name: userData.name.trim(),
-      nameEn: userData.nameEn?.trim(),
-      username: userData.username.trim(),
-      password: userData.password,
-      email: userData.email?.trim(),
-      phone: userData.phone?.trim(),
-      role: userData.role,
-      branch: userData.branch,
-      department: userData.department,
-      isActive: userData.isActive ?? true,
-    });
-    console.log(`[${new Date().toISOString()}] Users create response:`, response);
-    return response;
-  },
-  update: async (id: string, userData: {
-    name: string;
-    nameEn?: string;
-    username: string;
-    email?: string;
-    phone?: string;
-    role: 'admin' | 'branch' | 'chef' | 'production';
-    branch?: string;
-    department?: string;
-    isActive?: boolean;
-  }) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] Users update - Invalid user ID:`, id);
-      throw new Error('Invalid user ID');
-    }
-    if (userData.role === 'branch' && !isValidObjectId(userData.branch)) {
-      console.error(`[${new Date().toISOString()}] Users update - Invalid branch ID:`, userData.branch);
-      throw new Error('Invalid branch ID');
-    }
-    if (userData.role === 'chef' && !isValidObjectId(userData.department)) {
-      console.error(`[${new Date().toISOString()}] Users update - Invalid department ID:`, userData.department);
-      throw new Error('Invalid department ID');
-    }
-    const response = await api.put(`/users/${id}`, {
-      name: userData.name.trim(),
-      nameEn: userData.nameEn?.trim(),
-      username: userData.username.trim(),
-      email: userData.email?.trim(),
-      phone: userData.phone?.trim(),
-      role: userData.role,
-      branch: userData.branch,
-      department: userData.department,
-      isActive: userData.isActive ?? true,
-    });
-    console.log(`[${new Date().toISOString()}] Users update response:`, response);
-    return response;
-  },
-  delete: async (id: string) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] Users delete - Invalid user ID:`, id);
-      throw new Error('Invalid user ID');
-    }
-    const response = await api.delete(`/users/${id}`);
-    console.log(`[${new Date().toISOString()}] Users delete response:`, response);
-    return response;
-  },
-  checkEmail: async (email: string) => {
-    const response = await api.post('/users/check-email', { email: email.trim() });
-    console.log(`[${new Date().toISOString()}] Users checkEmail response:`, response);
-    return response;
-  },
-  resetPassword: async (id: string, password: string) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] Users resetPassword - Invalid user ID:`, id);
-      throw new Error('Invalid user ID');
-    }
-    const response = await api.post(`/users/${id}/reset-password`, { password });
-    console.log(`[${new Date().toISOString()}] Users resetPassword response:`, response);
     return response;
   },
 };
@@ -688,9 +461,6 @@ export const productionAssignmentsAPI = {
     return response;
   },
 };
-
-
-
 
 export const inventoryAPI = {
   getInventory: async (params = {}) => {
@@ -973,5 +743,5 @@ export const factoryInventoryAPI = {
   },
 };
 
-export { notificationsAPI, returnsAPI, salesAPI };
+export { notificationsAPI, returnsAPI, salesAPI, usersAPI, branchesAPI };
 export default api;

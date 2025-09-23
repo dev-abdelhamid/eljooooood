@@ -1,90 +1,7 @@
-
 import axios from 'axios';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
-const isRtl = localStorage.getItem('language') === 'ar';
-
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 30000,
-  headers: { 'Content-Type': 'application/json' },
-  params: { isRtl: isRtl.toString() },
-});
+import api from './api';
 
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
-
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    console.log(`[${new Date().toISOString()}] API request:`, {
-      url: config.url,
-      method: config.method,
-      headers: config.headers,
-      params: config.params,
-    });
-    return config;
-  },
-  (error) => {
-    console.error(`[${new Date().toISOString()}] API request error:`, error);
-    return Promise.reject(error);
-  }
-);
-
-api.interceptors.response.use(
-  (response) => response.data,
-  async (error) => {
-    const originalRequest = error.config;
-    console.error(`[${new Date().toISOString()}] API response error:`, {
-      url: error.config?.url,
-      method: error.config?.method,
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message,
-    });
-    let message = error.response?.data?.message || 'خطأ غير متوقع';
-    if (error.response?.status === 400) {
-      message = error.response?.data?.message || 'بيانات غير صالحة';
-      if (error.response?.data?.field) {
-        message = `${message}: ${error.response.data.field} = ${error.response.data.value}`;
-      }
-    }
-    if (error.response?.status === 403) message = error.response?.data?.message || 'عملية غير مصرح بها';
-    if (error.response?.status === 404) message = error.response?.data?.message || 'المورد غير موجود';
-    if (error.response?.status === 429) message = 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا';
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      try {
-        const refreshToken = localStorage.getItem('refreshToken');
-        if (!refreshToken) {
-          console.error(`[${new Date().toISOString()}] No refresh token available`);
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          localStorage.removeItem('refreshToken');
-          window.location.href = '/login';
-          return Promise.reject({ message: 'التوكن منتهي الصلاحية ولا يوجد توكن منعش', status: 401 });
-        }
-        const response = await axios.post<{ accessToken: string; refreshToken?: string }>(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
-        const { accessToken, refreshToken: newRefreshToken } = response.data;
-        localStorage.setItem('token', accessToken);
-        if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
-        console.log(`[${new Date().toISOString()}] Token refreshed successfully`);
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-        return api(originalRequest);
-      } catch (refreshError) {
-        console.error(`[${new Date().toISOString()}] Refresh token failed:`, refreshError);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        localStorage.removeItem('refreshToken');
-        window.location.href = '/login';
-        return Promise.reject({ message: 'فشل تجديد التوكن', status: 401 });
-      }
-    }
-    return Promise.reject({ message, status: error.response?.status });
-  }
-);
 
 export const branchesAPI = {
   getAll: async () => {
@@ -106,7 +23,9 @@ export const branchesAPI = {
     nameEn?: string;
     code: string;
     address: string;
+    addressEn?: string;
     city: string;
+    cityEn?: string;
     phone?: string;
     user: {
       name: string;
@@ -123,7 +42,9 @@ export const branchesAPI = {
       nameEn: branchData.nameEn?.trim(),
       code: branchData.code.trim(),
       address: branchData.address.trim(),
+      addressEn: branchData.addressEn?.trim(),
       city: branchData.city.trim(),
+      cityEn: branchData.cityEn?.trim(),
       phone: branchData.phone?.trim(),
       user: {
         name: branchData.user.name.trim(),
@@ -143,7 +64,9 @@ export const branchesAPI = {
     nameEn?: string;
     code: string;
     address: string;
+    addressEn?: string;
     city: string;
+    cityEn?: string;
     phone?: string;
     user: {
       name: string;
@@ -163,7 +86,9 @@ export const branchesAPI = {
       nameEn: branchData.nameEn?.trim(),
       code: branchData.code.trim(),
       address: branchData.address.trim(),
+      addressEn: branchData.addressEn?.trim(),
       city: branchData.city.trim(),
+      cityEn: branchData.cityEn?.trim(),
       phone: branchData.phone?.trim(),
       user: {
         name: branchData.user.name.trim(),
