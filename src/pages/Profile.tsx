@@ -220,11 +220,11 @@ export function Profile() {
       <div className="mx-auto max-w-6xl p-4 sm:p-6">
         <p className="text-red-500">{error || 'No profile data'}</p>
       </div>
-    );
+    );md
   }
 
   return (
-    <div className={`mx-auto max-w-6xl p-4 sm:p-6 bg-gray-100 ${isRtl ? 'rtl font-arabic' : 'ltr font-sans'}`}>
+    <div className={`mx-auto p-4 `}>
       <h1 className="text-2xl font-bold text-gray-900 mb-6">{t.profile}</h1>
 
       <Card className="p-6 bg-white rounded-2xl shadow-sm">
