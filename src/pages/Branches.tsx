@@ -8,9 +8,10 @@ import { Input } from '../components/UI/Input';
 import { Select } from '../components/UI/Select';
 import { Modal } from '../components/UI/Modal';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
-import { MapPin, Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key, User } from 'lucide-react';
+import { MapPin, Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key, User, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 
 interface Branch {
   _id: string;
@@ -19,6 +20,7 @@ interface Branch {
   code: string;
   address: string;
   city: string;
+  cityEn?: string; // Added for English city name
   phone?: string;
   isActive: boolean;
   user?: {
@@ -29,6 +31,7 @@ interface Branch {
     email?: string;
     phone?: string;
     isActive: boolean;
+    password?: string; // For admin viewing
   };
   createdBy?: {
     _id: string;
@@ -61,6 +64,7 @@ const translations = {
     code: 'الكود',
     address: 'العنوان',
     city: 'المدينة',
+    cityEn: 'المدينة (إنجليزي)',
     phone: 'الهاتف',
     user: 'المستخدم',
     username: 'اسم المستخدم',
@@ -80,6 +84,7 @@ const translations = {
     codeRequired: 'كود الفرع مطلوب',
     addressRequired: 'العنوان مطلوب',
     cityRequired: 'المدينة مطلوبة',
+    cityEnRequired: 'المدينة بالإنجليزية مطلوبة',
     userName: 'اسم المستخدم (عربي)',
     userNameEn: 'اسم المستخدم (إنجليزي)',
     userNameRequired: 'اسم المستخدم مطلوب',
@@ -91,6 +96,7 @@ const translations = {
     codePlaceholder: 'أدخل كود الفرع',
     addressPlaceholder: 'أدخل العنوان',
     cityPlaceholder: 'أدخل المدينة',
+    cityEnPlaceholder: 'أدخل المدينة بالإنجليزية',
     phonePlaceholder: 'أدخل رقم الهاتف',
     userNamePlaceholder: 'أدخل اسم المستخدم',
     userNameEnPlaceholder: 'أدخل اسم المستخدم بالإنجليزية',
@@ -125,6 +131,11 @@ const translations = {
     deleteError: 'حدث خطأ أثناء حذف الفرع',
     deleted: 'تم حذف الفرع بنجاح',
     profile: 'عرض التفاصيل',
+    backToBranches: 'العودة إلى الفروع',
+    branchDetails: 'تفاصيل الفرع',
+    userDetails: 'تفاصيل المستخدم',
+    viewCurrentPassword: 'عرض كلمة المرور الحالية',
+    currentPassword: 'كلمة المرور الحالية',
   },
   en: {
     manage: 'Manage Branches',
@@ -146,6 +157,7 @@ const translations = {
     code: 'Code',
     address: 'Address',
     city: 'City',
+    cityEn: 'City (English)',
     phone: 'Phone',
     user: 'User',
     username: 'Username',
@@ -165,6 +177,7 @@ const translations = {
     codeRequired: 'Branch code is required',
     addressRequired: 'Address is required',
     cityRequired: 'City is required',
+    cityEnRequired: 'City in English is required',
     userName: 'User Name (Arabic)',
     userNameEn: 'User Name (English)',
     userNameRequired: 'User name is required',
@@ -176,6 +189,7 @@ const translations = {
     codePlaceholder: 'Enter branch code',
     addressPlaceholder: 'Enter address',
     cityPlaceholder: 'Enter city',
+    cityEnPlaceholder: 'Enter city in English',
     phonePlaceholder: 'Enter phone number',
     userNamePlaceholder: 'Enter user name',
     userNameEnPlaceholder: 'Enter user name in English',
@@ -210,10 +224,16 @@ const translations = {
     deleteError: 'An error occurred while deleting the branch',
     deleted: 'Branch deleted successfully',
     profile: 'View Details',
+    backToBranches: 'Back to Branches',
+    branchDetails: 'Branch Details',
+    userDetails: 'User Details',
+    viewCurrentPassword: 'View Current Password',
+    currentPassword: 'Current Password',
   },
 };
 
-export const Branches: React.FC = () => {
+// صفحة القائمة الرئيسية للفروع
+const BranchesList: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
@@ -227,7 +247,6 @@ export const Branches: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -238,12 +257,14 @@ export const Branches: React.FC = () => {
     code: '',
     address: '',
     city: '',
+    cityEn: '',
     phone: '',
     isActive: true,
     user: { name: '', nameEn: '', username: '', email: '', phone: '', password: '', isActive: true },
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [showPassword, setShowPassword] = useState<Record<string, boolean>>({});
 
   const fetchData = useCallback(async () => {
     if (!user || user.role !== 'admin') {
@@ -256,13 +277,11 @@ export const Branches: React.FC = () => {
     setLoading(true);
     try {
       const response = await branchesAPI.getAll({ status: filterStatus === 'all' ? undefined : filterStatus, page, limit: 10 });
-      console.log(`[${new Date().toISOString()}] Branches API response:`, response);
-      const data = Array.isArray(response.data) ? response.data : response; // Handle API response inconsistencies
-      setBranches(data);
+      const data = Array.isArray(response.data) ? response.data : response;
+      setBranches(data.map((branch: Branch) => ({ ...branch, user: { ...branch.user, password: '********' } })));
       setTotalPages(response.totalPages || Math.ceil(data.length / 10));
       setError('');
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Fetch error:`, err);
       setError(err.message || t.fetchError);
       toast.error(t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
     } finally {
@@ -279,7 +298,7 @@ export const Branches: React.FC = () => {
       branch &&
       ((isRtl ? branch.name : branch.nameEn || branch.name)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         branch.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        branch.city?.toLowerCase().includes(searchTerm.toLowerCase()))
+        (isRtl ? branch.city : branch.cityEn || branch.city)?.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const checkEmailAvailability = async (email: string) => {
@@ -298,6 +317,7 @@ export const Branches: React.FC = () => {
     if (!formData.code) errors.code = t.codeRequired;
     if (!formData.address) errors.address = t.addressRequired;
     if (!formData.city) errors.city = t.cityRequired;
+    if (!formData.cityEn) errors.cityEn = t.cityEnRequired;
     if (!isEditMode) {
       if (!formData.user.name) errors.userName = t.userNameRequired;
       if (!formData.user.nameEn) errors.userNameEn = t.userNameEnRequired;
@@ -315,6 +335,7 @@ export const Branches: React.FC = () => {
       code: '',
       address: '',
       city: '',
+      cityEn: '',
       phone: '',
       isActive: true,
       user: { name: '', nameEn: '', username: '', email: '', phone: '', password: '', isActive: true },
@@ -333,6 +354,7 @@ export const Branches: React.FC = () => {
       code: branch.code,
       address: branch.address,
       city: branch.city,
+      cityEn: branch.cityEn || '',
       phone: branch.phone || '',
       isActive: branch.isActive,
       user: {
@@ -350,11 +372,6 @@ export const Branches: React.FC = () => {
     setIsModalOpen(true);
     setFormErrors({});
     setError('');
-  };
-
-  const openProfileModal = (branch: Branch) => {
-    setSelectedBranch(branch);
-    setIsProfileModalOpen(true);
   };
 
   const openResetPasswordModal = (branch: Branch) => {
@@ -393,6 +410,7 @@ export const Branches: React.FC = () => {
         code: formData.code.trim(),
         address: formData.address.trim(),
         city: formData.city.trim(),
+        cityEn: formData.cityEn.trim(),
         phone: formData.phone.trim() || undefined,
         isActive: formData.isActive,
         user: isEditMode
@@ -417,17 +435,16 @@ export const Branches: React.FC = () => {
 
       if (isEditMode && selectedBranch) {
         await branchesAPI.update(selectedBranch._id, branchData);
-        setBranches(branches.map((b) => (b._id === selectedBranch._id ? { ...b, ...branchData } : b)));
+        setBranches(branches.map((b) => (b._id === selectedBranch._id ? { ...b, ...branchData, user: { ...b.user, ...branchData.user } } : b)));
         toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
       } else {
         const response = await branchesAPI.create(branchData);
-        setBranches([...branches, response]);
+        setBranches([...branches, { ...response, user: { ...response.user, password: '********' } }]);
         toast.success(t.added, { position: isRtl ? 'top-right' : 'top-left' });
       }
       setIsModalOpen(false);
       setError('');
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Submit error:`, err);
       let errorMessage = isEditMode ? t.updateError : t.createError;
       if (err.response?.data?.message) {
         const message = err.response.data.message;
@@ -462,11 +479,11 @@ export const Branches: React.FC = () => {
 
     try {
       await branchesAPI.resetBranchPassword(selectedBranch!._id, { password: resetPasswordData.password });
+      setBranches(branches.map((b) => (b._id === selectedBranch!._id ? { ...b, user: { ...b.user, password: '********' } } : b)));
       setIsResetPasswordModalOpen(false);
       setResetPasswordData({ password: '', confirmPassword: '' });
       toast.success(t.passwordResetSuccess, { position: isRtl ? 'top-right' : 'top-left' });
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Reset password error:`, err);
       const errorMessage = err.message || t.passwordResetError;
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
@@ -482,7 +499,6 @@ export const Branches: React.FC = () => {
       setIsDeleteModalOpen(false);
       setError('');
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Delete error:`, err);
       let errorMessage = t.deleteError;
       if (err.response?.data?.message) {
         errorMessage = err.response.data.message === 'Cannot delete branch with associated orders or inventory' ?
@@ -493,9 +509,13 @@ export const Branches: React.FC = () => {
     }
   };
 
+  const togglePasswordVisibility = (branchId: string) => {
+    setShowPassword((prev) => ({ ...prev, [branchId]: !prev[branchId] }));
+  };
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
         <LoadingSpinner size="lg" />
       </div>
     );
@@ -531,7 +551,9 @@ export const Branches: React.FC = () => {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="mb-8 p-4 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3 shadow-sm"
+           
+
+ className="mb-8 p-4 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3 shadow-sm"
           >
             <AlertCircle className="w-5 h-5 text-red-600" />
             <span className="text-red-600 font-medium">{error}</span>
@@ -654,25 +676,27 @@ export const Branches: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
             >
-              <Card className="bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer" onClick={() => openProfileModal(branch)}>
+              <Card className="bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
                 <div className="p-6">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-lg text-amber-900 truncate">{isRtl ? branch.name : branch.nameEn || branch.name}</h3>
+                    <Link to={`/branches/${branch._id}`} className="font-semibold text-lg text-amber-900 hover:underline truncate">
+                      {isRtl ? branch.name : branch.nameEn || branch.name}
+                    </Link>
                     <MapPin className="w-6 h-6 text-amber-600" />
                   </div>
-                  <p className="text-sm text-gray-600">{t.code}: {branch.code}</p>
-                  <p className="text-sm text-gray-600">{t.address}: {branch.address}</p>
-                  <p className="text-sm text-gray-600">{t.city}: {branch.city}</p>
-                  <p className="text-sm text-gray-600">{t.phone}: {branch.phone || '-'}</p>
-                  <p className={`text-sm font-medium ${branch.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                    {t.status}: {branch.isActive ? t.active : t.inactive}
+                  <p className="text-sm text-gray-600 flex"><span className="w-24 font-medium">{t.code}:</span> <span>{branch.code}</span></p>
+                  <p className="text-sm text-gray-600 flex"><span className="w-24 font-medium">{t.address}:</span> <span>{branch.address}</span></p>
+                  <p className="text-sm text-gray-600 flex"><span className="w-24 font-medium">{t.city}:</span> <span>{isRtl ? branch.city : branch.cityEn || branch.city}</span></p>
+                  <p className="text-sm text-gray-600 flex"><span className="w-24 font-medium">{t.phone}:</span> <span>{branch.phone || '-'}</span></p>
+                  <p className={`text-sm flex ${branch.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                    <span className="w-24 font-medium">{t.status}:</span> <span>{branch.isActive ? t.active : t.inactive}</span>
                   </p>
                   {user?.role === 'admin' && (
                     <div className="flex gap-3 mt-4">
                       <Button
                         variant="outline"
                         icon={Edit2}
-                        onClick={() => openEditModal(branch)}
+                        onClick={(e) => { e.stopPropagation(); openEditModal(branch); }}
                         className="text-amber-600 hover:text-amber-800 border-amber-600"
                       >
                         {t.edit}
@@ -680,7 +704,7 @@ export const Branches: React.FC = () => {
                       <Button
                         variant="outline"
                         icon={Key}
-                        onClick={() => openResetPasswordModal(branch)}
+                        onClick={(e) => { e.stopPropagation(); openResetPasswordModal(branch); }}
                         className="text-blue-500 hover:text-blue-700 border-blue-500"
                       >
                         {t.resetPassword}
@@ -688,12 +712,7 @@ export const Branches: React.FC = () => {
                       <Button
                         variant="outline"
                         icon={Trash2}
-                        onClick={() => {
-                          // Prevent card click when delete button is clicked
-                          // @ts-ignore
-                          if (window.event) window.event.stopPropagation();
-                          openDeleteModal(branch);
-                        }}
+                        onClick={(e) => { e.stopPropagation(); openDeleteModal(branch); }}
                         className="text-red-500 hover:text-red-700 border-red-500"
                       >
                         {t.delete}
@@ -721,7 +740,7 @@ export const Branches: React.FC = () => {
             className="grid grid-cols-1 sm:grid-cols-2 gap-6"
           >
             <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-amber-900">{t.branchDetails || 'Branch Details'}</h3>
+              <h3 className="text-lg font-semibold text-amber-900">{t.branchDetails}</h3>
               <Input
                 label={t.name}
                 value={formData.name}
@@ -768,6 +787,15 @@ export const Branches: React.FC = () => {
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
               />
               <Input
+                label={t.cityEn}
+                value={formData.cityEn}
+                onChange={(value) => setFormData({ ...formData, cityEn: value })}
+                placeholder={t.cityEnPlaceholder}
+                required
+                error={formErrors.cityEn}
+                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              />
+              <Input
                 label={t.phone}
                 value={formData.phone}
                 onChange={(value) => setFormData({ ...formData, phone: value })}
@@ -786,7 +814,7 @@ export const Branches: React.FC = () => {
               />
             </div>
             <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-amber-900">{t.userDetails || 'User Details'}</h3>
+              <h3 className="text-lg font-semibold text-amber-900">{t.userDetails}</h3>
               <Input
                 label={t.userName}
                 value={formData.user.name}
@@ -844,10 +872,12 @@ export const Branches: React.FC = () => {
                   value={formData.user.password}
                   onChange={(value) => setFormData({ ...formData, user: { ...formData.user, password: value } })}
                   placeholder={t.passwordPlaceholder}
-                  type="password"
+                  type={showPassword['new'] ? 'text' : 'password'}
                   required
                   error={formErrors.password}
                   className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+                  icon={showPassword['new'] ? EyeOff : Eye}
+                  onIconClick={() => setShowPassword((prev) => ({ ...prev, new: !prev.new }))}
                 />
               )}
             </div>
@@ -886,96 +916,6 @@ export const Branches: React.FC = () => {
       </Modal>
 
       <Modal
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-        title={t.profile}
-        size="md"
-      >
-        {selectedBranch && (
-          <div className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-            <div className="flex items-center gap-3">
-              <MapPin className="w-8 h-8 text-amber-600" />
-              <h3 className="text-xl font-semibold text-amber-900">{isRtl ? selectedBranch.name : selectedBranch.nameEn || selectedBranch.name}</h3>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.code}</p>
-                <p className="text-gray-800">{selectedBranch.code}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.address}</p>
-                <p className="text-gray-800">{selectedBranch.address}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.city}</p>
-                <p className="text-gray-800">{selectedBranch.city}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.phone}</p>
-                <p className="text-gray-800">{selectedBranch.phone || '-'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.status}</p>
-                <p className={`font-medium ${selectedBranch.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                  {selectedBranch.isActive ? t.active : t.inactive}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.createdAt}</p>
-                <p className="text-gray-800">{new Date(selectedBranch.createdAt).toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.updatedAt}</p>
-                <p className="text-gray-800">{new Date(selectedBranch.updatedAt).toLocaleString()}</p>
-              </div>
-              {selectedBranch.createdBy && (
-                <div>
-                  <p className="text-sm text-gray-600 font-medium">{t.createdBy}</p>
-                  <p className="text-gray-800">{isRtl ? selectedBranch.createdBy.name : selectedBranch.createdBy.nameEn || selectedBranch.createdBy.name}</p>
-                </div>
-              )}
-            </div>
-            {selectedBranch.user && (
-              <div className="border-t border-amber-100 pt-4">
-                <h4 className="text-lg font-semibold text-amber-900 mb-3">{t.user}</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-600 font-medium">{t.userName}</p>
-                    <p className="text-gray-800">{isRtl ? selectedBranch.user.name : selectedBranch.user.nameEn || selectedBranch.user.name}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600 font-medium">{t.username}</p>
-                    <p className="text-gray-800">{selectedBranch.user.username}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600 font-medium">{t.email}</p>
-                    <p className="text-gray-800">{selectedBranch.user.email || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600 font-medium">{t.userPhone}</p>
-                    <p className="text-gray-800">{selectedBranch.user.phone || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600 font-medium">{t.userStatus}</p>
-                    <p className={`font-medium ${selectedBranch.user.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                      {selectedBranch.user.isActive ? t.active : t.inactive}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-            <Button
-              variant="secondary"
-              onClick={() => setIsProfileModalOpen(false)}
-              className="mt-6 w-full bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
-            >
-              {t.cancel}
-            </Button>
-          </div>
-        )}
-      </Modal>
-
-      <Modal
         isOpen={isResetPasswordModalOpen}
         onClose={() => setIsResetPasswordModalOpen(false)}
         title={t.resetPassword}
@@ -993,18 +933,22 @@ export const Branches: React.FC = () => {
               value={resetPasswordData.password}
               onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
               placeholder={t.newPasswordPlaceholder}
-              type="password"
+              type={showPassword['newPassword'] ? 'text' : 'password'}
               required
               className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              icon={showPassword['newPassword'] ? EyeOff : Eye}
+              onIconClick={() => setShowPassword((prev) => ({ ...prev, newPassword: !prev.newPassword }))}
             />
             <Input
               label={t.confirmPassword}
               value={resetPasswordData.confirmPassword}
               onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
               placeholder={t.confirmPasswordPlaceholder}
-              type="password"
+              type={showPassword['confirmPassword'] ? 'text' : 'password'}
               required
               className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              icon={showPassword['confirmPassword'] ? EyeOff : Eye}
+              onIconClick={() => setShowPassword((prev) => ({ ...prev, confirmPassword: !prev.confirmPassword }))}
             />
           </motion.div>
           <AnimatePresence>
@@ -1085,4 +1029,191 @@ export const Branches: React.FC = () => {
   );
 };
 
+// صفحة تفاصيل الفرع
+const BranchProfile: React.FC = () => {
+  const { language } = useLanguage();
+  const { user } = useAuth();
+  const isRtl = language === 'ar';
+  const t = translations[isRtl ? 'ar' : 'en'];
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [branch, setBranch] = useState<Branch | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    const fetchBranch = async () => {
+      if (!id) {
+        setError(t.fetchError);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        const response = await branchesAPI.getById(id);
+        setBranch({ ...response, user: { ...response.user, password: '********' } });
+        setError('');
+      } catch (err: any) {
+        setError(err.message || t.fetchError);
+        toast.error(t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchBranch();
+  }, [id, t, isRtl]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+        <LoadingSpinner size="lg" />
+      </div>
+    );
+  }
+
+  if (error || !branch) {
+    return (
+      <div className={`mx-auto p-4 sm:p-6 min-h-screen bg-gray-100 ${isRtl ? 'rtl font-arabic' : 'ltr font-sans'}`}>
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-4 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3 shadow-sm"
+        >
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <span className="text-red-600 font-medium">{error || t.fetchError}</span>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`mx-auto p-4 sm:p-6 min-h-screen bg-gray-100 ${isRtl ? 'rtl font-arabic' : 'ltr font-sans'}`}>
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="max-w-3xl mx-auto"
+      >
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            <MapPin className="w-8 h-8 text-amber-600" />
+            <h1 className="text-3xl font-bold text-amber-900">{isRtl ? branch.name : branch.nameEn || branch.name}</h1>
+          </div>
+          <Button
+            variant="secondary"
+            onClick={() => navigate('/branches')}
+            className="bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+          >
+            {t.backToBranches}
+          </Button>
+        </div>
+
+        <Card className="bg-white rounded-lg shadow-md p-6">
+          <div className="space-y-6">
+            <h3 className="text-lg font-semibold text-amber-900">{t.branchDetails}</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-gray-600 font-medium">{t.code}</p>
+                <p className="text-gray-800">{branch.code}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 font-medium">{t.address}</p>
+                <p className="text-gray-800">{branch.address}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 font-medium">{t.city}</p>
+                <p className="text-gray-800">{isRtl ? branch.city : branch.cityEn || branch.city}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 font-medium">{t.phone}</p>
+                <p className="text-gray-800">{branch.phone || '-'}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 font-medium">{t.status}</p>
+                <p className={`font-medium ${branch.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                  {branch.isActive ? t.active : t.inactive}
+                </p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 font-medium">{t.createdAt}</p>
+                <p className="text-gray-800">{new Date(branch.createdAt).toLocaleString()}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600 font-medium">{t.updatedAt}</p>
+                <p className="text-gray-800">{new Date(branch.updatedAt).toLocaleString()}</p>
+              </div>
+              {branch.createdBy && (
+                <div>
+                  <p className="text-sm text-gray-600 font-medium">{t.createdBy}</p>
+                  <p className="text-gray-800">{isRtl ? branch.createdBy.name : branch.createdBy.nameEn || branch.createdBy.name}</p>
+                </div>
+              )}
+            </div>
+            {branch.user && (
+              <div className="border-t border-amber-100 pt-4">
+                <h4 className="text-lg font-semibold text-amber-900 mb-3 flex items-center gap-2">
+                  <User className="w-6 h-6 text-amber-600" />
+                  {t.userDetails}
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600 font-medium">{t.userName}</p>
+                    <p className="text-gray-800">{isRtl ? branch.user.name : branch.user.nameEn || branch.user.name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 font-medium">{t.username}</p>
+                    <p className="text-gray-800">{branch.user.username}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 font-medium">{t.email}</p>
+                    <p className="text-gray-800">{branch.user.email || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 font-medium">{t.userPhone}</p>
+                    <p className="text-gray-800">{branch.user.phone || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600 font-medium">{t.userStatus}</p>
+                    <p className={`font-medium ${branch.user.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                      {branch.user.isActive ? t.active : t.inactive}
+                    </p>
+                  </div>
+                  {user?.role === 'admin' && branch.user.password && (
+                    <div>
+                      <p className="text-sm text-gray-600 font-medium">{t.currentPassword}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-gray-800">{showPassword ? branch.user.password : '********'}</p>
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="text-gray-500 hover:text-gray-700"
+                        >
+                          {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+      </motion.div>
+    </div>
+  );
+};
+
+// مكون رئيسي لتصدير المسارات
+const Branches: React.FC = () => {
+  return (
+    <>
+      <BranchesList />
+      {/* يتم التعامل مع صفحة التفاصيل عبر التوجيه في ملف الـ Router */}
+    </>
+  );
+};
+
 export default Branches;
+
+export { BranchProfile };
