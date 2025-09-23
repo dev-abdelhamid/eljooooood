@@ -19,9 +19,9 @@ interface Product {
   department: { _id: string; name: string; nameEn?: string };
   price: number;
   unit: 'كيلو' | 'قطعة' | 'علبة' | 'صينية';
+  unitEn?: 'Kilogram' | 'Piece' | 'Box' | 'Tray';
   description?: string;
   displayName: string;
-  displayUnit: string;
 }
 
 interface Department {
@@ -29,6 +29,13 @@ interface Department {
   name: string;
   nameEn?: string;
 }
+
+const unitTranslations: Record<Product['unit'], { ar: string; en: string }> = {
+  'كيلو': { ar: 'كيلو', en: 'Kilogram' },
+  'قطعة': { ar: 'قطعة', en: 'Piece' },
+  'علبة': { ar: 'علبة', en: 'Box' },
+  'صينية': { ar: 'صينية', en: 'Tray' },
+};
 
 export function Products() {
   const { t, language } = useLanguage();
@@ -49,6 +56,7 @@ export function Products() {
     department: '',
     price: '',
     unit: 'قطعة' as Product['unit'],
+    unitEn: 'Piece' as Product['unitEn'],
     description: '',
   });
 
@@ -65,29 +73,33 @@ export function Products() {
         console.log('Fetching products with params:', { department: filterDepartment, search: searchTerm });
         console.log('API URL:', import.meta.env.VITE_API_URL);
         const [productsResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 1000 }),
-          departmentAPI.getAll({ limit: 1000 }),
+          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 100 }),
+          departmentAPI.getAll({ limit: 100 }),
         ]);
         console.log('Products response:', productsResponse);
         console.log('Departments response:', departmentsResponse);
 
-        setProducts(productsResponse.data);
+        const productsWithDisplayName = productsResponse.data.map((product: Product) => ({
+          ...product,
+          displayName: language === 'ar' ? product.name : (product.nameEn || product.name),
+        }));
+        setProducts(productsWithDisplayName);
         setDepartments(departmentsResponse.data);
         setError('');
       } catch (err: any) {
         console.error('Fetch error:', err);
         console.error('Error details:', {
-          status: err.response?.status,
-          data: err.response?.data,
+          status: err.status,
+          message: err.message,
           url: err.config?.url,
         });
-        setError(err.response?.data?.message || t('products.fetchError'));
+        setError(err.message || t('products.fetchError'));
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [t, user, filterDepartment, searchTerm]);
+  }, [t, user, filterDepartment, searchTerm, language]);
 
   const filteredProducts = products.filter(
     (product) =>
@@ -110,6 +122,7 @@ export function Products() {
         department: product.department._id,
         price: product.price.toString(),
         unit: product.unit,
+        unitEn: product.unitEn || unitTranslations[product.unit].en,
         description: product.description || '',
       });
     } else {
@@ -121,6 +134,7 @@ export function Products() {
         department: departments[0]?._id || '',
         price: '',
         unit: 'قطعة',
+        unitEn: 'Piece',
         description: '',
       });
     }
@@ -143,6 +157,7 @@ export function Products() {
         department: formData.department,
         price: parseFloat(formData.price),
         unit: formData.unit,
+        unitEn: formData.unitEn || undefined,
         description: formData.description || undefined,
       };
       console.log('Submitting product:', productData);
@@ -150,17 +165,22 @@ export function Products() {
         const updatedProduct = await productsAPI.update(editingProduct._id, productData);
         setProducts(
           products.map((p) =>
-            p._id === editingProduct._id ? updatedProduct : p
+            p._id === editingProduct._id
+              ? { ...updatedProduct, displayName: language === 'ar' ? updatedProduct.name : (updatedProduct.nameEn || updatedProduct.name) }
+              : p
           )
         );
       } else {
         const newProduct = await productsAPI.create(productData);
-        setProducts([...products, newProduct]);
+        setProducts([
+          ...products,
+          { ...newProduct, displayName: language === 'ar' ? newProduct.name : (newProduct.nameEn || newProduct.name) },
+        ]);
       }
       closeModal();
     } catch (err: any) {
       console.error('Submit error:', err);
-      setError(err.response?.data?.message || t('products.saveError'));
+      setError(err.message || t('products.saveError'));
     }
   };
 
@@ -175,7 +195,7 @@ export function Products() {
         setProducts(products.filter((p) => p._id !== id));
       } catch (err: any) {
         console.error('Delete error:', err);
-        setError(err.response?.data?.message || t('products.deleteError'));
+        setError(err.message || t('products.deleteError'));
       }
     }
   };
@@ -268,7 +288,9 @@ export function Products() {
                 <p className="text-sm text-blue-500">
                   {t('products.department')}: {language === 'ar' ? product.department.name : (product.department.nameEn || product.department.name)}
                 </p>
-                <p className="text-sm text-gray-500">{t('products.unit')}: {product.displayUnit}</p>
+                <p className="text-sm text-gray-500">
+                  {t('products.unit')}: {language === 'ar' ? unitTranslations[product.unit].ar : (product.unitEn || unitTranslations[product.unit].en)}
+                </p>
                 {product.description && <p className="text-xs text-gray-400 mt-1">{product.description}</p>}
                 <div className="flex items-center justify-between mt-3">
                   <span className="text-lg font-semibold text-gray-800">{product.price} {t('products.currency')}</span>
@@ -347,14 +369,18 @@ export function Products() {
             />
             <Select
               label={t('products.unit')}
-              options={[
-                { value: 'كيلو', label: t('products.units.kilo') },
-                { value: 'قطعة', label: t('products.units.piece') },
-                { value: 'علبة', label: t('products.units.box') },
-                { value: 'صينية', label: t('products.units.tray') },
-              ]}
+              options={Object.entries(unitTranslations).map(([value, { ar, en }]) => ({
+                value,
+                label: language === 'ar' ? ar : en,
+              }))}
               value={formData.unit}
-              onChange={(value) => setFormData({ ...formData, unit: value as Product['unit'] })}
+              onChange={(value) =>
+                setFormData({
+                  ...formData,
+                  unit: value as Product['unit'],
+                  unitEn: unitTranslations[value as Product['unit']].en,
+                })
+              }
               required
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />
