@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI } from '../services/api';
@@ -8,7 +9,7 @@ import { Input } from '../components/UI/Input';
 import { Select } from '../components/UI/Select';
 import { Modal } from '../components/UI/Modal';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
-import { MapPin, Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key, User } from 'lucide-react';
+import { MapPin, Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -165,7 +166,7 @@ const translations = {
     createdAt: 'Created At',
     updatedAt: 'Updated At',
     edit: 'Edit',
-    resetPassword: 'Reset Password',
+    resetPassword: 'Reset Whitman',
     delete: 'Delete',
     profile: 'View Details',
     name: 'Branch Name (Arabic)',
@@ -184,9 +185,7 @@ const translations = {
     namePlaceholder: 'Enter branch name',
     nameEnPlaceholder: 'Enter branch name in English',
     addressPlaceholder: 'Enter address',
-    addressEnPlaceholder: 'Enter address in English',
     cityPlaceholder: 'Enter city',
-    cityEnPlaceholder: 'Enter city in English',
     phonePlaceholder: 'Enter phone number',
     userNamePlaceholder: 'Enter user name',
     userNameEnPlaceholder: 'Enter user name in English',
@@ -228,6 +227,7 @@ const translations = {
 export const Branches: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -244,7 +244,6 @@ export const Branches: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -386,12 +385,6 @@ export const Branches: React.FC = () => {
     setSelectedBranch(branch);
     setIsModalOpen(true);
     setFormErrors({});
-    setError('');
-  };
-
-  const openProfileModal = (branch: Branch) => {
-    setSelectedBranch(branch);
-    setIsProfileModalOpen(true);
     setError('');
   };
 
@@ -726,7 +719,7 @@ export const Branches: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
             >
-              <Card className="bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer" onClick={() => openProfileModal(branch)}>
+              <Card className="bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer" onClick={() => navigate(`/branches/${branch._id}`)}>
                 <div className="p-4 sm:p-6">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-base font-semibold text-amber-900 truncate">{isRtl ? branch.name : branch.nameEn || branch.name}</h3>
@@ -960,96 +953,6 @@ export const Branches: React.FC = () => {
             </Button>
           </div>
         </form>
-      </Modal>
-
-      <Modal
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-        title={t.profile}
-        size="md"
-      >
-        {selectedBranch && (
-          <div className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-            <div className="flex items-center gap-3">
-              <MapPin className="w-6 h-6 text-amber-600" />
-              <h3 className="text-lg font-semibold text-amber-900">{isRtl ? selectedBranch.name : selectedBranch.nameEn || selectedBranch.name}</h3>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.code}</p>
-                <p className="text-sm text-gray-800">{selectedBranch.code}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.address}</p>
-                <p className="text-sm text-gray-800">{isRtl ? selectedBranch.address : selectedBranch.addressEn || selectedBranch.address}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.city}</p>
-                <p className="text-sm text-gray-800">{isRtl ? selectedBranch.city : selectedBranch.cityEn || selectedBranch.city}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.phone}</p>
-                <p className="text-sm text-gray-800">{selectedBranch.phone || '-'}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.status}</p>
-                <p className={`text-sm font-medium ${selectedBranch.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                  {selectedBranch.isActive ? t.active : t.inactive}
-                </p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.createdAt}</p>
-                <p className="text-sm text-gray-800">{new Date(selectedBranch.createdAt).toLocaleString()}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">{t.updatedAt}</p>
-                <p className="text-sm text-gray-800">{new Date(selectedBranch.updatedAt).toLocaleString()}</p>
-              </div>
-              {selectedBranch.createdBy && (
-                <div>
-                  <p className="text-sm text-gray-600 font-medium">{t.createdBy}</p>
-                  <p className="text-sm text-gray-800">{isRtl ? selectedBranch.createdBy.name : selectedBranch.createdBy.nameEn || selectedBranch.createdBy.name}</p>
-                </div>
-              )}
-            </div>
-            {selectedBranch.user && (
-              <div className="border-t border-amber-100 pt-4">
-                <h4 className="text-base font-semibold text-amber-900 mb-3">{t.userDetails}</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-gray-600 font-medium">{t.userName}</p>
-                    <p className="text-sm text-gray-800">{isRtl ? selectedBranch.user.name : selectedBranch.user.nameEn || selectedBranch.user.name}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600 font-medium">{t.username}</p>
-                    <p className="text-sm text-gray-800">{selectedBranch.user.username}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600 font-medium">{t.email}</p>
-                    <p className="text-sm text-gray-800">{selectedBranch.user.email || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600 font-medium">{t.userPhone}</p>
-                    <p className="text-sm text-gray-800">{selectedBranch.user.phone || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600 font-medium">{t.userStatus}</p>
-                    <p className={`text-sm font-medium ${selectedBranch.user.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                      {selectedBranch.user.isActive ? t.active : t.inactive}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-            <Button
-              variant="secondary"
-              onClick={() => setIsProfileModalOpen(false)}
-              className="mt-6 w-full bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-2.5 shadow-md transition-transform transform hover:scale-105"
-            >
-              {t.cancel}
-            </Button>
-          </div>
-        )}
       </Modal>
 
       <Modal
