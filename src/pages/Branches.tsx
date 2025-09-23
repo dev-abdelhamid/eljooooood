@@ -233,7 +233,7 @@ const translations = {
 };
 
 // صفحة القائمة الرئيسية للفروع
-const BranchesList: React.FC = () => {
+export const BranchesList: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
@@ -1030,7 +1030,7 @@ const BranchesList: React.FC = () => {
 };
 
 // صفحة تفاصيل الفرع
-const BranchProfile: React.FC = () => {
+ const BranchProfile: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
@@ -1205,7 +1205,7 @@ const BranchProfile: React.FC = () => {
 };
 
 // مكون رئيسي لتصدير المسارات
-const Branches: React.FC = () => {
+export const Branches: React.FC = () => {
   return (
     <>
       <BranchesList />
