@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { productsAPI, ordersAPI, branchesAPI, departmentAPI } from '../services/api';
-import { ShoppingCart, Plus, Minus, Trash2, Package, AlertCircle, Search, X, ChevronDown } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Trash2, Package, AlertCircle, Search, X } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
@@ -20,7 +20,7 @@ interface Product {
   name: string;
   nameEn?: string;
   code: string;
-  department: { _id: string; name: string; nameEn?: string };
+  department: { _id: string; name: string; nameEn?: string; displayName: string };
   price: number;
   unit: string;
   unitEn?: string;
@@ -33,12 +33,14 @@ interface Branch {
   _id: string;
   name: string;
   nameEn?: string;
+  displayName: string;
 }
 
 interface Department {
   _id: string;
   name: string;
   nameEn?: string;
+  displayName: string;
 }
 
 interface OrderItem {
@@ -92,7 +94,7 @@ export function NewOrder() {
   const debouncedSearch = useCallback(
     debounce((value: string) => {
       setSearchTerm(value);
-      setCurrentPage(1); // Reset to first page on new search
+      setCurrentPage(1);
     }, 300),
     []
   );
@@ -120,6 +122,10 @@ export function NewOrder() {
           ...product,
           displayName: language === 'ar' ? product.name : (product.nameEn || product.name),
           displayUnit: language === 'ar' ? product.unit : (product.unitEn || product.unit),
+          department: {
+            ...product.department,
+            displayName: language === 'ar' ? product.department.name : (product.department.nameEn || product.department.name),
+          },
         }));
         setProducts(productsWithDisplay);
         setTotalPages(productsResponse.totalPages);
@@ -294,13 +300,14 @@ export function NewOrder() {
         >
           <div className="flex items-center gap-2">
             <span className="text-sm">{toastState.message}</span>
-            <button
+            <Button
+              variant="secondary"
               onClick={() => setToastState(null)}
+              className="hover:opacity-80 p-0"
               aria-label={t('close')}
-              className="hover:opacity-80"
             >
               <X className="w-4 h-4" />
-            </button>
+            </Button>
           </div>
         </motion.div>
       )}
@@ -360,7 +367,7 @@ export function NewOrder() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+        className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4"
       >
         <h1 className="text-3xl sm:text-4xl font-bold text-amber-900 flex items-center justify-center sm:justify-start gap-3">
           <ShoppingCart className="w-8 h-8 text-amber-600" />
@@ -437,7 +444,7 @@ export function NewOrder() {
                         <h3 className="font-medium text-gray-800 text-base truncate">{product.displayName}</h3>
                         <p className="text-xs text-gray-500">{product.code}</p>
                       </div>
-                      <p className="text-sm text-amber-600">{product.department.displayName}</p>
+                      <p className="text-sm text-amber-600">{product.department.displayName || t('products.noDepartment')}</p>
                       <p className="font-semibold text-gray-900 text-sm">
                         {product.price} {t('currency')} / {product.displayUnit}
                       </p>
