@@ -207,6 +207,7 @@ export const productsAPI = {
   },
 };
 
+// Other APIs remain unchanged
 export const branchesAPI = {
   getAll: async () => {
     const response = await api.get('/branches');
@@ -227,9 +228,7 @@ export const branchesAPI = {
     nameEn?: string;
     code: string;
     address: string;
-    addressEn?: string;
     city: string;
-    cityEn?: string;
     phone?: string;
     user: {
       name: string;
@@ -246,9 +245,7 @@ export const branchesAPI = {
       nameEn: branchData.nameEn?.trim(),
       code: branchData.code.trim(),
       address: branchData.address.trim(),
-      addressEn: branchData.addressEn?.trim(),
       city: branchData.city.trim(),
-      cityEn: branchData.cityEn?.trim(),
       phone: branchData.phone?.trim(),
       user: {
         name: branchData.user.name.trim(),
@@ -268,9 +265,7 @@ export const branchesAPI = {
     nameEn?: string;
     code: string;
     address: string;
-    addressEn?: string;
     city: string;
-    cityEn?: string;
     phone?: string;
     user: {
       name: string;
@@ -290,9 +285,7 @@ export const branchesAPI = {
       nameEn: branchData.nameEn?.trim(),
       code: branchData.code.trim(),
       address: branchData.address.trim(),
-      addressEn: branchData.addressEn?.trim(),
       city: branchData.city.trim(),
-      cityEn: branchData.cityEn?.trim(),
       phone: branchData.phone?.trim(),
       user: {
         name: branchData.user.name.trim(),
@@ -695,6 +688,9 @@ export const productionAssignmentsAPI = {
     return response;
   },
 };
+
+
+
 
 export const inventoryAPI = {
   getInventory: async (params = {}) => {
