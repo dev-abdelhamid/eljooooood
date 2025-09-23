@@ -50,7 +50,6 @@ export function NewOrder() {
   const isRtl = language === 'ar';
   const navigate = useNavigate();
   const summaryRef = useRef<HTMLDivElement>(null);
-
   const [products, setProducts] = useState<Product[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -65,8 +64,6 @@ export function NewOrder() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
 
   const priorityOptions = useMemo(
     () => [
@@ -83,7 +80,6 @@ export function NewOrder() {
   const debouncedSearch = useCallback(
     debounce((value: string) => {
       setSearchTerm(value);
-      setCurrentPage(1);
     }, 300),
     []
   );
@@ -94,22 +90,19 @@ export function NewOrder() {
       navigate('/branch-orders');
       return;
     }
-
     const loadData = async () => {
       try {
         setLoading((prev) => ({ ...prev, products: true, branches: true, departments: true }));
         const [productsResponse, branchesResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ limit: 12, page: currentPage, department: filterDepartment, search: searchTerm }).finally(() =>
+          productsAPI.getAll({ limit: 100, department: filterDepartment, search: searchTerm }).finally(() =>
             setLoading((prev) => ({ ...prev, products: false }))
           ),
           branchesAPI.getAll().finally(() => setLoading((prev) => ({ ...prev, branches: false }))),
-          departmentAPI.getAll({ limit: 100 }).finally(() => setLoading((prev) => ({ ...prev, departments: false }))),
+          departmentAPI.getAll().finally(() => setLoading((prev) => ({ ...prev, departments: false }))),
         ]);
-
-        setProducts(productsResponse.data);
-        setTotalPages(productsResponse.totalPages);
+        setProducts(Array.isArray(productsResponse.data) ? productsResponse.data : productsResponse);
         setBranches(Array.isArray(branchesResponse) ? branchesResponse : []);
-        setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data : []);
+        setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data : departmentsResponse);
         if (user?.role === 'branch' && user?.branchId) {
           setBranch(user.branchId.toString());
         }
@@ -119,7 +112,7 @@ export function NewOrder() {
       }
     };
     loadData();
-  }, [isRtl, user, navigate, filterDepartment, searchTerm, currentPage]);
+  }, [isRtl, user, navigate, filterDepartment, searchTerm]);
 
   useEffect(() => {
     socket.on('connect', () => {
@@ -214,19 +207,18 @@ export function NewOrder() {
         orderNumber: `ORD-${Date.now()}`,
         branchId: user?.role === 'branch' ? user?.branchId?.toString() : branch,
         items: orderItems.map((item) => ({
-          productId: item.productId,
+          product: item.productId,
           quantity: item.quantity,
           price: item.price,
         })),
         status: 'pending',
         notes: notes.trim() || undefined,
         priority,
-        requestedDeliveryDate: new Date().toISOString(),
       };
       const response = await ordersAPI.create(orderData);
       socket.emit('newOrderFromBranch', response);
       setToastState({ message: isRtl ? 'تم إنشاء الطلب بنجاح' : 'Order created successfully', type: 'success' });
-      setTimeout(() => navigate('/orders'), 1000);
+      setTimeout(() => navigate('/branch-orders'), 1000);
     } catch (err: any) {
       setError(err.response?.data?.message || (isRtl ? 'خطأ في إنشاء الطلب' : 'Error creating order'));
       setToastState({ message: err.response?.data?.message || (isRtl ? 'خطأ في إنشاء الطلب' : 'Error creating order'), type: 'error' });
@@ -272,7 +264,6 @@ export function NewOrder() {
           </div>
         </div>
       )}
-
       {/* Confirm Modal */}
       {showConfirmModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -322,7 +313,6 @@ export function NewOrder() {
           </div>
         </div>
       )}
-
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
@@ -333,7 +323,6 @@ export function NewOrder() {
           {isRtl ? 'قم بإضافة المنتجات وتأكيد الطلب لإرساله' : 'Add products and confirm to submit your order'}
         </p>
       </div>
-
       {/* Error Message */}
       {error && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 animate-pulse">
@@ -341,7 +330,6 @@ export function NewOrder() {
           <span className="text-red-600 text-sm">{error}</span>
         </div>
       )}
-
       {/* Scroll Down Button for Small Screens */}
       {orderItems.length > 0 && (
         <div className={`lg:hidden fixed bottom-6 ${isRtl ? 'left-6' : 'right-6'} z-50`}>
@@ -354,7 +342,6 @@ export function NewOrder() {
           </button>
         </div>
       )}
-
       {/* Main Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Products Section */}
@@ -455,31 +442,7 @@ export function NewOrder() {
               })}
             </div>
           )}
-          {totalPages > 1 && (
-            <div className="flex justify-center mt-6">
-              <button
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="mx-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full transition-colors text-sm"
-                aria-label={isRtl ? 'السابق' : 'Previous'}
-              >
-                {isRtl ? 'السابق' : 'Previous'}
-              </button>
-              <span className="mx-4 self-center text-sm">
-                {isRtl ? `الصفحة ${currentPage} من ${totalPages}` : `Page ${currentPage} of ${totalPages}`}
-              </span>
-              <button
-                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="mx-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full transition-colors text-sm"
-                aria-label={isRtl ? 'التالي' : 'Next'}
-              >
-                {isRtl ? 'التالي' : 'Next'}
-              </button>
-            </div>
-          )}
         </div>
-
         {/* Order Summary and Form */}
         <div className="lg:sticky lg:top-8 space-y-4 max-h-[calc(100vh-2rem)] overflow-y-auto" ref={summaryRef}>
           <div className="p-6 bg-white rounded-2xl shadow-md">
