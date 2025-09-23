@@ -386,7 +386,7 @@ const BranchProfile: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+      <div className="flex items-center justify-center min-h-screen ">
         <LoadingSpinner size="lg" />
       </div>
     );
@@ -394,7 +394,7 @@ const BranchProfile: React.FC = () => {
 
   if (!branch) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+      <div className="flex items-center justify-center min-h-screen ">
         <Card className="p-6 text-center bg-white rounded-2xl shadow-sm">
           <h3 className="text-sm font-semibold text-gray-800">{t.branchNotFound}</h3>
         </Card>
@@ -403,7 +403,7 @@ const BranchProfile: React.FC = () => {
   }
 
   return (
-    <div className={`mx-auto max-w-6xl p-4  min-h-screen `}>
+    <div className={`mx-auto  p-4  min-h-screen `}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
