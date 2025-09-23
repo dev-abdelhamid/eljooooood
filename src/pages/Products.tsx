@@ -15,26 +15,30 @@ interface Product {
   _id: string;
   name: string;
   nameEn?: string;
-  displayName: string;
   code: string;
-  department: { _id: string; name: string; nameEn?: string; displayName: string };
+  department: { _id: string; name: string; nameEn?: string };
   price: number;
-  unit: string;
-  unitEn?: string;
-  displayUnit: string;
+  unit: 'كيلو' | 'قطعة' | 'علبة' | 'صينية';
+  unitEn?: 'Kilogram' | 'Piece' | 'Box' | 'Tray';
   description?: string;
+  displayName: string;
 }
 
 interface Department {
   _id: string;
   name: string;
   nameEn?: string;
-  displayName: string;
 }
+
+const unitTranslations: Record<Product['unit'], { ar: string; en: string }> = {
+  'كيلو': { ar: 'كيلو', en: 'Kilogram' },
+  'قطعة': { ar: 'قطعة', en: 'Piece' },
+  'علبة': { ar: 'علبة', en: 'Box' },
+  'صينية': { ar: 'صينية', en: 'Tray' },
+};
 
 export function Products() {
   const { t, language } = useLanguage();
-  const isRtl = language === 'ar';
   const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -51,8 +55,8 @@ export function Products() {
     code: '',
     department: '',
     price: '',
-    unit: 'قطعة',
-    unitEn: 'Piece',
+    unit: 'قطعة' as Product['unit'],
+    unitEn: 'Piece' as Product['unitEn'],
     description: '',
   });
 
@@ -66,22 +70,36 @@ export function Products() {
 
       setLoading(true);
       try {
+        console.log('Fetching products with params:', { department: filterDepartment, search: searchTerm });
+        console.log('API URL:', import.meta.env.VITE_API_URL);
         const [productsResponse, departmentsResponse] = await Promise.all([
           productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 100 }),
-          departmentAPI.getAll(),
+          departmentAPI.getAll({ limit: 100 }),
         ]);
-        setProducts(Array.isArray(productsResponse) ? productsResponse : []);
-        setDepartments(Array.isArray(departmentsResponse) ? departmentsResponse : []);
+        console.log('Products response:', productsResponse);
+        console.log('Departments response:', departmentsResponse);
+
+        const productsWithDisplayName = productsResponse.data.map((product: Product) => ({
+          ...product,
+          displayName: language === 'ar' ? product.name : (product.nameEn || product.name),
+        }));
+        setProducts(productsWithDisplayName);
+        setDepartments(departmentsResponse.data);
         setError('');
       } catch (err: any) {
         console.error('Fetch error:', err);
-        setError(err.response?.data?.message || t('products.fetchError'));
+        console.error('Error details:', {
+          status: err.status,
+          message: err.message,
+          url: err.config?.url,
+        });
+        setError(err.message || t('products.fetchError'));
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [t, user, filterDepartment, searchTerm]);
+  }, [t, user, filterDepartment, searchTerm, language]);
 
   const filteredProducts = products.filter(
     (product) =>
@@ -104,7 +122,7 @@ export function Products() {
         department: product.department._id,
         price: product.price.toString(),
         unit: product.unit,
-        unitEn: product.unitEn || '',
+        unitEn: product.unitEn || unitTranslations[product.unit].en,
         description: product.description || '',
       });
     } else {
@@ -142,21 +160,27 @@ export function Products() {
         unitEn: formData.unitEn || undefined,
         description: formData.description || undefined,
       };
+      console.log('Submitting product:', productData);
       if (editingProduct) {
         const updatedProduct = await productsAPI.update(editingProduct._id, productData);
         setProducts(
           products.map((p) =>
-            p._id === editingProduct._id ? { ...updatedProduct, department: departments.find((d) => d._id === formData.department)! } : p
+            p._id === editingProduct._id
+              ? { ...updatedProduct, displayName: language === 'ar' ? updatedProduct.name : (updatedProduct.nameEn || updatedProduct.name) }
+              : p
           )
         );
       } else {
         const newProduct = await productsAPI.create(productData);
-        setProducts([...products, { ...newProduct, department: departments.find((d) => d._id === formData.department)! }]);
+        setProducts([
+          ...products,
+          { ...newProduct, displayName: language === 'ar' ? newProduct.name : (newProduct.nameEn || newProduct.name) },
+        ]);
       }
       closeModal();
     } catch (err: any) {
       console.error('Submit error:', err);
-      setError(err.response?.data?.message || t('products.saveError'));
+      setError(err.message || t('products.saveError'));
     }
   };
 
@@ -171,21 +195,21 @@ export function Products() {
         setProducts(products.filter((p) => p._id !== id));
       } catch (err: any) {
         console.error('Delete error:', err);
-        setError(err.response?.data?.message || t('products.deleteError'));
+        setError(err.message || t('products.deleteError'));
       }
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   return (
-    <div className="mx-auto min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="container mx-auto px-4 py-6 min-h-screen bg-gray-50" dir={language === 'ar' ? 'rtl' : 'ltr'}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -228,67 +252,72 @@ export function Products() {
             />
           </div>
           <Select
-            label={t('orders.department')}
-            options={[{ value: '', label: t('orders.allDepartments') }, ...departments.map((d) => ({ value: d._id, label: d.displayName }))]}
+            label={t('products.department')}
+            options={[{ value: '', label: t('products.allDepartments') }, ...departments.map((d) => ({ value: d._id, label: language === 'ar' ? d.name : (d.nameEn || d.name) }))]}
             value={filterDepartment}
             onChange={setFilterDepartment}
             className="border-gray-300 rounded-md focus:ring-blue-500"
-            aria-label={t('orders.department')}
+            aria-label={t('products.department')}
           />
         </div>
       </Card>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredProducts.map((product) => (
-          <Card key={product._id} className="bg-white rounded-md shadow-sm hover:shadow-md transition-shadow">
-            <div className="p-4">
-              <h3 className="font-medium text-gray-800">{product.displayName}</h3>
-              <p className="text-sm text-gray-500">{t('products.code')}: {product.code}</p>
-              <p className="text-sm text-blue-500">{product.department?.displayName || t('products.noDepartment')}</p>
-              {product.description && <p className="text-xs text-gray-400 mt-1">{product.description}</p>}
-              <div className="flex items-center justify-between mt-3">
-                <span className="text-lg font-semibold text-gray-800">{product.price} {t('orders.currency')} / {product.displayUnit}</span>
-                {user?.role === 'admin' && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => openModal(product)}
-                      className="text-blue-500 hover:text-blue-700"
-                      title={t('orders.edit')}
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => deleteProduct(product._id)}
-                      className="text-red-500 hover:text-red-700"
-                      title={t('orders.delete')}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
+        {filteredProducts.length === 0 ? (
+          <Card className="p-6 text-center bg-white rounded-md shadow-sm">
+            <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+            <h3 className="text-lg font-medium text-gray-800">{t('products.noProducts')}</h3>
+            <p className="text-gray-500">{searchTerm || filterDepartment ? t('products.noMatch') : t('products.empty')}</p>
+            {user?.role === 'admin' && !searchTerm && !filterDepartment && (
+              <Button
+                variant="primary"
+                icon={Plus}
+                onClick={() => openModal()}
+                className="mt-4 bg-blue-500 hover:bg-blue-600 text-white rounded-md px-4 py-2"
+              >
+                {t('products.addFirst')}
+              </Button>
+            )}
           </Card>
-        ))}
+        ) : (
+          filteredProducts.map((product) => (
+            <Card key={product._id} className="bg-white rounded-md shadow-sm hover:shadow-md transition-shadow">
+              <div className="p-4">
+                <h3 className="font-medium text-gray-800">{product.displayName}</h3>
+                <p className="text-sm text-gray-500">{t('products.code')}: {product.code}</p>
+                <p className="text-sm text-blue-500">
+                  {t('products.department')}: {language === 'ar' ? product.department.name : (product.department.nameEn || product.department.name)}
+                </p>
+                <p className="text-sm text-gray-500">
+                  {t('products.unit')}: {language === 'ar' ? unitTranslations[product.unit].ar : (product.unitEn || unitTranslations[product.unit].en)}
+                </p>
+                {product.description && <p className="text-xs text-gray-400 mt-1">{product.description}</p>}
+                <div className="flex items-center justify-between mt-3">
+                  <span className="text-lg font-semibold text-gray-800">{product.price} {t('products.currency')}</span>
+                  {user?.role === 'admin' && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => openModal(product)}
+                        className="text-blue-500 hover:text-blue-700"
+                        title={t('products.edit')}
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => deleteProduct(product._id)}
+                        className="text-red-500 hover:text-red-700"
+                        title={t('products.delete')}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Card>
+          ))
+        )}
       </div>
-
-      {filteredProducts.length === 0 && (
-        <Card className="p-6 text-center bg-white rounded-md shadow-sm">
-          <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-          <h3 className="text-lg font-medium text-gray-800">{t('products.noProducts')}</h3>
-          <p className="text-gray-500">{searchTerm || filterDepartment ? t('products.noMatch') : t('products.empty')}</p>
-          {user?.role === 'admin' && !searchTerm && !filterDepartment && (
-            <Button
-              variant="primary"
-              icon={Plus}
-              onClick={() => openModal()}
-              className="mt-4 bg-blue-500 hover:bg-blue-600 text-white rounded-md px-4 py-2"
-            >
-              {t('products.addFirst')}
-            </Button>
-          )}
-        </Card>
-      )}
 
       <Modal
         isOpen={isModalOpen}
@@ -323,7 +352,7 @@ export function Products() {
             />
             <Select
               label={t('products.department')}
-              options={[{ value: '', label: t('products.selectDepartment') }, ...departments.map((d) => ({ value: d._id, label: d.displayName }))]}
+              options={[{ value: '', label: t('products.selectDepartment') }, ...departments.map((d) => ({ value: d._id, label: language === 'ar' ? d.name : (d.nameEn || d.name) }))]}
               value={formData.department}
               onChange={(value) => setFormData({ ...formData, department: value })}
               required
@@ -340,29 +369,18 @@ export function Products() {
             />
             <Select
               label={t('products.unit')}
-              options={[
-                { value: 'كيلو', label: t('products.units.kilo'), valueEn: 'Kilo' },
-                { value: 'قطعة', label: t('products.units.piece'), valueEn: 'Piece' },
-                { value: 'علبة', label: t('products.units.box'), valueEn: 'Pack' },
-                { value: 'صينية', label: t('products.units.tray'), valueEn: 'Tray' },
-              ].map((opt) => ({
-                value: opt.value,
-                label: isRtl ? opt.label : opt.valueEn,
+              options={Object.entries(unitTranslations).map(([value, { ar, en }]) => ({
+                value,
+                label: language === 'ar' ? ar : en,
               }))}
               value={formData.unit}
-              onChange={(value) => {
-                const selectedOption = [
-                  { value: 'كيلو', valueEn: 'Kilo' },
-                  { value: 'قطعة', valueEn: 'Piece' },
-                  { value: 'علبة', valueEn: 'Pack' },
-                  { value: 'صينية', valueEn: 'Tray' },
-                ].find((opt) => opt.value === value);
+              onChange={(value) =>
                 setFormData({
                   ...formData,
-                  unit: value,
-                  unitEn: selectedOption?.valueEn || '',
-                });
-              }}
+                  unit: value as Product['unit'],
+                  unitEn: unitTranslations[value as Product['unit']].en,
+                })
+              }
               required
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />
