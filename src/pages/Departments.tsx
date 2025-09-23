@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { departmentAPI, usersAPI } from '../services/api';
+import { departmentAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Input } from '../components/UI/Input';
-import { Select } from '../components/UI/Select';
 import { Modal } from '../components/UI/Modal';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 import { Layers, Plus, Edit2, Trash2, Search, AlertCircle } from 'lucide-react';
@@ -13,92 +12,63 @@ import { Layers, Plus, Edit2, Trash2, Search, AlertCircle } from 'lucide-react';
 interface Department {
   _id: string;
   name: string;
-  nameEn?: string;
   code: string;
   description?: string;
-  chef?: { _id: string; name: string };
   isActive: boolean;
-  displayName: string;
-}
-
-interface User {
-  _id: string;
-  name: string;
-  role: string;
 }
 
 export function Departments() {
   const { t, language } = useLanguage();
   const { user } = useAuth();
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [chefs, setChefs] = useState<User[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
 
   const [formData, setFormData] = useState({
     name: '',
-    nameEn: '',
     code: '',
     description: '',
-    chef: '',
   });
 
   useEffect(() => {
     const fetchData = async () => {
       if (!user || !['admin'].includes(user.role)) {
         setError(t('departments.unauthorized'));
-        setLoading(false);
         return;
       }
 
       setLoading(true);
       try {
-        console.log('Fetching departments with params:', { page: currentPage, limit: 12, search: searchTerm });
+        console.log('Fetching departments with params:', { searchTerm });
         console.log('API URL:', import.meta.env.VITE_API_URL);
-        const [departmentsResponse, chefsResponse] = await Promise.all([
-          departmentAPI.getAll({ page: currentPage, limit: 12, search: searchTerm }).catch((err) => {
-            console.error('Departments API error:', err);
-            throw err;
-          }),
-          usersAPI.getAll().catch((err) => {
-            console.error('Users API error:', err);
-            throw err;
-          }),
-        ]);
+        const departmentsResponse = await departmentAPI.getAll().catch((err) => {
+          console.error('Departments API error:', err);
+          throw err;
+        });
         console.log('Departments response:', departmentsResponse);
-        console.log('Chefs response:', chefsResponse);
-
-        const departmentsWithDisplayName = departmentsResponse.data.map((dept: Department) => ({
-          ...dept,
-          displayName: language === 'ar' ? dept.name : (dept.nameEn || dept.name),
-        }));
-        setDepartments(departmentsWithDisplayName);
-        setTotalPages(departmentsResponse.totalPages);
-        setChefs(chefsResponse.filter((user: User) => user.role === 'chef'));
+        setDepartments(departmentsResponse);
         setError('');
       } catch (err: any) {
         console.error('Fetch error:', err);
         console.error('Error details:', {
-          status: err.status,
-          message: err.message,
+          status: err.response?.status,
+          data: err.response?.data,
           url: err.config?.url,
         });
-        setError(err.message || t('departments.fetchError'));
+        setError(err.response?.data?.message || t('departments.fetchError'));
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [t, user, searchTerm, currentPage]);
+  }, [t, user, searchTerm]);
 
   const filteredDepartments = departments.filter(
     (department) =>
-      department.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      department.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       department.code.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -111,19 +81,15 @@ export function Departments() {
       setEditingDepartment(department);
       setFormData({
         name: department.name,
-        nameEn: department.nameEn || '',
         code: department.code,
         description: department.description || '',
-        chef: department.chef?._id || '',
       });
     } else {
       setEditingDepartment(null);
       setFormData({
         name: '',
-        nameEn: '',
         code: '',
         description: '',
-        chef: '',
       });
     }
     setIsModalOpen(true);
@@ -140,32 +106,23 @@ export function Departments() {
     try {
       const departmentData = {
         name: formData.name,
-        nameEn: formData.nameEn || undefined,
         code: formData.code,
         description: formData.description || undefined,
-        chef: formData.chef || undefined,
       };
       console.log('Submitting department:', departmentData);
       if (editingDepartment) {
         const updatedDepartment = await departmentAPI.update(editingDepartment._id, departmentData);
         setDepartments(
-          departments.map((d) =>
-            d._id === editingDepartment._id
-              ? { ...updatedDepartment, displayName: language === 'ar' ? updatedDepartment.name : (updatedDepartment.nameEn || updatedDepartment.name) }
-              : d
-          )
+          departments.map((d) => (d._id === editingDepartment._id ? updatedDepartment : d))
         );
       } else {
         const newDepartment = await departmentAPI.create(departmentData);
-        setDepartments([
-          ...departments,
-          { ...newDepartment, displayName: language === 'ar' ? newDepartment.name : (newDepartment.nameEn || newDepartment.name) },
-        ]);
+        setDepartments([...departments, newDepartment]);
       }
       closeModal();
     } catch (err: any) {
       console.error('Submit error:', err);
-      setError(err.message || t('departments.saveError'));
+      setError(err.response?.data?.message || t('departments.saveError'));
     }
   };
 
@@ -180,7 +137,7 @@ export function Departments() {
         setDepartments(departments.filter((d) => d._id !== id));
       } catch (err: any) {
         console.error('Delete error:', err);
-        setError(err.message || t('departments.deleteError'));
+        setError(err.response?.data?.message || t('departments.deleteError'));
       }
     }
   };
@@ -253,10 +210,9 @@ export function Departments() {
           filteredDepartments.map((department) => (
             <Card key={department._id} className="bg-white rounded-md shadow-sm hover:shadow-md transition-shadow">
               <div className="p-4">
-                <h3 className="font-medium text-gray-800">{department.displayName}</h3>
+                <h3 className="font-medium text-gray-800">{department.name}</h3>
                 <p className="text-sm text-gray-500">{t('departments.code')}: {department.code}</p>
                 {department.description && <p className="text-xs text-gray-400 mt-1">{department.description}</p>}
-                <p className="text-sm text-gray-500">{t('departments.chef')}: {department.chef?.name || '-'}</p>
                 <p className="text-sm text-blue-500">
                   {t('departments.status')}: {department.isActive ? t('departments.active') : t('departments.inactive')}
                 </p>
@@ -284,26 +240,6 @@ export function Departments() {
         )}
       </div>
 
-      <div className="flex justify-center mt-6">
-        <Button
-          variant="secondary"
-          onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-          disabled={currentPage === 1}
-          className="mx-2"
-        >
-          {t('previous')}
-        </Button>
-        <span className="mx-4 self-center">{t('page')} {currentPage} / {totalPages}</span>
-        <Button
-          variant="secondary"
-          onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-          disabled={currentPage === totalPages}
-          className="mx-2"
-        >
-          {t('next')}
-        </Button>
-      </div>
-
       <Modal
         isOpen={isModalOpen}
         onClose={closeModal}
@@ -321,25 +257,11 @@ export function Departments() {
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />
             <Input
-              label={t('departments.nameEn')}
-              value={formData.nameEn}
-              onChange={(value) => setFormData({ ...formData, nameEn: value })}
-              placeholder={t('departments.nameEnPlaceholder')}
-              className="border-gray-300 rounded-md focus:ring-blue-500"
-            />
-            <Input
               label={t('departments.code')}
               value={formData.code}
               onChange={(value) => setFormData({ ...formData, code: value })}
               placeholder={t('departments.codePlaceholder')}
               required
-              className="border-gray-300 rounded-md focus:ring-blue-500"
-            />
-            <Select
-              label={t('departments.chef')}
-              options={[{ value: '', label: t('departments.selectChef') }, ...chefs.map((c) => ({ value: c._id, label: c.name }))]}
-              value={formData.chef}
-              onChange={(value) => setFormData({ ...formData, chef: value })}
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />
             <div>
