@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Edit2, Trash2, Key, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Edit2, Trash2, Key, AlertCircle, User } from 'lucide-react';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Input } from '../components/UI/Input';
@@ -348,7 +348,7 @@ const BranchProfile: React.FC = () => {
 
     try {
       setLoading(true);
-      await branchesAPI.resetPassword(id!, passwordData.password, { isRtl });
+      await branchesAPI.resetPassword(id!, passwordData.password);
       setIsResetPasswordModalOpen(false);
       setPasswordData({ password: '', confirmPassword: '' });
       setError('');
@@ -403,7 +403,7 @@ const BranchProfile: React.FC = () => {
   }
 
   return (
-    <div className={`mx-auto max-w-6xl p-4 sm:p-6 min-h-screen bg-gray-100 font-sans ${isRtl ? 'rtl font-arabic' : 'ltr'}`}>
+    <div className={`mx-auto max-w-6xl p-4  min-h-screen `}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
