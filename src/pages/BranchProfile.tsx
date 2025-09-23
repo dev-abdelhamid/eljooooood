@@ -801,10 +801,11 @@ export const BranchProfile: React.FC = () => {
               />
               <Select
                 label={t.userStatus}
-                options=[
-                  { value: true, label: t.active },
-                  { value: false, label: t.inactive },
-                ]
+                options={[
+                    { value: true, label: t.active },
+                    { value: false, label: t.inactive },
+                    
+                ]}
                 value={formData.user.isActive}
                 onChange={(value) => handleInputChange(value === 'true', 'isActive', true)}
                 className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
