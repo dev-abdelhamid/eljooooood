@@ -655,6 +655,52 @@ export const chefsAPI = {
 };
 
 
+
+export const productionAssignmentsAPI = {
+  create: async (assignmentData: {
+    order: string;
+    product: string;
+    chef: string;
+    quantity: number;
+    itemId: string;
+  }) => {
+    if (!isValidObjectId(assignmentData.order) ||
+        !isValidObjectId(assignmentData.product) ||
+        !isValidObjectId(assignmentData.chef) ||
+        !isValidObjectId(assignmentData.itemId)) {
+      console.error(`[${new Date().toISOString()}] productionAssignmentsAPI.create - Invalid data:`, assignmentData);
+      throw new Error('Invalid order ID, product ID, chef ID, or item ID');
+    }
+    const response = await api.post('/orders/tasks', assignmentData);
+    console.log(`[${new Date().toISOString()}] productionAssignmentsAPI.create - Response:`, response);
+    return response;
+  },
+  getChefTasks: async (chefId: string, query: { page?: number; limit?: number; status?: string; search?: string } = {}) => {
+    if (!isValidObjectId(chefId)) {
+      console.error(`[${new Date().toISOString()}] productionAssignmentsAPI.getChefTasks - Invalid chefId:`, chefId);
+      throw new Error('Invalid chef ID');
+    }
+    const response = await api.get(`/orders/tasks/chef/${chefId}`, { params: query });
+    console.log(`[${new Date().toISOString()}] productionAssignmentsAPI.getChefTasks - Response:`, response);
+    return response;
+  },
+  updateTaskStatus: async (orderId: string, taskId: string, data: { status: string }) => {
+    if (!isValidObjectId(orderId) || !isValidObjectId(taskId)) {
+      console.error(`[${new Date().toISOString()}] productionAssignmentsAPI.updateTaskStatus - Invalid orderId or taskId:`, { orderId, taskId });
+      throw new Error('Invalid order ID or task ID');
+    }
+    const response = await api.patch(`/orders/${orderId}/tasks/${taskId}/status`, data);
+    console.log(`[${new Date().toISOString()}] productionAssignmentsAPI.updateTaskStatus - Response:`, response);
+    return response;
+  },
+  getAllTasks: async () => {
+    const response = await api.get('/orders/tasks');
+    console.log(`[${new Date().toISOString()}] productionAssignmentsAPI.getAllTasks - Response:`, response);
+    return response;
+  },
+};
+
+
 export const inventoryAPI = {
   getInventory: async (params: { branch?: string; product?: string } = {}) => {
     if (params.branch && !isValidObjectId(params.branch)) {
