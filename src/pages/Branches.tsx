@@ -41,6 +41,9 @@ interface Branch {
   };
   createdAt: string;
   updatedAt: string;
+  displayName: string;
+  displayAddress: string;
+  displayCity: string;
 }
 
 const translations = {
@@ -166,7 +169,7 @@ const translations = {
     createdAt: 'Created At',
     updatedAt: 'Updated At',
     edit: 'Edit',
-    resetPassword: 'Reset Whitman',
+    resetPassword: 'Reset Password',
     delete: 'Delete',
     profile: 'View Details',
     name: 'Branch Name (Arabic)',
@@ -185,7 +188,9 @@ const translations = {
     namePlaceholder: 'Enter branch name',
     nameEnPlaceholder: 'Enter branch name in English',
     addressPlaceholder: 'Enter address',
+    addressEnPlaceholder: 'Enter address in English',
     cityPlaceholder: 'Enter city',
+    cityEnPlaceholder: 'Enter city in English',
     phonePlaceholder: 'Enter phone number',
     userNamePlaceholder: 'Enter user name',
     userNameEnPlaceholder: 'Enter user name in English',
@@ -281,13 +286,13 @@ export const Branches: React.FC = () => {
 
     setLoading(true);
     try {
-      const response = await branchesAPI.getAll({ status: filterStatus === 'all' ? undefined : filterStatus, page, limit: 10 });
+      const response = await branchesAPI.getAll({ status: filterStatus === 'all' ? undefined : filterStatus, page, limit: 10, isRtl });
       console.log(`[${new Date().toISOString()}] Branches API response:`, response);
       const data = Array.isArray(response.data) ? response.data : response;
       setBranches(data);
       setTotalPages(response.totalPages || Math.ceil(data.length / 10));
       // Extract unique cities and codes for filters
-      const uniqueCities = [...new Set(data.map((b: Branch) => (isRtl ? b.city : b.cityEn || b.city)))];
+      const uniqueCities = [...new Set(data.map((b: Branch) => b.displayCity))];
       const uniqueCodes = [...new Set(data.map((b: Branch) => b.code))];
       setCities(uniqueCities.map(city => ({ value: city, label: city })));
       setCodes(uniqueCodes.map(code => ({ value: code, label: code })));
@@ -308,24 +313,24 @@ export const Branches: React.FC = () => {
   const filteredBranches = branches.filter(
     (branch) =>
       branch &&
-      ((isRtl ? branch.name : branch.nameEn || branch.name)?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      (branch.displayName?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
         branch.code?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-        (isRtl ? branch.city : branch.cityEn || branch.city)?.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) &&
+        branch.displayCity?.toLowerCase().includes(debouncedSearchTerm.toLowerCase())) &&
       (filterStatus === 'all' || branch.isActive === (filterStatus === 'active')) &&
-      (filterCity === 'all' || (isRtl ? branch.city : branch.cityEn || branch.city) === filterCity) &&
+      (filterCity === 'all' || branch.displayCity === filterCity) &&
       (filterCode === 'all' || branch.code === filterCode)
   );
 
   const checkEmailAvailability = async (email: string) => {
     try {
       const response = await branchesAPI.checkEmail(email);
-      return response.available;
+      return response.data.available;
     } catch {
       return false;
     }
   };
 
-  const validateForm = () => {
+  const validateForm = async () => {
     const errors: Record<string, string> = {};
     if (!formData.name) errors.name = t.nameRequired;
     if (!formData.code) errors.code = t.codeRequired;
@@ -335,6 +340,10 @@ export const Branches: React.FC = () => {
       if (!formData.user.name) errors.userName = t.userNameRequired;
       if (!formData.user.username) errors.username = t.usernameRequired;
       if (!formData.user.password) errors.password = t.passwordRequired;
+    }
+    if (formData.user.email && !isEditMode) {
+      const isEmailAvailable = await checkEmailAvailability(formData.user.email);
+      if (!isEmailAvailable) errors.email = t.emailExists;
     }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -403,18 +412,9 @@ export const Branches: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validateForm()) {
+    if (!(await validateForm())) {
       toast.error(t.requiredFields, { position: isRtl ? 'top-right' : 'top-left' });
       return;
-    }
-
-    if (!isEditMode && formData.user.email) {
-      const isEmailAvailable = await checkEmailAvailability(formData.user.email);
-      if (!isEmailAvailable) {
-        setError(t.emailExists);
-        toast.error(t.emailExists, { position: isRtl ? 'top-right' : 'top-left' });
-        return;
-      }
     }
 
     try {
@@ -449,12 +449,12 @@ export const Branches: React.FC = () => {
       };
 
       if (isEditMode && selectedBranch) {
-        await branchesAPI.update(selectedBranch._id, branchData);
-        setBranches(branches.map((b) => (b._id === selectedBranch._id ? { ...b, ...branchData } : b)));
+        const response = await branchesAPI.update(selectedBranch._id, branchData, { isRtl });
+        setBranches(branches.map((b) => (b._id === selectedBranch._id ? response.data : b)));
         toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
       } else {
-        const response = await branchesAPI.create(branchData);
-        setBranches([...branches, response]);
+        const response = await branchesAPI.create(branchData, { isRtl });
+        setBranches([...branches, response.data]);
         toast.success(t.added, { position: isRtl ? 'top-right' : 'top-left' });
       }
       setIsModalOpen(false);
@@ -465,9 +465,9 @@ export const Branches: React.FC = () => {
       if (err.response?.data?.message) {
         const message = err.response.data.message;
         errorMessage =
-          message === 'Branch code already exists' ? t.codeExists :
-          message === 'Username already exists' ? t.usernameExists :
-          message.includes('الإيميل') || message.includes('email') ? t.emailExists :
+          message.includes('كود الفرع') || message.includes('Branch code') ? t.codeExists :
+          message.includes('اسم المستخدم') || message.includes('Username') ? t.usernameExists :
+          message.includes('الإيميل') || message.includes('Email') ? t.emailExists :
           message;
       }
       setError(errorMessage);
@@ -494,13 +494,13 @@ export const Branches: React.FC = () => {
     }
 
     try {
-      await branchesAPI.resetBranchPassword(selectedBranch!._id, { password: resetPasswordData.password });
+      await branchesAPI.resetPassword(selectedBranch!._id, { password: resetPasswordData.password });
       setIsResetPasswordModalOpen(false);
       setResetPasswordData({ password: '', confirmPassword: '' });
       toast.success(t.passwordResetSuccess, { position: isRtl ? 'top-right' : 'top-left' });
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Reset password error:`, err);
-      const errorMessage = err.message || t.passwordResetError;
+      const errorMessage = err.response?.data?.message || t.passwordResetError;
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
     }
@@ -518,7 +518,7 @@ export const Branches: React.FC = () => {
       console.error(`[${new Date().toISOString()}] Delete error:`, err);
       let errorMessage = t.deleteError;
       if (err.response?.data?.message) {
-        errorMessage = err.response.data.message === 'Cannot delete branch with associated orders or inventory' ?
+        errorMessage = err.response.data.message.includes('طلبات أو مخزون') || err.response.data.message.includes('orders or inventory') ?
           t.deleteRestricted : err.response.data.message;
       }
       setError(errorMessage);
@@ -722,12 +722,12 @@ export const Branches: React.FC = () => {
               <Card className="bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer" onClick={() => navigate(`/branches/${branch._id}`)}>
                 <div className="p-4 sm:p-6">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-base font-semibold text-amber-900 truncate">{isRtl ? branch.name : branch.nameEn || branch.name}</h3>
+                    <h3 className="text-base font-semibold text-amber-900 truncate">{branch.displayName}</h3>
                     <MapPin className="w-5 h-5 text-amber-600" />
                   </div>
                   <p className="text-sm text-gray-600">{t.code}: {branch.code}</p>
-                  <p className="text-sm text-gray-600">{t.address}: {isRtl ? branch.address : branch.addressEn || branch.address}</p>
-                  <p className="text-sm text-gray-600">{t.city}: {isRtl ? branch.city : branch.cityEn || branch.city}</p>
+                  <p className="text-sm text-gray-600">{t.address}: {branch.displayAddress}</p>
+                  <p className="text-sm text-gray-600">{t.city}: {branch.displayCity}</p>
                   <p className="text-sm text-gray-600">{t.phone}: {branch.phone || '-'}</p>
                   <p className={`text-sm font-medium ${branch.isActive ? 'text-green-600' : 'text-red-600'}`}>
                     {t.status}: {branch.isActive ? t.active : t.inactive}
@@ -802,7 +802,7 @@ export const Branches: React.FC = () => {
                 label={t.code}
                 value={formData.code}
                 onChange={(value) => setFormData({ ...formData, code: value })}
-                placeholder={t.codePlaceholder}
+                placeholder={t.code}
                 required
                 error={formErrors.code}
                 className="border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors text-sm"
