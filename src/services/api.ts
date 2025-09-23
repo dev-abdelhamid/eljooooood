@@ -227,6 +227,7 @@ export const branchesAPI = {
     nameEn?: string;
     code: string;
     address: string;
+    addressEn?: string;
     city: string;
     cityEn?: string;
     phone?: string;
@@ -245,6 +246,7 @@ export const branchesAPI = {
       nameEn: branchData.nameEn?.trim(),
       code: branchData.code.trim(),
       address: branchData.address.trim(),
+      addressEn: branchData.addressEn?.trim(),
       city: branchData.city.trim(),
       cityEn: branchData.cityEn?.trim(),
       phone: branchData.phone?.trim(),
@@ -266,6 +268,7 @@ export const branchesAPI = {
     nameEn?: string;
     code: string;
     address: string;
+    addressEn?: string;
     city: string;
     cityEn?: string;
     phone?: string;
@@ -287,6 +290,7 @@ export const branchesAPI = {
       nameEn: branchData.nameEn?.trim(),
       code: branchData.code.trim(),
       address: branchData.address.trim(),
+      addressEn: branchData.addressEn?.trim(),
       city: branchData.city.trim(),
       cityEn: branchData.cityEn?.trim(),
       phone: branchData.phone?.trim(),
