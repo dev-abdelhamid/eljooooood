@@ -660,10 +660,7 @@ export const chefsAPI = {
     };
     department: string;
   }) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.update - Invalid chef ID:`, id);
-      throw new Error('Invalid chef ID');
-    }
+ 
     const response = await api.put(`/chefs/${id}`, {
       user: {
         name: chefData.user.name.trim(),
