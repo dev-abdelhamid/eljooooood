@@ -84,7 +84,7 @@ function AppContent() {
                   <Route path="/chefs" element={<Chefs />} />
                   <Route path="/users" element={<Users />} />
                   <Route path="/profile" element={<Profile />} />
-                  <Route path="/branch-profile" element={<BranchProfile />} />
+                  <Route path="/branches/:id" element={<BranchProfile />} />
                   <Route path="/departments" element={<Departments />} />
                   <Route path="/inventory" element={<div className="p-8 text-center">قريباً: إدارة المخزون</div>} />
                   <Route path="/sales" element={<SalesReport />} />
