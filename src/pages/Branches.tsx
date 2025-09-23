@@ -32,12 +32,14 @@ interface Branch {
     email?: string;
     phone?: string;
     isActive: boolean;
+    displayName: string;
   };
   createdBy?: {
     _id: string;
     name: string;
     nameEn?: string;
     username: string;
+    displayName: string;
   };
   createdAt: string;
   updatedAt: string;
@@ -288,14 +290,14 @@ export const Branches: React.FC = () => {
     try {
       const response = await branchesAPI.getAll({ status: filterStatus === 'all' ? undefined : filterStatus, page, limit: 10, isRtl });
       console.log(`[${new Date().toISOString()}] Branches API response:`, response);
-      const data = Array.isArray(response.data) ? response.data : response;
+      const data = Array.isArray(response.data) ? response.data : Array.isArray(response) ? response : [];
       setBranches(data);
       setTotalPages(response.totalPages || Math.ceil(data.length / 10));
       // Extract unique cities and codes for filters
       const uniqueCities = [...new Set(data.map((b: Branch) => b.displayCity))];
       const uniqueCodes = [...new Set(data.map((b: Branch) => b.code))];
-      setCities(uniqueCities.map(city => ({ value: city, label: city })));
-      setCodes(uniqueCodes.map(code => ({ value: code, label: code })));
+      setCities(uniqueCities.map(city => ({ value: String(city), label: String(city) })));
+      setCodes(uniqueCodes.map(code => ({ value: String(code), label: String(code) })));
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Fetch error:`, err);
@@ -332,16 +334,16 @@ export const Branches: React.FC = () => {
 
   const validateForm = async () => {
     const errors: Record<string, string> = {};
-    if (!formData.name) errors.name = t.nameRequired;
-    if (!formData.code) errors.code = t.codeRequired;
-    if (!formData.address) errors.address = t.addressRequired;
-    if (!formData.city) errors.city = t.cityRequired;
+    if (!formData.name.trim()) errors.name = t.nameRequired;
+    if (!formData.code.trim()) errors.code = t.codeRequired;
+    if (!formData.address.trim()) errors.address = t.addressRequired;
+    if (!formData.city.trim()) errors.city = t.cityRequired;
     if (!isEditMode) {
-      if (!formData.user.name) errors.userName = t.userNameRequired;
-      if (!formData.user.username) errors.username = t.usernameRequired;
-      if (!formData.user.password) errors.password = t.passwordRequired;
+      if (!formData.user.name.trim()) errors.userName = t.userNameRequired;
+      if (!formData.user.username.trim()) errors.username = t.usernameRequired;
+      if (!formData.user.password.trim()) errors.password = t.passwordRequired;
     }
-    if (formData.user.email && !isEditMode) {
+    if (formData.user.email.trim()) {
       const isEmailAvailable = await checkEmailAvailability(formData.user.email);
       if (!isEmailAvailable) errors.email = t.emailExists;
     }
@@ -494,7 +496,7 @@ export const Branches: React.FC = () => {
     }
 
     try {
-      await branchesAPI.resetPassword(selectedBranch!._id, { password: resetPasswordData.password });
+      await branchesAPI.resetPassword(selectedBranch!._id, resetPasswordData.password, { isRtl });
       setIsResetPasswordModalOpen(false);
       setResetPasswordData({ password: '', confirmPassword: '' });
       toast.success(t.passwordResetSuccess, { position: isRtl ? 'top-right' : 'top-left' });
@@ -535,7 +537,7 @@ export const Branches: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen bg-gray-50 p-4 sm:p-6 md:p-8 ${isRtl ? 'rtl font-[Noto Sans Arabic]' : 'ltr font-[Inter]'}`}>
+    <div className={`min-h-screen  p-6 sm:p-4 `}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -889,6 +891,7 @@ export const Branches: React.FC = () => {
                 value={formData.user.email}
                 onChange={(value) => setFormData({ ...formData, user: { ...formData.user, email: value } })}
                 placeholder={t.emailPlaceholder}
+                error={formErrors.email}
                 className="border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors text-sm"
               />
               <Input
