@@ -7,25 +7,38 @@ import { ShoppingCart, Plus, Minus, Trash2, Package, AlertCircle, Search, X, Che
 import { io } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
+import { Card } from '../components/UI/Card';
+import { Button } from '../components/UI/Button';
+import { Input } from '../components/UI/Input';
+import { Select } from '../components/UI/Select';
+import { Modal } from '../components/UI/Modal';
+import { LoadingSpinner } from '../components/UI/LoadingSpinner';
+import { motion } from 'framer-motion';
 
 interface Product {
   _id: string;
   name: string;
+  nameEn?: string;
   code: string;
-  department: { _id: string; name: string };
+  department: { _id: string; name: string; nameEn?: string };
   price: number;
   unit: string;
+  unitEn?: string;
   description?: string;
+  displayName: string;
+  displayUnit: string;
 }
 
 interface Branch {
   _id: string;
   name: string;
+  nameEn?: string;
 }
 
 interface Department {
   _id: string;
   name: string;
+  nameEn?: string;
 }
 
 interface OrderItem {
@@ -61,15 +74,17 @@ export function NewOrder() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
 
   const priorityOptions = useMemo(
     () => [
-      { value: 'low', label: isRtl ? 'منخفض' : 'Low' },
-      { value: 'medium', label: isRtl ? 'متوسط' : 'Medium' },
-      { value: 'high', label: isRtl ? 'عالي' : 'High' },
-      { value: 'urgent', label: isRtl ? 'عاجل' : 'Urgent' },
+      { value: 'low', label: t('orders.priority.low') },
+      { value: 'medium', label: t('orders.priority.medium') },
+      { value: 'high', label: t('orders.priority.high') },
+      { value: 'urgent', label: t('orders.priority.urgent') },
     ],
-    [isRtl]
+    [t]
   );
 
   const socket = useMemo(() => io('https://eljoodia-server-production.up.railway.app'), []);
@@ -77,13 +92,14 @@ export function NewOrder() {
   const debouncedSearch = useCallback(
     debounce((value: string) => {
       setSearchTerm(value);
+      setCurrentPage(1); // Reset to first page on new search
     }, 300),
     []
   );
 
   useEffect(() => {
     if (!user || !['admin', 'branch'].includes(user.role)) {
-      setError(isRtl ? 'غير مصرح' : 'Unauthorized');
+      setError(t('orders.unauthorized'));
       navigate('/branch-orders');
       return;
     }
@@ -93,39 +109,59 @@ export function NewOrder() {
         setLoading((prev) => ({ ...prev, products: true, branches: true, departments: true }));
 
         const [productsResponse, branchesResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ limit: 100, department: filterDepartment, search: searchTerm }).finally(() =>
+          productsAPI.getAll({ limit: 12, page: currentPage, department: filterDepartment, search: searchTerm }).finally(() =>
             setLoading((prev) => ({ ...prev, products: false }))
           ),
           branchesAPI.getAll().finally(() => setLoading((prev) => ({ ...prev, branches: false }))),
-          departmentAPI.getAll().finally(() => setLoading((prev) => ({ ...prev, departments: false }))),
+          departmentAPI.getAll({ limit: 100 }).finally(() => setLoading((prev) => ({ ...prev, departments: false }))),
         ]);
 
-        setProducts(Array.isArray(productsResponse) ? productsResponse : []);
-        setBranches(Array.isArray(branchesResponse) ? branchesResponse : []);
-        setDepartments(Array.isArray(departmentsResponse) ? departmentsResponse : []);
+        const productsWithDisplay = productsResponse.data.map((product: Product) => ({
+          ...product,
+          displayName: language === 'ar' ? product.name : (product.nameEn || product.name),
+          displayUnit: language === 'ar' ? product.unit : (product.unitEn || product.unit),
+        }));
+        setProducts(productsWithDisplay);
+        setTotalPages(productsResponse.totalPages);
+        setBranches(
+          Array.isArray(branchesResponse)
+            ? branchesResponse.map((branch) => ({
+                ...branch,
+                displayName: language === 'ar' ? branch.name : (branch.nameEn || branch.name),
+              }))
+            : []
+        );
+        setDepartments(
+          Array.isArray(departmentsResponse.data)
+            ? departmentsResponse.data.map((dept) => ({
+                ...dept,
+                displayName: language === 'ar' ? dept.name : (dept.nameEn || dept.name),
+              }))
+            : []
+        );
         if (user?.role === 'branch' && user?.branchId) {
           setBranch(user.branchId.toString());
         }
         setError('');
       } catch (err: any) {
-        setError(err.response?.data?.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
+        setError(err.message || t('orders.fetchError'));
       }
     };
 
     loadData();
-  }, [isRtl, user, navigate, filterDepartment, searchTerm]);
+  }, [t, user, navigate, filterDepartment, searchTerm, currentPage, language]);
 
   useEffect(() => {
     socket.on('connect', () => {
       console.log('Connected to Socket.IO server');
     });
     socket.on('orderCreated', () => {
-      setToastState({ message: isRtl ? 'تم إنشاء الطلب بنجاح' : 'Order created successfully', type: 'success' });
+      setToastState({ message: t('orders.createdSuccess'), type: 'success' });
     });
     return () => {
       socket.disconnect();
     };
-  }, [isRtl, socket]);
+  }, [t, socket]);
 
   useEffect(() => {
     if (toastState) {
@@ -138,7 +174,7 @@ export function NewOrder() {
     () =>
       products.filter(
         (product) =>
-          (product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (product.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
             product.code.toLowerCase().includes(searchTerm.toLowerCase())) &&
           (filterDepartment === '' || product.department._id === filterDepartment)
       ),
@@ -176,8 +212,8 @@ export function NewOrder() {
     setNotes('');
     setPriority('medium');
     if (user?.role === 'admin') setBranch('');
-    setToastState({ message: isRtl ? 'تم مسح الطلب' : 'Order cleared', type: 'success' });
-  }, [isRtl, user]);
+    setToastState({ message: t('orders.cleared'), type: 'success' });
+  }, [t, user]);
 
   const getTotalAmount = useMemo(
     () => orderItems.reduce((total, item) => total + item.price * item.quantity, 0).toFixed(2),
@@ -188,16 +224,16 @@ export function NewOrder() {
     async (e: React.FormEvent) => {
       e.preventDefault();
       if (orderItems.length === 0) {
-        setError(isRtl ? 'السلة فارغة' : 'Cart is empty');
+        setError(t('orders.cartEmpty'));
         return;
       }
-      if (!branch && user?.role !== 'admin') {
-        setError(isRtl ? 'الفرع مطلوب' : 'Branch is required');
+      if (!branch && user?.role === 'admin') {
+        setError(t('orders.branchRequired'));
         return;
       }
       setShowConfirmModal(true);
     },
-    [orderItems, branch, user, isRtl]
+    [orderItems, branch, user, t]
   );
 
   const confirmOrder = async () => {
@@ -208,20 +244,22 @@ export function NewOrder() {
         orderNumber: `ORD-${Date.now()}`,
         branchId: user?.role === 'branch' ? user?.branchId?.toString() : branch,
         items: orderItems.map((item) => ({
-          product: item.productId,
+          productId: item.productId,
           quantity: item.quantity,
           price: item.price,
         })),
         status: 'pending',
-        notes,
+        notes: notes.trim() || undefined,
         priority,
+        requestedDeliveryDate: new Date().toISOString(),
       };
       const response = await ordersAPI.create(orderData);
       socket.emit('newOrderFromBranch', response);
-      setTimeout(() => navigate('/orders/new'), 1000);
+      setToastState({ message: t('orders.createdSuccess'), type: 'success' });
+      setTimeout(() => navigate('/orders'), 1000);
     } catch (err: any) {
-      setError(err.response?.data?.message || (isRtl ? 'خطأ في إنشاء الطلب' : 'Error creating order'));
-      setToastState({ message: isRtl ? 'خطأ في إنشاء الطلب' : 'Error creating order', type: 'error' });
+      setError(err.message || t('orders.createError'));
+      setToastState({ message: err.message || t('orders.createError'), type: 'error' });
     } finally {
       setSubmitting(false);
     }
@@ -233,20 +271,22 @@ export function NewOrder() {
 
   if (loading.products || loading.branches || loading.departments) {
     return (
-      <div className="flex items-center justify-center min-h-screen ">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <LoadingSpinner size="lg" />
       </div>
     );
   }
 
   return (
     <div
-      className=" mx-auto px-4 py-8 min-h-screen  h-screen overflow-auto"
+      className="container mx-auto px-4 py-6 min-h-screen bg-gray-50"
       dir={isRtl ? 'rtl' : 'ltr'}
     >
       {/* Toast Notification */}
       {toastState && (
-        <div
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
           className={`fixed top-4 ${isRtl ? 'right-4' : 'left-4'} z-50 p-4 rounded-lg shadow-lg transition-all duration-300 ${
             toastState.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
           }`}
@@ -256,204 +296,221 @@ export function NewOrder() {
             <span className="text-sm">{toastState.message}</span>
             <button
               onClick={() => setToastState(null)}
-              aria-label={isRtl ? 'إغلاق' : 'Close'}
+              aria-label={t('close')}
               className="hover:opacity-80"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* Confirm Modal */}
       {showConfirmModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{isRtl ? 'تأكيد الطلب' : 'Confirm Order'}</h3>
-            <p className="text-gray-600 text-sm mb-4">
-              {isRtl ? 'هل أنت متأكد من إرسال الطلب؟' : 'Are you sure you want to submit the order?'}
-            </p>
-            <div className="max-h-64 overflow-y-auto space-y-3">
-              <h4 className="font-semibold text-gray-800 text-sm">{isRtl ? 'ملخص الطلب' : 'Order Summary'}</h4>
-              <ul className="space-y-2">
-                {orderItems.map((item) => (
-                  <li key={item.productId} className="flex justify-between text-sm text-gray-700">
-                    <span>
-                      {item.product.name} (x{item.quantity})
-                    </span>
-                    <span>
-                      {(item.price * item.quantity).toFixed(2)} {isRtl ? 'ريال ' : 'SAR'}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-4 font-semibold text-gray-800 text-sm">
-                <span>{isRtl ? 'الإجمالي النهائي' : 'Final Total'}: </span>
-                <span className="text-teal-600">
-                  {getTotalAmount} {isRtl ? 'ريال ' : 'SAR'}
-                </span>
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => setShowConfirmModal(false)}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full transition-colors text-sm"
-                aria-label={isRtl ? 'إلغاء' : 'Cancel'}
-              >
-                {isRtl ? 'إلغاء' : 'Cancel'}
-              </button>
-              <button
-                onClick={confirmOrder}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors text-sm"
-                disabled={submitting}
-                aria-label={submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'تأكيد' : 'Confirm')}
-              >
-                {submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'تأكيد' : 'Confirm')}
-              </button>
+        <Modal
+          isOpen={showConfirmModal}
+          onClose={() => setShowConfirmModal(false)}
+          title={t('orders.confirmOrder')}
+          size="md"
+        >
+          <p className="text-gray-600 text-sm mb-4">{t('orders.confirmMessage')}</p>
+          <div className="max-h-64 overflow-y-auto space-y-3">
+            <h4 className="font-semibold text-gray-800 text-sm">{t('orders.summary')}</h4>
+            <ul className="space-y-2">
+              {orderItems.map((item) => (
+                <li key={item.productId} className="flex justify-between text-sm text-gray-700">
+                  <span>
+                    {item.product.displayName} (x{item.quantity})
+                  </span>
+                  <span>
+                    {(item.price * item.quantity).toFixed(2)} {t('currency')}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-4 font-semibold text-gray-800 text-sm">
+              <span>{t('orders.finalTotal')}: </span>
+              <span className="text-teal-600">
+                {getTotalAmount} {t('currency')}
+              </span>
             </div>
           </div>
-        </div>
+          <div className="flex justify-end gap-3 mt-6">
+            <Button
+              variant="secondary"
+              onClick={() => setShowConfirmModal(false)}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md"
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              variant="primary"
+              onClick={confirmOrder}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-md"
+              disabled={submitting}
+            >
+              {submitting ? t('orders.submitting') : t('confirm')}
+            </Button>
+          </div>
+        </Modal>
       )}
 
       {/* Header */}
-      <div className="mb-8 ">
-        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+      >
+        <h1 className="text-3xl sm:text-4xl font-bold text-amber-900 flex items-center justify-center sm:justify-start gap-3">
           <ShoppingCart className="w-8 h-8 text-amber-600" />
-          {isRtl ? 'إنشاء طلب جديد' : 'Create New Order'}
+          {t('orders.createNew')}
         </h1>
-        <p className="text-gray-600 mt-2 text-sm">
-          {isRtl ? 'قم بإضافة المنتجات وتأكيد الطلب لإرساله' : 'Add products and confirm to submit your order'}
-        </p>
-      </div>
+        {orderItems.length > 0 && (
+          <Button
+            variant="primary"
+            onClick={scrollToSummary}
+            className="lg:hidden bg-amber-600 hover:bg-amber-700 text-white rounded-md px-4 py-2 shadow-md transition-transform transform hover:scale-105"
+          >
+            {t('orders.scrollToSummary')}
+          </Button>
+        )}
+      </motion.div>
 
       {/* Error Message */}
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 animate-pulse">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="mb-6 p-4 bg-red-100 border border-red-300 rounded-md flex items-center gap-2"
+        >
           <AlertCircle className="w-5 h-5 text-red-600" />
-          <span className="text-red-600 text-sm">{error}</span>
-        </div>
-      )}
-
-      {/* Scroll Down Button for Small Screens */}
-      {orderItems.length > 0 && (
-        <div className={`lg:hidden fixed bottom-6 ${isRtl ? 'left-6' : 'right-6'} z-50`}>
-          <button
-            onClick={scrollToSummary}
-            className="p-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg transition-transform transform hover:scale-105"
-            aria-label={isRtl ? 'التمرير للملخص' : 'Scroll to Summary'}
-          >
-            <ChevronDown className="w-6 h-6" />
-          </button>
-        </div>
+          <span className="text-red-600">{error}</span>
+        </motion.div>
       )}
 
       {/* Main Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Products Section */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="p-6 bg-white rounded-2xl shadow-md">
+          <Card className="p-4 bg-white rounded-md shadow-sm">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="text"
-                  placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
-                  onChange={(e) => debouncedSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
-                  aria-label={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
+                <Input
+                  value={searchTerm}
+                  onChange={(value) => debouncedSearch(value)}
+                  placeholder={t('products.searchPlaceholder')}
+                  className="pl-10 border-gray-300 rounded-md focus:ring-amber-500"
+                  aria-label={t('products.searchPlaceholder')}
                 />
               </div>
-              <select
+              <Select
+                label={t('products.department')}
+                options={[{ value: '', label: t('products.allDepartments') }, ...departments.map((d) => ({ value: d._id, label: d.displayName }))]}
                 value={filterDepartment}
-                onChange={(e) => setFilterDepartment(e.target.value)}
-                className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
-                aria-label={isRtl ? 'تصفية حسب القسم' : 'Filter by department'}
-              >
-                <option value="">{isRtl ? 'كل الأقسام' : 'All Departments'}</option>
-                {departments.map((d) => (
-                  <option key={d._id} value={d._id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
+                onChange={setFilterDepartment}
+                className="border-gray-300 rounded-md focus:ring-amber-500"
+                aria-label={t('products.department')}
+              />
             </div>
-          </div>
+          </Card>
 
           {loading.products ? (
-            <div className="p-6 text-center bg-white rounded-2xl shadow-md">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-amber-600 mx-auto"></div>
-            </div>
+            <Card className="p-6 text-center bg-white rounded-md shadow-sm">
+              <LoadingSpinner size="md" />
+            </Card>
           ) : filteredProducts.length === 0 ? (
-            <div className="p-8 text-center bg-white rounded-2xl shadow-md">
-              <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 text-sm">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
-            </div>
+            <Card className="p-6 text-center bg-white rounded-md shadow-sm">
+              <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+              <h3 className="text-lg font-medium text-gray-800">{t('products.noProducts')}</h3>
+              <p className="text-gray-500">{t('products.noMatch')}</p>
+            </Card>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredProducts.map((product) => {
                 const cartItem = orderItems.find((item) => item.productId === product._id);
                 return (
-                  <div
-                    key={product._id}
-                    className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-200"
-                  >
-                    <div className="space-y-3">
+                  <Card key={product._id} className="bg-white rounded-md shadow-sm hover:shadow-md transition-shadow">
+                    <div className="p-4">
                       <div className="flex items-center justify-between gap-4">
-                        <h3 className="font-semibold text-gray-900 text-base truncate">{product.name}</h3>
+                        <h3 className="font-medium text-gray-800 text-base truncate">{product.displayName}</h3>
                         <p className="text-xs text-gray-500">{product.code}</p>
                       </div>
-                      <p className="text-sm text-amber-600">{product.department?.name || (isRtl ? 'بدون قسم' : 'No Department')}</p>
+                      <p className="text-sm text-amber-600">{product.department.displayName}</p>
                       <p className="font-semibold text-gray-900 text-sm">
-                        {product.price} {isRtl ? 'ريال ' : 'SAR'} / {product.unit}
+                        {product.price} {t('currency')} / {product.displayUnit}
                       </p>
                       {product.description && (
-                        <p className="text-xs text-gray-600 line-clamp-2">{product.description}</p>
+                        <p className="text-xs text-gray-400 mt-1 line-clamp-2">{product.description}</p>
                       )}
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-2 mt-3">
                         {cartItem ? (
-                          <>
-                          <div className='flex items-center justify-center align-center gap-2'>
-                            <button
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="secondary"
                               onClick={() => updateQuantity(product._id, cartItem.quantity - 1)}
-                              className="w-8 h-8 bg-gray-200 rounded-full hover:bg-gray-300 transition-colors flex items-center justify-center"
-                              aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
+                              className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center"
+                              aria-label={t('orders.decreaseQuantity')}
                             >
                               <Minus className="w-4 h-4" />
-                            </button>
-                            <div className="w-8 h-8 text-center font-medium text-md">{cartItem.quantity}</div>
-                            <button
+                            </Button>
+                            <span className="w-8 text-center font-medium text-sm">{cartItem.quantity}</span>
+                            <Button
+                              variant="primary"
                               onClick={() => updateQuantity(product._id, cartItem.quantity + 1)}
-                              className="w-8 h-8 bg-amber-600 rounded-full hover:bg-amber-700 transition-colors flex items-center justify-center"
-                              aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
+                              className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full flex items-center justify-center"
+                              aria-label={t('orders.increaseQuantity')}
                             >
                               <Plus className="w-4 h-4 text-white" />
-                            </button>
-                           </ div>
-                          </>
+                            </Button>
+                          </div>
                         ) : (
-                          <button
+                          <Button
+                            variant="primary"
                             onClick={() => addToOrder(product)}
-                            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full text-sm transition-colors"
-                            aria-label={isRtl ? 'إضافة إلى السلة' : 'Add to Cart'}
+                            className="bg-amber-600 hover:bg-amber-700 text-white rounded-md px-4 py-2"
+                            aria-label={t('orders.addToCart')}
                           >
-                            {isRtl ? 'إضافة إلى السلة' : 'Add to Cart'}
-                          </button>
+                            {t('orders.addToCart')}
+                          </Button>
                         )}
                       </div>
                     </div>
-                  </div>
+                  </Card>
                 );
               })}
+            </div>
+          )}
+          {totalPages > 1 && (
+            <div className="flex justify-center mt-6">
+              <Button
+                variant="secondary"
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+                className="mx-2"
+              >
+                {t('previous')}
+              </Button>
+              <span className="mx-4 self-center">{t('page')} {currentPage} / {totalPages}</span>
+              <Button
+                variant="secondary"
+                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                disabled={currentPage === totalPages}
+                className="mx-2"
+              >
+                {t('next')}
+              </Button>
             </div>
           )}
         </div>
 
         {/* Order Summary and Form (Sticky on Large Screens) */}
         <div className="lg:sticky lg:top-8 space-y-4 max-h-[calc(100vh-2rem)] overflow-y-auto" ref={summaryRef}>
-          <div className="p-6 bg-white rounded-2xl shadow-md">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{isRtl ? 'ملخص الطلب' : 'Order Summary'}</h3>
+          <Card className="p-6 bg-white rounded-md shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('orders.summary')}</h3>
             {orderItems.length === 0 ? (
-              <p className="text-gray-600 text-center py-4 text-sm">{isRtl ? 'السلة فارغة' : 'Cart is empty'}</p>
+              <p className="text-gray-600 text-center py-4 text-sm">{t('orders.cartEmpty')}</p>
             ) : (
               <div className="space-y-3">
                 {orderItems.map((item) => (
@@ -462,126 +519,110 @@ export function NewOrder() {
                     className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                   >
                     <div className="flex-1">
-                      <p className="font-medium text-gray-900 text-sm">{item.product.name}</p>
+                      <p className="font-medium text-gray-900 text-sm">{item.product.displayName}</p>
                       <p className="text-xs text-gray-600">
-                        {item.price} {isRtl ? 'ريال ' : 'SAR'} / {item.product.unit}
+                        {item.price} {t('currency')} / {item.product.displayUnit}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button
+                      <Button
+                        variant="secondary"
                         onClick={() => updateQuantity(item.productId, item.quantity - 1)}
-                        className="w-8 h-8 bg-gray-200 rounded-full hover:bg-gray-300 transition-colors flex items-center justify-center"
-                        aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
+                        className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full flex items-center justify-center"
+                        aria-label={t('orders.decreaseQuantity')}
                       >
                         <Minus className="w-4 h-4" />
-                      </button>
+                      </Button>
                       <span className="w-8 text-center font-medium text-sm">{item.quantity}</span>
-                      <button
+                      <Button
+                        variant="primary"
                         onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                        className="w-8 h-8 bg-amber-600 rounded-full hover:bg-amber-700 transition-colors flex items-center justify-center"
-                        aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
+                        className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full flex items-center justify-center"
+                        aria-label={t('orders.increaseQuantity')}
                       >
                         <Plus className="w-4 h-4 text-white" />
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="danger"
                         onClick={() => removeFromOrder(item.productId)}
-                        className="w-8 h-8 bg-red-500 rounded-full hover:bg-red-600 transition-colors flex items-center justify-center"
-                        aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
+                        className="w-8 h-8 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center"
+                        aria-label={t('orders.removeItem')}
                       >
                         <Trash2 className="w-4 h-4 text-white" />
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ))}
                 <div className="border-t pt-3">
                   <div className="flex justify-between font-semibold text-gray-900 text-sm">
-                    <span>{isRtl ? 'الإجمالي النهائي' : 'Final Total'}:</span>
+                    <span>{t('orders.finalTotal')}:</span>
                     <span className="text-teal-600">
-                      {getTotalAmount} {isRtl ? 'ريال سعودي' : 'SAR'}
+                      {getTotalAmount} {t('currency')}
                     </span>
                   </div>
                 </div>
               </div>
             )}
-          </div>
+          </Card>
 
-          <div className="p-6 bg-white rounded-2xl shadow-md">
+          <Card className="p-6 bg-white rounded-md shadow-sm">
             <form onSubmit={handleSubmit} className="space-y-4">
               {user?.role === 'admin' && (
-                <div>
-                  <label htmlFor="branch" className="block text-sm font-medium text-gray-700 mb-1">
-                    {isRtl ? 'الفرع' : 'Branch'}
-                  </label>
-                  <select
-                    id="branch"
-                    value={branch}
-                    onChange={(e) => setBranch(e.target.value)}
-                    className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
-                    aria-label={isRtl ? 'الفرع' : 'Branch'}
-                    disabled={loading.branches}
-                  >
-                    <option value="">{isRtl ? 'اختر الفرع' : 'Select Branch'}</option>
-                    {branches.map((b) => (
-                      <option key={b._id} value={b._id}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <Select
+                  label={t('orders.branch')}
+                  options={[{ value: '', label: t('orders.selectBranch') }, ...branches.map((b) => ({ value: b._id, label: b.displayName }))]}
+                  value={branch}
+                  onChange={setBranch}
+                  className="border-gray-300 rounded-md focus:ring-amber-500"
+                  disabled={loading.branches}
+                  aria-label={t('orders.branch')}
+                />
               )}
-              <div>
-                <label htmlFor="priority" className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRtl ? 'الأولوية' : 'Priority'}
-                </label>
-                <select
-                  id="priority"
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value)}
-                  className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
-                  aria-label={isRtl ? 'الأولوية' : 'Priority'}
-                >
-                  {priorityOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <Select
+                label={t('orders.priority')}
+                options={priorityOptions}
+                value={priority}
+                onChange={setPriority}
+                className="border-gray-300 rounded-md focus:ring-amber-500"
+                aria-label={t('orders.priority')}
+              />
               <div>
                 <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRtl ? 'ملاحظات' : 'Notes'}
+                  {t('orders.notes')}
                 </label>
                 <textarea
                   id="notes"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder={isRtl ? 'أدخل ملاحظات الطلب...' : 'Enter order notes...'}
-                  className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-y text-sm"
+                  placeholder={t('orders.notesPlaceholder')}
+                  className="w-full px-3 py-3 border border-gray-200 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-y text-sm"
                   rows={4}
-                  aria-label={isRtl ? 'ملاحظات' : 'Notes'}
+                  aria-label={t('orders.notes')}
                 />
               </div>
               <div className="flex gap-3">
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
                   onClick={clearOrder}
-                  className="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full transition-colors text-sm"
+                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md"
                   disabled={submitting || orderItems.length === 0}
-                  aria-label={isRtl ? 'مسح الطلب' : 'Clear Order'}
+                  aria-label={t('orders.clearOrder')}
                 >
-                  {isRtl ? 'مسح الطلب' : 'Clear Order'}
-                </button>
-                <button
+                  {t('orders.clearOrder')}
+                </Button>
+                <Button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors text-sm"
+                  variant="primary"
+                  className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-md"
                   disabled={orderItems.length === 0 || submitting}
-                  aria-label={submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'إرسال الطلب' : 'Submit Order')}
+                  aria-label={submitting ? t('orders.submitting') : t('orders.submitOrder')}
                 >
-                  {submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'إرسال الطلب' : 'Submit Order')}
-                </button>
+                  {submitting ? t('orders.submitting') : t('orders.submitOrder')}
+                </Button>
               </div>
             </form>
-          </div>
+          </Card>
         </div>
       </div>
     </div>
