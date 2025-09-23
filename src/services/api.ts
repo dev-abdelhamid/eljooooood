@@ -521,29 +521,62 @@ export const ordersAPI = {
 };
 
 export const departmentAPI = {
-  getAll: async () => {
-    const response = await api.get('/departments');
+  getAll: async (params: { page?: number; limit?: number; search?: string } = {}) => {
+    const response = await api.get('/departments', { params });
     console.log(`[${new Date().toISOString()}] departmentAPI.getAll - Response:`, response);
     return response;
   },
-  create: async (departmentData: { name: string; code: string; description?: string }) => {
+  getById: async (id: string) => {
+    if (!isValidObjectId(id)) {
+      console.error(`[${new Date().toISOString()}] departmentAPI.getById - Invalid department ID:`, id);
+      throw new Error('Invalid department ID');
+    }
+    const response = await api.get(`/departments/${id}`);
+    console.log(`[${new Date().toISOString()}] departmentAPI.getById - Response:`, response);
+    return response;
+  },
+  create: async (departmentData: {
+    name: string;
+    nameEn?: string;
+    code: string;
+    description?: string;
+    chef?: string;
+  }) => {
+    if (departmentData.chef && !isValidObjectId(departmentData.chef)) {
+      console.error(`[${new Date().toISOString()}] departmentAPI.create - Invalid chef ID:`, departmentData.chef);
+      throw new Error('Invalid chef ID');
+    }
     const response = await api.post('/departments', {
       name: departmentData.name.trim(),
+      nameEn: departmentData.nameEn?.trim(),
       code: departmentData.code.trim(),
       description: departmentData.description?.trim(),
+      chef: departmentData.chef,
     });
     console.log(`[${new Date().toISOString()}] departmentAPI.create - Response:`, response);
     return response;
   },
-  update: async (id: string, departmentData: Partial<{ name: string; code: string; description: string }>) => {
+  update: async (id: string, departmentData: Partial<{
+    name: string;
+    nameEn?: string;
+    code: string;
+    description: string;
+    chef?: string;
+  }>) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] departmentAPI.update - Invalid department ID:`, id);
       throw new Error('Invalid department ID');
     }
+    if (departmentData.chef && !isValidObjectId(departmentData.chef)) {
+      console.error(`[${new Date().toISOString()}] departmentAPI.update - Invalid chef ID:`, departmentData.chef);
+      throw new Error('Invalid chef ID');
+    }
     const response = await api.put(`/departments/${id}`, {
       name: departmentData.name?.trim(),
+      nameEn: departmentData.nameEn?.trim(),
       code: departmentData.code?.trim(),
       description: departmentData.description?.trim(),
+      chef: departmentData.chef,
     });
     console.log(`[${new Date().toISOString()}] departmentAPI.update - Response:`, response);
     return response;
