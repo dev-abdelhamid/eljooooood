@@ -18,8 +18,8 @@ interface Product {
   code: string;
   department: { _id: string; name: string; nameEn?: string };
   price: number;
-  unit: string;
-  unitEn?: string;
+  unit: 'كيلو' | 'قطعة' | 'علبة' | 'صينية';
+  unitEn?: 'Kilogram' | 'Piece' | 'Box' | 'Tray';
   description?: string;
   displayName: string;
 }
@@ -29,6 +29,13 @@ interface Department {
   name: string;
   nameEn?: string;
 }
+
+const unitTranslations: Record<Product['unit'], { ar: string; en: string }> = {
+  'كيلو': { ar: 'كيلو', en: 'Kilogram' },
+  'قطعة': { ar: 'قطعة', en: 'Piece' },
+  'علبة': { ar: 'علبة', en: 'Box' },
+  'صينية': { ar: 'صينية', en: 'Tray' },
+};
 
 export function Products() {
   const { t, language } = useLanguage();
@@ -41,8 +48,6 @@ export function Products() {
   const [filterDepartment, setFilterDepartment] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -50,8 +55,8 @@ export function Products() {
     code: '',
     department: '',
     price: '',
-    unit: 'قطعة',
-    unitEn: 'Piece',
+    unit: 'قطعة' as Product['unit'],
+    unitEn: 'Piece' as Product['unitEn'],
     description: '',
   });
 
@@ -65,10 +70,10 @@ export function Products() {
 
       setLoading(true);
       try {
-        console.log('Fetching products with params:', { department: filterDepartment, search: searchTerm, page: currentPage, limit: 12 });
+        console.log('Fetching products with params:', { department: filterDepartment, search: searchTerm });
         console.log('API URL:', import.meta.env.VITE_API_URL);
         const [productsResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ department: filterDepartment, search: searchTerm, page: currentPage, limit: 12 }),
+          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 100 }),
           departmentAPI.getAll({ limit: 100 }),
         ]);
         console.log('Products response:', productsResponse);
@@ -79,7 +84,6 @@ export function Products() {
           displayName: language === 'ar' ? product.name : (product.nameEn || product.name),
         }));
         setProducts(productsWithDisplayName);
-        setTotalPages(productsResponse.totalPages);
         setDepartments(departmentsResponse.data);
         setError('');
       } catch (err: any) {
@@ -95,7 +99,7 @@ export function Products() {
       }
     };
     fetchData();
-  }, [t, user, filterDepartment, searchTerm, currentPage]);
+  }, [t, user, filterDepartment, searchTerm, language]);
 
   const filteredProducts = products.filter(
     (product) =>
@@ -118,7 +122,7 @@ export function Products() {
         department: product.department._id,
         price: product.price.toString(),
         unit: product.unit,
-        unitEn: product.unitEn || '',
+        unitEn: product.unitEn || unitTranslations[product.unit].en,
         description: product.description || '',
       });
     } else {
@@ -284,6 +288,9 @@ export function Products() {
                 <p className="text-sm text-blue-500">
                   {t('products.department')}: {language === 'ar' ? product.department.name : (product.department.nameEn || product.department.name)}
                 </p>
+                <p className="text-sm text-gray-500">
+                  {t('products.unit')}: {language === 'ar' ? unitTranslations[product.unit].ar : (product.unitEn || unitTranslations[product.unit].en)}
+                </p>
                 {product.description && <p className="text-xs text-gray-400 mt-1">{product.description}</p>}
                 <div className="flex items-center justify-between mt-3">
                   <span className="text-lg font-semibold text-gray-800">{product.price} {t('products.currency')}</span>
@@ -310,26 +317,6 @@ export function Products() {
             </Card>
           ))
         )}
-      </div>
-
-      <div className="flex justify-center mt-6">
-        <Button
-          variant="secondary"
-          onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-          disabled={currentPage === 1}
-          className="mx-2"
-        >
-          {t('previous')}
-        </Button>
-        <span className="mx-4 self-center">{t('page')} {currentPage} / {totalPages}</span>
-        <Button
-          variant="secondary"
-          onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-          disabled={currentPage === totalPages}
-          className="mx-2"
-        >
-          {t('next')}
-        </Button>
       </div>
 
       <Modal
@@ -382,14 +369,18 @@ export function Products() {
             />
             <Select
               label={t('products.unit')}
-              options={[
-                { value: 'كيلو', label: t('products.units.kilo'), valueEn: 'Kilogram' },
-                { value: 'قطعة', label: t('products.units.piece'), valueEn: 'Piece' },
-                { value: 'علبة', label: t('products.units.box'), valueEn: 'Box' },
-                { value: 'صينية', label: t('products.units.tray'), valueEn: 'Tray' },
-              ].map((opt) => ({ value: opt.value, label: language === 'ar' ? opt.label : opt.valueEn }))}
+              options={Object.entries(unitTranslations).map(([value, { ar, en }]) => ({
+                value,
+                label: language === 'ar' ? ar : en,
+              }))}
               value={formData.unit}
-              onChange={(value) => setFormData({ ...formData, unit: value, unitEn: (language === 'ar' ? undefined : formData.unitEn) || value })}
+              onChange={(value) =>
+                setFormData({
+                  ...formData,
+                  unit: value as Product['unit'],
+                  unitEn: unitTranslations[value as Product['unit']].en,
+                })
+              }
               required
               className="border-gray-300 rounded-md focus:ring-blue-500"
             />
