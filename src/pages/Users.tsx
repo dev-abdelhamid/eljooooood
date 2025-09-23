@@ -20,7 +20,7 @@ interface User {
   email?: string;
   phone?: string;
   role: 'admin' | 'branch' | 'chef' | 'production';
-  branch?: { _id: string; name: string; nameEn?: string; address?: string; addressEn?: string; city?: string; cityEn?: string };
+  branch?: { _id: string; name: string; nameEn?: string };
   department?: { _id: string; name: string };
   isActive: boolean;
   createdAt: string;
@@ -32,10 +32,6 @@ interface Branch {
   _id: string;
   name: string;
   nameEn?: string;
-  address?: string;
-  addressEn?: string;
-  city?: string;
-  cityEn?: string;
 }
 
 interface Department {
@@ -73,18 +69,12 @@ const translations = {
     delete: 'حذف',
     name: 'اسم المستخدم (عربي)',
     nameEn: 'اسم المستخدم (إنجليزي)',
-    address: 'العنوان (عربي)',
-    addressEn: 'العنوان (إنجليزي)',
-    city: 'المدينة (عربية)',
-    cityEn: 'المدينة (إنجليزية)',
     nameRequired: 'اسم المستخدم مطلوب',
     nameEnRequired: 'اسم المستخدم بالإنجليزية مطلوب',
     usernameRequired: 'اسم المستخدم للدخول مطلوب',
     passwordRequired: 'كلمة المرور مطلوبة',
     branchRequired: 'الفرع مطلوب',
     departmentRequired: 'القسم مطلوب',
-    addressRequired: 'العنوان مطلوب',
-    cityRequired: 'المدينة مطلوبة',
     namePlaceholder: 'أدخل اسم المستخدم',
     nameEnPlaceholder: 'أدخل اسم المستخدم بالإنجليزية',
     usernamePlaceholder: 'أدخل اسم المستخدم للدخول',
@@ -92,10 +82,6 @@ const translations = {
     phonePlaceholder: 'أدخل رقم الهاتف',
     branchPlaceholder: 'اختر الفرع',
     departmentPlaceholder: 'اختر القسم',
-    addressPlaceholder: 'أدخل العنوان',
-    addressEnPlaceholder: 'أدخل العنوان بالإنجليزية',
-    cityPlaceholder: 'أدخل المدينة',
-    cityEnPlaceholder: 'أدخل المدينة بالإنجليزية',
     passwordPlaceholder: 'أدخل كلمة المرور',
     update: 'تحديث المستخدم',
     requiredFields: 'يرجى ملء جميع الحقول المطلوبة',
@@ -129,6 +115,7 @@ const translations = {
     inactive: 'غير نشط',
   },
   en: {
+    // Similar to ar, but in English
     manage: 'Manage Users',
     add: 'Add User',
     addFirst: 'Add First User',
@@ -157,18 +144,12 @@ const translations = {
     delete: 'Delete',
     name: 'User Name (Arabic)',
     nameEn: 'User Name (English)',
-    address: 'Address (Arabic)',
-    addressEn: 'Address (English)',
-    city: 'City (Arabic)',
-    cityEn: 'City (English)',
     nameRequired: 'User name is required',
     nameEnRequired: 'User name in English is required',
     usernameRequired: 'Username is required',
     passwordRequired: 'Password is required',
     branchRequired: 'Branch is required',
     departmentRequired: 'Department is required',
-    addressRequired: 'Address is required',
-    cityRequired: 'City is required',
     namePlaceholder: 'Enter user name',
     nameEnPlaceholder: 'Enter user name in English',
     usernamePlaceholder: 'Enter username',
@@ -176,10 +157,6 @@ const translations = {
     phonePlaceholder: 'Enter phone number',
     branchPlaceholder: 'Select branch',
     departmentPlaceholder: 'Select department',
-    addressPlaceholder: 'Enter address',
-    addressEnPlaceholder: 'Enter address in English',
-    cityPlaceholder: 'Enter city',
-    cityEnPlaceholder: 'Enter city in English',
     passwordPlaceholder: 'Enter password',
     update: 'Update User',
     requiredFields: 'Please fill all required fields',
@@ -244,10 +221,6 @@ export const Users: React.FC = () => {
     role: 'admin' as 'admin' | 'branch' | 'chef' | 'production',
     branch: '',
     department: '',
-    address: '',
-    addressEn: '',
-    city: '',
-    cityEn: '',
     password: '',
     isActive: true,
   });
@@ -276,7 +249,6 @@ export const Users: React.FC = () => {
       setTotalPages(usersResponse.totalPages || Math.ceil(fetchedUsers.length / 10));
       setError('');
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Fetch error:`, err);
       setError(err.message || t.fetchError);
       toast.error(t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
     } finally {
@@ -304,8 +276,6 @@ export const Users: React.FC = () => {
     if (!isEditMode && !formData.password) errors.password = t.passwordRequired;
     if (formData.role === 'branch' && !formData.branch) errors.branch = t.branchRequired;
     if (formData.role === 'chef' && !formData.department) errors.department = t.departmentRequired;
-    if (formData.role === 'branch' && !formData.address) errors.address = t.addressRequired;
-    if (formData.role === 'branch' && !formData.city) errors.city = t.cityRequired;
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -320,10 +290,6 @@ export const Users: React.FC = () => {
       role: 'admin',
       branch: '',
       department: '',
-      address: '',
-      addressEn: '',
-      city: '',
-      cityEn: '',
       password: '',
       isActive: true,
     });
@@ -344,10 +310,6 @@ export const Users: React.FC = () => {
       role: user.role,
       branch: user.branch?._id || '',
       department: user.department?._id || '',
-      address: user.branch?.address || '',
-      addressEn: user.branch?.addressEn || '',
-      city: user.branch?.city || '',
-      cityEn: user.branch?.cityEn || '',
       password: '',
       isActive: user.isActive,
     });
@@ -386,7 +348,7 @@ export const Users: React.FC = () => {
     try {
       const userData = {
         name: formData.name.trim(),
-        nameEn: formData.nameEn.trim() || undefined,
+        nameEn: formData.nameEn.trim(),
         username: formData.username.trim(),
         email: formData.email.trim() || undefined,
         phone: formData.phone.trim() || undefined,
@@ -397,32 +359,19 @@ export const Users: React.FC = () => {
         ...(isEditMode ? {} : { password: formData.password.trim() }),
       };
 
-      const branchData = formData.role === 'branch' ? {
-        address: formData.address.trim(),
-        addressEn: formData.addressEn.trim() || undefined,
-        city: formData.city.trim(),
-        cityEn: formData.cityEn.trim() || undefined,
-      } : {};
-
       if (isEditMode && selectedUser) {
         await usersAPI.update(selectedUser._id, userData);
-        if (formData.role === 'branch' && formData.branch) {
-          await branchesAPI.update(formData.branch, branchData);
-        }
-        setUsers(users.map((u) => (u._id === selectedUser._id ? { ...u, ...userData, branch: { ...u.branch, ...branchData } } : u)));
+        setUsers(users.map((u) => (u._id === selectedUser._id ? { ...u, ...userData } : u)));
         toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
       } else {
         const response = await usersAPI.create(userData);
-        if (formData.role === 'branch' && formData.branch) {
-          await branchesAPI.update(formData.branch, branchData);
-        }
-        setUsers([...users, { ...response, password: '********', branch: { ...response.branch, ...branchData } }]);
+        setUsers([...users, { ...response, password: '********' }]);
         toast.success(t.added, { position: isRtl ? 'top-right' : 'top-left' });
       }
       setIsModalOpen(false);
       setError('');
+      fetchData(); // Refresh after change
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Submit error:`, err);
       let errorMessage = isEditMode ? t.updateError : t.createError;
       if (err.response?.data?.message) {
         const message = err.response.data.message;
@@ -532,130 +481,149 @@ export const Users: React.FC = () => {
         )}
       </AnimatePresence>
 
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="mb-6"
-      >
-        <div className="relative">
-          <Input
-            value={searchTerm}
-            onChange={(value) => setSearchTerm(value)}
-            placeholder={t.searchPlaceholder}
-            className="pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white text-sm"
-          />
-          <Search className="w-4 h-4 text-gray-400 absolute top-1/2 transform -translate-y-1/2 left-3" />
+      <Card className="p-4 sm:p-6 mb-6 bg-white rounded-2xl shadow-sm">
+        <div className="flex flex-col sm:flex-row gap-3 items-center">
+          <div className="relative flex-1 w-full sm:w-auto">
+            <Search
+              className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4`}
+            />
+            <Input
+              value={searchTerm}
+              onChange={(value) => setSearchTerm(value)}
+              placeholder={t.searchPlaceholder}
+              className={`pl-9 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+              aria-label={t.searchPlaceholder}
+            />
+          </div>
+          <div className="flex-1 w-full sm:w-auto">
+            <Select
+              label={t.role}
+              options={[
+                { value: 'all', label: t.allRoles },
+                { value: 'admin', label: t.admin },
+                { value: 'branch', label: t.branch },
+                { value: 'chef', label: t.chef },
+                { value: 'production', label: t.production },
+              ]}
+              value={filterRole}
+              onChange={(value) => setFilterRole(value)}
+              className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white text-sm"
+              aria-label={t.role}
+            />
+          </div>
         </div>
-      </motion.div>
+      </Card>
 
       <motion.div
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 0.5 }}
+        transition={{ staggerChildren: 0.1 }}
       >
-        <Card className="p-4 sm:p-6 bg-white rounded-2xl shadow-sm">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className={`p-3 text-left font-semibold text-gray-600 ${isRtl ? 'text-right' : 'text-left'}`}>
-                    {t.name}
-                  </th>
-                  <th className={`p-3 text-left font-semibold text-gray-600 ${isRtl ? 'text-right' : 'text-left'}`}>
-                    {t.username}
-                  </th>
-                  <th className={`p-3 text-left font-semibold text-gray-600 ${isRtl ? 'text-right' : 'text-left'}`}>
-                    {t.role}
-                  </th>
-                  <th className={`p-3 text-left font-semibold text-gray-600 ${isRtl ? 'text-right' : 'text-left'}`}>
-                    {t.branch}
-                  </th>
-                  <th className={`p-3 text-left font-semibold text-gray-600 ${isRtl ? 'text-right' : 'text-left'}`}>
-                    {t.address}
-                  </th>
-                  <th className={`p-3 text-left font-semibold text-gray-600 ${isRtl ? 'text-right' : 'text-left'}`}>
-                    {t.city}
-                  </th>
-                  <th className={`p-3 text-left font-semibold text-gray-600 ${isRtl ? 'text-right' : 'text-left'}`}>
-                    {t.status}
-                  </th>
-                  {loggedInUser?.role === 'admin' && (
-                    <th className={`p-3 text-left font-semibold text-gray-600 ${isRtl ? 'text-right' : 'text-left'}`}>
-                      {t.actions}
-                    </th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUsers.map((user) => (
-                  <tr key={user._id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="p-3">{isRtl ? user.name : user.nameEn || user.name}</td>
-                    <td className="p-3">{user.username}</td>
-                    <td className="p-3">{t[user.role]}</td>
-                    <td className="p-3">{user.branch ? (isRtl ? user.branch.name : user.branch.nameEn || user.branch.name) : '-'}</td>
-                    <td className="p-3">{user.branch ? (isRtl ? user.branch.address : user.branch.addressEn || user.branch.address) : '-'}</td>
-                    <td className="p-3">{user.branch ? (isRtl ? user.branch.city : user.branch.cityEn || user.branch.city) : '-'}</td>
-                    <td className={`p-3 ${user.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                      {user.isActive ? t.active : t.inactive}
-                    </td>
-                    {loggedInUser?.role === 'admin' && (
-                      <td className="p-3 flex gap-2">
-                        <Button
-                          variant="outline"
-                          icon={Edit2}
-                          onClick={(e) => { e.stopPropagation(); openEditModal(user); }}
-                          className="text-amber-500 hover:text-amber-600 border-amber-500 rounded-full text-xs px-3 py-1"
-                        >
-                          {t.edit}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          icon={Key}
-                          onClick={(e) => { e.stopPropagation(); openResetPasswordModal(user); }}
-                          className="text-blue-500 hover:text-blue-600 border-blue-500 rounded-full text-xs px-3 py-1"
-                        >
-                          {t.resetPassword}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          icon={Trash2}
-                          onClick={(e) => { e.stopPropagation(); openDeleteModal(user); }}
-                          className="text-red-500 hover:text-red-600 border-red-500 rounded-full text-xs px-3 py-1"
-                        >
-                          {t.delete}
-                        </Button>
-                      </td>
+        {filteredUsers.length === 0 ? (
+          <Card className="p-6 text-center bg-white rounded-2xl shadow-sm col-span-full">
+            <User className="w-8 h-8 text-amber-400 mx-auto mb-3" />
+            <h3 className="text-sm font-semibold text-gray-800">{t.noUsers}</h3>
+            <p className="text-gray-500 text-xs mt-2">
+              {searchTerm || filterRole !== 'all' ? t.noMatch : t.empty}
+            </p>
+            {loggedInUser?.role === 'admin' && !searchTerm && filterRole === 'all' && (
+              <Button
+                variant="primary"
+                icon={Plus}
+                onClick={openAddModal}
+                className="mt-4 bg-amber-500 hover:bg-amber-600 text-white rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
+              >
+                {t.addFirst}
+              </Button>
+            )}
+          </Card>
+        ) : (
+          filteredUsers.map((user) => (
+            <motion.div
+              key={user._id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Card className="bg-white rounded-2xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer" onClick={() => openProfileModal(user)}>
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold text-sm text-gray-800 truncate">{isRtl ? user.name : user.nameEn || user.name}</h3>
+                    <User className="w-4 h-4 text-amber-500" />
+                  </div>
+                  <div className="space-y-1 text-xs">
+                    <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.username}:</span> <span className="truncate">{user.username}</span></p>
+                    <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.email}:</span> <span className="truncate">{user.email || '-'}</span></p>
+                    <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.phone}:</span> <span>{user.phone || '-'}</span></p>
+                    <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.role}:</span> <span>{t[user.role]}</span></p>
+                    {user.role === 'branch' && (
+                      <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.branch}:</span> <span>{user.branch ? (isRtl ? user.branch.name : user.branch.nameEn || user.branch.name) : '-'}</span></p>
                     )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
+                    {user.role === 'chef' && (
+                      <p className="text-gray-600 flex"><span className="w-16 font-medium">{t.department}:</span> <span>{user.department?.name || '-'}</span></p>
+                    )}
+                    <p className={`flex ${user.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                      <span className="w-16 font-medium">{t.status}:</span> <span>{user.isActive ? t.active : t.inactive}</span>
+                    </p>
+                  </div>
+                  {loggedInUser?.role === 'admin' && (
+                    <div className="flex gap-2 mt-3">
+                      <Button
+                        variant="outline"
+                        icon={Edit2}
+                        onClick={(e) => { e.stopPropagation(); openEditModal(user); }}
+                        className="text-amber-500 hover:text-amber-600 border-amber-500 rounded-full text-xs px-3 py-1"
+                      >
+                        {t.edit}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        icon={Key}
+                        onClick={(e) => { e.stopPropagation(); openResetPasswordModal(user); }}
+                        className="text-blue-500 hover:text-blue-600 border-blue-500 rounded-full text-xs px-3 py-1"
+                      >
+                        {t.resetPassword}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        icon={Trash2}
+                        onClick={(e) => { e.stopPropagation(); openDeleteModal(user); }}
+                        className="text-red-500 hover:text-red-600 border-red-500 rounded-full text-xs px-3 py-1"
+                      >
+                        {t.delete}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </motion.div>
+          ))
+        )}
       </motion.div>
 
       {totalPages > 1 && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="flex justify-center items-center mt-6 gap-3"
+          className="flex justify-center items-center mt-6 gap-2"
         >
           <Button
             variant="outline"
             onClick={() => setPage((p) => Math.max(p - 1, 1))}
             disabled={page === 1}
-            className="px-4 py-2 bg-amber-100 text-amber-800 disabled:opacity-50"
+            className="px-3 py-1 bg-white text-gray-600 disabled:opacity-50 rounded-full text-xs"
           >
             {t.previous}
           </Button>
-          <span className="px-4 py-2 text-amber-900">
+          <span className="px-3 py-1 text-gray-700 text-xs">
             {t.page} {page} {t.of} {totalPages}
           </span>
           <Button
             variant="outline"
             onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
             disabled={page === totalPages}
-            className="px-4 py-2 bg-amber-100 text-amber-800 disabled:opacity-50"
+            className="px-3 py-1 bg-white text-gray-600 disabled:opacity-50 rounded-full text-xs"
           >
             {t.next}
           </Button>
@@ -668,7 +636,7 @@ export const Users: React.FC = () => {
         title={isEditMode ? t.edit : t.add}
         size="lg"
       >
-        <form onSubmit={handleSubmit} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
+        <form onSubmit={handleSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -683,14 +651,16 @@ export const Users: React.FC = () => {
                 placeholder={t.namePlaceholder}
                 required
                 error={formErrors.name}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors text-sm"
+                className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
               />
               <Input
                 label={t.nameEn}
                 value={formData.nameEn}
                 onChange={(value) => setFormData({ ...formData, nameEn: value })}
                 placeholder={t.nameEnPlaceholder}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors text-sm"
+                required
+                error={formErrors.nameEn}
+                className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
               />
               <Input
                 label={t.username}
@@ -699,21 +669,21 @@ export const Users: React.FC = () => {
                 placeholder={t.usernamePlaceholder}
                 required
                 error={formErrors.username}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors text-sm"
+                className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
               />
               <Input
                 label={t.email}
                 value={formData.email}
                 onChange={(value) => setFormData({ ...formData, email: value })}
                 placeholder={t.emailPlaceholder}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors text-sm"
+                className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
               />
               <Input
                 label={t.phone}
                 value={formData.phone}
                 onChange={(value) => setFormData({ ...formData, phone: value })}
                 placeholder={t.phonePlaceholder}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors text-sm"
+                className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
               />
             </div>
             <div className="space-y-4">
@@ -727,7 +697,7 @@ export const Users: React.FC = () => {
                 ]}
                 value={formData.role}
                 onChange={(value) => setFormData({ ...formData, role: value as 'admin' | 'branch' | 'chef' | 'production', branch: value === 'branch' ? formData.branch : '', department: value === 'chef' ? formData.department : '' })}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors text-sm"
+                className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
               />
               {formData.role === 'branch' && (
                 <Select
@@ -738,7 +708,7 @@ export const Users: React.FC = () => {
                   placeholder={t.branchPlaceholder}
                   required
                   error={formErrors.branch}
-                  className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors text-sm"
+                  className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
                 />
               )}
               {formData.role === 'chef' && (
@@ -750,7 +720,7 @@ export const Users: React.FC = () => {
                   placeholder={t.departmentPlaceholder}
                   required
                   error={formErrors.department}
-                  className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors text-sm"
+                  className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
                 />
               )}
               <Select
@@ -761,7 +731,7 @@ export const Users: React.FC = () => {
                 ]}
                 value={formData.isActive}
                 onChange={(value) => setFormData({ ...formData, isActive: value === 'true' })}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors text-sm"
+                className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
               />
               {!isEditMode && (
                 <Input
@@ -772,7 +742,7 @@ export const Users: React.FC = () => {
                   type={showPassword['new'] ? 'text' : 'password'}
                   required
                   error={formErrors.password}
-                  className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors text-sm"
+                  className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
                   icon={showPassword['new'] ? EyeOff : Eye}
                   onIconClick={() => setShowPassword((prev) => ({ ...prev, new: !prev.new }))}
                 />
@@ -785,18 +755,18 @@ export const Users: React.FC = () => {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3"
+                className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
               >
-                <AlertCircle className="w-5 h-5 text-red-600" />
-                <span className="text-red-600 font-medium">{error}</span>
+                <AlertCircle className="w-4 h-4 text-red-500" />
+                <span className="text-red-500 text-sm font-medium">{error}</span>
               </motion.div>
             )}
           </AnimatePresence>
-          <div className="flex gap-4 mt-6">
+          <div className="flex gap-3 mt-4">
             <Button
               type="submit"
               variant="primary"
-              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+              className="flex-1 bg-amber-500 hover:bg-amber-600 text-white rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
             >
               {isEditMode ? t.update : t.add}
             </Button>
@@ -804,7 +774,7 @@ export const Users: React.FC = () => {
               type="button"
               variant="secondary"
               onClick={() => setIsModalOpen(false)}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+              className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
             >
               {t.cancel}
             </Button>
@@ -813,59 +783,127 @@ export const Users: React.FC = () => {
       </Modal>
 
       <Modal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        title={t.profile}
+        size="md"
+      >
+        {selectedUser && (
+          <div className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
+            <div className="flex items-center gap-2">
+              <User className="w-5 h-5 text-amber-500" />
+              <h3 className="text-base font-semibold text-gray-800">{isRtl ? selectedUser.name : selectedUser.nameEn || selectedUser.name}</h3>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="flex flex-row items-center gap-2">
+                <span className="w-20 font-medium text-gray-600">{t.username}:</span>
+                <span className="text-gray-800 truncate">{selectedUser.username}</span>
+              </div>
+              <div className="flex flex-row items-center gap-2">
+                <span className="w-20 font-medium text-gray-600">{t.email}:</span>
+                <span className="text-gray-800 truncate">{selectedUser.email || '-'}</span>
+              </div>
+              <div className="flex flex-row items-center gap-2">
+                <span className="w-20 font-medium text-gray-600">{t.phone}:</span>
+                <span className="text-gray-800">{selectedUser.phone || '-'}</span>
+              </div>
+              <div className="flex flex-row items-center gap-2">
+                <span className="w-20 font-medium text-gray-600">{t.role}:</span>
+                <span className="text-gray-800">{t[selectedUser.role]}</span>
+              </div>
+              {selectedUser.role === 'branch' && (
+                <div className="flex flex-row items-center gap-2">
+                  <span className="w-20 font-medium text-gray-600">{t.branch}:</span>
+                  <span className="text-gray-800">{selectedUser.branch ? (isRtl ? selectedUser.branch.name : selectedUser.branch.nameEn || selectedUser.branch.name) : '-'}</span>
+                </div>
+              )}
+              {selectedUser.role === 'chef' && (
+                <div className="flex flex-row items-center gap-2">
+                  <span className="w-20 font-medium text-gray-600">{t.department}:</span>
+                  <span className="text-gray-800">{selectedUser.department?.name || '-'}</span>
+                </div>
+              )}
+              <div className="flex flex-row items-center gap-2">
+                <span className="w-20 font-medium text-gray-600">{t.status}:</span>
+                <span className={`font-medium ${selectedUser.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                  {selectedUser.isActive ? t.active : t.inactive}
+                </span>
+              </div>
+              <div className="flex flex-row items-center gap-2">
+                <span className="w-20 font-medium text-gray-600">{t.createdAt}:</span>
+                <span className="text-gray-800">{new Date(selectedUser.createdAt).toLocaleString()}</span>
+              </div>
+              <div className="flex flex-row items-center gap-2">
+                <span className="w-20 font-medium text-gray-600">{t.updatedAt}:</span>
+                <span className="text-gray-800">{new Date(selectedUser.updatedAt).toLocaleString()}</span>
+              </div>
+              {loggedInUser?.role === 'admin' && (
+                <div className="flex flex-row items-center gap-2">
+                  <span className="w-20 font-medium text-gray-600">{t.currentPassword}:</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-800">{showPassword[selectedUser._id] ? selectedUser.password : '********'}</span>
+                    <button
+                      type="button"
+                      onClick={() => togglePasswordVisibility(selectedUser._id)}
+                      className="text-gray-500 hover:text-gray-700"
+                    >
+                      {showPassword[selectedUser._id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+            <Button
+              variant="secondary"
+              onClick={() => setIsProfileModalOpen(false)}
+              className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
+            >
+              {t.cancel}
+            </Button>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
         isOpen={isResetPasswordModalOpen}
         onClose={() => setIsResetPasswordModalOpen(false)}
         title={t.resetPassword}
         size="sm"
       >
-        <form onSubmit={handleResetPassword} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="space-y-4"
-          >
-            <Input
-              label={t.newPassword}
-              value={resetPasswordData.password}
-              onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
-              placeholder={t.newPasswordPlaceholder}
-              type={showPassword['newPassword'] ? 'text' : 'password'}
-              required
-              className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors text-sm"
-              icon={showPassword['newPassword'] ? EyeOff : Eye}
-              onIconClick={() => setShowPassword((prev) => ({ ...prev, newPassword: !prev.newPassword }))}
-            />
-            <Input
-              label={t.confirmPassword}
-              value={resetPasswordData.confirmPassword}
-              onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
-              placeholder={t.confirmPasswordPlaceholder}
-              type={showPassword['confirmPassword'] ? 'text' : 'password'}
-              required
-              className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors text-sm"
-              icon={showPassword['confirmPassword'] ? EyeOff : Eye}
-              onIconClick={() => setShowPassword((prev) => ({ ...prev, confirmPassword: !prev.confirmPassword }))}
-            />
-          </motion.div>
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3"
-              >
-                <AlertCircle className="w-5 h-5 text-red-600" />
-                <span className="text-red-600 font-medium">{error}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <div className="flex gap-4 mt-6">
+        <form onSubmit={handleResetPassword} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
+          <Input
+            label={t.newPassword}
+            value={resetPasswordData.password}
+            onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
+            placeholder={t.newPasswordPlaceholder}
+            type={showPassword['newPassword'] ? 'text' : 'password'}
+            required
+            className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
+            icon={showPassword['newPassword'] ? EyeOff : Eye}
+            onIconClick={() => setShowPassword((prev) => ({ ...prev, newPassword: !prev.newPassword }))}
+          />
+          <Input
+            label={t.confirmPassword}
+            value={resetPasswordData.confirmPassword}
+            onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
+            placeholder={t.confirmPasswordPlaceholder}
+            type={showPassword['confirmPassword'] ? 'text' : 'password'}
+            required
+            className="border-gray-200 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-white text-sm transition-all duration-200"
+            icon={showPassword['confirmPassword'] ? EyeOff : Eye}
+            onIconClick={() => setShowPassword((prev) => ({ ...prev, confirmPassword: !prev.confirmPassword }))}
+          />
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm">
+              <AlertCircle className="w-4 h-4 text-red-500" />
+              <span className="text-red-500 text-sm font-medium">{error}</span>
+            </div>
+          )}
+          <div className="flex gap-3 mt-4">
             <Button
               type="submit"
               variant="primary"
-              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+              className="flex-1 bg-amber-500 hover:bg-amber-600 text-white rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
             >
               {t.reset}
             </Button>
@@ -873,7 +911,7 @@ export const Users: React.FC = () => {
               type="button"
               variant="secondary"
               onClick={() => setIsResetPasswordModalOpen(false)}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+              className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
             >
               {t.cancel}
             </Button>
@@ -887,27 +925,20 @@ export const Users: React.FC = () => {
         title={t.confirmDelete}
         size="sm"
       >
-        <div className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-          <p className="text-gray-600">{t.deleteWarning}</p>
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3"
-              >
-                <AlertCircle className="w-5 h-5 text-red-600" />
-                <span className="text-red-600 font-medium">{error}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <div className="flex gap-4 mt-6">
+        <div className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
+          <p className="text-gray-600 text-sm">{t.deleteWarning}</p>
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm">
+              <AlertCircle className="w-4 h-4 text-red-500" />
+              <span className="text-red-500 text-sm font-medium">{error}</span>
+            </div>
+          )}
+          <div className="flex gap-3 mt-4">
             <Button
               type="button"
               variant="danger"
               onClick={handleDelete}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+              className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
             >
               {t.delete}
             </Button>
@@ -915,7 +946,7 @@ export const Users: React.FC = () => {
               type="button"
               variant="secondary"
               onClick={() => setIsDeleteModalOpen(false)}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+              className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full px-4 py-2 text-sm shadow-md transition-all duration-300 hover:shadow-lg"
             >
               {t.cancel}
             </Button>
