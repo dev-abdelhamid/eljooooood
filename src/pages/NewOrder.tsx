@@ -370,9 +370,6 @@ export function NewOrder() {
                 ))}
               </select>
             </div>
-            <div className="mt-4 text-sm text-gray-600">
-              {isRtl ? `عدد المنتجات: ${products.length}` : `Products Count: ${products.length}`}
-            </div>
           </div>
           {loading.products ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
