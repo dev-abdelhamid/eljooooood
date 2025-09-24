@@ -65,6 +65,7 @@ export function NewOrder() {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
@@ -74,7 +75,7 @@ export function NewOrder() {
   const debouncedSearch = useCallback(
     debounce((value: string) => {
       setSearchTerm(value);
-    }, 300),
+    }, 500),
     []
   );
 
@@ -108,6 +109,7 @@ export function NewOrder() {
         setError('');
       } catch (err: any) {
         setError(err.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
+        toast.error(err.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
       } finally {
         setLoading(false);
       }
@@ -215,7 +217,17 @@ export function NewOrder() {
     summaryRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const CustomInput = ({ value, onChange, placeholder, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder: string; ariaLabel: string }) => (
+  const CustomInput = ({
+    value,
+    onChange,
+    placeholder,
+    ariaLabel,
+  }: {
+    value: string;
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    placeholder: string;
+    ariaLabel: string;
+  }) => (
     <div className="relative group">
       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500" />
       <input
@@ -223,18 +235,30 @@ export function NewOrder() {
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-full focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm hover:shadow-md text-sm"
+        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400"
         aria-label={ariaLabel}
       />
     </div>
   );
 
-  const CustomSelect = ({ value, onChange, children, ariaLabel, disabled = false }: { value: string; onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; children: React.ReactNode; ariaLabel: string; disabled?: boolean }) => (
+  const CustomSelect = ({
+    value,
+    onChange,
+    children,
+    ariaLabel,
+    disabled = false,
+  }: {
+    value: string;
+    onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+    children: React.ReactNode;
+    ariaLabel: string;
+    disabled?: boolean;
+  }) => (
     <div className="relative group">
       <select
         value={value}
         onChange={onChange}
-        className="w-full px-4 py-3 border border-gray-200 rounded-full focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm hover:shadow-md appearance-none text-sm"
+        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-sm text-gray-700"
         aria-label={ariaLabel}
         disabled={disabled}
       >
@@ -246,13 +270,23 @@ export function NewOrder() {
     </div>
   );
 
-  const CustomTextarea = ({ value, onChange, placeholder, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void; placeholder: string; ariaLabel: string }) => (
+  const CustomTextarea = ({
+    value,
+    onChange,
+    placeholder,
+    ariaLabel,
+  }: {
+    value: string;
+    onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+    placeholder: string;
+    ariaLabel: string;
+  }) => (
     <div className="relative group">
       <textarea
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm hover:shadow-md resize-y text-sm"
+        className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md resize-y text-sm placeholder-gray-400"
         rows={4}
         aria-label={ariaLabel}
       />
@@ -260,10 +294,7 @@ export function NewOrder() {
   );
 
   return (
-    <div
-      className="mx-auto px-4 py-8 min-h-screen overflow-y-auto scrollbar-hide"
-      dir={isRtl ? 'rtl' : 'ltr'}
-    >
+    <div className="mx-auto px-4 py-8 min-h-screen overflow-y-auto scrollbar-hide" dir={isRtl ? 'rtl' : 'ltr'}>
       {showConfirmModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
@@ -313,14 +344,16 @@ export function NewOrder() {
         </div>
       )}
 
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+      <div className="mb-6 flex flex-col items-center md:flex-row md:justify-between md:items-center gap-4">
+        <div className="flex items-center gap-3">
           <ShoppingCart className="w-7 h-7 text-amber-600" />
-          {isRtl ? 'إنشاء طلب جديد' : 'Create New Order'}
-        </h1>
-        <p className="text-gray-600 mt-1 text-xs">
-          {isRtl ? 'قم بإضافة المنتجات وتأكيد الطلب لإرساله' : 'Add products and confirm to submit your order'}
-        </p>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{isRtl ? 'إنشاء طلب جديد' : 'Create New Order'}</h1>
+            <p className="text-gray-600 mt-1 text-xs">
+              {isRtl ? 'قم بإضافة المنتجات وتأكيد الطلب لإرساله' : 'Add products and confirm to submit your order'}
+            </p>
+          </div>
+        </div>
       </div>
 
       {error && (
@@ -347,8 +380,11 @@ export function NewOrder() {
           <div className="p-6 bg-white rounded-2xl shadow-md">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <CustomInput
-                value={searchTerm}
-                onChange={(e) => debouncedSearch(e.target.value)}
+                value={searchInput}
+                onChange={(e) => {
+                  setSearchInput(e.target.value);
+                  debouncedSearch(e.target.value);
+                }}
                 placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
                 ariaLabel={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
               />
@@ -424,7 +460,7 @@ export function NewOrder() {
                           >
                             <Minus className="w-4 h-4" />
                           </button>
-                          <div className="w-8 h-8 text-center font-medium text-md">{cartItem.quantity}</div>
+                          <div className="w-8 h-8 text-center font-medium text-sm">{cartItem.quantity}</div>
                           <button
                             onClick={() => updateQuantity(product._id, cartItem.quantity + 1)}
                             className="w-8 h-8 bg-amber-600 rounded-full hover:bg-amber-700 transition-colors flex items-center justify-center"
