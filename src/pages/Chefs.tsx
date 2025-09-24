@@ -159,7 +159,7 @@ const translations = {
   },
 };
 
-const CustomInput = ({
+export const CustomInput = ({
   value,
   onChange,
   placeholder,
@@ -227,7 +227,7 @@ const CustomInput = ({
   );
 };
 
-const CustomDropdown = ({
+export const CustomDropdown = ({
   value,
   onChange,
   options,
