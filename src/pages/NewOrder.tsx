@@ -98,7 +98,7 @@ export function NewOrder() {
       try {
         setLoading((prev) => ({ ...prev, products: true, branches: true, departments: true }));
         const [productsResponse, branchesResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ department: filterDepartment, search: searchTerm }).finally(() =>
+          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 0 }).finally(() =>
             setLoading((prev) => ({ ...prev, products: false }))
           ),
           branchesAPI.getAll().finally(() => setLoading((prev) => ({ ...prev, branches: false }))),
@@ -342,8 +342,8 @@ export function NewOrder() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
+      <div className={`space-y-4 ${orderItems.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-6 lg:space-y-0' : ''}`}>
+        <div className={`${orderItems.length > 0 ? 'lg:col-span-2' : ''}`}>
           <div className="p-6 bg-white rounded-2xl shadow-md">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="relative">
@@ -372,7 +372,7 @@ export function NewOrder() {
             </div>
           </div>
           {loading.products ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
               {[...Array(6)].map((_, index) => (
                 <div key={index} className="p-5 bg-white rounded-xl shadow-sm">
                   <div className="space-y-3 animate-pulse">
@@ -389,12 +389,12 @@ export function NewOrder() {
               ))}
             </div>
           ) : products.length === 0 ? (
-            <div className="p-8 text-center bg-white rounded-2xl shadow-md">
+            <div className="p-8 text-center bg-white rounded-2xl shadow-md mt-4">
               <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 text-sm">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
               {products.map((product) => {
                 const cartItem = orderItems.find((item) => item.productId === product._id);
                 return (
@@ -456,7 +456,7 @@ export function NewOrder() {
         </div>
 
         {orderItems.length > 0 && (
-          <div className="lg:sticky lg:top-8 space-y-4 max-h-[calc(100vh-2rem)] overflow-y-auto" ref={summaryRef}>
+          <div className="lg:col-span-1 lg:sticky lg:top-8 space-y-4 max-h-[calc(100vh-2rem)] overflow-y-auto" ref={summaryRef}>
             <div className="p-6 bg-white rounded-2xl shadow-md">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{isRtl ? 'ملخص الطلب' : 'Order Summary'}</h3>
               <div className="space-y-3">

@@ -81,7 +81,7 @@ export function Products() {
       try {
         setLoading({ products: true, departments: true });
         const [productsResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ department: filterDepartment, search: searchTerm }).finally(() =>
+          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 0 }).finally(() =>
             setLoading((prev) => ({ ...prev, products: false }))
           ),
           departmentAPI.getAll({ limit: 100 }).finally(() => setLoading((prev) => ({ ...prev, departments: false }))),
@@ -285,9 +285,9 @@ export function Products() {
               ))}
             </select>
           </div>
-          <div className="mt-4 text-sm text-gray-600">
-            {isRtl ? `عدد المنتجات: ${products.length}` : `Products Count: ${products.length}`}
-          </div>
+        </div>
+        <div className="text-center text-sm text-gray-600">
+          {isRtl ? `عدد المنتجات: ${products.length}` : `Products Count: ${products.length}`}
         </div>
 
         {user?.role === 'admin' && (
