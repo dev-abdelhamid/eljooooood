@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { chefsAPI, departmentAPI, authAPI } from '../services/api';
-import { ChefHat, Search, AlertCircle, Plus, Edit2, Trash2, Key, Eye, EyeOff, X, ChevronDown } from 'lucide-react';
+import { chefsAPI, departmentAPI } from '../services/api';
+import { ChefHat, Search, AlertCircle, Plus, Edit2, Trash2, Key, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { debounce } from 'lodash';
@@ -31,7 +32,6 @@ interface Chef {
   department: Department | null;
   createdAt: string;
   updatedAt: string;
-  password?: string;
 }
 
 const translations = {
@@ -90,8 +90,6 @@ const translations = {
     deleteWarning: 'هل أنت متأكد من حذف هذا الشيف؟',
     deleteError: 'خطأ في الحذف',
     deleted: 'تم الحذف بنجاح',
-    profile: 'عرض التفاصيل',
-    currentPassword: 'كلمة المرور الحالية',
     noDepartments: 'لا توجد أقسام متاحة',
     invalidUser: 'مستخدم غير صالح',
     status: 'الحالة',
@@ -153,8 +151,6 @@ const translations = {
     deleteWarning: 'Are you sure you want to delete this chef?',
     deleteError: 'Error deleting',
     deleted: 'Deleted successfully',
-    profile: 'View Details',
-    currentPassword: 'Current Password',
     noDepartments: 'No departments available',
     invalidUser: 'Invalid user',
     status: 'Status',
@@ -291,6 +287,7 @@ const CustomDropdown = ({
 export function Chefs() {
   const { language } = useLanguage();
   const { user: loggedInUser } = useAuth();
+  const navigate = useNavigate();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   const [chefs, setChefs] = useState<Chef[]>([]);
@@ -301,10 +298,9 @@ export function Chefs() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [selectedChef, setSelectedChef] = useState<Chef | null>(null);
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [selectedChef, setSelectedChef] = useState<Chef | null>(null);
   const [resetPasswordData, setResetPasswordData] = useState({ password: '', confirmPassword: '' });
   const [formData, setFormData] = useState({
     name: '',
@@ -337,7 +333,7 @@ export function Chefs() {
     setLoading(true);
     try {
       const [chefsResponse, departmentsResponse] = await Promise.all([
-        chefsAPI.getAll({ limit: 0, isRtl }),
+        chefsAPI.getAll({ isRtl }),
         departmentAPI.getAll({ isRtl }),
       ]);
       const fetchedChefs = Array.isArray(chefsResponse.data) ? chefsResponse.data : chefsResponse;
@@ -365,7 +361,6 @@ export function Chefs() {
           : null,
         createdAt: chef.createdAt,
         updatedAt: chef.updatedAt,
-        password: '********',
       })));
       setDepartments(
         Array.isArray(departmentsResponse.data)
@@ -388,62 +383,9 @@ export function Chefs() {
     }
   }, [loggedInUser, t, isRtl]);
 
-  const fetchChefByUserId = useCallback(
-    async (userId: string) => {
-      if (!loggedInUser || loggedInUser.role !== 'admin') {
-        setError(t.unauthorized);
-        toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
-        return null;
-      }
-      try {
-        const chefResponse = await chefsAPI.getByUserId(userId, { isRtl });
-        return {
-          id: chefResponse._id,
-          user: {
-            id: chefResponse.user._id,
-            name: chefResponse.user.name,
-            nameEn: chefResponse.user.nameEn,
-            username: chefResponse.user.username,
-            email: chefResponse.user.email,
-            phone: chefResponse.user.phone,
-            isActive: chefResponse.user.isActive,
-            createdAt: chefResponse.user.createdAt,
-            updatedAt: chefResponse.user.updatedAt,
-          },
-          department: chefResponse.department
-            ? {
-                id: chefResponse.department._id,
-                name: chefResponse.department.name,
-                nameEn: chefResponse.department.nameEn,
-                code: chefResponse.department.code,
-                description: chefResponse.department.description,
-              }
-            : null,
-          createdAt: chefResponse.createdAt,
-          updatedAt: chefResponse.updatedAt,
-          password: '********',
-        };
-      } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Fetch chef by userId error:`, err);
-        setError(err.message || t.fetchError);
-        toast.error(err.message || t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
-        return null;
-      }
-    },
-    [loggedInUser, t, isRtl]
-  );
-
   useEffect(() => {
     fetchData();
-    if (loggedInUser?.role === 'chef' && loggedInUser.id) {
-      fetchChefByUserId(loggedInUser.id).then((chef) => {
-        if (chef) {
-          setSelectedChef(chef);
-          setIsProfileModalOpen(true);
-        }
-      });
-    }
-  }, [fetchData, fetchChefByUserId, loggedInUser]);
+  }, [fetchData]);
 
   const filteredChefs = chefs.filter(
     (chef) =>
@@ -503,11 +445,6 @@ export function Chefs() {
     setIsModalOpen(true);
     setFormErrors({});
     setError('');
-  };
-
-  const openProfileModal = (chef: Chef) => {
-    setSelectedChef(chef);
-    setIsProfileModalOpen(true);
   };
 
   const openResetPasswordModal = (chef: Chef) => {
@@ -603,7 +540,6 @@ export function Chefs() {
               : null,
             createdAt: newChef.createdAt,
             updatedAt: newChef.updatedAt,
-            password: '********',
           },
         ]);
         toast.success(t.added, { position: isRtl ? 'top-right' : 'top-left' });
@@ -641,8 +577,7 @@ export function Chefs() {
     }
 
     try {
-      await authAPI.updateProfile({ password: resetPasswordData.password }, selectedChef!.user!.id);
-      setChefs(chefs.map((c) => (c.id === selectedChef!.id ? { ...c, password: '********' } : c)));
+      await chefsAPI.resetPassword(selectedChef!.id, resetPasswordData.password);
       setIsResetPasswordModalOpen(false);
       setResetPasswordData({ password: '', confirmPassword: '' });
       toast.success(t.passwordResetSuccess, { position: isRtl ? 'top-right' : 'top-left' });
@@ -779,7 +714,7 @@ export function Chefs() {
               >
                 <div
                   className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer border border-gray-100"
-                  onClick={() => openProfileModal(chef)}
+                  onClick={() => navigate(`/chefs/${chef.id}`)}
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-3">
@@ -982,100 +917,6 @@ export function Chefs() {
                 </button>
               </div>
             </form>
-          </motion.div>
-        </div>
-      )}
-
-      {isProfileModalOpen && selectedChef && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.2 }}
-            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6 relative overflow-hidden"
-          >
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-600 to-amber-400" />
-            <div className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
-              <div className="flex items-center gap-2">
-                <ChefHat className="w-6 h-6 text-amber-600" />
-                <h3 className="text-lg font-semibold text-gray-900 truncate">
-                  {isRtl ? selectedChef.user?.name : selectedChef.user?.nameEn || selectedChef.user?.name}
-                </h3>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="w-24 font-medium text-gray-600">{t.username}:</span>
-                  <span className="text-gray-800 truncate flex-1">{selectedChef.user?.username || '-'}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-24 font-medium text-gray-600">{t.email}:</span>
-                  <span className="text-gray-800 truncate flex-1">{selectedChef.user?.email || '-'}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-24 font-medium text-gray-600">{t.phone}:</span>
-                  <span className="text-gray-800 truncate flex-1">{selectedChef.user?.phone || '-'}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-24 font-medium text-gray-600">{t.department}:</span>
-                  <span className="text-gray-800 truncate flex-1">{isRtl ? selectedChef.department?.name : selectedChef.department?.nameEn || selectedChef.department?.name || '-'}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-24 font-medium text-gray-600">{t.status}:</span>
-                  <span className={`truncate flex-1 ${selectedChef.user?.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                    {selectedChef.user?.isActive ? t.active : t.inactive}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-24 font-medium text-gray-600">{t.createdAt}:</span>
-                  <span className="text-gray-800 truncate flex-1">{new Date(selectedChef.createdAt).toLocaleString()}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-24 font-medium text-gray-600">{t.updatedAt}:</span>
-                  <span className="text-gray-800 truncate flex-1">{new Date(selectedChef.updatedAt).toLocaleString()}</span>
-                </div>
-                {loggedInUser?.role === 'admin' && (
-                  <div className="flex items-center gap-2">
-                    <span className="w-24 font-medium text-gray-600">{t.currentPassword}:</span>
-                    <div className="flex items-center gap-2 truncate flex-1">
-                      <span className="text-gray-800">{showPassword[selectedChef.id] ? selectedChef.password : '********'}</span>
-                      <button type="button" onClick={() => togglePasswordVisibility(selectedChef.id)} className="text-gray-400 hover:text-amber-600">
-                        {showPassword[selectedChef.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="flex justify-end gap-2">
-                {loggedInUser?.role === 'admin' && (
-                  <>
-                    <button
-                      onClick={() => {
-                        setIsProfileModalOpen(false);
-                        openEditModal(selectedChef);
-                      }}
-                      className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
-                    >
-                      {t.edit}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsProfileModalOpen(false);
-                        openResetPasswordModal(selectedChef);
-                      }}
-                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
-                    >
-                      {t.resetPassword}
-                    </button>
-                  </>
-                )}
-                <button
-                  onClick={() => setIsProfileModalOpen(false)}
-                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
-                >
-                  {t.cancel}
-                </button>
-              </div>
-            </div>
           </motion.div>
         </div>
       )}
