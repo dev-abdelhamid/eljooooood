@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { productsAPI, departmentAPI } from '../services/api';
-import { Package, Plus, Edit2, Trash2, Search, AlertCircle } from 'lucide-react';
+import { Package, Plus, Edit2, Trash2, Search, AlertCircle, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 
@@ -42,16 +42,17 @@ export function Products() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
   const [searchInput, setSearchInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const summaryRef = useRef<HTMLDivElement>(null);
 
   const debouncedSearch = useCallback(
     debounce((value: string) => {
       setSearchTerm(value);
-    }, 300),
+    }, 500),
     []
   );
 
@@ -81,6 +82,7 @@ export function Products() {
       } catch (err: any) {
         console.error('Fetch error:', err);
         setError(err.response?.data?.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
+        toast.error(err.response?.data?.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
       } finally {
         setLoading(false);
       }
@@ -199,7 +201,21 @@ export function Products() {
     }
   };
 
-  const CustomInput = ({ value, onChange, placeholder, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder: string; ariaLabel: string }) => (
+  const scrollToSummary = () => {
+    summaryRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const CustomInput = ({
+    value,
+    onChange,
+    placeholder,
+    ariaLabel,
+  }: {
+    value: string;
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    placeholder: string;
+    ariaLabel: string;
+  }) => (
     <div className="relative group">
       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500" />
       <input
@@ -207,18 +223,28 @@ export function Products() {
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-full focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm hover:shadow-md text-sm"
+        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400"
         aria-label={ariaLabel}
       />
     </div>
   );
 
-  const CustomSelect = ({ value, onChange, children, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; children: React.ReactNode; ariaLabel: string }) => (
+  const CustomSelect = ({
+    value,
+    onChange,
+    children,
+    ariaLabel,
+  }: {
+    value: string;
+    onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+    children: React.ReactNode;
+    ariaLabel: string;
+  }) => (
     <div className="relative group">
       <select
         value={value}
         onChange={onChange}
-        className="w-full px-4 py-3 border border-gray-200 rounded-full focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm hover:shadow-md appearance-none text-sm"
+        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-sm text-gray-700"
         aria-label={ariaLabel}
       >
         {children}
@@ -232,14 +258,14 @@ export function Products() {
   return (
     <div className="mx-auto px-4 py-8 min-h-screen overflow-y-auto scrollbar-hide" dir={isRtl ? 'rtl' : 'ltr'}>
       <div className="mb-6 flex flex-col items-center md:flex-row md:justify-between md:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
-            <Package className="w-7 h-7 text-amber-600" />
-            {isRtl ? 'إدارة المنتجات' : 'Manage Products'}
-          </h1>
-          <p className="text-gray-600 mt-1 text-xs">
-            {isRtl ? 'قم بإضافة المنتجات أو تعديلها أو حذفها' : 'Add, edit, or delete products'}
-          </p>
+        <div className="flex items-center gap-3">
+          <Package className="w-7 h-7 text-amber-600" />
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{isRtl ? 'إدارة المنتجات' : 'Manage Products'}</h1>
+            <p className="text-gray-600 text-xs">
+              {isRtl ? 'قم بإضافة المنتجات أو تعديلها أو حذفها' : 'Add, edit, or delete products'}
+            </p>
+          </div>
         </div>
         {user?.role === 'admin' && (
           <button
@@ -260,107 +286,137 @@ export function Products() {
         </div>
       )}
 
-      <div className="space-y-4">
-        <div className="p-6 bg-white rounded-2xl shadow-md">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <CustomInput
-              value={searchInput}
-              onChange={(e) => {
-                setSearchInput(e.target.value);
-                debouncedSearch(e.target.value);
-              }}
-              placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
-              ariaLabel={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
-            />
-            <CustomSelect
-              value={filterDepartment}
-              onChange={(e) => setFilterDepartment(e.target.value)}
-              ariaLabel={isRtl ? 'تصفية حسب القسم' : 'Filter by department'}
-            >
-              <option value="">{isRtl ? 'كل الأقسام' : 'All Departments'}</option>
-              {departments.map((d) => (
-                <option key={d._id} value={d._id}>
-                  {isRtl ? d.name : (d.nameEn || d.name)}
-                </option>
-              ))}
-            </CustomSelect>
+      <div className="lg:grid lg:grid-cols-3 lg:gap-6">
+        <div className="lg:col-span-2 space-y-4">
+          <div className="p-6 bg-white rounded-2xl shadow-md">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <CustomInput
+                value={searchInput}
+                onChange={(e) => {
+                  setSearchInput(e.target.value);
+                  debouncedSearch(e.target.value);
+                }}
+                placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
+                ariaLabel={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
+              />
+              <CustomSelect
+                value={filterDepartment}
+                onChange={(e) => setFilterDepartment(e.target.value)}
+                ariaLabel={isRtl ? 'تصفية حسب القسم' : 'Filter by department'}
+              >
+                <option value="">{isRtl ? 'كل الأقسام' : 'All Departments'}</option>
+                {departments.map((d) => (
+                  <option key={d._id} value={d._id}>
+                    {isRtl ? d.name : (d.nameEn || d.name)}
+                  </option>
+                ))}
+              </CustomSelect>
+            </div>
           </div>
-        </div>
-        <div className="text-center text-xs text-gray-600">
-          {isRtl ? `عدد المنتجات: ${products.length}` : `Products Count: ${products.length}`}
-        </div>
+          <div className="text-center text-xs text-gray-600">
+            {isRtl ? `عدد المنتجات: ${products.length}` : `Products Count: ${products.length}`}
+          </div>
 
-        {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[...Array(6)].map((_, index) => (
-              <div key={index} className="p-5 bg-white rounded-xl shadow-sm">
-                <div className="space-y-3 animate-pulse">
-                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/4"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : products.length === 0 ? (
-          <div className="p-8 text-center bg-white rounded-2xl shadow-md">
-            <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600 text-sm">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
-            {user?.role === 'admin' && !searchTerm && !filterDepartment && (
-              <button
-                onClick={() => openModal()}
-                className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full text-sm transition-colors"
-                aria-label={isRtl ? 'إضافة أول منتج' : 'Add First Product'}
-              >
-                {isRtl ? 'إضافة أول منتج' : 'Add First Product'}
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {products.map((product) => (
-              <div
-                key={product._id}
-                className="p-5 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between"
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-4">
-                    <h3 className="font-semibold text-gray-900 text-sm truncate">
-                      {product.displayName}
-                    </h3>
-                    <p className="text-xs text-gray-500">{product.code}</p>
+          {loading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[...Array(6)].map((_, index) => (
+                <div key={index} className="p-5 bg-white rounded-xl shadow-sm">
+                  <div className="space-y-3 animate-pulse">
+                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/3"></div>
                   </div>
-                  <p className="text-xs text-amber-600">
-                    {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
-                  </p>
-                  <p className="font-semibold text-gray-900 text-xs">
-                    {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
-                  </p>
-                  {product.description && (
-                    <p className="text-xs text-gray-600 line-clamp-3">{product.description}</p>
+                </div>
+              ))}
+            </div>
+          ) : products.length === 0 ? (
+            <div className="p-8 text-center bg-white rounded-2xl shadow-md">
+              <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600 text-sm">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
+              {user?.role === 'admin' && !searchTerm && !filterDepartment && (
+                <button
+                  onClick={() => openModal()}
+                  className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full text-sm transition-colors"
+                  aria-label={isRtl ? 'إضافة أول منتج' : 'Add First Product'}
+                >
+                  {isRtl ? 'إضافة أول منتج' : 'Add First Product'}
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {products.map((product) => (
+                <div
+                  key={product._id}
+                  className="p-5 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-4">
+                      <h3 className="font-semibold text-gray-900 text-sm truncate">
+                        {product.displayName}
+                      </h3>
+                      <p className="text-xs text-gray-500">{product.code}</p>
+                    </div>
+                    <p className="text-xs text-amber-600">
+                      {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
+                    </p>
+                    <p className="font-semibold text-gray-900 text-xs">
+                      {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
+                    </p>
+                    {product.description && (
+                      <p className="text-xs text-gray-600 line-clamp-3">{product.description}</p>
+                    )}
+                  </div>
+                  {user?.role === 'admin' && (
+                    <div className="mt-4 flex justify-end gap-2">
+                      <button
+                        onClick={() => openModal(product)}
+                        className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors"
+                        title={isRtl ? 'تعديل' : 'Edit'}
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => deleteProduct(product._id)}
+                        className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors"
+                        title={isRtl ? 'حذف' : 'Delete'}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   )}
                 </div>
-                {user?.role === 'admin' && (
-                  <div className="mt-4 flex justify-end gap-2">
-                    <button
-                      onClick={() => openModal(product)}
-                      className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors"
-                      title={isRtl ? 'تعديل' : 'Edit'}
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => deleteProduct(product._id)}
-                      className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors"
-                      title={isRtl ? 'حذف' : 'Delete'}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                )}
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="lg:col-span-1 lg:sticky lg:top-8 space-y-4 max-h-[calc(100vh-2rem)] overflow-y-auto scrollbar-hide" ref={summaryRef}>
+          <div className="p-6 bg-white rounded-2xl shadow-md">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{isRtl ? 'ملخص المنتجات' : 'Products Summary'}</h3>
+            <div className="space-y-3">
+              <div className="flex justify-between text-sm text-gray-700">
+                <span>{isRtl ? 'إجمالي المنتجات' : 'Total Products'}:</span>
+                <span className="font-semibold">{products.length}</span>
               </div>
-            ))}
+              <div className="flex justify-between text-sm text-gray-700">
+                <span>{isRtl ? 'الأقسام' : 'Departments'}:</span>
+                <span className="font-semibold">{departments.length}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {products.length > 0 && (
+          <div className="lg:hidden fixed bottom-6 z-50" style={isRtl ? { left: '1.5rem' } : { right: '1.5rem' }}>
+            <button
+              onClick={scrollToSummary}
+              className="p-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg transition-transform transform hover:scale-105"
+              aria-label={isRtl ? 'التمرير للملخص' : 'Scroll to Summary'}
+            >
+              <ChevronDown className="w-6 h-6" />
+            </button>
           </div>
         )}
       </div>
@@ -383,7 +439,7 @@ export function Products() {
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder={isRtl ? 'أدخل اسم المنتج' : 'Enter product name'}
                     required
-                    className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
+                    className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm"
                   />
                 </div>
                 <div>
@@ -395,7 +451,7 @@ export function Products() {
                     value={formData.nameEn}
                     onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
                     placeholder={isRtl ? 'أدخل الاسم بالإنجليزية' : 'Enter English name'}
-                    className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
+                    className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm"
                   />
                 </div>
                 <div>
@@ -408,7 +464,7 @@ export function Products() {
                     onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                     placeholder={isRtl ? 'أدخل رمز المنتج' : 'Enter product code'}
                     required
-                    className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
+                    className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm"
                   />
                 </div>
                 <div>
@@ -420,7 +476,7 @@ export function Products() {
                     value={formData.department}
                     onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                     required
-                    className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
+                    className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm"
                   >
                     <option value="">{isRtl ? 'اختر القسم' : 'Select Department'}</option>
                     {departments.map((d) => (
@@ -441,7 +497,7 @@ export function Products() {
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                     placeholder="0.00"
                     required
-                    className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
+                    className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm"
                   />
                 </div>
                 <div>
@@ -452,7 +508,7 @@ export function Products() {
                     id="unit"
                     value={formData.unit}
                     onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                    className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
+                    className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm"
                   >
                     {unitOptions.map((opt) => (
                       <option key={opt.value} value={opt.value}>
@@ -471,7 +527,7 @@ export function Products() {
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder={isRtl ? 'أدخل وصف المنتج...' : 'Enter product description...'}
-                  className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-y text-sm"
+                  className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md resize-y text-sm"
                   rows={4}
                 />
               </div>
