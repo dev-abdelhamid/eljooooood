@@ -2,34 +2,30 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { getAllowedUnits, getUnitOptions } from '../utils/units';
 import { productsAPI, ordersAPI, branchesAPI, departmentAPI } from '../services/api';
 import { ShoppingCart, Plus, Minus, Trash2, Package, AlertCircle, Search, X, ChevronDown } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
 
-export interface Product {
+interface Product {
   _id: string;
   name: string;
   nameEn?: string;
   code: string;
   department: { _id: string; name: string; nameEn?: string };
   price: number;
-  unit: string;
-  unitEn: string;
+  unit?: string;
+  unitEn?: string;
   description?: string;
   displayName: string;
   displayUnit: string;
-  displayUnitWithQuantity?: string;
 }
 
 interface Branch {
   _id: string;
   name: string;
   nameEn?: string;
-  
-  
 }
 
 interface Department {
@@ -43,7 +39,6 @@ interface OrderItem {
   product: Product;
   quantity: number;
   price: number;
-  unit: string;
 }
 
 interface Toast {
@@ -106,14 +101,19 @@ export function NewOrder() {
       try {
         setLoading((prev) => ({ ...prev, products: true, branches: true, departments: true }));
         const [productsResponse, branchesResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ limit: 12, page: currentPage, department: filterDepartment, search: searchTerm, lang: language }).finally(() =>
+          productsAPI.getAll({ limit: 12, page: currentPage, department: filterDepartment, search: searchTerm }).finally(() =>
             setLoading((prev) => ({ ...prev, products: false }))
           ),
           branchesAPI.getAll().finally(() => setLoading((prev) => ({ ...prev, branches: false }))),
           departmentAPI.getAll({ limit: 100 }).finally(() => setLoading((prev) => ({ ...prev, departments: false }))),
         ]);
 
-        setProducts(productsResponse.data);
+        const productsWithDisplay = productsResponse.data.map((product: Product) => ({
+          ...product,
+          displayName: language === 'ar' ? product.name : (product.nameEn || product.name),
+          displayUnit: language === 'ar' ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
+        }));
+        setProducts(productsWithDisplay);
         setTotalPages(productsResponse.totalPages);
         setBranches(Array.isArray(branchesResponse) ? branchesResponse : []);
         setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data : []);
@@ -158,70 +158,25 @@ export function NewOrder() {
     [products, searchTerm, filterDepartment, language]
   );
 
-  const addToOrder = useCallback(async (product: Product) => {
-    try {
-      const updatedProduct = await productsAPI.getById(product._id, 1, language);
-      setOrderItems((prev) => {
-        const existingItem = prev.find((item) => item.productId === product._id);
-        if (existingItem) {
-          const newQuantity = existingItem.quantity + 1;
-          return prev.map((item) =>
-            item.productId === product._id
-              ? { ...item, quantity: newQuantity }
-              : item
-          );
-        }
-        return [
-          ...prev,
-          {
-            productId: product._id,
-            product: updatedProduct,
-            quantity: 1,
-            price: product.price,
-            unit: product.unit,
-          },
-        ];
-      });
-    } catch (err) {
-      console.error('Error adding to order:', err);
-      setError(isRtl ? 'خطأ في إضافة المنتج' : 'Error adding product');
-    }
-  }, [isRtl, language]);
+  const addToOrder = useCallback((product: Product) => {
+    setOrderItems((prev) => {
+      const existingItem = prev.find((item) => item.productId === product._id);
+      if (existingItem) {
+        return prev.map((item) =>
+          item.productId === product._id ? { ...item, quantity: item.quantity + 1 } : item
+        );
+      }
+      return [...prev, { productId: product._id, product, quantity: 1, price: product.price }];
+    });
+  }, []);
 
-  const updateQuantity = useCallback(async (productId: string, quantity: number) => {
+  const updateQuantity = useCallback((productId: string, quantity: number) => {
     if (quantity <= 0) {
       removeFromOrder(productId);
       return;
     }
-    try {
-      const updatedProduct = await productsAPI.getById(productId, quantity, language);
-      setOrderItems((prev) =>
-        prev.map((item) => {
-          if (item.productId === productId) {
-            const availableUnits = getAllowedUnits();
-            const newUnit = availableUnits.includes(item.unit) ? item.unit : availableUnits[0] || item.product.unit;
-            return {
-              ...item,
-              quantity,
-              unit: newUnit,
-              product: { ...item.product, displayUnitWithQuantity: updatedProduct.displayUnitWithQuantity },
-            };
-          }
-          return item;
-        })
-      );
-      setProducts((prev) =>
-        prev.map((p) => (p._id === productId ? { ...p, displayUnitWithQuantity: updatedProduct.displayUnitWithQuantity } : p))
-      );
-    } catch (err) {
-      console.error('Error updating quantity:', err);
-      setError(isRtl ? 'خطأ في تحديث الكمية' : 'Error updating quantity');
-    }
-  }, [isRtl, language]);
-
-  const updateUnit = useCallback((productId: string, unit: string) => {
     setOrderItems((prev) =>
-      prev.map((item) => (item.productId === productId ? { ...item, unit } : item))
+      prev.map((item) => (item.productId === productId ? { ...item, quantity } : item))
     );
   }, []);
 
@@ -269,8 +224,6 @@ export function NewOrder() {
           productId: item.productId,
           quantity: item.quantity,
           price: item.price,
-          unit: item.unit,
-          department: item.product.department._id, // إرسال معرف القسم لتوزيع الطلب
         })),
         status: 'pending',
         notes: notes.trim() || undefined,
@@ -339,7 +292,7 @@ export function NewOrder() {
                 {orderItems.map((item) => (
                   <li key={item.productId} className="flex justify-between text-sm text-gray-700">
                     <span>
-                      {item.product.displayName} ({item.product.displayUnitWithQuantity})
+                      {item.product.displayName} (x{item.quantity})
                     </span>
                     <span>
                       {(item.price * item.quantity).toFixed(2)} {isRtl ? 'ريال' : 'SAR'}
@@ -446,7 +399,6 @@ export function NewOrder() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredProducts.map((product) => {
                 const cartItem = orderItems.find((item) => item.productId === product._id);
-                const unitOptions = getUnitOptions(products, language);
                 return (
                   <div
                     key={product._id}
@@ -468,38 +420,24 @@ export function NewOrder() {
                       {product.description && (
                         <p className="text-xs text-gray-600 line-clamp-2">{product.description}</p>
                       )}
-                      <div className="flex flex-col gap-2">
+                      <div className="flex justify-end gap-2">
                         {cartItem ? (
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => updateQuantity(product._id, cartItem.quantity - 1)}
-                                className="w-8 h-8 bg-gray-200 rounded-full hover:bg-gray-300 transition-colors flex items-center justify-center"
-                                aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
-                              >
-                                <Minus className="w-4 h-4" />
-                              </button>
-                              <span className="w-8 text-center font-medium text-md">{cartItem.quantity}</span>
-                              <button
-                                onClick={() => updateQuantity(product._id, cartItem.quantity + 1)}
-                                className="w-8 h-8 bg-amber-600 rounded-full hover:bg-amber-700 transition-colors flex items-center justify-center"
-                                aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
-                              >
-                                <Plus className="w-4 h-4 text-white" />
-                              </button>
-                            </div>
-                            <select
-                              value={cartItem.unit}
-                              onChange={(e) => updateUnit(product._id, e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
-                              aria-label={isRtl ? 'اختيار الوحدة' : 'Select unit'}
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => updateQuantity(product._id, cartItem.quantity - 1)}
+                              className="w-8 h-8 bg-gray-200 rounded-full hover:bg-gray-300 transition-colors flex items-center justify-center"
+                              aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
                             >
-                              {unitOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
+                              <Minus className="w-4 h-4" />
+                            </button>
+                            <div className="w-8 h-8 text-center font-medium text-md">{cartItem.quantity}</div>
+                            <button
+                              onClick={() => updateQuantity(product._id, cartItem.quantity + 1)}
+                              className="w-8 h-8 bg-amber-600 rounded-full hover:bg-amber-700 transition-colors flex items-center justify-center"
+                              aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
+                            >
+                              <Plus className="w-4 h-4 text-white" />
+                            </button>
                           </div>
                         ) : (
                           <button
@@ -559,24 +497,38 @@ export function NewOrder() {
                         {item.product.displayName}
                       </p>
                       <p className="text-xs text-gray-600">
-                        {item.price} {isRtl ? 'ريال' : 'SAR'} / {item.product.displayUnitWithQuantity}
+                        {item.price} {isRtl ? 'ريال' : 'SAR'} / {item.product.displayUnit}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">{item.product.displayUnitWithQuantity}</span>
+                      <button
+                        onClick={() => updateQuantity(item.productId, item.quantity - 1)}
+                        className="w-8 h-8 bg-gray-200 rounded-full hover:bg-gray-300 transition-colors flex items-center justify-center"
+                        aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
+                      >
+                        <Minus className="w-4 h-4" />
+                      </button>
+                      <span className="w-8 text-center font-medium text-sm">{item.quantity}</span>
+                      <button
+                        onClick={() => updateQuantity(item.productId, item.quantity + 1)}
+                        className="w-8 h-8 bg-amber-600 rounded-full hover:bg-amber-700 transition-colors flex items-center justify-center"
+                        aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
+                      >
+                        <Plus className="w-4 h-4 text-white" />
+                      </button>
                       <button
                         onClick={() => removeFromOrder(item.productId)}
-                        className="w-6 h-6 bg-red-100 rounded-full hover:bg-red-200 transition-colors flex items-center justify-center"
-                        aria-label={isRtl ? 'إزالة' : 'Remove'}
+                        className="w-8 h-8 bg-red-500 rounded-full hover:bg-red-600 transition-colors flex items-center justify-center"
+                        aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
                       >
-                        <Trash2 className="w-4 h-4 text-red-600" />
+                        <Trash2 className="w-4 h-4 text-white" />
                       </button>
                     </div>
                   </div>
                 ))}
-                <div className="border-t pt-4 mt-4">
-                  <div className="flex justify-between font-semibold text-gray-800 text-sm">
-                    <span>{isRtl ? 'الإجمالي' : 'Total'}</span>
+                <div className="border-t pt-3">
+                  <div className="flex justify-between font-semibold text-gray-900 text-sm">
+                    <span>{isRtl ? 'الإجمالي النهائي' : 'Final Total'}:</span>
                     <span className="text-teal-600">
                       {getTotalAmount} {isRtl ? 'ريال' : 'SAR'}
                     </span>
@@ -585,21 +537,20 @@ export function NewOrder() {
               </div>
             )}
           </div>
-
           <div className="p-6 bg-white rounded-2xl shadow-md">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{isRtl ? 'تفاصيل الطلب' : 'Order Details'}</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               {user?.role === 'admin' && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="branch" className="block text-sm font-medium text-gray-700 mb-1">
                     {isRtl ? 'الفرع' : 'Branch'}
                   </label>
                   <select
+                    id="branch"
                     value={branch}
                     onChange={(e) => setBranch(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
-                    aria-label={isRtl ? 'اختيار الفرع' : 'Select branch'}
-                    required
+                    className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
+                    aria-label={isRtl ? 'الفرع' : 'Branch'}
+                    disabled={loading.branches}
                   >
                     <option value="">{isRtl ? 'اختر الفرع' : 'Select Branch'}</option>
                     {branches.map((b) => (
@@ -611,14 +562,15 @@ export function NewOrder() {
                 </div>
               )}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="priority" className="block text-sm font-medium text-gray-700 mb-1">
                   {isRtl ? 'الأولوية' : 'Priority'}
                 </label>
                 <select
+                  id="priority"
                   value={priority}
                   onChange={(e) => setPriority(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
-                  aria-label={isRtl ? 'اختيار الأولوية' : 'Select priority'}
+                  className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
+                  aria-label={isRtl ? 'الأولوية' : 'Priority'}
                 >
                   {priorityOptions.map((option) => (
                     <option key={option.value} value={option.value}>
@@ -628,31 +580,33 @@ export function NewOrder() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
                   {isRtl ? 'ملاحظات' : 'Notes'}
                 </label>
                 <textarea
+                  id="notes"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder={isRtl ? 'أضف ملاحظات (اختياري)' : 'Add notes (optional)'}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm resize-y"
+                  placeholder={isRtl ? 'أدخل ملاحظات الطلب...' : 'Enter order notes...'}
+                  className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-y text-sm"
                   rows={4}
                   aria-label={isRtl ? 'ملاحظات' : 'Notes'}
                 />
               </div>
-              <div className="flex justify-end gap-3">
+              <div className="flex gap-3">
                 <button
                   type="button"
                   onClick={clearOrder}
-                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full transition-colors text-sm"
+                  className="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full transition-colors text-sm"
+                  disabled={submitting || orderItems.length === 0}
                   aria-label={isRtl ? 'مسح الطلب' : 'Clear Order'}
                 >
                   {isRtl ? 'مسح الطلب' : 'Clear Order'}
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors text-sm disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors text-sm"
+                  disabled={orderItems.length === 0 || submitting}
                   aria-label={submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'إرسال الطلب' : 'Submit Order')}
                 >
                   {submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'إرسال الطلب' : 'Submit Order')}
