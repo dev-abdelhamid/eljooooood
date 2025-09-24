@@ -61,13 +61,14 @@ export function NewOrder() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const socket = useMemo(() => io('https://eljoodia-server-production.up.railway.app'), []);
 
   const debouncedSearch = useCallback(
     debounce((value: string) => {
-      setSearchTerm(value);
-    }, 200), // Reduced for faster response and smoother typing
+      setSearchTerm(value.trim());
+    }, 300),
     []
   );
 
@@ -101,6 +102,7 @@ export function NewOrder() {
         setError('');
       } catch (err: any) {
         setError(err.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
+        toast.error(err.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
       } finally {
         setLoading(false);
       }
@@ -143,13 +145,9 @@ export function NewOrder() {
   }, []);
 
   const handleQuantityInput = useCallback((productId: string, value: string) => {
-    // Only allow numbers
-    if (!/^\d*$/.test(value)) return;
     const quantity = parseInt(value) || 0;
-    if (quantity <= 0) {
-      setOrderItems((prev) =>
-        prev.map((item) => (item.productId === productId ? { ...item, quantity: 0 } : item))
-      );
+    if (value === '' || quantity <= 0) {
+      updateQuantity(productId, 0);
       return;
     }
     updateQuantity(productId, quantity);
@@ -219,54 +217,123 @@ export function NewOrder() {
     summaryRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const CustomInput = ({ value, onChange, placeholder, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder: string; ariaLabel: string }) => (
+  const CustomInput = ({
+    value,
+    onChange,
+    placeholder,
+    ariaLabel,
+  }: {
+    value: string;
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+    placeholder: string;
+    ariaLabel: string;
+  }) => (
     <div className="relative group">
-      <Search className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500`} />
+      <motion.div
+        initial={{ opacity: value ? 0 : 1 }}
+        animate={{ opacity: value ? 0 : 1 }}
+        transition={{ duration: 0.2 }}
+        className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500`}
+      >
+        <Search />
+      </motion.div>
       <input
         type="text"
         value={value}
         onChange={(e) => {
           setSearchInput(e.target.value);
+          debouncedSearch(e.target.value);
           onChange(e);
         }}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pr-12 pl-4 text-right' : 'pl-12 pr-4 text-left'} py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-md hover:shadow-lg text-sm placeholder-gray-400`}
+        className={`w-full ${isRtl ? 'pr-11 pl-4' : 'pl-11 pr-4'} py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-md hover:shadow-lg text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       />
-      {value && (
-        <motion.button
-          initial={{ scale: 0 }}
-          animate={{ scale: 1 }}
-          transition={{ duration: 0.2 }}
+      <motion.div
+        initial={{ opacity: value ? 1 : 0 }}
+        animate={{ opacity: value ? 1 : 0 }}
+        transition={{ duration: 0.2 }}
+        className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
+      >
+        <button
           onClick={() => {
             setSearchInput('');
             setSearchTerm('');
           }}
-          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
           <X className="w-5 h-5" />
+        </button>
+      </motion.div>
+    </div>
+  );
+
+  const CustomDropdown = ({
+    value,
+    onChange,
+    options,
+    ariaLabel,
+    disabled = false,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    options: { value: string; label: string }[];
+    ariaLabel: string;
+    disabled?: boolean;
+  }) => {
+    const selectedOption = options.find((opt) => opt.value === value) || { label: isRtl ? 'كل الأقسام' : 'All Departments' };
+    return (
+      <div className="relative group">
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={() => !disabled && setIsDropdownOpen(!isDropdownOpen)}
+          className={`w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-md hover:shadow-lg text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+          aria-label={ariaLabel}
+        >
+          <span>{selectedOption.label}</span>
+          <ChevronDown className={`w-5 h-5 text-gray-400 group-focus-within:text-amber-500 transition-colors ${isDropdownOpen ? 'rotate-180' : ''}`} />
         </motion.button>
-      )}
-    </div>
-  );
+        <AnimatePresence>
+          {isDropdownOpen && !disabled && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+              className="absolute w-full mt-1 bg-white rounded-xl shadow-xl border border-gray-200 z-10 max-h-60 overflow-y-auto scrollbar-thin"
+            >
+              {options.map((option) => (
+                <motion.div
+                  key={option.value}
+                  whileHover={{ backgroundColor: '#f5f5f5' }}
+                  onClick={() => {
+                    onChange(option.value);
+                    setIsDropdownOpen(false);
+                  }}
+                  className="px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
+                >
+                  {option.label}
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
 
-  const CustomSelect = ({ value, onChange, children, ariaLabel, disabled = false }: { value: string; onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; children: React.ReactNode; ariaLabel: string; disabled?: boolean }) => (
-    <div className="relative group">
-      <select
-        value={value}
-        onChange={onChange}
-        className={`w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-md hover:shadow-lg appearance-none text-sm text-gray-700 hover:scale-[1.02] transform ${isRtl ? 'text-right' : 'text-left'}`}
-        aria-label={ariaLabel}
-        disabled={disabled}
-      >
-        {children}
-      </select>
-      <ChevronDown className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-5 h-5 transition-colors`} />
-    </div>
-  );
-
-  const CustomTextarea = ({ value, onChange, placeholder, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void; placeholder: string; ariaLabel: string }) => (
+  const CustomTextarea = ({
+    value,
+    onChange,
+    placeholder,
+    ariaLabel,
+  }: {
+    value: string;
+    onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+    placeholder: string;
+    ariaLabel: string;
+  }) => (
     <div className="relative group">
       <textarea
         value={value}
@@ -279,12 +346,22 @@ export function NewOrder() {
     </div>
   );
 
-  const QuantityInput = ({ value, onChange, onDecrease, onIncrease, onRemove }: { value: number; onChange: (val: string) => void; onDecrease: () => void; onIncrease: () => void; onRemove: () => void }) => (
+  const QuantityInput = ({
+    value,
+    onChange,
+    onIncrement,
+    onDecrement,
+  }: {
+    value: number;
+    onChange: (val: string) => void;
+    onIncrement: () => void;
+    onDecrement: () => void;
+  }) => (
     <div className="flex items-center gap-2">
       <motion.button
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        onClick={onDecrease}
+        onClick={onDecrement}
         className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors flex items-center justify-center"
         aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
       >
@@ -294,30 +371,18 @@ export function NewOrder() {
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm min-w-[2.5rem] transition-all duration-200"
-        style={{ 
-          direction: 'ltr', // Force LTR for numbers
-          fontFamily: 'monospace' // Better for numbers
-        }}
+        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm min-w-[2.75rem] transition-all duration-300"
+        style={{ appearance: 'none' }}
         aria-label={isRtl ? 'الكمية' : 'Quantity'}
       />
       <motion.button
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        onClick={onIncrease}
+        onClick={onIncrement}
         className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors flex items-center justify-center"
         aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
       >
         <Plus className="w-4 h-4 text-white" />
-      </motion.button>
-      <motion.button
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
-        onClick={onRemove}
-        className="w-8 h-8 bg-red-500 hover:bg-red-600 rounded-full transition-colors flex items-center justify-center ml-1"
-        aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
-      >
-        <Trash2 className="w-4 h-4 text-white" />
       </motion.button>
     </div>
   );
@@ -327,7 +392,7 @@ export function NewOrder() {
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        transition={{ duration: 0.4 }}
         className="mb-6 flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-4"
       >
         <div className="flex items-center gap-3">
@@ -354,21 +419,17 @@ export function NewOrder() {
       )}
 
       {orderItems.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className={`lg:hidden fixed bottom-6 ${isRtl ? 'left-6' : 'right-6'} z-50`}
-        >
+        <div className={`lg:hidden fixed bottom-6 ${isRtl ? 'left-6' : 'right-6'} z-50`}>
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={scrollToSummary}
-            className="p-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg"
+            className="p-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg transition-all duration-300"
             aria-label={isRtl ? 'التمرير للملخص' : 'Scroll to Summary'}
           >
             <ChevronDown className="w-6 h-6" />
           </motion.button>
-        </motion.div>
+        </div>
       )}
 
       <div className={`space-y-4 ${orderItems.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-6 lg:space-y-0' : ''}`}>
@@ -382,25 +443,22 @@ export function NewOrder() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <CustomInput
                 value={searchInput}
-                onChange={(e) => {
-                  setSearchInput(e.target.value);
-                  debouncedSearch(e.target.value);
-                }}
+                onChange={() => {}}
                 placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
                 ariaLabel={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
               />
-              <CustomSelect
+              <CustomDropdown
                 value={filterDepartment}
-                onChange={(e) => setFilterDepartment(e.target.value)}
+                onChange={setFilterDepartment}
+                options={[
+                  { value: '', label: isRtl ? 'كل الأقسام' : 'All Departments' },
+                  ...departments.map((d) => ({
+                    value: d._id,
+                    label: isRtl ? d.name : (d.nameEn || d.name),
+                  })),
+                ]}
                 ariaLabel={isRtl ? 'تصفية حسب القسم' : 'Filter by department'}
-              >
-                <option value="">{isRtl ? 'كل الأقسام' : 'All Departments'}</option>
-                {departments.map((d) => (
-                  <option key={d._id} value={d._id}>
-                    {isRtl ? d.name : (d.nameEn || d.name)}
-                  </option>
-                ))}
-              </CustomSelect>
+              />
             </div>
           </motion.div>
           {loading ? (
@@ -419,29 +477,24 @@ export function NewOrder() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
+              transition={{ duration: 0.4 }}
               className="p-8 text-center bg-white rounded-xl shadow-lg mt-4"
             >
               <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 text-sm">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
             </motion.div>
           ) : (
-            <motion.div
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-            >
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
               <AnimatePresence>
                 {products.map((product, index) => {
                   const cartItem = orderItems.find((item) => item.productId === product._id);
                   return (
                     <motion.div
                       key={product._id}
-                      initial={{ opacity: 0, y: 20 }}
+                      initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
-                      transition={{ duration: 0.2, delay: index * 0.02 }} // Reduced delay for faster appearance
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.2, delay: index * 0.02 }}
                       className="p-5 bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col justify-between border border-gray-100 hover:border-amber-200"
                     >
                       <div className="space-y-2">
@@ -463,9 +516,8 @@ export function NewOrder() {
                           <QuantityInput
                             value={cartItem.quantity}
                             onChange={(val) => handleQuantityInput(product._id, val)}
-                            onDecrease={() => updateQuantity(product._id, cartItem.quantity - 1)}
-                            onIncrease={() => updateQuantity(product._id, cartItem.quantity + 1)}
-                            onRemove={() => removeFromOrder(product._id)}
+                            onIncrement={() => updateQuantity(product._id, cartItem.quantity + 1)}
+                            onDecrement={() => updateQuantity(product._id, cartItem.quantity - 1)}
                           />
                         ) : (
                           <motion.button
@@ -484,34 +536,30 @@ export function NewOrder() {
                   );
                 })}
               </AnimatePresence>
-            </motion.div>
+            </div>
           )}
         </div>
 
         {orderItems.length > 0 && (
           <motion.div
-            initial={{ opacity: 0, x: 20 }}
+            initial={{ opacity: 0, x: isRtl ? -20 : 20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.4 }}
             className="lg:col-span-1 lg:sticky lg:top-8 space-y-4 max-h-[calc(100vh-8rem)] overflow-y-auto scrollbar-thin"
             ref={summaryRef}
           >
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="p-5 bg-white rounded-xl shadow-lg"
-            >
+            <div className="p-5 bg-white rounded-xl shadow-lg">
               <h3 className="text-lg font-bold text-gray-900 mb-4">{isRtl ? 'ملخص الطلب' : 'Order Summary'}</h3>
               <div className="space-y-3">
                 <AnimatePresence>
                   {orderItems.map((item, index) => (
                     <motion.div
                       key={item.productId}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      transition={{ duration: 0.2, delay: index * 0.05 }}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200"
+                      initial={{ opacity: 0, x: isRtl ? -10 : 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: isRtl ? 10 : -10 }}
+                      transition={{ duration: 0.2, delay: index * 0.02 }}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100"
                     >
                       <div className="flex-1">
                         <p className="font-semibold text-gray-900 text-sm">
@@ -521,29 +569,40 @@ export function NewOrder() {
                           {item.price} {isRtl ? 'ريال' : 'SAR'} / {item.product.displayUnit}
                         </p>
                       </div>
-                      <QuantityInput
-                        value={item.quantity}
-                        onChange={(val) => handleQuantityInput(item.productId, val)}
-                        onDecrease={() => updateQuantity(item.productId, item.quantity - 1)}
-                        onIncrease={() => updateQuantity(item.productId, item.quantity + 1)}
-                        onRemove={() => removeFromOrder(item.productId)}
-                      />
+                      <div className="flex items-center gap-2">
+                        <QuantityInput
+                          value={item.quantity}
+                          onChange={(val) => handleQuantityInput(item.productId, val)}
+                          onIncrement={() => updateQuantity(item.productId, item.quantity + 1)}
+                          onDecrement={() => updateQuantity(item.productId, item.quantity - 1)}
+                        />
+                        <motion.button
+                          whileHover={{ scale: 1.1 }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => removeFromOrder(item.productId)}
+                          className="w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center"
+                          aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </motion.button>
+                      </div>
                     </motion.div>
                   ))}
                 </AnimatePresence>
                 <div className="border-t pt-3">
-                  <div className="flex justify-between font-bold text-gray-900 text-base">
+                  <div className="flex justify-between font-bold text-gray-900 text-sm">
                     <span>{isRtl ? 'الإجمالي النهائي' : 'Final Total'}:</span>
-                    <span className="text-amber-600">
+                    <span className="text-teal-600">
                       {getTotalAmount} {isRtl ? 'ريال' : 'SAR'}
                     </span>
                   </div>
                 </div>
               </div>
-            </motion.div>
+            </div>
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.4 }}
               className="p-5 bg-white rounded-xl shadow-lg"
             >
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -552,18 +611,18 @@ export function NewOrder() {
                     <label htmlFor="branch" className="block text-sm font-medium text-gray-700 mb-2">
                       {isRtl ? 'الفرع' : 'Branch'}
                     </label>
-                    <CustomSelect
+                    <CustomDropdown
                       value={branch}
-                      onChange={(e) => setBranch(e.target.value)}
+                      onChange={setBranch}
+                      options={[
+                        { value: '', label: isRtl ? 'اختر الفرع' : 'Select Branch' },
+                        ...branches.map((b) => ({
+                          value: b._id,
+                          label: isRtl ? b.name : (b.nameEn || b.name),
+                        })),
+                      ]}
                       ariaLabel={isRtl ? 'الفرع' : 'Branch'}
-                    >
-                      <option value="">{isRtl ? 'اختر الفرع' : 'Select Branch'}</option>
-                      {branches.map((b) => (
-                        <option key={b._id} value={b._id}>
-                          {isRtl ? b.name : (b.nameEn || b.name)}
-                        </option>
-                      ))}
-                    </CustomSelect>
+                    />
                   </div>
                 )}
                 <div>
@@ -583,7 +642,7 @@ export function NewOrder() {
                     whileTap={{ scale: 0.95 }}
                     type="button"
                     onClick={clearOrder}
-                    className="flex-1 px-4 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm transition-all duration-300"
+                    className="flex-1 px-4 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm transition-all duration-300 shadow-sm"
                     disabled={submitting || orderItems.length === 0}
                     aria-label={isRtl ? 'مسح الطلب' : 'Clear Order'}
                   >
@@ -593,7 +652,7 @@ export function NewOrder() {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     type="submit"
-                    className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-all duration-300"
+                    className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-all duration-300 shadow-lg hover:shadow-xl"
                     disabled={orderItems.length === 0 || submitting}
                     aria-label={submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'إرسال الطلب' : 'Submit Order')}
                   >
@@ -620,21 +679,16 @@ export function NewOrder() {
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.8, opacity: 0 }}
               transition={{ duration: 0.3 }}
-              className="bg-white rounded-xl shadow-2xl max-w-full w-[95vw] sm:max-w-md p-6"
+              className="bg-white rounded-xl shadow-2xl max-w-md p-6 w-[90vw]"
             >
-              <h3 className="text-xl font-bold text-gray-900 mb-4 text-center">
-                {isRtl ? 'تأكيد الطلب' : 'Confirm Order'}
-              </h3>
-              <p className="text-gray-600 mb-6 text-center">
-                {isRtl ? 'هل أنت متأكد من إرسال الطلب؟' : 'Are you sure you want to submit the order?'}
-              </p>
+              <h3 className="text-lg font-bold text-gray-900 mb-4">{isRtl ? 'تأكيد الطلب' : 'Confirm Order'}</h3>
+              <p className="text-sm text-gray-600 mb-6">{isRtl ? 'هل أنت متأكد من إرسال الطلب؟' : 'Are you sure you want to submit the order?'}</p>
               <div className="flex justify-end gap-3">
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  type="button"
                   onClick={() => setShowConfirmModal(false)}
-                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm transition-all duration-300"
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm transition-colors"
                 >
                   {isRtl ? 'إلغاء' : 'Cancel'}
                 </motion.button>
@@ -642,8 +696,8 @@ export function NewOrder() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={confirmOrder}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-all duration-300"
                   disabled={submitting}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-colors disabled:opacity-50"
                 >
                   {submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'تأكيد' : 'Confirm')}
                 </motion.button>
