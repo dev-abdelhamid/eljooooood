@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { productsAPI, departmentAPI } from '../services/api';
-import { Package, Plus, Edit2, Trash2, Search, AlertCircle, X } from 'lucide-react';
+import { Package, Plus, Edit2, Trash2, Search, AlertCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 
@@ -27,17 +27,11 @@ interface Department {
   nameEn?: string;
 }
 
-interface Toast {
-  message: string;
-  type: 'success' | 'error';
-}
-
 const unitOptions = [
   { value: 'كيلو', valueEn: 'Kilo', labelAr: 'كيلو', labelEn: 'Kilo' },
   { value: 'قطعة', valueEn: 'Piece', labelAr: 'قطعة', labelEn: 'Piece' },
   { value: 'علبة', valueEn: 'Pack', labelAr: 'علبة', labelEn: 'Pack' },
   { value: 'صينية', valueEn: 'Tray', labelAr: 'صينية', labelEn: 'Tray' },
-  { value: '', valueEn: '', labelAr: 'غير محدد', labelEn: 'None' },
 ];
 
 export function Products() {
@@ -51,17 +45,7 @@ export function Products() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState({ products: false, departments: false });
-  const [toastState, setToastState] = useState<Toast | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    nameEn: '',
-    code: '',
-    department: '',
-    price: '',
-    unit: '',
-    description: '',
-  });
+  const [loading, setLoading] = useState(false);
 
   const debouncedSearch = useCallback(
     debounce((value: string) => {
@@ -73,18 +57,16 @@ export function Products() {
   useEffect(() => {
     if (!user || !['admin'].includes(user.role)) {
       setError(isRtl ? 'غير مصرح' : 'Unauthorized');
-      setLoading({ products: false, departments: false });
+      setLoading(false);
       return;
     }
 
     const fetchData = async () => {
       try {
-        setLoading({ products: true, departments: true });
+        setLoading(true);
         const [productsResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 0 }).finally(() =>
-            setLoading((prev) => ({ ...prev, products: false }))
-          ),
-          departmentAPI.getAll({ limit: 100 }).finally(() => setLoading((prev) => ({ ...prev, departments: false }))),
+          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 0 }),
+          departmentAPI.getAll({ limit: 100 }),
         ]);
 
         const productsWithDisplay = productsResponse.data.map((product: Product) => ({
@@ -98,17 +80,12 @@ export function Products() {
       } catch (err: any) {
         console.error('Fetch error:', err);
         setError(err.response?.data?.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
+      } finally {
+        setLoading(false);
       }
     };
     fetchData();
   }, [isRtl, user, filterDepartment, searchTerm]);
-
-  useEffect(() => {
-    if (toastState) {
-      toast[toastState.type](toastState.message, { autoClose: 3000 });
-      setTimeout(() => setToastState(null), 3000);
-    }
-  }, [toastState]);
 
   const openModal = (product?: Product) => {
     if (!user || !['admin'].includes(user.role)) {
@@ -123,7 +100,7 @@ export function Products() {
         code: product.code,
         department: product.department._id,
         price: product.price.toString(),
-        unit: product.unit || '',
+        unit: product.unit || 'كيلو',
         description: product.description || '',
       });
     } else {
@@ -134,7 +111,7 @@ export function Products() {
         code: '',
         department: departments[0]?._id || '',
         price: '',
-        unit: '',
+        unit: 'كيلو',
         description: '',
       });
     }
@@ -146,6 +123,16 @@ export function Products() {
     setEditingProduct(null);
     setError('');
   };
+
+  const [formData, setFormData] = useState({
+    name: '',
+    nameEn: '',
+    code: '',
+    department: '',
+    price: '',
+    unit: '',
+    description: '',
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -172,7 +159,7 @@ export function Products() {
               : p
           )
         );
-        setToastState({ message: isRtl ? 'تم تحديث المنتج بنجاح' : 'Product updated successfully', type: 'success' });
+        toast.success(isRtl ? 'تم تحديث المنتج بنجاح' : 'Product updated successfully');
       } else {
         const newProduct = await productsAPI.create(productData);
         setProducts([
@@ -183,13 +170,13 @@ export function Products() {
             displayUnit: isRtl ? (newProduct.unit || 'غير محدد') : (newProduct.unitEn || newProduct.unit || 'N/A'),
           },
         ]);
-        setToastState({ message: isRtl ? 'تم إنشاء المنتج بنجاح' : 'Product created successfully', type: 'success' });
+        toast.success(isRtl ? 'تم إنشاء المنتج بنجاح' : 'Product created successfully');
       }
       closeModal();
     } catch (err: any) {
       console.error('Submit error:', err);
       setError(err.response?.data?.message || (isRtl ? 'خطأ في حفظ المنتج' : 'Error saving product'));
-      setToastState({ message: err.response?.data?.message || (isRtl ? 'خطأ في حفظ المنتج' : 'Error saving product'), type: 'error' });
+      toast.error(err.response?.data?.message || (isRtl ? 'خطأ في حفظ المنتج' : 'Error saving product'));
     }
   };
 
@@ -202,57 +189,69 @@ export function Products() {
       try {
         await productsAPI.delete(id);
         setProducts(products.filter((p) => p._id !== id));
-        setToastState({ message: isRtl ? 'تم حذف المنتج بنجاح' : 'Product deleted successfully', type: 'success' });
+        toast.success(isRtl ? 'تم حذف المنتج بنجاح' : 'Product deleted successfully');
       } catch (err: any) {
         console.error('Delete error:', err);
         setError(err.response?.data?.message || (isRtl ? 'خطأ في حذف المنتج' : 'Error deleting product'));
-        setToastState({ message: err.response?.data?.message || (isRtl ? 'خطأ في حذف المنتج' : 'Error deleting product'), type: 'error' });
+        toast.error(err.response?.data?.message || (isRtl ? 'خطأ في حذف المنتج' : 'Error deleting product'));
       }
     }
   };
 
-  if (loading.departments) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
+  const CustomInput = ({ value, onChange, placeholder, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder: string; ariaLabel: string }) => (
+    <div className="relative group">
+      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500" />
+      <input
+        type="text"
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-full focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm hover:shadow-md text-sm"
+        aria-label={ariaLabel}
+      />
+    </div>
+  );
+
+  const CustomSelect = ({ value, onChange, children, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; children: React.ReactNode; ariaLabel: string }) => (
+    <div className="relative group">
+      <select
+        value={value}
+        onChange={onChange}
+        className="w-full px-4 py-3 border border-gray-200 rounded-full focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm hover:shadow-md appearance-none text-sm"
+        aria-label={ariaLabel}
+      >
+        {children}
+      </select>
+      <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500">
+        ▼
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
-    <div className="mx-auto px-4 py-8 min-h-screen h-screen overflow-auto" dir={isRtl ? 'rtl' : 'ltr'}>
-      {toastState && (
-        <div
-          className={`fixed top-4 ${isRtl ? 'right-4' : 'left-4'} z-50 p-4 rounded-lg shadow-lg transition-all duration-300 ${
-            toastState.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-          }`}
-          role="alert"
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-sm">{toastState.message}</span>
-            <button
-              onClick={() => setToastState(null)}
-              aria-label={isRtl ? 'إغلاق' : 'Close'}
-              className="hover:opacity-80"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-          <Package className="w-8 h-8 text-amber-600" />
+    <div className="mx-auto px-4 py-8 min-h-screen overflow-y-auto scrollbar-hide" dir={isRtl ? 'rtl' : 'ltr'}>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+          <Package className="w-7 h-7 text-amber-600" />
           {isRtl ? 'إدارة المنتجات' : 'Manage Products'}
         </h1>
-        <p className="text-gray-600 mt-2 text-sm">
+        <p className="text-gray-600 mt-1 text-xs">
           {isRtl ? 'قم بإضافة المنتجات أو تعديلها أو حذفها' : 'Add, edit, or delete products'}
         </p>
+        {user?.role === 'admin' && (
+          <button
+            onClick={() => openModal()}
+            className="mt-4 w-full sm:w-auto px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full text-sm transition-colors flex items-center justify-center gap-2 shadow-sm"
+            aria-label={isRtl ? 'إضافة منتج جديد' : 'Add New Product'}
+          >
+            <Plus className="w-4 h-4" />
+            {isRtl ? 'إضافة منتج جديد' : 'Add New Product'}
+          </button>
+        )}
       </div>
 
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 animate-pulse">
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-red-600" />
           <span className="text-red-600 text-sm">{error}</span>
         </div>
@@ -261,21 +260,16 @@ export function Products() {
       <div className="space-y-4">
         <div className="p-6 bg-white rounded-2xl shadow-md">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
-                onChange={(e) => debouncedSearch(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
-                aria-label={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
-              />
-            </div>
-            <select
+            <CustomInput
+              value={searchTerm}
+              onChange={(e) => debouncedSearch(e.target.value)}
+              placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
+              ariaLabel={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
+            />
+            <CustomSelect
               value={filterDepartment}
               onChange={(e) => setFilterDepartment(e.target.value)}
-              className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
-              aria-label={isRtl ? 'تصفية حسب القسم' : 'Filter by department'}
+              ariaLabel={isRtl ? 'تصفية حسب القسم' : 'Filter by department'}
             >
               <option value="">{isRtl ? 'كل الأقسام' : 'All Departments'}</option>
               {departments.map((d) => (
@@ -283,30 +277,18 @@ export function Products() {
                   {isRtl ? d.name : (d.nameEn || d.name)}
                 </option>
               ))}
-            </select>
+            </CustomSelect>
           </div>
         </div>
-        <div className="text-center text-sm text-gray-600">
+        <div className="text-center text-xs text-gray-600">
           {isRtl ? `عدد المنتجات: ${products.length}` : `Products Count: ${products.length}`}
         </div>
 
-        {user?.role === 'admin' && (
-          <button
-            onClick={() => openModal()}
-            className="w-full sm:w-auto px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full text-sm transition-colors flex items-center justify-center gap-2"
-            aria-label={isRtl ? 'إضافة منتج جديد' : 'Add New Product'}
-          >
-            <Plus className="w-4 h-4" />
-            {isRtl ? 'إضافة منتج جديد' : 'Add New Product'}
-          </button>
-        )}
-
-        {loading.products ? (
+        {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[...Array(6)].map((_, index) => (
               <div key={index} className="p-5 bg-white rounded-xl shadow-sm">
                 <div className="space-y-3 animate-pulse">
-                  <div className="h-40 bg-gray-200 rounded-t-xl"></div>
                   <div className="h-4 bg-gray-200 rounded w-3/4"></div>
                   <div className="h-3 bg-gray-200 rounded w-1/4"></div>
                   <div className="h-3 bg-gray-200 rounded w-1/2"></div>
@@ -334,50 +316,43 @@ export function Products() {
             {products.map((product) => (
               <div
                 key={product._id}
-                className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-200"
+                className="p-5 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between"
               >
-                <div className="space-y-3">
-                  <div className="relative">
-                    <img
-                      src={product.image || 'https://images.pexels.com/photos/1126359/pexels-photo-1126359.jpeg'}
-                      alt={product.displayName}
-                      className="w-full h-40 object-cover rounded-t-xl"
-                    />
-                    {user?.role === 'admin' && (
-                      <div className="absolute top-2 right-2 flex gap-2">
-                        <button
-                          onClick={() => openModal(product)}
-                          className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors"
-                          title={isRtl ? 'تعديل' : 'Edit'}
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => deleteProduct(product._id)}
-                          className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors"
-                          title={isRtl ? 'حذف' : 'Delete'}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                <div className="space-y-2">
                   <div className="flex items-center justify-between gap-4">
-                    <h3 className="font-semibold text-gray-900 text-base truncate">
+                    <h3 className="font-semibold text-gray-900 text-sm truncate">
                       {product.displayName}
                     </h3>
                     <p className="text-xs text-gray-500">{product.code}</p>
                   </div>
-                  <p className="text-sm text-amber-600">
+                  <p className="text-xs text-amber-600">
                     {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
                   </p>
-                  <p className="font-semibold text-gray-900 text-sm">
+                  <p className="font-semibold text-gray-900 text-xs">
                     {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
                   </p>
                   {product.description && (
-                    <p className="text-xs text-gray-600 line-clamp-2">{product.description}</p>
+                    <p className="text-xs text-gray-600 line-clamp-3">{product.description}</p>
                   )}
                 </div>
+                {user?.role === 'admin' && (
+                  <div className="mt-4 flex justify-end gap-2">
+                    <button
+                      onClick={() => openModal(product)}
+                      className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors"
+                      title={isRtl ? 'تعديل' : 'Edit'}
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => deleteProduct(product._id)}
+                      className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors"
+                      title={isRtl ? 'حذف' : 'Delete'}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
