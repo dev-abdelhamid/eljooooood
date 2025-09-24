@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { chefsAPI, departmentAPI } from '../services/api';
-import { ChefHat, AlertCircle, Edit2, Trash2, Key, ArrowLeft, X, Eye, EyeOff } from 'lucide-react';
+import { ChefHat, Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key, X, Eye, EyeOff, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CustomInput, CustomDropdown } from './Chefs'; // استيراد المكونات المخصصة
+import { debounce } from 'lodash';
+import { CustomInput, CustomDropdown } from './Chefs'; // تأكد من أن هذه المكونات موجودة في ملف منفصل
 
 interface Department {
   id: string;
@@ -14,7 +15,6 @@ interface Department {
   nameEn?: string;
   code: string;
   description?: string;
-  displayName: string;
 }
 
 interface Chef {
@@ -37,25 +37,28 @@ interface Chef {
 
 const translations = {
   ar: {
-    chefDetails: 'تفاصيل الشيف',
-    back: 'رجوع',
-    name: 'اسم الشيف (عربي)',
-    nameEn: 'اسم الشيف (إنجليزي)',
+    manage: 'إدارة الشيفات',
+    add: 'إضافة شيف',
+    addFirst: 'إضافة أول شيف',
+    noChefs: 'لا توجد شيفات',
+    noMatch: 'لا توجد شيفات مطابقة',
+    empty: 'لا توجد شيفات متاحة',
+    searchPlaceholder: 'ابحث عن الشيفات...',
     username: 'اسم المستخدم',
     email: 'الإيميل',
     phone: 'الهاتف',
     department: 'القسم',
-    status: 'الحالة',
-    active: 'نشط',
-    inactive: 'غير نشط',
     createdAt: 'تاريخ الإنشاء',
     updatedAt: 'تاريخ التحديث',
     edit: 'تعديل',
     resetPassword: 'تغيير كلمة المرور',
     delete: 'حذف',
+    name: 'اسم الشيف (عربي)',
+    nameEn: 'اسم الشيف (إنجليزي)',
     nameRequired: 'اسم الشيف مطلوب',
     nameEnRequired: 'اسم الشيف بالإنجليزية مطلوب',
     usernameRequired: 'اسم المستخدم مطلوب',
+    passwordRequired: 'كلمة المرور مطلوبة',
     departmentRequired: 'القسم مطلوب',
     namePlaceholder: 'أدخل اسم الشيف',
     nameEnPlaceholder: 'أدخل اسم الشيف بالإنجليزية',
@@ -63,6 +66,7 @@ const translations = {
     emailPlaceholder: 'أدخل الإيميل',
     phonePlaceholder: 'أدخل رقم الهاتف',
     departmentPlaceholder: 'اختر القسم',
+    passwordPlaceholder: 'أدخل كلمة المرور',
     update: 'تحديث الشيف',
     requiredFields: 'يرجى ملء جميع الحقول المطلوبة',
     usernameExists: 'اسم المستخدم مستخدم بالفعل',
@@ -70,15 +74,17 @@ const translations = {
     unauthorized: 'غير مصرح لك',
     fetchError: 'خطأ في جلب البيانات',
     updateError: 'خطأ في تحديث الشيف',
+    createError: 'خطأ في إنشاء الشيف',
+    added: 'تم إضافة الشيف بنجاح',
     updated: 'تم تحديث الشيف بنجاح',
-    passwordResetSuccess: 'تم تغيير كلمة المرور بنجاح',
-    passwordResetError: 'خطأ في تغيير كلمة المرور',
     newPassword: 'كلمة المرور الجديدة',
     confirmPassword: 'تأكيد كلمة المرور',
     newPasswordPlaceholder: 'أدخل كلمة المرور الجديدة',
     confirmPasswordPlaceholder: 'أدخل تأكيد كلمة المرور',
     passwordMismatch: 'كلمات المرور غير متطابقة',
     passwordTooShort: 'كلمة المرور قصيرة جدًا (6 أحرف على الأقل)',
+    passwordResetSuccess: 'تم تغيير كلمة المرور بنجاح',
+    passwordResetError: 'خطأ في تغيير كلمة المرور',
     reset: 'إعادة تعيين',
     cancel: 'إلغاء',
     confirmDelete: 'تأكيد الحذف',
@@ -86,28 +92,37 @@ const translations = {
     deleteError: 'خطأ في الحذف',
     deleted: 'تم الحذف بنجاح',
     noDepartments: 'لا توجد أقسام متاحة',
-    notFound: 'الشيف غير موجود',
+    invalidUser: 'مستخدم غير صالح',
+    status: 'الحالة',
+    active: 'نشط',
+    inactive: 'غير نشط',
+    page: 'الصفحة',
+    previous: 'السابق',
+    next: 'التالي',
   },
   en: {
-    chefDetails: 'Chef Details',
-    back: 'Back',
-    name: 'Chef Name (Arabic)',
-    nameEn: 'Chef Name (English)',
+    manage: 'Manage Chefs',
+    add: 'Add Chef',
+    addFirst: 'Add First Chef',
+    noChefs: 'No Chefs Found',
+    noMatch: 'No Matching Chefs',
+    empty: 'No Chefs Available',
+    searchPlaceholder: 'Search chefs...',
     username: 'Username',
     email: 'Email',
     phone: 'Phone',
     department: 'Department',
-    status: 'Status',
-    active: 'Active',
-    inactive: 'Inactive',
     createdAt: 'Created At',
     updatedAt: 'Updated At',
     edit: 'Edit',
     resetPassword: 'Change Password',
     delete: 'Delete',
+    name: 'Chef Name (Arabic)',
+    nameEn: 'Chef Name (English)',
     nameRequired: 'Chef name is required',
     nameEnRequired: 'Chef name in English is required',
     usernameRequired: 'Username is required',
+    passwordRequired: 'Password is required',
     departmentRequired: 'Department is required',
     namePlaceholder: 'Enter chef name',
     nameEnPlaceholder: 'Enter chef name in English',
@@ -115,6 +130,7 @@ const translations = {
     emailPlaceholder: 'Enter email',
     phonePlaceholder: 'Enter phone number',
     departmentPlaceholder: 'Select department',
+    passwordPlaceholder: 'Enter password',
     update: 'Update Chef',
     requiredFields: 'Please fill all required fields',
     usernameExists: 'Username already in use',
@@ -122,15 +138,17 @@ const translations = {
     unauthorized: 'Unauthorized access',
     fetchError: 'Error fetching data',
     updateError: 'Error updating chef',
+    createError: 'Error creating chef',
+    added: 'Chef added successfully',
     updated: 'Chef updated successfully',
-    passwordResetSuccess: 'Password changed successfully',
-    passwordResetError: 'Error changing password',
     newPassword: 'New Password',
     confirmPassword: 'Confirm Password',
     newPasswordPlaceholder: 'Enter new password',
     confirmPasswordPlaceholder: 'Enter confirm password',
     passwordMismatch: 'Passwords do not match',
     passwordTooShort: 'Password too short (at least 6 characters)',
+    passwordResetSuccess: 'Password changed successfully',
+    passwordResetError: 'Error changing password',
     reset: 'Reset',
     cancel: 'Cancel',
     confirmDelete: 'Confirm Deletion',
@@ -138,24 +156,35 @@ const translations = {
     deleteError: 'Error deleting',
     deleted: 'Deleted successfully',
     noDepartments: 'No departments available',
-    notFound: 'Chef not found',
+    invalidUser: 'Invalid user',
+    status: 'Status',
+    active: 'Active',
+    inactive: 'Inactive',
+    page: 'Page',
+    previous: 'Previous',
+    next: 'Next',
   },
 };
 
-export function ChefDetails() {
-  const { id } = useParams<{ id: string }>();
+export function Chefs() {
   const { language } = useLanguage();
-  const { user } = useAuth();
+  const { user: loggedInUser } = useAuth();
   const navigate = useNavigate();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
-  const [chef, setChef] = useState<Chef | null>(null);
+  const [chefs, setChefs] = useState<Chef[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [searchInput, setSearchInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState('');
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [selectedChef, setSelectedChef] = useState<Chef | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [formData, setFormData] = useState({
     name: '',
     nameEn: '',
@@ -163,20 +192,23 @@ export function ChefDetails() {
     email: '',
     phone: '',
     department: '',
+    password: '',
     isActive: true,
   });
   const [resetPasswordData, setResetPasswordData] = useState({ password: '', confirmPassword: '' });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [showPassword, setShowPassword] = useState<Record<string, boolean>>({});
 
+  const debouncedSearch = useCallback(
+    debounce((value: string) => {
+      setSearchTerm(value);
+      setCurrentPage(1); // إعادة تعيين الصفحة عند البحث
+    }, 500),
+    []
+  );
+
   const fetchData = useCallback(async () => {
-    if (!id) {
-      setError(t.notFound);
-      setLoading(false);
-      toast.error(t.notFound, { position: isRtl ? 'top-right' : 'top-left' });
-      return;
-    }
-    if (!user || user.role !== 'admin') {
+    if (!loggedInUser || loggedInUser.role !== 'admin') {
       setError(t.unauthorized);
       setLoading(false);
       toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
@@ -184,44 +216,45 @@ export function ChefDetails() {
     }
     setLoading(true);
     try {
-      const [chefResponse, departmentsResponse] = await Promise.all([
-        chefsAPI.getById(id),
+      const [chefsResponse, departmentsResponse] = await Promise.all([
+        chefsAPI.getAll({ page: currentPage, limit: 12, search: searchTerm, isRtl }),
         departmentAPI.getAll({ isRtl }),
       ]);
 
-      if (!chefResponse || !chefResponse.user || !chefResponse.department) {
-        setError(t.notFound);
-        toast.error(t.notFound, { position: isRtl ? 'top-right' : 'top-left' });
-        setLoading(false);
-        return;
-      }
-
-      setChef({
-        id: chefResponse._id,
-        user: {
-          id: chefResponse.user._id,
-          name: chefResponse.user.name,
-          nameEn: chefResponse.user.nameEn,
-          username: chefResponse.user.username,
-          email: chefResponse.user.email,
-          phone: chefResponse.user.phone,
-          isActive: chefResponse.user.isActive,
-          createdAt: chefResponse.user.createdAt,
-          updatedAt: chefResponse.user.updatedAt,
-        },
-        department: {
-          id: chefResponse.department._id,
-          name: chefResponse.department.name,
-          nameEn: chefResponse.department.nameEn,
-          code: chefResponse.department.code,
-          description: chefResponse.department.description,
-          displayName: isRtl ? chefResponse.department.name : chefResponse.department.nameEn || chefResponse.department.name,
-        },
-        createdAt: chefResponse.createdAt,
-        updatedAt: chefResponse.updatedAt,
-      });
-
+      // التأكد من أن الاستجابة هي مصفوفة
+      const chefsData = Array.isArray(chefsResponse.data) ? chefsResponse.data : [];
       const departmentsData = Array.isArray(departmentsResponse.data) ? departmentsResponse.data : [];
+
+      setChefs(
+        chefsData
+          .filter((chef: any) => chef.user && chef.department) // تصفية الشيفات غير الصالحة
+          .map((chef: any) => ({
+            id: chef._id,
+            user: {
+              id: chef.user._id,
+              name: chef.user.name,
+              nameEn: chef.user.nameEn,
+              username: chef.user.username,
+              email: chef.user.email,
+              phone: chef.user.phone,
+              isActive: chef.user.isActive,
+              createdAt: chef.user.createdAt,
+              updatedAt: chef.user.updatedAt,
+            },
+            department: chef.department
+              ? {
+                  id: chef.department._id,
+                  name: chef.department.name,
+                  nameEn: chef.department.nameEn,
+                  code: chef.department.code,
+                  description: chef.department.description,
+                }
+              : null,
+            createdAt: chef.createdAt,
+            updatedAt: chef.updatedAt,
+          }))
+      );
+
       setDepartments(
         departmentsData.map((dept: any) => ({
           id: dept._id,
@@ -229,10 +262,10 @@ export function ChefDetails() {
           nameEn: dept.nameEn,
           code: dept.code,
           description: dept.description,
-          displayName: isRtl ? dept.name : dept.nameEn || dept.name,
         }))
       );
 
+      setTotalPages(chefsResponse.totalPages || 1);
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Fetch error:`, err);
@@ -241,49 +274,81 @@ export function ChefDetails() {
     } finally {
       setLoading(false);
     }
-  }, [id, user, t, isRtl]);
+  }, [loggedInUser, t, isRtl, currentPage, searchTerm]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const filteredChefs = chefs.filter(
+    (chef) =>
+      chef.user &&
+      ((isRtl ? chef.user.name : chef.user.nameEn || chef.user.name)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        chef.user.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        chef.user.email?.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
   const validateForm = () => {
     const errors: Record<string, string> = {};
     if (!formData.name) errors.name = t.nameRequired;
     if (!formData.nameEn) errors.nameEn = t.nameEnRequired;
     if (!formData.username) errors.username = t.usernameRequired;
+    if (!isEditMode && !formData.password) errors.password = t.passwordRequired;
     if (!formData.department) errors.department = t.departmentRequired;
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  const openEditModal = () => {
+  const openAddModal = () => {
     if (departments.length === 0) {
       setError(t.noDepartments);
       toast.error(t.noDepartments, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
     setFormData({
-      name: chef?.user?.name || '',
-      nameEn: chef?.user?.nameEn || '',
-      username: chef?.user?.username || '',
-      email: chef?.user?.email || '',
-      phone: chef?.user?.phone || '',
-      department: chef?.department?.id || departments[0].id,
-      isActive: chef?.user?.isActive ?? true,
+      name: '',
+      nameEn: '',
+      username: '',
+      email: '',
+      phone: '',
+      department: departments[0].id,
+      password: '',
+      isActive: true,
     });
-    setIsEditModalOpen(true);
+    setIsEditMode(false);
+    setSelectedChef(null);
+    setIsModalOpen(true);
     setFormErrors({});
     setError('');
   };
 
-  const openResetPasswordModal = () => {
+  const openEditModal = (chef: Chef) => {
+    setFormData({
+      name: chef.user?.name || '',
+      nameEn: chef.user?.nameEn || '',
+      username: chef.user?.username || '',
+      email: chef.user?.email || '',
+      phone: chef.user?.phone || '',
+      department: chef.department?.id || '',
+      password: '',
+      isActive: chef.user?.isActive ?? true,
+    });
+    setIsEditMode(true);
+    setSelectedChef(chef);
+    setIsModalOpen(true);
+    setFormErrors({});
+    setError('');
+  };
+
+  const openResetPasswordModal = (chef: Chef) => {
+    setSelectedChef(chef);
     setResetPasswordData({ password: '', confirmPassword: '' });
     setIsResetPasswordModalOpen(true);
     setError('');
   };
 
-  const openDeleteModal = () => {
+  const openDeleteModal = (chef: Chef) => {
+    setSelectedChef(chef);
     setIsDeleteModalOpen(true);
     setError('');
   };
@@ -304,36 +369,80 @@ export function ChefDetails() {
           phone: formData.phone.trim() || undefined,
           role: 'chef',
           isActive: formData.isActive,
+          ...(isEditMode ? {} : { password: formData.password.trim() }),
         },
         department: formData.department,
       };
-      const updatedChef = await chefsAPI.update(chef!.id, chefData);
-      setChef({
-        ...chef!,
-        user: {
-          ...chef!.user!,
-          name: updatedChef.user.name,
-          nameEn: updatedChef.user.nameEn,
-          username: updatedChef.user.username,
-          email: updatedChef.user.email,
-          phone: updatedChef.user.phone,
-          isActive: updatedChef.user.isActive,
-          updatedAt: updatedChef.user.updatedAt,
-        },
-        department: {
-          id: updatedChef.department._id,
-          name: updatedChef.department.name,
-          nameEn: updatedChef.department.nameEn,
-          code: updatedChef.department.code,
-          description: updatedChef.department.description,
-          displayName: isRtl ? updatedChef.department.name : updatedChef.department.nameEn || updatedChef.department.name,
-        },
-        updatedAt: updatedChef.updatedAt,
-      });
-      toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
-      setIsEditModalOpen(false);
+      if (isEditMode && selectedChef) {
+        const updatedChef = await chefsAPI.update(selectedChef.id, chefData);
+        setChefs(
+          chefs.map((c) =>
+            c.id === selectedChef.id
+              ? {
+                  ...c,
+                  user: {
+                    ...c.user!,
+                    name: updatedChef.user.name,
+                    nameEn: updatedChef.user.nameEn,
+                    username: updatedChef.user.username,
+                    email: updatedChef.user.email,
+                    phone: updatedChef.user.phone,
+                    isActive: updatedChef.user.isActive,
+                    createdAt: updatedChef.user.createdAt,
+                    updatedAt: updatedChef.user.updatedAt,
+                  },
+                  department: updatedChef.department
+                    ? {
+                        id: updatedChef.department._id,
+                        name: updatedChef.department.name,
+                        nameEn: updatedChef.department.nameEn,
+                        code: updatedChef.department.code,
+                        description: updatedChef.department.description,
+                      }
+                    : null,
+                  createdAt: updatedChef.createdAt,
+                  updatedAt: updatedChef.updatedAt,
+                }
+              : c
+          )
+        );
+        toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
+      } else {
+        const newChef = await chefsAPI.create(chefData);
+        setChefs([
+          ...chefs,
+          {
+            id: newChef._id,
+            user: {
+              id: newChef.user._id,
+              name: newChef.user.name,
+              nameEn: newChef.user.nameEn,
+              username: newChef.user.username,
+              email: newChef.user.email,
+              phone: newChef.user.phone,
+              isActive: newChef.user.isActive,
+              createdAt: newChef.user.createdAt,
+              updatedAt: newChef.user.updatedAt,
+            },
+            department: newChef.department
+              ? {
+                  id: newChef.department._id,
+                  name: newChef.department.name,
+                  nameEn: newChef.department.nameEn,
+                  code: newChef.department.code,
+                  description: newChef.department.description,
+                }
+              : null,
+            createdAt: newChef.createdAt,
+            updatedAt: newChef.updatedAt,
+          },
+        ]);
+        toast.success(t.added, { position: isRtl ? 'top-right' : 'top-left' });
+      }
+      setIsModalOpen(false);
+      setError('');
     } catch (err: any) {
-      const errorMessage = err.message || t.updateError;
+      const errorMessage = err.message || (isEditMode ? t.updateError : t.createError);
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
     }
@@ -357,7 +466,7 @@ export function ChefDetails() {
       return;
     }
     try {
-      await chefsAPI.resetPassword(chef!.id, resetPasswordData.password);
+      await chefsAPI.resetPassword(selectedChef!.id, resetPasswordData.password);
       setIsResetPasswordModalOpen(false);
       setResetPasswordData({ password: '', confirmPassword: '' });
       toast.success(t.passwordResetSuccess, { position: isRtl ? 'top-right' : 'top-left' });
@@ -369,11 +478,13 @@ export function ChefDetails() {
   };
 
   const handleDelete = async () => {
+    if (!selectedChef) return;
     try {
-      await chefsAPI.delete(chef!.id);
+      await chefsAPI.delete(selectedChef.id);
+      setChefs(chefs.filter((c) => c.id !== selectedChef.id));
       toast.success(t.deleted, { position: isRtl ? 'top-right' : 'top-left' });
       setIsDeleteModalOpen(false);
-      navigate('/chefs');
+      setError('');
     } catch (err: any) {
       const errorMessage = err.message || t.deleteError;
       setError(errorMessage);
@@ -388,24 +499,17 @@ export function ChefDetails() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100">
-        <div className="p-6 bg-white rounded-xl shadow-sm max-w-md w-full">
-          <div className="space-y-4 animate-pulse">
-            <div className="h-6 bg-gray-200 rounded w-3/4"></div>
-            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-            <div className="h-4 bg-gray-200 rounded w-2/3"></div>
-            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!chef) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100">
-        <div className="p-6 bg-white rounded-xl shadow-sm max-w-md w-full text-center">
-          <AlertCircle className="w-10 h-10 text-red-600 mx-auto mb-3" />
-          <p className="text-gray-600 text-sm">{t.notFound}</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl w-full px-4">
+          {[...Array(6)].map((_, index) => (
+            <div key={index} className="p-4 bg-white rounded-xl shadow-sm">
+              <div className="space-y-2 animate-pulse">
+                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -413,7 +517,7 @@ export function ChefDetails() {
 
   return (
     <div
-      className={`mx-auto max-w-3xl px-4 py-6 min-h-screen bg-gray-100 font-sans ${
+      className={`mx-auto max-w-6xl px-4 py-6 min-h-screen overflow-y-auto scrollbar-none bg-gray-100 font-sans ${
         isRtl ? 'rtl font-arabic' : 'ltr'
       }`}
       dir={isRtl ? 'rtl' : 'ltr'}
@@ -422,19 +526,25 @@ export function ChefDetails() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="flex items-center justify-between mb-6"
+        className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-3"
       >
         <div className="flex items-center gap-2">
           <ChefHat className="w-6 h-6 text-amber-600" />
-          <h1 className="text-xl font-bold text-gray-900">{t.chefDetails}</h1>
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">{t.manage}</h1>
+            <p className="text-gray-600 text-xs">{isRtl ? 'إضافة، تعديل، أو حذف الشيفات' : 'Add, edit, or delete chefs'}</p>
+          </div>
         </div>
-        <button
-          onClick={() => navigate('/chefs')}
-          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors flex items-center gap-2 shadow-sm hover:shadow-md"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          {t.back}
-        </button>
+        {loggedInUser?.role === 'admin' && (
+          <button
+            onClick={openAddModal}
+            className="w-full sm:w-auto px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors flex items-center justify-center gap-2 shadow-sm hover:shadow-md"
+            aria-label={t.add}
+          >
+            <Plus className="w-4 h-4" />
+            {t.add}
+          </button>
+        )}
       </motion.div>
 
       <AnimatePresence>
@@ -447,97 +557,159 @@ export function ChefDetails() {
             className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
           >
             <AlertCircle className="w-4 h-4 text-red-600" />
-            <span className="text-red-600 text-sm">{error}</span>
+            <span className="text-red-600 text-xs">{error}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5 }}
-        className="bg-white rounded-xl shadow-sm p-6"
-      >
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold text-gray-900">
-              {isRtl ? chef.user?.name : chef.user?.nameEn || chef.user?.name}
-            </h2>
-            <ChefHat className="w-6 h-6 text-amber-600" />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <span className="block text-sm font-medium text-gray-700">{t.name}</span>
-              <span className="text-sm text-gray-600">{chef.user?.name || '-'}</span>
-            </div>
-            <div>
-              <span className="block text-sm font-medium text-gray-700">{t.nameEn}</span>
-              <span className="text-sm text-gray-600">{chef.user?.nameEn || '-'}</span>
-            </div>
-            <div>
-              <span className="block text-sm font-medium text-gray-700">{t.username}</span>
-              <span className="text-sm text-gray-600">{chef.user?.username || '-'}</span>
-            </div>
-            <div>
-              <span className="block text-sm font-medium text-gray-700">{t.email}</span>
-              <span className="text-sm text-gray-600">{chef.user?.email || '-'}</span>
-            </div>
-            <div>
-              <span className="block text-sm font-medium text-gray-700">{t.phone}</span>
-              <span className="text-sm text-gray-600">{chef.user?.phone || '-'}</span>
-            </div>
-            <div>
-              <span className="block text-sm font-medium text-gray-700">{t.department}</span>
-              <span className="text-sm text-gray-600">{chef.department?.displayName || '-'}</span>
-            </div>
-            <div>
-              <span className="block text-sm font-medium text-gray-700">{t.status}</span>
-              <span className={`text-sm ${chef.user?.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                {chef.user?.isActive ? t.active : t.inactive}
-              </span>
-            </div>
-            <div>
-              <span className="block text-sm font-medium text-gray-700">{t.createdAt}</span>
-              <span className="text-sm text-gray-600">
-                {new Date(chef.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
-              </span>
-            </div>
-            <div>
-              <span className="block text-sm font-medium text-gray-700">{t.updatedAt}</span>
-              <span className="text-sm text-gray-600">
-                {new Date(chef.updatedAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
-              </span>
-            </div>
-          </div>
-          {user?.role === 'admin' && (
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                onClick={openEditModal}
-                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm transition-colors flex items-center gap-2 shadow-sm hover:shadow-md"
-              >
-                <Edit2 className="w-4 h-4" />
-                {t.edit}
-              </button>
-              <button
-                onClick={openResetPasswordModal}
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm transition-colors flex items-center gap-2 shadow-sm hover:shadow-md"
-              >
-                <Key className="w-4 h-4" />
-                {t.resetPassword}
-              </button>
-              <button
-                onClick={openDeleteModal}
-                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm transition-colors flex items-center gap-2 shadow-sm hover:shadow-md"
-              >
-                <Trash2 className="w-4 h-4" />
-                {t.delete}
-              </button>
-            </div>
-          )}
+      <div className="space-y-4">
+        <div className="p-4 bg-white rounded-xl shadow-sm">
+          <CustomInput
+            value={searchInput}
+            onChange={(value) => {
+              setSearchInput(value);
+              debouncedSearch(value);
+            }}
+            placeholder={t.searchPlaceholder}
+            ariaLabel={t.searchPlaceholder}
+          />
         </div>
-      </motion.div>
+        <div className="text-center text-xs text-gray-600">
+          {isRtl ? `عدد الشيفات: ${filteredChefs.length}` : `Chefs Count: ${filteredChefs.length}`}
+        </div>
+        {filteredChefs.length === 0 ? (
+          <div className="p-6 text-center bg-white rounded-xl shadow-sm">
+            <ChefHat className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+            <p className="text-gray-600 text-xs">{searchTerm ? t.noMatch : t.empty}</p>
+            {loggedInUser?.role === 'admin' && !searchTerm && (
+              <button
+                onClick={openAddModal}
+                className="mt-3 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
+                aria-label={t.addFirst}
+              >
+                {t.addFirst}
+              </button>
+            )}
+          </div>
+        ) : (
+          <motion.div
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ staggerChildren: 0.1 }}
+          >
+            {filteredChefs.map((chef) => (
+              <motion.div
+                key={chef.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <div
+                  className="p-4 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer border border-gray-100"
+                  onClick={() => navigate(`/chefs/${chef.id}`)}
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="font-semibold text-gray-900 text-sm truncate" style={{ whiteSpace: 'nowrap' }}>
+                        {isRtl ? chef.user?.name : chef.user?.nameEn || chef.user?.name}
+                      </h3>
+                      <ChefHat className="w-5 h-5 text-amber-600 flex-shrink-0" />
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                      <span className="w-20 font-medium flex-shrink-0">{t.username}:</span>
+                      <span className="truncate" style={{ whiteSpace: 'nowrap' }}>{chef.user?.username || '-'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                      <span className="w-20 font-medium flex-shrink-0">{t.email}:</span>
+                      <span className="truncate" style={{ whiteSpace: 'nowrap' }}>{chef.user?.email || '-'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                      <span className="w-20 font-medium flex-shrink-0">{t.department}:</span>
+                      <span className="truncate" style={{ whiteSpace: 'nowrap' }}>
+                        {chef.department
+                          ? isRtl
+                            ? chef.department.name
+                            : chef.department.nameEn || chef.department.name
+                          : '-'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="w-20 font-medium flex-shrink-0">{t.status}:</span>
+                      <span
+                        className={`truncate ${chef.user?.isActive ? 'text-green-600' : 'text-red-600'}`}
+                        style={{ whiteSpace: 'nowrap' }}
+                      >
+                        {chef.user?.isActive ? t.active : t.inactive}
+                      </span>
+                    </div>
+                  </div>
+                  {loggedInUser?.role === 'admin' && (
+                    <div className="mt-3 flex items-center justify-end gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(chef);
+                        }}
+                        className="p-2 w-9 h-9 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
+                        title={t.edit}
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openResetPasswordModal(chef);
+                        }}
+                        className="p-2 w-9 h-9 bg-amber-500 hover:bg-amber-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
+                        title={t.resetPassword}
+                      >
+                        <Key className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openDeleteModal(chef);
+                        }}
+                        className="p-2 w-9 h-9 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
+                        title={t.delete}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </div>
 
-      {isEditModalOpen && (
+      {filteredChefs.length > 0 && (
+        <div className="flex justify-center mt-6 gap-4 items-center">
+          <button
+            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            {t.previous}
+          </button>
+          <span className="text-xs text-gray-600">
+            {t.page} {currentPage} / {totalPages}
+          </span>
+          <button
+            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {t.next}
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -545,11 +717,11 @@ export function ChefDetails() {
             transition={{ duration: 0.2 }}
             className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6"
           >
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.edit}</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{isEditMode ? t.edit : t.add}</h3>
             <form onSubmit={handleSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">
                     {t.name}
                   </label>
                   <CustomInput
@@ -559,10 +731,10 @@ export function ChefDetails() {
                     ariaLabel={t.name}
                     type="text"
                   />
-                  {formErrors.name && <p className="text-sm text-red-600 mt-1">{formErrors.name}</p>}
+                  {formErrors.name && <p className="text-xs text-red-600 mt-1">{formErrors.name}</p>}
                 </div>
                 <div>
-                  <label htmlFor="nameEn" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">
                     {t.nameEn}
                   </label>
                   <CustomInput
@@ -572,10 +744,10 @@ export function ChefDetails() {
                     ariaLabel={t.nameEn}
                     type="text"
                   />
-                  {formErrors.nameEn && <p className="text-sm text-red-600 mt-1">{formErrors.nameEn}</p>}
+                  {formErrors.nameEn && <p className="text-xs text-red-600 mt-1">{formErrors.nameEn}</p>}
                 </div>
                 <div>
-                  <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="username" className="block text-xs font-medium text-gray-700 mb-1">
                     {t.username}
                   </label>
                   <CustomInput
@@ -585,10 +757,10 @@ export function ChefDetails() {
                     ariaLabel={t.username}
                     type="text"
                   />
-                  {formErrors.username && <p className="text-sm text-red-600 mt-1">{formErrors.username}</p>}
+                  {formErrors.username && <p className="text-xs text-red-600 mt-1">{formErrors.username}</p>}
                 </div>
                 <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1">
                     {t.email}
                   </label>
                   <CustomInput
@@ -600,7 +772,7 @@ export function ChefDetails() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="phone" className="block text-xs font-medium text-gray-700 mb-1">
                     {t.phone}
                   </label>
                   <CustomInput
@@ -612,7 +784,7 @@ export function ChefDetails() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="department" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="department" className="block text-xs font-medium text-gray-700 mb-1">
                     {t.department}
                   </label>
                   <CustomDropdown
@@ -622,15 +794,15 @@ export function ChefDetails() {
                       { value: '', label: t.departmentPlaceholder },
                       ...departments.map((dept) => ({
                         value: dept.id,
-                        label: dept.displayName,
+                        label: isRtl ? dept.name : dept.nameEn || dept.name,
                       })),
                     ]}
                     ariaLabel={t.department}
                   />
-                  {formErrors.department && <p className="text-sm text-red-600 mt-1">{formErrors.department}</p>}
+                  {formErrors.department && <p className="text-xs text-red-600 mt-1">{formErrors.department}</p>}
                 </div>
                 <div>
-                  <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="status" className="block text-xs font-medium text-gray-700 mb-1">
                     {t.status}
                   </label>
                   <CustomDropdown
@@ -643,17 +815,35 @@ export function ChefDetails() {
                     ariaLabel={t.status}
                   />
                 </div>
+                {!isEditMode && (
+                  <div>
+                    <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">
+                      {t.password}
+                    </label>
+                    <CustomInput
+                      value={formData.password}
+                      onChange={(value) => setFormData({ ...formData, password: value })}
+                      placeholder={t.passwordPlaceholder}
+                      ariaLabel={t.password}
+                      type="password"
+                      showPasswordToggle
+                      showPassword={showPassword['new']}
+                      togglePasswordVisibility={() => togglePasswordVisibility('new')}
+                    />
+                    {formErrors.password && <p className="text-xs text-red-600 mt-1">{formErrors.password}</p>}
+                  </div>
+                )}
               </div>
               {error && (
                 <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-red-600" />
-                  <span className="text-red-600 text-sm">{error}</span>
+                  <span className="text-red-600 text-xs">{error}</span>
                 </div>
               )}
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsEditModalOpen(false)}
+                  onClick={() => setIsModalOpen(false)}
                   className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
                 >
                   {t.cancel}
@@ -662,7 +852,7 @@ export function ChefDetails() {
                   type="submit"
                   className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
                 >
-                  {t.update}
+                  {isEditMode ? t.update : t.add}
                 </button>
               </div>
             </form>
@@ -682,7 +872,7 @@ export function ChefDetails() {
             <form onSubmit={handleResetPassword} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
               <div className="space-y-4">
                 <div>
-                  <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="newPassword" className="block text-xs font-medium text-gray-700 mb-1">
                     {t.newPassword}
                   </label>
                   <CustomInput
@@ -697,7 +887,7 @@ export function ChefDetails() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="confirmPassword" className="block text-xs font-medium text-gray-700 mb-1">
                     {t.confirmPassword}
                   </label>
                   <CustomInput
@@ -714,7 +904,7 @@ export function ChefDetails() {
                 {error && (
                   <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 text-red-600" />
-                    <span className="text-red-600 text-sm">{error}</span>
+                    <span className="text-red-600 text-xs">{error}</span>
                   </div>
                 )}
                 <div className="flex justify-end gap-2">
@@ -747,11 +937,11 @@ export function ChefDetails() {
             className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6"
           >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.confirmDelete}</h3>
-            <p className="text-sm text-gray-600 mb-4">{t.deleteWarning}</p>
+            <p className="text-xs text-gray-600 mb-4">{t.deleteWarning}</p>
             {error && (
               <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 mb-4">
                 <AlertCircle className="w-4 h-4 text-red-600" />
-                <span className="text-red-600 text-sm">{error}</span>
+                <span className="text-red-600 text-xs">{error}</span>
               </div>
             )}
             <div className="flex justify-end gap-2">
