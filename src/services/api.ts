@@ -14,7 +14,7 @@ const api = axios.create({
   params: { isRtl: isRtl.toString() },
 });
 
-const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
+export const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 
 api.interceptors.request.use(
   (config) => {
