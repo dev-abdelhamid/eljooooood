@@ -53,9 +53,9 @@ const CustomInput = ({
         initial={{ opacity: value ? 0 : 1 }}
         animate={{ opacity: value ? 0 : 1 }}
         transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'}  flex items-center justify-center align-center  top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`}
       >
-        <Search />
+        <Search className="w-4 h-4" />
       </motion.div>
       <input
         type="text"
