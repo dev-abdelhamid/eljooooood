@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useReducer, useRef , useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useReducer, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -6,6 +6,7 @@ import { branchesAPI } from '../services/api';
 import { MapPin, Plus, Edit2, Trash2, Key, AlertCircle, Search, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Branch {
   _id: string;
@@ -277,7 +278,7 @@ const BranchInput = ({
       onChange={onChange}
       placeholder={placeholder}
       required={required}
-      className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+      className={`w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors duration-200 bg-white shadow-sm text-xs placeholder-gray-400 font-medium ${isRtl ? 'text-right' : 'text-left'}`}
       aria-label={ariaLabel}
     />
   );
@@ -298,24 +299,35 @@ const BranchSearchInput = ({
   const isRtl = language === 'ar';
   return (
     <div className="relative group">
-      <Search className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`} />
+      <motion.div
+        initial={{ opacity: value ? 0 : 1 }}
+        animate={{ opacity: value ? 0 : 1 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`}
+      >
+        <Search />
+      </motion.div>
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-10 pr-2' : 'pr-10 pl-2'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pr-10 pl-3' : 'pl-10 pr-3'} py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors duration-200 bg-white shadow-sm text-xs placeholder-gray-400 font-medium ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       />
-      {value && (
+      <motion.div
+        initial={{ opacity: value ? 1 : 0 }}
+        animate={{ opacity: value ? 1 : 0 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
+      >
         <button
           onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
-          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
           <X className="w-4 h-4" />
         </button>
-      )}
+      </motion.div>
     </div>
   );
 };
@@ -344,7 +356,7 @@ const BranchSelect = ({
         value={value}
         onChange={onChange}
         required={required}
-        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors duration-200 bg-white shadow-sm appearance-none text-xs text-gray-700 font-medium ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       >
         {options.map((option) => (
@@ -371,16 +383,19 @@ const BranchCard = ({ branch, onEdit, onResetPassword, onDelete, onClick }: {
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   return (
-    <div
-      className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between border border-gray-100"
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      className="p-4 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col justify-between border border-gray-100 hover:border-amber-200 cursor-pointer"
       onClick={onClick}
     >
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         <div className="flex items-center justify-between gap-3">
           <h3 className="font-semibold text-gray-900 text-sm truncate">
             {isRtl ? branch.name : branch.nameEn || branch.name}
           </h3>
-          <MapPin className="w-4 h-4 text-amber-600" />
+          <MapPin className="w-5 h-5 text-amber-600" />
         </div>
         <p className="text-xs text-gray-500">{t.code}: {branch.code}</p>
         <p className="text-xs text-gray-600 truncate">{t.address}: {isRtl ? branch.address : branch.addressEn || branch.address}</p>
@@ -390,39 +405,42 @@ const BranchCard = ({ branch, onEdit, onResetPassword, onDelete, onClick }: {
           {t.status}: {branch.isActive ? t.active : t.inactive}
         </p>
       </div>
-      <div className="mt-3 flex items-center justify-end gap-1.5">
-        <button
+      <div className="mt-4 flex items-center justify-end gap-2">
+        <motion.button
           onClick={onEdit}
-          className="p-1.5 w-7 h-7 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center"
+          className="p-2 w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
           title={t.edit}
+          whileHover={{ scale: 1.05 }}
         >
-          <Edit2 className="w-3.5 h-3.5" />
-        </button>
-        <button
+          <Edit2 className="w-4 h-4" />
+        </motion.button>
+        <motion.button
           onClick={onResetPassword}
-          className="p-1.5 w-7 h-7 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors flex items-center justify-center"
+          className="p-2 w-8 h-8 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
           title={t.resetPassword}
+          whileHover={{ scale: 1.05 }}
         >
-          <Key className="w-3.5 h-3.5" />
-        </button>
-        <button
+          <Key className="w-4 h-4" />
+        </motion.button>
+        <motion.button
           onClick={onDelete}
-          className="p-1.5 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center"
+          className="p-2 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
           title={t.delete}
+          whileHover={{ scale: 1.05 }}
         >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+          <Trash2 className="w-4 h-4" />
+        </motion.button>
       </div>
-    </div>
+    </motion.div>
   );
 };
 
 const BranchSkeletonCard = () => (
-  <div className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+  <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
     <div className="space-y-2 animate-pulse">
       <div className="flex items-center justify-between">
         <div className="h-3 bg-gray-200 rounded w-3/4"></div>
-        <div className="w-4 h-4 bg-gray-200 rounded-full"></div>
+        <div className="w-5 h-5 bg-gray-200 rounded-full"></div>
       </div>
       <div className="h-2 bg-gray-200 rounded w-1/4"></div>
       <div className="h-2 bg-gray-200 rounded w-1/2"></div>
@@ -458,14 +476,24 @@ const BranchModal = ({
 }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-2xl p-5">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">
-          {editingBranch ? t.edit : t.add}
-        </h3>
-        <form onSubmit={onSubmit} className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-3">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        className="bg-white rounded-lg shadow-xl max-w-full w-[90vw] sm:max-w-2xl p-6"
+      >
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">{editingBranch ? t.edit : t.add}</h3>
+        <form onSubmit={onSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-4">
               <div>
                 <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">
                   {t.name}
@@ -592,7 +620,7 @@ const BranchModal = ({
                 />
               </div>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-4">
               <div>
                 <label htmlFor="userName" className="block text-xs font-medium text-gray-700 mb-1">
                   {t.userName}
@@ -700,26 +728,28 @@ const BranchModal = ({
               <span className="text-red-600 text-xs">{error}</span>
             </div>
           )}
-          <div className="flex justify-end gap-2">
-            <button
+          <div className="flex justify-end gap-3">
+            <motion.button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors"
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors duration-200"
               aria-label={t.cancel}
+              whileHover={{ scale: 1.05 }}
             >
               {t.cancel}
-            </button>
-            <button
+            </motion.button>
+            <motion.button
               type="submit"
-              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors duration-200"
               aria-label={editingBranch ? t.update : t.add}
+              whileHover={{ scale: 1.05 }}
             >
               {editingBranch ? t.update : t.add}
-            </button>
+            </motion.button>
           </div>
         </form>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
 
@@ -744,10 +774,22 @@ const BranchResetPasswordModal = ({
 }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.resetPassword}</h3>
-        <form onSubmit={onSubmit} className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        className="bg-white rounded-lg shadow-xl max-w-full w-[90vw] sm:max-w-md p-6"
+      >
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.resetPassword}</h3>
+        <form onSubmit={onSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
           <div>
             <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">
               {t.newPassword}
@@ -782,26 +824,28 @@ const BranchResetPasswordModal = ({
               <span className="text-red-600 text-xs">{error}</span>
             </div>
           )}
-          <div className="flex justify-end gap-2">
-            <button
+          <div className="flex justify-end gap-3">
+            <motion.button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors"
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors duration-200"
               aria-label={t.cancel}
+              whileHover={{ scale: 1.05 }}
             >
               {t.cancel}
-            </button>
-            <button
+            </motion.button>
+            <motion.button
               type="submit"
-              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors duration-200"
               aria-label={t.reset}
+              whileHover={{ scale: 1.05 }}
             >
               {t.reset}
-            </button>
+            </motion.button>
           </div>
         </form>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
 
@@ -822,34 +866,48 @@ const BranchDeleteModal = ({
 }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5">
-        <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.confirmDelete}</h3>
-        <p className="text-xs text-gray-600 mb-3">{t.deleteWarning}</p>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        className="bg-white rounded-lg shadow-xl max-w-full w-[90vw] sm:max-w-md p-6"
+      >
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.confirmDelete}</h3>
+        <p className="text-xs text-gray-600 mb-4">{t.deleteWarning}</p>
         {error && (
           <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-red-600" />
             <span className="text-red-600 text-xs">{error}</span>
           </div>
         )}
-        <div className="flex justify-end gap-2">
-          <button
+        <div className="flex justify-end gap-3">
+          <motion.button
             onClick={onClose}
-            className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors"
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors duration-200"
             aria-label={t.cancel}
+            whileHover={{ scale: 1.05 }}
           >
             {t.cancel}
-          </button>
-          <button
+          </motion.button>
+          <motion.button
             onClick={onConfirm}
-            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs transition-colors"
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs transition-colors duration-200"
             aria-label={t.delete}
+            whileHover={{ scale: 1.05 }}
           >
             {t.delete}
-          </button>
+          </motion.button>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
 
@@ -890,16 +948,14 @@ export const Branches: React.FC = () => {
   const debouncedSearch = useCallback(
     debounce((value: string) => {
       setSearchTerm(value.trim());
-    }, 500),
+    }, 300),
     []
   );
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchInput(value);
-    if (value.length >= 2 || value === '') {
-      debouncedSearch(value);
-    }
+    debouncedSearch(value);
   };
 
   const fetchData = useCallback(async () => {
@@ -1164,92 +1220,126 @@ export const Branches: React.FC = () => {
   };
 
   return (
-    <div className={`mx-auto px-4 py-6 min-h-screen overflow-y-auto scrollbar-thin ${isRtl ? 'font-arabic' : 'font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
-      <div className="mb-4 flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-3">
-        <div className="flex items-center gap-2">
-          <MapPin className="w-6 h-6 text-amber-600" />
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">{t.manage}</h1>
-            <p className="text-gray-600 text-xs">{t.addBranches}</p>
+    <div className={`mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 min-h-screen overflow-y-auto scrollbar-thin ${isRtl ? 'font-arabic' : 'font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3, ease: 'easeOut' }}
+        className="mb-6 flex flex-col items-center gap-4"
+      >
+        <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-between sm:items-center w-full">
+          <div className="flex items-center gap-3">
+            <MapPin className="w-6 h-6 text-amber-600" />
+            <div className="text-center sm:text-left">
+              <h1 className="text-xl font-bold text-gray-900">{t.manage}</h1>
+              <p className="text-gray-600 text-xs">{t.addBranches}</p>
+            </div>
           </div>
+          {user?.role === 'admin' && (
+            <motion.button
+              onClick={openAddModal}
+              className="w-full sm:w-auto px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors duration-200 flex items-center justify-center gap-2 shadow-sm"
+              aria-label={t.add}
+              whileHover={{ scale: 1.05 }}
+            >
+              <Plus className="w-4 h-4" />
+              {t.add}
+            </motion.button>
+          )}
         </div>
-        {user?.role === 'admin' && (
-          <button
-            onClick={openAddModal}
-            className="w-full sm:w-auto px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
-            aria-label={t.add}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            {t.add}
-          </button>
-        )}
-      </div>
+      </motion.div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: 'easeOut' }}
+          className="mb-6 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
+        >
           <AlertCircle className="w-4 h-4 text-red-600" />
           <span className="text-red-600 text-xs">{error}</span>
-        </div>
+        </motion.div>
       )}
 
       {user?.role === 'admin' && (
         <div className={`lg:hidden fixed bottom-6 ${isRtl ? 'left-6' : 'right-6'} z-50`}>
-          <button
+          <motion.button
             onClick={openAddModal}
-            className="p-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg transition-all duration-200"
+            className="p-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg transition-colors duration-200"
             aria-label={t.scrollToForm}
+            whileHover={{ scale: 1.05 }}
           >
             <Plus className="w-5 h-5" />
-          </button>
+          </motion.button>
         </div>
       )}
 
-      <div className="space-y-3">
-        <div className="p-4 bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-sm">
+      <div className="space-y-6">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: 'easeOut' }}
+          className="p-4 bg-white rounded-lg shadow-sm border border-gray-100"
+        >
           <BranchSearchInput
             value={searchInput}
             onChange={handleSearchChange}
             placeholder={t.searchPlaceholder}
             ariaLabel={t.searchPlaceholder}
           />
-        </div>
-        <div className="text-center text-xs text-gray-600">
-          {isRtl ? `${t.branchCount}: ${filteredBranches.length}` : `${t.branchCount}: ${filteredBranches.length}`}
-        </div>
+          <div className="mt-3 text-center text-xs text-gray-600 font-medium">
+            {isRtl ? `${t.branchCount}: ${filteredBranches.length}` : `${t.branchCount}: ${filteredBranches.length}`}
+          </div>
+        </motion.div>
 
         <div ref={formRef} className="lg:overflow-y-auto lg:max-h-[calc(100vh-12rem)] scrollbar-thin">
           {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {[...Array(6)].map((_, index) => (
                 <BranchSkeletonCard key={index} />
               ))}
             </div>
           ) : filteredBranches.length === 0 ? (
-            <div className="p-6 text-center bg-white rounded-xl shadow-sm">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+              className="p-6 text-center bg-white rounded-lg shadow-sm border border-gray-100"
+            >
               <MapPin className="w-10 h-10 text-gray-400 mx-auto mb-3" />
               <p className="text-gray-600 text-xs">{searchTerm ? t.noMatch : t.empty}</p>
               {user?.role === 'admin' && !searchTerm && (
-                <button
+                <motion.button
                   onClick={openAddModal}
-                  className="mt-3 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
+                  className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors duration-200"
                   aria-label={t.addFirst}
+                  whileHover={{ scale: 1.05 }}
                 >
                   {t.addFirst}
-                </button>
+                </motion.button>
               )}
-            </div>
+            </motion.div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {filteredBranches.map((branch) => (
-                <BranchCard
-                  key={branch._id}
-                  branch={branch}
-                  onEdit={(e) => openEditModal(branch, e)}
-                  onResetPassword={(e) => openResetPasswordModal(branch, e)}
-                  onDelete={(e) => openDeleteModal(branch, e)}
-                  onClick={() => handleCardClick(branch._id)}
-                />
-              ))}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <AnimatePresence>
+                {filteredBranches.map((branch, index) => (
+                  <motion.div
+                    key={branch._id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2, ease: 'easeOut', delay: index * 0.05 }}
+                  >
+                    <BranchCard
+                      branch={branch}
+                      onEdit={(e) => openEditModal(branch, e)}
+                      onResetPassword={(e) => openResetPasswordModal(branch, e)}
+                      onDelete={(e) => openDeleteModal(branch, e)}
+                      onClick={() => handleCardClick(branch._id)}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
           )}
         </div>
