@@ -19,8 +19,8 @@ interface Product {
   code: string;
   department: { _id: string; name: string; nameEn?: string };
   price: number;
-  unit: string;
-  unitEn: string;
+  unit?: string;
+  unitEn?: string;
   description?: string;
   image?: string;
   displayName: string;
@@ -32,6 +32,15 @@ interface Department {
   name: string;
   nameEn?: string;
 }
+
+// Unit mapping for frontend
+const unitOptions = [
+  { value: 'كيلو', valueEn: 'Kilo', labelAr: 'كيلو', labelEn: 'Kilo' },
+  { value: 'قطعة', valueEn: 'Piece', labelAr: 'قطعة', labelEn: 'Piece' },
+  { value: 'علبة', valueEn: 'Pack', labelAr: 'علبة', labelEn: 'Pack' },
+  { value: 'صينية', valueEn: 'Tray', labelAr: 'صينية', labelEn: 'Tray' },
+  { value: '', valueEn: '', labelAr: 'غير محدد', labelEn: 'None' },
+];
 
 export function Products() {
   const { t, language } = useLanguage();
@@ -58,12 +67,6 @@ export function Products() {
     description: '',
   });
 
-  // جلب الوحدات من المنتجات
-  const unitOptions = Array.from(new Set(products.map((p) => p.unit))).map((unit) => ({
-    value: unit,
-    label: language === 'ar' ? unit : products.find((p) => p.unit === unit)?.unitEn || unit,
-  }));
-
   // Debounce للبحث
   const debouncedSearch = useCallback(
     debounce((value: string) => {
@@ -86,11 +89,16 @@ export function Products() {
       try {
         console.log('Fetching products with params:', { department: filterDepartment, search: searchTerm, page: currentPage, limit: 12 });
         const [productsResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ department: filterDepartment, search: searchTerm, page: currentPage, limit: 12, lang: language }),
+          productsAPI.getAll({ department: filterDepartment, search: searchTerm, page: currentPage, limit: 12 }),
           departmentAPI.getAll({ limit: 100 }),
         ]);
 
-        setProducts(productsResponse.data);
+        const productsWithDisplay = productsResponse.data.map((product: Product) => ({
+          ...product,
+          displayName: language === 'ar' ? product.name : (product.nameEn || product.name),
+          displayUnit: language === 'ar' ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
+        }));
+        setProducts(productsWithDisplay);
         setTotalPages(productsResponse.totalPages);
         setDepartments(departmentsResponse.data);
         setError('');
@@ -125,7 +133,7 @@ export function Products() {
         code: product.code,
         department: product.department._id,
         price: product.price.toString(),
-        unit: product.unit,
+        unit: product.unit || '',
         description: product.description || '',
       });
     } else {
@@ -136,7 +144,7 @@ export function Products() {
         code: '',
         department: departments[0]?._id || '',
         price: '',
-        unit: unitOptions[0]?.value || 'قطعة',
+        unit: '',
         description: '',
       });
     }
@@ -158,7 +166,7 @@ export function Products() {
         code: formData.code,
         department: formData.department,
         price: parseFloat(formData.price),
-        unit: formData.unit,
+        unit: formData.unit || undefined,
         description: formData.description || undefined,
       };
       console.log('Submitting product:', productData);
@@ -166,7 +174,13 @@ export function Products() {
         const updatedProduct = await productsAPI.update(editingProduct._id, productData);
         setProducts(
           products.map((p) =>
-            p._id === editingProduct._id ? { ...updatedProduct, displayName: language === 'ar' ? updatedProduct.name : (updatedProduct.nameEn || updatedProduct.name), displayUnit: language === 'ar' ? updatedProduct.unit : updatedProduct.unitEn } : p
+            p._id === editingProduct._id
+              ? {
+                  ...updatedProduct,
+                  displayName: language === 'ar' ? updatedProduct.name : (updatedProduct.nameEn || updatedProduct.name),
+                  displayUnit: language === 'ar' ? (updatedProduct.unit || 'غير محدد') : (updatedProduct.unitEn || updatedProduct.unit || 'N/A'),
+                }
+              : p
           )
         );
       } else {
@@ -176,7 +190,7 @@ export function Products() {
           {
             ...newProduct,
             displayName: language === 'ar' ? newProduct.name : (newProduct.nameEn || newProduct.name),
-            displayUnit: language === 'ar' ? newProduct.unit : newProduct.unitEn,
+            displayUnit: language === 'ar' ? (newProduct.unit || 'غير محدد') : (newProduct.unitEn || newProduct.unit || 'N/A'),
           },
         ]);
       }
@@ -438,10 +452,12 @@ export function Products() {
             />
             <Select
               label={t('products.unit')}
-              options={unitOptions}
+              options={unitOptions.map((opt) => ({
+                value: opt.value,
+                label: language === 'ar' ? opt.labelAr : opt.labelEn,
+              }))}
               value={formData.unit}
               onChange={(value) => setFormData({ ...formData, unit: value })}
-              required
               className="border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors"
             />
           </div>
