@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useCallback, useMemo, useReducer, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useReducer, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI } from '../services/api';
 import { MapPin, Plus, Edit2, Trash2, Key, AlertCircle, Search, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { motion, AnimatePresence } from 'framer-motion';
 import { debounce } from 'lodash';
 
 interface Branch {
@@ -91,7 +90,7 @@ const formReducer = (state: FormState, action: FormAction): FormState => {
 const translations = {
   ar: {
     manage: 'إدارة الفروع',
-    addProducts: 'إدارة الفروع وإضافتها أو تعديلها',
+    addBranches: 'إدارة الفروع وإضافتها أو تعديلها',
     add: 'إضافة فرع',
     addFirst: 'إضافة أول فرع',
     noBranches: 'لا توجد فروع',
@@ -167,10 +166,11 @@ const translations = {
     deleteError: 'خطأ أثناء حذف الفرع',
     deleted: 'تم حذف الفرع بنجاح',
     scrollToForm: 'الذهاب إلى نموذج الإضافة',
+    branchCount: 'عدد الفروع',
   },
   en: {
     manage: 'Manage Branches',
-    addProducts: 'Manage, add, or edit branches',
+    addBranches: 'Manage, add, or edit branches',
     add: 'Add Branch',
     addFirst: 'Add First Branch',
     noBranches: 'No Branches Found',
@@ -246,10 +246,44 @@ const translations = {
     deleteError: 'Error deleting branch',
     deleted: 'Branch deleted successfully',
     scrollToForm: 'Go to Add Form',
+    branchCount: 'Branches Count',
   },
 };
 
-const CustomInput = ({
+const BranchInput = ({
+  id,
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+  type = 'text',
+  required = false,
+}: {
+  id: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  ariaLabel: string;
+  type?: string;
+  required?: boolean;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <input
+      id={id}
+      type={type}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      required={required}
+      className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+      aria-label={ariaLabel}
+    />
+  );
+};
+
+const BranchSearchInput = ({
   value,
   onChange,
   placeholder,
@@ -264,119 +298,557 @@ const CustomInput = ({
   const isRtl = language === 'ar';
   return (
     <div className="relative group">
-      <motion.div
-        initial={{ opacity: value ? 0 : 1 }}
-        animate={{ opacity: value ? 0 : 1 }}
-        transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500`}
-      >
-        <Search />
-      </motion.div>
+      <Search className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`} />
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-11 pr-4' : 'pr-11 pl-4'} py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pl-10 pr-8' : 'pr-10 pl-8'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       />
-      <motion.div
-        initial={{ opacity: value ? 1 : 0 }}
-        animate={{ opacity: value ? 1 : 0 }}
-        transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
-      >
+      {value && (
         <button
           onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
+          className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </button>
-      </motion.div>
+      )}
     </div>
   );
 };
 
-const CustomDropdown = ({
+const BranchSelect = ({
+  id,
   value,
   onChange,
   options,
   ariaLabel,
-  disabled = false,
+  required = false,
 }: {
+  id: string;
   value: string | boolean;
-  onChange: (value: string) => void;
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   options: { value: string | boolean; label: string }[];
   ariaLabel: string;
-  disabled?: boolean;
+  required?: boolean;
 }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
-  const [isOpen, setIsOpen] = useState(false);
-  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { label: isRtl ? 'اختر' : 'Select' };
   return (
     <div className="relative group">
-      <motion.button
-        onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+      <select
+        id={id}
+        value={value}
+        onChange={onChange}
+        required={required}
+        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       >
-        <span className="truncate">{selectedOption.label}</span>
-        <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
-          <ChevronDown className="w-5 h-5 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
-        </motion.div>
-      </motion.button>
-      <AnimatePresence>
-        {isOpen && !disabled && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.15 }}
-            className="absolute w-full mt-2 bg-white rounded-xl shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-thin"
-          >
-            {options.map((option) => (
-              <motion.div
-                key={String(option.value)}
-                onClick={() => {
-                  onChange(String(option.value));
-                  setIsOpen(false);
-                }}
-                className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
-              >
-                {option.label}
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
+        {options.map((option) => (
+          <option key={String(option.value)} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors`}
+      />
     </div>
   );
 };
 
-const CustomTextarea = ({
-  value,
-  onChange,
-  placeholder,
-  ariaLabel,
-}: {
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-  placeholder: string;
-  ariaLabel: string;
+const BranchCard = ({ branch, onEdit, onResetPassword, onDelete, onClick }: {
+  branch: Branch;
+  onEdit: (e: React.MouseEvent) => void;
+  onResetPassword: (e: React.MouseEvent) => void;
+  onDelete: (e: React.MouseEvent) => void;
+  onClick: () => void;
 }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
+  const t = translations[isRtl ? 'ar' : 'en'];
   return (
-    <div className="relative group">
-      <textarea
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className={`w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
-        rows={4}
-        aria-label={ariaLabel}
-      />
+    <div
+      className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between border border-gray-100"
+      onClick={onClick}
+    >
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-semibold text-gray-900 text-sm truncate">
+            {isRtl ? branch.name : branch.nameEn || branch.name}
+          </h3>
+          <MapPin className="w-4 h-4 text-amber-600" />
+        </div>
+        <p className="text-xs text-gray-500">{t.code}: {branch.code}</p>
+        <p className="text-xs text-gray-600 truncate">{t.address}: {isRtl ? branch.address : branch.addressEn || branch.address}</p>
+        <p className="text-xs text-gray-600 truncate">{t.city}: {isRtl ? branch.city : branch.cityEn || branch.city}</p>
+        <p className="text-xs text-gray-600 truncate">{t.phone}: {branch.phone || '-'}</p>
+        <p className={`text-xs font-medium ${branch.isActive ? 'text-teal-600' : 'text-red-600'}`}>
+          {t.status}: {branch.isActive ? t.active : t.inactive}
+        </p>
+      </div>
+      <div className="mt-3 flex items-center justify-end gap-1.5">
+        <button
+          onClick={onEdit}
+          className="p-1.5 w-7 h-7 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center"
+          title={t.edit}
+        >
+          <Edit2 className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={onResetPassword}
+          className="p-1.5 w-7 h-7 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors flex items-center justify-center"
+          title={t.resetPassword}
+        >
+          <Key className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={onDelete}
+          className="p-1.5 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center"
+          title={t.delete}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const BranchSkeletonCard = () => (
+  <div className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+    <div className="space-y-2 animate-pulse">
+      <div className="flex items-center justify-between">
+        <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+        <div className="w-4 h-4 bg-gray-200 rounded-full"></div>
+      </div>
+      <div className="h-2 bg-gray-200 rounded w-1/4"></div>
+      <div className="h-2 bg-gray-200 rounded w-1/2"></div>
+      <div className="h-2 bg-gray-200 rounded w-1/3"></div>
+      <div className="h-2 bg-gray-200 rounded w-1/4"></div>
+      <div className="h-2 bg-gray-200 rounded w-1/5"></div>
+    </div>
+  </div>
+);
+
+const BranchModal = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  formData,
+  dispatchForm,
+  editingBranch,
+  formErrors,
+  error,
+  t,
+  isRtl,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (e: React.FormEvent) => void;
+  formData: FormState;
+  dispatchForm: React.Dispatch<FormAction>;
+  editingBranch: Branch | null;
+  formErrors: Record<string, string>;
+  error: string;
+  t: typeof translations['ar' | 'en'];
+  isRtl: boolean;
+}) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-2xl p-5">
+        <h3 className="text-lg font-semibold text-gray-900 mb-3">
+          {editingBranch ? t.edit : t.add}
+        </h3>
+        <form onSubmit={onSubmit} className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">
+                  {t.name}
+                </label>
+                <BranchInput
+                  id="name"
+                  value={formData.name}
+                  onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'name', value: e.target.value })}
+                  placeholder={t.namePlaceholder}
+                  ariaLabel={t.name}
+                  required
+                />
+                {formErrors.name && <p className="text-red-600 text-xs mt-1">{formErrors.name}</p>}
+              </div>
+              <div>
+                <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">
+                  {t.nameEn}
+                </label>
+                <BranchInput
+                  id="nameEn"
+                  value={formData.nameEn}
+                  onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'nameEn', value: e.target.value })}
+                  placeholder={t.nameEnPlaceholder}
+                  ariaLabel={t.nameEn}
+                  required
+                />
+                {formErrors.nameEn && <p className="text-red-600 text-xs mt-1">{formErrors.nameEn}</p>}
+              </div>
+              <div>
+                <label htmlFor="code" className="block text-xs font-medium text-gray-700 mb-1">
+                  {t.code}
+                </label>
+                <BranchInput
+                  id="code"
+                  value={formData.code}
+                  onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'code', value: e.target.value })}
+                  placeholder={t.codePlaceholder}
+                  ariaLabel={t.code}
+                  required
+                />
+                {formErrors.code && <p className="text-red-600 text-xs mt-1">{formErrors.code}</p>}
+              </div>
+              <div>
+                <label htmlFor="address" className="block text-xs font-medium text-gray-700 mb-1">
+                  {t.address}
+                </label>
+                <BranchInput
+                  id="address"
+                  value={formData.address}
+                  onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'address', value: e.target.value })}
+                  placeholder={t.addressPlaceholder}
+                  ariaLabel={t.address}
+                  required
+                />
+                {formErrors.address && <p className="text-red-600 text-xs mt-1">{formErrors.address}</p>}
+              </div>
+              <div>
+                <label htmlFor="addressEn" className="block text-xs font-medium text-gray-700 mb-1">
+                  {t.addressEn}
+                </label>
+                <BranchInput
+                  id="addressEn"
+                  value={formData.addressEn}
+                  onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'addressEn', value: e.target.value })}
+                  placeholder={t.addressEnPlaceholder}
+                  ariaLabel={t.addressEn}
+                  required
+                />
+                {formErrors.addressEn && <p className="text-red-600 text-xs mt-1">{formErrors.addressEn}</p>}
+              </div>
+              <div>
+                <label htmlFor="city" className="block text-xs font-medium text-gray-700 mb-1">
+                  {t.city}
+                </label>
+                <BranchInput
+                  id="city"
+                  value={formData.city}
+                  onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'city', value: e.target.value })}
+                  placeholder={t.cityPlaceholder}
+                  ariaLabel={t.city}
+                  required
+                />
+                {formErrors.city && <p className="text-red-600 text-xs mt-1">{formErrors.city}</p>}
+              </div>
+              <div>
+                <label htmlFor="cityEn" className="block text-xs font-medium text-gray-700 mb-1">
+                  {t.cityEn}
+                </label>
+                <BranchInput
+                  id="cityEn"
+                  value={formData.cityEn}
+                  onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'cityEn', value: e.target.value })}
+                  placeholder={t.cityEnPlaceholder}
+                  ariaLabel={t.cityEn}
+                  required
+                />
+                {formErrors.cityEn && <p className="text-red-600 text-xs mt-1">{formErrors.cityEn}</p>}
+              </div>
+              <div>
+                <label htmlFor="phone" className="block text-xs font-medium text-gray-700 mb-1">
+                  {t.phone}
+                </label>
+                <BranchInput
+                  id="phone"
+                  value={formData.phone}
+                  onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'phone', value: e.target.value })}
+                  placeholder={t.phonePlaceholder}
+                  ariaLabel={t.phone}
+                />
+              </div>
+              <div>
+                <label htmlFor="isActive" className="block text-xs font-medium text-gray-700 mb-1">
+                  {t.status}
+                </label>
+                <BranchSelect
+                  id="isActive"
+                  value={formData.isActive}
+                  onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'isActive', value: e.target.value === 'true' })}
+                  options={[
+                    { value: true, label: t.active },
+                    { value: false, label: t.inactive },
+                  ]}
+                  ariaLabel={t.status}
+                />
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label htmlFor="userName" className="block text-xs font-medium text-gray-700 mb-1">
+                  {t.userName}
+                </label>
+                <BranchInput
+                  id="userName"
+                  value={formData.user.name}
+                  onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'name', value: e.target.value })}
+                  placeholder={t.userNamePlaceholder}
+                  ariaLabel={t.userName}
+                  required={!editingBranch}
+                />
+                {formErrors.userName && <p className="text-red-600 text-xs mt-1">{formErrors.userName}</p>}
+              </div>
+              <div>
+                <label htmlFor="userNameEn" className="block text-xs font-medium text-gray-700 mb-1">
+                  {t.userNameEn}
+                </label>
+                <BranchInput
+                  id="userNameEn"
+                  value={formData.user.nameEn}
+                  onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'nameEn', value: e.target.value })}
+                  placeholder={t.userNameEnPlaceholder}
+                  ariaLabel={t.userNameEn}
+                  required={!editingBranch}
+                />
+                {formErrors.userNameEn && <p className="text-red-600 text-xs mt-1">{formErrors.userNameEn}</p>}
+              </div>
+              <div>
+                <label htmlFor="username" className="block text-xs font-medium text-gray-700 mb-1">
+                  {t.username}
+                </label>
+                <BranchInput
+                  id="username"
+                  value={formData.user.username}
+                  onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'username', value: e.target.value })}
+                  placeholder={t.usernamePlaceholder}
+                  ariaLabel={t.username}
+                  required={!editingBranch}
+                />
+                {formErrors.username && <p className="text-red-600 text-xs mt-1">{formErrors.username}</p>}
+              </div>
+              <div>
+                <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1">
+                  {t.email}
+                </label>
+                <BranchInput
+                  id="email"
+                  value={formData.user.email}
+                  onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'email', value: e.target.value })}
+                  placeholder={t.emailPlaceholder}
+                  ariaLabel={t.email}
+                />
+                {formErrors.email && <p className="text-red-600 text-xs mt-1">{formErrors.email}</p>}
+              </div>
+              <div>
+                <label htmlFor="userPhone" className="block text-xs font-medium text-gray-700 mb-1">
+                  {t.userPhone}
+                </label>
+                <BranchInput
+                  id="userPhone"
+                  value={formData.user.phone}
+                  onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'phone', value: e.target.value })}
+                  placeholder={t.userPhonePlaceholder}
+                  ariaLabel={t.userPhone}
+                />
+              </div>
+              <div>
+                <label htmlFor="userIsActive" className="block text-xs font-medium text-gray-700 mb-1">
+                  {t.status}
+                </label>
+                <BranchSelect
+                  id="userIsActive"
+                  value={formData.user.isActive}
+                  onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'isActive', value: e.target.value === 'true' })}
+                  options={[
+                    { value: true, label: t.active },
+                    { value: false, label: t.inactive },
+                  ]}
+                  ariaLabel={t.status}
+                />
+              </div>
+              {!editingBranch && (
+                <div>
+                  <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">
+                    {t.password}
+                  </label>
+                  <BranchInput
+                    id="password"
+                    type="password"
+                    value={formData.user.password}
+                    onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'password', value: e.target.value })}
+                    placeholder={t.passwordPlaceholder}
+                    ariaLabel={t.password}
+                    required
+                  />
+                  {formErrors.password && <p className="text-red-600 text-xs mt-1">{formErrors.password}</p>}
+                </div>
+              )}
+            </div>
+          </div>
+          {error && (
+            <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600" />
+              <span className="text-red-600 text-xs">{error}</span>
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors"
+              aria-label={t.cancel}
+            >
+              {t.cancel}
+            </button>
+            <button
+              type="submit"
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
+              aria-label={editingBranch ? t.update : t.add}
+            >
+              {editingBranch ? t.update : t.add}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const BranchResetPasswordModal = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  resetPasswordData,
+  setResetPasswordData,
+  error,
+  t,
+  isRtl,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (e: React.FormEvent) => void;
+  resetPasswordData: { password: string; confirmPassword: string };
+  setResetPasswordData: React.Dispatch<React.SetStateAction<{ password: string; confirmPassword: string }>>;
+  error: string;
+  t: typeof translations['ar' | 'en'];
+  isRtl: boolean;
+}) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5">
+        <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.resetPassword}</h3>
+        <form onSubmit={onSubmit} className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
+          <div>
+            <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">
+              {t.newPassword}
+            </label>
+            <BranchInput
+              id="password"
+              type="password"
+              value={resetPasswordData.password}
+              onChange={(e) => setResetPasswordData({ ...resetPasswordData, password: e.target.value })}
+              placeholder={t.newPasswordPlaceholder}
+              ariaLabel={t.newPassword}
+              required
+            />
+          </div>
+          <div>
+            <label htmlFor="confirmPassword" className="block text-xs font-medium text-gray-700 mb-1">
+              {t.confirmPassword}
+            </label>
+            <BranchInput
+              id="confirmPassword"
+              type="password"
+              value={resetPasswordData.confirmPassword}
+              onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
+              placeholder={t.confirmPasswordPlaceholder}
+              ariaLabel={t.confirmPassword}
+              required
+            />
+          </div>
+          {error && (
+            <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600" />
+              <span className="text-red-600 text-xs">{error}</span>
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors"
+              aria-label={t.cancel}
+            >
+              {t.cancel}
+            </button>
+            <button
+              type="submit"
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
+              aria-label={t.reset}
+            >
+              {t.reset}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+const BranchDeleteModal = ({
+  isOpen,
+  onClose,
+  onConfirm,
+  error,
+  t,
+  isRtl,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  error: string;
+  t: typeof translations['ar' | 'en'];
+  isRtl: boolean;
+}) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5">
+        <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.confirmDelete}</h3>
+        <p className="text-xs text-gray-600 mb-3">{t.deleteWarning}</p>
+        {error && (
+          <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600" />
+            <span className="text-red-600 text-xs">{error}</span>
+          </div>
+        )}
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors"
+            aria-label={t.cancel}
+          >
+            {t.cancel}
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs transition-colors"
+            aria-label={t.delete}
+          >
+            {t.delete}
+          </button>
+        </div>
+      </div>
     </div>
   );
 };
@@ -392,8 +864,6 @@ export const Branches: React.FC = () => {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -442,10 +912,9 @@ export const Branches: React.FC = () => {
     }
     setLoading(true);
     try {
-      const response = await branchesAPI.getAll({ page, limit: 12 });
+      const response = await branchesAPI.getAll({ limit: 0 });
       const data = Array.isArray(response.data) ? response.data : response;
       setBranches(data);
-      setTotalPages(response.totalPages || Math.ceil(data.length / 12));
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Fetch error:`, err);
@@ -454,7 +923,7 @@ export const Branches: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, page, t, isRtl, navigate]);
+  }, [user, t, isRtl, navigate]);
 
   useEffect(() => {
     fetchData();
@@ -694,531 +1163,133 @@ export const Branches: React.FC = () => {
     formRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const renderPagination = useMemo(() => {
-    const pages = [];
-    const maxPagesToShow = 5;
-    const startPage = Math.max(1, page - Math.floor(maxPagesToShow / 2));
-    const endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
-
-    for (let i = startPage; i <= endPage; i++) {
-      pages.push(
-        <motion.button
-          key={i}
-          onClick={() => setPage(i)}
-          className={`w-10 h-10 text-sm font-medium rounded-xl ${page === i ? 'bg-amber-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-amber-200'} transition-colors duration-200 shadow-md`}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          {i}
-        </motion.button>
-      );
-    }
-
-    return (
-      <div className="flex justify-center items-center mt-6 gap-2">
-        <motion.button
-          onClick={() => setPage((p) => Math.max(p - 1, 1))}
-          disabled={page === 1}
-          className="w-10 h-10 rounded-xl bg-gray-200 text-gray-700 disabled:opacity-50 hover:bg-amber-200 transition-colors duration-200 shadow-md"
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          {isRtl ? '→' : '←'}
-        </motion.button>
-        {pages}
-        <motion.button
-          onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-          disabled={page === totalPages}
-          className="w-10 h-10 rounded-xl bg-gray-200 text-gray-700 disabled:opacity-50 hover:bg-amber-200 transition-colors duration-200 shadow-md"
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-        >
-          {isRtl ? '←' : '→'}
-        </motion.button>
-      </div>
-    );
-  }, [page, totalPages, isRtl]);
-
   return (
-    <div className={`mx-auto px-4 py-8 min-h-screen overflow-y-auto scrollbar-thin ${isRtl ? 'rtl font-arabic' : 'ltr font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="mb-6 flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-4"
-      >
-        <div className="flex items-center gap-3">
-          <MapPin className="w-8 h-8 text-amber-600" />
+    <div className={`mx-auto px-4 py-6 min-h-screen overflow-y-auto scrollbar-thin ${isRtl ? 'font-arabic' : 'font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
+      <div className="mb-4 flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-3">
+        <div className="flex items-center gap-2">
+          <MapPin className="w-6 h-6 text-amber-600" />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t.manage}</h1>
-            <p className="text-gray-600 text-sm">{t.addProducts}</p>
+            <h1 className="text-xl font-bold text-gray-900">{t.manage}</h1>
+            <p className="text-gray-600 text-xs">{t.addBranches}</p>
           </div>
         </div>
         {user?.role === 'admin' && (
-          <motion.button
+          <button
             onClick={openAddModal}
-            className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-colors duration-200 flex items-center justify-center gap-2 shadow-lg"
+            className="w-full sm:w-auto px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
             aria-label={t.add}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             {t.add}
-          </motion.button>
+          </button>
         )}
-      </motion.div>
+      </div>
 
       {error && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3"
-        >
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <span className="text-red-600 text-sm">{error}</span>
-        </motion.div>
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-red-600" />
+          <span className="text-red-600 text-xs">{error}</span>
+        </div>
       )}
 
       {user?.role === 'admin' && (
         <div className={`lg:hidden fixed bottom-6 ${isRtl ? 'left-6' : 'right-6'} z-50`}>
-          <motion.button
+          <button
             onClick={openAddModal}
-            className="p-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg transition-all duration-200"
+            className="p-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg transition-all duration-200"
             aria-label={t.scrollToForm}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
           >
-            <Plus className="w-6 h-6" />
-          </motion.button>
+            <Plus className="w-5 h-5" />
+          </button>
         </div>
       )}
 
-      <div className="space-y-4">
-        <motion.div
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.3 }}
-          className="p-5 bg-gradient-to-r from-white to-gray-50 rounded-xl shadow-lg"
-        >
-          <CustomInput
+      <div className="space-y-3">
+        <div className="p-4 bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-sm">
+          <BranchSearchInput
             value={searchInput}
             onChange={handleSearchChange}
             placeholder={t.searchPlaceholder}
             ariaLabel={t.searchPlaceholder}
           />
-        </motion.div>
+        </div>
+        <div className="text-center text-xs text-gray-600">
+          {isRtl ? `${t.branchCount}: ${filteredBranches.length}` : `${t.branchCount}: ${filteredBranches.length}`}
+        </div>
 
-        <div className="lg:overflow-y-auto lg:max-h-[calc(100vh-8rem)] scrollbar-thin">
+        <div ref={formRef} className="lg:overflow-y-auto lg:max-h-[calc(100vh-12rem)] scrollbar-thin">
           {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {[...Array(6)].map((_, index) => (
-                <div key={index} className="p-5 bg-white rounded-xl shadow-md">
-                  <div className="space-y-3 animate-pulse">
-                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                    <div className="h-3 bg-gray-200 rounded w-1/4"></div>
-                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                  </div>
-                </div>
+                <BranchSkeletonCard key={index} />
               ))}
             </div>
           ) : filteredBranches.length === 0 ? (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-              className="p-8 text-center bg-white rounded-xl shadow-lg"
-            >
-              <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 text-sm">{searchTerm ? t.noMatch : t.empty}</p>
+            <div className="p-6 text-center bg-white rounded-xl shadow-sm">
+              <MapPin className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-600 text-xs">{searchTerm ? t.noMatch : t.empty}</p>
               {user?.role === 'admin' && !searchTerm && (
-                <motion.button
+                <button
                   onClick={openAddModal}
-                  className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-colors duration-200 shadow-lg"
+                  className="mt-3 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
                   aria-label={t.addFirst}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
                 >
                   {t.addFirst}
-                </motion.button>
+                </button>
               )}
-            </motion.div>
+            </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <AnimatePresence>
-                {filteredBranches.map((branch, index) => (
-                  <motion.div
-                    key={branch._id}
-                    initial={{ opacity: 0, y: 5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -5 }}
-                    transition={{ duration: 0.15, delay: index * 0.02 }}
-                    className="p-5 bg-white rounded-xl shadow-lg transition-colors duration-200 flex flex-col justify-between border border-gray-100 hover:border-amber-200 cursor-pointer"
-                    onClick={() => handleCardClick(branch._id)}
-                  >
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>
-                          {isRtl ? branch.name : branch.nameEn || branch.name}
-                        </h3>
-                        <MapPin className="w-5 h-5 text-amber-600" />
-                      </div>
-                      <p className="text-sm text-gray-500">{t.code}: {branch.code}</p>
-                      <p className="text-sm text-gray-600 truncate">{t.address}: {isRtl ? branch.address : branch.addressEn || branch.address}</p>
-                      <p className="text-sm text-gray-600 truncate">{t.city}: {isRtl ? branch.city : branch.cityEn || branch.city}</p>
-                      <p className="text-sm text-gray-600 truncate">{t.phone}: {branch.phone || '-'}</p>
-                      <p className={`text-sm font-medium ${branch.isActive ? 'text-teal-600' : 'text-red-600'}`}>
-                        {t.status}: {branch.isActive ? t.active : t.inactive}
-                      </p>
-                    </div>
-                    {user?.role === 'admin' && (
-                      <div className="mt-4 flex justify-end gap-2">
-                        <motion.button
-                          onClick={(e) => openEditModal(branch, e)}
-                          className="w-8 h-8 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
-                          aria-label={t.edit}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </motion.button>
-                        <motion.button
-                          onClick={(e) => openResetPasswordModal(branch, e)}
-                          className="w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
-                          aria-label={t.resetPassword}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                        >
-                          <Key className="w-4 h-4" />
-                        </motion.button>
-                        <motion.button
-                          onClick={(e) => openDeleteModal(branch, e)}
-                          className="w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
-                          aria-label={t.delete}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </motion.button>
-                      </div>
-                    )}
-                  </motion.div>
-                ))}
-              </AnimatePresence>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filteredBranches.map((branch) => (
+                <BranchCard
+                  key={branch._id}
+                  branch={branch}
+                  onEdit={(e) => openEditModal(branch, e)}
+                  onResetPassword={(e) => openResetPasswordModal(branch, e)}
+                  onDelete={(e) => openDeleteModal(branch, e)}
+                  onClick={() => handleCardClick(branch._id)}
+                />
+              ))}
             </div>
           )}
         </div>
       </div>
 
-      {filteredBranches.length > 0 && renderPagination}
+      <BranchModal
+        isOpen={showAddModal || showEditModal}
+        onClose={() => {
+          setShowAddModal(false);
+          setShowEditModal(false);
+        }}
+        onSubmit={handleSubmit}
+        formData={formData}
+        dispatchForm={dispatchForm}
+        editingBranch={showEditModal ? selectedBranch : null}
+        formErrors={formErrors}
+        error={error}
+        t={t}
+        isRtl={isRtl}
+      />
 
-      <div ref={formRef}>
-        <AnimatePresence>
-          {(showAddModal || showEditModal) && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="bg-white rounded-xl shadow-2xl max-w-2xl p-6 w-[90vw]"
-              >
-                <h3 className="text-lg font-bold text-gray-900 mb-4">{showEditModal ? t.edit : t.add}</h3>
-                <form onSubmit={handleSubmit} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ duration: 0.3 }}
-                    className="grid grid-cols-1 sm:grid-cols-2 gap-4"
-                  >
-                    <div className="space-y-4">
-                      <h4 className="text-sm font-medium text-gray-700">{t.name}</h4>
-                      <CustomInput
-                        value={formData.name}
-                        onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'name', value: e.target.value })}
-                        placeholder={t.namePlaceholder}
-                        ariaLabel={t.name}
-                      />
-                      {formErrors.name && <p className="text-red-600 text-xs">{formErrors.name}</p>}
-                      <CustomInput
-                        value={formData.nameEn}
-                        onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'nameEn', value: e.target.value })}
-                        placeholder={t.nameEnPlaceholder}
-                        ariaLabel={t.nameEn}
-                      />
-                      {formErrors.nameEn && <p className="text-red-600 text-xs">{formErrors.nameEn}</p>}
-                      <CustomInput
-                        value={formData.code}
-                        onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'code', value: e.target.value })}
-                        placeholder={t.codePlaceholder}
-                        ariaLabel={t.code}
-                      />
-                      {formErrors.code && <p className="text-red-600 text-xs">{formErrors.code}</p>}
-                      <CustomInput
-                        value={formData.address}
-                        onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'address', value: e.target.value })}
-                        placeholder={t.addressPlaceholder}
-                        ariaLabel={t.address}
-                      />
-                      {formErrors.address && <p className="text-red-600 text-xs">{formErrors.address}</p>}
-                      <CustomInput
-                        value={formData.addressEn}
-                        onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'addressEn', value: e.target.value })}
-                        placeholder={t.addressEnPlaceholder}
-                        ariaLabel={t.addressEn}
-                      />
-                      {formErrors.addressEn && <p className="text-red-600 text-xs">{formErrors.addressEn}</p>}
-                      <CustomInput
-                        value={formData.city}
-                        onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'city', value: e.target.value })}
-                        placeholder={t.cityPlaceholder}
-                        ariaLabel={t.city}
-                      />
-                      {formErrors.city && <p className="text-red-600 text-xs">{formErrors.city}</p>}
-                      <CustomInput
-                        value={formData.cityEn}
-                        onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'cityEn', value: e.target.value })}
-                        placeholder={t.cityEnPlaceholder}
-                        ariaLabel={t.cityEn}
-                      />
-                      {formErrors.cityEn && <p className="text-red-600 text-xs">{formErrors.cityEn}</p>}
-                      <CustomInput
-                        value={formData.phone}
-                        onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'phone', value: e.target.value })}
-                        placeholder={t.phonePlaceholder}
-                        ariaLabel={t.phone}
-                      />
-                      <CustomDropdown
-                        value={formData.isActive}
-                        onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'isActive', value: value === 'true' })}
-                        options={[
-                          { value: true, label: t.active },
-                          { value: false, label: t.inactive },
-                        ]}
-                        ariaLabel={t.status}
-                      />
-                    </div>
-                    <div className="space-y-4">
-                      <h4 className="text-sm font-medium text-gray-700">{t.user}</h4>
-                      <CustomInput
-                        value={formData.user.name}
-                        onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'name', value: e.target.value })}
-                        placeholder={t.userNamePlaceholder}
-                        ariaLabel={t.userName}
-                      />
-                      {formErrors.userName && <p className="text-red-600 text-xs">{formErrors.userName}</p>}
-                      <CustomInput
-                        value={formData.user.nameEn}
-                        onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'nameEn', value: e.target.value })}
-                        placeholder={t.userNameEnPlaceholder}
-                        ariaLabel={t.userNameEn}
-                      />
-                      {formErrors.userNameEn && <p className="text-red-600 text-xs">{formErrors.userNameEn}</p>}
-                      <CustomInput
-                        value={formData.user.username}
-                        onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'username', value: e.target.value })}
-                        placeholder={t.usernamePlaceholder}
-                        ariaLabel={t.username}
-                      />
-                      {formErrors.username && <p className="text-red-600 text-xs">{formErrors.username}</p>}
-                      <CustomInput
-                        value={formData.user.email}
-                        onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'email', value: e.target.value })}
-                        placeholder={t.emailPlaceholder}
-                        ariaLabel={t.email}
-                      />
-                      {formErrors.email && <p className="text-red-600 text-xs">{formErrors.email}</p>}
-                      <CustomInput
-                        value={formData.user.phone}
-                        onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'phone', value: e.target.value })}
-                        placeholder={t.userPhonePlaceholder}
-                        ariaLabel={t.userPhone}
-                      />
-                      <CustomDropdown
-                        value={formData.user.isActive}
-                        onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'isActive', value: value === 'true' })}
-                        options={[
-                          { value: true, label: t.active },
-                          { value: false, label: t.inactive },
-                        ]}
-                        ariaLabel={t.status}
-                      />
-                      {!showEditModal && (
-                        <>
-                          <CustomInput
-                            value={formData.user.password}
-                            onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'password', value: e.target.value })}
-                            placeholder={t.passwordPlaceholder}
-                            ariaLabel={t.password}
-                            type="password"
-                          />
-                          {formErrors.password && <p className="text-red-600 text-xs">{formErrors.password}</p>}
-                        </>
-                      )}
-                    </div>
-                  </motion.div>
-                  {error && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      transition={{ duration: 0.3 }}
-                      className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3"
-                    >
-                      <AlertCircle className="w-5 h-5 text-red-600" />
-                      <span className="text-red-600 text-sm">{error}</span>
-                    </motion.div>
-                  )}
-                  <div className="flex justify-end gap-3">
-                    <motion.button
-                      onClick={() => {
-                        setShowAddModal(false);
-                        setShowEditModal(false);
-                      }}
-                      className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm transition-colors duration-200 shadow-sm"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      {t.cancel}
-                    </motion.button>
-                    <motion.button
-                      type="submit"
-                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-colors duration-200 shadow-lg"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      {showEditModal ? t.update : t.add}
-                    </motion.button>
-                  </div>
-                </form>
-              </motion.div>
-            </motion.div>
-          )}
-          {showResetPasswordModal && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="bg-white rounded-xl shadow-2xl max-w-md p-6 w-[90vw]"
-              >
-                <h3 className="text-lg font-bold text-gray-900 mb-4">{t.resetPassword}</h3>
-                <form onSubmit={handleResetPassword} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
-                  <div className="space-y-4">
-                    <CustomInput
-                      value={resetPasswordData.password}
-                      onChange={(e) => setResetPasswordData({ ...resetPasswordData, password: e.target.value })}
-                      placeholder={t.newPasswordPlaceholder}
-                      ariaLabel={t.newPassword}
-                      type="password"
-                    />
-                    <CustomInput
-                      value={resetPasswordData.confirmPassword}
-                      onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
-                      placeholder={t.confirmPasswordPlaceholder}
-                      ariaLabel={t.confirmPassword}
-                      type="password"
-                    />
-                  </div>
-                  {error && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      transition={{ duration: 0.3 }}
-                      className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3"
-                    >
-                      <AlertCircle className="w-5 h-5 text-red-600" />
-                      <span className="text-red-600 text-sm">{error}</span>
-                    </motion.div>
-                  )}
-                  <div className="flex justify-end gap-3">
-                    <motion.button
-                      onClick={() => setShowResetPasswordModal(false)}
-                      className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm transition-colors duration-200 shadow-sm"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      {t.cancel}
-                    </motion.button>
-                    <motion.button
-                      type="submit"
-                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-colors duration-200 shadow-lg"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                    >
-                      {t.reset}
-                    </motion.button>
-                  </div>
-                </form>
-              </motion.div>
-            </motion.div>
-          )}
-          {showDeleteModal && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
-            >
-              <motion.div
-                initial={{ scale: 0.95, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.95, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="bg-white rounded-xl shadow-2xl max-w-md p-6 w-[90vw]"
-              >
-                <h3 className="text-lg font-bold text-gray-900 mb-4">{t.confirmDelete}</h3>
-                <p className="text-sm text-gray-600 mb-6">{t.deleteWarning}</p>
-                {error && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.3 }}
-                    className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3"
-                  >
-                    <AlertCircle className="w-5 h-5 text-red-600" />
-                    <span className="text-red-600 text-sm">{error}</span>
-                  </motion.div>
-                )}
-                <div className="flex justify-end gap-3">
-                  <motion.button
-                    onClick={() => setShowDeleteModal(false)}
-                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm transition-colors duration-200 shadow-sm"
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    {t.cancel}
-                  </motion.button>
-                  <motion.button
-                    onClick={handleDelete}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm transition-colors duration-200 shadow-lg"
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                  >
-                    {t.delete}
-                  </motion.button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+      <BranchResetPasswordModal
+        isOpen={showResetPasswordModal}
+        onClose={() => setShowResetPasswordModal(false)}
+        onSubmit={handleResetPassword}
+        resetPasswordData={resetPasswordData}
+        setResetPasswordData={setResetPasswordData}
+        error={error}
+        t={t}
+        isRtl={isRtl}
+      />
+
+      <BranchDeleteModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleDelete}
+        error={error}
+        t={t}
+        isRtl={isRtl}
+      />
     </div>
   );
 };
