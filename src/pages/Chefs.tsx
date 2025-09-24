@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { chefsAPI, departmentAPI } from '../services/api';
-import { ChefHat, Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key, X , Eye } from 'lucide-react';
+import { ChefHat, Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key, X, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { debounce } from 'lodash';
@@ -336,8 +336,7 @@ export function Chefs() {
         chefsAPI.getAll({ isRtl }),
         departmentAPI.getAll({ isRtl }),
       ]);
-      const fetchedChefs = Array.isArray(chefsResponse.data) ? chefsResponse.data : chefsResponse;
-      setChefs(fetchedChefs.map((chef: any) => ({
+      setChefs(chefsResponse.map((chef: any) => ({
         id: chef._id,
         user: {
           id: chef.user._id,
@@ -362,17 +361,13 @@ export function Chefs() {
         createdAt: chef.createdAt,
         updatedAt: chef.updatedAt,
       })));
-      setDepartments(
-        Array.isArray(departmentsResponse.data)
-          ? departmentsResponse.data.map((dept: any) => ({
-              id: dept._id,
-              name: dept.name,
-              nameEn: dept.nameEn,
-              code: dept.code,
-              description: dept.description,
-            }))
-          : departmentsResponse
-      );
+      setDepartments(departmentsResponse.map((dept: any) => ({
+        id: dept._id,
+        name: dept.name,
+        nameEn: dept.nameEn,
+        code: dept.code,
+        description: dept.description,
+      })));
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Fetch error:`, err);
@@ -491,8 +486,12 @@ export function Chefs() {
                   ...c,
                   user: {
                     ...c.user!,
-                    ...updatedChef.user,
-                    id: updatedChef.user._id,
+                    name: updatedChef.user.name,
+                    nameEn: updatedChef.user.nameEn,
+                    username: updatedChef.user.username,
+                    email: updatedChef.user.email,
+                    phone: updatedChef.user.phone,
+                    isActive: updatedChef.user.isActive,
                     createdAt: updatedChef.user.createdAt,
                     updatedAt: updatedChef.user.updatedAt,
                   },
@@ -549,9 +548,9 @@ export function Chefs() {
     } catch (err: any) {
       let errorMessage = isEditMode ? t.updateError : t.createError;
       if (err.message) {
-        errorMessage =
-          err.message.includes('Username') ? t.usernameExists :
-          err.message.includes('email') ? t.emailExists : err.message;
+        if (err.message.includes('username')) errorMessage = t.usernameExists;
+        else if (err.message.includes('email')) errorMessage = t.emailExists;
+        else errorMessage = err.message;
       }
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
@@ -610,7 +609,7 @@ export function Chefs() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-6xl w-full px-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl w-full px-4">
           {[...Array(6)].map((_, index) => (
             <div key={index} className="p-4 bg-white rounded-xl shadow-sm">
               <div className="space-y-2 animate-pulse">
@@ -644,10 +643,10 @@ export function Chefs() {
         {loggedInUser?.role === 'admin' && (
           <button
             onClick={openAddModal}
-            className="w-full sm:w-auto px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm hover:shadow-md"
+            className="w-full sm:w-auto px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors flex items-center justify-center gap-2 shadow-sm hover:shadow-md"
             aria-label={t.add}
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-4 h-4" />
             {t.add}
           </button>
         )}
@@ -668,7 +667,7 @@ export function Chefs() {
         )}
       </AnimatePresence>
 
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div className="p-4 bg-white rounded-xl shadow-sm">
           <CustomInput
             value={searchInput}
@@ -691,7 +690,7 @@ export function Chefs() {
             {loggedInUser?.role === 'admin' && !searchTerm && (
               <button
                 onClick={openAddModal}
-                className="mt-3 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                className="mt-3 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
                 aria-label={t.addFirst}
               >
                 {t.addFirst}
@@ -700,7 +699,7 @@ export function Chefs() {
           </div>
         ) : (
           <motion.div
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto scrollbar-none"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ staggerChildren: 0.1 }}
@@ -713,43 +712,45 @@ export function Chefs() {
                 transition={{ duration: 0.3 }}
               >
                 <div
-                  className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer border border-gray-100"
+                  className="p-4 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer border border-gray-100"
                   onClick={() => navigate(`/chefs/${chef.id}`)}
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-3">
-                      <h3 className="font-semibold text-gray-900 text-sm truncate">
+                      <h3 className="font-semibold text-gray-900 text-sm truncate" style={{ whiteSpace: 'nowrap' }}>
                         {isRtl ? chef.user?.name : chef.user?.nameEn || chef.user?.name}
                       </h3>
-                      <ChefHat className="w-5 h-5 text-amber-600" />
+                      <ChefHat className="w-5 h-5 text-amber-600 flex-shrink-0" />
                     </div>
                     <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <span className="w-20 font-medium">{t.username}:</span>
-                      <span className="truncate flex-1">{chef.user?.username || '-'}</span>
+                      <span className="w-20 font-medium flex-shrink-0">{t.username}:</span>
+                      <span className="truncate" style={{ whiteSpace: 'nowrap' }}>{chef.user?.username || '-'}</span>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <span className="w-20 font-medium">{t.email}:</span>
-                      <span className="truncate flex-1">{chef.user?.email || '-'}</span>
+                      <span className="w-20 font-medium flex-shrink-0">{t.email}:</span>
+                      <span className="truncate" style={{ whiteSpace: 'nowrap' }}>{chef.user?.email || '-'}</span>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <span className="w-20 font-medium">{t.department}:</span>
-                      <span className="truncate flex-1">{isRtl ? chef.department?.name : chef.department?.nameEn || chef.department?.name || '-'}</span>
+                      <span className="w-20 font-medium flex-shrink-0">{t.department}:</span>
+                      <span className="truncate" style={{ whiteSpace: 'nowrap' }}>
+                        {isRtl ? chef.department?.name : chef.department?.nameEn || chef.department?.name || '-'}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2 text-xs">
-                      <span className="w-20 font-medium">{t.status}:</span>
-                      <span className={`truncate flex-1 ${chef.user?.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                      <span className="w-20 font-medium flex-shrink-0">{t.status}:</span>
+                      <span className={`truncate ${chef.user?.isActive ? 'text-green-600' : 'text-red-600'}`} style={{ whiteSpace: 'nowrap' }}>
                         {chef.user?.isActive ? t.active : t.inactive}
                       </span>
                     </div>
                   </div>
                   {loggedInUser?.role === 'admin' && (
-                    <div className="mt-3 flex items-center justify-end gap-1.5">
+                    <div className="mt-3 flex items-center justify-end gap-2">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           openEditModal(chef);
                         }}
-                        className="p-1.5 w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
+                        className="p-2 w-9 h-9 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
                         title={t.edit}
                       >
                         <Edit2 className="w-4 h-4" />
@@ -759,7 +760,7 @@ export function Chefs() {
                           e.stopPropagation();
                           openResetPasswordModal(chef);
                         }}
-                        className="p-1.5 w-8 h-8 bg-amber-500 hover:bg-amber-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
+                        className="p-2 w-9 h-9 bg-amber-500 hover:bg-amber-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
                         title={t.resetPassword}
                       >
                         <Key className="w-4 h-4" />
@@ -769,7 +770,7 @@ export function Chefs() {
                           e.stopPropagation();
                           openDeleteModal(chef);
                         }}
-                        className="p-1.5 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
+                        className="p-2 w-9 h-9 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
                         title={t.delete}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -905,13 +906,13 @@ export function Chefs() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
                 >
                   {isEditMode ? t.update : t.add}
                 </button>
@@ -967,13 +968,13 @@ export function Chefs() {
                 <button
                   type="button"
                   onClick={() => setIsResetPasswordModalOpen(false)}
-                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
                 >
                   {t.reset}
                 </button>
@@ -1004,14 +1005,14 @@ export function Chefs() {
                 <button
                   type="button"
                   onClick={() => setIsDeleteModalOpen(false)}
-                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="button"
                   onClick={handleDelete}
-                  className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
                 >
                   {t.delete}
                 </button>
