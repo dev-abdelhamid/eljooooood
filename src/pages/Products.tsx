@@ -285,9 +285,9 @@ export function Products() {
               ))}
             </select>
           </div>
-        </div>
-        <div className="text-sm text-gray-600">
-          {isRtl ? `عدد المنتجات: ${products.length}` : `Products Count: ${products.length}`}
+          <div className="mt-4 text-sm text-gray-600">
+            {isRtl ? `عدد المنتجات: ${products.length}` : `Products Count: ${products.length}`}
+          </div>
         </div>
 
         {user?.role === 'admin' && (
