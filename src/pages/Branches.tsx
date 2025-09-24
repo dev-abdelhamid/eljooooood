@@ -90,7 +90,7 @@ const formReducer = (state: FormState, action: FormAction): FormState => {
 
 const translations = {
   ar: {
-    manage: 'لوحة إدارة الفروع',
+    manage: 'إدارة الفروع',
     addBranches: 'إدارة الفروع وإضافتها أو تعديلها',
     add: 'إضافة فرع',
     addFirst: 'إضافة أول فرع',
@@ -170,7 +170,7 @@ const translations = {
     branchCount: 'عدد الفروع',
   },
   en: {
-    manage: 'Branch Management Dashboard',
+    manage: 'Manage Branches',
     addBranches: 'Manage, add, or edit branches',
     add: 'Add Branch',
     addFirst: 'Add First Branch',
@@ -278,7 +278,7 @@ const BranchInput = ({
       onChange={onChange}
       placeholder={placeholder}
       required={required}
-      className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+      className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
       aria-label={ariaLabel}
     />
   );
@@ -300,14 +300,14 @@ const BranchSearchInput = ({
   return (
     <div className="relative group">
       {!value && (
-        <Search className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500`} />
+        <Search className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`} />
       )}
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pl-10 pr-2' : 'pr-10 pl-2'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -316,7 +316,7 @@ const BranchSearchInput = ({
           className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </button>
       )}
     </div>
@@ -347,7 +347,7 @@ const BranchSelect = ({
         value={value}
         onChange={onChange}
         required={required}
-        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-sm text-gray-700 font-medium ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors duration-200 bg-white shadow-sm appearance-none text-xs text-gray-700 font-medium ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       >
         {options.map((option) => (
@@ -357,7 +357,7 @@ const BranchSelect = ({
         ))}
       </select>
       <ChevronDown
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-5 h-5 transition-colors`}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors`}
       />
     </div>
   );
@@ -375,54 +375,51 @@ const BranchCard = ({ branch, onEdit, onResetPassword, onDelete, onClick }: {
   const t = translations[isRtl ? 'ar' : 'en'];
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
-      className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col justify-between border border-gray-100 hover:border-amber-200 cursor-pointer"
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      className="p-4 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col justify-between border border-gray-100 hover:border-amber-200 cursor-pointer"
       onClick={onClick}
     >
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="font-bold text-gray-900 text-base truncate">
+          <h3 className="font-semibold text-gray-900 text-sm truncate">
             {isRtl ? branch.name : branch.nameEn || branch.name}
           </h3>
-          <MapPin className="w-6 h-6 text-amber-600" />
+          <MapPin className="w-5 h-5 text-amber-600" />
         </div>
-        <p className="text-sm text-gray-500">{t.code}: {branch.code}</p>
-        <p className="text-sm text-gray-600 truncate">{t.address}: {isRtl ? branch.address : branch.addressEn || branch.address}</p>
-        <p className="text-sm text-gray-600 truncate">{t.city}: {isRtl ? branch.city : branch.cityEn || branch.city}</p>
-        <p className="text-sm text-gray-600 truncate">{t.phone}: {branch.phone || '-'}</p>
-        <p className={`text-sm font-medium ${branch.isActive ? 'text-teal-600' : 'text-red-600'}`}>
+        <p className="text-xs text-gray-500">{t.code}: {branch.code}</p>
+        <p className="text-xs text-gray-600 truncate">{t.address}: {isRtl ? branch.address : branch.addressEn || branch.address}</p>
+        <p className="text-xs text-gray-600 truncate">{t.city}: {isRtl ? branch.city : branch.cityEn || branch.city}</p>
+        <p className="text-xs text-gray-600 truncate">{t.phone}: {branch.phone || '-'}</p>
+        <p className={`text-xs font-medium ${branch.isActive ? 'text-teal-600' : 'text-red-600'}`}>
           {t.status}: {branch.isActive ? t.active : t.inactive}
         </p>
       </div>
       <div className="mt-4 flex items-center justify-end gap-2">
         <motion.button
           onClick={onEdit}
-          className="p-2 w-10 h-10 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
+          className="p-2 w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
           title={t.edit}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.05 }}
         >
-          <Edit2 className="w-5 h-5" />
+          <Edit2 className="w-4 h-4" />
         </motion.button>
         <motion.button
           onClick={onResetPassword}
-          className="p-2 w-10 h-10 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
+          className="p-2 w-8 h-8 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
           title={t.resetPassword}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.05 }}
         >
-          <Key className="w-5 h-5" />
+          <Key className="w-4 h-4" />
         </motion.button>
         <motion.button
           onClick={onDelete}
-          className="p-2 w-10 h-10 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
+          className="p-2 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
           title={t.delete}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.05 }}
         >
-          <Trash2 className="w-5 h-5" />
+          <Trash2 className="w-4 h-4" />
         </motion.button>
       </div>
     </motion.div>
@@ -430,29 +427,19 @@ const BranchCard = ({ branch, onEdit, onResetPassword, onDelete, onClick }: {
 };
 
 const BranchSkeletonCard = () => (
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    transition={{ duration: 0.3 }}
-    className="p-5 bg-white rounded-xl shadow-sm border border-gray-100"
-  >
-    <div className="space-y-3 animate-pulse">
+  <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+    <div className="space-y-2 animate-pulse">
       <div className="flex items-center justify-between">
-        <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-        <div className="w-6 h-6 bg-gray-200 rounded-full"></div>
+        <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+        <div className="w-5 h-5 bg-gray-200 rounded-full"></div>
       </div>
-      <div className="h-3 bg-gray-200 rounded w-1/4"></div>
-      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-      <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-      <div className="h-3 bg-gray-200 rounded w-1/4"></div>
-      <div className="h-3 bg-gray-200 rounded w-1/5"></div>
-      <div className="mt-4 flex justify-end gap-2">
-        <div className="w-10 h-10 bg-gray-200 rounded-full"></div>
-        <div className="w-10 h-10 bg-gray-200 rounded-full"></div>
-        <div className="w-10 h-10 bg-gray-200 rounded-full"></div>
-      </div>
+      <div className="h-2 bg-gray-200 rounded w-1/4"></div>
+      <div className="h-2 bg-gray-200 rounded w-1/2"></div>
+      <div className="h-2 bg-gray-200 rounded w-1/3"></div>
+      <div className="h-2 bg-gray-200 rounded w-1/4"></div>
+      <div className="h-2 bg-gray-200 rounded w-1/5"></div>
     </div>
-  </motion.div>
+  </div>
 );
 
 const BranchModal = ({
@@ -484,22 +471,22 @@ const BranchModal = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
-      className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
     >
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        transition={{ duration: 0.3, ease: 'easeOut' }}
-        className="bg-white rounded-xl shadow-2xl max-w-full w-[95vw] sm:max-w-3xl p-8"
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        className="bg-white rounded-lg shadow-xl max-w-full w-[90vw] sm:max-w-2xl p-6"
       >
-        <h3 className="text-xl font-bold text-gray-900 mb-6">{editingBranch ? t.edit : t.add}</h3>
-        <form onSubmit={onSubmit} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">{editingBranch ? t.edit : t.add}</h3>
+        <form onSubmit={onSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-4">
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">
                   {t.name}
                 </label>
                 <BranchInput
@@ -510,10 +497,10 @@ const BranchModal = ({
                   ariaLabel={t.name}
                   required
                 />
-                {formErrors.name && <p className="text-red-600 text-xs mt-1.5">{formErrors.name}</p>}
+                {formErrors.name && <p className="text-red-600 text-xs mt-1">{formErrors.name}</p>}
               </div>
               <div>
-                <label htmlFor="nameEn" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">
                   {t.nameEn}
                 </label>
                 <BranchInput
@@ -524,10 +511,10 @@ const BranchModal = ({
                   ariaLabel={t.nameEn}
                   required
                 />
-                {formErrors.nameEn && <p className="text-red-600 text-xs mt-1.5">{formErrors.nameEn}</p>}
+                {formErrors.nameEn && <p className="text-red-600 text-xs mt-1">{formErrors.nameEn}</p>}
               </div>
               <div>
-                <label htmlFor="code" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="code" className="block text-xs font-medium text-gray-700 mb-1">
                   {t.code}
                 </label>
                 <BranchInput
@@ -538,10 +525,10 @@ const BranchModal = ({
                   ariaLabel={t.code}
                   required
                 />
-                {formErrors.code && <p className="text-red-600 text-xs mt-1.5">{formErrors.code}</p>}
+                {formErrors.code && <p className="text-red-600 text-xs mt-1">{formErrors.code}</p>}
               </div>
               <div>
-                <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="address" className="block text-xs font-medium text-gray-700 mb-1">
                   {t.address}
                 </label>
                 <BranchInput
@@ -552,10 +539,10 @@ const BranchModal = ({
                   ariaLabel={t.address}
                   required
                 />
-                {formErrors.address && <p className="text-red-600 text-xs mt-1.5">{formErrors.address}</p>}
+                {formErrors.address && <p className="text-red-600 text-xs mt-1">{formErrors.address}</p>}
               </div>
               <div>
-                <label htmlFor="addressEn" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="addressEn" className="block text-xs font-medium text-gray-700 mb-1">
                   {t.addressEn}
                 </label>
                 <BranchInput
@@ -566,10 +553,10 @@ const BranchModal = ({
                   ariaLabel={t.addressEn}
                   required
                 />
-                {formErrors.addressEn && <p className="text-red-600 text-xs mt-1.5">{formErrors.addressEn}</p>}
+                {formErrors.addressEn && <p className="text-red-600 text-xs mt-1">{formErrors.addressEn}</p>}
               </div>
               <div>
-                <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="city" className="block text-xs font-medium text-gray-700 mb-1">
                   {t.city}
                 </label>
                 <BranchInput
@@ -580,10 +567,10 @@ const BranchModal = ({
                   ariaLabel={t.city}
                   required
                 />
-                {formErrors.city && <p className="text-red-600 text-xs mt-1.5">{formErrors.city}</p>}
+                {formErrors.city && <p className="text-red-600 text-xs mt-1">{formErrors.city}</p>}
               </div>
               <div>
-                <label htmlFor="cityEn" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="cityEn" className="block text-xs font-medium text-gray-700 mb-1">
                   {t.cityEn}
                 </label>
                 <BranchInput
@@ -594,10 +581,10 @@ const BranchModal = ({
                   ariaLabel={t.cityEn}
                   required
                 />
-                {formErrors.cityEn && <p className="text-red-600 text-xs mt-1.5">{formErrors.cityEn}</p>}
+                {formErrors.cityEn && <p className="text-red-600 text-xs mt-1">{formErrors.cityEn}</p>}
               </div>
               <div>
-                <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="phone" className="block text-xs font-medium text-gray-700 mb-1">
                   {t.phone}
                 </label>
                 <BranchInput
@@ -609,7 +596,7 @@ const BranchModal = ({
                 />
               </div>
               <div>
-                <label htmlFor="isActive" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="isActive" className="block text-xs font-medium text-gray-700 mb-1">
                   {t.status}
                 </label>
                 <BranchSelect
@@ -626,7 +613,7 @@ const BranchModal = ({
             </div>
             <div className="space-y-4">
               <div>
-                <label htmlFor="userName" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="userName" className="block text-xs font-medium text-gray-700 mb-1">
                   {t.userName}
                 </label>
                 <BranchInput
@@ -637,10 +624,10 @@ const BranchModal = ({
                   ariaLabel={t.userName}
                   required={!editingBranch}
                 />
-                {formErrors.userName && <p className="text-red-600 text-xs mt-1.5">{formErrors.userName}</p>}
+                {formErrors.userName && <p className="text-red-600 text-xs mt-1">{formErrors.userName}</p>}
               </div>
               <div>
-                <label htmlFor="userNameEn" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="userNameEn" className="block text-xs font-medium text-gray-700 mb-1">
                   {t.userNameEn}
                 </label>
                 <BranchInput
@@ -651,10 +638,10 @@ const BranchModal = ({
                   ariaLabel={t.userNameEn}
                   required={!editingBranch}
                 />
-                {formErrors.userNameEn && <p className="text-red-600 text-xs mt-1.5">{formErrors.userNameEn}</p>}
+                {formErrors.userNameEn && <p className="text-red-600 text-xs mt-1">{formErrors.userNameEn}</p>}
               </div>
               <div>
-                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="username" className="block text-xs font-medium text-gray-700 mb-1">
                   {t.username}
                 </label>
                 <BranchInput
@@ -665,10 +652,10 @@ const BranchModal = ({
                   ariaLabel={t.username}
                   required={!editingBranch}
                 />
-                {formErrors.username && <p className="text-red-600 text-xs mt-1.5">{formErrors.username}</p>}
+                {formErrors.username && <p className="text-red-600 text-xs mt-1">{formErrors.username}</p>}
               </div>
               <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1">
                   {t.email}
                 </label>
                 <BranchInput
@@ -678,10 +665,10 @@ const BranchModal = ({
                   placeholder={t.emailPlaceholder}
                   ariaLabel={t.email}
                 />
-                {formErrors.email && <p className="text-red-600 text-xs mt-1.5">{formErrors.email}</p>}
+                {formErrors.email && <p className="text-red-600 text-xs mt-1">{formErrors.email}</p>}
               </div>
               <div>
-                <label htmlFor="userPhone" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="userPhone" className="block text-xs font-medium text-gray-700 mb-1">
                   {t.userPhone}
                 </label>
                 <BranchInput
@@ -693,7 +680,7 @@ const BranchModal = ({
                 />
               </div>
               <div>
-                <label htmlFor="userIsActive" className="block text-sm font-medium text-gray-700 mb-1.5">
+                <label htmlFor="userIsActive" className="block text-xs font-medium text-gray-700 mb-1">
                   {t.status}
                 </label>
                 <BranchSelect
@@ -709,7 +696,7 @@ const BranchModal = ({
               </div>
               {!editingBranch && (
                 <div>
-                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">
+                  <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">
                     {t.password}
                   </label>
                   <BranchInput
@@ -721,39 +708,32 @@ const BranchModal = ({
                     ariaLabel={t.password}
                     required
                   />
-                  {formErrors.password && <p className="text-red-600 text-xs mt-1.5">{formErrors.password}</p>}
+                  {formErrors.password && <p className="text-red-600 text-xs mt-1">{formErrors.password}</p>}
                 </div>
               )}
             </div>
           </div>
           {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-              className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
-            >
-              <AlertCircle className="w-5 h-5 text-red-600" />
-              <span className="text-red-600 text-sm">{error}</span>
-            </motion.div>
+            <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600" />
+              <span className="text-red-600 text-xs">{error}</span>
+            </div>
           )}
           <div className="flex justify-end gap-3">
             <motion.button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors duration-200"
               aria-label={t.cancel}
               whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
             >
               {t.cancel}
             </motion.button>
             <motion.button
               type="submit"
-              className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors duration-200"
               aria-label={editingBranch ? t.update : t.add}
               whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
             >
               {editingBranch ? t.update : t.add}
             </motion.button>
@@ -789,20 +769,20 @@ const BranchResetPasswordModal = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
-      className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
     >
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        transition={{ duration: 0.3, ease: 'easeOut' }}
-        className="bg-white rounded-xl shadow-2xl max-w-full w-[95vw] sm:max-w-md p-8"
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        className="bg-white rounded-lg shadow-xl max-w-full w-[90vw] sm:max-w-md p-6"
       >
-        <h3 className="text-xl font-bold text-gray-900 mb-6">{t.resetPassword}</h3>
-        <form onSubmit={onSubmit} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.resetPassword}</h3>
+        <form onSubmit={onSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">
               {t.newPassword}
             </label>
             <BranchInput
@@ -816,7 +796,7 @@ const BranchResetPasswordModal = ({
             />
           </div>
           <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1.5">
+            <label htmlFor="confirmPassword" className="block text-xs font-medium text-gray-700 mb-1">
               {t.confirmPassword}
             </label>
             <BranchInput
@@ -830,33 +810,26 @@ const BranchResetPasswordModal = ({
             />
           </div>
           {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-              className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
-            >
-              <AlertCircle className="w-5 h-5 text-red-600" />
-              <span className="text-red-600 text-sm">{error}</span>
-            </motion.div>
+            <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600" />
+              <span className="text-red-600 text-xs">{error}</span>
+            </div>
           )}
           <div className="flex justify-end gap-3">
             <motion.button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors duration-200"
               aria-label={t.cancel}
               whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
             >
               {t.cancel}
             </motion.button>
             <motion.button
               type="submit"
-              className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors duration-200"
               aria-label={t.reset}
               whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
             >
               {t.reset}
             </motion.button>
@@ -888,45 +861,38 @@ const BranchDeleteModal = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.3, ease: 'easeOut' }}
-      className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
     >
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        transition={{ duration: 0.3, ease: 'easeOut' }}
-        className="bg-white rounded-xl shadow-2xl max-w-full w-[95vw] sm:max-w-md p-8"
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        className="bg-white rounded-lg shadow-xl max-w-full w-[90vw] sm:max-w-md p-6"
       >
-        <h3 className="text-xl font-bold text-gray-900 mb-6">{t.confirmDelete}</h3>
-        <p className="text-sm text-gray-600 mb-6">{t.deleteWarning}</p>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.confirmDelete}</h3>
+        <p className="text-xs text-gray-600 mb-4">{t.deleteWarning}</p>
         {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 mb-6"
-          >
-            <AlertCircle className="w-5 h-5 text-red-600" />
-            <span className="text-red-600 text-sm">{error}</span>
-          </motion.div>
+          <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-600" />
+            <span className="text-red-600 text-xs">{error}</span>
+          </div>
         )}
         <div className="flex justify-end gap-3">
           <motion.button
             onClick={onClose}
-            className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors duration-200"
             aria-label={t.cancel}
             whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
           >
             {t.cancel}
           </motion.button>
           <motion.button
             onClick={onConfirm}
-            className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs transition-colors duration-200"
             aria-label={t.delete}
             whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
           >
             {t.delete}
           </motion.button>
@@ -1030,10 +996,6 @@ export const Branches: React.FC = () => {
         return aName.localeCompare(bName);
       });
   }, [branches, searchTerm, isRtl]);
-
-  const skeletonCount = useMemo(() => {
-    return filteredBranches.length > 0 ? filteredBranches.length : 6;
-  }, [filteredBranches]);
 
   const checkEmailAvailability = useCallback(async (email: string) => {
     try {
@@ -1249,66 +1211,66 @@ export const Branches: React.FC = () => {
   };
 
   return (
-    <div className={`mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`mx-auto  px-4 sm:px-6 lg:px-8 py-8 min-h-screen overflow-y-auto `}>
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
+        initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: 'easeOut' }}
-        className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center"
+        transition={{ duration: 0.3, ease: 'easeOut' }}
+        className="mb-6 flex flex-col items-center gap-4"
       >
-        <div className="flex items-center gap-3">
-          <MapPin className="w-7 h-7 text-amber-600" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t.manage}</h1>
-            <p className="text-gray-600 text-sm">{t.addBranches}</p>
+        <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-between sm:items-center w-full">
+          <div className={`flex  flex-col  ${isRtl ? 'md:text-right' : ' md:text-left'} text-center gap-3 sm:flex-row sm:items-center gap-3`}>
+            <MapPin className="w-6 h-6 text-amber-600" />
+            <div className="text-center sm:text-left">
+              <h1 className="text-xl font-bold text-gray-900">{t.manage}</h1>
+              <p className="text-gray-600 text-xs">{t.addBranches}</p>
+            </div>
           </div>
+          {user?.role === 'admin' && (
+            <motion.button
+              onClick={openAddModal}
+              className="w-full sm:w-auto px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors duration-200 flex items-center justify-center gap-2 shadow-sm"
+              aria-label={t.add}
+              whileHover={{ scale: 1.05 }}
+            >
+              <Plus className="w-4 h-4" />
+              {t.add}
+            </motion.button>
+          )}
         </div>
-        {user?.role === 'admin' && (
-          <motion.button
-            onClick={openAddModal}
-            className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2 shadow-md"
-            aria-label={t.add}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <Plus className="w-5 h-5" />
-            {t.add}
-          </motion.button>
-        )}
       </motion.div>
 
       {error && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: 'easeOut' }}
-          className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3"
+          transition={{ duration: 0.3, ease: 'easeOut' }}
+          className="mb-6 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
         >
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <span className="text-red-600 text-sm font-medium">{error}</span>
+          <AlertCircle className="w-4 h-4 text-red-600" />
+          <span className="text-red-600 text-xs">{error}</span>
         </motion.div>
       )}
 
       {user?.role === 'admin' && (
-        <div className={`lg:hidden fixed bottom-8 ${isRtl ? 'left-8' : 'right-8'} z-50`}>
+        <div className={`lg:hidden fixed bottom-6 ${isRtl ? 'left-6' : 'right-6'} z-50`}>
           <motion.button
             onClick={openAddModal}
-            className="p-4 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg transition-colors duration-200"
+            className="p-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg transition-colors duration-200"
             aria-label={t.scrollToForm}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.05 }}
           >
-            <Plus className="w-6 h-6" />
+            <Plus className="w-5 h-5" />
           </motion.button>
         </div>
       )}
 
-      <div className="space-y-8">
+      <div className="space-y-6">
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: 'easeOut' }}
-          className="p-6 bg-white rounded-xl shadow-sm border border-gray-100"
+          transition={{ duration: 0.3, ease: 'easeOut' }}
+          className="p-4 bg-white rounded-lg shadow-sm border border-gray-100"
         >
           <BranchSearchInput
             value={searchInput}
@@ -1316,58 +1278,48 @@ export const Branches: React.FC = () => {
             placeholder={t.searchPlaceholder}
             ariaLabel={t.searchPlaceholder}
           />
-          <div className="mt-4 text-center text-sm text-gray-600 font-medium">
+          <div className="mt-3 text-center text-xs text-gray-600 font-medium">
             {isRtl ? `${t.branchCount}: ${filteredBranches.length}` : `${t.branchCount}: ${filteredBranches.length}`}
           </div>
         </motion.div>
 
-        <div ref={formRef} className="lg:overflow-y-auto lg:max-h-[calc(100vh-14rem)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+        <div ref={formRef} className="lg:overflow-y-auto lg:max-h-[calc(100vh-12rem)] scrollbar-thin">
           {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              <AnimatePresence>
-                {[...Array(skeletonCount)].map((_, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: index * 0.1 }}
-                  >
-                    <BranchSkeletonCard />
-                  </motion.div>
-                ))}
-              </AnimatePresence>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[...Array(6)].map((_, index) => (
+                <BranchSkeletonCard key={index} />
+              ))}
             </div>
           ) : filteredBranches.length === 0 ? (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, ease: 'easeOut' }}
-              className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100"
+              transition={{ duration: 0.3, ease: 'easeOut' }}
+              className="p-6 text-center bg-white rounded-lg shadow-sm border border-gray-100"
             >
-              <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 text-sm font-medium">{searchTerm ? t.noMatch : t.empty}</p>
+              <MapPin className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-600 text-xs">{searchTerm ? t.noMatch : t.empty}</p>
               {user?.role === 'admin' && !searchTerm && (
                 <motion.button
                   onClick={openAddModal}
-                  className="mt-6 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+                  className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors duration-200"
                   aria-label={t.addFirst}
                   whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
                 >
                   {t.addFirst}
                 </motion.button>
               )}
             </motion.div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <AnimatePresence>
                 {filteredBranches.map((branch, index) => (
                   <motion.div
                     key={branch._id}
-                    initial={{ opacity: 0, y: 20 }}
+                    initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.3, ease: 'easeOut', delay: index * 0.05 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2, ease: 'easeOut', delay: index * 0.05 }}
                   >
                     <BranchCard
                       branch={branch}
