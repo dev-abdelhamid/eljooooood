@@ -105,7 +105,7 @@ export function NewOrder() {
           departmentAPI.getAll({ limit: 100 }).finally(() => setLoading((prev) => ({ ...prev, departments: false }))),
         ]);
 
-        const productsWithDisplay = productsResponse.data.map((product: Product) => ({
+        const productsWithDisplay = productsResponse.data.data.map((product: Product) => ({
           ...product,
           displayName: isRtl ? product.name : (product.nameEn || product.name),
           displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
@@ -370,6 +370,9 @@ export function NewOrder() {
                 ))}
               </select>
             </div>
+          </div>
+          <div className="text-center text-sm text-gray-600 mt-4">
+            {isRtl ? `عدد المنتجات: ${products.length}` : `Products Count: ${products.length}`}
           </div>
           {loading.products ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
