@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { chefsAPI, departmentAPI } from '../services/api';
-import { ChefHat, Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key, X , Eye , EyeOff  } from 'lucide-react';
+import { ChefHat, Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key, X, Eye, EyeOff, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { debounce } from 'lodash';
+import { CustomInput, CustomDropdown } from './Chefs'; // تأكد من أن هذه المكونات موجودة في ملف منفصل
 
 interface Department {
   id: string;
@@ -95,6 +96,9 @@ const translations = {
     status: 'الحالة',
     active: 'نشط',
     inactive: 'غير نشط',
+    page: 'الصفحة',
+    previous: 'السابق',
+    next: 'التالي',
   },
   en: {
     manage: 'Manage Chefs',
@@ -156,132 +160,10 @@ const translations = {
     status: 'Status',
     active: 'Active',
     inactive: 'Inactive',
+    page: 'Page',
+    previous: 'Previous',
+    next: 'Next',
   },
-};
-
-export const CustomInput = ({
-  value,
-  onChange,
-  placeholder,
-  ariaLabel,
-  type = 'text',
-  showPasswordToggle = false,
-  showPassword = false,
-  togglePasswordVisibility,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-  ariaLabel: string;
-  type?: string;
-  showPasswordToggle?: boolean;
-  showPassword?: boolean;
-  togglePasswordVisibility?: () => void;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  return (
-    <div className="relative group">
-      {!showPasswordToggle && (
-        <motion.div
-          initial={{ opacity: value ? 0 : 1 }}
-          animate={{ opacity: value ? 0 : 1 }}
-          transition={{ duration: 0.15 }}
-          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-600`}
-        >
-          <Search />
-        </motion.div>
-      )}
-      <input
-        type={showPasswordToggle ? (showPassword ? 'text' : 'password') : type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-10 pr-2' : 'pr-10 pl-2'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
-        aria-label={ariaLabel}
-      />
-      {showPasswordToggle ? (
-        <button
-          type="button"
-          onClick={togglePasswordVisibility}
-          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-600 transition-colors`}
-        >
-          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-        </button>
-      ) : (
-        <motion.div
-          initial={{ opacity: value ? 1 : 0 }}
-          animate={{ opacity: value ? 1 : 0 }}
-          transition={{ duration: 0.15 }}
-          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-600 transition-colors`}
-        >
-          <button
-            onClick={() => onChange('')}
-            aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </motion.div>
-      )}
-    </div>
-  );
-};
-
-export const CustomDropdown = ({
-  value,
-  onChange,
-  options,
-  ariaLabel,
-}: {
-  value: string | boolean;
-  onChange: (value: string) => void;
-  options: { value: string | boolean; label: string }[];
-  ariaLabel: string;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  const [isOpen, setIsOpen] = useState(false);
-  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { label: isRtl ? 'اختر' : 'Select' };
-
-  return (
-    <div className="relative group">
-      <motion.button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center`}
-        aria-label={ariaLabel}
-      >
-        <span className="truncate">{selectedOption.label}</span>
-        <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
-          <ChevronDown className="w-4 h-4 text-gray-400 group-focus-within:text-amber-600 transition-colors" />
-        </motion.div>
-      </motion.button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.15 }}
-            className="absolute w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-300 z-20 max-h-48 overflow-y-auto scrollbar-none"
-          >
-            {options.map((option) => (
-              <motion.div
-                key={option.value.toString()}
-                onClick={() => {
-                  onChange(option.value.toString());
-                  setIsOpen(false);
-                }}
-                className="px-3 py-2 text-xs text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
-                whileHover={{ backgroundColor: '#fef3c7' }}
-              >
-                {option.label}
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
 };
 
 export function Chefs() {
@@ -301,7 +183,8 @@ export function Chefs() {
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [selectedChef, setSelectedChef] = useState<Chef | null>(null);
-  const [resetPasswordData, setResetPasswordData] = useState({ password: '', confirmPassword: '' });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [formData, setFormData] = useState({
     name: '',
     nameEn: '',
@@ -312,12 +195,14 @@ export function Chefs() {
     password: '',
     isActive: true,
   });
+  const [resetPasswordData, setResetPasswordData] = useState({ password: '', confirmPassword: '' });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [showPassword, setShowPassword] = useState<Record<string, boolean>>({});
 
   const debouncedSearch = useCallback(
     debounce((value: string) => {
       setSearchTerm(value);
+      setCurrentPage(1); // إعادة تعيين الصفحة عند البحث
     }, 500),
     []
   );
@@ -329,50 +214,58 @@ export function Chefs() {
       toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
-
     setLoading(true);
     try {
       const [chefsResponse, departmentsResponse] = await Promise.all([
-        chefsAPI.getAll({ isRtl }),
+        chefsAPI.getAll({ page: currentPage, limit: 12, search: searchTerm, isRtl }),
         departmentAPI.getAll({ isRtl }),
       ]);
-      const fetchedChefs = Array.isArray(chefsResponse.data) ? chefsResponse.data : chefsResponse;
-      setChefs(fetchedChefs.map((chef: any) => ({
-        id: chef._id,
-        user: {
-          id: chef.user._id,
-          name: chef.user.name,
-          nameEn: chef.user.nameEn,
-          username: chef.user.username,
-          email: chef.user.email,
-          phone: chef.user.phone,
-          isActive: chef.user.isActive,
-          createdAt: chef.user.createdAt,
-          updatedAt: chef.user.updatedAt,
-        },
-        department: chef.department
-          ? {
-              id: chef.department._id,
-              name: chef.department.name,
-              nameEn: chef.department.nameEn,
-              code: chef.department.code,
-              description: chef.department.description,
-            }
-          : null,
-        createdAt: chef.createdAt,
-        updatedAt: chef.updatedAt,
-      })));
-      setDepartments(
-        Array.isArray(departmentsResponse.data)
-          ? departmentsResponse.data.map((dept: any) => ({
-              id: dept._id,
-              name: dept.name,
-              nameEn: dept.nameEn,
-              code: dept.code,
-              description: dept.description,
-            }))
-          : departmentsResponse
+
+      // التأكد من أن الاستجابة هي مصفوفة
+      const chefsData = Array.isArray(chefsResponse.data) ? chefsResponse.data : [];
+      const departmentsData = Array.isArray(departmentsResponse.data) ? departmentsResponse.data : [];
+
+      setChefs(
+        chefsData
+          .filter((chef: any) => chef.user && chef.department) // تصفية الشيفات غير الصالحة
+          .map((chef: any) => ({
+            id: chef._id,
+            user: {
+              id: chef.user._id,
+              name: chef.user.name,
+              nameEn: chef.user.nameEn,
+              username: chef.user.username,
+              email: chef.user.email,
+              phone: chef.user.phone,
+              isActive: chef.user.isActive,
+              createdAt: chef.user.createdAt,
+              updatedAt: chef.user.updatedAt,
+            },
+            department: chef.department
+              ? {
+                  id: chef.department._id,
+                  name: chef.department.name,
+                  nameEn: chef.department.nameEn,
+                  code: chef.department.code,
+                  description: chef.department.description,
+                }
+              : null,
+            createdAt: chef.createdAt,
+            updatedAt: chef.updatedAt,
+          }))
       );
+
+      setDepartments(
+        departmentsData.map((dept: any) => ({
+          id: dept._id,
+          name: dept.name,
+          nameEn: dept.nameEn,
+          code: dept.code,
+          description: dept.description,
+        }))
+      );
+
+      setTotalPages(chefsResponse.totalPages || 1);
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Fetch error:`, err);
@@ -381,7 +274,7 @@ export function Chefs() {
     } finally {
       setLoading(false);
     }
-  }, [loggedInUser, t, isRtl]);
+  }, [loggedInUser, t, isRtl, currentPage, searchTerm]);
 
   useEffect(() => {
     fetchData();
@@ -466,7 +359,6 @@ export function Chefs() {
       toast.error(t.requiredFields, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
-
     try {
       const chefData = {
         user: {
@@ -481,7 +373,6 @@ export function Chefs() {
         },
         department: formData.department,
       };
-
       if (isEditMode && selectedChef) {
         const updatedChef = await chefsAPI.update(selectedChef.id, chefData);
         setChefs(
@@ -491,8 +382,12 @@ export function Chefs() {
                   ...c,
                   user: {
                     ...c.user!,
-                    ...updatedChef.user,
-                    id: updatedChef.user._id,
+                    name: updatedChef.user.name,
+                    nameEn: updatedChef.user.nameEn,
+                    username: updatedChef.user.username,
+                    email: updatedChef.user.email,
+                    phone: updatedChef.user.phone,
+                    isActive: updatedChef.user.isActive,
                     createdAt: updatedChef.user.createdAt,
                     updatedAt: updatedChef.user.updatedAt,
                   },
@@ -547,12 +442,7 @@ export function Chefs() {
       setIsModalOpen(false);
       setError('');
     } catch (err: any) {
-      let errorMessage = isEditMode ? t.updateError : t.createError;
-      if (err.message) {
-        errorMessage =
-          err.message.includes('Username') ? t.usernameExists :
-          err.message.includes('email') ? t.emailExists : err.message;
-      }
+      const errorMessage = err.message || (isEditMode ? t.updateError : t.createError);
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
     }
@@ -575,7 +465,6 @@ export function Chefs() {
       toast.error(t.passwordTooShort, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
-
     try {
       await chefsAPI.resetPassword(selectedChef!.id, resetPasswordData.password);
       setIsResetPasswordModalOpen(false);
@@ -610,7 +499,7 @@ export function Chefs() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-6xl w-full px-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl w-full px-4">
           {[...Array(6)].map((_, index) => (
             <div key={index} className="p-4 bg-white rounded-xl shadow-sm">
               <div className="space-y-2 animate-pulse">
@@ -627,7 +516,12 @@ export function Chefs() {
   }
 
   return (
-    <div className={`mx-auto max-w-6xl px-4 py-6 min-h-screen overflow-y-auto scrollbar-none bg-gray-100 font-sans ${isRtl ? 'rtl font-arabic' : 'ltr'}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div
+      className={`mx-auto max-w-6xl px-4 py-6 min-h-screen overflow-y-auto scrollbar-none bg-gray-100 font-sans ${
+        isRtl ? 'rtl font-arabic' : 'ltr'
+      }`}
+      dir={isRtl ? 'rtl' : 'ltr'}
+    >
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -644,10 +538,10 @@ export function Chefs() {
         {loggedInUser?.role === 'admin' && (
           <button
             onClick={openAddModal}
-            className="w-full sm:w-auto px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm hover:shadow-md"
+            className="w-full sm:w-auto px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors flex items-center justify-center gap-2 shadow-sm hover:shadow-md"
             aria-label={t.add}
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-4 h-4" />
             {t.add}
           </button>
         )}
@@ -668,7 +562,7 @@ export function Chefs() {
         )}
       </AnimatePresence>
 
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div className="p-4 bg-white rounded-xl shadow-sm">
           <CustomInput
             value={searchInput}
@@ -683,7 +577,6 @@ export function Chefs() {
         <div className="text-center text-xs text-gray-600">
           {isRtl ? `عدد الشيفات: ${filteredChefs.length}` : `Chefs Count: ${filteredChefs.length}`}
         </div>
-
         {filteredChefs.length === 0 ? (
           <div className="p-6 text-center bg-white rounded-xl shadow-sm">
             <ChefHat className="w-10 h-10 text-gray-400 mx-auto mb-3" />
@@ -691,7 +584,7 @@ export function Chefs() {
             {loggedInUser?.role === 'admin' && !searchTerm && (
               <button
                 onClick={openAddModal}
-                className="mt-3 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                className="mt-3 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
                 aria-label={t.addFirst}
               >
                 {t.addFirst}
@@ -700,7 +593,7 @@ export function Chefs() {
           </div>
         ) : (
           <motion.div
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto scrollbar-none"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ staggerChildren: 0.1 }}
@@ -713,43 +606,52 @@ export function Chefs() {
                 transition={{ duration: 0.3 }}
               >
                 <div
-                  className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer border border-gray-100"
+                  className="p-4 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer border border-gray-100"
                   onClick={() => navigate(`/chefs/${chef.id}`)}
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-3">
-                      <h3 className="font-semibold text-gray-900 text-sm truncate">
+                      <h3 className="font-semibold text-gray-900 text-sm truncate" style={{ whiteSpace: 'nowrap' }}>
                         {isRtl ? chef.user?.name : chef.user?.nameEn || chef.user?.name}
                       </h3>
-                      <ChefHat className="w-5 h-5 text-amber-600" />
+                      <ChefHat className="w-5 h-5 text-amber-600 flex-shrink-0" />
                     </div>
                     <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <span className="w-20 font-medium">{t.username}:</span>
-                      <span className="truncate flex-1">{chef.user?.username || '-'}</span>
+                      <span className="w-20 font-medium flex-shrink-0">{t.username}:</span>
+                      <span className="truncate" style={{ whiteSpace: 'nowrap' }}>{chef.user?.username || '-'}</span>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <span className="w-20 font-medium">{t.email}:</span>
-                      <span className="truncate flex-1">{chef.user?.email || '-'}</span>
+                      <span className="w-20 font-medium flex-shrink-0">{t.email}:</span>
+                      <span className="truncate" style={{ whiteSpace: 'nowrap' }}>{chef.user?.email || '-'}</span>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <span className="w-20 font-medium">{t.department}:</span>
-                      <span className="truncate flex-1">{isRtl ? chef.department?.name : chef.department?.nameEn || chef.department?.name || '-'}</span>
+                      <span className="w-20 font-medium flex-shrink-0">{t.department}:</span>
+                      <span className="truncate" style={{ whiteSpace: 'nowrap' }}>
+                        {chef.department
+                          ? isRtl
+                            ? chef.department.name
+                            : chef.department.nameEn || chef.department.name
+                          : '-'}
+                      </span>
                     </div>
                     <div className="flex items-center gap-2 text-xs">
-                      <span className="w-20 font-medium">{t.status}:</span>
-                      <span className={`truncate flex-1 ${chef.user?.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                      <span className="w-20 font-medium flex-shrink-0">{t.status}:</span>
+                      <span
+                        className={`truncate ${chef.user?.isActive ? 'text-green-600' : 'text-red-600'}`}
+                        style={{ whiteSpace: 'nowrap' }}
+                      >
                         {chef.user?.isActive ? t.active : t.inactive}
                       </span>
                     </div>
                   </div>
                   {loggedInUser?.role === 'admin' && (
-                    <div className="mt-3 flex items-center justify-end gap-1.5">
+                    <div className="mt-3 flex items-center justify-end gap-2">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           openEditModal(chef);
                         }}
-                        className="p-1.5 w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
+                        className="p-2 w-9 h-9 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
                         title={t.edit}
                       >
                         <Edit2 className="w-4 h-4" />
@@ -759,7 +661,7 @@ export function Chefs() {
                           e.stopPropagation();
                           openResetPasswordModal(chef);
                         }}
-                        className="p-1.5 w-8 h-8 bg-amber-500 hover:bg-amber-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
+                        className="p-2 w-9 h-9 bg-amber-500 hover:bg-amber-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
                         title={t.resetPassword}
                       >
                         <Key className="w-4 h-4" />
@@ -769,7 +671,7 @@ export function Chefs() {
                           e.stopPropagation();
                           openDeleteModal(chef);
                         }}
-                        className="p-1.5 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
+                        className="p-2 w-9 h-9 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
                         title={t.delete}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -783,6 +685,30 @@ export function Chefs() {
         )}
       </div>
 
+      {filteredChefs.length > 0 && (
+        <div className="flex justify-center mt-6 gap-4 items-center">
+          <button
+            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            {t.previous}
+          </button>
+          <span className="text-xs text-gray-600">
+            {t.page} {currentPage} / {totalPages}
+          </span>
+          <button
+            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {t.next}
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <motion.div
@@ -795,63 +721,72 @@ export function Chefs() {
             <form onSubmit={handleSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">{t.name}</label>
-                  <input
-                    id="name"
+                  <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">
+                    {t.name}
+                  </label>
+                  <CustomInput
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={(value) => setFormData({ ...formData, name: value })}
                     placeholder={t.namePlaceholder}
-                    required
-                    className={`w-full px-3 py-2 border ${formErrors.name ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                    ariaLabel={t.name}
+                    type="text"
                   />
                   {formErrors.name && <p className="text-xs text-red-600 mt-1">{formErrors.name}</p>}
                 </div>
                 <div>
-                  <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">{t.nameEn}</label>
-                  <input
-                    id="nameEn"
+                  <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">
+                    {t.nameEn}
+                  </label>
+                  <CustomInput
                     value={formData.nameEn}
-                    onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
+                    onChange={(value) => setFormData({ ...formData, nameEn: value })}
                     placeholder={t.nameEnPlaceholder}
-                    required
-                    className={`w-full px-3 py-2 border ${formErrors.nameEn ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                    ariaLabel={t.nameEn}
+                    type="text"
                   />
                   {formErrors.nameEn && <p className="text-xs text-red-600 mt-1">{formErrors.nameEn}</p>}
                 </div>
                 <div>
-                  <label htmlFor="username" className="block text-xs font-medium text-gray-700 mb-1">{t.username}</label>
-                  <input
-                    id="username"
+                  <label htmlFor="username" className="block text-xs font-medium text-gray-700 mb-1">
+                    {t.username}
+                  </label>
+                  <CustomInput
                     value={formData.username}
-                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    onChange={(value) => setFormData({ ...formData, username: value })}
                     placeholder={t.usernamePlaceholder}
-                    required
-                    className={`w-full px-3 py-2 border ${formErrors.username ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                    ariaLabel={t.username}
+                    type="text"
                   />
                   {formErrors.username && <p className="text-xs text-red-600 mt-1">{formErrors.username}</p>}
                 </div>
                 <div>
-                  <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1">{t.email}</label>
-                  <input
-                    id="email"
+                  <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1">
+                    {t.email}
+                  </label>
+                  <CustomInput
                     value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    onChange={(value) => setFormData({ ...formData, email: value })}
                     placeholder={t.emailPlaceholder}
-                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                    ariaLabel={t.email}
+                    type="email"
                   />
                 </div>
                 <div>
-                  <label htmlFor="phone" className="block text-xs font-medium text-gray-700 mb-1">{t.phone}</label>
-                  <input
-                    id="phone"
+                  <label htmlFor="phone" className="block text-xs font-medium text-gray-700 mb-1">
+                    {t.phone}
+                  </label>
+                  <CustomInput
                     value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    onChange={(value) => setFormData({ ...formData, phone: value })}
                     placeholder={t.phonePlaceholder}
-                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                    ariaLabel={t.phone}
+                    type="tel"
                   />
                 </div>
                 <div>
-                  <label htmlFor="department" className="block text-xs font-medium text-gray-700 mb-1">{t.department}</label>
+                  <label htmlFor="department" className="block text-xs font-medium text-gray-700 mb-1">
+                    {t.department}
+                  </label>
                   <CustomDropdown
                     value={formData.department}
                     onChange={(value) => setFormData({ ...formData, department: value })}
@@ -867,7 +802,9 @@ export function Chefs() {
                   {formErrors.department && <p className="text-xs text-red-600 mt-1">{formErrors.department}</p>}
                 </div>
                 <div>
-                  <label htmlFor="status" className="block text-xs font-medium text-gray-700 mb-1">{t.status}</label>
+                  <label htmlFor="status" className="block text-xs font-medium text-gray-700 mb-1">
+                    {t.status}
+                  </label>
                   <CustomDropdown
                     value={formData.isActive}
                     onChange={(value) => setFormData({ ...formData, isActive: value === 'true' })}
@@ -880,7 +817,9 @@ export function Chefs() {
                 </div>
                 {!isEditMode && (
                   <div>
-                    <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">{t.password}</label>
+                    <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">
+                      {t.password}
+                    </label>
                     <CustomInput
                       value={formData.password}
                       onChange={(value) => setFormData({ ...formData, password: value })}
@@ -889,7 +828,7 @@ export function Chefs() {
                       type="password"
                       showPasswordToggle
                       showPassword={showPassword['new']}
-                      togglePasswordVisibility={() => setShowPassword((prev) => ({ ...prev, new: !prev.new }))}
+                      togglePasswordVisibility={() => togglePasswordVisibility('new')}
                     />
                     {formErrors.password && <p className="text-xs text-red-600 mt-1">{formErrors.password}</p>}
                   </div>
@@ -905,13 +844,13 @@ export function Chefs() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
                 >
                   {isEditMode ? t.update : t.add}
                 </button>
@@ -931,52 +870,58 @@ export function Chefs() {
           >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.resetPassword}</h3>
             <form onSubmit={handleResetPassword} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
-              <div>
-                <label htmlFor="newPassword" className="block text-xs font-medium text-gray-700 mb-1">{t.newPassword}</label>
-                <CustomInput
-                  value={resetPasswordData.password}
-                  onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
-                  placeholder={t.newPasswordPlaceholder}
-                  ariaLabel={t.newPassword}
-                  type="password"
-                  showPasswordToggle
-                  showPassword={showPassword['newPassword']}
-                  togglePasswordVisibility={() => setShowPassword((prev) => ({ ...prev, newPassword: !prev.newPassword }))}
-                />
-              </div>
-              <div>
-                <label htmlFor="confirmPassword" className="block text-xs font-medium text-gray-700 mb-1">{t.confirmPassword}</label>
-                <CustomInput
-                  value={resetPasswordData.confirmPassword}
-                  onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
-                  placeholder={t.confirmPasswordPlaceholder}
-                  ariaLabel={t.confirmPassword}
-                  type="password"
-                  showPasswordToggle
-                  showPassword={showPassword['confirmPassword']}
-                  togglePasswordVisibility={() => setShowPassword((prev) => ({ ...prev, confirmPassword: !prev.confirmPassword }))}
-                />
-              </div>
-              {error && (
-                <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-600" />
-                  <span className="text-red-600 text-xs">{error}</span>
+              <div className="space-y-4">
+                <div>
+                  <label htmlFor="newPassword" className="block text-xs font-medium text-gray-700 mb-1">
+                    {t.newPassword}
+                  </label>
+                  <CustomInput
+                    value={resetPasswordData.password}
+                    onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
+                    placeholder={t.newPasswordPlaceholder}
+                    ariaLabel={t.newPassword}
+                    type="password"
+                    showPasswordToggle
+                    showPassword={showPassword['reset']}
+                    togglePasswordVisibility={() => togglePasswordVisibility('reset')}
+                  />
                 </div>
-              )}
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsResetPasswordModalOpen(false)}
-                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
-                >
-                  {t.cancel}
-                </button>
-                <button
-                  type="submit"
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
-                >
-                  {t.reset}
-                </button>
+                <div>
+                  <label htmlFor="confirmPassword" className="block text-xs font-medium text-gray-700 mb-1">
+                    {t.confirmPassword}
+                  </label>
+                  <CustomInput
+                    value={resetPasswordData.confirmPassword}
+                    onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
+                    placeholder={t.confirmPasswordPlaceholder}
+                    ariaLabel={t.confirmPassword}
+                    type="password"
+                    showPasswordToggle
+                    showPassword={showPassword['confirm']}
+                    togglePasswordVisibility={() => togglePasswordVisibility('confirm')}
+                  />
+                </div>
+                {error && (
+                  <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-600" />
+                    <span className="text-red-600 text-xs">{error}</span>
+                  </div>
+                )}
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsResetPasswordModalOpen(false)}
+                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
+                  >
+                    {t.cancel}
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
+                  >
+                    {t.reset}
+                  </button>
+                </div>
               </div>
             </form>
           </motion.div>
@@ -992,30 +937,26 @@ export function Chefs() {
             className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6"
           >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.confirmDelete}</h3>
-            <div className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
-              <p className="text-gray-600 text-xs">{t.deleteWarning}</p>
-              {error && (
-                <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-600" />
-                  <span className="text-red-600 text-xs">{error}</span>
-                </div>
-              )}
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsDeleteModalOpen(false)}
-                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
-                >
-                  {t.cancel}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
-                >
-                  {t.delete}
-                </button>
+            <p className="text-xs text-gray-600 mb-4">{t.deleteWarning}</p>
+            {error && (
+              <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 mb-4">
+                <AlertCircle className="w-4 h-4 text-red-600" />
+                <span className="text-red-600 text-xs">{error}</span>
               </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
+              >
+                {t.cancel}
+              </button>
+              <button
+                onClick={handleDelete}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
+              >
+                {t.delete}
+              </button>
             </div>
           </motion.div>
         </div>
