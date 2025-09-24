@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useReducer, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useReducer } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,7 +12,6 @@ import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 import { MapPin, Search, AlertCircle, Plus, Edit2, Trash2, Key } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { debounce } from 'lodash';
 
 interface Branch {
   _id: string;
@@ -97,7 +96,6 @@ const formReducer = (state: FormState, action: FormAction): FormState => {
 const translations = {
   ar: {
     manage: 'إدارة الفروع',
-    subtitle: 'إدارة الفروع وإضافتها أو تعديلها',
     add: 'إضافة فرع',
     addFirst: 'إضافة أول فرع',
     noBranches: 'لا توجد فروع',
@@ -172,11 +170,9 @@ const translations = {
     deleteRestricted: 'لا يمكن حذف الفرع لوجود طلبات أو مخزون مرتبط',
     deleteError: 'خطأ أثناء حذف الفرع',
     deleted: 'تم حذف الفرع بنجاح',
-    scrollToForm: 'الذهاب إلى نموذج الإضافة',
   },
   en: {
     manage: 'Manage Branches',
-    subtitle: 'Manage, add, or edit branches',
     add: 'Add Branch',
     addFirst: 'Add First Branch',
     noBranches: 'No Branches Found',
@@ -251,7 +247,6 @@ const translations = {
     deleteRestricted: 'Cannot delete branch with associated orders or inventory',
     deleteError: 'Error deleting branch',
     deleted: 'Branch deleted successfully',
-    scrollToForm: 'Go to Add Form',
   },
 };
 
@@ -261,7 +256,6 @@ export const Branches: React.FC = () => {
   const navigate = useNavigate();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
-  const formRef = useRef<HTMLDivElement>(null);
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -289,13 +283,6 @@ export const Branches: React.FC = () => {
     isActive: true,
     user: { name: '', nameEn: '', username: '', email: '', phone: '', password: '', isActive: true },
   });
-
-  const debouncedSearch = useCallback(
-    debounce((value: string) => {
-      setSearchTerm(value);
-    }, 500),
-    []
-  );
 
   const fetchData = useCallback(async () => {
     if (!user || user.role !== 'admin') {
@@ -325,24 +312,12 @@ export const Branches: React.FC = () => {
   }, [fetchData]);
 
   const filteredBranches = useMemo(() => {
-    const lowerSearchTerm = searchTerm.toLowerCase();
-    return branches
-      .filter((branch) => {
-        const name = (isRtl ? branch.name : branch.nameEn || branch.name).toLowerCase();
-        const code = branch.code.toLowerCase();
-        return name.startsWith(lowerSearchTerm) || code.startsWith(lowerSearchTerm) || name.includes(lowerSearchTerm);
-      })
-      .sort((a, b) => {
-        const aName = (isRtl ? a.name : a.nameEn || a.name).toLowerCase();
-        const bName = (isRtl ? b.name : b.nameEn || b.name).toLowerCase();
-        const aCode = a.code.toLowerCase();
-        const bCode = b.code.toLowerCase();
-        if (aName.startsWith(lowerSearchTerm) && !bName.startsWith(lowerSearchTerm)) return -1;
-        if (!aName.startsWith(lowerSearchTerm) && bName.startsWith(lowerSearchTerm)) return 1;
-        if (aCode.startsWith(lowerSearchTerm) && !bCode.startsWith(lowerSearchTerm)) return -1;
-        if (!aCode.startsWith(lowerSearchTerm) && bCode.startsWith(lowerSearchTerm)) return 1;
-        return aName.localeCompare(bName);
-      });
+    return branches.filter(
+      (branch) =>
+        branch &&
+        ((isRtl ? branch.name : branch.nameEn || branch.name)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          branch.code?.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
   }, [branches, searchTerm, isRtl]);
 
   const checkEmailAvailability = useCallback(async (email: string) => {
@@ -386,7 +361,6 @@ export const Branches: React.FC = () => {
     setIsModalOpen(true);
     setFormErrors({});
     setError('');
-    scrollToForm();
   }, []);
 
   const openEditModal = useCallback((branch: Branch, e: React.MouseEvent) => {
@@ -412,7 +386,6 @@ export const Branches: React.FC = () => {
     setIsModalOpen(true);
     setFormErrors({});
     setError('');
-    scrollToForm();
   }, []);
 
   const openResetPasswordModal = useCallback((branch: Branch, e: React.MouseEvent) => {
@@ -553,10 +526,6 @@ export const Branches: React.FC = () => {
     navigate(`/branches/${branchId}`);
   }, [navigate]);
 
-  const scrollToForm = () => {
-    formRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
   const renderPagination = useMemo(() => {
     const pages = [];
     const maxPagesToShow = 5;
@@ -584,7 +553,7 @@ export const Branches: React.FC = () => {
           disabled={page === 1}
           className="w-10 h-10 rounded-full bg-amber-100 text-amber-800 disabled:opacity-50 transition-colors"
         >
-          {isRtl ? '→' : '←'}
+          &larr;
         </Button>
         {pages}
         <Button
@@ -593,15 +562,15 @@ export const Branches: React.FC = () => {
           disabled={page === totalPages}
           className="w-10 h-10 rounded-full bg-amber-100 text-amber-800 disabled:opacity-50 transition-colors"
         >
-          {isRtl ? '←' : '→'}
+          &rarr;
         </Button>
       </div>
     );
-  }, [page, totalPages, isRtl]);
+  }, [page, totalPages]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+      <div className="flex items-center justify-center min-h-screen">
         <LoadingSpinner size="lg" />
       </div>
     );
@@ -615,25 +584,21 @@ export const Branches: React.FC = () => {
         transition={{ duration: 0.5 }}
         className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4"
       >
-        <div className="flex items-center gap-2 justify-center sm:justify-start">
+        <h1 className="text-2xl sm:text-3xl font-bold text-amber-900 flex items-center justify-center sm:justify-start gap-2">
           <MapPin className="w-6 h-6 text-amber-600" />
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-amber-900">{t.manage}</h1>
-            <p className="text-sm text-gray-600">{t.subtitle}</p>
-          </div>
-        </div>
+          {t.manage}
+        </h1>
         {user?.role === 'admin' && (
           <Button
             variant="primary"
             icon={Plus}
             onClick={openAddModal}
-            className="text-sm px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-md transition-transform transform hover:scale-105"
+            className="text-sm px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-md transition-transform transform hover:scale-105"
           >
             {t.add}
           </Button>
         )}
       </motion.div>
-
       <AnimatePresence>
         {error && (
           <motion.div
@@ -647,325 +612,298 @@ export const Branches: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {user?.role === 'admin' && (
-        <div className={`lg:hidden fixed bottom-6 ${isRtl ? 'left-6' : 'right-6'} z-50`}>
-          <Button
-            onClick={openAddModal}
-            variant="primary"
-            className="p-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg transition-transform transform hover:scale-105"
-            aria-label={t.scrollToForm}
-          >
-            <Plus className="w-6 h-6" />
-          </Button>
+      <Card className="p-4 mb-6 bg-white rounded-lg shadow-md">
+        <div className="relative">
+          <Search
+            className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-amber-500 w-5 h-5`}
+          />
+          <Input
+            value={searchTerm}
+            onChange={(value) => setSearchTerm(value)}
+            placeholder={t.searchPlaceholder}
+            className={`w-full pl-10 pr-4 py-2 text-sm border border-amber-300 rounded-full focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50 ${isRtl ? 'text-right' : 'text-left'}`}
+            aria-label={t.searchPlaceholder}
+          />
         </div>
-      )}
-
-      <div className="space-y-6">
-        <Card className="p-4 bg-white rounded-lg shadow-md">
-          <div className="relative">
-            <Search
-              className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-amber-500 w-5 h-5`}
-            />
-            <Input
-              value={searchTerm}
-              onChange={(value) => {
-                setSearchTerm(value);
-                debouncedSearch(value);
-              }}
-              placeholder={t.searchPlaceholder}
-              className={`w-full pl-10 pr-4 py-2 text-sm border border-amber-300 rounded-full focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50 ${isRtl ? 'text-right' : 'text-left'}`}
-              aria-label={t.searchPlaceholder}
-            />
-          </div>
-        </Card>
-
-        <div className="lg:overflow-y-auto lg:max-h-[calc(100vh-8rem)] scrollbar-hidden">
+      </Card>
+      <motion.div
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ staggerChildren: 0.1 }}
+      >
+        {filteredBranches.length === 0 ? (
+          <Card className="p-6 text-center bg-white rounded-lg shadow-md col-span-full">
+            <MapPin className="w-10 h-10 text-amber-400 mx-auto mb-3" />
+            <h3 className="text-lg font-semibold text-amber-900">{t.noBranches}</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              {searchTerm ? t.noMatch : t.empty}
+            </p>
+            {user?.role === 'admin' && !searchTerm && (
+              <Button
+                variant="primary"
+                icon={Plus}
+                onClick={openAddModal}
+                className="mt-4 text-sm px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-md transition-transform transform hover:scale-105"
+              >
+                {t.addFirst}
+              </Button>
+            )}
+          </Card>
+        ) : (
+          filteredBranches.map((branch) => (
+            <motion.div
+              key={branch._id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <Card
+                className="bg-white rounded-lg shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer overflow-hidden"
+                onClick={() => handleCardClick(branch._id)}
+              >
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-base font-semibold text-amber-900 truncate max-w-[80%]">
+                      {isRtl ? branch.name : branch.nameEn || branch.name}
+                    </h3>
+                    <MapPin className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <p className="text-xs text-gray-600 truncate">{t.code}: {branch.code}</p>
+                  <p className="text-xs text-gray-600 truncate">{t.address}: {isRtl ? branch.address : branch.addressEn || branch.address}</p>
+                  <p className="text-xs text-gray-600 truncate">{t.city}: {isRtl ? branch.city : branch.cityEn || branch.city}</p>
+                  <p className="text-xs text-gray-600 truncate">{t.phone}: {branch.phone || '-'}</p>
+                  <p className={`text-xs font-medium ${branch.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                    {t.status}: {branch.isActive ? t.active : t.inactive}
+                  </p>
+                  {user?.role === 'admin' && (
+                    <div className="flex gap-2 mt-3 justify-end">
+                      <Button
+                        variant="outline"
+                        icon={Edit2}
+                        onClick={(e) => openEditModal(branch, e)}
+                        className="text-xs p-1.5 w-8 h-8 rounded-full text-amber-600 hover:text-amber-800 border-amber-600 hover:bg-amber-50"
+                        aria-label={t.edit}
+                      />
+                      <Button
+                        variant="outline"
+                        icon={Key}
+                        onClick={(e) => openResetPasswordModal(branch, e)}
+                        className="text-xs p-1.5 w-8 h-8 rounded-full text-blue-500 hover:text-blue-700 border-blue-500 hover:bg-blue-50"
+                        aria-label={t.resetPassword}
+                      />
+                      <Button
+                        variant="outline"
+                        icon={Trash2}
+                        onClick={(e) => openDeleteModal(branch, e)}
+                        className="text-xs p-1.5 w-8 h-8 rounded-full text-red-500 hover:text-red-700 border-red-500 hover:bg-red-50"
+                        aria-label={t.delete}
+                      />
+                    </div>
+                  )}
+                </div>
+              </Card>
+            </motion.div>
+          ))
+        )}
+      </motion.div>
+      {filteredBranches.length > 0 && renderPagination}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        title={isEditMode ? t.edit : t.add}
+        size="lg"
+      >
+        <form onSubmit={handleSubmit} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
           <motion.div
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ staggerChildren: 0.1 }}
+            transition={{ duration: 0.3 }}
+            className="grid grid-cols-1 sm:grid-cols-2 gap-4"
           >
-            {filteredBranches.length === 0 ? (
-              <Card className="p-6 text-center bg-white rounded-lg shadow-md col-span-full">
-                <MapPin className="w-10 h-10 text-amber-400 mx-auto mb-3" />
-                <h3 className="text-lg font-semibold text-amber-900">{t.noBranches}</h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  {searchTerm ? t.noMatch : t.empty}
-                </p>
-                {user?.role === 'admin' && !searchTerm && (
-                  <Button
-                    variant="primary"
-                    icon={Plus}
-                    onClick={openAddModal}
-                    className="mt-4 text-sm px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-md transition-transform transform hover:scale-105"
-                  >
-                    {t.addFirst}
-                  </Button>
-                )}
-              </Card>
-            ) : (
-              filteredBranches.map((branch) => (
-                <motion.div
-                  key={branch._id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <Card
-                    className="bg-white rounded-lg shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer overflow-hidden"
-                    onClick={() => handleCardClick(branch._id)}
-                  >
-                    <div className="p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-base font-semibold text-amber-900 truncate max-w-[80%]">
-                          {isRtl ? branch.name : branch.nameEn || branch.name}
-                        </h3>
-                        <MapPin className="w-5 h-5 text-amber-600" />
-                      </div>
-                      <p className="text-xs text-gray-600 truncate">{t.code}: {branch.code}</p>
-                      <p className="text-xs text-gray-600 truncate">{t.address}: {isRtl ? branch.address : branch.addressEn || branch.address}</p>
-                      <p className="text-xs text-gray-600 truncate">{t.city}: {isRtl ? branch.city : branch.cityEn || branch.city}</p>
-                      <p className="text-xs text-gray-600 truncate">{t.phone}: {branch.phone || '-'}</p>
-                      <p className={`text-xs font-medium ${branch.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                        {t.status}: {branch.isActive ? t.active : t.inactive}
-                      </p>
-                      {user?.role === 'admin' && (
-                        <div className="flex gap-2 mt-3 justify-end">
-                          <Button
-                            variant="outline"
-                            icon={Edit2}
-                            onClick={(e) => openEditModal(branch, e)}
-                            className="text-xs p-1.5 w-8 h-8 rounded-full text-amber-600 hover:text-amber-800 border-amber-600 hover:bg-amber-50"
-                            aria-label={t.edit}
-                          />
-                          <Button
-                            variant="outline"
-                            icon={Key}
-                            onClick={(e) => openResetPasswordModal(branch, e)}
-                            className="text-xs p-1.5 w-8 h-8 rounded-full text-blue-500 hover:text-blue-700 border-blue-500 hover:bg-blue-50"
-                            aria-label={t.resetPassword}
-                          />
-                          <Button
-                            variant="outline"
-                            icon={Trash2}
-                            onClick={(e) => openDeleteModal(branch, e)}
-                            className="text-xs p-1.5 w-8 h-8 rounded-full text-red-500 hover:text-red-700 border-red-500 hover:bg-red-50"
-                            aria-label={t.delete}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  </Card>
-                </motion.div>
-              ))
-            )}
-          </motion.div>
-        </div>
-      </div>
-
-      {filteredBranches.length > 0 && renderPagination}
-
-      <div ref={formRef}>
-        <Modal
-          isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
-          title={isEditMode ? t.edit : t.add}
-          size="lg"
-        >
-          <form onSubmit={handleSubmit} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.3 }}
-              className="grid grid-cols-1 sm:grid-cols-2 gap-4"
-            >
-              <div className="space-y-4">
-                <h3 className="text-base font-semibold text-amber-900">{t.name}</h3>
-                <Input
-                  label={t.name}
-                  value={formData.name}
-                  onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'name', value })}
-                  placeholder={t.namePlaceholder}
-                  required
-                  error={formErrors.name}
-                  className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                />
-                <Input
-                  label={t.nameEn}
-                  value={formData.nameEn}
-                  onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'nameEn', value })}
-                  placeholder={t.nameEnPlaceholder}
-                  required
-                  error={formErrors.nameEn}
-                  className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                />
-                <Input
-                  label={t.code}
-                  value={formData.code}
-                  onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'code', value })}
-                  placeholder={t.codePlaceholder}
-                  required
-                  error={formErrors.code}
-                  className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                />
-                <Input
-                  label={t.address}
-                  value={formData.address}
-                  onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'address', value })}
-                  placeholder={t.addressPlaceholder}
-                  required
-                  error={formErrors.address}
-                  className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                />
-                <Input
-                  label={t.addressEn}
-                  value={formData.addressEn}
-                  onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'addressEn', value })}
-                  placeholder={t.addressEnPlaceholder}
-                  required
-                  error={formErrors.addressEn}
-                  className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                />
-                <Input
-                  label={t.city}
-                  value={formData.city}
-                  onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'city', value })}
-                  placeholder={t.cityPlaceholder}
-                  required
-                  error={formErrors.city}
-                  className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                />
-                <Input
-                  label={t.cityEn}
-                  value={formData.cityEn}
-                  onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'cityEn', value })}
-                  placeholder={t.cityEnPlaceholder}
-                  required
-                  error={formErrors.cityEn}
-                  className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                />
-                <Input
-                  label={t.phone}
-                  value={formData.phone}
-                  onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'phone', value })}
-                  placeholder={t.phonePlaceholder}
-                  className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                />
-                <Select
-                  label={t.status}
-                  options={[
-                    { value: true, label: t.active },
-                    { value: false, label: t.inactive },
-                  ]}
-                  value={formData.isActive}
-                  onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'isActive', value: value === 'true' })}
-                  className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                />
-              </div>
-              <div className="space-y-4">
-                <h3 className="text-base font-semibold text-amber-900">{t.user}</h3>
-                <Input
-                  label={t.userName}
-                  value={formData.user.name}
-                  onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'name', value })}
-                  placeholder={t.userNamePlaceholder}
-                  required={!isEditMode}
-                  error={formErrors.userName}
-                  className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                />
-                <Input
-                  label={t.userNameEn}
-                  value={formData.user.nameEn}
-                  onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'nameEn', value })}
-                  placeholder={t.userNameEnPlaceholder}
-                  required={!isEditMode}
-                  error={formErrors.userNameEn}
-                  className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                />
-                <Input
-                  label={t.username}
-                  value={formData.user.username}
-                  onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'username', value })}
-                  placeholder={t.usernamePlaceholder}
-                  required={!isEditMode}
-                  error={formErrors.username}
-                  className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                />
-                <Input
-                  label={t.email}
-                  value={formData.user.email}
-                  onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'email', value })}
-                  placeholder={t.emailPlaceholder}
-                  error={formErrors.email}
-                  className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                />
-                <Input
-                  label={t.userPhone}
-                  value={formData.user.phone}
-                  onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'phone', value })}
-                  placeholder={t.userPhonePlaceholder}
-                  className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                />
-                <Select
-                  label={t.status}
-                  options={[
-                    { value: true, label: t.active },
-                    { value: false, label: t.inactive },
-                  ]}
-                  value={formData.user.isActive}
-                  onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'isActive', value: value === 'true' })}
-                  className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                />
-                {!isEditMode && (
-                  <Input
-                    label={t.password}
-                    value={formData.user.password}
-                    onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'password', value })}
-                    placeholder={t.passwordPlaceholder}
-                    type="password"
-                    required
-                    error={formErrors.password}
-                    className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                  />
-                )}
-              </div>
-            </motion.div>
-            <AnimatePresence>
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-2"
-                >
-                  <AlertCircle className="w-4 h-4 text-red-600" />
-                  <span className="text-red-600 text-sm font-medium">{error}</span>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            <div className="flex gap-3 mt-6">
-              <Button
-                type="submit"
-                variant="primary"
-                className="flex-1 text-sm px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-md transition-transform transform hover:scale-105"
-              >
-                {isEditMode ? t.update : t.add}
-              </Button>
-              <Button
-                type="button"
-                variant="secondary"
-                onClick={() => setIsModalOpen(false)}
-                className="flex-1 text-sm px-4 py-2 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg shadow-md transition-transform transform hover:scale-105"
-              >
-                {t.cancel}
-              </Button>
+            <div className="space-y-4">
+              <h3 className="text-base font-semibold text-amber-900">{t.name}</h3>
+              <Input
+                label={t.name}
+                value={formData.name}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'name', value })}
+                placeholder={t.namePlaceholder}
+                required
+                error={formErrors.name}
+                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              />
+              <Input
+                label={t.nameEn}
+                value={formData.nameEn}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'nameEn', value })}
+                placeholder={t.nameEnPlaceholder}
+                required
+                error={formErrors.nameEn}
+                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              />
+              <Input
+                label={t.code}
+                value={formData.code}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'code', value })}
+                placeholder={t.codePlaceholder}
+                required
+                error={formErrors.code}
+                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              />
+              <Input
+                label={t.address}
+                value={formData.address}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'address', value })}
+                placeholder={t.addressPlaceholder}
+                required
+                error={formErrors.address}
+                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              />
+              <Input
+                label={t.addressEn}
+                value={formData.addressEn}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'addressEn', value })}
+                placeholder={t.addressEnPlaceholder}
+                required
+                error={formErrors.addressEn}
+                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              />
+              <Input
+                label={t.city}
+                value={formData.city}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'city', value })}
+                placeholder={t.cityPlaceholder}
+                required
+                error={formErrors.city}
+                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              />
+              <Input
+                label={t.cityEn}
+                value={formData.cityEn}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'cityEn', value })}
+                placeholder={t.cityEnPlaceholder}
+                required
+                error={formErrors.cityEn}
+                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              />
+              <Input
+                label={t.phone}
+                value={formData.phone}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'phone', value })}
+                placeholder={t.phonePlaceholder}
+                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              />
+              <Select
+                label={t.status}
+                options={[
+                  { value: true, label: t.active },
+                  { value: false, label: t.inactive },
+                ]}
+                value={formData.isActive}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'isActive', value: value === 'true' })}
+                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              />
             </div>
-          </form>
-        </Modal>
-      </div>
-
+            <div className="space-y-4">
+              <h3 className="text-base font-semibold text-amber-900">{t.user}</h3>
+              <Input
+                label={t.userName}
+                value={formData.user.name}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'name', value })}
+                placeholder={t.userNamePlaceholder}
+                required={!isEditMode}
+                error={formErrors.userName}
+                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              />
+              <Input
+                label={t.userNameEn}
+                value={formData.user.nameEn}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'nameEn', value })}
+                placeholder={t.userNameEnPlaceholder}
+                required={!isEditMode}
+                error={formErrors.userNameEn}
+                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              />
+              <Input
+                label={t.username}
+                value={formData.user.username}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'username', value })}
+                placeholder={t.usernamePlaceholder}
+                required={!isEditMode}
+                error={formErrors.username}
+                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              />
+              <Input
+                label={t.email}
+                value={formData.user.email}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'email', value })}
+                placeholder={t.emailPlaceholder}
+                error={formErrors.email}
+                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              />
+              <Input
+                label={t.userPhone}
+                value={formData.user.phone}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'phone', value })}
+                placeholder={t.userPhonePlaceholder}
+                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              />
+              <Select
+                label={t.status}
+                options={[
+                  { value: true, label: t.active },
+                  { value: false, label: t.inactive },
+                ]}
+                value={formData.user.isActive}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'isActive', value: value === 'true' })}
+                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+              />
+              {!isEditMode && (
+                <Input
+                  label={t.password}
+                  value={formData.user.password}
+                  onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'password', value })}
+                  placeholder={t.passwordPlaceholder}
+                  type="password"
+                  required
+                  error={formErrors.password}
+                  className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
+                />
+              )}
+            </div>
+          </motion.div>
+          <AnimatePresence>
+            {error && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-2"
+              >
+                <AlertCircle className="w-4 h-4 text-red-600" />
+                <span className="text-red-600 text-sm font-medium">{error}</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <div className="flex gap-3 mt-6">
+            <Button
+              type="submit"
+              variant="primary"
+              className="flex-1 text-sm px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-md transition-transform transform hover:scale-105"
+            >
+              {isEditMode ? t.update : t.add}
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setIsModalOpen(false)}
+              className="flex-1 text-sm px-4 py-2 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg shadow-md transition-transform transform hover:scale-105"
+            >
+              {t.cancel}
+            </Button>
+          </div>
+        </form>
+      </Modal>
       <Modal
         isOpen={isResetPasswordModalOpen}
         onClose={() => setIsResetPasswordModalOpen(false)}
@@ -1030,7 +968,6 @@ export const Branches: React.FC = () => {
           </div>
         </form>
       </Modal>
-
       <Modal
         isOpen={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}
