@@ -80,7 +80,6 @@ export function Products() {
       } catch (err: any) {
         console.error('Fetch error:', err);
         setError(err.response?.data?.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
-        toast.error(err.response?.data?.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
       } finally {
         setLoading(false);
       }
@@ -134,13 +133,30 @@ export function Products() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.name.trim()) {
+      setError(isRtl ? 'اسم المنتج مطلوب' : 'Product name is required');
+      return;
+    }
+    if (!formData.code.trim()) {
+      setError(isRtl ? 'رمز المنتج مطلوب' : 'Product code is required');
+      return;
+    }
+    if (!formData.department) {
+      setError(isRtl ? 'القسم مطلوب' : 'Department is required');
+      return;
+    }
+    const priceNum = parseFloat(formData.price);
+    if (isNaN(priceNum) || priceNum <= 0) {
+      setError(isRtl ? 'السعر يجب أن يكون رقم إيجابي' : 'Price must be a positive number');
+      return;
+    }
     try {
       const productData = {
-        name: formData.name,
-        nameEn: formData.nameEn || undefined,
-        code: formData.code,
+        name: formData.name.trim(),
+        nameEn: formData.nameEn.trim() || undefined,
+        code: formData.code.trim(),
         department: formData.department,
-        price: parseFloat(formData.price),
+        price: priceNum,
         unit: formData.unit || undefined,
       };
       if (editingProduct) {
@@ -195,25 +211,15 @@ export function Products() {
     }
   };
 
-  const CustomInput = ({
-    value,
-    onChange,
-    placeholder,
-    ariaLabel,
-  }: {
-    value: string;
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    placeholder: string;
-    ariaLabel: string;
-  }) => (
+  const CustomInput = ({ value, onChange, placeholder, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder: string; ariaLabel: string }) => (
     <div className="relative group">
-      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500" />
+      <Search className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500 ${isRtl ? 'right-3' : 'left-3'}`} />
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className="w-full pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400"
+        className={`w-full py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-xs placeholder-gray-400 ${isRtl ? 'pr-10 pl-4 text-right' : 'pl-10 pr-4 text-left'}`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -222,7 +228,7 @@ export function Products() {
             setSearchInput('');
             setSearchTerm('');
           }}
-          className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors"
+          className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors ${isRtl ? 'left-3' : 'right-3'}`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
           <X className="w-4 h-4" />
@@ -231,35 +237,23 @@ export function Products() {
     </div>
   );
 
-  const CustomSelect = ({
-    value,
-    onChange,
-    children,
-    ariaLabel,
-  }: {
-    value: string;
-    onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
-    children: React.ReactNode;
-    ariaLabel: string;
-  }) => (
+  const CustomSelect = ({ value, onChange, children, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; children: React.ReactNode; ariaLabel: string }) => (
     <div className="relative group">
       <select
         value={value}
         onChange={onChange}
-        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-xs text-gray-700 hover:scale-[1.02] transform"
+        className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm appearance-none text-xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       >
         {children}
       </select>
-      <ChevronDown
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors`}
-      />
+      <ChevronDown className={`absolute top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors ${isRtl ? 'left-3' : 'right-3'}`} />
     </div>
   );
 
   return (
     <div className="mx-auto px-4 py-6 min-h-screen overflow-y-auto scrollbar-thin" dir={isRtl ? 'rtl' : 'ltr'}>
-      <div className="mb-4 flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-3">
+      <div className="mb-4 flex flex-col items-center gap-2">
         <div className="flex items-center gap-2">
           <Package className="w-6 h-6 text-amber-600" />
           <div>
@@ -272,7 +266,7 @@ export function Products() {
         {user?.role === 'admin' && (
           <button
             onClick={() => openModal()}
-            className="w-full sm:w-auto px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+            className="w-auto px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
             aria-label={isRtl ? 'إضافة منتج جديد' : 'Add New Product'}
           >
             <Plus className="w-3.5 h-3.5" />
@@ -407,7 +401,7 @@ export function Products() {
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder={isRtl ? 'أدخل اسم المنتج' : 'Enter product name'}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-xs"
                   />
                 </div>
                 <div>
@@ -419,7 +413,7 @@ export function Products() {
                     value={formData.nameEn}
                     onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
                     placeholder={isRtl ? 'أدخل الاسم بالإنجليزية' : 'Enter English name'}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-xs"
                   />
                 </div>
                 <div>
@@ -432,7 +426,7 @@ export function Products() {
                     onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                     placeholder={isRtl ? 'أدخل رمز المنتج' : 'Enter product code'}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-xs"
                   />
                 </div>
                 <div>
@@ -445,7 +439,7 @@ export function Products() {
                       value={formData.department}
                       onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                       required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-xs text-gray-700 hover:scale-[1.02] transform"
+                      className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm appearance-none text-xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'}`}
                     >
                       <option value="">{isRtl ? 'اختر القسم' : 'Select Department'}</option>
                       {departments.map((d) => (
@@ -455,7 +449,7 @@ export function Products() {
                       ))}
                     </select>
                     <ChevronDown
-                      className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors`}
+                      className={`absolute top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors ${isRtl ? 'left-3' : 'right-3'}`}
                     />
                   </div>
                 </div>
@@ -470,7 +464,7 @@ export function Products() {
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                     placeholder="0.00"
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-xs"
                   />
                 </div>
                 <div>
@@ -482,7 +476,7 @@ export function Products() {
                       id="unit"
                       value={formData.unit}
                       onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-xs text-gray-700 hover:scale-[1.02] transform"
+                      className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm appearance-none text-xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'}`}
                     >
                       {unitOptions.map((opt) => (
                         <option key={opt.value} value={opt.value}>
@@ -491,7 +485,7 @@ export function Products() {
                       ))}
                     </select>
                     <ChevronDown
-                      className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors`}
+                      className={`absolute top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors ${isRtl ? 'left-3' : 'right-3'}`}
                     />
                   </div>
                 </div>
