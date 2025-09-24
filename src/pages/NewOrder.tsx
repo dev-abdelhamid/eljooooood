@@ -1,7 +1,9 @@
+// في src/components/NewOrder.jsx
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { getUnitOptions, getDisplayUnit } from '../utils/units'; // استيراد الدوال الجديدة
 import { productsAPI, ordersAPI, branchesAPI, departmentAPI } from '../services/api';
 import { ShoppingCart, Plus, Minus, Trash2, Package, AlertCircle, Search, X, ChevronDown } from 'lucide-react';
 import { io } from 'socket.io-client';
@@ -39,6 +41,7 @@ interface OrderItem {
   product: Product;
   quantity: number;
   price: number;
+  unit: string; // الوحدة المختارة
 }
 
 interface Toast {
@@ -111,7 +114,7 @@ export function NewOrder() {
         const productsWithDisplay = productsResponse.data.map((product: Product) => ({
           ...product,
           displayName: language === 'ar' ? product.name : (product.nameEn || product.name),
-          displayUnit: language === 'ar' ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
+          displayUnit: language === 'ar' ? product.unit : product.unitEn, // نستخدم unit مباشرة
         }));
         setProducts(productsWithDisplay);
         setTotalPages(productsResponse.totalPages);
@@ -163,10 +166,21 @@ export function NewOrder() {
       const existingItem = prev.find((item) => item.productId === product._id);
       if (existingItem) {
         return prev.map((item) =>
-          item.productId === product._id ? { ...item, quantity: item.quantity + 1 } : item
+          item.productId === product._id
+            ? { ...item, quantity: item.quantity + 1, unit: item.unit || product.unit || 'قطعة' }
+            : item
         );
       }
-      return [...prev, { productId: product._id, product, quantity: 1, price: product.price }];
+      return [
+        ...prev,
+        {
+          productId: product._id,
+          product,
+          quantity: 1,
+          price: product.price,
+          unit: product.unit || 'قطعة', // الوحدة الافتراضية
+        },
+      ];
     });
   }, []);
 
@@ -176,7 +190,21 @@ export function NewOrder() {
       return;
     }
     setOrderItems((prev) =>
-      prev.map((item) => (item.productId === productId ? { ...item, quantity } : item))
+      prev.map((item) => {
+        if (item.productId === productId) {
+          // التحقق من الوحدات المتاحة بناءً على الكمية الجديدة
+          const availableUnits = getUnitOptions(products, language, quantity).map((u) => u.value);
+          const newUnit = availableUnits.includes(item.unit) ? item.unit : availableUnits[0] || 'قطعة';
+          return { ...item, quantity, unit: newUnit };
+        }
+        return item;
+      })
+    );
+  }, [products, language]);
+
+  const updateUnit = useCallback((productId: string, unit: string) => {
+    setOrderItems((prev) =>
+      prev.map((item) => (item.productId === productId ? { ...item, unit } : item))
     );
   }, []);
 
@@ -224,6 +252,7 @@ export function NewOrder() {
           productId: item.productId,
           quantity: item.quantity,
           price: item.price,
+          unit: item.unit, // إضافة الوحدة
         })),
         status: 'pending',
         notes: notes.trim() || undefined,
@@ -292,7 +321,7 @@ export function NewOrder() {
                 {orderItems.map((item) => (
                   <li key={item.productId} className="flex justify-between text-sm text-gray-700">
                     <span>
-                      {item.product.displayName} (x{item.quantity})
+                      {item.product.displayName} (x{item.quantity}) {item.unit ? ` - ${getDisplayUnit(item.unit, item.quantity, language)}` : ''}
                     </span>
                     <span>
                       {(item.price * item.quantity).toFixed(2)} {isRtl ? 'ريال' : 'SAR'}
@@ -399,6 +428,8 @@ export function NewOrder() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredProducts.map((product) => {
                 const cartItem = orderItems.find((item) => item.productId === product._id);
+                // جلب الوحدات المتاحة بناءً على الكمية
+                const unitOptions = getUnitOptions(products, language, cartItem?.quantity || 1);
                 return (
                   <div
                     key={product._id}
@@ -407,7 +438,7 @@ export function NewOrder() {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between gap-4">
                         <h3 className="font-semibold text-gray-900 text-base truncate">
-                          {product.displayName}
+                          {product.displayName} {/* الاسم بيظهر باللغة الصحيحة */}
                         </h3>
                         <p className="text-xs text-gray-500">{product.code}</p>
                       </div>
@@ -415,29 +446,43 @@ export function NewOrder() {
                         {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
                       </p>
                       <p className="font-semibold text-gray-900 text-sm">
-                        {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
+                        {product.price} {isRtl ? 'ريال' : 'SAR'} / {getDisplayUnit(product.unit || 'قطعة', cartItem?.quantity || 1, language)}
                       </p>
                       {product.description && (
                         <p className="text-xs text-gray-600 line-clamp-2">{product.description}</p>
                       )}
-                      <div className="flex justify-end gap-2">
+                      <div className="flex flex-col gap-2">
                         {cartItem ? (
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => updateQuantity(product._id, cartItem.quantity - 1)}
-                              className="w-8 h-8 bg-gray-200 rounded-full hover:bg-gray-300 transition-colors flex items-center justify-center"
-                              aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => updateQuantity(product._id, cartItem.quantity - 1)}
+                                className="w-8 h-8 bg-gray-200 rounded-full hover:bg-gray-300 transition-colors flex items-center justify-center"
+                                aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
+                              >
+                                <Minus className="w-4 h-4" />
+                              </button>
+                              <span className="w-8 text-center font-medium text-md">{cartItem.quantity}</span>
+                              <button
+                                onClick={() => updateQuantity(product._id, cartItem.quantity + 1)}
+                                className="w-8 h-8 bg-amber-600 rounded-full hover:bg-amber-700 transition-colors flex items-center justify-center"
+                                aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
+                              >
+                                <Plus className="w-4 h-4 text-white" />
+                              </button>
+                            </div>
+                            <select
+                              value={cartItem.unit}
+                              onChange={(e) => updateUnit(product._id, e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
+                              aria-label={isRtl ? 'اختيار الوحدة' : 'Select unit'}
                             >
-                              <Minus className="w-4 h-4" />
-                            </button>
-                            <div className="w-8 h-8 text-center font-medium text-md">{cartItem.quantity}</div>
-                            <button
-                              onClick={() => updateQuantity(product._id, cartItem.quantity + 1)}
-                              className="w-8 h-8 bg-amber-600 rounded-full hover:bg-amber-700 transition-colors flex items-center justify-center"
-                              aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
-                            >
-                              <Plus className="w-4 h-4 text-white" />
-                            </button>
+                              {unitOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
                           </div>
                         ) : (
                           <button
@@ -497,7 +542,7 @@ export function NewOrder() {
                         {item.product.displayName}
                       </p>
                       <p className="text-xs text-gray-600">
-                        {item.price} {isRtl ? 'ريال' : 'SAR'} / {item.product.displayUnit}
+                        {item.price} {isRtl ? 'ريال' : 'SAR'} / {getDisplayUnit(item.unit, item.quantity, language)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">

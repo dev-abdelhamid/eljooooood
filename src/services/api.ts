@@ -132,21 +132,21 @@ export const authAPI = {
 };
 
 export const productsAPI = {
-  getAll: async (params: { department?: string; search?: string; page?: number; limit?: number } = {}) => {
+  getAll: async (params: { department?: string; search?: string; page?: number; limit?: number; lang?: string } = {}) => {
     if (params.department && !isValidObjectId(params.department)) {
       console.error(`[${new Date().toISOString()}] productsAPI.getAll - Invalid department ID:`, params.department);
       throw new Error(isRtl ? 'معرف القسم غير صالح' : 'Invalid department ID');
     }
-    const response = await api.get('/products', { params });
+    const response = await api.get('/products', { params: { ...params, lang: isRtl ? 'ar' : 'en' } });
     console.log(`[${new Date().toISOString()}] productsAPI.getAll - Response:`, response);
     return response; // Returns { data: Product[], totalPages: number, currentPage: number, totalItems: number }
   },
-  getById: async (id: string) => {
+  getById: async (id: string, lang: string = isRtl ? 'ar' : 'en') => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] productsAPI.getById - Invalid product ID:`, id);
       throw new Error(isRtl ? 'معرف المنتج غير صالح' : 'Invalid product ID');
     }
-    const response = await api.get(`/products/${id}`);
+    const response = await api.get(`/products/${id}`, { params: { lang } });
     console.log(`[${new Date().toISOString()}] productsAPI.getById - Response:`, response);
     return response;
   },
@@ -157,12 +157,15 @@ export const productsAPI = {
     department: string;
     price: number;
     unit: string;
-    unitEn?: string;
     description?: string;
   }) => {
     if (!isValidObjectId(productData.department)) {
       console.error(`[${new Date().toISOString()}] productsAPI.create - Invalid department ID:`, productData.department);
       throw new Error(isRtl ? 'معرف القسم غير صالح' : 'Invalid department ID');
+    }
+    if (!productData.unit) {
+      console.error(`[${new Date().toISOString()}] productsAPI.create - Unit is required`);
+      throw new Error(isRtl ? 'الوحدة مطلوبة' : 'Unit is required');
     }
     const response = await api.post('/products', {
       name: productData.name.trim(),
@@ -170,8 +173,7 @@ export const productsAPI = {
       code: productData.code.trim(),
       department: productData.department,
       price: productData.price,
-      unit: productData.unit?.trim(),
-      unitEn: productData.unitEn?.trim(),
+      unit: productData.unit.trim(),
       description: productData.description?.trim(),
     });
     console.log(`[${new Date().toISOString()}] productsAPI.create - Response:`, response);
@@ -184,7 +186,6 @@ export const productsAPI = {
     department: string;
     price: number;
     unit: string;
-    unitEn?: string;
     description: string;
   }>) => {
     if (!isValidObjectId(id)) {
@@ -195,6 +196,10 @@ export const productsAPI = {
       console.error(`[${new Date().toISOString()}] productsAPI.update - Invalid department ID:`, productData.department);
       throw new Error(isRtl ? 'معرف القسم غير صالح' : 'Invalid department ID');
     }
+    if (productData.unit !== undefined && !productData.unit) {
+      console.error(`[${new Date().toISOString()}] productsAPI.update - Unit is required`);
+      throw new Error(isRtl ? 'الوحدة مطلوبة' : 'Unit is required');
+    }
     const response = await api.put(`/products/${id}`, {
       name: productData.name?.trim(),
       nameEn: productData.nameEn?.trim(),
@@ -202,7 +207,6 @@ export const productsAPI = {
       department: productData.department,
       price: productData.price,
       unit: productData.unit?.trim(),
-      unitEn: productData.unitEn?.trim(),
       description: productData.description?.trim(),
     });
     console.log(`[${new Date().toISOString()}] productsAPI.update - Response:`, response);
@@ -218,7 +222,6 @@ export const productsAPI = {
     return response;
   },
 };
-
 export const branchesAPI = {
   getAll: async () => {
     const response = await api.get('/branches');
