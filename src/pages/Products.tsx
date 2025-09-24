@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { productsAPI, departmentAPI } from '../services/api';
 import { Package, Plus, Edit2, Trash2, Search, AlertCircle, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
+import { motion, AnimatePresence } from 'framer-motion'; // Added for animations
 
 interface Product {
   _id: string;
@@ -47,13 +48,18 @@ export function Products() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Cache products to avoid redundant API calls
+  const [cachedProducts, setCachedProducts] = useState<Product[]>([]);
+
+  // Debounced search function
   const debouncedSearch = useCallback(
     debounce((value: string) => {
       setSearchTerm(value);
-    }, 500),
+    }, 300), // Reduced debounce time for faster response
     []
   );
 
+  // Fetch data with caching
   useEffect(() => {
     if (!user || !['admin'].includes(user.role)) {
       setError(isRtl ? 'غير مصرح' : 'Unauthorized');
@@ -74,6 +80,8 @@ export function Products() {
           displayName: isRtl ? product.name : (product.nameEn || product.name),
           displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
         }));
+
+        setCachedProducts(productsWithDisplay); // Cache the fetched products
         setProducts(productsWithDisplay);
         setDepartments(departmentsResponse.data);
         setError('');
@@ -85,8 +93,19 @@ export function Products() {
         setLoading(false);
       }
     };
+
     fetchData();
   }, [isRtl, user, filterDepartment, searchTerm]);
+
+  // Filter products locally if possible to reduce API calls
+  const filteredProducts = useMemo(() => {
+    if (!searchTerm && !filterDepartment) return cachedProducts;
+    return cachedProducts.filter((product) => {
+      const matchesSearch = product.displayName.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesDepartment = filterDepartment ? product.department._id === filterDepartment : true;
+      return matchesSearch && matchesDepartment;
+    });
+  }, [cachedProducts, searchTerm, filterDepartment]);
 
   const openModal = (product?: Product) => {
     if (!user || !['admin'].includes(user.role)) {
@@ -145,28 +164,27 @@ export function Products() {
       };
       if (editingProduct) {
         const updatedProduct = await productsAPI.update(editingProduct._id, productData);
+        const updatedProductWithDisplay = {
+          ...updatedProduct,
+          displayName: isRtl ? updatedProduct.name : (updatedProduct.nameEn || updatedProduct.name),
+          displayUnit: isRtl ? (updatedProduct.unit || 'غير محدد') : (updatedProduct.unitEn || updatedProduct.unit || 'N/A'),
+        };
+        setCachedProducts(
+          cachedProducts.map((p) => (p._id === editingProduct._id ? updatedProductWithDisplay : p))
+        );
         setProducts(
-          products.map((p) =>
-            p._id === editingProduct._id
-              ? {
-                  ...updatedProduct,
-                  displayName: isRtl ? updatedProduct.name : (updatedProduct.nameEn || updatedProduct.name),
-                  displayUnit: isRtl ? (updatedProduct.unit || 'غير محدد') : (updatedProduct.unitEn || updatedProduct.unit || 'N/A'),
-                }
-              : p
-          )
+          products.map((p) => (p._id === editingProduct._id ? updatedProductWithDisplay : p))
         );
         toast.success(isRtl ? 'تم تحديث المنتج بنجاح' : 'Product updated successfully');
       } else {
         const newProduct = await productsAPI.create(productData);
-        setProducts([
-          ...products,
-          {
-            ...newProduct,
-            displayName: isRtl ? newProduct.name : (newProduct.nameEn || newProduct.name),
-            displayUnit: isRtl ? (newProduct.unit || 'غير محدد') : (newProduct.unitEn || newProduct.unit || 'N/A'),
-          },
-        ]);
+        const newProductWithDisplay = {
+          ...newProduct,
+          displayName: isRtl ? newProduct.name : (newProduct.nameEn || newProduct.name),
+          displayUnit: isRtl ? (newProduct.unit || 'غير محدد') : (newProduct.unitEn || newProduct.unit || 'N/A'),
+        };
+        setCachedProducts([...cachedProducts, newProductWithDisplay]);
+        setProducts([...products, newProductWithDisplay]);
         toast.success(isRtl ? 'تم إنشاء المنتج بنجاح' : 'Product created successfully');
       }
       closeModal();
@@ -185,6 +203,7 @@ export function Products() {
     if (confirm(isRtl ? 'هل أنت متأكد من حذف المنتج؟' : 'Are you sure you want to delete this product?')) {
       try {
         await productsAPI.delete(id);
+        setCachedProducts(cachedProducts.filter((p) => p._id !== id));
         setProducts(products.filter((p) => p._id !== id));
         toast.success(isRtl ? 'تم حذف المنتج بنجاح' : 'Product deleted successfully');
       } catch (err: any) {
@@ -207,27 +226,28 @@ export function Products() {
     ariaLabel: string;
   }) => (
     <div className="relative group">
-      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500" />
-      <input
-        type="text"
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className="w-full pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400"
-        aria-label={ariaLabel}
-      />
-      {value && (
+      {value ? (
         <button
           onClick={() => {
             setSearchInput('');
             setSearchTerm('');
           }}
-          className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors"
+          className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors"
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
           <X className="w-4 h-4" />
         </button>
+      ) : (
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500" />
       )}
+      <input
+        type="text"
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400"
+        aria-label={ariaLabel}
+      />
     </div>
   );
 
@@ -246,7 +266,7 @@ export function Products() {
       <select
         value={value}
         onChange={onChange}
-        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-xs text-gray-700 hover:scale-[1.02] transform"
+        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-xs text-gray-700"
         aria-label={ariaLabel}
       >
         {children}
@@ -315,7 +335,7 @@ export function Products() {
           </div>
         </div>
         <div className="text-center text-xs text-gray-600">
-          {isRtl ? `عدد المنتجات: ${products.length}` : `Products Count: ${products.length}`}
+          {isRtl ? `عدد المنتجات: ${filteredProducts.length}` : `Products Count: ${filteredProducts.length}`}
         </div>
 
         {loading ? (
@@ -330,7 +350,7 @@ export function Products() {
               </div>
             ))}
           </div>
-        ) : products.length === 0 ? (
+        ) : filteredProducts.length === 0 ? (
           <div className="p-6 text-center bg-white rounded-xl shadow-sm">
             <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
             <p className="text-gray-600 text-xs">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
@@ -346,52 +366,69 @@ export function Products() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {products.map((product) => (
-              <div
-                key={product._id}
-                className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between"
-              >
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="font-semibold text-gray-900 text-sm truncate">
-                      {product.displayName}
-                    </h3>
-                    <p className="text-xs text-gray-500">{product.code}</p>
+            <AnimatePresence>
+              {filteredProducts.map((product) => (
+                <motion.div
+                  key={product._id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3, ease: 'easeOut' }}
+                  className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col justify-between"
+                >
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="font-semibold text-gray-900 text-sm truncate">
+                        {product.displayName}
+                      </h3>
+                      <p className="text-xs text-gray-500">{product.code}</p>
+                    </div>
+                    <p className="text-xs text-amber-600">
+                      {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
+                    </p>
+                    <p className="font-semibold text-gray-900 text-xs">
+                      {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
+                    </p>
                   </div>
-                  <p className="text-xs text-amber-600">
-                    {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
-                  </p>
-                  <p className="font-semibold text-gray-900 text-xs">
-                    {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
-                  </p>
-                </div>
-                {user?.role === 'admin' && (
-                  <div className="mt-3 flex items-center justify-end gap-1.5">
-                    <button
-                      onClick={() => openModal(product)}
-                      className="p-1.5 w-7 h-7 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center"
-                      title={isRtl ? 'تعديل' : 'Edit'}
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => deleteProduct(product._id)}
-                      className="p-1.5 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center"
-                      title={isRtl ? 'حذف' : 'Delete'}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
+                  {user?.role === 'admin' && (
+                    <div className="mt-3 flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => openModal(product)}
+                        className="p-1.5 w-7 h-7 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center"
+                        title={isRtl ? 'تعديل' : 'Edit'}
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => deleteProduct(product._id)}
+                        className="p-1.5 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center"
+                        title={isRtl ? 'حذف' : 'Delete'}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
         )}
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        >
+          <motion.div
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5"
+          >
             <h3 className="text-lg font-semibold text-gray-900 mb-3">
               {editingProduct ? (isRtl ? 'تعديل المنتج' : 'Edit Product') : (isRtl ? 'إضافة منتج جديد' : 'Add New Product')}
             </h3>
@@ -445,7 +482,7 @@ export function Products() {
                       value={formData.department}
                       onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                       required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-xs text-gray-700 hover:scale-[1.02] transform"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-xs text-gray-700"
                     >
                       <option value="">{isRtl ? 'اختر القسم' : 'Select Department'}</option>
                       {departments.map((d) => (
@@ -482,7 +519,7 @@ export function Products() {
                       id="unit"
                       value={formData.unit}
                       onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-xs text-gray-700 hover:scale-[1.02] transform"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-xs text-gray-700"
                     >
                       {unitOptions.map((opt) => (
                         <option key={opt.value} value={opt.value}>
@@ -521,7 +558,7 @@ export function Products() {
               </div>
             </form>
           </div>
-        </div>
+        </motion.div>
       )}
     </div>
   );
