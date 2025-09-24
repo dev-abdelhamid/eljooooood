@@ -606,62 +606,20 @@ export const departmentAPI = {
   },
 };
 export const chefsAPI = {
-  getAll: async (params: { isRtl?: boolean } = {}) => {
-    try {
-      const response = await api.get('/chefs', { params });
-      console.log(`[${new Date().toISOString()}] chefsAPI.getAll - Response:`, response);
-      return response.data;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.getAll - Error:`, error);
-      throw new Error(error.response?.data?.message || 'Failed to fetch chefs');
-    }
+  getAll: async () => {
+    const response = await api.get('/chefs');
+    console.log(`[${new Date().toISOString()}] chefsAPI.getAll - Response:`, response);
+    return response;
   },
-
-  getById: async (id: string, params: { isRtl?: boolean } = {}) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.getById - Invalid chef ID:`, id);
-      throw new Error('Invalid chef ID');
-    }
-    try {
-      const response = await api.get(`/chefs/${id}`, { params });
-      console.log(`[${new Date().toISOString()}] chefsAPI.getById - Response:`, response);
-      return response.data;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.getById - Error:`, error);
-      throw new Error(error.response?.data?.message || 'Failed to fetch chef');
-    }
-  },
-
-  getByUserId: async (userId: string, params: { isRtl?: boolean } = {}) => {
+  getByUserId: async (userId: string) => {
     if (!isValidObjectId(userId)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.getByUserId - Invalid user ID:`, userId);
       throw new Error('Invalid user ID');
     }
-    try {
-      const response = await api.get(`/chefs/by-user/${userId}`, { params });
-      console.log(`[${new Date().toISOString()}] chefsAPI.getByUserId - Response:`, response);
-      return response.data;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.getByUserId - Error:`, error);
-      throw new Error(error.response?.data?.message || 'Failed to fetch chef by user ID');
-    }
+    const response = await api.get(`/chefs/by-user/${userId}`);
+    console.log(`[${new Date().toISOString()}] chefsAPI.getByUserId - Response:`, response);
+    return response;
   },
-
-  getStatistics: async (id: string, params: { isRtl?: boolean } = {}) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.getStatistics - Invalid chef ID:`, id);
-      throw new Error('Invalid chef ID');
-    }
-    try {
-      const response = await api.get(`/chefs/${id}/statistics`, { params });
-      console.log(`[${new Date().toISOString()}] chefsAPI.getStatistics - Response:`, response);
-      return response.data;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.getStatistics - Error:`, error);
-      throw new Error(error.response?.data?.message || 'Failed to fetch chef statistics');
-    }
-  },
-
   create: async (chefData: {
     user: {
       name: string;
@@ -675,28 +633,22 @@ export const chefsAPI = {
     };
     department: string;
   }) => {
-    try {
-      const response = await api.post('/chefs', {
-        user: {
-          name: chefData.user.name.trim(),
-          nameEn: chefData.user.nameEn?.trim(),
-          username: chefData.user.username.trim(),
-          email: chefData.user.email?.trim(),
-          phone: chefData.user.phone?.trim(),
-          password: chefData.user.password,
-          role: chefData.user.role,
-          isActive: chefData.user.isActive ?? true,
-        },
-        department: chefData.department,
-      });
-      console.log(`[${new Date().toISOString()}] chefsAPI.create - Response:`, response);
-      return response.data;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.create - Error:`, error);
-      throw new Error(error.response?.data?.message || 'Failed to create chef');
-    }
+    const response = await api.post('/chefs', {
+      user: {
+        name: chefData.user.name.trim(),
+        nameEn: chefData.user.nameEn?.trim(),
+        username: chefData.user.username.trim(),
+        email: chefData.user.email?.trim(),
+        phone: chefData.user.phone?.trim(),
+        password: chefData.user.password,
+        role: chefData.user.role,
+        isActive: chefData.user.isActive ?? true,
+      },
+      department: chefData.department,
+    });
+    console.log(`[${new Date().toISOString()}] chefsAPI.create - Response:`, response);
+    return response;
   },
-
   update: async (id: string, chefData: {
     user: {
       name: string;
@@ -708,58 +660,38 @@ export const chefsAPI = {
     };
     department: string;
   }) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.update - Invalid chef ID:`, id);
-      throw new Error('Invalid chef ID');
-    }
-    try {
-      const response = await api.put(`/chefs/${id}`, {
-        user: {
-          name: chefData.user.name.trim(),
-          nameEn: chefData.user.nameEn?.trim(),
-          username: chefData.user.username.trim(),
-          email: chefData.user.email?.trim(),
-          phone: chefData.user.phone?.trim(),
-          isActive: chefData.user.isActive ?? true,
-        },
-        department: chefData.department,
-      });
-      console.log(`[${new Date().toISOString()}] chefsAPI.update - Response:`, response);
-      return response.data;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.update - Error:`, error);
-      throw new Error(error.response?.data?.message || 'Failed to update chef');
-    }
+ 
+    const response = await api.put(`/chefs/${id}`, {
+      user: {
+        name: chefData.user.name.trim(),
+        nameEn: chefData.user.nameEn?.trim(),
+        username: chefData.user.username.trim(),
+        email: chefData.user.email?.trim(),
+        phone: chefData.user.phone?.trim(),
+        isActive: chefData.user.isActive ?? true,
+      },
+      department: chefData.department,
+    });
+    console.log(`[${new Date().toISOString()}] chefsAPI.update - Response:`, response);
+    return response;
   },
-
   delete: async (id: string) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.delete - Invalid chef ID:`, id);
       throw new Error('Invalid chef ID');
     }
-    try {
-      const response = await api.delete(`/chefs/${id}`);
-      console.log(`[${new Date().toISOString()}] chefsAPI.delete - Response:`, response);
-      return response.data;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.delete - Error:`, error);
-      throw new Error(error.response?.data?.message || 'Failed to delete chef');
-    }
+    const response = await api.delete(`/chefs/${id}`);
+    console.log(`[${new Date().toISOString()}] chefsAPI.delete - Response:`, response);
+    return response;
   },
-
   resetPassword: async (id: string, password: string) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.resetPassword - Invalid chef ID:`, id);
       throw new Error('Invalid chef ID');
     }
-    try {
-      const response = await api.post(`/chefs/${id}/reset-password`, { password });
-      console.log(`[${new Date().toISOString()}] chefsAPI.resetPassword - Response:`, response);
-      return response.data;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.resetPassword - Error:`, error);
-      throw new Error(error.response?.data?.message || 'Failed to reset password');
-    }
+    const response = await api.post(`/chefs/${id}/reset-password`, { password });
+    console.log(`[${new Date().toISOString()}] chefsAPI.resetPassword response:`, response);
+    return response;
   },
 };
 
