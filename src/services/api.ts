@@ -131,22 +131,38 @@ export const authAPI = {
   },
 };
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 export const productsAPI = {
-  getAll: async (params: { department?: string; search?: string; page?: number; limit?: number; lang?: string } = {}) => {
+  getAll: async (params: { department?: string; search?: string; page?: number; limit?: number; lang?: string; quantity?: number } = {}) => {
     if (params.department && !isValidObjectId(params.department)) {
       console.error(`[${new Date().toISOString()}] productsAPI.getAll - Invalid department ID:`, params.department);
       throw new Error(isRtl ? 'معرف القسم غير صالح' : 'Invalid department ID');
     }
-    const response = await api.get('/products', { params: { ...params, lang: isRtl ? 'ar' : 'en' } });
+    const response = await api.get('/products', { params: { ...params, lang: isRtl ? 'ar' : 'en', quantity: params.quantity || 1 } });
     console.log(`[${new Date().toISOString()}] productsAPI.getAll - Response:`, response);
-    return response; // Returns { data: Product[], totalPages: number, currentPage: number, totalItems: number }
+    return response;
   },
-  getById: async (id: string, lang: string = isRtl ? 'ar' : 'en') => {
+  getById: async (id: string, quantity: number = 1, lang: string = isRtl ? 'ar' : 'en') => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] productsAPI.getById - Invalid product ID:`, id);
       throw new Error(isRtl ? 'معرف المنتج غير صالح' : 'Invalid product ID');
     }
-    const response = await api.get(`/products/${id}`, { params: { lang } });
+    const response = await api.get(`/products/${id}`, { params: { lang, quantity } });
     console.log(`[${new Date().toISOString()}] productsAPI.getById - Response:`, response);
     return response;
   },
@@ -222,6 +238,38 @@ export const productsAPI = {
     return response;
   },
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 export const branchesAPI = {
   getAll: async () => {
     const response = await api.get('/branches');
