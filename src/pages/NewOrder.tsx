@@ -41,255 +41,6 @@ interface OrderItem {
   price: number;
 }
 
-const OrderInput = ({
-  id,
-  value,
-  onChange,
-  placeholder,
-  ariaLabel,
-  onClear,
-}: {
-  id: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  placeholder: string;
-  ariaLabel: string;
-  onClear: () => void;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  return (
-    <div className="relative group">
-      <motion.div
-        initial={{ opacity: value ? 0 : 1 }}
-        animate={{ opacity: value ? 0 : 1 }}
-        transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500`}
-      >
-        <Search />
-      </motion.div>
-      <input
-        id={id}
-        type="text"
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pr-11 pl-4' : 'pl-11 pr-4'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-amber-50 shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
-        aria-label={ariaLabel}
-      />
-      <motion.div
-        initial={{ opacity: value ? 1 : 0 }}
-        animate={{ opacity: value ? 1 : 0 }}
-        transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
-      >
-        <button onClick={onClear} aria-label={isRtl ? 'مسح البحث' : 'Clear search'}>
-          <X className="w-5 h-5" />
-        </button>
-      </motion.div>
-    </div>
-  );
-};
-
-const OrderDropdown = ({
-  id,
-  value,
-  onChange,
-  options,
-  ariaLabel,
-  disabled = false,
-}: {
-  id: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-  ariaLabel: string;
-  disabled?: boolean;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  const [isOpen, setIsOpen] = useState(false);
-  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { label: isRtl ? 'كل الأقسام' : 'All Departments' };
-  return (
-    <div className="relative group">
-      <motion.button
-        onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-amber-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-        aria-label={ariaLabel}
-      >
-        <span className="truncate">{selectedOption.label}</span>
-        <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
-          <ChevronDown className="w-5 h-5 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
-        </motion.div>
-      </motion.button>
-      <AnimatePresence>
-        {isOpen && !disabled && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            className="absolute w-full mt-2 bg-white rounded-lg shadow-xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-thin"
-          >
-            {options.map((option) => (
-              <div
-                key={option.value}
-                onClick={() => {
-                  onChange(option.value);
-                  setIsOpen(false);
-                }}
-                className="px-4 py-2 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
-              >
-                {option.label}
-              </div>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
-
-const OrderTextarea = ({
-  id,
-  value,
-  onChange,
-  placeholder,
-  ariaLabel,
-}: {
-  id: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-  placeholder: string;
-  ariaLabel: string;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  return (
-    <div className="relative group">
-      <textarea
-        id={id}
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-amber-50 shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
-        rows={4}
-        aria-label={ariaLabel}
-      />
-    </div>
-  );
-};
-
-const OrderQuantityInput = ({
-  value,
-  onChange,
-  onIncrement,
-  onDecrement,
-}: {
-  value: number;
-  onChange: (val: string) => void;
-  onIncrement: () => void;
-  onDecrement: () => void;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  return (
-    <div className="flex items-center gap-2">
-      <motion.button
-        onClick={onDecrement}
-        className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors duration-200 flex items-center justify-center"
-        aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
-      >
-        <Minus className="w-4 h-4 text-gray-700" />
-      </motion.button>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-12 h-8 text-center border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-amber-50 shadow-sm hover:shadow-md transition-all duration-200"
-        style={{ appearance: 'none' }}
-        aria-label={isRtl ? 'الكمية' : 'Quantity'}
-      />
-      <motion.button
-        onClick={onIncrement}
-        className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors duration-200 flex items-center justify-center"
-        aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
-      >
-        <Plus className="w-4 h-4 text-white" />
-      </motion.button>
-    </div>
-  );
-};
-
-const OrderCard = ({
-  product,
-  cartItem,
-  addToOrder,
-  updateQuantity,
-  handleQuantityInput,
-}: {
-  product: Product;
-  cartItem: OrderItem | undefined;
-  addToOrder: (product: Product) => void;
-  updateQuantity: (productId: string, quantity: number) => void;
-  handleQuantityInput: (productId: string, value: string) => void;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      transition={{ duration: 0.2 }}
-      className="p-5 bg-gradient-to-br from-white to-gray-50 rounded-lg shadow-sm border border-gray-100 hover:border-amber-200 transition-all duration-200 flex flex-col justify-between"
-    >
-      <div className="space-y-2">
-        <div className="flex items-center justify-between gap-3">
-          <h3 className="font-semibold text-gray-900 text-sm truncate">{product.displayName}</h3>
-          <p className="text-xs text-gray-500">{product.code}</p>
-        </div>
-        <p className="text-xs text-amber-600">
-          {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
-        </p>
-        <p className="font-semibold text-gray-900 text-sm">
-          {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
-        </p>
-      </div>
-      <div className="mt-4 flex justify-end">
-        {cartItem ? (
-          <OrderQuantityInput
-            value={cartItem.quantity}
-            onChange={(val) => handleQuantityInput(product._id, val)}
-            onIncrement={() => updateQuantity(product._id, cartItem.quantity + 1)}
-            onDecrement={() => updateQuantity(product._id, cartItem.quantity - 1)}
-          />
-        ) : (
-          <motion.button
-            onClick={() => addToOrder(product)}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors duration-200 flex items-center justify-center gap-2 shadow-sm"
-            aria-label={isRtl ? 'إضافة إلى السلة' : 'Add to Cart'}
-          >
-            <Plus className="w-4 h-4" />
-            {isRtl ? 'إضافة إلى السلة' : 'Add to Cart'}
-          </motion.button>
-        )}
-      </div>
-    </motion.div>
-  );
-};
-
-const OrderSkeletonCard = () => (
-  <div className="p-5 bg-white rounded-lg shadow-sm border border-gray-100">
-    <div className="space-y-3 animate-pulse">
-      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-      <div className="h-3 bg-gray-200 rounded w-1/4"></div>
-      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-      <div className="h-8 bg-gray-200 rounded w-1/3 mt-4"></div>
-    </div>
-  </div>
-);
-
 export function NewOrder() {
   const { user } = useAuth();
   const { language } = useLanguage();
@@ -310,12 +61,13 @@ export function NewOrder() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const socket = useMemo(() => io('https://eljoodia-server-production.up.railway.app'), []);
 
   const debouncedSearch = useCallback(
     debounce((value: string) => {
-      setSearchTerm(value.trim().toLowerCase());
+      setSearchTerm(value.trim());
     }, 500),
     []
   );
@@ -326,11 +78,6 @@ export function NewOrder() {
     if (value.length >= 2 || value === '') {
       debouncedSearch(value);
     }
-  };
-
-  const handleClearSearch = () => {
-    setSearchInput('');
-    setSearchTerm('');
   };
 
   useEffect(() => {
@@ -344,11 +91,7 @@ export function NewOrder() {
       try {
         setLoading(true);
         const [productsResponse, branchesResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({
-            department: filterDepartment,
-            search: searchTerm,
-            limit: 0,
-          }),
+          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 0 }),
           branchesAPI.getAll(),
           departmentAPI.getAll({ limit: 100 }),
         ]);
@@ -409,17 +152,14 @@ export function NewOrder() {
     );
   }, []);
 
-  const handleQuantityInput = useCallback(
-    (productId: string, value: string) => {
-      const quantity = parseInt(value) || 0;
-      if (value === '' || quantity <= 0) {
-        updateQuantity(productId, 0);
-        return;
-      }
-      updateQuantity(productId, quantity);
-    },
-    [updateQuantity]
-  );
+  const handleQuantityInput = useCallback((productId: string, value: string) => {
+    const quantity = parseInt(value) || 0;
+    if (value === '' || quantity <= 0) {
+      updateQuantity(productId, 0);
+      return;
+    }
+    updateQuantity(productId, quantity);
+  }, [updateQuantity]);
 
   const removeFromOrder = useCallback((productId: string) => {
     setOrderItems((prev) => prev.filter((item) => item.productId !== productId));
@@ -486,11 +226,11 @@ export function NewOrder() {
   };
 
   return (
-    <div className={`mx-auto px-4 py-8 min-h-screen overflow-y-auto scrollbar-thin ${isRtl ? 'font-arabic' : 'font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="mx-auto px-4 py-8 min-h-screen overflow-y-auto scrollbar-thin" dir={isRtl ? 'rtl' : 'ltr'}>
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2 }}
+        transition={{ duration: 0.3 }}
         className="mb-6 flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-4"
       >
         <div className="flex items-center gap-3">
@@ -508,9 +248,8 @@ export function NewOrder() {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          transition={{ duration: 0.2 }}
-          className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 shadow-sm"
+          transition={{ duration: 0.3 }}
+          className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3"
         >
           <AlertCircle className="w-5 h-5 text-red-600" />
           <span className="text-red-600 text-sm">{error}</span>
@@ -521,7 +260,7 @@ export function NewOrder() {
         <div className={`lg:hidden fixed bottom-6 ${isRtl ? 'left-6' : 'right-6'} z-50`}>
           <motion.button
             onClick={scrollToSummary}
-            className="p-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-sm transition-colors duration-200"
+            className="p-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg transition-colors duration-200"
             aria-label={isRtl ? 'التمرير للملخص' : 'Scroll to Summary'}
           >
             <ChevronDown className="w-6 h-6" />
@@ -535,7 +274,7 @@ export function NewOrder() {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}
-            className="p-5 bg-gradient-to-br from-white to-gray-50 rounded-lg shadow-sm border border-gray-100"
+            className="p-5 bg-gradient-to-r from-white to-gray-50 rounded-xl shadow-lg"
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <OrderInput
@@ -572,7 +311,7 @@ export function NewOrder() {
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2 }}
-              className="p-8 text-center bg-gradient-to-br from-white to-gray-50 rounded-lg shadow-sm border border-gray-100 mt-4"
+              className="p-8 text-center bg-gradient-to-r from-white to-gray-50 rounded-xl shadow-lg mt-4"
             >
               <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 text-sm">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
@@ -583,14 +322,48 @@ export function NewOrder() {
                 {products.map((product, index) => {
                   const cartItem = orderItems.find((item) => item.productId === product._id);
                   return (
-                    <OrderCard
+                    <motion.div
                       key={product._id}
-                      product={product}
-                      cartItem={cartItem}
-                      addToOrder={addToOrder}
-                      updateQuantity={updateQuantity}
-                      handleQuantityInput={handleQuantityInput}
-                    />
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.2 }}
+                      className="p-5 bg-gradient-to-r from-white to-gray-50 rounded-xl shadow-lg transition-colors duration-200 flex flex-col justify-between border border-gray-100 hover:border-amber-200"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>
+                            {product.displayName}
+                          </h3>
+                          <p className="text-sm text-gray-500">{product.code}</p>
+                        </div>
+                        <p className="text-sm text-amber-600">
+                          {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
+                        </p>
+                        <p className="font-semibold text-gray-900 text-sm">
+                          {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
+                        </p>
+                      </div>
+                      <div className="mt-4 flex justify-end">
+                        {cartItem ? (
+                          <OrderQuantityInput
+                            value={cartItem.quantity}
+                            onChange={(val) => handleQuantityInput(product._id, val)}
+                            onIncrement={() => updateQuantity(product._id, cartItem.quantity + 1)}
+                            onDecrement={() => updateQuantity(product._id, cartItem.quantity - 1)}
+                          />
+                        ) : (
+                          <motion.button
+                            onClick={() => addToOrder(product)}
+                            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors duration-200 flex items-center justify-center gap-2 shadow-sm"
+                            aria-label={isRtl ? 'إضافة إلى السلة' : 'Add to Cart'}
+                          >
+                            <Plus className="w-4 h-4" />
+                            {isRtl ? 'إضافة إلى السلة' : 'Add to Cart'}
+                          </motion.button>
+                        )}
+                      </div>
+                    </motion.div>
                   );
                 })}
               </AnimatePresence>
@@ -606,8 +379,8 @@ export function NewOrder() {
             className="lg:col-span-1 lg:sticky lg:top-8 space-y-4 max-h-[calc(100vh-8rem)] overflow-y-auto scrollbar-thin"
             ref={summaryRef}
           >
-            <div className="p-5 bg-gradient-to-br from-white to-gray-50 rounded-lg shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">{isRtl ? 'ملخص الطلب' : 'Order Summary'}</h3>
+            <div className="p-5 bg-gradient-to-r from-white to-gray-50 rounded-xl shadow-lg border border-gray-100">
+              <h3 className="text-lg font-bold text-gray-900 mb-4">{isRtl ? 'ملخص الطلب' : 'Order Summary'}</h3>
               <div className="space-y-3">
                 <AnimatePresence>
                   {orderItems.map((item, index) => (
@@ -620,7 +393,7 @@ export function NewOrder() {
                       className="flex items-center justify-between p-3 bg-amber-50 rounded-lg border border-gray-100 hover:border-amber-200 transition-all duration-200"
                     >
                       <div className="flex-1">
-                        <p className="font-semibold text-gray-900 text-sm">{item.product.displayName}</p>
+                        <p className="font-bold text-gray-900 text-sm">{item.product.displayName}</p>
                         <p className="text-xs text-gray-600">
                           {item.price} {isRtl ? 'ريال' : 'SAR'} / {item.product.displayUnit}
                         </p>
@@ -644,7 +417,7 @@ export function NewOrder() {
                   ))}
                 </AnimatePresence>
                 <div className="border-t pt-3">
-                  <div className="flex justify-between font-semibold text-gray-900 text-sm">
+                  <div className="flex justify-between font-bold text-gray-900 text-sm">
                     <span>{isRtl ? 'الإجمالي النهائي' : 'Final Total'}:</span>
                     <span className="text-teal-600">
                       {getTotalAmount} {isRtl ? 'ريال' : 'SAR'}
@@ -657,7 +430,7 @@ export function NewOrder() {
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2 }}
-              className="p-5 bg-gradient-to-br from-white to-gray-50 rounded-lg shadow-sm border border-gray-100"
+              className="p-5 bg-gradient-to-r from-white to-gray-50 rounded-xl shadow-lg border border-gray-100"
             >
               <form onSubmit={handleSubmit} className="space-y-4">
                 {user?.role === 'admin' && (
@@ -695,7 +468,7 @@ export function NewOrder() {
                 <div className="flex gap-3">
                   <motion.button
                     onClick={clearOrder}
-                    className="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors duration-200 shadow-sm"
+                    className="flex-1 px-4 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm transition-colors duration-200 shadow-sm"
                     disabled={submitting || orderItems.length === 0}
                     aria-label={isRtl ? 'مسح الطلب' : 'Clear Order'}
                   >
@@ -703,7 +476,7 @@ export function NewOrder() {
                   </motion.button>
                   <motion.button
                     type="submit"
-                    className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors duration-200 shadow-sm"
+                    className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-colors duration-200 shadow-lg"
                     disabled={orderItems.length === 0 || submitting}
                     aria-label={submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'إرسال الطلب' : 'Submit Order')}
                   >
@@ -723,21 +496,21 @@ export function NewOrder() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
           >
             <motion.div
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
-              className="bg-white rounded-lg shadow-xl max-w-md p-6 w-[90vw]"
+              className="bg-white rounded-xl shadow-2xl max-w-md p-6 w-[90vw]"
             >
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">{isRtl ? 'تأكيد الطلب' : 'Confirm Order'}</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-4">{isRtl ? 'تأكيد الطلب' : 'Confirm Order'}</h3>
               <p className="text-sm text-gray-600 mb-6">{isRtl ? 'هل أنت متأكد من إرسال الطلب؟' : 'Are you sure you want to submit the order?'}</p>
               <div className="flex justify-end gap-3">
                 <motion.button
                   onClick={() => setShowConfirmModal(false)}
-                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors duration-200 shadow-sm"
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm transition-colors duration-200"
                   aria-label={isRtl ? 'إلغاء' : 'Cancel'}
                 >
                   {isRtl ? 'إلغاء' : 'Cancel'}
@@ -745,7 +518,7 @@ export function NewOrder() {
                 <motion.button
                   onClick={confirmOrder}
                   disabled={submitting}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors duration-200 shadow-sm disabled:opacity-50"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-colors duration-200 disabled:opacity-50"
                   aria-label={submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'تأكيد' : 'Confirm')}
                 >
                   {submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'تأكيد' : 'Confirm')}
