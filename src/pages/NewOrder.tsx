@@ -361,12 +361,12 @@ export function NewOrder() {
           <div className="p-6 bg-white rounded-2xl shadow-md">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="relative">
-                <Search className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 ${isRtl ? 'right-3' : 'left-3'}`} />
+                <Search className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 ${isRtl ? 'left-3' : 'right-3'}`} />
                 <input
                   type="text"
                   placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
                   onChange={(e) => debouncedSearch(e.target.value)}
-                  className={`w-full py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm ${isRtl ? 'pr-10 pl-4 text-right' : 'pl-10 pr-4 text-left'}`}
+                  className={`w-full py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm ${isRtl ? 'pr-r0 pl-4 text-right' : 'pr-10 pl-4 text-left'}`}
                   aria-label={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
                 />
               </div>
