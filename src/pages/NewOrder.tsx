@@ -7,7 +7,6 @@ import { ShoppingCart, Plus, Minus, Trash2, Package, AlertCircle, Search, X, Che
 import { io } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
-import { motion, AnimatePresence } from 'framer-motion';
 
 interface Product {
   _id: string;
@@ -41,6 +40,13 @@ interface OrderItem {
   price: number;
 }
 
+const priorityOptions = [
+  { value: 'low', labelAr: 'منخفض', labelEn: 'Low' },
+  { value: 'medium', labelAr: 'متوسط', labelEn: 'Medium' },
+  { value: 'high', labelAr: 'عالي', labelEn: 'High' },
+  { value: 'urgent', labelAr: 'عاجل', labelEn: 'Urgent' },
+];
+
 export function NewOrder() {
   const { user } = useAuth();
   const { language } = useLanguage();
@@ -54,6 +60,7 @@ export function NewOrder() {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [branch, setBranch] = useState<string>(user?.branchId?.toString() || '');
   const [notes, setNotes] = useState('');
+  const [priority, setPriority] = useState('medium');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -61,24 +68,15 @@ export function NewOrder() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   const socket = useMemo(() => io('https://eljoodia-server-production.up.railway.app'), []);
 
   const debouncedSearch = useCallback(
     debounce((value: string) => {
-      setSearchTerm(value.trim());
+      setSearchTerm(value);
     }, 500),
     []
   );
-
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchInput(value);
-    if (value.length >= 2 || value === '') {
-      debouncedSearch(value);
-    }
-  };
 
   useEffect(() => {
     if (!user || !['admin', 'branch'].includes(user.role)) {
@@ -110,7 +108,6 @@ export function NewOrder() {
         setError('');
       } catch (err: any) {
         setError(err.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
-        toast.error(err.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
       } finally {
         setLoading(false);
       }
@@ -153,8 +150,8 @@ export function NewOrder() {
   }, []);
 
   const handleQuantityInput = useCallback((productId: string, value: string) => {
-    const quantity = parseInt(value) || 0;
-    if (value === '' || quantity <= 0) {
+    const quantity = parseInt(value, 10);
+    if (value === '' || isNaN(quantity) || quantity <= 0) {
       updateQuantity(productId, 0);
       return;
     }
@@ -168,6 +165,7 @@ export function NewOrder() {
   const clearOrder = useCallback(() => {
     setOrderItems([]);
     setNotes('');
+    setPriority('medium');
     if (user?.role === 'admin') setBranch('');
     toast.success(isRtl ? 'تم مسح الطلب' : 'Order cleared');
   }, [isRtl, user]);
@@ -207,6 +205,7 @@ export function NewOrder() {
         })),
         status: 'pending',
         notes: notes.trim() || undefined,
+        priority,
         requestedDeliveryDate: new Date().toISOString(),
       };
       const response = await ordersAPI.create(orderData);
@@ -225,401 +224,300 @@ export function NewOrder() {
     summaryRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const CustomInput = ({
-    value,
-    onChange,
-    placeholder,
-    ariaLabel,
-  }: {
-    value: string;
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    placeholder: string;
-    ariaLabel: string;
-  }) => (
+  const CustomInput = ({ value, onChange, placeholder, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder: string; ariaLabel: string }) => (
     <div className="relative group">
-      <motion.div
-        initial={{ opacity: value ? 0 : 1 }}
-        animate={{ opacity: value ? 0 : 1 }}
-        transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500`}
-      >
-        <Search />
-      </motion.div>
+      <button className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors w-4 h-4 ${isRtl ? 'left-3' : 'right-3'}`}>
+        {value ? (
+          <X onClick={() => {
+            setSearchInput('');
+            setSearchTerm('');
+          }} aria-label={isRtl ? 'مسح البحث' : 'Clear search'} />
+        ) : (
+          <Search aria-hidden="true" />
+        )}
+      </button>
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-11 pr-4' : 'pr-11 pl-4'} py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-xs placeholder-gray-400 ${isRtl ? 'pr-8 pl-4 text-right' : 'pl-8 pr-4 text-left'}`}
         aria-label={ariaLabel}
       />
-      <motion.div
-        initial={{ opacity: value ? 1 : 0 }}
-        animate={{ opacity: value ? 1 : 0 }}
-        transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
-      >
-        <button
-          onClick={() => {
-            setSearchInput('');
-            setSearchTerm('');
-          }}
-          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
-        >
-          <X className="w-5 h-5" />
-        </button>
-      </motion.div>
     </div>
   );
 
-  const CustomDropdown = ({
-    value,
-    onChange,
-    options,
-    ariaLabel,
-    disabled = false,
-  }: {
-    value: string;
-    onChange: (value: string) => void;
-    options: { value: string; label: string }[];
-    ariaLabel: string;
-    disabled?: boolean;
-  }) => {
-    const selectedOption = options.find((opt) => opt.value === value) || { label: isRtl ? 'كل الأقسام' : 'All Departments' };
-    return (
-      <div className="relative group">
-        <motion.button
-          onClick={() => !disabled && setIsDropdownOpen(!isDropdownOpen)}
-          className={`w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-          aria-label={ariaLabel}
-        >
-          <span className="truncate">{selectedOption.label}</span>
-          <motion.div animate={{ rotate: isDropdownOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
-            <ChevronDown className="w-5 h-5 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
-          </motion.div>
-        </motion.button>
-        <AnimatePresence>
-          {isDropdownOpen && !disabled && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.15 }}
-              className="absolute w-full mt-2 bg-white rounded-xl shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-thin"
-            >
-              {options.map((option) => (
-                <motion.div
-                  key={option.value}
-                  onClick={() => {
-                    onChange(option.value);
-                    setIsDropdownOpen(false);
-                  }}
-                  className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
-                >
-                  {option.label}
-                </motion.div>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    );
-  };
+  const CustomSelect = ({ value, onChange, children, ariaLabel, disabled = false }: { value: string; onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; children: React.ReactNode; ariaLabel: string; disabled?: boolean }) => (
+    <div className="relative group">
+      <select
+        value={value}
+        onChange={onChange}
+        className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm appearance-none text-xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={ariaLabel}
+        disabled={disabled}
+      >
+        {children}
+      </select>
+      <ChevronDown className={`absolute top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors ${isRtl ? 'left-3' : 'right-3'}`} />
+    </div>
+  );
 
-  const CustomTextarea = ({
-    value,
-    onChange,
-    placeholder,
-    ariaLabel,
-  }: {
-    value: string;
-    onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-    placeholder: string;
-    ariaLabel: string;
-  }) => (
+  const CustomTextarea = ({ value, onChange, placeholder, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void; placeholder: string; ariaLabel: string }) => (
     <div className="relative group">
       <textarea
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm resize-y text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
         rows={4}
         aria-label={ariaLabel}
       />
     </div>
   );
 
-  const QuantityInput = ({
-    value,
-    onChange,
-    onIncrement,
-    onDecrement,
-  }: {
-    value: number;
-    onChange: (val: string) => void;
-    onIncrement: () => void;
-    onDecrement: () => void;
-  }) => (
-    <div className="flex items-center gap-2">
-      <motion.button
-        onClick={onDecrement}
-        className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center"
-        aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
-      >
-        <Minus className="w-4 h-4" />
-      </motion.button>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm min-w-[2.75rem] transition-all duration-200"
-        style={{ appearance: 'none' }}
-        aria-label={isRtl ? 'الكمية' : 'Quantity'}
-      />
-      <motion.button
-        onClick={onIncrement}
-        className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center"
-        aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
-      >
-        <Plus className="w-4 h-4 text-white" />
-      </motion.button>
-    </div>
-  );
-
   return (
-    <div className="mx-auto px-4 py-8 min-h-screen overflow-y-auto scrollbar-thin" dir={isRtl ? 'rtl' : 'ltr'}>
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="mb-6 flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-4"
-      >
-        <div className="flex items-center gap-3">
-          <ShoppingCart className="w-8 h-8 text-amber-600" />
+    <div className="mx-auto px-4 py-6 min-h-screen overflow-hidden" dir={isRtl ? 'rtl' : 'ltr'}>
+      <div className="mb-4 flex flex-col items-center sm:flex-row sm:justify-start sm:items-center gap-2">
+        <div className="flex items-center gap-2">
+          <ShoppingCart className="w-6 h-6 text-amber-600" />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{isRtl ? 'إنشاء طلب جديد' : 'Create New Order'}</h1>
-            <p className="text-gray-600 text-sm">
+            <h1 className="text-xl font-bold text-gray-900">{isRtl ? 'إنشاء طلب جديد' : 'Create New Order'}</h1>
+            <p className="text-gray-600 text-xs">
               {isRtl ? 'قم بإضافة المنتجات وتأكيد الطلب لإرساله' : 'Add products and confirm to submit your order'}
             </p>
           </div>
         </div>
-      </motion.div>
+      </div>
 
       {error && (
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3"
-        >
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <span className="text-red-600 text-sm">{error}</span>
-        </motion.div>
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-red-600" />
+          <span className="text-red-600 text-xs">{error}</span>
+        </div>
       )}
 
       {orderItems.length > 0 && (
         <div className={`lg:hidden fixed bottom-6 ${isRtl ? 'left-6' : 'right-6'} z-50`}>
-          <motion.button
+          <button
             onClick={scrollToSummary}
-            className="p-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg transition-all duration-200"
+            className="p-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg transition-transform transform hover:scale-105"
             aria-label={isRtl ? 'التمرير للملخص' : 'Scroll to Summary'}
           >
             <ChevronDown className="w-6 h-6" />
-          </motion.button>
+          </button>
         </div>
       )}
 
-      <div className={`space-y-4 ${orderItems.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-6 lg:space-y-0' : ''}`}>
-        <div className={`${orderItems.length > 0 ? 'lg:col-span-2 lg:overflow-y-auto lg:max-h-[calc(100vh-8rem)] scrollbar-thin' : ''}`}>
-          <motion.div
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.3 }}
-            className="p-5 bg-gradient-to-r from-white to-gray-50 rounded-xl shadow-lg"
-          >
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className={`space-y-3 ${orderItems.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-6 lg:space-y-0' : ''}`}>
+        <div className={`${orderItems.length > 0 ? 'lg:col-span-2 lg:overflow-y-auto lg:max-h-[calc(100vh-4rem)] lg:scrollbar-hidden' : ''}`}>
+          <div className="p-4 bg-white rounded-xl shadow-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <CustomInput
                 value={searchInput}
-                onChange={handleSearchChange}
+                onChange={(e) => {
+                  setSearchInput(e.target.value);
+                  debouncedSearch(e.target.value);
+                }}
                 placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
                 ariaLabel={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
               />
-              <CustomDropdown
+              <CustomSelect
                 value={filterDepartment}
-                onChange={setFilterDepartment}
-                options={[
-                  { value: '', label: isRtl ? 'كل الأقسام' : 'All Departments' },
-                  ...departments.map((d) => ({
-                    value: d._id,
-                    label: isRtl ? d.name : (d.nameEn || d.name),
-                  })),
-                ]}
+                onChange={(e) => setFilterDepartment(e.target.value)}
                 ariaLabel={isRtl ? 'تصفية حسب القسم' : 'Filter by department'}
-              />
+              >
+                <option value="">{isRtl ? 'كل الأقسام' : 'All Departments'}</option>
+                {departments.map((d) => (
+                  <option key={d._id} value={d._id}>
+                    {isRtl ? d.name : (d.nameEn || d.name)}
+                  </option>
+                ))}
+              </CustomSelect>
             </div>
-          </motion.div>
+          </div>
           {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
               {[...Array(6)].map((_, index) => (
-                <div key={index} className="p-5 bg-white rounded-xl shadow-md">
-                  <div className="space-y-3 animate-pulse">
-                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                    <div className="h-3 bg-gray-200 rounded w-1/4"></div>
-                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                <div key={index} className="p-4 bg-white rounded-xl shadow-sm">
+                  <div className="space-y-2 animate-pulse">
+                    <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+                    <div className="h-2 bg-gray-200 rounded w-1/4"></div>
+                    <div className="h-2 bg-gray-200 rounded w-1/2"></div>
                   </div>
                 </div>
               ))}
             </div>
           ) : products.length === 0 ? (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3 }}
-              className="p-8 text-center bg-white rounded-xl shadow-lg mt-4"
-            >
-              <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 text-sm">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
-            </motion.div>
+            <div className="p-6 text-center bg-white rounded-xl shadow-sm mt-3">
+              <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+              <p className="text-gray-600 text-xs">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
+            </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-              <AnimatePresence>
-                {products.map((product, index) => {
-                  const cartItem = orderItems.find((item) => item.productId === product._id);
-                  return (
-                    <motion.div
-                      key={product._id}
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -5 }}
-                      transition={{ duration: 0.15, delay: index * 0.02 }}
-                      className="p-5 bg-white rounded-xl shadow-lg transition-colors duration-200 flex flex-col justify-between border border-gray-100 hover:border-amber-200"
-                    >
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between gap-3">
-                          <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>
-                            {product.displayName}
-                          </h3>
-                          <p className="text-sm text-gray-500">{product.code}</p>
-                        </div>
-                        <p className="text-sm text-amber-600">
-                          {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
-                        </p>
-                        <p className="font-semibold text-gray-900 text-sm">
-                          {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
-                        </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mt-3">
+              {products.map((product) => {
+                const cartItem = orderItems.find((item) => item.productId === product._id);
+                return (
+                  <div
+                    key={product._id}
+                    className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="font-semibold text-gray-900 text-sm truncate">
+                          {product.displayName}
+                        </h3>
+                        <p className="text-xs text-gray-500">{product.code}</p>
                       </div>
-                      <div className="mt-4 flex justify-end">
-                        {cartItem ? (
-                          <QuantityInput
-                            value={cartItem.quantity}
-                            onChange={(val) => handleQuantityInput(product._id, val)}
-                            onIncrement={() => updateQuantity(product._id, cartItem.quantity + 1)}
-                            onDecrement={() => updateQuantity(product._id, cartItem.quantity - 1)}
-                          />
-                        ) : (
-                          <motion.button
-                            onClick={() => addToOrder(product)}
-                            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-colors duration-200 flex items-center justify-center gap-2 shadow-lg"
-                            aria-label={isRtl ? 'إضافة إلى السلة' : 'Add to Cart'}
+                      <p className="text-xs text-amber-600">
+                        {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
+                      </p>
+                      <p className="font-semibold text-gray-900 text-xs">
+                        {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
+                      </p>
+                    </div>
+                    <div className="mt-3 flex justify-end gap-1.5">
+                      {cartItem ? (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => updateQuantity(product._id, cartItem.quantity - 1)}
+                            className="w-7 h-7 bg-gray-200 rounded-full hover:bg-gray-300 transition-colors flex items-center justify-center"
+                            aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
                           >
-                            <Plus className="w-4 h-4" />
-                            {isRtl ? 'إضافة إلى السلة' : 'Add to Cart'}
-                          </motion.button>
-                        )}
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </AnimatePresence>
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <input
+                            type="text"
+                            value={cartItem.quantity}
+                            onChange={(e) => handleQuantityInput(product._id, e.target.value)}
+                            className="w-auto min-w-10 h-7 text-center border border-gray-300 rounded-md text-xs focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                            style={{ width: `${Math.max(10, cartItem.quantity.toString().length * 8 + 20)}px` }}
+                            aria-label={isRtl ? 'الكمية' : 'Quantity'}
+                          />
+                          <button
+                            onClick={() => updateQuantity(product._id, cartItem.quantity + 1)}
+                            className="w-7 h-7 bg-amber-600 rounded-full hover:bg-amber-700 transition-colors flex items-center justify-center"
+                            aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
+                          >
+                            <Plus className="w-3.5 h-3.5 text-white" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => addToOrder(product)}
+                          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
+                          aria-label={isRtl ? 'إضافة إلى السلة' : 'Add to Cart'}
+                        >
+                          {isRtl ? 'إضافة إلى السلة' : 'Add to Cart'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
 
         {orderItems.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, x: isRtl ? -10 : 10 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3 }}
-            className="lg:col-span-1 lg:sticky lg:top-8 space-y-4 max-h-[calc(100vh-8rem)] overflow-y-auto scrollbar-thin"
-            ref={summaryRef}
-          >
-            <div className="p-5 bg-white rounded-xl shadow-lg">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">{isRtl ? 'ملخص الطلب' : 'Order Summary'}</h3>
-              <div className="space-y-3">
-                <AnimatePresence>
-                  {orderItems.map((item, index) => (
-                    <motion.div
-                      key={item.productId}
-                      initial={{ opacity: 0, x: isRtl ? -5 : 5 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: isRtl ? 5 : -5 }}
-                      transition={{ duration: 0.15, delay: index * 0.02 }}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100"
-                    >
-                      <div className="flex-1">
-                        <p className="font-semibold text-gray-900 text-sm">
-                          {item.product.displayName}
-                        </p>
-                        <p className="text-sm text-[#1B5E20]">
-                          {item.price} {isRtl ? 'ريال' : 'SAR'} / {item.product.displayUnit}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <QuantityInput
-                          value={item.quantity}
-                          onChange={(val) => handleQuantityInput(item.productId, val)}
-                          onIncrement={() => updateQuantity(item.productId, item.quantity + 1)}
-                          onDecrement={() => updateQuantity(item.productId, item.quantity - 1)}
-                        />
-                        <motion.button
-                          onClick={() => removeFromOrder(item.productId)}
-                          className="w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
-                          aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </motion.button>
-                      </div>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-                <div className="border-t pt-3">
-                  <div className="flex justify-between font-bold text-gray-900 text-sm">
+          <div className="lg:col-span-1 lg:sticky lg:top-4 space-y-3 max-h-[calc(100vh-4rem)] overflow-y-auto scrollbar-hidden" ref={summaryRef}>
+            <div className="p-4 bg-white rounded-xl shadow-sm">
+              <h3 className="text-base font-semibold text-gray-900 mb-3">{isRtl ? 'ملخص الطلب' : 'Order Summary'}</h3>
+              <div className="space-y-2">
+                {orderItems.map((item) => (
+                  <div
+                    key={item.productId}
+                    className="flex items-center justify-between p-2 bg-gray-50 rounded-lg"
+                  >
+                    <div className="flex-1">
+                      <p className="font-medium text-gray-900 text-xs">
+                        {item.product.displayName}
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        {item.price} {isRtl ? 'ريال' : 'SAR'} / {item.product.displayUnit}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => updateQuantity(item.productId, item.quantity - 1)}
+                        className="w-7 h-7 bg-gray-200 rounded-full hover:bg-gray-300 transition-colors flex items-center justify-center"
+                        aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
+                      >
+                        <Minus className="w-3.5 h-3.5" />
+                      </button>
+                      <input
+                        type="text"
+                        value={item.quantity}
+                        onChange={(e) => handleQuantityInput(item.productId, e.target.value)}
+                        className="w-auto min-w-10 h-7 text-center border border-gray-300 rounded-md text-xs focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                        style={{ width: `${Math.max(10, item.quantity.toString().length * 8 + 20)}px` }}
+                        aria-label={isRtl ? 'الكمية' : 'Quantity'}
+                      />
+                      <button
+                        onClick={() => updateQuantity(item.productId, item.quantity + 1)}
+                        className="w-7 h-7 bg-amber-600 rounded-full hover:bg-amber-700 transition-colors flex items-center justify-center"
+                        aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
+                      >
+                        <Plus className="w-3.5 h-3.5 text-white" />
+                      </button>
+                      <button
+                        onClick={() => removeFromOrder(item.productId)}
+                        className="w-7 h-7 bg-red-500 rounded-full hover:bg-red-600 transition-colors flex items-center justify-center"
+                        aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-white" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                <div className="border-t pt-2">
+                  <div className="flex justify-between font-semibold text-gray-900 text-xs">
                     <span>{isRtl ? 'الإجمالي النهائي' : 'Final Total'}:</span>
-                    <span className="text-[#1B5E20]">
+                    <span className="text-teal-600">
                       {getTotalAmount} {isRtl ? 'ريال' : 'SAR'}
                     </span>
                   </div>
                 </div>
               </div>
             </div>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3 }}
-              className="p-5 bg-white rounded-xl shadow-lg"
-            >
-              <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="p-4 bg-white rounded-xl shadow-sm">
+              <form onSubmit={handleSubmit} className="space-y-3">
                 {user?.role === 'admin' && (
                   <div>
-                    <label htmlFor="branch" className="block text-sm font-medium text-gray-700 mb-2">
+                    <label htmlFor="branch" className="block text-xs font-medium text-gray-700 mb-1">
                       {isRtl ? 'الفرع' : 'Branch'}
                     </label>
-                    <CustomDropdown
+                    <CustomSelect
                       value={branch}
-                      onChange={setBranch}
-                      options={[
-                        { value: '', label: isRtl ? 'اختر الفرع' : 'Select Branch' },
-                        ...branches.map((b) => ({
-                          value: b._id,
-                          label: isRtl ? b.name : (b.nameEn || b.name),
-                        })),
-                      ]}
+                      onChange={(e) => setBranch(e.target.value)}
                       ariaLabel={isRtl ? 'الفرع' : 'Branch'}
-                    />
+                    >
+                      <option value="">{isRtl ? 'اختر الفرع' : 'Select Branch'}</option>
+                      {branches.map((b) => (
+                        <option key={b._id} value={b._id}>
+                          {isRtl ? b.name : (b.nameEn || b.name)}
+                        </option>
+                      ))}
+                    </CustomSelect>
                   </div>
                 )}
                 <div>
-                  <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
+                  <label htmlFor="priority" className="block text-xs font-medium text-gray-700 mb-1">
+                    {isRtl ? 'الأولوية' : 'Priority'}
+                  </label>
+                  <CustomSelect
+                    value={priority}
+                    onChange={(e) => setPriority(e.target.value)}
+                    ariaLabel={isRtl ? 'الأولوية' : 'Priority'}
+                  >
+                    {priorityOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {isRtl ? option.labelAr : option.labelEn}
+                      </option>
+                    ))}
+                  </CustomSelect>
+                </div>
+                <div>
+                  <label htmlFor="notes" className="block text-xs font-medium text-gray-700 mb-1">
                     {isRtl ? 'ملاحظات' : 'Notes'}
                   </label>
                   <CustomTextarea
@@ -629,67 +527,30 @@ export function NewOrder() {
                     ariaLabel={isRtl ? 'ملاحظات' : 'Notes'}
                   />
                 </div>
-                <div className="flex gap-3">
-                  <motion.button
+                <div className="flex gap-2">
+                  <button
+                    type="button"
                     onClick={clearOrder}
-                    className="flex-1 px-4 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm transition-colors duration-200 shadow-sm"
+                    className="flex-1 px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors"
                     disabled={submitting || orderItems.length === 0}
                     aria-label={isRtl ? 'مسح الطلب' : 'Clear Order'}
                   >
                     {isRtl ? 'مسح الطلب' : 'Clear Order'}
-                  </motion.button>
-                  <motion.button
+                  </button>
+                  <button
                     type="submit"
-                    className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-colors duration-200 shadow-lg"
+                    className="flex-1 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
                     disabled={orderItems.length === 0 || submitting}
                     aria-label={submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'إرسال الطلب' : 'Submit Order')}
                   >
                     {submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'إرسال الطلب' : 'Submit Order')}
-                  </motion.button>
+                  </button>
                 </div>
               </form>
-            </motion.div>
-          </motion.div>
+            </div>
+          </div>
         )}
       </div>
-
-      <AnimatePresence>
-        {showConfirmModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="bg-white rounded-xl shadow-2xl max-w-md p-6 w-[90vw]"
-            >
-              <h3 className="text-lg font-bold text-gray-900 mb-4">{isRtl ? 'تأكيد الطلب' : 'Confirm Order'}</h3>
-              <p className="text-sm text-gray-600 mb-6">{isRtl ? 'هل أنت متأكد من إرسال الطلب؟' : 'Are you sure you want to submit the order?'}</p>
-              <div className="flex justify-end gap-3">
-                <motion.button
-                  onClick={() => setShowConfirmModal(false)}
-                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm transition-colors duration-200"
-                >
-                  {isRtl ? 'إلغاء' : 'Cancel'}
-                </motion.button>
-                <motion.button
-                  onClick={confirmOrder}
-                  disabled={submitting}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-colors duration-200 disabled:opacity-50"
-                >
-                  {submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'تأكيد' : 'Confirm')}
-                </motion.button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
