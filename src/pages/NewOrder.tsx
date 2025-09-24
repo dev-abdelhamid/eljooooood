@@ -41,10 +41,12 @@ interface OrderItem {
   price: number;
 }
 
-interface Toast {
-  message: string;
-  type: 'success' | 'error';
-}
+const priorityOptions = [
+  { value: 'low', labelAr: 'منخفض', labelEn: 'Low' },
+  { value: 'medium', labelAr: 'متوسط', labelEn: 'Medium' },
+  { value: 'high', labelAr: 'عالي', labelEn: 'High' },
+  { value: 'urgent', labelAr: 'عاجل', labelEn: 'Urgent' },
+];
 
 export function NewOrder() {
   const { user } = useAuth();
@@ -60,23 +62,12 @@ export function NewOrder() {
   const [branch, setBranch] = useState<string>(user?.branchId?.toString() || '');
   const [notes, setNotes] = useState('');
   const [priority, setPriority] = useState('medium');
-  const [loading, setLoading] = useState({ products: false, branches: false, departments: false });
+  const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [toastState, setToastState] = useState<Toast | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-
-  const priorityOptions = useMemo(
-    () => [
-      { value: 'low', label: isRtl ? 'منخفض' : 'Low' },
-      { value: 'medium', label: isRtl ? 'متوسط' : 'Medium' },
-      { value: 'high', label: isRtl ? 'عالي' : 'High' },
-      { value: 'urgent', label: isRtl ? 'عاجل' : 'Urgent' },
-    ],
-    [isRtl]
-  );
 
   const socket = useMemo(() => io('https://eljoodia-server-production.up.railway.app'), []);
 
@@ -96,13 +87,11 @@ export function NewOrder() {
 
     const loadData = async () => {
       try {
-        setLoading((prev) => ({ ...prev, products: true, branches: true, departments: true }));
+        setLoading(true);
         const [productsResponse, branchesResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 0 }).finally(() =>
-            setLoading((prev) => ({ ...prev, products: false }))
-          ),
-          branchesAPI.getAll().finally(() => setLoading((prev) => ({ ...prev, branches: false }))),
-          departmentAPI.getAll({ limit: 100 }).finally(() => setLoading((prev) => ({ ...prev, departments: false }))),
+          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 0 }),
+          branchesAPI.getAll(),
+          departmentAPI.getAll({ limit: 100 }),
         ]);
 
         const productsWithDisplay = productsResponse.data.map((product: Product) => ({
@@ -119,6 +108,8 @@ export function NewOrder() {
         setError('');
       } catch (err: any) {
         setError(err.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
+      } finally {
+        setLoading(false);
       }
     };
     loadData();
@@ -129,19 +120,12 @@ export function NewOrder() {
       console.log('Connected to Socket.IO server');
     });
     socket.on('orderCreated', () => {
-      setToastState({ message: isRtl ? 'تم إنشاء الطلب بنجاح' : 'Order created successfully', type: 'success' });
+      toast.success(isRtl ? 'تم إنشاء الطلب بنجاح' : 'Order created successfully');
     });
     return () => {
       socket.disconnect();
     };
   }, [isRtl, socket]);
-
-  useEffect(() => {
-    if (toastState) {
-      toast[toastState.type](toastState.message, { autoClose: 3000 });
-      setTimeout(() => setToastState(null), 3000);
-    }
-  }, [toastState]);
 
   const addToOrder = useCallback((product: Product) => {
     setOrderItems((prev) => {
@@ -174,7 +158,7 @@ export function NewOrder() {
     setNotes('');
     setPriority('medium');
     if (user?.role === 'admin') setBranch('');
-    setToastState({ message: isRtl ? 'تم مسح الطلب' : 'Order cleared', type: 'success' });
+    toast.success(isRtl ? 'تم مسح الطلب' : 'Order cleared');
   }, [isRtl, user]);
 
   const getTotalAmount = useMemo(
@@ -217,11 +201,11 @@ export function NewOrder() {
       };
       const response = await ordersAPI.create(orderData);
       socket.emit('newOrderFromBranch', response);
-      setToastState({ message: isRtl ? 'تم إنشاء الطلب بنجاح' : 'Order created successfully', type: 'success' });
+      toast.success(isRtl ? 'تم إنشاء الطلب بنجاح' : 'Order created successfully');
       setTimeout(() => navigate('/orders'), 1000);
     } catch (err: any) {
       setError(err.message || (isRtl ? 'خطأ في إنشاء الطلب' : 'Error creating order'));
-      setToastState({ message: err.message || (isRtl ? 'خطأ في إنشاء الطلب' : 'Error creating order'), type: 'error' });
+      toast.error(err.message || (isRtl ? 'خطأ في إنشاء الطلب' : 'Error creating order'));
     } finally {
       setSubmitting(false);
     }
@@ -231,39 +215,55 @@ export function NewOrder() {
     summaryRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  if (loading.branches || loading.departments) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
+  const CustomInput = ({ value, onChange, placeholder, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder: string; ariaLabel: string }) => (
+    <div className="relative group">
+      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500" />
+      <input
+        type="text"
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-full focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm hover:shadow-md text-sm"
+        aria-label={ariaLabel}
+      />
+    </div>
+  );
+
+  const CustomSelect = ({ value, onChange, children, ariaLabel, disabled = false }: { value: string; onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; children: React.ReactNode; ariaLabel: string; disabled?: boolean }) => (
+    <div className="relative group">
+      <select
+        value={value}
+        onChange={onChange}
+        className="w-full px-4 py-3 border border-gray-200 rounded-full focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm hover:shadow-md appearance-none text-sm"
+        aria-label={ariaLabel}
+        disabled={disabled}
+      >
+        {children}
+      </select>
+      <div className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500">
+        ▼
       </div>
-    );
-  }
+    </div>
+  );
+
+  const CustomTextarea = ({ value, onChange, placeholder, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void; placeholder: string; ariaLabel: string }) => (
+    <div className="relative group">
+      <textarea
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm hover:shadow-md resize-y text-sm"
+        rows={4}
+        aria-label={ariaLabel}
+      />
+    </div>
+  );
 
   return (
     <div
-      className="mx-auto px-4 py-8 min-h-screen h-screen overflow-auto"
+      className="mx-auto px-4 py-8 min-h-screen overflow-y-auto scrollbar-hide"
       dir={isRtl ? 'rtl' : 'ltr'}
     >
-      {toastState && (
-        <div
-          className={`fixed top-4 ${isRtl ? 'right-4' : 'left-4'} z-50 p-4 rounded-lg shadow-lg transition-all duration-300 ${
-            toastState.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-          }`}
-          role="alert"
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-sm">{toastState.message}</span>
-            <button
-              onClick={() => setToastState(null)}
-              aria-label={isRtl ? 'إغلاق' : 'Close'}
-              className="hover:opacity-80"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
       {showConfirmModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
@@ -313,18 +313,18 @@ export function NewOrder() {
         </div>
       )}
 
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-          <ShoppingCart className="w-8 h-8 text-amber-600" />
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-3">
+          <ShoppingCart className="w-7 h-7 text-amber-600" />
           {isRtl ? 'إنشاء طلب جديد' : 'Create New Order'}
         </h1>
-        <p className="text-gray-600 mt-2 text-sm">
+        <p className="text-gray-600 mt-1 text-xs">
           {isRtl ? 'قم بإضافة المنتجات وتأكيد الطلب لإرساله' : 'Add products and confirm to submit your order'}
         </p>
       </div>
 
       {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 animate-pulse">
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-red-600" />
           <span className="text-red-600 text-sm">{error}</span>
         </div>
@@ -346,21 +346,16 @@ export function NewOrder() {
         <div className={`${orderItems.length > 0 ? 'lg:col-span-2' : ''}`}>
           <div className="p-6 bg-white rounded-2xl shadow-md">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="text"
-                  placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
-                  onChange={(e) => debouncedSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
-                  aria-label={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
-                />
-              </div>
-              <select
+              <CustomInput
+                value={searchTerm}
+                onChange={(e) => debouncedSearch(e.target.value)}
+                placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
+                ariaLabel={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
+              />
+              <CustomSelect
                 value={filterDepartment}
                 onChange={(e) => setFilterDepartment(e.target.value)}
-                className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
-                aria-label={isRtl ? 'تصفية حسب القسم' : 'Filter by department'}
+                ariaLabel={isRtl ? 'تصفية حسب القسم' : 'Filter by department'}
               >
                 <option value="">{isRtl ? 'كل الأقسام' : 'All Departments'}</option>
                 {departments.map((d) => (
@@ -368,10 +363,10 @@ export function NewOrder() {
                     {isRtl ? d.name : (d.nameEn || d.name)}
                   </option>
                 ))}
-              </select>
+              </CustomSelect>
             </div>
           </div>
-          {loading.products ? (
+          {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
               {[...Array(6)].map((_, index) => (
                 <div key={index} className="p-5 bg-white rounded-xl shadow-sm">
@@ -400,53 +395,53 @@ export function NewOrder() {
                 return (
                   <div
                     key={product._id}
-                    className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-200"
+                    className="p-5 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between"
                   >
-                    <div className="space-y-3">
+                    <div className="space-y-2">
                       <div className="flex items-center justify-between gap-4">
-                        <h3 className="font-semibold text-gray-900 text-base truncate">
+                        <h3 className="font-semibold text-gray-900 text-sm truncate">
                           {product.displayName}
                         </h3>
                         <p className="text-xs text-gray-500">{product.code}</p>
                       </div>
-                      <p className="text-sm text-amber-600">
+                      <p className="text-xs text-amber-600">
                         {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
                       </p>
-                      <p className="font-semibold text-gray-900 text-sm">
+                      <p className="font-semibold text-gray-900 text-xs">
                         {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
                       </p>
                       {product.description && (
-                        <p className="text-xs text-gray-600 line-clamp-2">{product.description}</p>
+                        <p className="text-xs text-gray-600 line-clamp-3">{product.description}</p>
                       )}
-                      <div className="flex justify-end gap-2">
-                        {cartItem ? (
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => updateQuantity(product._id, cartItem.quantity - 1)}
-                              className="w-8 h-8 bg-gray-200 rounded-full hover:bg-gray-300 transition-colors flex items-center justify-center"
-                              aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
-                            >
-                              <Minus className="w-4 h-4" />
-                            </button>
-                            <div className="w-8 h-8 text-center font-medium text-md">{cartItem.quantity}</div>
-                            <button
-                              onClick={() => updateQuantity(product._id, cartItem.quantity + 1)}
-                              className="w-8 h-8 bg-amber-600 rounded-full hover:bg-amber-700 transition-colors flex items-center justify-center"
-                              aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
-                            >
-                              <Plus className="w-4 h-4 text-white" />
-                            </button>
-                          </div>
-                        ) : (
+                    </div>
+                    <div className="mt-4 flex justify-end gap-2">
+                      {cartItem ? (
+                        <div className="flex items-center gap-2">
                           <button
-                            onClick={() => addToOrder(product)}
-                            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full text-sm transition-colors"
-                            aria-label={isRtl ? 'إضافة إلى السلة' : 'Add to Cart'}
+                            onClick={() => updateQuantity(product._id, cartItem.quantity - 1)}
+                            className="w-8 h-8 bg-gray-200 rounded-full hover:bg-gray-300 transition-colors flex items-center justify-center"
+                            aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
                           >
-                            {isRtl ? 'إضافة إلى السلة' : 'Add to Cart'}
+                            <Minus className="w-4 h-4" />
                           </button>
-                        )}
-                      </div>
+                          <div className="w-8 h-8 text-center font-medium text-md">{cartItem.quantity}</div>
+                          <button
+                            onClick={() => updateQuantity(product._id, cartItem.quantity + 1)}
+                            className="w-8 h-8 bg-amber-600 rounded-full hover:bg-amber-700 transition-colors flex items-center justify-center"
+                            aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
+                          >
+                            <Plus className="w-4 h-4 text-white" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => addToOrder(product)}
+                          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full text-sm transition-colors"
+                          aria-label={isRtl ? 'إضافة إلى السلة' : 'Add to Cart'}
+                        >
+                          {isRtl ? 'إضافة إلى السلة' : 'Add to Cart'}
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -456,7 +451,7 @@ export function NewOrder() {
         </div>
 
         {orderItems.length > 0 && (
-          <div className="lg:col-span-1 lg:sticky lg:top-8 space-y-4 max-h-[calc(100vh-2rem)] overflow-y-auto" ref={summaryRef}>
+          <div className="lg:col-span-1 lg:sticky lg:top-8 space-y-4 max-h-[calc(100vh-2rem)] overflow-y-auto scrollbar-hide" ref={summaryRef}>
             <div className="p-6 bg-white rounded-2xl shadow-md">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{isRtl ? 'ملخص الطلب' : 'Order Summary'}</h3>
               <div className="space-y-3">
@@ -516,13 +511,10 @@ export function NewOrder() {
                     <label htmlFor="branch" className="block text-sm font-medium text-gray-700 mb-1">
                       {isRtl ? 'الفرع' : 'Branch'}
                     </label>
-                    <select
-                      id="branch"
+                    <CustomSelect
                       value={branch}
                       onChange={(e) => setBranch(e.target.value)}
-                      className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
-                      aria-label={isRtl ? 'الفرع' : 'Branch'}
-                      disabled={loading.branches}
+                      ariaLabel={isRtl ? 'الفرع' : 'Branch'}
                     >
                       <option value="">{isRtl ? 'اختر الفرع' : 'Select Branch'}</option>
                       {branches.map((b) => (
@@ -530,39 +522,34 @@ export function NewOrder() {
                           {isRtl ? b.name : (b.nameEn || b.name)}
                         </option>
                       ))}
-                    </select>
+                    </CustomSelect>
                   </div>
                 )}
                 <div>
                   <label htmlFor="priority" className="block text-sm font-medium text-gray-700 mb-1">
                     {isRtl ? 'الأولوية' : 'Priority'}
                   </label>
-                  <select
-                    id="priority"
+                  <CustomSelect
                     value={priority}
                     onChange={(e) => setPriority(e.target.value)}
-                    className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
-                    aria-label={isRtl ? 'الأولوية' : 'Priority'}
+                    ariaLabel={isRtl ? 'الأولوية' : 'Priority'}
                   >
                     {priorityOptions.map((option) => (
                       <option key={option.value} value={option.value}>
-                        {option.label}
+                        {isRtl ? option.labelAr : option.labelEn}
                       </option>
                     ))}
-                  </select>
+                  </CustomSelect>
                 </div>
                 <div>
                   <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
                     {isRtl ? 'ملاحظات' : 'Notes'}
                   </label>
-                  <textarea
-                    id="notes"
+                  <CustomTextarea
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     placeholder={isRtl ? 'أدخل ملاحظات الطلب...' : 'Enter order notes...'}
-                    className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-y text-sm"
-                    rows={4}
-                    aria-label={isRtl ? 'ملاحظات' : 'Notes'}
+                    ariaLabel={isRtl ? 'ملاحظات' : 'Notes'}
                   />
                 </div>
                 <div className="flex gap-3">
