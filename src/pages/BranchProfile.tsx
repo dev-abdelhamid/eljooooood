@@ -5,13 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Edit2, Trash2, Key, AlertCircle, MapPin } from 'lucide-react';
-import { Card } from '../components/UI/Card';
-import { Button } from '../components/UI/Button';
-import { Input } from '../components/UI/Input';
-import { Select } from '../components/UI/Select';
-import { Modal } from '../components/UI/Modal';
-import { LoadingSpinner } from '../components/UI/LoadingSpinner';
+import { ArrowLeft, Edit2, Trash2, Key, AlertCircle, MapPin, ChevronDown } from 'lucide-react';
 
 interface Branch {
   _id: string;
@@ -136,6 +130,8 @@ const translations = {
     back: 'رجوع',
     newPassword: 'كلمة المرور الجديدة',
     confirmPassword: 'تأكيد كلمة المرور',
+    passwordPlaceholder: 'أدخل كلمة المرور الجديدة',
+    confirmPasswordPlaceholder: 'تأكيد كلمة المرور',
     passwordMismatch: 'كلمة المرور وتأكيدها غير متطابقتين',
     passwordTooShort: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل',
     passwordRequired: 'كلمة المرور مطلوبة',
@@ -183,6 +179,8 @@ const translations = {
     back: 'Back',
     newPassword: 'New Password',
     confirmPassword: 'Confirm Password',
+    passwordPlaceholder: 'Enter new password',
+    confirmPasswordPlaceholder: 'Confirm password',
     passwordMismatch: 'Passwords do not match',
     passwordTooShort: 'Password must be at least 6 characters',
     passwordRequired: 'Password is required',
@@ -199,6 +197,486 @@ const translations = {
     deleteRestricted: 'Cannot delete branch with associated orders or inventory',
     confirmDelete: 'Confirm Branch Deletion',
   },
+};
+
+const ProfileInput = ({
+  id,
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = 'text',
+  required = false,
+  error,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  type?: string;
+  required?: boolean;
+  error?: string;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="space-y-1">
+      <label htmlFor={id} className="block text-sm font-medium text-gray-700">
+        {label}
+      </label>
+      <input
+        id={id}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        required={required}
+        className={`w-full px-3 py-2 border ${error ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-amber-50 shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={label}
+      />
+      {error && <p className="text-red-600 text-xs mt-1">{error}</p>}
+    </div>
+  );
+};
+
+const ProfileSelect = ({
+  id,
+  label,
+  value,
+  onChange,
+  options,
+  required = false,
+}: {
+  id: string;
+  label: string;
+  value: string | boolean;
+  onChange: (value: string) => void;
+  options: { value: string | boolean; label: string }[];
+  required?: boolean;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="space-y-1">
+      <label htmlFor={id} className="block text-sm font-medium text-gray-700">
+        {label}
+      </label>
+      <div className="relative group">
+        <select
+          id={id}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          required={required}
+          className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-amber-50 shadow-sm hover:shadow-md appearance-none text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'}`}
+          aria-label={label}
+        >
+          {options.map((option) => (
+            <option key={String(option.value)} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDown
+          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors`}
+        />
+      </div>
+    </div>
+  );
+};
+
+const ProfileCard = ({ title, details }: { title: string; details: { label: string; value: string; className?: string }[] }) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+      className="p-6 bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-200"
+    >
+      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+        <MapPin className="w-5 h-5 text-amber-600" />
+        {title}
+      </h3>
+      <div className="space-y-4">
+        {details.map((detail, index) => (
+          <motion.div
+            key={index}
+            initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.3, delay: index * 0.1 }}
+          >
+            <p className="text-sm text-gray-600 font-medium">{detail.label}</p>
+            <p className={`text-sm text-gray-800 ${detail.className || ''}`}>{detail.value}</p>
+          </motion.div>
+        ))}
+      </div>
+    </motion.div>
+  );
+};
+
+const ProfileSkeletonCard = () => (
+  <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+    <div className="space-y-4 animate-pulse">
+      <div className="flex items-center gap-2">
+        <div className="w-5 h-5 bg-gray-200 rounded-full"></div>
+        <div className="h-4 bg-gray-200 rounded w-1/4"></div>
+      </div>
+      {[...Array(6)].map((_, index) => (
+        <div key={index} className="space-y-2">
+          <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+          <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const ProfileModal = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  formData,
+  dispatchForm,
+  errors,
+  error,
+  t,
+  isRtl,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (e: React.FormEvent) => void;
+  formData: FormState;
+  dispatchForm: React.Dispatch<FormAction>;
+  errors: { [key: string]: string };
+  error: string;
+  t: typeof translations['ar' | 'en'];
+  isRtl: boolean;
+}) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-2xl p-6"
+      >
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.editBranch}</h3>
+        <form onSubmit={onSubmit} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-gray-900">{t.branchDetails}</h4>
+              <ProfileInput
+                id="name"
+                label={t.name}
+                value={formData.name}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'name', value })}
+                placeholder={t.name}
+                required
+                error={errors.name}
+              />
+              <ProfileInput
+                id="nameEn"
+                label={t.nameEn}
+                value={formData.nameEn}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'nameEn', value })}
+                placeholder={t.nameEn}
+                required
+                error={errors.nameEn}
+              />
+              <ProfileInput
+                id="code"
+                label={t.code}
+                value={formData.code}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'code', value })}
+                placeholder={t.code}
+                required
+                error={errors.code}
+              />
+              <ProfileInput
+                id="address"
+                label={t.address}
+                value={formData.address}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'address', value })}
+                placeholder={t.address}
+                required
+                error={errors.address}
+              />
+              <ProfileInput
+                id="addressEn"
+                label={t.addressEn}
+                value={formData.addressEn}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'addressEn', value })}
+                placeholder={t.addressEn}
+                required
+                error={errors.addressEn}
+              />
+              <ProfileInput
+                id="city"
+                label={t.city}
+                value={formData.city}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'city', value })}
+                placeholder={t.city}
+                required
+                error={errors.city}
+              />
+              <ProfileInput
+                id="cityEn"
+                label={t.cityEn}
+                value={formData.cityEn}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'cityEn', value })}
+                placeholder={t.cityEn}
+                required
+                error={errors.cityEn}
+              />
+              <ProfileInput
+                id="phone"
+                label={t.phone}
+                value={formData.phone}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'phone', value })}
+                placeholder={t.phone}
+              />
+              <ProfileSelect
+                id="isActive"
+                label={t.isActive}
+                value={formData.isActive}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'isActive', value: value === 'true' })}
+                options={[
+                  { value: true, label: t.active },
+                  { value: false, label: t.inactive },
+                ]}
+              />
+            </div>
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-gray-900">{t.user}</h4>
+              <ProfileInput
+                id="userName"
+                label={t.userName}
+                value={formData.user.name}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'name', value })}
+                placeholder={t.userName}
+                required
+                error={errors['user.name']}
+              />
+              <ProfileInput
+                id="userNameEn"
+                label={t.userNameEn}
+                value={formData.user.nameEn}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'nameEn', value })}
+                placeholder={t.userNameEn}
+                required
+                error={errors['user.nameEn']}
+              />
+              <ProfileInput
+                id="username"
+                label={t.username}
+                value={formData.user.username}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'username', value })}
+                placeholder={t.username}
+                required
+                error={errors['user.username']}
+              />
+              <ProfileInput
+                id="email"
+                label={t.email}
+                value={formData.user.email}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'email', value })}
+                placeholder={t.email}
+                error={errors['user.email']}
+              />
+              <ProfileInput
+                id="userPhone"
+                label={t.userPhone}
+                value={formData.user.phone}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'phone', value })}
+                placeholder={t.userPhone}
+              />
+              <ProfileSelect
+                id="userIsActive"
+                label={t.userStatus}
+                value={formData.user.isActive}
+                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'isActive', value: value === 'true' })}
+                options={[
+                  { value: true, label: t.active },
+                  { value: false, label: t.inactive },
+                ]}
+              />
+            </div>
+          </div>
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
+            >
+              <AlertCircle className="w-4 h-4 text-red-600" />
+              <span className="text-red-600 text-xs">{error}</span>
+            </motion.div>
+          )}
+          <div className="flex justify-end gap-3 mt-6">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm"
+              aria-label={t.cancel}
+            >
+              {t.cancel}
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm"
+              aria-label={t.save}
+            >
+              {t.save}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+};
+
+const ProfileResetPasswordModal = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  passwordData,
+  setPasswordData,
+  error,
+  t,
+  isRtl,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (e: React.FormEvent) => void;
+  passwordData: { password: string; confirmPassword: string };
+  setPasswordData: React.Dispatch<React.SetStateAction<{ password: string; confirmPassword: string }>>;
+  error: string;
+  t: typeof translations['ar' | 'en'];
+  isRtl: boolean;
+}) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-6"
+      >
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.resetPassword}</h3>
+        <form onSubmit={onSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
+          <ProfileInput
+            id="password"
+            label={t.newPassword}
+            value={passwordData.password}
+            onChange={(value) => setPasswordData({ ...passwordData, password: value })}
+            placeholder={t.passwordPlaceholder}
+            type="password"
+            required
+          />
+          <ProfileInput
+            id="confirmPassword"
+            label={t.confirmPassword}
+            value={passwordData.confirmPassword}
+            onChange={(value) => setPasswordData({ ...passwordData, confirmPassword: value })}
+            placeholder={t.confirmPasswordPlaceholder}
+            type="password"
+            required
+          />
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
+            >
+              <AlertCircle className="w-4 h-4 text-red-600" />
+              <span className="text-red-600 text-xs">{error}</span>
+            </motion.div>
+          )}
+          <div className="flex justify-end gap-3 mt-6">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm"
+              aria-label={t.cancel}
+            >
+              {t.cancel}
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm"
+              aria-label={t.save}
+            >
+              {t.save}
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
+  );
+};
+
+const ProfileDeleteModal = ({
+  isOpen,
+  onClose,
+  onConfirm,
+  error,
+  t,
+  isRtl,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  error: string;
+  t: typeof translations['ar' | 'en'];
+  isRtl: boolean;
+}) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-6"
+      >
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.confirmDelete}</h3>
+        <p className="text-sm text-gray-600 mb-4">{t.deleteWarning}</p>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 mb-4"
+          >
+            <AlertCircle className="w-4 h-4 text-red-600" />
+            <span className="text-red-600 text-xs">{error}</span>
+          </motion.div>
+        )}
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm"
+            aria-label={t.cancel}
+          >
+            {t.cancel}
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm transition-colors shadow-sm"
+            aria-label={t.deleteBranch}
+          >
+            {t.deleteBranch}
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
 };
 
 export const BranchProfile: React.FC = () => {
@@ -476,18 +954,18 @@ export const BranchProfile: React.FC = () => {
 
   const branchDetails = useMemo(
     () => [
-      { label: t.name, value: branch?.name },
-      { label: t.nameEn, value: branch?.nameEn || branch?.name },
-      { label: t.code, value: branch?.code },
-      { label: t.address, value: branch?.displayAddress },
-      { label: t.addressEn, value: branch?.addressEn || branch?.address },
-      { label: t.city, value: branch?.displayCity },
-      { label: t.cityEn, value: branch?.cityEn || branch?.city },
+      { label: t.name, value: branch?.name || '-' },
+      { label: t.nameEn, value: branch?.nameEn || branch?.name || '-' },
+      { label: t.code, value: branch?.code || '-' },
+      { label: t.address, value: branch?.displayAddress || '-' },
+      { label: t.addressEn, value: branch?.addressEn || branch?.address || '-' },
+      { label: t.city, value: branch?.displayCity || '-' },
+      { label: t.cityEn, value: branch?.cityEn || branch?.city || '-' },
       { label: t.phone, value: branch?.phone || '-' },
       {
         label: t.isActive,
         value: branch?.isActive ? t.active : t.inactive,
-        className: branch?.isActive ? 'text-green-600' : 'text-red-600',
+        className: branch?.isActive ? 'text-teal-600' : 'text-red-600',
       },
       { label: t.createdAt, value: branch ? new Date(branch.createdAt).toLocaleString() : '-' },
       { label: t.updatedAt, value: branch ? new Date(branch.updatedAt).toLocaleString() : '-' },
@@ -508,7 +986,7 @@ export const BranchProfile: React.FC = () => {
             {
               label: t.userStatus,
               value: branch.user.isActive ? t.active : t.inactive,
-              className: branch.user.isActive ? 'text-green-600' : 'text-red-600',
+              className: branch.user.isActive ? 'text-teal-600' : 'text-red-600',
             },
           ]
         : [],
@@ -517,83 +995,91 @@ export const BranchProfile: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <LoadingSpinner size="lg" />
-      </div>
+      <div className={`flex items-center justify-center min-h-screen bg-gray-50 ${isRtl ? 'font-arabic' : 'font-sans'}`}>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+          className="p-6 bg-white rounded-xl shadow-sm"
+        >
+          <ProfileSkeletonCard />
+        </motion.div>
+    </div>
     );
   }
 
   if (!branch) {
     return (
-      <div className={`mx-auto p-4 sm:p-6 min-h-screen bg-gray-50 ${isRtl ? 'rtl font-arabic' : 'ltr font-sans'}`}>
+      <div className={`mx-auto p-4 sm:p-6 min-h-screen bg-gray-50 ${isRtl ? 'font-arabic' : 'font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="text-center"
+          transition={{ duration: 0.3 }}
+          className="text-center p-6 bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-sm border border-gray-100"
         >
-          <h2 className="text-2xl font-semibold text-amber-900">{t.branchNotFound}</h2>
-          <Button
-            variant="primary"
-            icon={ArrowLeft}
+          <MapPin className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+          <h2 className="text-2xl font-semibold text-gray-900 mb-4">{t.branchNotFound}</h2>
+          <button
             onClick={() => navigate('/branches')}
-            className="mt-4 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm flex items-center gap-2 mx-auto"
+            aria-label={t.back}
           >
+            <ArrowLeft className="w-4 h-4" />
             {t.back}
-          </Button>
+          </button>
         </motion.div>
       </div>
     );
   }
 
   return (
-    <div className={`mx-auto max-w-7xl p-4 sm:p-6 min-h-screen bg-gray-50 ${isRtl ? 'rtl font-arabic' : 'ltr font-sans'}`}>
+    <div className={`mx-auto max-w-7xl p-4 sm:p-6 min-h-screen bg-gray-50 ${isRtl ? 'font-arabic' : 'font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
+        transition={{ duration: 0.3 }}
         className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4"
       >
         <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            icon={ArrowLeft}
+          <button
             onClick={() => navigate('/branches')}
-            className="bg-amber-100 text-amber-800 hover:bg-amber-200 rounded-lg px-4 py-2 transition-transform transform hover:scale-105"
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm flex items-center gap-2"
+            aria-label={t.back}
           >
+            <ArrowLeft className="w-4 h-4" />
             {t.back}
-          </Button>
-          <h1 className="text-3xl sm:text-4xl font-bold text-amber-900 flex items-center gap-2">
-            <MapPin className="w-8 h-8 text-amber-600" />
+          </button>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <MapPin className="w-6 h-6 text-amber-600" />
             {branch.displayName}
           </h1>
         </div>
         {user?.role === 'admin' && (
           <div className="flex gap-3">
-            <Button
-              variant="outline"
-              icon={Edit2}
+            <button
               onClick={openEditModal}
-              className="text-amber-600 hover:text-amber-800 border-amber-600 rounded-lg px-4 py-2 transition-transform transform hover:scale-105"
+              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm transition-colors shadow-sm flex items-center gap-2"
+              aria-label={t.editBranch}
             >
+              <Edit2 className="w-4 h-4" />
               {t.editBranch}
-            </Button>
-            <Button
-              variant="outline"
-              icon={Key}
+            </button>
+            <button
               onClick={openResetPasswordModal}
-              className="text-blue-500 hover:text-blue-700 border-blue-500 rounded-lg px-4 py-2 transition-transform transform hover:scale-105"
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm flex items-center gap-2"
+              aria-label={t.resetPassword}
             >
+              <Key className="w-4 h-4" />
               {t.resetPassword}
-            </Button>
-            <Button
-              variant="outline"
-              icon={Trash2}
+            </button>
+            <button
               onClick={openDeleteModal}
-              className="text-red-500 hover:text-red-700 border-red-500 rounded-lg px-4 py-2 transition-transform transform hover:scale-105"
+              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm transition-colors shadow-sm flex items-center gap-2"
+              aria-label={t.deleteBranch}
             >
+              <Trash2 className="w-4 h-4" />
               {t.deleteBranch}
-            </Button>
+            </button>
           </div>
         )}
       </motion.div>
@@ -603,355 +1089,46 @@ export const BranchProfile: React.FC = () => {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="mb-8 p-4 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3 shadow-sm"
+            className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 shadow-sm"
           >
             <AlertCircle className="w-5 h-5 text-red-600" />
-            <span className="text-red-600 font-medium">{error}</span>
+            <span className="text-red-600 text-sm font-medium">{error}</span>
           </motion.div>
         )}
       </AnimatePresence>
-      <Card className="p-6 bg-white rounded-lg shadow-md">
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5 }}
-          className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-        >
-          <div>
-            <h3 className="text-lg font-semibold text-amber-900 mb-4 flex items-center gap-2">
-              <MapPin className="w-5 h-5 text-amber-600" />
-              {t.branchDetails}
-            </h3>
-            <div className="space-y-4">
-              {branchDetails.map((detail, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.3, delay: index * 0.1 }}
-                >
-                  <p className="text-sm text-gray-600 font-medium">{detail.label}</p>
-                  <p className={`text-gray-800 ${detail.className || ''}`}>{detail.value}</p>
-                </motion.div>
-              ))}
-            </div>
-          </div>
-          {branch.user && (
-            <div>
-              <h3 className="text-lg font-semibold text-amber-900 mb-4 flex items-center gap-2">
-                <MapPin className="w-5 h-5 text-amber-600" />
-                {t.user}
-              </h3>
-              <div className="space-y-4">
-                {userDetails.map((detail, index) => (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ duration: 0.3, delay: index * 0.1 }}
-                  >
-                    <p className="text-sm text-gray-600 font-medium">{detail.label}</p>
-                    <p className={`text-gray-800 ${detail.className || ''}`}>{detail.value}</p>
-                  </motion.div>
-                ))}
-              </div>
-            </div>
-          )}
-        </motion.div>
-      </Card>
-      <Modal
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ProfileCard title={t.branchDetails} details={branchDetails} />
+        {branch.user && <ProfileCard title={t.user} details={userDetails} />}
+      </div>
+      <ProfileModal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
-        title={t.editBranch}
-        size="lg"
-      >
-        <form onSubmit={handleSubmit} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="grid grid-cols-1 lg:grid-cols-2 gap-6"
-          >
-            <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-amber-900">{t.branchDetails}</h3>
-              <Input
-                label={t.name}
-                value={formData.name}
-                onChange={(value) => handleInputChange(value, 'name')}
-                placeholder={t.name}
-                required
-                error={errors.name}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.nameEn}
-                value={formData.nameEn}
-                onChange={(value) => handleInputChange(value, 'nameEn')}
-                placeholder={t.nameEn}
-                required
-                error={errors.nameEn}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.code}
-                value={formData.code}
-                onChange={(value) => handleInputChange(value, 'code')}
-                placeholder={t.code}
-                required
-                error={errors.code}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.address}
-                value={formData.address}
-                onChange={(value) => handleInputChange(value, 'address')}
-                placeholder={t.address}
-                required
-                error={errors.address}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.addressEn}
-                value={formData.addressEn}
-                onChange={(value) => handleInputChange(value, 'addressEn')}
-                placeholder={t.addressEn}
-                required
-                error={errors.addressEn}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.city}
-                value={formData.city}
-                onChange={(value) => handleInputChange(value, 'city')}
-                placeholder={t.city}
-                required
-                error={errors.city}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.cityEn}
-                value={formData.cityEn}
-                onChange={(value) => handleInputChange(value, 'cityEn')}
-                placeholder={t.cityEn}
-                required
-                error={errors.cityEn}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.phone}
-                value={formData.phone}
-                onChange={(value) => handleInputChange(value, 'phone')}
-                placeholder={t.phone}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Select
-                label={t.isActive}
-                options={[
-                  { value: true, label: t.active },
-                  { value: false, label: t.inactive },
-                ]}
-                value={formData.isActive}
-                onChange={(value) => handleInputChange(value === 'true', 'isActive')}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-            </div>
-            <div className="space-y-6">
-              <h3 className="text-lg font-semibold text-amber-900">{t.user}</h3>
-              <Input
-                label={t.userName}
-                value={formData.user.name}
-                onChange={(value) => handleInputChange(value, 'name', true)}
-                placeholder={t.userName}
-                required
-                error={errors['user.name']}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.userNameEn}
-                value={formData.user.nameEn}
-                onChange={(value) => handleInputChange(value, 'nameEn', true)}
-                placeholder={t.userNameEn}
-                required
-                error={errors['user.nameEn']}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.username}
-                value={formData.user.username}
-                onChange={(value) => handleInputChange(value, 'username', true)}
-                placeholder={t.username}
-                required
-                error={errors['user.username']}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.email}
-                value={formData.user.email}
-                onChange={(value) => handleInputChange(value, 'email', true)}
-                placeholder={t.email}
-                error={errors['user.email']}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.userPhone}
-                value={formData.user.phone}
-                onChange={(value) => handleInputChange(value, 'phone', true)}
-                placeholder={t.userPhone}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Select
-                label={t.userStatus}
-                options={[
-                    { value: true, label: t.active },
-                    { value: false, label: t.inactive },
-                    
-                ]}
-                value={formData.user.isActive}
-                onChange={(value) => handleInputChange(value === 'true', 'isActive', true)}
-                className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-            </div>
-          </motion.div>
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-4 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3 shadow-sm"
-              >
-                <AlertCircle className="w-5 h-5 text-red-600" />
-                <span className="text-red-600 font-medium">{error}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <div className="flex gap-4 mt-6">
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={loading}
-              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105 disabled:opacity-50"
-            >
-              {t.save}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setIsEditModalOpen(false)}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
-            >
-              {t.cancel}
-            </Button>
-          </div>
-        </form>
-      </Modal>
-      <Modal
+        onSubmit={handleSubmit}
+        formData={formData}
+        dispatchForm={dispatchForm}
+        errors={errors}
+        error={error}
+        t={t}
+        isRtl={isRtl}
+      />
+      <ProfileResetPasswordModal
         isOpen={isResetPasswordModalOpen}
         onClose={() => setIsResetPasswordModalOpen(false)}
-        title={t.resetPassword}
-        size="sm"
-      >
-        <form onSubmit={handleResetPassword} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="space-y-6"
-          >
-            <Input
-              label={t.newPassword}
-              value={passwordData.password}
-              onChange={(value) => setPasswordData({ ...passwordData, password: value })}
-              placeholder={t.newPassword}
-              type="password"
-              required
-              className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-            />
-            <Input
-              label={t.confirmPassword}
-              value={passwordData.confirmPassword}
-              onChange={(value) => setPasswordData({ ...passwordData, confirmPassword: value })}
-              placeholder={t.confirmPassword}
-              type="password"
-              required
-              className="border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-            />
-          </motion.div>
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-4 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3 shadow-sm"
-              >
-                <AlertCircle className="w-5 h-5 text-red-600" />
-                <span className="text-red-600 font-medium">{error}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <div className="flex gap-4 mt-6">
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={loading}
-              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105 disabled:opacity-50"
-            >
-              {t.save}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setIsResetPasswordModalOpen(false)}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
-            >
-              {t.cancel}
-            </Button>
-          </div>
-        </form>
-      </Modal>
-      <Modal
+        onSubmit={handleResetPassword}
+        passwordData={passwordData}
+        setPasswordData={setPasswordData}
+        error={error}
+        t={t}
+        isRtl={isRtl}
+      />
+      <ProfileDeleteModal
         isOpen={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}
-        title={t.confirmDelete}
-        size="sm"
-      >
-        <div className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-          <p className="text-gray-600">{t.deleteWarning}</p>
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-4 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3 shadow-sm"
-              >
-                <AlertCircle className="w-5 h-5 text-red-600" />
-                <span className="text-red-600 font-medium">{error}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <div className="flex gap-4 mt-6">
-            <Button
-              type="button"
-              variant="danger"
-              onClick={handleDelete}
-              disabled={loading}
-              className="flex-1 bg-red-600 hover:bg-red-700 text-white rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105 disabled:opacity-50"
-            >
-              {t.deleteBranch}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setIsDeleteModalOpen(false)}
-              className="flex-1 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg px-6 py-3 shadow-md transition-transform transform hover:scale-105"
-            >
-              {t.cancel}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        onConfirm={handleDelete}
+        error={error}
+        t={t}
+        isRtl={isRtl}
+      />
     </div>
   );
 };
