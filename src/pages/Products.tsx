@@ -81,7 +81,9 @@ export function Products() {
       try {
         setLoading({ products: true, departments: true });
         const [productsResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ department: filterDepartment, search: searchTerm }),
+          productsAPI.getAll({ department: filterDepartment, search: searchTerm }).finally(() =>
+            setLoading((prev) => ({ ...prev, products: false }))
+          ),
           departmentAPI.getAll({ limit: 100 }).finally(() => setLoading((prev) => ({ ...prev, departments: false }))),
         ]);
 
@@ -96,8 +98,6 @@ export function Products() {
       } catch (err: any) {
         console.error('Fetch error:', err);
         setError(err.response?.data?.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
-      } finally {
-        setLoading((prev) => ({ ...prev, products: false }));
       }
     };
     fetchData();
@@ -211,7 +211,7 @@ export function Products() {
     }
   };
 
-  if (loading.products || loading.departments) {
+  if (loading.departments) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
@@ -286,6 +286,9 @@ export function Products() {
                 ))}
               </select>
             </div>
+            <div className="mt-4 text-sm text-gray-600">
+              {isRtl ? `عدد المنتجات: ${products.length}` : `Products Count: ${products.length}`}
+            </div>
           </div>
 
           {user?.role === 'admin' && (
@@ -299,7 +302,21 @@ export function Products() {
             </button>
           )}
 
-          {products.length === 0 ? (
+          {loading.products ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[...Array(6)].map((_, index) => (
+                <div key={index} className="p-5 bg-white rounded-xl shadow-sm">
+                  <div className="space-y-3 animate-pulse">
+                    <div className="h-40 bg-gray-200 rounded-t-xl"></div>
+                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : products.length === 0 ? (
             <div className="p-8 text-center bg-white rounded-2xl shadow-md">
               <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 text-sm">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
@@ -366,16 +383,6 @@ export function Products() {
               ))}
             </div>
           )}
-        </div>
-
-        <div className="lg:sticky lg:top-8 space-y-4 max-h-[calc(100vh-2rem)] overflow-y-auto">
-          <div className="p-6 bg-white rounded-2xl shadow-md">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{isRtl ? 'إحصائيات المنتجات' : 'Product Statistics'}</h3>
-            <div className="space-y-2 text-sm text-gray-600">
-              <p>{isRtl ? `إجمالي المنتجات: ${products.length}` : `Total Products: ${products.length}`}</p>
-              <p>{isRtl ? `الأقسام: ${departments.length}` : `Departments: ${departments.length}`}</p>
-            </div>
-          </div>
         </div>
       </div>
 

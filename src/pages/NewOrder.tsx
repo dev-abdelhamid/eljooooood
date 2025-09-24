@@ -48,7 +48,7 @@ interface Toast {
 
 export function NewOrder() {
   const { user } = useAuth();
-  const { t, language } = useLanguage();
+  const { language } = useLanguage();
   const isRtl = language === 'ar';
   const navigate = useNavigate();
   const summaryRef = useRef<HTMLDivElement>(null);
@@ -67,8 +67,6 @@ export function NewOrder() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
 
   const priorityOptions = useMemo(
     () => [
@@ -85,7 +83,6 @@ export function NewOrder() {
   const debouncedSearch = useCallback(
     debounce((value: string) => {
       setSearchTerm(value);
-      setCurrentPage(1);
     }, 300),
     []
   );
@@ -101,7 +98,7 @@ export function NewOrder() {
       try {
         setLoading((prev) => ({ ...prev, products: true, branches: true, departments: true }));
         const [productsResponse, branchesResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ limit: 12, page: currentPage, department: filterDepartment, search: searchTerm }).finally(() =>
+          productsAPI.getAll({ department: filterDepartment, search: searchTerm }).finally(() =>
             setLoading((prev) => ({ ...prev, products: false }))
           ),
           branchesAPI.getAll().finally(() => setLoading((prev) => ({ ...prev, branches: false }))),
@@ -110,11 +107,10 @@ export function NewOrder() {
 
         const productsWithDisplay = productsResponse.data.map((product: Product) => ({
           ...product,
-          displayName: language === 'ar' ? product.name : (product.nameEn || product.name),
-          displayUnit: language === 'ar' ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
+          displayName: isRtl ? product.name : (product.nameEn || product.name),
+          displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
         }));
         setProducts(productsWithDisplay);
-        setTotalPages(productsResponse.totalPages);
         setBranches(Array.isArray(branchesResponse) ? branchesResponse : []);
         setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data : []);
         if (user?.role === 'branch' && user?.branchId) {
@@ -126,7 +122,7 @@ export function NewOrder() {
       }
     };
     loadData();
-  }, [isRtl, user, navigate, filterDepartment, searchTerm, currentPage, language]);
+  }, [isRtl, user, navigate, filterDepartment, searchTerm]);
 
   useEffect(() => {
     socket.on('connect', () => {
@@ -146,17 +142,6 @@ export function NewOrder() {
       setTimeout(() => setToastState(null), 3000);
     }
   }, [toastState]);
-
-  const filteredProducts = useMemo(
-    () =>
-      products.filter(
-        (product) =>
-          ((language === 'ar' ? product.name : product.nameEn || product.name).toLowerCase().includes(searchTerm.toLowerCase()) ||
-            product.code.toLowerCase().includes(searchTerm.toLowerCase())) &&
-          (filterDepartment === '' || product.department._id === filterDepartment)
-      ),
-    [products, searchTerm, filterDepartment, language]
-  );
 
   const addToOrder = useCallback((product: Product) => {
     setOrderItems((prev) => {
@@ -246,7 +231,7 @@ export function NewOrder() {
     summaryRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  if (loading.products || loading.branches || loading.departments) {
+  if (loading.branches || loading.departments) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
@@ -385,19 +370,35 @@ export function NewOrder() {
                 ))}
               </select>
             </div>
+            <div className="mt-4 text-sm text-gray-600">
+              {isRtl ? `عدد المنتجات: ${products.length}` : `Products Count: ${products.length}`}
+            </div>
           </div>
           {loading.products ? (
-            <div className="p-6 text-center bg-white rounded-2xl shadow-md">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-amber-600 mx-auto"></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[...Array(6)].map((_, index) => (
+                <div key={index} className="p-5 bg-white rounded-xl shadow-sm">
+                  <div className="space-y-3 animate-pulse">
+                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                    <div className="h-3 bg-gray-200 rounded w-full"></div>
+                    <div className="flex justify-end gap-2">
+                      <div className="h-8 w-24 bg-gray-200 rounded-full"></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-          ) : filteredProducts.length === 0 ? (
+          ) : products.length === 0 ? (
             <div className="p-8 text-center bg-white rounded-2xl shadow-md">
               <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 text-sm">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredProducts.map((product) => {
+              {products.map((product) => {
                 const cartItem = orderItems.find((item) => item.productId === product._id);
                 return (
                   <div
@@ -455,37 +456,12 @@ export function NewOrder() {
               })}
             </div>
           )}
-          {totalPages > 1 && (
-            <div className="flex justify-center mt-6">
-              <button
-                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                disabled={currentPage === 1}
-                className="mx-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full transition-colors text-sm"
-                aria-label={isRtl ? 'السابق' : 'Previous'}
-              >
-                {isRtl ? 'السابق' : 'Previous'}
-              </button>
-              <span className="mx-4 self-center text-sm">
-                {isRtl ? `الصفحة ${currentPage} من ${totalPages}` : `Page ${currentPage} of ${totalPages}`}
-              </span>
-              <button
-                onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                disabled={currentPage === totalPages}
-                className="mx-2 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full transition-colors text-sm"
-                aria-label={isRtl ? 'التالي' : 'Next'}
-              >
-                {isRtl ? 'التالي' : 'Next'}
-              </button>
-            </div>
-          )}
         </div>
 
-        <div className="lg:sticky lg:top-8 space-y-4 max-h-[calc(100vh-2rem)] overflow-y-auto" ref={summaryRef}>
-          <div className="p-6 bg-white rounded-2xl shadow-md">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{isRtl ? 'ملخص الطلب' : 'Order Summary'}</h3>
-            {orderItems.length === 0 ? (
-              <p className="text-gray-600 text-center py-4 text-sm">{isRtl ? 'السلة فارغة' : 'Cart is empty'}</p>
-            ) : (
+        {orderItems.length > 0 && (
+          <div className="lg:sticky lg:top-8 space-y-4 max-h-[calc(100vh-2rem)] overflow-y-auto" ref={summaryRef}>
+            <div className="p-6 bg-white rounded-2xl shadow-md">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">{isRtl ? 'ملخص الطلب' : 'Order Summary'}</h3>
               <div className="space-y-3">
                 {orderItems.map((item) => (
                   <div
@@ -535,86 +511,86 @@ export function NewOrder() {
                   </div>
                 </div>
               </div>
-            )}
-          </div>
-          <div className="p-6 bg-white rounded-2xl shadow-md">
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {user?.role === 'admin' && (
+            </div>
+            <div className="p-6 bg-white rounded-2xl shadow-md">
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {user?.role === 'admin' && (
+                  <div>
+                    <label htmlFor="branch" className="block text-sm font-medium text-gray-700 mb-1">
+                      {isRtl ? 'الفرع' : 'Branch'}
+                    </label>
+                    <select
+                      id="branch"
+                      value={branch}
+                      onChange={(e) => setBranch(e.target.value)}
+                      className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
+                      aria-label={isRtl ? 'الفرع' : 'Branch'}
+                      disabled={loading.branches}
+                    >
+                      <option value="">{isRtl ? 'اختر الفرع' : 'Select Branch'}</option>
+                      {branches.map((b) => (
+                        <option key={b._id} value={b._id}>
+                          {isRtl ? b.name : (b.nameEn || b.name)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div>
-                  <label htmlFor="branch" className="block text-sm font-medium text-gray-700 mb-1">
-                    {isRtl ? 'الفرع' : 'Branch'}
+                  <label htmlFor="priority" className="block text-sm font-medium text-gray-700 mb-1">
+                    {isRtl ? 'الأولوية' : 'Priority'}
                   </label>
                   <select
-                    id="branch"
-                    value={branch}
-                    onChange={(e) => setBranch(e.target.value)}
+                    id="priority"
+                    value={priority}
+                    onChange={(e) => setPriority(e.target.value)}
                     className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
-                    aria-label={isRtl ? 'الفرع' : 'Branch'}
-                    disabled={loading.branches}
+                    aria-label={isRtl ? 'الأولوية' : 'Priority'}
                   >
-                    <option value="">{isRtl ? 'اختر الفرع' : 'Select Branch'}</option>
-                    {branches.map((b) => (
-                      <option key={b._id} value={b._id}>
-                        {isRtl ? b.name : (b.nameEn || b.name)}
+                    {priorityOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
                       </option>
                     ))}
                   </select>
                 </div>
-              )}
-              <div>
-                <label htmlFor="priority" className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRtl ? 'الأولوية' : 'Priority'}
-                </label>
-                <select
-                  id="priority"
-                  value={priority}
-                  onChange={(e) => setPriority(e.target.value)}
-                  className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
-                  aria-label={isRtl ? 'الأولوية' : 'Priority'}
-                >
-                  {priorityOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
-                  {isRtl ? 'ملاحظات' : 'Notes'}
-                </label>
-                <textarea
-                  id="notes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder={isRtl ? 'أدخل ملاحظات الطلب...' : 'Enter order notes...'}
-                  className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-y text-sm"
-                  rows={4}
-                  aria-label={isRtl ? 'ملاحظات' : 'Notes'}
-                />
-              </div>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={clearOrder}
-                  className="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full transition-colors text-sm"
-                  disabled={submitting || orderItems.length === 0}
-                  aria-label={isRtl ? 'مسح الطلب' : 'Clear Order'}
-                >
-                  {isRtl ? 'مسح الطلب' : 'Clear Order'}
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors text-sm"
-                  disabled={orderItems.length === 0 || submitting}
-                  aria-label={submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'إرسال الطلب' : 'Submit Order')}
-                >
-                  {submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'إرسال الطلب' : 'Submit Order')}
-                </button>
-              </div>
-            </form>
+                <div>
+                  <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
+                    {isRtl ? 'ملاحظات' : 'Notes'}
+                  </label>
+                  <textarea
+                    id="notes"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder={isRtl ? 'أدخل ملاحظات الطلب...' : 'Enter order notes...'}
+                    className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-y text-sm"
+                    rows={4}
+                    aria-label={isRtl ? 'ملاحظات' : 'Notes'}
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={clearOrder}
+                    className="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full transition-colors text-sm"
+                    disabled={submitting || orderItems.length === 0}
+                    aria-label={isRtl ? 'مسح الطلب' : 'Clear Order'}
+                  >
+                    {isRtl ? 'مسح الطلب' : 'Clear Order'}
+                  </button>
+                  <button
+                    type="submit"
+                    className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors text-sm"
+                    disabled={orderItems.length === 0 || submitting}
+                    aria-label={submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'إرسال الطلب' : 'Submit Order')}
+                  >
+                    {submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'إرسال الطلب' : 'Submit Order')}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
