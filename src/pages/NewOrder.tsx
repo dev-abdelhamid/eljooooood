@@ -41,6 +41,257 @@ interface OrderItem {
   price: number;
 }
 
+
+
+const OrderInput = ({
+  id,
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+  onClear,
+}: {
+  id: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  ariaLabel: string;
+  onClear: () => void;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="relative group">
+      <motion.div
+        initial={{ opacity: value ? 0 : 1 }}
+        animate={{ opacity: value ? 0 : 1 }}
+        transition={{ duration: 0.15 }}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500`}
+      >
+        <Search />
+      </motion.div>
+      <input
+        id={id}
+        type="text"
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={`w-full ${isRtl ? 'pr-11 pl-4' : 'pl-11 pr-4'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-amber-50 shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={ariaLabel}
+      />
+      <motion.div
+        initial={{ opacity: value ? 1 : 0 }}
+        animate={{ opacity: value ? 1 : 0 }}
+        transition={{ duration: 0.15 }}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
+      >
+        <button onClick={onClear} aria-label={isRtl ? 'مسح البحث' : 'Clear search'}>
+          <X className="w-5 h-5" />
+        </button>
+      </motion.div>
+    </div>
+  );
+};
+
+const OrderDropdown = ({
+  id,
+  value,
+  onChange,
+  options,
+  ariaLabel,
+  disabled = false,
+}: {
+  id: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  ariaLabel: string;
+  disabled?: boolean;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { label: isRtl ? 'كل الأقسام' : 'All Departments' };
+  return (
+    <div className="relative group">
+      <motion.button
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-amber-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        aria-label={ariaLabel}
+      >
+        <span className="truncate">{selectedOption.label}</span>
+        <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+          <ChevronDown className="w-5 h-5 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
+        </motion.div>
+      </motion.button>
+      <AnimatePresence>
+        {isOpen && !disabled && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.2 }}
+            className="absolute w-full mt-2 bg-white rounded-lg shadow-xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-thin"
+          >
+            {options.map((option) => (
+              <div
+                key={option.value}
+                onClick={() => {
+                  onChange(option.value);
+                  setIsOpen(false);
+                }}
+                className="px-4 py-2 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
+              >
+                {option.label}
+              </div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+const OrderTextarea = ({
+  id,
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+}: {
+  id: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  placeholder: string;
+  ariaLabel: string;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="relative group">
+      <textarea
+        id={id}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-amber-50 shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        rows={4}
+        aria-label={ariaLabel}
+      />
+    </div>
+  );
+};
+
+const OrderQuantityInput = ({
+  value,
+  onChange,
+  onIncrement,
+  onDecrement,
+}: {
+  value: number;
+  onChange: (val: string) => void;
+  onIncrement: () => void;
+  onDecrement: () => void;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="flex items-center gap-2">
+      <motion.button
+        onClick={onDecrement}
+        className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors duration-200 flex items-center justify-center"
+        aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
+      >
+        <Minus className="w-4 h-4 text-gray-700" />
+      </motion.button>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-12 h-8 text-center border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-amber-50 shadow-sm hover:shadow-md transition-all duration-200"
+        style={{ appearance: 'none' }}
+        aria-label={isRtl ? 'الكمية' : 'Quantity'}
+      />
+      <motion.button
+        onClick={onIncrement}
+        className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-lg transition-colors duration-200 flex items-center justify-center"
+        aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
+      >
+        <Plus className="w-4 h-4 text-white" />
+      </motion.button>
+    </div>
+  );
+};
+
+const OrderCard = ({
+  product,
+  cartItem,
+  addToOrder,
+  updateQuantity,
+  handleQuantityInput,
+}: {
+  product: Product;
+  cartItem: OrderItem | undefined;
+  addToOrder: (product: Product) => void;
+  updateQuantity: (productId: string, quantity: number) => void;
+  handleQuantityInput: (productId: string, value: string) => void;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -10 }}
+      transition={{ duration: 0.2 }}
+      className="p-5 bg-gradient-to-br from-white to-gray-50 rounded-lg shadow-sm border border-gray-100 hover:border-amber-200 transition-all duration-200 flex flex-col justify-between"
+    >
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-semibold text-gray-900 text-sm truncate">{product.displayName}</h3>
+          <p className="text-xs text-gray-500">{product.code}</p>
+        </div>
+        <p className="text-xs text-amber-600">
+          {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
+        </p>
+        <p className="font-semibold text-gray-900 text-sm">
+          {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
+        </p>
+      </div>
+      <div className="mt-4 flex justify-end">
+        {cartItem ? (
+          <OrderQuantityInput
+            value={cartItem.quantity}
+            onChange={(val) => handleQuantityInput(product._id, val)}
+            onIncrement={() => updateQuantity(product._id, cartItem.quantity + 1)}
+            onDecrement={() => updateQuantity(product._id, cartItem.quantity - 1)}
+          />
+        ) : (
+          <motion.button
+            onClick={() => addToOrder(product)}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors duration-200 flex items-center justify-center gap-2 shadow-sm"
+            aria-label={isRtl ? 'إضافة إلى السلة' : 'Add to Cart'}
+          >
+            <Plus className="w-4 h-4" />
+            {isRtl ? 'إضافة إلى السلة' : 'Add to Cart'}
+          </motion.button>
+        )}
+      </div>
+    </motion.div>
+  );
+};
+
+const OrderSkeletonCard = () => (
+  <div className="p-5 bg-white rounded-lg shadow-sm border border-gray-100">
+    <div className="space-y-3 animate-pulse">
+      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+      <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+      <div className="h-8 bg-gray-200 rounded w-1/3 mt-4"></div>
+    </div>
+  </div>
+);
+
 export function NewOrder() {
   const { user } = useAuth();
   const { language } = useLanguage();
