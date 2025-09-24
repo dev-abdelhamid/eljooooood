@@ -67,7 +67,7 @@ export function NewOrder() {
   const debouncedSearch = useCallback(
     debounce((value: string) => {
       setSearchTerm(value);
-    }, 200), // Reduced debounce for immediate character-by-character search
+    }, 200), // Reduced for faster response and smoother typing
     []
   );
 
@@ -143,9 +143,13 @@ export function NewOrder() {
   }, []);
 
   const handleQuantityInput = useCallback((productId: string, value: string) => {
+    // Only allow numbers
+    if (!/^\d*$/.test(value)) return;
     const quantity = parseInt(value) || 0;
-    if (value === '' || quantity <= 0) {
-      updateQuantity(productId, 0);
+    if (quantity <= 0) {
+      setOrderItems((prev) =>
+        prev.map((item) => (item.productId === productId ? { ...item, quantity: 0 } : item))
+      );
       return;
     }
     updateQuantity(productId, quantity);
@@ -215,17 +219,7 @@ export function NewOrder() {
     summaryRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const CustomInput = ({
-    value,
-    onChange,
-    placeholder,
-    ariaLabel,
-  }: {
-    value: string;
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    placeholder: string;
-    ariaLabel: string;
-  }) => (
+  const CustomInput = ({ value, onChange, placeholder, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder: string; ariaLabel: string }) => (
     <div className="relative group">
       <Search className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500`} />
       <input
@@ -236,7 +230,7 @@ export function NewOrder() {
           onChange(e);
         }}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pr-11 pl-4' : 'pl-11 pr-4'} py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-md hover:shadow-lg text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pr-12 pl-4 text-right' : 'pl-12 pr-4 text-left'} py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-md hover:shadow-lg text-sm placeholder-gray-400`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -257,19 +251,7 @@ export function NewOrder() {
     </div>
   );
 
-  const CustomSelect = ({
-    value,
-    onChange,
-    children,
-    ariaLabel,
-    disabled = false,
-  }: {
-    value: string;
-    onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
-    children: React.ReactNode;
-    ariaLabel: string;
-    disabled?: boolean;
-  }) => (
+  const CustomSelect = ({ value, onChange, children, ariaLabel, disabled = false }: { value: string; onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; children: React.ReactNode; ariaLabel: string; disabled?: boolean }) => (
     <div className="relative group">
       <select
         value={value}
@@ -284,17 +266,7 @@ export function NewOrder() {
     </div>
   );
 
-  const CustomTextarea = ({
-    value,
-    onChange,
-    placeholder,
-    ariaLabel,
-  }: {
-    value: string;
-    onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-    placeholder: string;
-    ariaLabel: string;
-  }) => (
+  const CustomTextarea = ({ value, onChange, placeholder, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void; placeholder: string; ariaLabel: string }) => (
     <div className="relative group">
       <textarea
         value={value}
@@ -307,12 +279,12 @@ export function NewOrder() {
     </div>
   );
 
-  const QuantityInput = ({ value, onChange, onIncrement, onDecrement }: { value: number; onChange: (val: string) => void; onIncrement: () => void; onDecrement: () => void }) => (
+  const QuantityInput = ({ value, onChange, onDecrease, onIncrease, onRemove }: { value: number; onChange: (val: string) => void; onDecrease: () => void; onIncrease: () => void; onRemove: () => void }) => (
     <div className="flex items-center gap-2">
       <motion.button
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        onClick={onDecrement}
+        onClick={onDecrease}
         className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors flex items-center justify-center"
         aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
       >
@@ -322,17 +294,30 @@ export function NewOrder() {
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm min-w-[2.75rem] transition-all duration-300"
+        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm min-w-[2.5rem] transition-all duration-200"
+        style={{ 
+          direction: 'ltr', // Force LTR for numbers
+          fontFamily: 'monospace' // Better for numbers
+        }}
         aria-label={isRtl ? 'الكمية' : 'Quantity'}
       />
       <motion.button
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.95 }}
-        onClick={onIncrement}
+        onClick={onIncrease}
         className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors flex items-center justify-center"
         aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
       >
         <Plus className="w-4 h-4 text-white" />
+      </motion.button>
+      <motion.button
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+        onClick={onRemove}
+        className="w-8 h-8 bg-red-500 hover:bg-red-600 rounded-full transition-colors flex items-center justify-center ml-1"
+        aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
+      >
+        <Trash2 className="w-4 h-4 text-white" />
       </motion.button>
     </div>
   );
@@ -369,17 +354,21 @@ export function NewOrder() {
       )}
 
       {orderItems.length > 0 && (
-        <div className={`lg:hidden fixed bottom-6 ${isRtl ? 'left-6' : 'right-6'} z-50`}>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className={`lg:hidden fixed bottom-6 ${isRtl ? 'left-6' : 'right-6'} z-50`}
+        >
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             onClick={scrollToSummary}
-            className="p-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg transition-all duration-300"
+            className="p-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg"
             aria-label={isRtl ? 'التمرير للملخص' : 'Scroll to Summary'}
           >
             <ChevronDown className="w-6 h-6" />
           </motion.button>
-        </div>
+        </motion.div>
       )}
 
       <div className={`space-y-4 ${orderItems.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-6 lg:space-y-0' : ''}`}>
@@ -437,17 +426,22 @@ export function NewOrder() {
               <p className="text-gray-600 text-sm">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
             </motion.div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
+            <motion.div
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+            >
               <AnimatePresence>
                 {products.map((product, index) => {
                   const cartItem = orderItems.find((item) => item.productId === product._id);
                   return (
                     <motion.div
                       key={product._id}
-                      initial={{ opacity: 0, y: 10 }}
+                      initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      transition={{ duration: 0.2, delay: index * 0.02 }} // Fast staggered animation without delay impact
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.2, delay: index * 0.02 }} // Reduced delay for faster appearance
                       className="p-5 bg-white rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 flex flex-col justify-between border border-gray-100 hover:border-amber-200"
                     >
                       <div className="space-y-2">
@@ -469,8 +463,9 @@ export function NewOrder() {
                           <QuantityInput
                             value={cartItem.quantity}
                             onChange={(val) => handleQuantityInput(product._id, val)}
-                            onIncrement={() => updateQuantity(product._id, cartItem.quantity + 1)}
-                            onDecrement={() => updateQuantity(product._id, cartItem.quantity - 1)}
+                            onDecrease={() => updateQuantity(product._id, cartItem.quantity - 1)}
+                            onIncrease={() => updateQuantity(product._id, cartItem.quantity + 1)}
+                            onRemove={() => removeFromOrder(product._id)}
                           />
                         ) : (
                           <motion.button
@@ -489,7 +484,7 @@ export function NewOrder() {
                   );
                 })}
               </AnimatePresence>
-            </div>
+            </motion.div>
           )}
         </div>
 
@@ -497,22 +492,26 @@ export function NewOrder() {
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5 }}
+            transition={{ duration: 0.4 }}
             className="lg:col-span-1 lg:sticky lg:top-8 space-y-4 max-h-[calc(100vh-8rem)] overflow-y-auto scrollbar-thin"
             ref={summaryRef}
           >
-            <div className="p-5 bg-white rounded-xl shadow-lg">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="p-5 bg-white rounded-xl shadow-lg"
+            >
               <h3 className="text-lg font-bold text-gray-900 mb-4">{isRtl ? 'ملخص الطلب' : 'Order Summary'}</h3>
               <div className="space-y-3">
                 <AnimatePresence>
                   {orderItems.map((item, index) => (
                     <motion.div
                       key={item.productId}
-                      initial={{ opacity: 0, x: 10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -10 }}
-                      transition={{ duration: 0.2, delay: index * 0.02 }}
-                      className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-100"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.2, delay: index * 0.05 }}
+                      className="flex items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200"
                     >
                       <div className="flex-1">
                         <p className="font-semibold text-gray-900 text-sm">
@@ -522,40 +521,29 @@ export function NewOrder() {
                           {item.price} {isRtl ? 'ريال' : 'SAR'} / {item.product.displayUnit}
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <QuantityInput
-                          value={item.quantity}
-                          onChange={(val) => handleQuantityInput(item.productId, val)}
-                          onIncrement={() => updateQuantity(item.productId, item.quantity + 1)}
-                          onDecrement={() => updateQuantity(item.productId, item.quantity - 1)}
-                        />
-                        <motion.button
-                          whileHover={{ scale: 1.1 }}
-                          whileTap={{ scale: 0.9 }}
-                          onClick={() => removeFromOrder(item.productId)}
-                          className="w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center"
-                          aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </motion.button>
-                      </div>
+                      <QuantityInput
+                        value={item.quantity}
+                        onChange={(val) => handleQuantityInput(item.productId, val)}
+                        onDecrease={() => updateQuantity(item.productId, item.quantity - 1)}
+                        onIncrease={() => updateQuantity(item.productId, item.quantity + 1)}
+                        onRemove={() => removeFromOrder(item.productId)}
+                      />
                     </motion.div>
                   ))}
                 </AnimatePresence>
                 <div className="border-t pt-3">
-                  <div className="flex justify-between font-bold text-gray-900 text-sm">
+                  <div className="flex justify-between font-bold text-gray-900 text-base">
                     <span>{isRtl ? 'الإجمالي النهائي' : 'Final Total'}:</span>
-                    <span className="text-teal-600">
+                    <span className="text-amber-600">
                       {getTotalAmount} {isRtl ? 'ريال' : 'SAR'}
                     </span>
                   </div>
                 </div>
               </div>
-            </div>
+            </motion.div>
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.4 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
               className="p-5 bg-white rounded-xl shadow-lg"
             >
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -595,7 +583,7 @@ export function NewOrder() {
                     whileTap={{ scale: 0.95 }}
                     type="button"
                     onClick={clearOrder}
-                    className="flex-1 px-4 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm transition-all duration-300 shadow-sm"
+                    className="flex-1 px-4 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm transition-all duration-300"
                     disabled={submitting || orderItems.length === 0}
                     aria-label={isRtl ? 'مسح الطلب' : 'Clear Order'}
                   >
@@ -605,7 +593,7 @@ export function NewOrder() {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     type="submit"
-                    className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-all duration-300 shadow-lg hover:shadow-xl"
+                    className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-all duration-300"
                     disabled={orderItems.length === 0 || submitting}
                     aria-label={submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'إرسال الطلب' : 'Submit Order')}
                   >
@@ -625,31 +613,40 @@ export function NewOrder() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
           >
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.8, opacity: 0 }}
               transition={{ duration: 0.3 }}
-              className="bg-white rounded-xl shadow-2xl max-w-md p-6 w-[90vw]"
+              className="bg-white rounded-xl shadow-2xl max-w-full w-[95vw] sm:max-w-md p-6"
             >
-              <h3 className="text-lg font-bold text-gray-900 mb-4">{isRtl ? 'تأكيد الطلب' : 'Confirm Order'}</h3>
-              <p className="text-sm text-gray-600 mb-6">{isRtl ? 'هل أنت متأكد من إرسال الطلب؟' : 'Are you sure you want to submit the order?'}</p>
+              <h3 className="text-xl font-bold text-gray-900 mb-4 text-center">
+                {isRtl ? 'تأكيد الطلب' : 'Confirm Order'}
+              </h3>
+              <p className="text-gray-600 mb-6 text-center">
+                {isRtl ? 'هل أنت متأكد من إرسال الطلب؟' : 'Are you sure you want to submit the order?'}
+              </p>
               <div className="flex justify-end gap-3">
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  type="button"
                   onClick={() => setShowConfirmModal(false)}
-                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm transition-colors"
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm transition-all duration-300"
                 >
                   {isRtl ? 'إلغاء' : 'Cancel'}
-                </button>
-                <button
+                </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
                   onClick={confirmOrder}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-all duration-300"
                   disabled={submitting}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-colors disabled:opacity-50"
                 >
                   {submitting ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : (isRtl ? 'تأكيد' : 'Confirm')}
-                </button>
+                </motion.button>
               </div>
             </motion.div>
           </motion.div>
