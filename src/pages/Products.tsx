@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { productsAPI, departmentAPI } from '../services/api';
-import { Package, Plus, Edit2, Trash2, Search, AlertCircle, X, ChevronDown } from 'lucide-react';
+import { Package, Plus, Edit2, Trash2, Search, AlertCircle, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 
@@ -15,7 +15,6 @@ interface Product {
   price: number;
   unit?: string;
   unitEn?: string;
-  image?: string;
   displayName: string;
   displayUnit: string;
 }
@@ -41,11 +40,11 @@ export function Products() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState({ products: false, departments: false });
 
   const debouncedSearch = useCallback(
     debounce((value: string) => {
@@ -57,34 +56,46 @@ export function Products() {
   useEffect(() => {
     if (!user || !['admin'].includes(user.role)) {
       setError(isRtl ? 'غير مصرح' : 'Unauthorized');
-      setLoading(false);
       return;
     }
 
-    const fetchData = async () => {
+    const fetchDepartments = async () => {
       try {
-        setLoading(true);
-        const [productsResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 0 }),
-          departmentAPI.getAll({ limit: 100 }),
-        ]);
+        setLoading((prev) => ({ ...prev, departments: true }));
+        const departmentsResponse = await departmentAPI.getAll({ limit: 100 });
+        setDepartments(departmentsResponse.data);
+      } catch (err: any) {
+        console.error('Fetch departments error:', err);
+        setError(err.response?.data?.message || (isRtl ? 'خطأ في جلب الأقسام' : 'Error fetching departments'));
+      } finally {
+        setLoading((prev) => ({ ...prev, departments: false }));
+      }
+    };
+    fetchDepartments();
+  }, [isRtl, user]);
 
+  useEffect(() => {
+    if (!user || !['admin'].includes(user.role)) return;
+
+    const fetchProducts = async () => {
+      try {
+        setLoading((prev) => ({ ...prev, products: true }));
+        const productsResponse = await productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 0 });
         const productsWithDisplay = productsResponse.data.map((product: Product) => ({
           ...product,
           displayName: isRtl ? product.name : (product.nameEn || product.name),
           displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
         }));
         setProducts(productsWithDisplay);
-        setDepartments(departmentsResponse.data);
         setError('');
       } catch (err: any) {
-        console.error('Fetch error:', err);
-        setError(err.response?.data?.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
+        console.error('Fetch products error:', err);
+        setError(err.response?.data?.message || (isRtl ? 'خطأ في جلب المنتجات' : 'Error fetching products'));
       } finally {
-        setLoading(false);
+        setLoading((prev) => ({ ...prev, products: false }));
       }
     };
-    fetchData();
+    fetchProducts();
   }, [isRtl, user, filterDepartment, searchTerm]);
 
   const openModal = (product?: Product) => {
@@ -133,30 +144,13 @@ export function Products() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim()) {
-      setError(isRtl ? 'اسم المنتج مطلوب' : 'Product name is required');
-      return;
-    }
-    if (!formData.code.trim()) {
-      setError(isRtl ? 'رمز المنتج مطلوب' : 'Product code is required');
-      return;
-    }
-    if (!formData.department) {
-      setError(isRtl ? 'القسم مطلوب' : 'Department is required');
-      return;
-    }
-    const priceNum = parseFloat(formData.price);
-    if (isNaN(priceNum) || priceNum <= 0) {
-      setError(isRtl ? 'السعر يجب أن يكون رقم إيجابي' : 'Price must be a positive number');
-      return;
-    }
     try {
       const productData = {
-        name: formData.name.trim(),
-        nameEn: formData.nameEn.trim() || undefined,
-        code: formData.code.trim(),
+        name: formData.name,
+        nameEn: formData.nameEn || undefined,
+        code: formData.code,
         department: formData.department,
-        price: priceNum,
+        price: parseFloat(formData.price),
         unit: formData.unit || undefined,
       };
       if (editingProduct) {
@@ -211,65 +205,25 @@ export function Products() {
     }
   };
 
-  const CustomInput = ({ value, onChange, placeholder, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder: string; ariaLabel: string }) => (
-    <div className="relative group">
-      <Search className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500 ${isRtl ? 'right-3' : 'left-3'}`} />
-      <input
-        type="text"
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className={`w-full py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-xs placeholder-gray-400 ${isRtl ? 'pr-10 pl-4 text-right' : 'pl-10 pr-4 text-left'}`}
-        aria-label={ariaLabel}
-      />
-      {value && (
-        <button
-          onClick={() => {
-            setSearchInput('');
-            setSearchTerm('');
-          }}
-          className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors ${isRtl ? 'left-3' : 'right-3'}`}
-          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
-        >
-          <X className="w-4 h-4" />
-        </button>
-      )}
-    </div>
-  );
-
-  const CustomSelect = ({ value, onChange, children, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void; children: React.ReactNode; ariaLabel: string }) => (
-    <div className="relative group">
-      <select
-        value={value}
-        onChange={onChange}
-        className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm appearance-none text-xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'}`}
-        aria-label={ariaLabel}
-      >
-        {children}
-      </select>
-      <ChevronDown className={`absolute top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors ${isRtl ? 'left-3' : 'right-3'}`} />
-    </div>
-  );
-
   return (
-    <div className="mx-auto px-4 py-6 min-h-screen overflow-hidden" dir={isRtl ? 'rtl' : 'ltr'}>
-      <div className="mb-4 flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-2">
-        <div className="flex items-center gap-2">
-          <Package className="w-6 h-6 text-amber-600" />
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">{isRtl ? 'إدارة المنتجات' : 'Manage Products'}</h1>
-            <p className="text-gray-600 text-xs">
-              {isRtl ? 'قم بإضافة المنتجات أو تعديلها أو حذفها' : 'Add, edit, or delete products'}
-            </p>
-          </div>
+    <div className="mx-auto px-2 sm:px-4 py-6 min-h-screen overflow-y-auto" dir={isRtl ? 'rtl' : 'ltr'}>
+      <div className="mb-4 flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-3">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Package className="w-6 h-6 text-amber-600" />
+            {isRtl ? 'إدارة المنتجات' : 'Manage Products'}
+          </h1>
+          <p className="text-gray-600 mt-1 text-xs">
+            {isRtl ? 'قم بإضافة المنتجات أو تعديلها أو حذفها' : 'Add, edit, or delete products'}
+          </p>
         </div>
         {user?.role === 'admin' && (
           <button
             onClick={() => openModal()}
-            className="w-auto px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+            className="w-full sm:w-auto px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-full text-xs transition-colors flex items-center justify-center gap-1 shadow-sm"
             aria-label={isRtl ? 'إضافة منتج جديد' : 'Add New Product'}
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3 h-3" />
             {isRtl ? 'إضافة منتج جديد' : 'Add New Product'}
           </button>
         )}
@@ -283,39 +237,48 @@ export function Products() {
       )}
 
       <div className="space-y-3">
-        <div className="p-4 bg-white rounded-xl shadow-sm">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <CustomInput
-              value={searchInput}
-              onChange={(e) => {
-                setSearchInput(e.target.value);
-                debouncedSearch(e.target.value);
-              }}
-              placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
-              ariaLabel={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
-            />
-            <CustomSelect
-              value={filterDepartment}
-              onChange={(e) => setFilterDepartment(e.target.value)}
-              ariaLabel={isRtl ? 'تصفية حسب القسم' : 'Filter by department'}
-            >
-              <option value="">{isRtl ? 'كل الأقسام' : 'All Departments'}</option>
-              {departments.map((d) => (
-                <option key={d._id} value={d._id}>
-                  {isRtl ? d.name : (d.nameEn || d.name)}
-                </option>
-              ))}
-            </CustomSelect>
+        <div className="p-4 sm:p-6 bg-white rounded-2xl shadow-md">
+          <div className="grid grid-cols-1 gap-3">
+            <div className="relative group">
+              <Search className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500 ${isRtl ? 'right-2' : 'left-2'}`} />
+              <input
+                type="text"
+                value={searchInput}
+                onChange={(e) => {
+                  setSearchInput(e.target.value);
+                  debouncedSearch(e.target.value);
+                }}
+                placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
+                className={`w-full py-2 border border-gray-200 rounded-full focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'pr-8 pl-3 text-right' : 'pl-8 pr-3 text-left'}`}
+                aria-label={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
+              />
+            </div>
+            <div className="relative group">
+              <select
+                value={filterDepartment}
+                onChange={(e) => setFilterDepartment(e.target.value)}
+                className={`w-full px-3 py-2 border border-gray-200 rounded-full focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm hover:shadow-md appearance-none text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                aria-label={isRtl ? 'تصفية حسب القسم' : 'Filter by department'}
+              >
+                <option value="">{isRtl ? 'كل الأقسام' : 'All Departments'}</option>
+                {departments.map((d) => (
+                  <option key={d._id} value={d._id}>
+                    {isRtl ? d.name : (d.nameEn || d.name)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 group-focus-within:text-amber-500 w-4 h-4 pointer-events-none ${isRtl ? 'left-2' : 'right-2'}`} />
+            </div>
           </div>
         </div>
         <div className="text-center text-xs text-gray-600">
           {isRtl ? `عدد المنتجات: ${products.length}` : `Products Count: ${products.length}`}
         </div>
 
-        {loading ? (
+        {loading.products || loading.departments ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {[...Array(6)].map((_, index) => (
-              <div key={index} className="p-4 bg-white rounded-xl shadow-sm">
+              <div key={index} className="p-3 bg-white rounded-xl shadow-sm">
                 <div className="space-y-2 animate-pulse">
                   <div className="h-3 bg-gray-200 rounded w-3/4"></div>
                   <div className="h-2 bg-gray-200 rounded w-1/4"></div>
@@ -325,13 +288,13 @@ export function Products() {
             ))}
           </div>
         ) : products.length === 0 ? (
-          <div className="p-6 text-center bg-white rounded-xl shadow-sm">
+          <div className="p-6 text-center bg-white rounded-2xl shadow-md">
             <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
             <p className="text-gray-600 text-xs">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
             {user?.role === 'admin' && !searchTerm && !filterDepartment && (
               <button
                 onClick={() => openModal()}
-                className="mt-3 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
+                className="mt-3 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-full text-xs transition-colors"
                 aria-label={isRtl ? 'إضافة أول منتج' : 'Add First Product'}
               >
                 {isRtl ? 'إضافة أول منتج' : 'Add First Product'}
@@ -343,16 +306,16 @@ export function Products() {
             {products.map((product) => (
               <div
                 key={product._id}
-                className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+                className="p-3 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between"
               >
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="font-semibold text-gray-900 text-sm truncate">
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <h3 className="font-semibold text-gray-900 text-xs truncate">
                       {product.displayName}
                     </h3>
                     <p className="text-xs text-gray-500">{product.code}</p>
                   </div>
-                  <p className="text-xs text-amber-600">
+                  <p className="text-xs text-amber-600 truncate">
                     {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
                   </p>
                   <p className="font-semibold text-gray-900 text-xs">
@@ -360,20 +323,20 @@ export function Products() {
                   </p>
                 </div>
                 {user?.role === 'admin' && (
-                  <div className="mt-3 flex items-center justify-end gap-1.5">
+                  <div className="mt-2 flex justify-end gap-1.5">
                     <button
                       onClick={() => openModal(product)}
-                      className="p-1.5 w-7 h-7 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center"
+                      className="p-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors"
                       title={isRtl ? 'تعديل' : 'Edit'}
                     >
-                      <Edit2 className="w-3.5 h-3.5" />
+                      <Edit2 className="w-3 h-3" />
                     </button>
                     <button
                       onClick={() => deleteProduct(product._id)}
-                      className="p-1.5 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center"
+                      className="p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors"
                       title={isRtl ? 'حذف' : 'Delete'}
                     >
-                      <Trash2 className="w-3.5 h-3.5" />
+                      <Trash2 className="w-3 h-3" />
                     </button>
                   </div>
                 )}
@@ -384,13 +347,13 @@ export function Products() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-auto">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-4 sm:p-6 mx-2">
+            <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-3">
               {editingProduct ? (isRtl ? 'تعديل المنتج' : 'Edit Product') : (isRtl ? 'إضافة منتج جديد' : 'Add New Product')}
             </h3>
             <form onSubmit={handleSubmit} className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
                   <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">
                     {isRtl ? 'اسم المنتج' : 'Product Name'}
@@ -401,7 +364,7 @@ export function Products() {
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder={isRtl ? 'أدخل اسم المنتج' : 'Enter product name'}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-xs"
+                    className="w-full px-2 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-xs overflow-hidden"
                   />
                 </div>
                 <div>
@@ -413,7 +376,7 @@ export function Products() {
                     value={formData.nameEn}
                     onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
                     placeholder={isRtl ? 'أدخل الاسم بالإنجليزية' : 'Enter English name'}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-xs"
+                    className="w-full px-2 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-xs overflow-hidden"
                   />
                 </div>
                 <div>
@@ -426,32 +389,28 @@ export function Products() {
                     onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                     placeholder={isRtl ? 'أدخل رمز المنتج' : 'Enter product code'}
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-xs"
+                    className="w-full px-2 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-xs overflow-hidden"
                   />
                 </div>
-                <div>
+                <div className="relative group">
                   <label htmlFor="department" className="block text-xs font-medium text-gray-700 mb-1">
                     {isRtl ? 'القسم' : 'Department'}
                   </label>
-                  <div className="relative group">
-                    <select
-                      id="department"
-                      value={formData.department}
-                      onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                      required
-                      className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm appearance-none text-xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'}`}
-                    >
-                      <option value="">{isRtl ? 'اختر القسم' : 'Select Department'}</option>
-                      {departments.map((d) => (
-                        <option key={d._id} value={d._id}>
-                          {isRtl ? d.name : (d.nameEn || d.name)}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown
-                      className={`absolute top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors ${isRtl ? 'left-3' : 'right-3'}`}
-                    />
-                  </div>
+                  <select
+                    id="department"
+                    value={formData.department}
+                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                    required
+                    className={`w-full px-2 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-xs appearance-none overflow-hidden ${isRtl ? 'text-right' : 'text-left'}`}
+                  >
+                    <option value="">{isRtl ? 'اختر القسم' : 'Select Department'}</option>
+                    {departments.map((d) => (
+                      <option key={d._id} value={d._id}>
+                        {isRtl ? d.name : (d.nameEn || d.name)}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 group-focus-within:text-amber-500 w-4 h-4 pointer-events-none ${isRtl ? 'left-2' : 'right-2'}`} />
                 </div>
                 <div>
                   <label htmlFor="price" className="block text-xs font-medium text-gray-700 mb-1">
@@ -464,30 +423,26 @@ export function Products() {
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                     placeholder="0.00"
                     required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-xs"
+                    className="w-full px-2 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-xs overflow-hidden"
                   />
                 </div>
-                <div>
+                <div className="relative group">
                   <label htmlFor="unit" className="block text-xs font-medium text-gray-700 mb-1">
                     {isRtl ? 'الوحدة' : 'Unit'}
                   </label>
-                  <div className="relative group">
-                    <select
-                      id="unit"
-                      value={formData.unit}
-                      onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                      className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm appearance-none text-xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'}`}
-                    >
-                      {unitOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {isRtl ? opt.labelAr : opt.labelEn}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown
-                      className={`absolute top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors ${isRtl ? 'left-3' : 'right-3'}`}
-                    />
-                  </div>
+                  <select
+                    id="unit"
+                    value={formData.unit}
+                    onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                    className={`w-full px-2 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-xs appearance-none overflow-hidden ${isRtl ? 'text-right' : 'text-left'}`}
+                  >
+                    {unitOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {isRtl ? opt.labelAr : opt.labelEn}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 group-focus-within:text-amber-500 w-4 h-4 pointer-events-none ${isRtl ? 'left-2' : 'right-2'}`} />
                 </div>
               </div>
               {error && (
@@ -500,14 +455,14 @@ export function Products() {
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors"
+                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full transition-colors text-xs"
                   aria-label={isRtl ? 'إلغاء' : 'Cancel'}
                 >
                   {isRtl ? 'إلغاء' : 'Cancel'}
                 </button>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors text-xs"
                   aria-label={editingProduct ? (isRtl ? 'تحديث المنتج' : 'Update Product') : (isRtl ? 'إضافة المنتج' : 'Add Product')}
                 >
                   {editingProduct ? (isRtl ? 'تحديث المنتج' : 'Update Product') : (isRtl ? 'إضافة المنتج' : 'Add Product')}
