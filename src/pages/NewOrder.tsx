@@ -309,6 +309,7 @@ export function NewOrder() {
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   const socket = useMemo(() => io('https://eljoodia-server-production.up.railway.app'), []);
 
