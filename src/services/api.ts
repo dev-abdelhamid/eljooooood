@@ -605,20 +605,10 @@ export const departmentAPI = {
     return response;
   },
 };
-
 export const chefsAPI = {
   getAll: async () => {
     const response = await api.get('/chefs');
     console.log(`[${new Date().toISOString()}] chefsAPI.getAll - Response:`, response);
-    return response;
-  },
-  getById: async (id: string) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.getById - Invalid chef ID:`, id);
-      throw new Error('Invalid chef ID');
-    }
-    const response = await api.get(`/chefs/${id}`);
-    console.log(`[${new Date().toISOString()}] chefsAPI.getById - Response:`, response);
     return response;
   },
   getByUserId: async (userId: string) => {
@@ -670,6 +660,7 @@ export const chefsAPI = {
     };
     department: string;
   }) => {
+ 
     const response = await api.put(`/chefs/${id}`, {
       user: {
         name: chefData.user.name.trim(),
