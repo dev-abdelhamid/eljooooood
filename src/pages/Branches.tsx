@@ -278,7 +278,7 @@ const BranchInput = ({
       onChange={onChange}
       placeholder={placeholder}
       required={required}
-      className={`w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors duration-200 bg-white shadow-sm text-xs placeholder-gray-400 font-medium ${isRtl ? 'text-right' : 'text-left'}`}
+      className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
       aria-label={ariaLabel}
     />
   );
@@ -299,35 +299,24 @@ const BranchSearchInput = ({
   const isRtl = language === 'ar';
   return (
     <div className="relative group">
-      <motion.div
-        initial={{ opacity: value ? 0 : 1 }}
-        animate={{ opacity: value ? 0 : 1 }}
-        transition={{ duration: 0.2, ease: 'easeOut' }}
-        className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`}
-      >
-        <Search />
-      </motion.div>
+      <Search className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`} />
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pr-10 pl-3' : 'pl-10 pr-3'} py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors duration-200 bg-white shadow-sm text-xs placeholder-gray-400 font-medium ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pl-10 pr-2' : 'pr-10 pl-2'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       />
-      <motion.div
-        initial={{ opacity: value ? 1 : 0 }}
-        animate={{ opacity: value ? 1 : 0 }}
-        transition={{ duration: 0.2, ease: 'easeOut' }}
-        className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
-      >
+      {value && (
         <button
           onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
+          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
           <X className="w-4 h-4" />
         </button>
-      </motion.div>
+      )}
     </div>
   );
 };
@@ -1220,7 +1209,7 @@ export const Branches: React.FC = () => {
   };
 
   return (
-    <div className={`mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 min-h-screen overflow-y-auto scrollbar-thin ${isRtl ? 'font-arabic' : 'font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`mx-auto  px-4 sm:px-6 lg:px-8 py-8 min-h-screen overflow-y-auto scrollbar-thin`}>
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -1228,7 +1217,7 @@ export const Branches: React.FC = () => {
         className="mb-6 flex flex-col items-center gap-4"
       >
         <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-between sm:items-center w-full">
-          <div className="flex items-center gap-3">
+          <div className="flex  flex-col items-start gap-3 sm:flex-row sm:items-center gap-3">
             <MapPin className="w-6 h-6 text-amber-600" />
             <div className="text-center sm:text-left">
               <h1 className="text-xl font-bold text-gray-900">{t.manage}</h1>
