@@ -5,6 +5,7 @@ import { productsAPI, departmentAPI } from '../services/api';
 import { Package, Plus, Edit2, Trash2, Search, AlertCircle, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Product {
   _id: string;
@@ -32,6 +33,109 @@ const unitOptions = [
   { value: 'علبة', valueEn: 'Pack', labelAr: 'علبة', labelEn: 'Pack' },
   { value: 'صينية', valueEn: 'Tray', labelAr: 'صينية', labelEn: 'Tray' },
 ];
+
+const CustomInput = ({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  ariaLabel: string;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="relative group">
+      <motion.div
+        initial={{ opacity: value ? 0 : 1 }}
+        animate={{ opacity: value ? 0 : 1 }}
+        transition={{ duration: 0.15 }}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500`}
+      >
+        <Search />
+      </motion.div>
+      <input
+        type="text"
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={`w-full ${isRtl ? 'pl-11 pr-4' : 'pr-11 pl-4'} py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={ariaLabel}
+      />
+      <motion.div
+        initial={{ opacity: value ? 1 : 0 }}
+        animate={{ opacity: value ? 1 : 0 }}
+        transition={{ duration: 0.15 }}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
+      >
+        <button
+          onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
+          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </motion.div>
+    </div>
+  );
+};
+
+const CustomDropdown = ({
+  value,
+  onChange,
+  options,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  ariaLabel: string;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const selectedOption = options.find((opt) => opt.value === value) || { label: isRtl ? 'كل الأقسام' : 'All Departments' };
+  return (
+    <div className="relative group">
+      <motion.button
+        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center`}
+        aria-label={ariaLabel}
+      >
+        <span className="truncate">{selectedOption.label}</span>
+        <motion.div animate={{ rotate: isDropdownOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+          <ChevronDown className="w-5 h-5 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
+        </motion.div>
+      </motion.button>
+      <AnimatePresence>
+        {isDropdownOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.15 }}
+            className="absolute w-full mt-2 bg-white rounded-xl shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none"
+          >
+            {options.map((option) => (
+              <motion.div
+                key={option.value}
+                onClick={() => {
+                  onChange(option.value);
+                  setIsDropdownOpen(false);
+                }}
+                className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
+              >
+                {option.label}
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
 
 export function Products() {
   const { language } = useLanguage();
@@ -195,70 +299,8 @@ export function Products() {
     }
   };
 
-  const CustomInput = ({
-    value,
-    onChange,
-    placeholder,
-    ariaLabel,
-  }: {
-    value: string;
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    placeholder: string;
-    ariaLabel: string;
-  }) => (
-    <div className="relative group">
-      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500" />
-      <input
-        type="text"
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className="w-full pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400"
-        aria-label={ariaLabel}
-      />
-      {value && (
-        <button
-          onClick={() => {
-            setSearchInput('');
-            setSearchTerm('');
-          }}
-          className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors"
-          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
-        >
-          <X className="w-4 h-4" />
-        </button>
-      )}
-    </div>
-  );
-
-  const CustomSelect = ({
-    value,
-    onChange,
-    children,
-    ariaLabel,
-  }: {
-    value: string;
-    onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
-    children: React.ReactNode;
-    ariaLabel: string;
-  }) => (
-    <div className="relative group">
-      <select
-        value={value}
-        onChange={onChange}
-        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-xs text-gray-700 hover:scale-[1.02] transform"
-        aria-label={ariaLabel}
-      >
-        {children}
-      </select>
-      <ChevronDown
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors`}
-      />
-    </div>
-  );
-
   return (
-    <div className="mx-auto px-4 py-6 min-h-screen overflow-y-auto scrollbar-thin" dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="mx-auto px-4 py-6 min-h-screen overflow-y-auto scrollbar-none" dir={isRtl ? 'rtl' : 'ltr'}>
       <div className="mb-4 flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-3">
         <div className="flex items-center gap-2">
           <Package className="w-6 h-6 text-amber-600" />
@@ -300,18 +342,18 @@ export function Products() {
               placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
               ariaLabel={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
             />
-            <CustomSelect
+            <CustomDropdown
               value={filterDepartment}
-              onChange={(e) => setFilterDepartment(e.target.value)}
+              onChange={setFilterDepartment}
+              options={[
+                { value: '', label: isRtl ? 'كل الأقسام' : 'All Departments' },
+                ...departments.map((d) => ({
+                  value: d._id,
+                  label: isRtl ? d.name : (d.nameEn || d.name),
+                })),
+              ]}
               ariaLabel={isRtl ? 'تصفية حسب القسم' : 'Filter by department'}
-            >
-              <option value="">{isRtl ? 'كل الأقسام' : 'All Departments'}</option>
-              {departments.map((d) => (
-                <option key={d._id} value={d._id}>
-                  {isRtl ? d.name : (d.nameEn || d.name)}
-                </option>
-              ))}
-            </CustomSelect>
+            />
           </div>
         </div>
         <div className="text-center text-xs text-gray-600">
@@ -319,7 +361,7 @@ export function Products() {
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto scrollbar-none">
             {[...Array(6)].map((_, index) => (
               <div key={index} className="p-4 bg-white rounded-xl shadow-sm">
                 <div className="space-y-2 animate-pulse">
@@ -345,7 +387,7 @@ export function Products() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto scrollbar-none">
             {products.map((product) => (
               <div
                 key={product._id}
@@ -439,25 +481,18 @@ export function Products() {
                   <label htmlFor="department" className="block text-xs font-medium text-gray-700 mb-1">
                     {isRtl ? 'القسم' : 'Department'}
                   </label>
-                  <div className="relative group">
-                    <select
-                      id="department"
-                      value={formData.department}
-                      onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-xs text-gray-700 hover:scale-[1.02] transform"
-                    >
-                      <option value="">{isRtl ? 'اختر القسم' : 'Select Department'}</option>
-                      {departments.map((d) => (
-                        <option key={d._id} value={d._id}>
-                          {isRtl ? d.name : (d.nameEn || d.name)}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown
-                      className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors`}
-                    />
-                  </div>
+                  <CustomDropdown
+                    value={formData.department}
+                    onChange={(value) => setFormData({ ...formData, department: value })}
+                    options={[
+                      { value: '', label: isRtl ? 'اختر القسم' : 'Select Department' },
+                      ...departments.map((d) => ({
+                        value: d._id,
+                        label: isRtl ? d.name : (d.nameEn || d.name),
+                      })),
+                    ]}
+                    ariaLabel={isRtl ? 'القسم' : 'Department'}
+                  />
                 </div>
                 <div>
                   <label htmlFor="price" className="block text-xs font-medium text-gray-700 mb-1">
@@ -477,23 +512,15 @@ export function Products() {
                   <label htmlFor="unit" className="block text-xs font-medium text-gray-700 mb-1">
                     {isRtl ? 'الوحدة' : 'Unit'}
                   </label>
-                  <div className="relative group">
-                    <select
-                      id="unit"
-                      value={formData.unit}
-                      onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-xs text-gray-700 hover:scale-[1.02] transform"
-                    >
-                      {unitOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {isRtl ? opt.labelAr : opt.labelEn}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown
-                      className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors`}
-                    />
-                  </div>
+                  <CustomDropdown
+                    value={formData.unit}
+                    onChange={(value) => setFormData({ ...formData, unit: value })}
+                    options={unitOptions.map((opt) => ({
+                      value: opt.value,
+                      label: isRtl ? opt.labelAr : opt.labelEn,
+                    }))}
+                    ariaLabel={isRtl ? 'الوحدة' : 'Unit'}
+                  />
                 </div>
               </div>
               {error && (
