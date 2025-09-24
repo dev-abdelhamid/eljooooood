@@ -57,7 +57,7 @@ export function NewOrder() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
-  const [branch, setBranch] = useState<string>(user?.branchId?.toString() || '');
+  const [branch, setBranch] = useState<string>(user?.branch?.toString() || '');
   const [notes, setNotes] = useState('');
   const [priority, setPriority] = useState('medium');
   const [loading, setLoading] = useState({ products: false, branches: false, departments: false });
@@ -105,8 +105,8 @@ export function NewOrder() {
 
         setBranches(Array.isArray(branchesResponse) ? branchesResponse : []);
         setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data : []);
-        if (user?.role === 'branch' && user?.branchId) {
-          setBranch(user.branchId.toString());
+        if (user?.role === 'branch' && user?.branch) {
+          setBranch(user.branch.toString());
         }
         setError('');
       } catch (err: any) {
@@ -218,7 +218,7 @@ export function NewOrder() {
     try {
       const orderData = {
         orderNumber: `ORD-${Date.now()}`,
-        branchId: user?.role === 'branch' ? user?.branchId?.toString() : branch,
+        branchId: user?.role === 'branch' ? user?.branch?.toString() : branch,
         items: orderItems.map((item) => ({
           productId: item.productId,
           quantity: item.quantity,
@@ -473,7 +473,7 @@ export function NewOrder() {
         </div>
 
         {orderItems.length > 0 && (
-          <div className="lg:col-span-1 lg:sticky lg:top-8 space-y-4 max-h-[calc(100vh-2rem)] overflow-y-auto" ref={summaryRef}>
+          <div className="lg:col-span-1 lg:sticky lg:pt-8  max-h-[calc(100vh-2rem)] overflow-y-auto" ref={summaryRef}>
             <div className="p-6 bg-white rounded-2xl shadow-md">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{isRtl ? 'ملخص الطلب' : 'Order Summary'}</h3>
               <div className="space-y-3">
