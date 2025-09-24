@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { chefsAPI, departmentAPI } from '../services/api';
-import { ChefHat, Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key, X , Eye , EyeOff  } from 'lucide-react';
+import { ChefHat, Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key, X , Eye , EyeOff } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { debounce } from 'lodash';
