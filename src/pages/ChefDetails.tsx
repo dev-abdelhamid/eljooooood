@@ -185,11 +185,12 @@ export function ChefDetails() {
     setLoading(true);
     try {
       const [chefResponse, departmentsResponse] = await Promise.all([
-        chefsAPI.getById(id), // استخدام getById بدلاً من getByUserId
+        chefsAPI.getById(id), // استخدام getById
         departmentAPI.getAll({ isRtl }),
       ]);
 
-      const chefData = chefResponse.data; // افتراض أن الاستجابة تحتوي على data
+      // الاستجابة من /chefs/:id لا تحتوي على مفتاح data
+      const chefData = chefResponse;
       if (!chefData || !chefData.user || !chefData.department) {
         setError(t.notFound);
         toast.error(t.notFound, { position: isRtl ? 'top-right' : 'top-left' });
@@ -309,7 +310,7 @@ export function ChefDetails() {
         department: formData.department,
       };
       const response = await chefsAPI.update(chef!.id, chefData);
-      const updatedChef = response.data; // افتراض أن الاستجابة تحتوي على data
+      const updatedChef = response; // الاستجابة لا تحتوي على مفتاح data
       setChef({
         ...chef!,
         user: {
