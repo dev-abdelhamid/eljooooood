@@ -258,132 +258,130 @@ export function Products() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
-          <div className="p-6 bg-white rounded-2xl shadow-md">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="text"
-                  placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
-                  onChange={(e) => debouncedSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
-                  aria-label={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
-                />
-              </div>
-              <select
-                value={filterDepartment}
-                onChange={(e) => setFilterDepartment(e.target.value)}
-                className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
-                aria-label={isRtl ? 'تصفية حسب القسم' : 'Filter by department'}
-              >
-                <option value="">{isRtl ? 'كل الأقسام' : 'All Departments'}</option>
-                {departments.map((d) => (
-                  <option key={d._id} value={d._id}>
-                    {isRtl ? d.name : (d.nameEn || d.name)}
-                  </option>
-                ))}
-              </select>
+      <div className="space-y-4">
+        <div className="p-6 bg-white rounded-2xl shadow-md">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
+                onChange={(e) => debouncedSearch(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
+                aria-label={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
+              />
             </div>
-            <div className="mt-4 text-sm text-gray-600">
-              {isRtl ? `عدد المنتجات: ${products.length}` : `Products Count: ${products.length}`}
-            </div>
-          </div>
-
-          {user?.role === 'admin' && (
-            <button
-              onClick={() => openModal()}
-              className="w-full sm:w-auto px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full text-sm transition-colors flex items-center justify-center gap-2"
-              aria-label={isRtl ? 'إضافة منتج جديد' : 'Add New Product'}
+            <select
+              value={filterDepartment}
+              onChange={(e) => setFilterDepartment(e.target.value)}
+              className="w-full px-3 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors text-sm"
+              aria-label={isRtl ? 'تصفية حسب القسم' : 'Filter by department'}
             >
-              <Plus className="w-4 h-4" />
-              {isRtl ? 'إضافة منتج جديد' : 'Add New Product'}
-            </button>
-          )}
-
-          {loading.products ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[...Array(6)].map((_, index) => (
-                <div key={index} className="p-5 bg-white rounded-xl shadow-sm">
-                  <div className="space-y-3 animate-pulse">
-                    <div className="h-40 bg-gray-200 rounded-t-xl"></div>
-                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                    <div className="h-3 bg-gray-200 rounded w-1/4"></div>
-                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                    <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                  </div>
-                </div>
+              <option value="">{isRtl ? 'كل الأقسام' : 'All Departments'}</option>
+              {departments.map((d) => (
+                <option key={d._id} value={d._id}>
+                  {isRtl ? d.name : (d.nameEn || d.name)}
+                </option>
               ))}
-            </div>
-          ) : products.length === 0 ? (
-            <div className="p-8 text-center bg-white rounded-2xl shadow-md">
-              <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 text-sm">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
-              {user?.role === 'admin' && !searchTerm && !filterDepartment && (
-                <button
-                  onClick={() => openModal()}
-                  className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full text-sm transition-colors"
-                  aria-label={isRtl ? 'إضافة أول منتج' : 'Add First Product'}
-                >
-                  {isRtl ? 'إضافة أول منتج' : 'Add First Product'}
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {products.map((product) => (
-                <div
-                  key={product._id}
-                  className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-200"
-                >
-                  <div className="space-y-3">
-                    <div className="relative">
-                      <img
-                        src={product.image || 'https://images.pexels.com/photos/1126359/pexels-photo-1126359.jpeg'}
-                        alt={product.displayName}
-                        className="w-full h-40 object-cover rounded-t-xl"
-                      />
-                      {user?.role === 'admin' && (
-                        <div className="absolute top-2 right-2 flex gap-2">
-                          <button
-                            onClick={() => openModal(product)}
-                            className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors"
-                            title={isRtl ? 'تعديل' : 'Edit'}
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => deleteProduct(product._id)}
-                            className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors"
-                            title={isRtl ? 'حذف' : 'Delete'}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between gap-4">
-                      <h3 className="font-semibold text-gray-900 text-base truncate">
-                        {product.displayName}
-                      </h3>
-                      <p className="text-xs text-gray-500">{product.code}</p>
-                    </div>
-                    <p className="text-sm text-amber-600">
-                      {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
-                    </p>
-                    <p className="font-semibold text-gray-900 text-sm">
-                      {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
-                    </p>
-                    {product.description && (
-                      <p className="text-xs text-gray-600 line-clamp-2">{product.description}</p>
+            </select>
+          </div>
+          <div className="mt-4 text-sm text-gray-600">
+            {isRtl ? `عدد المنتجات: ${products.length}` : `Products Count: ${products.length}`}
+          </div>
+        </div>
+
+        {user?.role === 'admin' && (
+          <button
+            onClick={() => openModal()}
+            className="w-full sm:w-auto px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full text-sm transition-colors flex items-center justify-center gap-2"
+            aria-label={isRtl ? 'إضافة منتج جديد' : 'Add New Product'}
+          >
+            <Plus className="w-4 h-4" />
+            {isRtl ? 'إضافة منتج جديد' : 'Add New Product'}
+          </button>
+        )}
+
+        {loading.products ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[...Array(6)].map((_, index) => (
+              <div key={index} className="p-5 bg-white rounded-xl shadow-sm">
+                <div className="space-y-3 animate-pulse">
+                  <div className="h-40 bg-gray-200 rounded-t-xl"></div>
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : products.length === 0 ? (
+          <div className="p-8 text-center bg-white rounded-2xl shadow-md">
+            <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-600 text-sm">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
+            {user?.role === 'admin' && !searchTerm && !filterDepartment && (
+              <button
+                onClick={() => openModal()}
+                className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full text-sm transition-colors"
+                aria-label={isRtl ? 'إضافة أول منتج' : 'Add First Product'}
+              >
+                {isRtl ? 'إضافة أول منتج' : 'Add First Product'}
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {products.map((product) => (
+              <div
+                key={product._id}
+                className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-200"
+              >
+                <div className="space-y-3">
+                  <div className="relative">
+                    <img
+                      src={product.image || 'https://images.pexels.com/photos/1126359/pexels-photo-1126359.jpeg'}
+                      alt={product.displayName}
+                      className="w-full h-40 object-cover rounded-t-xl"
+                    />
+                    {user?.role === 'admin' && (
+                      <div className="absolute top-2 right-2 flex gap-2">
+                        <button
+                          onClick={() => openModal(product)}
+                          className="p-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors"
+                          title={isRtl ? 'تعديل' : 'Edit'}
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => deleteProduct(product._id)}
+                          className="p-2 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors"
+                          title={isRtl ? 'حذف' : 'Delete'}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
                   </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <h3 className="font-semibold text-gray-900 text-base truncate">
+                      {product.displayName}
+                    </h3>
+                    <p className="text-xs text-gray-500">{product.code}</p>
+                  </div>
+                  <p className="text-sm text-amber-600">
+                    {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
+                  </p>
+                  <p className="font-semibold text-gray-900 text-sm">
+                    {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
+                  </p>
+                  {product.description && (
+                    <p className="text-xs text-gray-600 line-clamp-2">{product.description}</p>
+                  )}
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {isModalOpen && (
