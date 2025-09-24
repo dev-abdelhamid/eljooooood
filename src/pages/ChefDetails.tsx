@@ -515,54 +515,7 @@ export function ChefDetails() {
                   </div>
                 </div>
                 <div className="p-4 bg-white rounded-lg shadow-sm">
-                  <h4 className="text-xs font-medium text-gray-600 mb-2">{t.monthlyOrders}</h4>
-                  ```chartjs
-                  {
-                    "type": "bar",
-                    "data": {
-                      "labels": stats.monthlyPerformance.map((item) => item.month),
-                      "datasets": [
-                        {
-                          "label": t.monthlyOrders,
-                          "data": stats.monthlyPerformance.map((item) => item.orders),
-                          "backgroundColor": "#f59e0b",
-                          "borderColor": "#d97706",
-                          "borderWidth": 1
-                        }
-                      ]
-                    },
-                    "options": {
-                      "responsive": true,
-                      "maintainAspectRatio": false,
-                      "scales": {
-                        "y": {
-                          "beginAtZero": true,
-                          "title": {
-                            "display": true,
-                            "text": t.ordersCompleted,
-                            "color": "#374151"
-                          }
-                        },
-                        "x": {
-                          "title": {
-                            "display": true,
-                            "text": "Month",
-                            "color": "#374151"
-                          }
-                        }
-                      },
-                      "plugins": {
-                        "legend": {
-                          "display": true,
-                          "position": "top",
-                          "labels": {
-                            "color": "#374151"
-                          }
-                        }
-                      }
-                    }
-                  }
-                  ```
+                  
                 </div>
               </>
             ) : (
