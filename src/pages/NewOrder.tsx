@@ -560,7 +560,7 @@ export function NewOrder() {
                         <p className="font-semibold text-gray-900 text-sm">
                           {item.product.displayName}
                         </p>
-                        <p className="text-sm text-[#1B5E20]">
+                       <p className="text-sm text-gray-600">
                           {item.price} {isRtl ? 'ريال' : 'SAR'} / {item.product.displayUnit}
                         </p>
                       </div>
@@ -585,7 +585,7 @@ export function NewOrder() {
                 <div className="border-t pt-3">
                   <div className="flex justify-between font-bold text-gray-900 text-sm">
                     <span>{isRtl ? 'الإجمالي النهائي' : 'Final Total'}:</span>
-                    <span className="text-[#1B5E20]">
+                  <span className="text-teal-600">
                       {getTotalAmount} {isRtl ? 'ريال' : 'SAR'}
                     </span>
                   </div>
