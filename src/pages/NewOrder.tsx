@@ -241,7 +241,7 @@ export function NewOrder() {
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-xs placeholder-gray-400 ${isRtl ? 'pl-10 pr-4 text-right' : 'pr-10 pl-4 text-left'}`}
+        className={`w-full py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-xs placeholder-gray-400 ${isRtl ? 'pr-8 pl-4 text-right' : 'pl-8 pr-4 text-left'}`}
         aria-label={ariaLabel}
       />
     </div>
@@ -386,11 +386,11 @@ export function NewOrder() {
                             <Minus className="w-3.5 h-3.5" />
                           </button>
                           <input
-                            type="number"
+                            type="text"
                             value={cartItem.quantity}
                             onChange={(e) => handleQuantityInput(product._id, e.target.value)}
-                            className="w-10 h-7 text-center border border-gray-300 rounded-md text-xs focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                            min="1"
+                            className="w-auto min-w-10 h-7 text-center border border-gray-300 rounded-md text-xs focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                            style={{ width: `${Math.max(10, cartItem.quantity.toString().length * 8 + 20)}px` }}
                             aria-label={isRtl ? 'الكمية' : 'Quantity'}
                           />
                           <button
@@ -445,11 +445,11 @@ export function NewOrder() {
                         <Minus className="w-3.5 h-3.5" />
                       </button>
                       <input
-                        type="number"
+                        type="text"
                         value={item.quantity}
                         onChange={(e) => handleQuantityInput(item.productId, e.target.value)}
-                        className="w-10 h-7 text-center border border-gray-300 rounded-md text-xs focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                        min="1"
+                        className="w-auto min-w-10 h-7 text-center border border-gray-300 rounded-md text-xs focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                        style={{ width: `${Math.max(10, item.quantity.toString().length * 8 + 20)}px` }}
                         aria-label={isRtl ? 'الكمية' : 'Quantity'}
                       />
                       <button
