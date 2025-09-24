@@ -69,11 +69,12 @@ const CustomInput = ({
         initial={{ opacity: value ? 1 : 0 }}
         animate={{ opacity: value ? 1 : 0 }}
         transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2  flex items-center justify-center align-center transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
       >
         <button
           onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
+          className="flex items-center justify-center"
         >
           <X className="w-4 h-4" />
         </button>
