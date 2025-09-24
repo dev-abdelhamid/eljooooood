@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { productsAPI, departmentAPI } from '../services/api';
 import { Package, Plus, Edit2, Trash2, Search, AlertCircle, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface Product {
   _id: string;
@@ -33,10 +34,463 @@ const unitOptions = [
   { value: 'صينية', valueEn: 'Tray', labelAr: 'صينية', labelEn: 'Tray' },
 ];
 
+const translations = {
+  ar: {
+    manage: 'لوحة إدارة المنتجات',
+    addProducts: 'إدارة المنتجات وإضافتها أو تعديلها',
+    add: 'إضافة منتج',
+    addFirst: 'إضافة أول منتج',
+    noProducts: 'لا توجد منتجات',
+    noMatch: 'لا توجد منتجات مطابقة',
+    empty: 'لا توجد منتجات متاحة',
+    searchPlaceholder: 'ابحث عن منتج بالاسم أو الكود...',
+    code: 'الكود',
+    department: 'القسم',
+    price: 'السعر',
+    unit: 'الوحدة',
+    edit: 'تعديل',
+    delete: 'حذف',
+    name: 'اسم المنتج (عربي)',
+    nameEn: 'اسم المنتج (إنجليزي)',
+    nameRequired: 'اسم المنتج مطلوب',
+    nameEnRequired: 'اسم المنتج بالإنجليزية مطلوب',
+    codeRequired: 'كود المنتج مطلوب',
+    departmentRequired: 'القسم مطلوب',
+    priceRequired: 'السعر مطلوب',
+    namePlaceholder: 'أدخل اسم المنتج',
+    nameEnPlaceholder: 'أدخل اسم المنتج بالإنجليزية',
+    codePlaceholder: 'أدخل كود المنتج',
+    departmentPlaceholder: 'اختر القسم',
+    pricePlaceholder: 'أدخل السعر',
+    unitPlaceholder: 'اختر الوحدة',
+    update: 'تحديث المنتج',
+    requiredFields: 'يرجى ملء جميع الحقول المطلوبة',
+    codeExists: 'الكود مستخدم بالفعل',
+    unauthorized: 'غير مصرح لك بالوصول',
+    fetchError: 'خطأ أثناء جلب البيانات',
+    updateError: 'خطأ أثناء تحديث المنتج',
+    createError: 'خطأ أثناء إنشاء المنتج',
+    added: 'تم إضافة المنتج بنجاح',
+    updated: 'تم تحديث المنتج بنجاح',
+    deleteWarning: 'هل أنت متأكد من حذف هذا المنتج؟',
+    deleteError: 'خطأ أثناء حذف المنتج',
+    deleted: 'تم حذف المنتج بنجاح',
+    productCount: 'عدد المنتجات',
+    cancel: 'إلغاء',
+  },
+  en: {
+    manage: 'Product Management Dashboard',
+    addProducts: 'Manage, add, or edit products',
+    add: 'Add Product',
+    addFirst: 'Add First Product',
+    noProducts: 'No Products Found',
+    noMatch: 'No Matching Products',
+    empty: 'No Products Available',
+    searchPlaceholder: 'Search by product name or code...',
+    code: 'Code',
+    department: 'Department',
+    price: 'Price',
+    unit: 'Unit',
+    edit: 'Edit',
+    delete: 'Delete',
+    name: 'Product Name (Arabic)',
+    nameEn: 'Product Name (English)',
+    nameRequired: 'Product name is required',
+    nameEnRequired: 'Product name in English is required',
+    codeRequired: 'Product code is required',
+    departmentRequired: 'Department is required',
+    priceRequired: 'Price is required',
+    namePlaceholder: 'Enter product name',
+    nameEnPlaceholder: 'Enter product name in English',
+    codePlaceholder: 'Enter product code',
+    departmentPlaceholder: 'Select Department',
+    pricePlaceholder: 'Enter price',
+    unitPlaceholder: 'Select Unit',
+    update: 'Update Product',
+    requiredFields: 'Please fill all required fields',
+    codeExists: 'Code is already in use',
+    unauthorized: 'You are not authorized to access',
+    fetchError: 'Error fetching data',
+    updateError: 'Error updating product',
+    createError: 'Error creating product',
+    added: 'Product added successfully',
+    updated: 'Product updated successfully',
+    deleteWarning: 'Are you sure you want to delete this product?',
+    deleteError: 'Error deleting product',
+    deleted: 'Product deleted successfully',
+    productCount: 'Products Count',
+    cancel: 'Cancel',
+  },
+};
+
+const ProductInput = ({
+  id,
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+  type = 'text',
+  required = false,
+}: {
+  id: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  ariaLabel: string;
+  type?: string;
+  required?: boolean;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <input
+      id={id}
+      type={type}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      required={required}
+      className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+      aria-label={ariaLabel}
+    />
+  );
+};
+
+const ProductSearchInput = ({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  ariaLabel: string;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="relative group">
+      <motion.div
+        initial={{ opacity: value ? 0 : 1 }}
+        animate={{ opacity: value ? 0 : 1 }}
+        transition={{ duration: 0.15 }}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500`}
+      >
+        <Search />
+      </motion.div>
+      <input
+        type="text"
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={ariaLabel}
+      />
+      <motion.div
+        initial={{ opacity: value ? 1 : 0 }}
+        animate={{ opacity: value ? 1 : 0 }}
+        transition={{ duration: 0.15 }}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
+      >
+        <button
+          onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
+          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </motion.div>
+    </div>
+  );
+};
+
+const ProductDropdown = ({
+  value,
+  onChange,
+  options,
+  ariaLabel,
+  required = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  ariaLabel: string;
+  required?: boolean;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { label: isRtl ? 'اختر' : 'Select' };
+
+  return (
+    <div className="relative group">
+      <motion.button
+        onClick={() => setIsOpen(!isOpen)}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center`}
+        aria-label={ariaLabel}
+      >
+        <span className="truncate">{selectedOption.label}</span>
+        <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+          <ChevronDown className="w-5 h-5 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
+        </motion.div>
+      </motion.button>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.15 }}
+            className="absolute w-full mt-2 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none"
+          >
+            {options.map((option) => (
+              <motion.div
+                key={option.value}
+                onClick={() => {
+                  onChange(option.value);
+                  setIsOpen(false);
+                }}
+                className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
+              >
+                {option.label}
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+const ProductCard = ({ product, onEdit, onDelete }: {
+  product: Product;
+  onEdit: (e: React.MouseEvent) => void;
+  onDelete: (e: React.MouseEvent) => void;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  const t = translations[isRtl ? 'ar' : 'en'];
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+      className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col justify-between border border-gray-100 hover:border-amber-200"
+    >
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-bold text-gray-900 text-base truncate">{product.displayName}</h3>
+          <Package className="w-6 h-6 text-amber-600" />
+        </div>
+        <p className="text-sm text-gray-500">{t.code}: {product.code}</p>
+        <p className="text-sm text-amber-600">{t.department}: {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}</p>
+        <p className="font-semibold text-gray-900 text-sm">{t.price}: {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}</p>
+      </div>
+      <div className="mt-4 flex items-center justify-end gap-2">
+        <motion.button
+          onClick={onEdit}
+          className="p-2 w-10 h-10 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
+          title={t.edit}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          <Edit2 className="w-5 h-5" />
+        </motion.button>
+        <motion.button
+          onClick={onDelete}
+          className="p-2 w-10 h-10 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
+          title={t.delete}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.95 }}
+        >
+          <Trash2 className="w-5 h-5" />
+        </motion.button>
+      </div>
+    </motion.div>
+  );
+};
+
+const ProductSkeletonCard = () => (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    transition={{ duration: 0.3 }}
+    className="p-5 bg-white rounded-xl shadow-sm border border-gray-100"
+  >
+    <div className="space-y-3 animate-pulse">
+      <div className="flex items-center justify-between">
+        <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+        <div className="w-6 h-6 bg-gray-200 rounded-full"></div>
+      </div>
+      <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+      <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+      <div className="mt-4 flex justify-end gap-2">
+        <div className="w-10 h-10 bg-gray-200 rounded-full"></div>
+        <div className="w-10 h-10 bg-gray-200 rounded-full"></div>
+      </div>
+    </div>
+  </motion.div>
+);
+
+const ProductModal = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  formData,
+  setFormData,
+  editingProduct,
+  error,
+  departments,
+  t,
+  isRtl,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (e: React.FormEvent) => void;
+  formData: { name: string; nameEn: string; code: string; department: string; price: string; unit: string };
+  setFormData: React.Dispatch<React.SetStateAction<{ name: string; nameEn: string; code: string; department: string; price: string; unit: string }>>;
+  editingProduct: Product | null;
+  error: string;
+  departments: Department[];
+  t: typeof translations['ar' | 'en'];
+  isRtl: boolean;
+}) => {
+  if (!isOpen) return null;
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+      className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
+    >
+      <motion.div
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.95, opacity: 0 }}
+        transition={{ duration: 0.3, ease: 'easeOut' }}
+        className="bg-white rounded-xl shadow-2xl max-w-full w-[95vw] sm:max-w-md p-8"
+      >
+        <h3 className="text-xl font-bold text-gray-900 mb-6">{editingProduct ? t.edit : t.add}</h3>
+        <form onSubmit={onSubmit} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1.5">{t.name}</label>
+              <ProductInput
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder={t.namePlaceholder}
+                ariaLabel={t.name}
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="nameEn" className="block text-sm font-medium text-gray-700 mb-1.5">{t.nameEn}</label>
+              <ProductInput
+                id="nameEn"
+                value={formData.nameEn}
+                onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
+                placeholder={t.nameEnPlaceholder}
+                ariaLabel={t.nameEn}
+              />
+            </div>
+            <div>
+              <label htmlFor="code" className="block text-sm font-medium text-gray-700 mb-1.5">{t.code}</label>
+              <ProductInput
+                id="code"
+                value={formData.code}
+                onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                placeholder={t.codePlaceholder}
+                ariaLabel={t.code}
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="department" className="block text-sm font-medium text-gray-700 mb-1.5">{t.department}</label>
+              <ProductDropdown
+                value={formData.department}
+                onChange={(value) => setFormData({ ...formData, department: value })}
+                options={[
+                  { value: '', label: t.departmentPlaceholder },
+                  ...departments.map((d) => ({
+                    value: d._id,
+                    label: isRtl ? d.name : (d.nameEn || d.name),
+                  })),
+                ]}
+                ariaLabel={t.department}
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="price" className="block text-sm font-medium text-gray-700 mb-1.5">{t.price}</label>
+              <ProductInput
+                id="price"
+                type="number"
+                value={formData.price}
+                onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                placeholder={t.pricePlaceholder}
+                ariaLabel={t.price}
+                required
+              />
+            </div>
+            <div>
+              <label htmlFor="unit" className="block text-sm font-medium text-gray-700 mb-1.5">{t.unit}</label>
+              <ProductDropdown
+                value={formData.unit}
+                onChange={(value) => setFormData({ ...formData, unit: value })}
+                options={unitOptions.map((opt) => ({
+                  value: opt.value,
+                  label: isRtl ? opt.labelAr : opt.labelEn,
+                }))}
+                ariaLabel={t.unit}
+              />
+            </div>
+          </div>
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
+            >
+              <AlertCircle className="w-5 h-5 text-red-600" />
+              <span className="text-red-600 text-sm">{error}</span>
+            </motion.div>
+          )}
+          <div className="flex justify-end gap-3">
+            <motion.button
+              type="button"
+              onClick={onClose}
+              className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
+              aria-label={t.cancel}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              {t.cancel}
+            </motion.button>
+            <motion.button
+              type="submit"
+              className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+              aria-label={editingProduct ? t.update : t.add}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              {editingProduct ? t.update : t.add}
+            </motion.button>
+          </div>
+        </form>
+      </motion.div>
+    </motion.div>
+  );
+};
+
 export function Products() {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
+  const t = translations[isRtl ? 'ar' : 'en'];
   const [products, setProducts] = useState<Product[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -49,15 +503,50 @@ export function Products() {
 
   const debouncedSearch = useCallback(
     debounce((value: string) => {
-      setSearchTerm(value);
+      setSearchTerm(value.trim());
     }, 500),
     []
   );
 
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchInput(value);
+    debouncedSearch(value);
+  };
+
+  const filteredProducts = useMemo(() => {
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    return products
+      .filter((product) => {
+        const name = (isRtl ? product.name : product.nameEn || product.name).toLowerCase();
+        const code = product.code.toLowerCase();
+        return (
+          (filterDepartment ? product.department._id === filterDepartment : true) &&
+          (name.startsWith(lowerSearchTerm) || code.startsWith(lowerSearchTerm) || name.includes(lowerSearchTerm))
+        );
+      })
+      .sort((a, b) => {
+        const aName = (isRtl ? a.name : a.nameEn || a.name).toLowerCase();
+        const bName = (isRtl ? b.name : b.nameEn || b.name).toLowerCase();
+        const aCode = a.code.toLowerCase();
+        const bCode = b.code.toLowerCase();
+        if (aName.startsWith(lowerSearchTerm) && !bName.startsWith(lowerSearchTerm)) return -1;
+        if (!aName.startsWith(lowerSearchTerm) && bName.startsWith(lowerSearchTerm)) return 1;
+        if (aCode.startsWith(lowerSearchTerm) && !bCode.startsWith(lowerSearchTerm)) return -1;
+        if (!aCode.startsWith(lowerSearchTerm) && bCode.startsWith(lowerSearchTerm)) return 1;
+        return aName.localeCompare(bName);
+      });
+  }, [products, searchTerm, filterDepartment, isRtl]);
+
+  const skeletonCount = useMemo(() => {
+    return filteredProducts.length > 0 ? filteredProducts.length : 6;
+  }, [filteredProducts]);
+
   useEffect(() => {
     if (!user || !['admin'].includes(user.role)) {
-      setError(isRtl ? 'غير مصرح' : 'Unauthorized');
+      setError(t.unauthorized);
       setLoading(false);
+      toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
 
@@ -78,19 +567,20 @@ export function Products() {
         setDepartments(departmentsResponse.data);
         setError('');
       } catch (err: any) {
-        console.error('Fetch error:', err);
-        setError(err.response?.data?.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
-        toast.error(err.response?.data?.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
+        console.error(`[${new Date().toISOString()}] Fetch error:`, err);
+        setError(err.response?.data?.message || t.fetchError);
+        toast.error(err.response?.data?.message || t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [isRtl, user, filterDepartment, searchTerm]);
+  }, [user, t, isRtl, filterDepartment, searchTerm]);
 
   const openModal = (product?: Product) => {
     if (!user || !['admin'].includes(user.role)) {
-      setError(isRtl ? 'غير مصرح' : 'Unauthorized');
+      setError(t.unauthorized);
+      toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
     if (product) {
@@ -132,13 +622,29 @@ export function Products() {
     unit: '',
   });
 
+  const validateForm = useCallback(() => {
+    const errors: Record<string, string> = {};
+    if (!formData.name.trim()) errors.name = t.nameRequired;
+    if (!formData.nameEn.trim()) errors.nameEn = t.nameEnRequired;
+    if (!formData.code.trim()) errors.code = t.codeRequired;
+    if (!formData.department) errors.department = t.departmentRequired;
+    if (!formData.price.trim()) errors.price = t.priceRequired;
+    return errors;
+  }, [formData, t]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const errors = validateForm();
+    if (Object.keys(errors).length > 0) {
+      setError(t.requiredFields);
+      toast.error(t.requiredFields, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
     try {
       const productData = {
-        name: formData.name,
-        nameEn: formData.nameEn || undefined,
-        code: formData.code,
+        name: formData.name.trim(),
+        nameEn: formData.nameEn.trim() || undefined,
+        code: formData.code.trim(),
         department: formData.department,
         price: parseFloat(formData.price),
         unit: formData.unit || undefined,
@@ -156,7 +662,7 @@ export function Products() {
               : p
           )
         );
-        toast.success(isRtl ? 'تم تحديث المنتج بنجاح' : 'Product updated successfully');
+        toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
       } else {
         const newProduct = await productsAPI.create(productData);
         setProducts([
@@ -167,362 +673,197 @@ export function Products() {
             displayUnit: isRtl ? (newProduct.unit || 'غير محدد') : (newProduct.unitEn || newProduct.unit || 'N/A'),
           },
         ]);
-        toast.success(isRtl ? 'تم إنشاء المنتج بنجاح' : 'Product created successfully');
+        toast.success(t.added, { position: isRtl ? 'top-right' : 'top-left' });
       }
       closeModal();
     } catch (err: any) {
-      console.error('Submit error:', err);
-      setError(err.response?.data?.message || (isRtl ? 'خطأ في حفظ المنتج' : 'Error saving product'));
-      toast.error(err.response?.data?.message || (isRtl ? 'خطأ في حفظ المنتج' : 'Error saving product'));
+      console.error(`[${new Date().toISOString()}] Submit error:`, err);
+      const errorMessage = err.response?.data?.message === 'Product code already exists' ? t.codeExists : (err.response?.data?.message || (editingProduct ? t.updateError : t.createError));
+      setError(errorMessage);
+      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
     }
   };
 
-  const deleteProduct = async (id: string) => {
+  const deleteProduct = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
     if (!user || !['admin'].includes(user.role)) {
-      setError(isRtl ? 'غير مصرح' : 'Unauthorized');
+      setError(t.unauthorized);
+      toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
-    if (confirm(isRtl ? 'هل أنت متأكد من حذف المنتج؟' : 'Are you sure you want to delete this product?')) {
-      try {
-        await productsAPI.delete(id);
-        setProducts(products.filter((p) => p._id !== id));
-        toast.success(isRtl ? 'تم حذف المنتج بنجاح' : 'Product deleted successfully');
-      } catch (err: any) {
-        console.error('Delete error:', err);
-        setError(err.response?.data?.message || (isRtl ? 'خطأ في حذف المنتج' : 'Error deleting product'));
-        toast.error(err.response?.data?.message || (isRtl ? 'خطأ في حذف المنتج' : 'Error deleting product'));
-      }
+    if (!window.confirm(t.deleteWarning)) return;
+    try {
+      await productsAPI.delete(id);
+      setProducts(products.filter((p) => p._id !== id));
+      toast.success(t.deleted, { position: isRtl ? 'top-right' : 'top-left' });
+    } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] Delete error:`, err);
+      const errorMessage = err.response?.data?.message || t.deleteError;
+      setError(errorMessage);
+      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
     }
   };
 
-  const CustomInput = ({
-    value,
-    onChange,
-    placeholder,
-    ariaLabel,
-  }: {
-    value: string;
-    onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    placeholder: string;
-    ariaLabel: string;
-  }) => (
-    <div className="relative group">
-      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500" />
-      <input
-        type="text"
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className="w-full pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400"
-        aria-label={ariaLabel}
-      />
-      {value && (
-        <button
-          onClick={() => {
-            setSearchInput('');
-            setSearchTerm('');
-          }}
-          className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors"
-          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
-        >
-          <X className="w-4 h-4" />
-        </button>
-      )}
-    </div>
-  );
-
-  const CustomSelect = ({
-    value,
-    onChange,
-    children,
-    ariaLabel,
-  }: {
-    value: string;
-    onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
-    children: React.ReactNode;
-    ariaLabel: string;
-  }) => (
-    <div className="relative group">
-      <select
-        value={value}
-        onChange={onChange}
-        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-xs text-gray-700 hover:scale-[1.02] transform"
-        aria-label={ariaLabel}
-      >
-        {children}
-      </select>
-      <ChevronDown
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors`}
-      />
-    </div>
-  );
-
   return (
-    <div className="mx-auto px-4 py-6 min-h-screen overflow-y-auto scrollbar-thin" dir={isRtl ? 'rtl' : 'ltr'}>
-      <div className="mb-4 flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-3">
-        <div className="flex items-center gap-2">
-          <Package className="w-6 h-6 text-amber-600" />
+    <div className={`mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: 'easeOut' }}
+        className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center"
+      >
+        <div className="flex items-center gap-3">
+          <Package className="w-7 h-7 text-amber-600" />
           <div>
-            <h1 className="text-xl font-bold text-gray-900">{isRtl ? 'إدارة المنتجات' : 'Manage Products'}</h1>
-            <p className="text-gray-600 text-xs">
-              {isRtl ? 'قم بإضافة المنتجات أو تعديلها أو حذفها' : 'Add, edit, or delete products'}
-            </p>
+            <h1 className="text-2xl font-bold text-gray-900">{t.manage}</h1>
+            <p className="text-gray-600 text-sm">{t.addProducts}</p>
           </div>
         </div>
         {user?.role === 'admin' && (
-          <button
+          <motion.button
             onClick={() => openModal()}
-            className="w-full sm:w-auto px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
-            aria-label={isRtl ? 'إضافة منتج جديد' : 'Add New Product'}
+            className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2 shadow-md"
+            aria-label={t.add}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
           >
-            <Plus className="w-3.5 h-3.5" />
-            {isRtl ? 'إضافة منتج جديد' : 'Add New Product'}
-          </button>
+            <Plus className="w-5 h-5" />
+            {t.add}
+          </motion.button>
         )}
-      </div>
+      </motion.div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-red-600" />
-          <span className="text-red-600 text-xs">{error}</span>
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
+          className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3"
+        >
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <span className="text-red-600 text-sm font-medium">{error}</span>
+        </motion.div>
+      )}
+
+      {user?.role === 'admin' && (
+        <div className={`lg:hidden fixed bottom-8 ${isRtl ? 'left-8' : 'right-8'} z-50`}>
+          <motion.button
+            onClick={() => openModal()}
+            className="p-4 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg transition-colors duration-200"
+            aria-label={t.add}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Plus className="w-6 h-6" />
+          </motion.button>
         </div>
       )}
 
-      <div className="space-y-3">
-        <div className="p-4 bg-white rounded-xl shadow-sm">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <CustomInput
+      <div className="space-y-8">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
+          className="p-6 bg-white rounded-xl shadow-sm border border-gray-100"
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <ProductSearchInput
               value={searchInput}
-              onChange={(e) => {
-                setSearchInput(e.target.value);
-                debouncedSearch(e.target.value);
-              }}
-              placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
-              ariaLabel={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
+              onChange={handleSearchChange}
+              placeholder={t.searchPlaceholder}
+              ariaLabel={t.searchPlaceholder}
             />
-            <CustomSelect
+            <ProductDropdown
               value={filterDepartment}
-              onChange={(e) => setFilterDepartment(e.target.value)}
-              ariaLabel={isRtl ? 'تصفية حسب القسم' : 'Filter by department'}
-            >
-              <option value="">{isRtl ? 'كل الأقسام' : 'All Departments'}</option>
-              {departments.map((d) => (
-                <option key={d._id} value={d._id}>
-                  {isRtl ? d.name : (d.nameEn || d.name)}
-                </option>
-              ))}
-            </CustomSelect>
+              onChange={setFilterDepartment}
+              options={[
+                { value: '', label: isRtl ? 'كل الأقسام' : 'All Departments' },
+                ...departments.map((d) => ({
+                  value: d._id,
+                  label: isRtl ? d.name : (d.nameEn || d.name),
+                })),
+              ]}
+              ariaLabel={t.department}
+            />
           </div>
-        </div>
-        <div className="text-center text-xs text-gray-600">
-          {isRtl ? `عدد المنتجات: ${products.length}` : `Products Count: ${products.length}`}
-        </div>
+          <div className="mt-4 text-center text-sm text-gray-600 font-medium">
+            {isRtl ? `${t.productCount}: ${filteredProducts.length}` : `${t.productCount}: ${filteredProducts.length}`}
+          </div>
+        </motion.div>
 
-        {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {[...Array(6)].map((_, index) => (
-              <div key={index} className="p-4 bg-white rounded-xl shadow-sm">
-                <div className="space-y-2 animate-pulse">
-                  <div className="h-3 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-2 bg-gray-200 rounded w-1/4"></div>
-                  <div className="h-2 bg-gray-200 rounded w-1/2"></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : products.length === 0 ? (
-          <div className="p-6 text-center bg-white rounded-xl shadow-sm">
-            <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-            <p className="text-gray-600 text-xs">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
-            {user?.role === 'admin' && !searchTerm && !filterDepartment && (
-              <button
-                onClick={() => openModal()}
-                className="mt-3 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
-                aria-label={isRtl ? 'إضافة أول منتج' : 'Add First Product'}
-              >
-                {isRtl ? 'إضافة أول منتج' : 'Add First Product'}
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {products.map((product) => (
-              <div
-                key={product._id}
-                className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between"
-              >
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="font-semibold text-gray-900 text-sm truncate">
-                      {product.displayName}
-                    </h3>
-                    <p className="text-xs text-gray-500">{product.code}</p>
-                  </div>
-                  <p className="text-xs text-amber-600">
-                    {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
-                  </p>
-                  <p className="font-semibold text-gray-900 text-xs">
-                    {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
-                  </p>
-                </div>
-                {user?.role === 'admin' && (
-                  <div className="mt-3 flex items-center justify-end gap-1.5">
-                    <button
-                      onClick={() => openModal(product)}
-                      className="p-1.5 w-7 h-7 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center"
-                      title={isRtl ? 'تعديل' : 'Edit'}
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => deleteProduct(product._id)}
-                      className="p-1.5 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center"
-                      title={isRtl ? 'حذف' : 'Delete'}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+        <div className="overflow-y-auto max-h-[calc(100vh-14rem)] scrollbar-none">
+          {loading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <AnimatePresence>
+                {[...Array(skeletonCount)].map((_, index) => (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: index * 0.1 }}
+                  >
+                    <ProductSkeletonCard />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          ) : filteredProducts.length === 0 ? (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4, ease: 'easeOut' }}
+              className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100"
+            >
+              <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600 text-sm font-medium">{searchTerm || filterDepartment ? t.noMatch : t.empty}</p>
+              {user?.role === 'admin' && !searchTerm && !filterDepartment && (
+                <motion.button
+                  onClick={() => openModal()}
+                  className="mt-6 px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+                  aria-label={t.addFirst}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  {t.addFirst}
+                </motion.button>
+              )}
+            </motion.div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <AnimatePresence>
+                {filteredProducts.map((product, index) => (
+                  <motion.div
+                    key={product._id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.3, ease: 'easeOut', delay: index * 0.05 }}
+                  >
+                    <ProductCard
+                      product={product}
+                      onEdit={(e) => openModal(product)}
+                      onDelete={(e) => deleteProduct(product._id, e)}
+                    />
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+        </div>
       </div>
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">
-              {editingProduct ? (isRtl ? 'تعديل المنتج' : 'Edit Product') : (isRtl ? 'إضافة منتج جديد' : 'Add New Product')}
-            </h3>
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">
-                    {isRtl ? 'اسم المنتج' : 'Product Name'}
-                  </label>
-                  <input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder={isRtl ? 'أدخل اسم المنتج' : 'Enter product name'}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">
-                    {isRtl ? 'الاسم بالإنجليزية' : 'English Name'}
-                  </label>
-                  <input
-                    id="nameEn"
-                    value={formData.nameEn}
-                    onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
-                    placeholder={isRtl ? 'أدخل الاسم بالإنجليزية' : 'Enter English name'}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="code" className="block text-xs font-medium text-gray-700 mb-1">
-                    {isRtl ? 'رمز المنتج' : 'Product Code'}
-                  </label>
-                  <input
-                    id="code"
-                    value={formData.code}
-                    onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                    placeholder={isRtl ? 'أدخل رمز المنتج' : 'Enter product code'}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="department" className="block text-xs font-medium text-gray-700 mb-1">
-                    {isRtl ? 'القسم' : 'Department'}
-                  </label>
-                  <div className="relative group">
-                    <select
-                      id="department"
-                      value={formData.department}
-                      onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                      required
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-xs text-gray-700 hover:scale-[1.02] transform"
-                    >
-                      <option value="">{isRtl ? 'اختر القسم' : 'Select Department'}</option>
-                      {departments.map((d) => (
-                        <option key={d._id} value={d._id}>
-                          {isRtl ? d.name : (d.nameEn || d.name)}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown
-                      className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors`}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label htmlFor="price" className="block text-xs font-medium text-gray-700 mb-1">
-                    {isRtl ? 'السعر' : 'Price'}
-                  </label>
-                  <input
-                    id="price"
-                    type="number"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                    placeholder="0.00"
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="unit" className="block text-xs font-medium text-gray-700 mb-1">
-                    {isRtl ? 'الوحدة' : 'Unit'}
-                  </label>
-                  <div className="relative group">
-                    <select
-                      id="unit"
-                      value={formData.unit}
-                      onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-xs text-gray-700 hover:scale-[1.02] transform"
-                    >
-                      {unitOptions.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {isRtl ? opt.labelAr : opt.labelEn}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown
-                      className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors`}
-                    />
-                  </div>
-                </div>
-              </div>
-              {error && (
-                <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-600" />
-                  <span className="text-red-600 text-xs">{error}</span>
-                </div>
-              )}
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={closeModal}
-                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors"
-                  aria-label={isRtl ? 'إلغاء' : 'Cancel'}
-                >
-                  {isRtl ? 'إلغاء' : 'Cancel'}
-                </button>
-                <button
-                  type="submit"
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
-                  aria-label={editingProduct ? (isRtl ? 'تحديث المنتج' : 'Update Product') : (isRtl ? 'إضافة المنتج' : 'Add Product')}
-                >
-                  {editingProduct ? (isRtl ? 'تحديث المنتج' : 'Update Product') : (isRtl ? 'إضافة المنتج' : 'Add Product')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <ProductModal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        onSubmit={handleSubmit}
+        formData={formData}
+        setFormData={setFormData}
+        editingProduct={editingProduct}
+        error={error}
+        departments={departments}
+        t={t}
+        isRtl={isRtl}
+      />
     </div>
   );
 }
