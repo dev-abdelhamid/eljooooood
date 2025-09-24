@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -72,23 +71,19 @@ export function Sidebar({
       { path: '/branch-sales', icon: TrendingUp, label: t('sales.review') },
       { path: '/branch-returns', icon: RefreshCcw, label: t('returns.review') },
       { path: '/branch-inventory', icon: Warehouse, label: t('inventory') },
-            { path: '/profile', icon: Settings2, label: t('settings') },
-
+      { path: '/profile', icon: Settings2, label: t('settings') },
     ];
 
     const chefItems = [
       { path: '/production-tasks', icon: ListTodo, label: t('productionTasks') },
-            { path: '/profile', icon: Settings2, label: t('settings') },
-
+      { path: '/profile', icon: Settings2, label: t('settings') },
     ];
 
     const productionItems = [
-      
       { path: '/orders', icon: ShoppingBag, label: t('orders') },
       { path: '/returns', icon: RefreshCcw, label: t('returns') },
       { path: '/reports', icon: BarChart2, label: t('reports') },
-            { path: '/profile', icon: Settings2, label: t('settings') },
-
+      { path: '/profile', icon: Settings2, label: t('settings') },
     ];
 
     let roleItems = [];
@@ -203,7 +198,7 @@ export function Sidebar({
               <div className="flex items-center gap-1 text-amber-900 text-xs sm:text-sm font-medium p-1 sm:p-2 rounded-lg hover:bg-amber-200/50 transition-all">
                 <UserCircle2 size={isSmallScreen ? 16 : 18} className="text-amber-600 min-w-[18px]" />
                 <span className={`${isLargeScreen && !isExpanded ? 'hidden' : 'block truncate'}`}>
-                  {user?.name || t('header.guest')}
+                  {user ? (isRtl ? user.name : user.nameEn || user.name) : t('header.guest')}
                 </span>
               </div>
               <button

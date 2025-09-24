@@ -1,17 +1,12 @@
-import React, { useState, useEffect, useCallback, useMemo, useReducer } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useReducer, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI } from '../services/api';
-import { Card } from '../components/UI/Card';
-import { Button } from '../components/UI/Button';
-import { Input } from '../components/UI/Input';
-import { Select } from '../components/UI/Select';
-import { Modal } from '../components/UI/Modal';
-import { LoadingSpinner } from '../components/UI/LoadingSpinner';
-import { MapPin, Search, AlertCircle, Plus, Edit2, Trash2, Key } from 'lucide-react';
+import { MapPin, Plus, Edit2, Trash2, Key, AlertCircle, Search, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
+import { debounce } from 'lodash';
 
 interface Branch {
   _id: string;
@@ -96,6 +91,7 @@ const formReducer = (state: FormState, action: FormAction): FormState => {
 const translations = {
   ar: {
     manage: 'إدارة الفروع',
+    addProducts: 'إدارة الفروع وإضافتها أو تعديلها',
     add: 'إضافة فرع',
     addFirst: 'إضافة أول فرع',
     noBranches: 'لا توجد فروع',
@@ -170,9 +166,11 @@ const translations = {
     deleteRestricted: 'لا يمكن حذف الفرع لوجود طلبات أو مخزون مرتبط',
     deleteError: 'خطأ أثناء حذف الفرع',
     deleted: 'تم حذف الفرع بنجاح',
+    scrollToForm: 'الذهاب إلى نموذج الإضافة',
   },
   en: {
     manage: 'Manage Branches',
+    addProducts: 'Manage, add, or edit branches',
     add: 'Add Branch',
     addFirst: 'Add First Branch',
     noBranches: 'No Branches Found',
@@ -247,7 +245,140 @@ const translations = {
     deleteRestricted: 'Cannot delete branch with associated orders or inventory',
     deleteError: 'Error deleting branch',
     deleted: 'Branch deleted successfully',
+    scrollToForm: 'Go to Add Form',
   },
+};
+
+const CustomInput = ({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  ariaLabel: string;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="relative group">
+      <motion.div
+        initial={{ opacity: value ? 0 : 1 }}
+        animate={{ opacity: value ? 0 : 1 }}
+        transition={{ duration: 0.15 }}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500`}
+      >
+        <Search />
+      </motion.div>
+      <input
+        type="text"
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={`w-full ${isRtl ? 'pl-11 pr-4' : 'pr-11 pl-4'} py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={ariaLabel}
+      />
+      <motion.div
+        initial={{ opacity: value ? 1 : 0 }}
+        animate={{ opacity: value ? 1 : 0 }}
+        transition={{ duration: 0.15 }}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
+      >
+        <button
+          onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
+          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </motion.div>
+    </div>
+  );
+};
+
+const CustomDropdown = ({
+  value,
+  onChange,
+  options,
+  ariaLabel,
+  disabled = false,
+}: {
+  value: string | boolean;
+  onChange: (value: string) => void;
+  options: { value: string | boolean; label: string }[];
+  ariaLabel: string;
+  disabled?: boolean;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { label: isRtl ? 'اختر' : 'Select' };
+  return (
+    <div className="relative group">
+      <motion.button
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        aria-label={ariaLabel}
+      >
+        <span className="truncate">{selectedOption.label}</span>
+        <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+          <ChevronDown className="w-5 h-5 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
+        </motion.div>
+      </motion.button>
+      <AnimatePresence>
+        {isOpen && !disabled && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.15 }}
+            className="absolute w-full mt-2 bg-white rounded-xl shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-thin"
+          >
+            {options.map((option) => (
+              <motion.div
+                key={String(option.value)}
+                onClick={() => {
+                  onChange(String(option.value));
+                  setIsOpen(false);
+                }}
+                className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
+              >
+                {option.label}
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+const CustomTextarea = ({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  placeholder: string;
+  ariaLabel: string;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="relative group">
+      <textarea
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        rows={4}
+        aria-label={ariaLabel}
+      />
+    </div>
+  );
 };
 
 export const Branches: React.FC = () => {
@@ -256,18 +387,20 @@ export const Branches: React.FC = () => {
   const navigate = useNavigate();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
+  const formRef = useRef<HTMLDivElement>(null);
 
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isEditMode, setIsEditMode] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState<Branch | null>(null);
-  const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [resetPasswordData, setResetPasswordData] = useState({ password: '', confirmPassword: '' });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
@@ -284,11 +417,27 @@ export const Branches: React.FC = () => {
     user: { name: '', nameEn: '', username: '', email: '', phone: '', password: '', isActive: true },
   });
 
+  const debouncedSearch = useCallback(
+    debounce((value: string) => {
+      setSearchTerm(value.trim());
+    }, 500),
+    []
+  );
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchInput(value);
+    if (value.length >= 2 || value === '') {
+      debouncedSearch(value);
+    }
+  };
+
   const fetchData = useCallback(async () => {
     if (!user || user.role !== 'admin') {
       setError(t.unauthorized);
       setLoading(false);
       toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
+      navigate('/dashboard');
       return;
     }
     setLoading(true);
@@ -305,19 +454,31 @@ export const Branches: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, page, t, isRtl]);
+  }, [user, page, t, isRtl, navigate]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
   const filteredBranches = useMemo(() => {
-    return branches.filter(
-      (branch) =>
-        branch &&
-        ((isRtl ? branch.name : branch.nameEn || branch.name)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          branch.code?.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
+    const lowerSearchTerm = searchTerm.toLowerCase();
+    return branches
+      .filter((branch) => {
+        const name = (isRtl ? branch.name : branch.nameEn || branch.name).toLowerCase();
+        const code = branch.code.toLowerCase();
+        return name.startsWith(lowerSearchTerm) || code.startsWith(lowerSearchTerm) || name.includes(lowerSearchTerm);
+      })
+      .sort((a, b) => {
+        const aName = (isRtl ? a.name : a.nameEn || a.name).toLowerCase();
+        const bName = (isRtl ? b.name : b.nameEn || b.name).toLowerCase();
+        const aCode = a.code.toLowerCase();
+        const bCode = b.code.toLowerCase();
+        if (aName.startsWith(lowerSearchTerm) && !bName.startsWith(lowerSearchTerm)) return -1;
+        if (!aName.startsWith(lowerSearchTerm) && bName.startsWith(lowerSearchTerm)) return 1;
+        if (aCode.startsWith(lowerSearchTerm) && !bCode.startsWith(lowerSearchTerm)) return -1;
+        if (!aCode.startsWith(lowerSearchTerm) && bCode.startsWith(lowerSearchTerm)) return 1;
+        return aName.localeCompare(bName);
+      });
   }, [branches, searchTerm, isRtl]);
 
   const checkEmailAvailability = useCallback(async (email: string) => {
@@ -338,7 +499,7 @@ export const Branches: React.FC = () => {
     if (!formData.addressEn.trim()) errors.addressEn = t.addressEnRequired;
     if (!formData.city.trim()) errors.city = t.cityRequired;
     if (!formData.cityEn.trim()) errors.cityEn = t.cityEnRequired;
-    if (!isEditMode) {
+    if (!showEditModal) {
       if (!formData.user.name.trim()) errors.userName = t.userNameRequired;
       if (!formData.user.nameEn.trim()) errors.userNameEn = t.userNameEnRequired;
       if (!formData.user.username.trim()) errors.username = t.usernameRequired;
@@ -352,15 +513,16 @@ export const Branches: React.FC = () => {
     }
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [formData, isEditMode, t, checkEmailAvailability, selectedBranch]);
+  }, [formData, showEditModal, t, checkEmailAvailability, selectedBranch]);
 
   const openAddModal = useCallback(() => {
     dispatchForm({ type: 'RESET' });
-    setIsEditMode(false);
+    setShowAddModal(true);
+    setShowEditModal(false);
     setSelectedBranch(null);
-    setIsModalOpen(true);
     setFormErrors({});
     setError('');
+    scrollToForm();
   }, []);
 
   const openEditModal = useCallback((branch: Branch, e: React.MouseEvent) => {
@@ -381,25 +543,26 @@ export const Branches: React.FC = () => {
     dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'email', value: branch.user?.email || '' });
     dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'phone', value: branch.user?.phone || '' });
     dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'isActive', value: branch.user?.isActive ?? true });
-    setIsEditMode(true);
+    setShowEditModal(true);
+    setShowAddModal(false);
     setSelectedBranch(branch);
-    setIsModalOpen(true);
     setFormErrors({});
     setError('');
+    scrollToForm();
   }, []);
 
   const openResetPasswordModal = useCallback((branch: Branch, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedBranch(branch);
     setResetPasswordData({ password: '', confirmPassword: '' });
-    setIsResetPasswordModalOpen(true);
+    setShowResetPasswordModal(true);
     setError('');
   }, []);
 
   const openDeleteModal = useCallback((branch: Branch, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedBranch(branch);
-    setIsDeleteModalOpen(true);
+    setShowDeleteModal(true);
     setError('');
   }, []);
 
@@ -421,7 +584,7 @@ export const Branches: React.FC = () => {
           cityEn: formData.cityEn.trim() || undefined,
           phone: formData.phone.trim() || undefined,
           isActive: formData.isActive,
-          user: isEditMode
+          user: showEditModal
             ? {
                 name: formData.user.name.trim(),
                 nameEn: formData.user.nameEn.trim() || undefined,
@@ -440,7 +603,7 @@ export const Branches: React.FC = () => {
                 isActive: formData.user.isActive,
               },
         };
-        if (isEditMode && selectedBranch) {
+        if (showEditModal && selectedBranch) {
           await branchesAPI.update(selectedBranch._id, branchData);
           setBranches(branches.map((b) => (b._id === selectedBranch._id ? { ...b, ...branchData } : b)));
           toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
@@ -449,11 +612,12 @@ export const Branches: React.FC = () => {
           setBranches([...branches, response]);
           toast.success(t.added, { position: isRtl ? 'top-right' : 'top-left' });
         }
-        setIsModalOpen(false);
+        setShowAddModal(false);
+        setShowEditModal(false);
         setError('');
       } catch (err: any) {
         console.error(`[${new Date().toISOString()}] Submit error:`, err);
-        let errorMessage = isEditMode ? t.updateError : t.createError;
+        let errorMessage = showEditModal ? t.updateError : t.createError;
         if (err.response?.data?.message) {
           const message = err.response.data.message;
           errorMessage =
@@ -466,7 +630,7 @@ export const Branches: React.FC = () => {
         toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       }
     },
-    [formData, isEditMode, selectedBranch, branches, t, isRtl]
+    [formData, showEditModal, selectedBranch, branches, t, isRtl]
   );
 
   const handleResetPassword = useCallback(
@@ -489,7 +653,7 @@ export const Branches: React.FC = () => {
       }
       try {
         await branchesAPI.resetPassword(selectedBranch!._id, resetPasswordData.password);
-        setIsResetPasswordModalOpen(false);
+        setShowResetPasswordModal(false);
         setResetPasswordData({ password: '', confirmPassword: '' });
         toast.success(t.passwordResetSuccess, { position: isRtl ? 'top-right' : 'top-left' });
       } catch (err: any) {
@@ -508,7 +672,7 @@ export const Branches: React.FC = () => {
       await branchesAPI.delete(selectedBranch._id);
       setBranches(branches.filter((b) => b._id !== selectedBranch._id));
       toast.success(t.deleted, { position: isRtl ? 'top-right' : 'top-left' });
-      setIsDeleteModalOpen(false);
+      setShowDeleteModal(false);
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Delete error:`, err);
@@ -526,6 +690,10 @@ export const Branches: React.FC = () => {
     navigate(`/branches/${branchId}`);
   }, [navigate]);
 
+  const scrollToForm = () => {
+    formRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   const renderPagination = useMemo(() => {
     const pages = [];
     const maxPagesToShow = 5;
@@ -534,481 +702,523 @@ export const Branches: React.FC = () => {
 
     for (let i = startPage; i <= endPage; i++) {
       pages.push(
-        <Button
+        <motion.button
           key={i}
-          variant={page === i ? 'primary' : 'outline'}
           onClick={() => setPage(i)}
-          className={`w-10 h-10 text-sm font-medium rounded-full ${page === i ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-800 hover:bg-amber-200'} transition-colors`}
+          className={`w-10 h-10 text-sm font-medium rounded-xl ${page === i ? 'bg-amber-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-amber-200'} transition-colors duration-200 shadow-md`}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
         >
           {i}
-        </Button>
+        </motion.button>
       );
     }
 
     return (
       <div className="flex justify-center items-center mt-6 gap-2">
-        <Button
-          variant="outline"
+        <motion.button
           onClick={() => setPage((p) => Math.max(p - 1, 1))}
           disabled={page === 1}
-          className="w-10 h-10 rounded-full bg-amber-100 text-amber-800 disabled:opacity-50 transition-colors"
+          className="w-10 h-10 rounded-xl bg-gray-200 text-gray-700 disabled:opacity-50 hover:bg-amber-200 transition-colors duration-200 shadow-md"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
         >
-          &larr;
-        </Button>
+          {isRtl ? '→' : '←'}
+        </motion.button>
         {pages}
-        <Button
-          variant="outline"
+        <motion.button
           onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
           disabled={page === totalPages}
-          className="w-10 h-10 rounded-full bg-amber-100 text-amber-800 disabled:opacity-50 transition-colors"
+          className="w-10 h-10 rounded-xl bg-gray-200 text-gray-700 disabled:opacity-50 hover:bg-amber-200 transition-colors duration-200 shadow-md"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
         >
-          &rarr;
-        </Button>
+          {isRtl ? '←' : '→'}
+        </motion.button>
       </div>
     );
-  }, [page, totalPages]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <LoadingSpinner size="lg" />
-      </div>
-    );
-  }
+  }, [page, totalPages, isRtl]);
 
   return (
-    <div className={`mx-auto max-w-7xl p-4 sm:p-6 min-h-screen bg-gray-100 ${isRtl ? 'rtl font-arabic' : 'ltr font-sans'}`}>
+    <div className={`mx-auto px-4 py-8 min-h-screen overflow-y-auto scrollbar-thin ${isRtl ? 'rtl font-arabic' : 'ltr font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <motion.div
-        initial={{ opacity: 0, y: -20 }}
+        initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4"
+        transition={{ duration: 0.3 }}
+        className="mb-6 flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-4"
       >
-        <h1 className="text-2xl sm:text-3xl font-bold text-amber-900 flex items-center justify-center sm:justify-start gap-2">
-          <MapPin className="w-6 h-6 text-amber-600" />
-          {t.manage}
-        </h1>
+        <div className="flex items-center gap-3">
+          <MapPin className="w-8 h-8 text-amber-600" />
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{t.manage}</h1>
+            <p className="text-gray-600 text-sm">{t.addProducts}</p>
+          </div>
+        </div>
         {user?.role === 'admin' && (
-          <Button
-            variant="primary"
-            icon={Plus}
+          <motion.button
             onClick={openAddModal}
-            className="text-sm px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-md transition-transform transform hover:scale-105"
+            className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-colors duration-200 flex items-center justify-center gap-2 shadow-lg"
+            aria-label={t.add}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
           >
+            <Plus className="w-4 h-4" />
             {t.add}
-          </Button>
+          </motion.button>
         )}
       </motion.div>
-      <AnimatePresence>
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="mb-6 p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-2 shadow-sm"
+
+      {error && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3"
+        >
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <span className="text-red-600 text-sm">{error}</span>
+        </motion.div>
+      )}
+
+      {user?.role === 'admin' && (
+        <div className={`lg:hidden fixed bottom-6 ${isRtl ? 'left-6' : 'right-6'} z-50`}>
+          <motion.button
+            onClick={openAddModal}
+            className="p-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg transition-all duration-200"
+            aria-label={t.scrollToForm}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
           >
-            <AlertCircle className="w-4 h-4 text-red-600" />
-            <span className="text-red-600 text-sm font-medium">{error}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      <Card className="p-4 mb-6 bg-white rounded-lg shadow-md">
-        <div className="relative">
-          <Search
-            className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 text-amber-500 w-5 h-5`}
-          />
-          <Input
-            value={searchTerm}
-            onChange={(value) => setSearchTerm(value)}
-            placeholder={t.searchPlaceholder}
-            className={`w-full pl-10 pr-4 py-2 text-sm border border-amber-300 rounded-full focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors bg-amber-50 ${isRtl ? 'text-right' : 'text-left'}`}
-            aria-label={t.searchPlaceholder}
-          />
+            <Plus className="w-6 h-6" />
+          </motion.button>
         </div>
-      </Card>
-      <motion.div
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ staggerChildren: 0.1 }}
-      >
-        {filteredBranches.length === 0 ? (
-          <Card className="p-6 text-center bg-white rounded-lg shadow-md col-span-full">
-            <MapPin className="w-10 h-10 text-amber-400 mx-auto mb-3" />
-            <h3 className="text-lg font-semibold text-amber-900">{t.noBranches}</h3>
-            <p className="text-sm text-gray-600 mt-1">
-              {searchTerm ? t.noMatch : t.empty}
-            </p>
-            {user?.role === 'admin' && !searchTerm && (
-              <Button
-                variant="primary"
-                icon={Plus}
-                onClick={openAddModal}
-                className="mt-4 text-sm px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-md transition-transform transform hover:scale-105"
-              >
-                {t.addFirst}
-              </Button>
-            )}
-          </Card>
-        ) : (
-          filteredBranches.map((branch) => (
+      )}
+
+      <div className="space-y-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+          className="p-5 bg-gradient-to-r from-white to-gray-50 rounded-xl shadow-lg"
+        >
+          <CustomInput
+            value={searchInput}
+            onChange={handleSearchChange}
+            placeholder={t.searchPlaceholder}
+            ariaLabel={t.searchPlaceholder}
+          />
+        </motion.div>
+
+        <div className="lg:overflow-y-auto lg:max-h-[calc(100vh-8rem)] scrollbar-thin">
+          {loading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[...Array(6)].map((_, index) => (
+                <div key={index} className="p-5 bg-white rounded-xl shadow-md">
+                  <div className="space-y-3 animate-pulse">
+                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredBranches.length === 0 ? (
             <motion.div
-              key={branch._id}
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
+              className="p-8 text-center bg-white rounded-xl shadow-lg"
             >
-              <Card
-                className="bg-white rounded-lg shadow-md hover:shadow-xl transition-all duration-300 hover:-translate-y-1 cursor-pointer overflow-hidden"
-                onClick={() => handleCardClick(branch._id)}
+              <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600 text-sm">{searchTerm ? t.noMatch : t.empty}</p>
+              {user?.role === 'admin' && !searchTerm && (
+                <motion.button
+                  onClick={openAddModal}
+                  className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-colors duration-200 shadow-lg"
+                  aria-label={t.addFirst}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                >
+                  {t.addFirst}
+                </motion.button>
+              )}
+            </motion.div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <AnimatePresence>
+                {filteredBranches.map((branch, index) => (
+                  <motion.div
+                    key={branch._id}
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    transition={{ duration: 0.15, delay: index * 0.02 }}
+                    className="p-5 bg-white rounded-xl shadow-lg transition-colors duration-200 flex flex-col justify-between border border-gray-100 hover:border-amber-200 cursor-pointer"
+                    onClick={() => handleCardClick(branch._id)}
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>
+                          {isRtl ? branch.name : branch.nameEn || branch.name}
+                        </h3>
+                        <MapPin className="w-5 h-5 text-amber-600" />
+                      </div>
+                      <p className="text-sm text-gray-500">{t.code}: {branch.code}</p>
+                      <p className="text-sm text-gray-600 truncate">{t.address}: {isRtl ? branch.address : branch.addressEn || branch.address}</p>
+                      <p className="text-sm text-gray-600 truncate">{t.city}: {isRtl ? branch.city : branch.cityEn || branch.city}</p>
+                      <p className="text-sm text-gray-600 truncate">{t.phone}: {branch.phone || '-'}</p>
+                      <p className={`text-sm font-medium ${branch.isActive ? 'text-teal-600' : 'text-red-600'}`}>
+                        {t.status}: {branch.isActive ? t.active : t.inactive}
+                      </p>
+                    </div>
+                    {user?.role === 'admin' && (
+                      <div className="mt-4 flex justify-end gap-2">
+                        <motion.button
+                          onClick={(e) => openEditModal(branch, e)}
+                          className="w-8 h-8 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
+                          aria-label={t.edit}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </motion.button>
+                        <motion.button
+                          onClick={(e) => openResetPasswordModal(branch, e)}
+                          className="w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
+                          aria-label={t.resetPassword}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                        >
+                          <Key className="w-4 h-4" />
+                        </motion.button>
+                        <motion.button
+                          onClick={(e) => openDeleteModal(branch, e)}
+                          className="w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
+                          aria-label={t.delete}
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </motion.button>
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
+              </AnimatePresence>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {filteredBranches.length > 0 && renderPagination}
+
+      <div ref={formRef}>
+        <AnimatePresence>
+          {(showAddModal || showEditModal) && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="bg-white rounded-xl shadow-2xl max-w-2xl p-6 w-[90vw]"
               >
-                <div className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-base font-semibold text-amber-900 truncate max-w-[80%]">
-                      {isRtl ? branch.name : branch.nameEn || branch.name}
-                    </h3>
-                    <MapPin className="w-5 h-5 text-amber-600" />
-                  </div>
-                  <p className="text-xs text-gray-600 truncate">{t.code}: {branch.code}</p>
-                  <p className="text-xs text-gray-600 truncate">{t.address}: {isRtl ? branch.address : branch.addressEn || branch.address}</p>
-                  <p className="text-xs text-gray-600 truncate">{t.city}: {isRtl ? branch.city : branch.cityEn || branch.city}</p>
-                  <p className="text-xs text-gray-600 truncate">{t.phone}: {branch.phone || '-'}</p>
-                  <p className={`text-xs font-medium ${branch.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                    {t.status}: {branch.isActive ? t.active : t.inactive}
-                  </p>
-                  {user?.role === 'admin' && (
-                    <div className="flex gap-2 mt-3 justify-end">
-                      <Button
-                        variant="outline"
-                        icon={Edit2}
-                        onClick={(e) => openEditModal(branch, e)}
-                        className="text-xs p-1.5 w-8 h-8 rounded-full text-amber-600 hover:text-amber-800 border-amber-600 hover:bg-amber-50"
-                        aria-label={t.edit}
+                <h3 className="text-lg font-bold text-gray-900 mb-4">{showEditModal ? t.edit : t.add}</h3>
+                <form onSubmit={handleSubmit} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ duration: 0.3 }}
+                    className="grid grid-cols-1 sm:grid-cols-2 gap-4"
+                  >
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-medium text-gray-700">{t.name}</h4>
+                      <CustomInput
+                        value={formData.name}
+                        onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'name', value: e.target.value })}
+                        placeholder={t.namePlaceholder}
+                        ariaLabel={t.name}
                       />
-                      <Button
-                        variant="outline"
-                        icon={Key}
-                        onClick={(e) => openResetPasswordModal(branch, e)}
-                        className="text-xs p-1.5 w-8 h-8 rounded-full text-blue-500 hover:text-blue-700 border-blue-500 hover:bg-blue-50"
-                        aria-label={t.resetPassword}
+                      {formErrors.name && <p className="text-red-600 text-xs">{formErrors.name}</p>}
+                      <CustomInput
+                        value={formData.nameEn}
+                        onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'nameEn', value: e.target.value })}
+                        placeholder={t.nameEnPlaceholder}
+                        ariaLabel={t.nameEn}
                       />
-                      <Button
-                        variant="outline"
-                        icon={Trash2}
-                        onClick={(e) => openDeleteModal(branch, e)}
-                        className="text-xs p-1.5 w-8 h-8 rounded-full text-red-500 hover:text-red-700 border-red-500 hover:bg-red-50"
-                        aria-label={t.delete}
+                      {formErrors.nameEn && <p className="text-red-600 text-xs">{formErrors.nameEn}</p>}
+                      <CustomInput
+                        value={formData.code}
+                        onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'code', value: e.target.value })}
+                        placeholder={t.codePlaceholder}
+                        ariaLabel={t.code}
+                      />
+                      {formErrors.code && <p className="text-red-600 text-xs">{formErrors.code}</p>}
+                      <CustomInput
+                        value={formData.address}
+                        onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'address', value: e.target.value })}
+                        placeholder={t.addressPlaceholder}
+                        ariaLabel={t.address}
+                      />
+                      {formErrors.address && <p className="text-red-600 text-xs">{formErrors.address}</p>}
+                      <CustomInput
+                        value={formData.addressEn}
+                        onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'addressEn', value: e.target.value })}
+                        placeholder={t.addressEnPlaceholder}
+                        ariaLabel={t.addressEn}
+                      />
+                      {formErrors.addressEn && <p className="text-red-600 text-xs">{formErrors.addressEn}</p>}
+                      <CustomInput
+                        value={formData.city}
+                        onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'city', value: e.target.value })}
+                        placeholder={t.cityPlaceholder}
+                        ariaLabel={t.city}
+                      />
+                      {formErrors.city && <p className="text-red-600 text-xs">{formErrors.city}</p>}
+                      <CustomInput
+                        value={formData.cityEn}
+                        onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'cityEn', value: e.target.value })}
+                        placeholder={t.cityEnPlaceholder}
+                        ariaLabel={t.cityEn}
+                      />
+                      {formErrors.cityEn && <p className="text-red-600 text-xs">{formErrors.cityEn}</p>}
+                      <CustomInput
+                        value={formData.phone}
+                        onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'phone', value: e.target.value })}
+                        placeholder={t.phonePlaceholder}
+                        ariaLabel={t.phone}
+                      />
+                      <CustomDropdown
+                        value={formData.isActive}
+                        onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'isActive', value: value === 'true' })}
+                        options={[
+                          { value: true, label: t.active },
+                          { value: false, label: t.inactive },
+                        ]}
+                        ariaLabel={t.status}
                       />
                     </div>
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-medium text-gray-700">{t.user}</h4>
+                      <CustomInput
+                        value={formData.user.name}
+                        onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'name', value: e.target.value })}
+                        placeholder={t.userNamePlaceholder}
+                        ariaLabel={t.userName}
+                      />
+                      {formErrors.userName && <p className="text-red-600 text-xs">{formErrors.userName}</p>}
+                      <CustomInput
+                        value={formData.user.nameEn}
+                        onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'nameEn', value: e.target.value })}
+                        placeholder={t.userNameEnPlaceholder}
+                        ariaLabel={t.userNameEn}
+                      />
+                      {formErrors.userNameEn && <p className="text-red-600 text-xs">{formErrors.userNameEn}</p>}
+                      <CustomInput
+                        value={formData.user.username}
+                        onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'username', value: e.target.value })}
+                        placeholder={t.usernamePlaceholder}
+                        ariaLabel={t.username}
+                      />
+                      {formErrors.username && <p className="text-red-600 text-xs">{formErrors.username}</p>}
+                      <CustomInput
+                        value={formData.user.email}
+                        onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'email', value: e.target.value })}
+                        placeholder={t.emailPlaceholder}
+                        ariaLabel={t.email}
+                      />
+                      {formErrors.email && <p className="text-red-600 text-xs">{formErrors.email}</p>}
+                      <CustomInput
+                        value={formData.user.phone}
+                        onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'phone', value: e.target.value })}
+                        placeholder={t.userPhonePlaceholder}
+                        ariaLabel={t.userPhone}
+                      />
+                      <CustomDropdown
+                        value={formData.user.isActive}
+                        onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'isActive', value: value === 'true' })}
+                        options={[
+                          { value: true, label: t.active },
+                          { value: false, label: t.inactive },
+                        ]}
+                        ariaLabel={t.status}
+                      />
+                      {!showEditModal && (
+                        <>
+                          <CustomInput
+                            value={formData.user.password}
+                            onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'password', value: e.target.value })}
+                            placeholder={t.passwordPlaceholder}
+                            ariaLabel={t.password}
+                            type="password"
+                          />
+                          {formErrors.password && <p className="text-red-600 text-xs">{formErrors.password}</p>}
+                        </>
+                      )}
+                    </div>
+                  </motion.div>
+                  {error && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.3 }}
+                      className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3"
+                    >
+                      <AlertCircle className="w-5 h-5 text-red-600" />
+                      <span className="text-red-600 text-sm">{error}</span>
+                    </motion.div>
                   )}
-                </div>
-              </Card>
+                  <div className="flex justify-end gap-3">
+                    <motion.button
+                      onClick={() => {
+                        setShowAddModal(false);
+                        setShowEditModal(false);
+                      }}
+                      className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm transition-colors duration-200 shadow-sm"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      {t.cancel}
+                    </motion.button>
+                    <motion.button
+                      type="submit"
+                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-colors duration-200 shadow-lg"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      {showEditModal ? t.update : t.add}
+                    </motion.button>
+                  </div>
+                </form>
+              </motion.div>
             </motion.div>
-          ))
-        )}
-      </motion.div>
-      {filteredBranches.length > 0 && renderPagination}
-      <Modal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        title={isEditMode ? t.edit : t.add}
-        size="lg"
-      >
-        <form onSubmit={handleSubmit} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="grid grid-cols-1 sm:grid-cols-2 gap-4"
-          >
-            <div className="space-y-4">
-              <h3 className="text-base font-semibold text-amber-900">{t.name}</h3>
-              <Input
-                label={t.name}
-                value={formData.name}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'name', value })}
-                placeholder={t.namePlaceholder}
-                required
-                error={formErrors.name}
-                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.nameEn}
-                value={formData.nameEn}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'nameEn', value })}
-                placeholder={t.nameEnPlaceholder}
-                required
-                error={formErrors.nameEn}
-                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.code}
-                value={formData.code}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'code', value })}
-                placeholder={t.codePlaceholder}
-                required
-                error={formErrors.code}
-                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.address}
-                value={formData.address}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'address', value })}
-                placeholder={t.addressPlaceholder}
-                required
-                error={formErrors.address}
-                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.addressEn}
-                value={formData.addressEn}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'addressEn', value })}
-                placeholder={t.addressEnPlaceholder}
-                required
-                error={formErrors.addressEn}
-                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.city}
-                value={formData.city}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'city', value })}
-                placeholder={t.cityPlaceholder}
-                required
-                error={formErrors.city}
-                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.cityEn}
-                value={formData.cityEn}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'cityEn', value })}
-                placeholder={t.cityEnPlaceholder}
-                required
-                error={formErrors.cityEn}
-                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.phone}
-                value={formData.phone}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'phone', value })}
-                placeholder={t.phonePlaceholder}
-                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Select
-                label={t.status}
-                options={[
-                  { value: true, label: t.active },
-                  { value: false, label: t.inactive },
-                ]}
-                value={formData.isActive}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'isActive', value: value === 'true' })}
-                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-            </div>
-            <div className="space-y-4">
-              <h3 className="text-base font-semibold text-amber-900">{t.user}</h3>
-              <Input
-                label={t.userName}
-                value={formData.user.name}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'name', value })}
-                placeholder={t.userNamePlaceholder}
-                required={!isEditMode}
-                error={formErrors.userName}
-                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.userNameEn}
-                value={formData.user.nameEn}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'nameEn', value })}
-                placeholder={t.userNameEnPlaceholder}
-                required={!isEditMode}
-                error={formErrors.userNameEn}
-                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.username}
-                value={formData.user.username}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'username', value })}
-                placeholder={t.usernamePlaceholder}
-                required={!isEditMode}
-                error={formErrors.username}
-                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.email}
-                value={formData.user.email}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'email', value })}
-                placeholder={t.emailPlaceholder}
-                error={formErrors.email}
-                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Input
-                label={t.userPhone}
-                value={formData.user.phone}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'phone', value })}
-                placeholder={t.userPhonePlaceholder}
-                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              <Select
-                label={t.status}
-                options={[
-                  { value: true, label: t.active },
-                  { value: false, label: t.inactive },
-                ]}
-                value={formData.user.isActive}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'isActive', value: value === 'true' })}
-                className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-              />
-              {!isEditMode && (
-                <Input
-                  label={t.password}
-                  value={formData.user.password}
-                  onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'password', value })}
-                  placeholder={t.passwordPlaceholder}
-                  type="password"
-                  required
-                  error={formErrors.password}
-                  className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-                />
-              )}
-            </div>
-          </motion.div>
-          <AnimatePresence>
-            {error && (
+          )}
+          {showResetPasswordModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
+            >
               <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-2"
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="bg-white rounded-xl shadow-2xl max-w-md p-6 w-[90vw]"
               >
-                <AlertCircle className="w-4 h-4 text-red-600" />
-                <span className="text-red-600 text-sm font-medium">{error}</span>
+                <h3 className="text-lg font-bold text-gray-900 mb-4">{t.resetPassword}</h3>
+                <form onSubmit={handleResetPassword} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
+                  <div className="space-y-4">
+                    <CustomInput
+                      value={resetPasswordData.password}
+                      onChange={(e) => setResetPasswordData({ ...resetPasswordData, password: e.target.value })}
+                      placeholder={t.newPasswordPlaceholder}
+                      ariaLabel={t.newPassword}
+                      type="password"
+                    />
+                    <CustomInput
+                      value={resetPasswordData.confirmPassword}
+                      onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
+                      placeholder={t.confirmPasswordPlaceholder}
+                      ariaLabel={t.confirmPassword}
+                      type="password"
+                    />
+                  </div>
+                  {error && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      transition={{ duration: 0.3 }}
+                      className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3"
+                    >
+                      <AlertCircle className="w-5 h-5 text-red-600" />
+                      <span className="text-red-600 text-sm">{error}</span>
+                    </motion.div>
+                  )}
+                  <div className="flex justify-end gap-3">
+                    <motion.button
+                      onClick={() => setShowResetPasswordModal(false)}
+                      className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm transition-colors duration-200 shadow-sm"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      {t.cancel}
+                    </motion.button>
+                    <motion.button
+                      type="submit"
+                      className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm transition-colors duration-200 shadow-lg"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                    >
+                      {t.reset}
+                    </motion.button>
+                  </div>
+                </form>
               </motion.div>
-            )}
-          </AnimatePresence>
-          <div className="flex gap-3 mt-6">
-            <Button
-              type="submit"
-              variant="primary"
-              className="flex-1 text-sm px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-md transition-transform transform hover:scale-105"
+            </motion.div>
+          )}
+          {showDeleteModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
             >
-              {isEditMode ? t.update : t.add}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setIsModalOpen(false)}
-              className="flex-1 text-sm px-4 py-2 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg shadow-md transition-transform transform hover:scale-105"
-            >
-              {t.cancel}
-            </Button>
-          </div>
-        </form>
-      </Modal>
-      <Modal
-        isOpen={isResetPasswordModalOpen}
-        onClose={() => setIsResetPasswordModalOpen(false)}
-        title={t.resetPassword}
-        size="sm"
-      >
-        <form onSubmit={handleResetPassword} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="space-y-4"
-          >
-            <Input
-              label={t.newPassword}
-              value={resetPasswordData.password}
-              onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
-              placeholder={t.newPasswordPlaceholder}
-              type="password"
-              required
-              className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-            />
-            <Input
-              label={t.confirmPassword}
-              value={resetPasswordData.confirmPassword}
-              onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
-              placeholder={t.confirmPasswordPlaceholder}
-              type="password"
-              required
-              className="text-sm border-amber-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 bg-amber-50 transition-colors"
-            />
-          </motion.div>
-          <AnimatePresence>
-            {error && (
               <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-2"
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="bg-white rounded-xl shadow-2xl max-w-md p-6 w-[90vw]"
               >
-                <AlertCircle className="w-4 h-4 text-red-600" />
-                <span className="text-red-600 text-sm font-medium">{error}</span>
+                <h3 className="text-lg font-bold text-gray-900 mb-4">{t.confirmDelete}</h3>
+                <p className="text-sm text-gray-600 mb-6">{t.deleteWarning}</p>
+                {error && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.3 }}
+                    className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3"
+                  >
+                    <AlertCircle className="w-5 h-5 text-red-600" />
+                    <span className="text-red-600 text-sm">{error}</span>
+                  </motion.div>
+                )}
+                <div className="flex justify-end gap-3">
+                  <motion.button
+                    onClick={() => setShowDeleteModal(false)}
+                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm transition-colors duration-200 shadow-sm"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    {t.cancel}
+                  </motion.button>
+                  <motion.button
+                    onClick={handleDelete}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-sm transition-colors duration-200 shadow-lg"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                  >
+                    {t.delete}
+                  </motion.button>
+                </div>
               </motion.div>
-            )}
-          </AnimatePresence>
-          <div className="flex gap-3 mt-4">
-            <Button
-              type="submit"
-              variant="primary"
-              className="flex-1 text-sm px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg shadow-md transition-transform transform hover:scale-105"
-            >
-              {t.reset}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setIsResetPasswordModalOpen(false)}
-              className="flex-1 text-sm px-4 py-2 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg shadow-md transition-transform transform hover:scale-105"
-            >
-              {t.cancel}
-            </Button>
-          </div>
-        </form>
-      </Modal>
-      <Modal
-        isOpen={isDeleteModalOpen}
-        onClose={() => setIsDeleteModalOpen(false)}
-        title={t.confirmDelete}
-        size="sm"
-      >
-        <div className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
-          <p className="text-sm text-gray-600">{t.deleteWarning}</p>
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-3 bg-red-100 border border-red-300 rounded-lg flex items-center gap-2"
-              >
-                <AlertCircle className="w-4 h-4 text-red-600" />
-                <span className="text-red-600 text-sm font-medium">{error}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <div className="flex gap-3 mt-4">
-            <Button
-              type="button"
-              variant="danger"
-              onClick={handleDelete}
-              className="flex-1 text-sm px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md transition-transform transform hover:scale-105"
-            >
-              {t.delete}
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={() => setIsDeleteModalOpen(false)}
-              className="flex-1 text-sm px-4 py-2 bg-gray-200 hover:bg-gray-300 text-amber-900 rounded-lg shadow-md transition-transform transform hover:scale-105"
-            >
-              {t.cancel}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 };
