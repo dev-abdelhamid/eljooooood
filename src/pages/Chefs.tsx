@@ -168,45 +168,65 @@ const CustomInput = ({
   onChange,
   placeholder,
   ariaLabel,
+  type = 'text',
+  showPasswordToggle = false,
+  showPassword = false,
+  togglePasswordVisibility,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   ariaLabel: string;
+  type?: string;
+  showPasswordToggle?: boolean;
+  showPassword?: boolean;
+  togglePasswordVisibility?: () => void;
 }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
     <div className="relative group">
-      <motion.div
-        initial={{ opacity: value ? 0 : 1 }}
-        animate={{ opacity: value ? 0 : 1 }}
-        transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`}
-      >
-        <Search />
-      </motion.div>
+      {!showPasswordToggle && (
+        <motion.div
+          initial={{ opacity: value ? 0 : 1 }}
+          animate={{ opacity: value ? 0 : 1 }}
+          transition={{ duration: 0.15 }}
+          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-600`}
+        >
+          <Search />
+        </motion.div>
+      )}
       <input
-        type="text"
+        type={showPasswordToggle ? (showPassword ? 'text' : 'password') : type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-10 pr-2' : 'pr-10 pl-2'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pl-10 pr-2' : 'pr-10 pl-2'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       />
-      <motion.div
-        initial={{ opacity: value ? 1 : 0 }}
-        animate={{ opacity: value ? 1 : 0 }}
-        transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
-      >
+      {showPasswordToggle ? (
         <button
-          onClick={() => onChange('')}
-          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
+          type="button"
+          onClick={togglePasswordVisibility}
+          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-600 transition-colors`}
         >
-          <X className="w-4 h-4" />
+          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
         </button>
-      </motion.div>
+      ) : (
+        <motion.div
+          initial={{ opacity: value ? 1 : 0 }}
+          animate={{ opacity: value ? 1 : 0 }}
+          transition={{ duration: 0.15 }}
+          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-600 transition-colors`}
+        >
+          <button
+            onClick={() => onChange('')}
+            aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </motion.div>
+      )}
     </div>
   );
 };
@@ -231,12 +251,12 @@ const CustomDropdown = ({
     <div className="relative group">
       <motion.button
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center`}
+        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center`}
         aria-label={ariaLabel}
       >
         <span className="truncate">{selectedOption.label}</span>
         <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
-          <ChevronDown className="w-4 h-4 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
+          <ChevronDown className="w-4 h-4 text-gray-400 group-focus-within:text-amber-600 transition-colors" />
         </motion.div>
       </motion.button>
       <AnimatePresence>
@@ -334,24 +354,30 @@ export function Chefs() {
           createdAt: chef.user.createdAt,
           updatedAt: chef.user.updatedAt,
         },
-        department: chef.department ? {
-          id: chef.department._id,
-          name: chef.department.name,
-          nameEn: chef.department.nameEn,
-          code: chef.department.code,
-          description: chef.department.description,
-        } : null,
+        department: chef.department
+          ? {
+              id: chef.department._id,
+              name: chef.department.name,
+              nameEn: chef.department.nameEn,
+              code: chef.department.code,
+              description: chef.department.description,
+            }
+          : null,
         createdAt: chef.createdAt,
         updatedAt: chef.updatedAt,
         password: '********',
       })));
-      setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data.map((dept: any) => ({
-        id: dept._id,
-        name: dept.name,
-        nameEn: dept.nameEn,
-        code: dept.code,
-        description: dept.description,
-      })) : departmentsResponse);
+      setDepartments(
+        Array.isArray(departmentsResponse.data)
+          ? departmentsResponse.data.map((dept: any) => ({
+              id: dept._id,
+              name: dept.name,
+              nameEn: dept.nameEn,
+              code: dept.code,
+              description: dept.description,
+            }))
+          : departmentsResponse
+      );
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Fetch error:`, err);
@@ -362,45 +388,50 @@ export function Chefs() {
     }
   }, [loggedInUser, t, isRtl]);
 
-  const fetchChefByUserId = useCallback(async (userId: string) => {
-    if (!loggedInUser || loggedInUser.role !== 'admin') {
-      setError(t.unauthorized);
-      toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
-      return null;
-    }
-    try {
-      const chefResponse = await chefsAPI.getByUserId(userId, { isRtl });
-      return {
-        id: chefResponse._id,
-        user: {
-          id: chefResponse.user._id,
-          name: chefResponse.user.name,
-          nameEn: chefResponse.user.nameEn,
-          username: chefResponse.user.username,
-          email: chefResponse.user.email,
-          phone: chefResponse.user.phone,
-          isActive: chefResponse.user.isActive,
-          createdAt: chefResponse.user.createdAt,
-          updatedAt: chefResponse.user.updatedAt,
-        },
-        department: chefResponse.department ? {
-          id: chefResponse.department._id,
-          name: chefResponse.department.name,
-          nameEn: chefResponse.department.nameEn,
-          code: chefResponse.department.code,
-          description: chefResponse.department.description,
-        } : null,
-        createdAt: chefResponse.createdAt,
-        updatedAt: chefResponse.updatedAt,
-        password: '********',
-      };
-    } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Fetch chef by userId error:`, err);
-      setError(err.message || t.fetchError);
-      toast.error(err.message || t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
-      return null;
-    }
-  }, [loggedInUser, t, isRtl]);
+  const fetchChefByUserId = useCallback(
+    async (userId: string) => {
+      if (!loggedInUser || loggedInUser.role !== 'admin') {
+        setError(t.unauthorized);
+        toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
+        return null;
+      }
+      try {
+        const chefResponse = await chefsAPI.getByUserId(userId, { isRtl });
+        return {
+          id: chefResponse._id,
+          user: {
+            id: chefResponse.user._id,
+            name: chefResponse.user.name,
+            nameEn: chefResponse.user.nameEn,
+            username: chefResponse.user.username,
+            email: chefResponse.user.email,
+            phone: chefResponse.user.phone,
+            isActive: chefResponse.user.isActive,
+            createdAt: chefResponse.user.createdAt,
+            updatedAt: chefResponse.user.updatedAt,
+          },
+          department: chefResponse.department
+            ? {
+                id: chefResponse.department._id,
+                name: chefResponse.department.name,
+                nameEn: chefResponse.department.nameEn,
+                code: chefResponse.department.code,
+                description: chefResponse.department.description,
+              }
+            : null,
+          createdAt: chefResponse.createdAt,
+          updatedAt: chefResponse.updatedAt,
+          password: '********',
+        };
+      } catch (err: any) {
+        console.error(`[${new Date().toISOString()}] Fetch chef by userId error:`, err);
+        setError(err.message || t.fetchError);
+        toast.error(err.message || t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
+        return null;
+      }
+    },
+    [loggedInUser, t, isRtl]
+  );
 
   useEffect(() => {
     fetchData();
@@ -516,52 +547,65 @@ export function Chefs() {
 
       if (isEditMode && selectedChef) {
         const updatedChef = await chefsAPI.update(selectedChef.id, chefData);
-        setChefs(chefs.map((c) => (c.id === selectedChef.id ? {
-          ...c,
-          user: {
-            ...c.user!,
-            ...updatedChef.user,
-            id: updatedChef.user._id,
-            createdAt: updatedChef.user.createdAt,
-            updatedAt: updatedChef.user.updatedAt,
-          },
-          department: updatedChef.department ? {
-            id: updatedChef.department._id,
-            name: updatedChef.department.name,
-            nameEn: updatedChef.department.nameEn,
-            code: updatedChef.department.code,
-            description: updatedChef.department.description,
-          } : null,
-          createdAt: updatedChef.createdAt,
-          updatedAt: updatedChef.updatedAt,
-        } : c)));
+        setChefs(
+          chefs.map((c) =>
+            c.id === selectedChef.id
+              ? {
+                  ...c,
+                  user: {
+                    ...c.user!,
+                    ...updatedChef.user,
+                    id: updatedChef.user._id,
+                    createdAt: updatedChef.user.createdAt,
+                    updatedAt: updatedChef.user.updatedAt,
+                  },
+                  department: updatedChef.department
+                    ? {
+                        id: updatedChef.department._id,
+                        name: updatedChef.department.name,
+                        nameEn: updatedChef.department.nameEn,
+                        code: updatedChef.department.code,
+                        description: updatedChef.department.description,
+                      }
+                    : null,
+                  createdAt: updatedChef.createdAt,
+                  updatedAt: updatedChef.updatedAt,
+                }
+              : c
+          )
+        );
         toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
       } else {
         const newChef = await chefsAPI.create(chefData);
-        setChefs([...chefs, {
-          id: newChef._id,
-          user: {
-            id: newChef.user._id,
-            name: newChef.user.name,
-            nameEn: newChef.user.nameEn,
-            username: newChef.user.username,
-            email: newChef.user.email,
-            phone: newChef.user.phone,
-            isActive: newChef.user.isActive,
-            createdAt: newChef.user.createdAt,
-            updatedAt: newChef.user.updatedAt,
+        setChefs([
+          ...chefs,
+          {
+            id: newChef._id,
+            user: {
+              id: newChef.user._id,
+              name: newChef.user.name,
+              nameEn: newChef.user.nameEn,
+              username: newChef.user.username,
+              email: newChef.user.email,
+              phone: newChef.user.phone,
+              isActive: newChef.user.isActive,
+              createdAt: newChef.user.createdAt,
+              updatedAt: newChef.user.updatedAt,
+            },
+            department: newChef.department
+              ? {
+                  id: newChef.department._id,
+                  name: newChef.department.name,
+                  nameEn: newChef.department.nameEn,
+                  code: newChef.department.code,
+                  description: newChef.department.description,
+                }
+              : null,
+            createdAt: newChef.createdAt,
+            updatedAt: newChef.updatedAt,
+            password: '********',
           },
-          department: newChef.department ? {
-            id: newChef.department._id,
-            name: newChef.department.name,
-            nameEn: newChef.department.nameEn,
-            code: newChef.department.code,
-            description: newChef.department.description,
-          } : null,
-          createdAt: newChef.createdAt,
-          updatedAt: newChef.updatedAt,
-          password: '********',
-        }]);
+        ]);
         toast.success(t.added, { position: isRtl ? 'top-right' : 'top-left' });
       }
       setIsModalOpen(false);
@@ -635,9 +679,10 @@ export function Chefs() {
           {[...Array(6)].map((_, index) => (
             <div key={index} className="p-4 bg-white rounded-xl shadow-sm">
               <div className="space-y-2 animate-pulse">
-                <div className="h-3 bg-gray-200 rounded w-3/4"></div>
-                <div className="h-2 bg-gray-200 rounded w-1/4"></div>
-                <div className="h-2 bg-gray-200 rounded w-1/2"></div>
+                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
               </div>
             </div>
           ))}
@@ -733,45 +778,66 @@ export function Chefs() {
                 transition={{ duration: 0.3 }}
               >
                 <div
-                  className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer"
+                  className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer border border-gray-100"
                   onClick={() => openProfileModal(chef)}
                 >
-                  <div className="space-y-1.5">
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between gap-3">
                       <h3 className="font-semibold text-gray-900 text-sm truncate">
                         {isRtl ? chef.user?.name : chef.user?.nameEn || chef.user?.name}
                       </h3>
-                      <ChefHat className="w-4 h-4 text-amber-600" />
+                      <ChefHat className="w-5 h-5 text-amber-600" />
                     </div>
-                    <p className="text-xs text-gray-600 flex"><span className="w-16 font-medium">{t.username}:</span> <span className="truncate">{chef.user?.username || '-'}</span></p>
-                    <p className="text-xs text-gray-600 flex"><span className="w-16 font-medium">{t.email}:</span> <span className="truncate">{chef.user?.email || '-'}</span></p>
-                    <p className="text-xs text-gray-600 flex"><span className="w-16 font-medium">{t.department}:</span> <span>{isRtl ? chef.department?.name : chef.department?.nameEn || chef.department?.name || '-'}</span></p>
-                    <p className={`text-xs flex ${chef.user?.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                      <span className="w-16 font-medium">{t.status}:</span> <span>{chef.user?.isActive ? t.active : t.inactive}</span>
-                    </p>
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                      <span className="w-20 font-medium">{t.username}:</span>
+                      <span className="truncate flex-1">{chef.user?.username || '-'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                      <span className="w-20 font-medium">{t.email}:</span>
+                      <span className="truncate flex-1">{chef.user?.email || '-'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-gray-600">
+                      <span className="w-20 font-medium">{t.department}:</span>
+                      <span className="truncate flex-1">{isRtl ? chef.department?.name : chef.department?.nameEn || chef.department?.name || '-'}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="w-20 font-medium">{t.status}:</span>
+                      <span className={`truncate flex-1 ${chef.user?.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                        {chef.user?.isActive ? t.active : t.inactive}
+                      </span>
+                    </div>
                   </div>
                   {loggedInUser?.role === 'admin' && (
                     <div className="mt-3 flex items-center justify-end gap-1.5">
                       <button
-                        onClick={(e) => { e.stopPropagation(); openEditModal(chef); }}
-                        className="p-1.5 w-7 h-7 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(chef);
+                        }}
+                        className="p-1.5 w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
                         title={t.edit}
                       >
-                        <Edit2 className="w-3.5 h-3.5" />
+                        <Edit2 className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={(e) => { e.stopPropagation(); openResetPasswordModal(chef); }}
-                        className="p-1.5 w-7 h-7 bg-amber-500 hover:bg-amber-600 text-white rounded-full transition-colors flex items-center justify-center"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openResetPasswordModal(chef);
+                        }}
+                        className="p-1.5 w-8 h-8 bg-amber-500 hover:bg-amber-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
                         title={t.resetPassword}
                       >
-                        <Key className="w-3.5 h-3.5" />
+                        <Key className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={(e) => { e.stopPropagation(); openDeleteModal(chef); }}
-                        className="p-1.5 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openDeleteModal(chef);
+                        }}
+                        className="p-1.5 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
                         title={t.delete}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
                   )}
@@ -788,11 +854,11 @@ export function Chefs() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5"
+            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6"
           >
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">{isEditMode ? t.edit : t.add}</h3>
-            <form onSubmit={handleSubmit} className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{isEditMode ? t.edit : t.add}</h3>
+            <form onSubmit={handleSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">{t.name}</label>
                   <input
@@ -801,7 +867,7 @@ export function Chefs() {
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder={t.namePlaceholder}
                     required
-                    className={`w-full px-3 py-2 border ${formErrors.name ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                    className={`w-full px-3 py-2 border ${formErrors.name ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
                   />
                   {formErrors.name && <p className="text-xs text-red-600 mt-1">{formErrors.name}</p>}
                 </div>
@@ -813,7 +879,7 @@ export function Chefs() {
                     onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
                     placeholder={t.nameEnPlaceholder}
                     required
-                    className={`w-full px-3 py-2 border ${formErrors.nameEn ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                    className={`w-full px-3 py-2 border ${formErrors.nameEn ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
                   />
                   {formErrors.nameEn && <p className="text-xs text-red-600 mt-1">{formErrors.nameEn}</p>}
                 </div>
@@ -825,7 +891,7 @@ export function Chefs() {
                     onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                     placeholder={t.usernamePlaceholder}
                     required
-                    className={`w-full px-3 py-2 border ${formErrors.username ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                    className={`w-full px-3 py-2 border ${formErrors.username ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
                   />
                   {formErrors.username && <p className="text-xs text-red-600 mt-1">{formErrors.username}</p>}
                 </div>
@@ -836,7 +902,7 @@ export function Chefs() {
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     placeholder={t.emailPlaceholder}
-                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
                   />
                 </div>
                 <div>
@@ -846,7 +912,7 @@ export function Chefs() {
                     value={formData.phone}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     placeholder={t.phonePlaceholder}
-                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
                   />
                 </div>
                 <div>
@@ -880,24 +946,16 @@ export function Chefs() {
                 {!isEditMode && (
                   <div>
                     <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">{t.password}</label>
-                    <div className="relative">
-                      <input
-                        id="password"
-                        type={showPassword['new'] ? 'text' : 'password'}
-                        value={formData.password}
-                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        placeholder={t.passwordPlaceholder}
-                        required
-                        className={`w-full px-3 py-2 border ${formErrors.password ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((prev) => ({ ...prev, new: !prev.new }))}
-                        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
-                      >
-                        {showPassword['new'] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
+                    <CustomInput
+                      value={formData.password}
+                      onChange={(value) => setFormData({ ...formData, password: value })}
+                      placeholder={t.passwordPlaceholder}
+                      ariaLabel={t.password}
+                      type="password"
+                      showPasswordToggle
+                      showPassword={showPassword['new']}
+                      togglePasswordVisibility={() => setShowPassword((prev) => ({ ...prev, new: !prev.new }))}
+                    />
                     {formErrors.password && <p className="text-xs text-red-600 mt-1">{formErrors.password}</p>}
                   </div>
                 )}
@@ -934,62 +992,89 @@ export function Chefs() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5"
+            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6 relative overflow-hidden"
           >
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-600 to-amber-400" />
             <div className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
               <div className="flex items-center gap-2">
-                <ChefHat className="w-5 h-5 text-amber-600" />
-                <h3 className="text-base font-semibold text-gray-900">{isRtl ? selectedChef.user?.name : selectedChef.user?.nameEn || selectedChef.user?.name}</h3>
+                <ChefHat className="w-6 h-6 text-amber-600" />
+                <h3 className="text-lg font-semibold text-gray-900 truncate">
+                  {isRtl ? selectedChef.user?.name : selectedChef.user?.nameEn || selectedChef.user?.name}
+                </h3>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div className="flex flex-row items-center gap-2">
-                  <span className="w-20 font-medium text-gray-600">{t.username}:</span>
-                  <span className="text-gray-800 truncate">{selectedChef.user?.username || '-'}</span>
+                <div className="flex items-center gap-2">
+                  <span className="w-24 font-medium text-gray-600">{t.username}:</span>
+                  <span className="text-gray-800 truncate flex-1">{selectedChef.user?.username || '-'}</span>
                 </div>
-                <div className="flex flex-row items-center gap-2">
-                  <span className="w-20 font-medium text-gray-600">{t.email}:</span>
-                  <span className="text-gray-800 truncate">{selectedChef.user?.email || '-'}</span>
+                <div className="flex items-center gap-2">
+                  <span className="w-24 font-medium text-gray-600">{t.email}:</span>
+                  <span className="text-gray-800 truncate flex-1">{selectedChef.user?.email || '-'}</span>
                 </div>
-                <div className="flex flex-row items-center gap-2">
-                  <span className="w-20 font-medium text-gray-600">{t.phone}:</span>
-                  <span className="text-gray-800">{selectedChef.user?.phone || '-'}</span>
+                <div className="flex items-center gap-2">
+                  <span className="w-24 font-medium text-gray-600">{t.phone}:</span>
+                  <span className="text-gray-800 truncate flex-1">{selectedChef.user?.phone || '-'}</span>
                 </div>
-                <div className="flex flex-row items-center gap-2">
-                  <span className="w-20 font-medium text-gray-600">{t.department}:</span>
-                  <span className="text-gray-800">{isRtl ? selectedChef.department?.name : selectedChef.department?.nameEn || selectedChef.department?.name || '-'}</span>
+                <div className="flex items-center gap-2">
+                  <span className="w-24 font-medium text-gray-600">{t.department}:</span>
+                  <span className="text-gray-800 truncate flex-1">{isRtl ? selectedChef.department?.name : selectedChef.department?.nameEn || selectedChef.department?.name || '-'}</span>
                 </div>
-                <div className="flex flex-row items-center gap-2">
-                  <span className="w-20 font-medium text-gray-600">{t.status}:</span>
-                  <span className={`font-medium ${selectedChef.user?.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                <div className="flex items-center gap-2">
+                  <span className="w-24 font-medium text-gray-600">{t.status}:</span>
+                  <span className={`truncate flex-1 ${selectedChef.user?.isActive ? 'text-green-600' : 'text-red-600'}`}>
                     {selectedChef.user?.isActive ? t.active : t.inactive}
                   </span>
                 </div>
-                <div className="flex flex-row items-center gap-2">
-                  <span className="w-20 font-medium text-gray-600">{t.createdAt}:</span>
-                  <span className="text-gray-800">{new Date(selectedChef.createdAt).toLocaleString()}</span>
+                <div className="flex items-center gap-2">
+                  <span className="w-24 font-medium text-gray-600">{t.createdAt}:</span>
+                  <span className="text-gray-800 truncate flex-1">{new Date(selectedChef.createdAt).toLocaleString()}</span>
                 </div>
-                <div className="flex flex-row items-center gap-2">
-                  <span className="w-20 font-medium text-gray-600">{t.updatedAt}:</span>
-                  <span className="text-gray-800">{new Date(selectedChef.updatedAt).toLocaleString()}</span>
+                <div className="flex items-center gap-2">
+                  <span className="w-24 font-medium text-gray-600">{t.updatedAt}:</span>
+                  <span className="text-gray-800 truncate flex-1">{new Date(selectedChef.updatedAt).toLocaleString()}</span>
                 </div>
                 {loggedInUser?.role === 'admin' && (
-                  <div className="flex flex-row items-center gap-2">
-                    <span className="w-20 font-medium text-gray-600">{t.currentPassword}:</span>
-                    <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-24 font-medium text-gray-600">{t.currentPassword}:</span>
+                    <div className="flex items-center gap-2 truncate flex-1">
                       <span className="text-gray-800">{showPassword[selectedChef.id] ? selectedChef.password : '********'}</span>
-                      <button type="button" onClick={() => togglePasswordVisibility(selectedChef.id)} className="text-gray-400 hover:text-amber-500">
+                      <button type="button" onClick={() => togglePasswordVisibility(selectedChef.id)} className="text-gray-400 hover:text-amber-600">
                         {showPassword[selectedChef.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>
                 )}
               </div>
-              <button
-                onClick={() => setIsProfileModalOpen(false)}
-                className="w-full px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
-              >
-                {t.cancel}
-              </button>
+              <div className="flex justify-end gap-2">
+                {loggedInUser?.role === 'admin' && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setIsProfileModalOpen(false);
+                        openEditModal(selectedChef);
+                      }}
+                      className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                    >
+                      {t.edit}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsProfileModalOpen(false);
+                        openResetPasswordModal(selectedChef);
+                      }}
+                      className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                    >
+                      {t.resetPassword}
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => setIsProfileModalOpen(false)}
+                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                >
+                  {t.cancel}
+                </button>
+              </div>
             </div>
           </motion.div>
         </div>
@@ -1001,51 +1086,35 @@ export function Chefs() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-5"
+            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6"
           >
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.resetPassword}</h3>
-            <form onSubmit={handleResetPassword} className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.resetPassword}</h3>
+            <form onSubmit={handleResetPassword} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
               <div>
                 <label htmlFor="newPassword" className="block text-xs font-medium text-gray-700 mb-1">{t.newPassword}</label>
-                <div className="relative">
-                  <input
-                    id="newPassword"
-                    type={showPassword['newPassword'] ? 'text' : 'password'}
-                    value={resetPasswordData.password}
-                    onChange={(e) => setResetPasswordData({ ...resetPasswordData, password: e.target.value })}
-                    placeholder={t.newPasswordPlaceholder}
-                    required
-                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((prev) => ({ ...prev, newPassword: !prev.newPassword }))}
-                    className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
-                  >
-                    {showPassword['newPassword'] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
+                <CustomInput
+                  value={resetPasswordData.password}
+                  onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
+                  placeholder={t.newPasswordPlaceholder}
+                  ariaLabel={t.newPassword}
+                  type="password"
+                  showPasswordToggle
+                  showPassword={showPassword['newPassword']}
+                  togglePasswordVisibility={() => setShowPassword((prev) => ({ ...prev, newPassword: !prev.newPassword }))}
+                />
               </div>
               <div>
                 <label htmlFor="confirmPassword" className="block text-xs font-medium text-gray-700 mb-1">{t.confirmPassword}</label>
-                <div className="relative">
-                  <input
-                    id="confirmPassword"
-                    type={showPassword['confirmPassword'] ? 'text' : 'password'}
-                    value={resetPasswordData.confirmPassword}
-                    onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
-                    placeholder={t.confirmPasswordPlaceholder}
-                    required
-                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((prev) => ({ ...prev, confirmPassword: !prev.confirmPassword }))}
-                    className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
-                  >
-                    {showPassword['confirmPassword'] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
+                <CustomInput
+                  value={resetPasswordData.confirmPassword}
+                  onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
+                  placeholder={t.confirmPasswordPlaceholder}
+                  ariaLabel={t.confirmPassword}
+                  type="password"
+                  showPasswordToggle
+                  showPassword={showPassword['confirmPassword']}
+                  togglePasswordVisibility={() => setShowPassword((prev) => ({ ...prev, confirmPassword: !prev.confirmPassword }))}
+                />
               </div>
               {error && (
                 <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
@@ -1079,10 +1148,10 @@ export function Chefs() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-5"
+            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6"
           >
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.confirmDelete}</h3>
-            <div className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.confirmDelete}</h3>
+            <div className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
               <p className="text-gray-600 text-xs">{t.deleteWarning}</p>
               {error && (
                 <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
