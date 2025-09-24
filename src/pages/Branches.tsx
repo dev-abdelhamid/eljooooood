@@ -299,24 +299,35 @@ const BranchSearchInput = ({
   const isRtl = language === 'ar';
   return (
     <div className="relative group">
-      <Search className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`} />
+      <motion.div
+        initial={{ opacity: value ? 0 : 1 }}
+        animate={{ opacity: value ? 0 : 1 }}
+        transition={{ duration: 0.15 }}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500`}
+      >
+        <Search />
+      </motion.div>
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-10 pr-2' : 'pr-10 pl-2'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pl-11 pr-4' : 'pr-11 pl-4'} py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       />
-      {value && (
+      <motion.div
+        initial={{ opacity: value ? 1 : 0 }}
+        animate={{ opacity: value ? 1 : 0 }}
+        transition={{ duration: 0.15 }}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
+      >
         <button
           onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
-          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
-          <X className="w-4 h-4" />
+          <X className="w-5 h-5" />
         </button>
-      )}
+      </motion.div>
     </div>
   );
 };
