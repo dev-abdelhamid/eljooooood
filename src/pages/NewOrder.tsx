@@ -323,6 +323,12 @@ export function NewOrder() {
     []
   );
 
+  // Fix: Add handleClearSearch function
+  const handleClearSearch = useCallback(() => {
+    setSearchInput('');
+    debouncedSearch('');
+  }, [debouncedSearch]);
+
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchInput(value);
