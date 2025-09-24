@@ -2,6 +2,7 @@ import axios from 'axios';
 import { notificationsAPI } from './notifications';
 import { returnsAPI } from './returnsAPI';
 import { salesAPI } from './salesAPI';
+import { chefsAPI } from './chefsAPI';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
 const isRtl = localStorage.getItem('language') === 'ar';
@@ -139,7 +140,7 @@ export const productsAPI = {
     }
     const response = await api.get('/products', { params });
     console.log(`[${new Date().toISOString()}] productsAPI.getAll - Response:`, response);
-    return response; // Returns { data: Product[], totalPages: number, currentPage: number, totalItems: number }
+    return response;
   },
   getById: async (id: string) => {
     if (!isValidObjectId(id)) {
@@ -545,7 +546,6 @@ export const ordersAPI = {
   },
 };
 
-
 export const departmentAPI = {
   getAll: async (params: { page?: number; limit?: number; search?: string } = {}) => {
     const response = await api.get('/departments', { params });
@@ -605,97 +605,6 @@ export const departmentAPI = {
     return response;
   },
 };
-export const chefsAPI = {
-  getAll: async () => {
-    const response = await api.get('/chefs');
-    console.log(`[${new Date().toISOString()}] chefsAPI.getAll - Response:`, response);
-    return response;
-  },
-  getByUserId: async (userId: string) => {
-    if (!isValidObjectId(userId)) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.getByUserId - Invalid user ID:`, userId);
-      throw new Error('Invalid user ID');
-    }
-    const response = await api.get(`/chefs/by-user/${userId}`);
-    console.log(`[${new Date().toISOString()}] chefsAPI.getByUserId - Response:`, response);
-    return response;
-  },
-  create: async (chefData: {
-    user: {
-      name: string;
-      nameEn?: string;
-      username: string;
-      email?: string;
-      phone?: string;
-      password: string;
-      role: string;
-      isActive?: boolean;
-    };
-    department: string;
-  }) => {
-    const response = await api.post('/chefs', {
-      user: {
-        name: chefData.user.name.trim(),
-        nameEn: chefData.user.nameEn?.trim(),
-        username: chefData.user.username.trim(),
-        email: chefData.user.email?.trim(),
-        phone: chefData.user.phone?.trim(),
-        password: chefData.user.password,
-        role: chefData.user.role,
-        isActive: chefData.user.isActive ?? true,
-      },
-      department: chefData.department,
-    });
-    console.log(`[${new Date().toISOString()}] chefsAPI.create - Response:`, response);
-    return response;
-  },
-  update: async (id: string, chefData: {
-    user: {
-      name: string;
-      nameEn?: string;
-      username: string;
-      email?: string;
-      phone?: string;
-      isActive?: boolean;
-    };
-    department: string;
-  }) => {
- 
-    const response = await api.put(`/chefs/${id}`, {
-      user: {
-        name: chefData.user.name.trim(),
-        nameEn: chefData.user.nameEn?.trim(),
-        username: chefData.user.username.trim(),
-        email: chefData.user.email?.trim(),
-        phone: chefData.user.phone?.trim(),
-        isActive: chefData.user.isActive ?? true,
-      },
-      department: chefData.department,
-    });
-    console.log(`[${new Date().toISOString()}] chefsAPI.update - Response:`, response);
-    return response;
-  },
-  delete: async (id: string) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.delete - Invalid chef ID:`, id);
-      throw new Error('Invalid chef ID');
-    }
-    const response = await api.delete(`/chefs/${id}`);
-    console.log(`[${new Date().toISOString()}] chefsAPI.delete - Response:`, response);
-    return response;
-  },
-  resetPassword: async (id: string, password: string) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] chefsAPI.resetPassword - Invalid chef ID:`, id);
-      throw new Error('Invalid chef ID');
-    }
-    const response = await api.post(`/chefs/${id}/reset-password`, { password });
-    console.log(`[${new Date().toISOString()}] chefsAPI.resetPassword response:`, response);
-    return response;
-  },
-};
-
-
 
 export const productionAssignmentsAPI = {
   create: async (assignmentData: {
@@ -740,7 +649,6 @@ export const productionAssignmentsAPI = {
     return response;
   },
 };
-
 
 export const inventoryAPI = {
   getInventory: async (params: { branch?: string; product?: string } = {}) => {
@@ -1067,5 +975,5 @@ export const factoryInventoryAPI = {
   },
 };
 
-export { notificationsAPI, returnsAPI, salesAPI };
+export { notificationsAPI, returnsAPI, salesAPI, chefsAPI };
 export default api;
