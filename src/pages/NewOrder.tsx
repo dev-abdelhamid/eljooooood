@@ -150,11 +150,9 @@ export function NewOrder() {
   }, []);
 
   const handleQuantityInput = useCallback((productId: string, value: string) => {
-    const quantity = parseInt(value);
+    const quantity = parseInt(value, 10);
     if (value === '' || isNaN(quantity) || quantity <= 0) {
-      setOrderItems((prev) =>
-        prev.map((item) => (item.productId === productId ? { ...item, quantity: 0 } : item))
-      );
+      updateQuantity(productId, 0);
       return;
     }
     updateQuantity(productId, quantity);
@@ -228,27 +226,24 @@ export function NewOrder() {
 
   const CustomInput = ({ value, onChange, placeholder, ariaLabel }: { value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder: string; ariaLabel: string }) => (
     <div className="relative group">
-      <Search className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500 ${isRtl ? 'right-3' : 'left-3'}`} />
+      <button className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors w-4 h-4 ${isRtl ? 'left-3' : 'right-3'}`}>
+        {value ? (
+          <X onClick={() => {
+            setSearchInput('');
+            setSearchTerm('');
+          }} aria-label={isRtl ? 'مسح البحث' : 'Clear search'} />
+        ) : (
+          <Search aria-hidden="true" />
+        )}
+      </button>
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-xs placeholder-gray-400 ${isRtl ? 'pr-10 pl-4 text-right' : 'pl-10 pr-4 text-left'}`}
+        className={`w-full py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-xs placeholder-gray-400 ${isRtl ? 'pl-10 pr-4 text-right' : 'pr-10 pl-4 text-left'}`}
         aria-label={ariaLabel}
       />
-      {value && (
-        <button
-          onClick={() => {
-            setSearchInput('');
-            setSearchTerm('');
-          }}
-          className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors ${isRtl ? 'left-3' : 'right-3'}`}
-          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
-        >
-          <X className="w-4 h-4" />
-        </button>
-      )}
     </div>
   );
 
@@ -282,7 +277,7 @@ export function NewOrder() {
 
   return (
     <div className="mx-auto px-4 py-6 min-h-screen overflow-hidden" dir={isRtl ? 'rtl' : 'ltr'}>
-      <div className="mb-4 flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-2">
+      <div className="mb-4 flex flex-col items-center sm:flex-row sm:justify-start sm:items-center gap-2">
         <div className="flex items-center gap-2">
           <ShoppingCart className="w-6 h-6 text-amber-600" />
           <div>
