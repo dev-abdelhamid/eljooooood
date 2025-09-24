@@ -156,7 +156,16 @@ body {
 
 
 
+.scrollbar-hidden {
+  /* Hide scrollbar for Webkit browsers (Chrome, Safari, Edge) */
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on touch devices */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* Internet Explorer and Edge */
+}
 
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Edge */
+}
 
 
 
