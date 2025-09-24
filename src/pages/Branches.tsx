@@ -1209,7 +1209,7 @@ export const Branches: React.FC = () => {
   };
 
   return (
-    <div className={`mx-auto  px-4 sm:px-6 lg:px-8 py-8 min-h-screen overflow-y-auto scrollbar-thin`}>
+    <div className={`mx-auto  px-4 sm:px-6 lg:px-8 py-8 min-h-screen overflow-y-auto `}>
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -1217,7 +1217,7 @@ export const Branches: React.FC = () => {
         className="mb-6 flex flex-col items-center gap-4"
       >
         <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-between sm:items-center w-full">
-          <div className="flex  flex-col items-start gap-3 sm:flex-row sm:items-center gap-3">
+          <div className={`flex  flex-col  ${isRtl ? 'md:text-right' : ' md:text-left'} text-center gap-3 sm:flex-row sm:items-center gap-3`}>
             <MapPin className="w-6 h-6 text-amber-600" />
             <div className="text-center sm:text-left">
               <h1 className="text-xl font-bold text-gray-900">{t.manage}</h1>
