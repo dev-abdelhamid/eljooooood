@@ -35,7 +35,7 @@ interface SocketEventData {
   branchName?: string;
   branchId?: string;
   items?: Array<{
-    _id?: string; // تغيير من itemId إلى _id للتوافق مع ordersAPI
+    itemId: string;
     productId?: string;
     productName?: string;
     quantity?: number;
@@ -46,9 +46,6 @@ interface SocketEventData {
   }>;
   eventId?: string;
   status?: string;
-  returnId?: string;
-  chefId?: string;
-  productName?: string; // للإشعارات مثل missingAssignments
 }
 
 interface SocketEventConfig {
@@ -80,6 +77,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [hasInteracted, setHasInteracted] = useState(false);
   const notificationIds = React.useRef(new Set<string>());
 
+  // دالة ترجمة الوحدات
   const translateUnit = (unit: string | undefined) => {
     const translations: Record<string, { ar: string; en: string }> = {
       'كيلو': { ar: 'كيلو', en: 'kg' },
@@ -137,7 +135,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setNotifications(
           uniqueNotifications.map((n: any) => ({
             _id: n._id,
-            type: (n.type || 'info') as NotificationType,
+            type: n.type as NotificationType || 'info',
             message: n.message.substring(0, 100),
             data: {
               orderId: n.data?.orderId,
@@ -151,16 +149,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             read: n.read,
             createdAt: n.createdAt,
             eventId: n.data?.eventId,
-            sound: n.data?.sound || '/sounds/notification.mp3',
-            vibrate: n.data?.vibrate || [200, 100, 200],
+            sound: '/sounds/notification.mp3',
+            vibrate: [200, 100, 200],
           }))
         );
-      } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] fetchNotifications - Error:`, err);
-        toast.error(t('errors.fetch_notifications'), {
-          position: isRtl ? 'top-left' : 'top-right',
-          toastId: `fetch-notifications-${Date.now()}`,
-        });
+      } catch (err) {
+        toast.error(t('errors.fetch_notifications'), { position: isRtl ? 'top-left' : 'top-right', toastId: `fetch-notifications-${Date.now()}` });
       } finally {
         setIsFetching(false);
       }
@@ -187,7 +181,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           position: isRtl ? 'top-left' : 'top-right',
           autoClose: 4000,
           pauseOnFocusLoss: true,
-          style: { direction: isRtl ? 'rtl' : 'ltr', textAlign: isRtl ? 'right' : 'left' },
+          style: { direction: isRtl ? 'rtl' : 'ltr', textAlign: isRtl ? 'left' : 'right' },
         });
       }
     },
@@ -196,24 +190,16 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   const markAsRead = useCallback(
     async (id: string) => {
-      if (!/^[0-9a-fA-F]{24}$/.test(id)) {
-        console.error(`[${new Date().toISOString()}] Invalid notification ID:`, id);
-        toast.error(t('errors.invalid_notification_id'), {
-          position: isRtl ? 'top-left' : 'top-right',
-          toastId: `invalid-notification-${id}`,
-        });
+      if (!/^[0-9a-fA-F]{24}$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) {
+        toast.error(t('errors.invalid_notification_id'), { position: isRtl ? 'top-left' : 'top-right', toastId: `invalid-notification-${id}` });
         return;
       }
       try {
         await notificationService.markAsRead(id);
         setNotifications((prev) => prev.map((n) => (n._id === id ? { ...n, read: true } : n)));
         socket?.emit('notificationRead', { notificationId: id, userId: user?.id || user?._id });
-      } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] markAsRead - Error:`, err);
-        toast.error(t('errors.mark_notification_read'), {
-          position: isRtl ? 'top-left' : 'top-right',
-          toastId: `mark-read-${id}-${Date.now()}`,
-        });
+      } catch (err) {
+        toast.error(t('errors.mark_notification_read'), { position: isRtl ? 'top-left' : 'top-right', toastId: `mark-read-${id}-${Date.now()}` });
       }
     },
     [socket, user, t, isRtl]
@@ -226,12 +212,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         await notificationService.markAllAsRead(user.id || user._id);
         setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
         socket?.emit('allNotificationsRead', { userId: user.id || user._id });
-      } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] markAllAsRead - Error:`, err);
-        toast.error(t('errors.mark_all_notifications_read'), {
-          position: isRtl ? 'top-left' : 'top-right',
-          toastId: `mark-all-read-${Date.now()}`,
-        });
+      } catch (err) {
+        toast.error(t('errors.mark_all_notifications_read'), { position: isRtl ? 'top-left' : 'top-right', toastId: `mark-all-read-${Date.now()}` });
       }
     },
     [socket, user, t, isRtl]
@@ -244,12 +226,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         setNotifications([]);
         socket?.emit('notificationsCleared', { userId: user?.id || user?._id });
         notificationIds.current.clear();
-      } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] clearNotifications - Error:`, err);
-        toast.error(t('errors.clear_notifications'), {
-          position: isRtl ? 'top-left' : 'top-right',
-          toastId: `clear-notifications-${Date.now()}`,
-        });
+      } catch (err) {
+        toast.error(t('errors.clear_notifications'), { position: isRtl ? 'top-left' : 'top-right', toastId: `clear-notifications-${Date.now()}` });
       }
     },
     [socket, user, t, isRtl]
@@ -260,7 +238,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const { data, type } = notif;
       if (data?.orderId && !data.taskId) return 'orders';
       if (data?.taskId || ['taskAssigned', 'taskStarted', 'taskCompleted'].includes(type)) return 'production-tasks';
-      if (data?.returnId) return 'returns';
       return null;
     },
     []
@@ -273,8 +250,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           return role === 'branch' ? '/branch-orders' : '/orders';
         case 'production-tasks':
           return role === 'chef' ? '/chef-tasks' : '/production-tasks';
-        case 'returns':
-          return '/returns';
         default:
           return null;
       }
@@ -390,53 +365,55 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           roles: ['admin', 'branch'],
         },
       },
-      {
-        name: 'taskAssigned',
-        handler: (notification: any) => {
-          console.log(`[${new Date().toISOString()}] taskAssigned - Received data:`, JSON.stringify(notification, null, 2));
-          const data: SocketEventData = notification.data || notification;
-          if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName) {
-            console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, data);
-            return;
-          }
-          if (!['admin', 'production', 'chef'].includes(user.role)) return;
-          if (user.role === 'chef' && !data.items.some((item: any) => item.assignedTo?._id === user._id)) return;
-
-          const eventId = data.eventId || crypto.randomUUID();
-          data.items.forEach((item: any) => {
-            if (!item._id || !item.product?.name || !item.quantity || !item.assignedTo?._id) {
-              console.warn(`[${new Date().toISOString()}] Invalid item data for notification:`, item);
-              return;
-            }
-            const itemEventId = `${eventId}-${item._id}`;
-            if (notificationIds.current.has(itemEventId)) return;
-            notificationIds.current.add(itemEventId);
-            addNotification({
-              _id: itemEventId,
-              type: 'info',
-              message: t('notifications.task_assigned_to_chef', {
-                chefName: item.assignedTo.name || item.assignedTo.username || t('chefs.unknown'),
-                productName: item.product?.name || t('products.unknown'),
-                quantity: item.quantity || 'غير معروف',
-                unit: translateUnit(item.unit || item.product?.unit),
-                orderNumber: data.orderNumber,
-                branchName: data.branchName || t('branches.unknown'),
-              }),
-              data: { orderId: data.orderId, itemId: item._id, eventId: itemEventId },
-              read: false,
-              createdAt: new Date().toISOString(),
-              sound: '/sounds/notification.mp3',
-              vibrate: [400, 100, 400],
-            });
-          });
-        },
-        config: {
-          type: 'TASK_ASSIGNED',
-          sound: '/sounds/notification.mp3',
-          vibrate: [400, 100, 400],
-          roles: ['admin', 'production', 'chef'],
-        },
-      },
+     {
+  name: 'taskAssigned',
+  handler: (notification: any) => {
+    console.log(`[${new Date().toISOString()}] taskAssigned - Received data:`, JSON.stringify(notification, null, 2));
+    const data: SocketEventData = notification.data || notification;
+    if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName) {
+      console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, data);
+      return;
+    }
+    if (!['admin', 'production', 'chef'].includes(user.role)) return;
+    if (user.role === 'chef' && !data.items.some((item: any) => item.assignedTo?._id === user._id)) return;
+    const eventId = data.eventId || crypto.randomUUID();
+    if (notificationIds.current.has(eventId)) return;
+    notificationIds.current.add(eventId);
+    data.items.forEach((item: any) => {
+      // تعديل: استخدام item._id بدلاً من item.itemId، وitem.product.name بدلاً من item.productName، وجعل username اختياريًا
+      if (!item._id || !item.product?.name || !item.quantity || !(item.assignedTo?.name || item.assignedTo?.username)) {
+        console.warn(`[${new Date().toISOString()}] Invalid item data for notification:`, item);
+        return;
+      }
+      const itemEventId = `${eventId}-${item._id}`;
+      if (notificationIds.current.has(itemEventId)) return;
+      notificationIds.current.add(itemEventId);
+      addNotification({
+        _id: itemEventId,
+        type: 'info',
+        message: t('notifications.task_assigned_to_chef', {
+          chefName: item.assignedTo.name || item.assignedTo.username || t('chefs.unknown'),
+          productName: item.product?.name || t('products.unknown'),
+          quantity: item.quantity || 'غير معروف',
+          unit: translateUnit(item.unit || item.product?.unit),
+          orderNumber: data.orderNumber,
+          branchName: data.branchName || t('branches.unknown'),
+        }),
+        data: { orderId: data.orderId, itemId: item._id, eventId: itemEventId },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: '/sounds/notification.mp3',
+        vibrate: [400, 100, 400],
+      });
+    });
+  },
+  config: {
+    type: 'TASK_ASSIGNED',
+    sound: '/sounds/notification.mp3',
+    vibrate: [400, 100, 400],
+    roles: ['admin', 'production', 'chef'],
+  },
+},
       {
         name: 'itemStatusUpdated',
         handler: async (data: SocketEventData) => {
