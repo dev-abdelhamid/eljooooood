@@ -211,6 +211,19 @@ export interface Notification {
   vibrate?: number[];
 }
 
+export interface Product {
+  _id: string;
+  name: string;
+  nameEn?: string;
+  code: string;
+  department: { _id: string; name: string; nameEn?: string };
+  price: number;
+  unit?: string;
+  unitEn?: string;
+  displayName: string;
+  displayUnit: string;
+}
+
 export interface Return {
   id: string;
   returnNumber: string;

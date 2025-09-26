@@ -8,7 +8,7 @@ import { io, Socket } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ItemStatus, OrderStatus, OrderItem, Order, Branch, Department, Product } from '../components/branch/types';
+import { ItemStatus, OrderStatus, OrderItem, Order, Branch, Department, Product } from '../types/types';
 
 interface Translations {
   [key: string]: {
@@ -673,9 +673,8 @@ export const NewOrder: React.FC = () => {
             <h1 className="text-2xl font-bold text-gray-900">{t.createOrder}</h1>
             <p className="text-gray-600 text-sm">{t.addProducts}</p>
           </div>
+        </div>
         </motion.div>
-      </motion.div>
-
       {error && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
