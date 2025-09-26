@@ -4,44 +4,52 @@ import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { productsAPI, ordersAPI, branchesAPI, departmentAPI } from '../services/api';
 import { ShoppingCart, Plus, Minus, Trash2, Package, AlertCircle, Search, X, ChevronDown } from 'lucide-react';
-import { io } from 'socket.io-client';
+import { io, Socket } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ItemStatus, OrderStatus, OrderItem, Order, Branch, Department, Product } from '../components/branch/types';
 
-interface Product {
-  _id: string;
-  name: string;
-  nameEn?: string;
-  code: string;
-  department: { _id: string; name: string; nameEn?: string };
-  price: number;
-  unit?: string;
-  unitEn?: string;
-  displayName: string;
-  displayUnit: string;
+interface Translations {
+  [key: string]: {
+    createOrder: string;
+    addProducts: string;
+    noProducts: string;
+    noMatch: string;
+    empty: string;
+    searchPlaceholder: string;
+    code: string;
+    department: string;
+    price: string;
+    unit: string;
+    addToCart: string;
+    branch: string;
+    branchPlaceholder: string;
+    branchRequired: string;
+    notes: string;
+    notesEn: string;
+    notesPlaceholder: string;
+    notesEnPlaceholder: string;
+    clearOrder: string;
+    submitOrder: string;
+    submitting: string;
+    orderSummary: string;
+    finalTotal: string;
+    confirmOrder: string;
+    confirmMessage: string;
+    cancel: string;
+    confirm: string;
+    unauthorized: string;
+    fetchError: string;
+    createError: string;
+    cartEmpty: string;
+    orderCreated: string;
+    orderCleared: string;
+    scrollToSummary: string;
+  };
 }
 
-interface Branch {
-  _id: string;
-  name: string;
-  nameEn?: string;
-}
-
-interface Department {
-  _id: string;
-  name: string;
-  nameEn?: string;
-}
-
-interface OrderItem {
-  productId: string;
-  product: Product;
-  quantity: number;
-  price: number;
-}
-
-const translations = {
+const translations: Translations = {
   ar: {
     createOrder: 'إنشاء طلب جديد',
     addProducts: 'قم بإضافة المنتجات وتأكيد الطلب لإرساله',
@@ -58,7 +66,9 @@ const translations = {
     branchPlaceholder: 'اختر الفرع',
     branchRequired: 'الفرع مطلوب',
     notes: 'ملاحظات',
+    notesEn: 'ملاحظات (إنجليزي)',
     notesPlaceholder: 'أدخل ملاحظات الطلب...',
+    notesEnPlaceholder: 'أدخل ملاحظات الطلب بالإنجليزية...',
     clearOrder: 'مسح الطلب',
     submitOrder: 'إرسال الطلب',
     submitting: 'جاري الإرسال...',
@@ -92,7 +102,9 @@ const translations = {
     branchPlaceholder: 'Select Branch',
     branchRequired: 'Branch is required',
     notes: 'Notes',
+    notesEn: 'Notes (English)',
     notesPlaceholder: 'Enter order notes...',
+    notesEnPlaceholder: 'Enter order notes in English...',
     clearOrder: 'Clear Order',
     submitOrder: 'Submit Order',
     submitting: 'Submitting...',
@@ -112,17 +124,12 @@ const translations = {
   },
 };
 
-const ProductSearchInput = ({
-  value,
-  onChange,
-  placeholder,
-  ariaLabel,
-}: {
+const ProductSearchInput: React.FC<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder: string;
   ariaLabel: string;
-}) => {
+}> = ({ value, onChange, placeholder, ariaLabel }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
@@ -160,19 +167,13 @@ const ProductSearchInput = ({
   );
 };
 
-const ProductDropdown = ({
-  value,
-  onChange,
-  options,
-  ariaLabel,
-  disabled = false,
-}: {
+const ProductDropdown: React.FC<{
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
   ariaLabel: string;
   disabled?: boolean;
-}) => {
+}> = ({ value, onChange, options, ariaLabel, disabled = false }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
@@ -221,17 +222,12 @@ const ProductDropdown = ({
   );
 };
 
-const ProductTextarea = ({
-  value,
-  onChange,
-  placeholder,
-  ariaLabel,
-}: {
+const ProductTextarea: React.FC<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   placeholder: string;
   ariaLabel: string;
-}) => {
+}> = ({ value, onChange, placeholder, ariaLabel }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
@@ -246,17 +242,12 @@ const ProductTextarea = ({
   );
 };
 
-const QuantityInput = ({
-  value,
-  onChange,
-  onIncrement,
-  onDecrement,
-}: {
+const QuantityInput: React.FC<{
   value: number;
   onChange: (val: string) => void;
   onIncrement: () => void;
   onDecrement: () => void;
-}) => {
+}> = ({ value, onChange, onIncrement, onDecrement }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
@@ -291,13 +282,13 @@ const QuantityInput = ({
   );
 };
 
-const ProductCard = ({ product, cartItem, onAdd, onUpdate, onRemove }: {
+const ProductCard: React.FC<{
   product: Product;
   cartItem?: OrderItem;
   onAdd: () => void;
   onUpdate: (quantity: number) => void;
   onRemove: () => void;
-}) => {
+}> = ({ product, cartItem, onAdd, onUpdate, onRemove }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
@@ -313,7 +304,7 @@ const ProductCard = ({ product, cartItem, onAdd, onUpdate, onRemove }: {
           <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>{product.displayName}</h3>
           <p className="text-sm text-gray-500">{product.code}</p>
         </div>
-        <p className="text-sm text-amber-600">{t.department}: {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}</p>
+        <p className="text-sm text-amber-600">{t.department}: {product.department.displayName}</p>
         <p className="font-semibold text-gray-900 text-sm">{t.price}: {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}</p>
       </div>
       <div className="mt-4 flex justify-end">
@@ -341,7 +332,7 @@ const ProductCard = ({ product, cartItem, onAdd, onUpdate, onRemove }: {
   );
 };
 
-const ProductSkeletonCard = () => (
+const ProductSkeletonCard: React.FC = () => (
   <motion.div
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
@@ -362,21 +353,14 @@ const ProductSkeletonCard = () => (
   </motion.div>
 );
 
-const OrderConfirmModal = ({
-  isOpen,
-  onClose,
-  onConfirm,
-  submitting,
-  t,
-  isRtl,
-}: {
+const OrderConfirmModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
   submitting: boolean;
-  t: typeof translations['ar' | 'en'];
+  t: Translations['ar' | 'en'];
   isRtl: boolean;
-}) => {
+}> = ({ isOpen, onClose, onConfirm, submitting, t, isRtl }) => {
   if (!isOpen) return null;
   return (
     <motion.div
@@ -421,7 +405,7 @@ const OrderConfirmModal = ({
   );
 };
 
-export function NewOrder() {
+export const NewOrder: React.FC = () => {
   const { user } = useAuth();
   const { language } = useLanguage();
   const isRtl = language === 'ar';
@@ -435,6 +419,7 @@ export function NewOrder() {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [branch, setBranch] = useState<string>(user?.branchId?.toString() || '');
   const [notes, setNotes] = useState('');
+  const [notesEn, setNotesEn] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -500,19 +485,29 @@ export function NewOrder() {
       try {
         setLoading(true);
         const [productsResponse, branchesResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 0 }),
-          branchesAPI.getAll(),
-          departmentAPI.getAll({ limit: 100 }),
+          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 0, isRtl }),
+          branchesAPI.getAll({ isRtl }),
+          departmentAPI.getAll({ limit: 100, isRtl }),
         ]);
 
         const productsWithDisplay = productsResponse.data.map((product: Product) => ({
           ...product,
           displayName: isRtl ? product.name : (product.nameEn || product.name),
           displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
+          department: {
+            ...product.department,
+            displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name),
+          },
         }));
         setProducts(productsWithDisplay);
-        setBranches(Array.isArray(branchesResponse) ? branchesResponse : []);
-        setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data : []);
+        setBranches(Array.isArray(branchesResponse.data) ? branchesResponse.data.map((b: Branch) => ({
+          ...b,
+          displayName: isRtl ? b.name : (b.nameEn || b.name),
+        })) : []);
+        setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data.map((d: Department) => ({
+          ...d,
+          displayName: isRtl ? d.name : (d.nameEn || d.name),
+        })) : []);
         if (user?.role === 'branch' && user?.branchId) {
           setBranch(user.branchId.toString());
         }
@@ -532,8 +527,12 @@ export function NewOrder() {
     socket.on('connect', () => {
       console.log('Connected to Socket.IO server');
     });
-    socket.on('orderCreated', () => {
+    socket.on('orderCreated', (data: Order) => {
       toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
+    });
+    socket.on('connect_error', (err) => {
+      console.error(`[${new Date().toISOString()}] Socket connection error:`, err);
+      toast.error(t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
     });
     return () => {
       socket.disconnect();
@@ -548,9 +547,25 @@ export function NewOrder() {
           item.productId === product._id ? { ...item, quantity: item.quantity + 1 } : item
         );
       }
-      return [...prev, { productId: product._id, product, quantity: 1, price: product.price }];
+      return [
+        ...prev,
+        {
+          itemId: `${product._id}-${Date.now()}`,
+          productId: product._id,
+          product,
+          quantity: 1,
+          price: product.price,
+          productName: product.name,
+          productNameEn: product.nameEn,
+          status: ItemStatus.Pending,
+          unit: product.unit || 'غير محدد',
+          unitEn: product.unitEn || 'N/A',
+          displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
+          department: product.department,
+        },
+      ];
     });
-  }, []);
+  }, [isRtl]);
 
   const updateQuantity = useCallback((productId: string, quantity: number) => {
     if (quantity <= 0) {
@@ -562,14 +577,17 @@ export function NewOrder() {
     );
   }, []);
 
-  const handleQuantityInput = useCallback((productId: string, value: string) => {
-    const quantity = parseInt(value) || 0;
-    if (value === '' || quantity <= 0) {
-      updateQuantity(productId, 0);
-      return;
-    }
-    updateQuantity(productId, quantity);
-  }, [updateQuantity]);
+  const handleQuantityInput = useCallback(
+    (productId: string, value: string) => {
+      const quantity = parseInt(value) || 0;
+      if (value === '' || quantity <= 0) {
+        updateQuantity(productId, 0);
+        return;
+      }
+      updateQuantity(productId, quantity);
+    },
+    [updateQuantity]
+  );
 
   const removeFromOrder = useCallback((productId: string) => {
     setOrderItems((prev) => prev.filter((item) => item.productId !== productId));
@@ -578,6 +596,7 @@ export function NewOrder() {
   const clearOrder = useCallback(() => {
     setOrderItems([]);
     setNotes('');
+    setNotesEn('');
     if (user?.role === 'admin') setBranch('');
     toast.success(t.orderCleared, { position: isRtl ? 'top-right' : 'top-left' });
   }, [user, t, isRtl]);
@@ -613,16 +632,19 @@ export function NewOrder() {
         orderNumber: `ORD-${Date.now()}`,
         branchId: user?.role === 'branch' ? user?.branchId?.toString() : branch,
         items: orderItems.map((item) => ({
-          productId: item.productId,
+          product: item.productId,
           quantity: item.quantity,
           price: item.price,
         })),
-        status: 'pending',
+        status: OrderStatus.Pending,
         notes: notes.trim() || undefined,
+        notesEn: isRtl ? undefined : notesEn.trim() || undefined,
+        priority: 'medium',
         requestedDeliveryDate: new Date().toISOString(),
       };
-      const response = await ordersAPI.create(orderData);
-      socket.emit('newOrderFromBranch', response);
+      const response = await ordersAPI.create(orderData, { isRtl });
+      socket.emit('newOrderFromBranch', response.data);
+      toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
       setTimeout(() => navigate('/orders'), 1000);
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Create error:`, err);
@@ -651,7 +673,7 @@ export function NewOrder() {
             <h1 className="text-2xl font-bold text-gray-900">{t.createOrder}</h1>
             <p className="text-gray-600 text-sm">{t.addProducts}</p>
           </div>
-        </div>
+        </motion.div>
       </motion.div>
 
       {error && (
@@ -702,7 +724,7 @@ export function NewOrder() {
                   { value: '', label: isRtl ? 'كل الأقسام' : 'All Departments' },
                   ...departments.map((d) => ({
                     value: d._id,
-                    label: isRtl ? d.name : (d.nameEn || d.name),
+                    label: d.displayName,
                   })),
                 ]}
                 ariaLabel={t.department}
@@ -789,7 +811,7 @@ export function NewOrder() {
                       <div className="flex-1">
                         <p className="font-semibold text-gray-900 text-sm">{item.product.displayName}</p>
                         <p className="text-sm text-gray-600">
-                          {item.price} {isRtl ? 'ريال' : 'SAR'} / {item.product.displayUnit}
+                          {item.price} {isRtl ? 'ريال' : 'SAR'} / {item.displayUnit}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -841,7 +863,7 @@ export function NewOrder() {
                         { value: '', label: t.branchPlaceholder },
                         ...branches.map((b) => ({
                           value: b._id,
-                          label: isRtl ? b.name : (b.nameEn || b.name),
+                          label: b.displayName,
                         })),
                       ]}
                       ariaLabel={t.branch}
@@ -859,6 +881,19 @@ export function NewOrder() {
                     ariaLabel={t.notes}
                   />
                 </div>
+                {!isRtl && (
+                  <div>
+                    <label htmlFor="notesEn" className="block text-sm font-medium text-gray-700 mb-2">
+                      {t.notesEn}
+                    </label>
+                    <ProductTextarea
+                      value={notesEn}
+                      onChange={(e) => setNotesEn(e.target.value)}
+                      placeholder={t.notesEnPlaceholder}
+                      ariaLabel={t.notesEn}
+                    />
+                  </div>
+                )}
                 <div className="flex gap-3">
                   <motion.button
                     onClick={clearOrder}
@@ -897,4 +932,6 @@ export function NewOrder() {
       />
     </div>
   );
-}
+};
+
+export default NewOrder;

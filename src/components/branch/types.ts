@@ -20,6 +20,8 @@ export interface Department {
   _id: string;
   name: string;
   nameEn?: string;
+  code?: string;
+  displayName: string; // Derived field: name (isRtl=true) or nameEn (isRtl=false)
 }
 
 export interface OrderItem {
@@ -33,12 +35,15 @@ export interface OrderItem {
   status: ItemStatus;
   unit: string;
   unitEn?: string;
+  displayUnit: string; // Derived field: unit (isRtl=true) or unitEn (isRtl=false)
   returnedQuantity?: number;
   returnReason?: string;
   returnReasonEn?: string;
-  assignedTo?: { _id: string; username: string };
+  displayReturnReason?: string; // Derived field: returnReason (isRtl=true) or returnReasonEn (isRtl=false)
+  assignedTo?: { _id: string; username: string; name: string; nameEn?: string; displayName: string };
   startedAt?: string;
   completedAt?: string;
+  isCompleted?: boolean;
 }
 
 export interface User {
@@ -46,6 +51,8 @@ export interface User {
   username: string;
   role: 'admin' | 'branch' | 'chef' | 'production';
   name: string;
+  nameEn?: string;
+  displayName: string; // Derived field: name (isRtl=true) or nameEn (isRtl=false)
   branchId?: string;
   branch?: string;
   departmentId?: string;
@@ -57,8 +64,11 @@ export interface ReturnItem {
   quantity: number;
   reason: string;
   reasonEn?: string;
+  displayReason: string; // Derived field: reason (isRtl=true) or reasonEn (isRtl=false)
   status: string;
   reviewNotes?: string;
+  reviewNotesEn?: string;
+  displayReviewNotes?: string; // Derived field: reviewNotes (isRtl=true) or reviewNotesEn (isRtl=false)
 }
 
 export interface OrderReturn {
@@ -66,14 +76,19 @@ export interface OrderReturn {
   items: ReturnItem[];
   status: string;
   reviewNotes?: string;
+  reviewNotesEn?: string;
+  displayReviewNotes?: string; // Derived field: reviewNotes (isRtl=true) or reviewNotesEn (isRtl=false)
   createdAt: string;
 }
 
 export interface StatusHistory {
   status: string;
   changedBy: string;
+  changedByName: string; // Derived field: name (isRtl=true) or nameEn (isRtl=false)
   changedAt: string;
   notes?: string;
+  notesEn?: string;
+  displayNotes: string; // Derived field: notes (isRtl=true) or notesEn (isRtl=false)
 }
 
 export interface Order {
@@ -82,17 +97,27 @@ export interface Order {
   branchId: string;
   branchName: string;
   branchNameEn?: string;
-  branch: { _id: string; name: string; nameEn?: string };
+  branch: { _id: string; name: string; nameEn?: string; displayName: string };
   items: OrderItem[];
   returns: OrderReturn[];
   status: OrderStatus;
   totalAmount: number;
+  adjustedTotal: number;
   date: string;
   requestedDeliveryDate: string;
   notes?: string;
+  notesEn?: string;
+  displayNotes: string; // Derived field: notes (isRtl=true) or notesEn (isRtl=false)
   priority: 'urgent' | 'high' | 'medium' | 'low';
   createdBy: string;
+  createdByName: string; // Derived field: name (isRtl=true) or nameEn (isRtl=false)
   statusHistory: StatusHistory[];
+  approvedAt?: string;
+  transitStartedAt?: string;
+  deliveredAt?: string;
+  confirmedAt?: string;
+  confirmedBy?: string;
+  isRtl: boolean;
 }
 
 export interface ReturnForm {
@@ -101,6 +126,7 @@ export interface ReturnForm {
   reason: string;
   reasonEn?: string;
   notes: string;
+  notesEn?: string;
 }
 
 export interface State {
@@ -122,6 +148,7 @@ export interface State {
   socketError: string | null;
   viewMode: 'card' | 'table';
   inventory: any[];
+  isRtl: boolean;
 }
 
 export type Action =
@@ -143,7 +170,7 @@ export type Action =
   | { type: 'UPDATE_ITEM_STATUS'; payload: { orderId: string; itemId: string; status: ItemStatus } }
   | { type: 'ADD_RETURN'; orderId: string; returnData: OrderReturn }
   | { type: 'UPDATE_RETURN_STATUS'; orderId: string; returnId: string; status: string }
-  | { type: 'TASK_ASSIGNED'; orderId: string; items: { _id: string; assignedTo: { _id: string; username: string } }[] }
+  | { type: 'TASK_ASSIGNED'; orderId: string; items: { _id: string; assignedTo: { _id: string; username: string; name: string; nameEn?: string; displayName: string } }[] }
   | { type: 'MISSING_ASSIGNMENTS'; orderId: string; itemId: string; productName: string }
   | { type: 'SET_VIEW_MODE'; payload: 'card' | 'table' }
   | { type: 'SET_INVENTORY'; payload: any[] }

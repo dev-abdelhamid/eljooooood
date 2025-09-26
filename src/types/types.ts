@@ -42,82 +42,129 @@ export enum NotificationType {
   ReturnCreated = 'returnCreated',
 }
 
+export interface Department {
+  _id: string;
+  name: string;
+  nameEn?: string;
+  displayName: string; // Derived: name (isRtl=true) or nameEn (isRtl=false)
+}
+
+export interface Branch {
+  _id: string;
+  name: string;
+  nameEn?: string;
+  displayName: string; // Derived: name (isRtl=true) or nameEn (isRtl=false)
+}
+
+export interface User {
+  id: string;
+  username: string;
+  role: 'admin' | 'branch' | 'chef' | 'production';
+  name: string;
+  nameEn?: string;
+  displayName: string; // Derived: name (isRtl=true) or nameEn (isRtl=false)
+  branchId?: string;
+  branch?: Branch;
+  departmentId?: string;
+  department?: Department;
+}
+
+export interface OrderItem {
+  _id: string;
+  itemId?: string;
+  productId: string;
+  productName: string;
+  productNameEn?: string;
+  quantity: number;
+  price: number;
+  unit: string;
+  unitEn?: string;
+  displayUnit: string; // Derived: unit (isRtl=true) or unitEn (isRtl=false)
+  department: Department;
+  assignedTo?: { _id: string; username: string; name: string; nameEn?: string; displayName: string; department: Department };
+  status: ItemStatus;
+  returnedQuantity?: number;
+  returnReason?: string;
+  returnReasonEn?: string;
+  displayReturnReason?: string; // Derived: returnReason (isRtl=true) or returnReasonEn (isRtl=false)
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export interface ReturnItem {
+  productId: string;
+  productName: string;
+  productNameEn?: string;
+  quantity: number;
+  unit: string;
+  unitEn?: string;
+  displayUnit: string; // Derived: unit (isRtl=true) or unitEn (isRtl=false)
+  reason: string;
+  reasonEn?: string;
+  displayReason: string; // Derived: reason (isRtl=true) or reasonEn (isRtl=false)
+  status?: ReturnStatus;
+  reviewNotes?: string;
+  reviewNotesEn?: string;
+  displayReviewNotes?: string; // Derived: reviewNotes (isRtl=true) or reviewNotesEn (isRtl=false)
+}
+
+export interface OrderReturn {
+  returnId: string;
+  returnNumber: string;
+  items: ReturnItem[];
+  status: ReturnStatus;
+  reviewNotes?: string;
+  reviewNotesEn?: string;
+  displayReviewNotes?: string; // Derived: reviewNotes (isRtl=true) or reviewNotesEn (isRtl=false)
+  createdAt: string;
+  createdBy: { _id: string; username: string; name: string; nameEn?: string; displayName: string };
+  reviewedBy?: { _id: string; username: string; name: string; nameEn?: string; displayName: string };
+}
+
 export interface Order {
   id: string;
   orderNumber: string;
   branchId: string;
   branchName: string;
-  branch: { _id: string; name: string };
-  items: Array<{
-    _id: string;
-    itemId?: string;
-    productId: string;
-    productName: string;
-    quantity: number;
-    price: number;
-    unit: string;
-    department: { _id: string; name: string };
-    assignedTo?: { _id: string; name: string };
-    status: ItemStatus;
-    returnedQuantity?: number;
-    returnReason?: string;
-  }>;
-  returns?: Array<{
-    returnId: string;
-    items: Array<{
-      productId: string;
-      productName: string;
-      quantity: number;
-      unit: string;
-      reason: string;
-      status?: ReturnStatus;
-      reviewNotes?: string;
-    }>;
-    status: ReturnStatus;
-    reviewNotes?: string;
-    createdAt: string;
-    createdBy: { _id: string; username: string };
-  }>;
+  branchNameEn?: string;
+  branch: Branch;
+  items: OrderItem[];
+  returns: OrderReturn[];
   status: OrderStatus;
   totalAmount: number;
   adjustedTotal: number;
   date: string;
+  requestedDeliveryDate: string;
   notes?: string;
+  notesEn?: string;
+  displayNotes: string; // Derived: notes (isRtl=true) or notesEn (isRtl=false)
   priority: Priority;
   createdBy: string;
-  statusHistory?: Array<{
+  createdByName: string; // Derived: name (isRtl=true) or nameEn (isRtl=false)
+  statusHistory: Array<{
     status: OrderStatus;
     changedBy?: string;
+    changedByName: string; // Derived: name (isRtl=true) or nameEn (isRtl=false)
     changedAt?: string;
-    date?: string;
     notes?: string;
+    notesEn?: string;
+    displayNotes: string; // Derived: notes (isRtl=true) or notesEn (isRtl=false)
   }>;
+  approvedBy?: { _id: string; name: string; nameEn?: string; displayName: string };
+  approvedAt?: string;
+  deliveredAt?: string;
+  transitStartedAt?: string;
+  isRtl: boolean;
 }
 
 export interface Chef {
   _id: string;
   userId: string;
   name: string;
-  department: { _id: string; name: string } ;
-}
-
-export interface OrderItem {
-  itemId: string;
-  productId: string;
-  productName: string;
-  quantity: number;
-  price: number;
-  unit: string;
-  department: { _id: string; name: string };
-  status: ItemStatus;
-  returnedQuantity?: number;
-  returnReason?: string;
-  assignedTo?: { _id: string; username: string , name: string};
-}
-
-export interface Branch {
-  _id: string;
-  name: string;
+  nameEn?: string;
+  displayName: string; // Derived: name (isRtl=true) or nameEn (isRtl=false)
+  department: Department;
+  status?: 'active' | 'inactive';
 }
 
 export interface AssignChefsForm {
@@ -125,8 +172,11 @@ export interface AssignChefsForm {
     itemId: string;
     assignedTo: string;
     product?: string;
+    productNameEn?: string;
     quantity: number;
     unit?: string;
+    unitEn?: string;
+    displayUnit?: string; // Derived: unit (isRtl=true) or unitEn (isRtl=false)
   }>;
 }
 
@@ -134,7 +184,9 @@ export interface ReturnForm {
   itemId: string;
   quantity: number;
   reason: string;
+  reasonEn?: string;
   notes: string;
+  notesEn?: string;
 }
 
 export interface Notification {
@@ -142,6 +194,8 @@ export interface Notification {
   type: NotificationType;
   displayType: 'success' | 'info' | 'warning' | 'error';
   message: string;
+  messageEn?: string;
+  displayMessage: string; // Derived: message (isRtl=true) or messageEn (isRtl=false)
   data?: {
     orderId?: string;
     branchId?: string;
@@ -157,18 +211,6 @@ export interface Notification {
   vibrate?: number[];
 }
 
-export interface ReturnItem {
-  itemId: string;
-  productId: string;
-  productName: string;
-  quantity: number;
-  unit: string;
-  price?: number;
-  reason: string;
-  status?: ReturnStatus;
-  reviewNotes?: string;
-}
-
 export interface Return {
   id: string;
   returnNumber: string;
@@ -179,20 +221,29 @@ export interface Return {
     createdAt: string;
     branch: string;
     branchName: string;
+    branchNameEn?: string;
+    displayBranchName: string; // Derived: branchName (isRtl=true) or branchNameEn (isRtl=false)
   };
   items: ReturnItem[];
   status: ReturnStatus;
   date: string;
   createdAt: string;
   notes?: string;
+  notesEn?: string;
+  displayNotes?: string; // Derived: notes (isRtl=true) or notesEn (isRtl=false)
   reviewNotes?: string;
-  branch: { _id: string; name: string };
-  createdBy: { _id: string; username: string };
-  reviewedBy?: { _id: string; username: string };
+  reviewNotesEn?: string;
+  displayReviewNotes?: string; // Derived: reviewNotes (isRtl=true) or reviewNotesEn (isRtl=false)
+  branch: Branch;
+  createdBy: { _id: string; username: string; name: string; nameEn?: string; displayName: string };
+  reviewedBy?: { _id: string; username: string; name: string; nameEn?: string; displayName: string };
   statusHistory?: Array<{
     status: ReturnStatus;
     changedBy: string;
+    changedByName: string; // Derived: name (isRtl=true) or nameEn (isRtl=false)
     notes?: string;
+    notesEn?: string;
+    displayNotes: string; // Derived: notes (isRtl=true) or notesEn (isRtl=false)
     changedAt: string;
   }>;
 }
@@ -211,6 +262,8 @@ export interface State {
   isActionModalOpen: boolean;
   actionType: 'approve' | 'reject' | null;
   actionNotes: string;
+  assignFormData: AssignChefsForm;
+  returnFormData: ReturnForm;
   filterStatus: string;
   filterBranch: string;
   searchQuery: string;
@@ -221,19 +274,62 @@ export interface State {
   loading: boolean;
   error: string;
   submitting: string | null;
-  toasts?: { id: string; message: string; type: 'success' | 'error' }[];
+  toasts?: { id: string; message: string; messageEn?: string; displayMessage: string; type: 'success' | 'error' }[];
   socketConnected: boolean;
   socketError: string | null;
   viewMode: 'card' | 'table';
+  isRtl: boolean;
 }
 
-export interface User {
+export interface Task {
   id: string;
-  username: string;
-  role: 'admin' | 'branch' | 'chef' | 'production';
-  name: string;
-  branch?: string;
-  department?: string;
+  orderId: string;
+  orderNumber: string;
+  productName: string;
+  productNameEn?: string;
+  displayProductName: string; // Derived: productName (isRtl=true) or productNameEn (isRtl=false)
+  quantity: number;
+  unit: string;
+  unitEn?: string;
+  displayUnit: string; // Derived: unit (isRtl=true) or unitEn (isRtl=false)
+  status: ItemStatus;
+  updatedAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  chefId?: string;
+}
+
+export interface ChefTask {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  productId: string;
+  productName: string;
+  productNameEn?: string;
+  displayProductName: string; // Derived: productName (isRtl=true) or productNameEn (isRtl=false)
+  quantity: number;
+  unit: string;
+  unitEn?: string;
+  displayUnit: string; // Derived: unit (isRtl=true) or unitEn (isRtl=false)
+  status: 'pending' | 'in_progress' | 'completed';
+  createdAt: string;
+  updatedAt: string;
+  progress?: number;
+}
+
+export interface ChefTasksState {
+  tasks: ChefTask[];
+  chefId: string | null;
+  loading: boolean;
+  error: string;
+  submitting: string | null;
+  socketConnected: boolean;
+  filterStatus: string;
+  searchQuery: string;
+  page: number;
+  totalPages: number;
+  showConfirmModal: { taskId: string; orderId: string; status: string } | null;
+  isRtl: boolean;
 }
 
 export type Action =
@@ -253,15 +349,15 @@ export type Action =
   | { type: 'SET_LOADING'; payload: boolean }
   | { type: 'SET_ERROR'; payload: string }
   | { type: 'SET_SUBMITTING'; payload: string | null }
-  | { type: 'ADD_TOAST'; payload: { id: string; message: string; type: 'success' | 'error' } }
+  | { type: 'ADD_TOAST'; payload: { id: string; message: string; messageEn?: string; displayMessage: string; type: 'success' | 'error' } }
   | { type: 'REMOVE_TOAST'; payload: string }
   | { type: 'SET_SOCKET_CONNECTED'; payload: boolean }
   | { type: 'SET_SOCKET_ERROR'; payload: string | null }
   | { type: 'UPDATE_ORDER_STATUS'; orderId: string; status: OrderStatus }
-  | { type: 'UPDATE_ITEM_STATUS'; payload: { orderId: string; itemId: string; status: ItemStatus } }
+  | { type: 'UPDATE_ITEM_STATUS'; orderId: string; payload: { itemId: string; status: ItemStatus } }
   | { type: 'TASK_ASSIGNED'; orderId: string; items: any[] }
-  | { type: 'ADD_RETURN'; orderId: string; returnData: Order['returns'][0] }
-  | { type: 'UPDATE_RETURN_STATUS'; orderId: string; returnId: string; status: ReturnStatus }
+  | { type: 'ADD_RETURN'; orderId: string; returnData: OrderReturn }
+  | { type: 'UPDATE_RETURN_STATUS'; orderId: string; returnId: string; status: ReturnStatus; reviewNotes?: string; adjustedTotal?: number }
   | { type: 'UPDATE_TASK_STATUS'; taskId: string; status: ItemStatus; updatedAt: string }
   | { type: 'REMOVE_TASKS_BY_ORDER'; orderId: string }
   | { type: 'MISSING_ASSIGNMENTS'; orderId: string; itemId: string; productName: string }
@@ -272,50 +368,7 @@ export type Action =
   | { type: 'SET_ACTION_MODAL'; isOpen: boolean }
   | { type: 'SET_ACTION_TYPE'; payload: 'approve' | 'reject' | null }
   | { type: 'SET_ACTION_NOTES'; payload: string }
-  | { type: 'UPDATE_RETURN_STATUS'; returnId: string; status: ReturnStatus; reviewNotes?: string; adjustedTotal?: number }
   | { type: 'SET_VIEW_MODE'; payload: 'card' | 'table' };
-
-export interface Task {
-  id: string;
-  orderId: string;
-  orderNumber: string;
-  productName: string;
-  quantity: number;
-  unit: string;
-  status: ItemStatus;
-  updatedAt: string;
-  startedAt?: string;
-  completedAt?: string;
-  chefId?: string;
-}
-
-export interface ChefTask {
-  id: string;
-  orderId: string;
-  orderNumber: string;
-  productId: string;
-  productName: string;
-  quantity: number;
-  unit: string;
-  status: 'pending' | 'in_progress' | 'completed';
-  createdAt: string;
-  updatedAt: string;
-  progress?: number;
-}
-
-export interface ChefTasksState {
-  tasks: ChefTask[];
-  chefId: string | null;
-  loading: boolean;
-  error: string;
-  submitting: string | null;
-  socketConnected: boolean;
-  filterStatus: string;
-  searchQuery: string;
-  page: number;
-  totalPages: number;
-  showConfirmModal: { taskId: string; orderId: string; status: string } | null;
-}
 
 export const socketEvents = {
   joinRoom: 'joinRoom',
