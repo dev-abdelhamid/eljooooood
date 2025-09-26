@@ -1,3 +1,4 @@
+// src/pages/Orders.tsx
 import React, { useReducer, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -37,6 +38,7 @@ interface State {
   sortBy: 'date' | 'totalAmount' | 'priority';
   sortOrder: 'asc' | 'desc';
   currentPage: number;
+  totalOrders: number;
   loading: boolean;
   error: string;
   submitting: string | null;
@@ -72,6 +74,7 @@ const initialState: State = {
   sortBy: 'date',
   sortOrder: 'desc',
   currentPage: 1,
+  totalOrders: 0,
   loading: true,
   error: '',
   submitting: null,
@@ -254,6 +257,8 @@ const reducer = (state: State, action: Action): State => {
       return { ...state, viewMode: action.payload, currentPage: 1 };
     case 'SET_IS_RTL':
       return { ...state, isRtl: action.payload };
+    case 'SET_TOTAL_ORDERS':
+      return { ...state, totalOrders: action.payload };
     default:
       return state;
   }
@@ -571,6 +576,7 @@ export const Orders: React.FC = () => {
       };
       dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
       playNotificationSound('/sounds/new-order.mp3', [200, 100, 200]);
+      fetchData(); // Re-fetch to update pagination
     });
     socket.on('orderStatusUpdated', ({ orderId, status }: { orderId: string; status: Order['status'] }) => {
       if (!orderId || !status) {
@@ -578,6 +584,7 @@ export const Orders: React.FC = () => {
         return;
       }
       dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
+      fetchData(); // Re-fetch to update pagination
     });
     socket.on('itemStatusUpdated', ({ orderId, itemId, status }: { orderId: string; itemId: string; status: string }) => {
       if (!orderId || !itemId || !status) {
@@ -585,6 +592,7 @@ export const Orders: React.FC = () => {
         return;
       }
       dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
+      fetchData(); // Re-fetch to update pagination
     });
     socket.on('returnStatusUpdated', ({ orderId, returnId, status }: { orderId: string; returnId: string; status: string }) => {
       if (!orderId || !returnId || !status) {
@@ -601,6 +609,7 @@ export const Orders: React.FC = () => {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
       });
+      fetchData(); // Re-fetch to update pagination
     });
     socket.on('taskAssigned', ({ orderId, items }: { orderId: string; items: any[] }) => {
       if (!orderId || !items) {
@@ -612,6 +621,7 @@ export const Orders: React.FC = () => {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
       });
+      fetchData(); // Re-fetch to update pagination
     });
     return () => {
       socket.off('connect');
@@ -624,7 +634,7 @@ export const Orders: React.FC = () => {
       socket.off('returnStatusUpdated');
       socket.off('taskAssigned');
     };
-  }, [user, socket, isRtl, language, playNotificationSound]);
+  }, [user, socket, isRtl, language, playNotificationSound, fetchData]);
 
   const fetchData = useCallback(
     async (retryCount = 0) => {
@@ -639,6 +649,11 @@ export const Orders: React.FC = () => {
           sortBy: state.sortBy,
           sortOrder: state.sortOrder,
           isRtl,
+          page: state.currentPage,
+          limit: ORDERS_PER_PAGE[state.viewMode],
+          filterStatus: state.filterStatus,
+          filterBranch: state.filterBranch,
+          searchQuery: state.searchQuery,
         };
         if (user.role === 'production' && user.department) query.department = user.department._id;
         const [ordersResponse, chefsResponse, branchesResponse] = await Promise.all([
@@ -646,7 +661,7 @@ export const Orders: React.FC = () => {
           chefsAPI.getAll({ isRtl }),
           branchesAPI.getAll({ isRtl }),
         ]);
-        const mappedOrders: Order[] = ordersResponse
+        const mappedOrders: Order[] = ordersResponse.orders
           .filter((order: any) => order && order._id && order.orderNumber)
           .map((order: any) => ({
             id: order._id,
@@ -789,6 +804,7 @@ export const Orders: React.FC = () => {
             isRtl,
           }));
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
+        dispatch({ type: 'SET_TOTAL_ORDERS', payload: ordersResponse.total });
         dispatch({
           type: 'SET_CHEFS',
           payload: chefsResponse
@@ -838,7 +854,7 @@ export const Orders: React.FC = () => {
         dispatch({ type: 'SET_LOADING', payload: false });
       }
     },
-    [user, state.sortBy, state.sortOrder, isRtl, language]
+    [user, state.sortBy, state.sortOrder, state.currentPage, state.viewMode, state.filterStatus, state.filterBranch, state.searchQuery, isRtl, language]
   );
 
   const handleSearchChange = useMemo(
@@ -849,53 +865,9 @@ export const Orders: React.FC = () => {
     []
   );
 
-  const filteredOrders = useMemo(
-    () =>
-      state.orders
-        .filter(
-          order =>
-            order.orderNumber.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.branch.displayName.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            (order.displayNotes || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.createdByName.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.items.some(item => item.displayProductName.toLowerCase().includes(state.searchQuery.toLowerCase()))
-        )
-        .filter(
-          order =>
-            (!state.filterStatus || order.status === state.filterStatus) &&
-            (!state.filterBranch || order.branchId === state.filterBranch) &&
-            (user?.role === 'production' && user?.department
-              ? order.items.some(item => item.department._id === user.department._id)
-              : true)
-        ),
-    [state.orders, state.searchQuery, state.filterStatus, state.filterBranch, user]
-  );
-
-  const sortedOrders = useMemo(() => {
-    const priorityOrder = { [Priority.Urgent]: 4, [Priority.High]: 3, [Priority.Medium]: 2, [Priority.Low]: 1 };
-    return [...filteredOrders].sort((a, b) => {
-      if (state.sortBy === 'date') {
-        return state.sortOrder === 'asc'
-          ? new Date(a.date).getTime() - new Date(b.date).getTime()
-          : new Date(b.date).getTime() - new Date(a.date).getTime();
-      } else if (state.sortBy === 'totalAmount') {
-        return state.sortOrder === 'asc' ? a.adjustedTotal - b.adjustedTotal : b.adjustedTotal - a.adjustedTotal;
-      } else {
-        return state.sortOrder === 'asc'
-          ? priorityOrder[a.priority] - priorityOrder[b.priority]
-          : priorityOrder[b.priority] - priorityOrder[a.priority];
-      }
-    });
-  }, [filteredOrders, state.sortBy, state.sortOrder]);
-
-  const paginatedOrders = useMemo(
-    () => sortedOrders.slice((state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode], state.currentPage * ORDERS_PER_PAGE[state.viewMode]),
-    [sortedOrders, state.currentPage, state.viewMode]
-  );
-
   const totalPages = useMemo(
-    () => Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode]),
-    [sortedOrders, state.viewMode]
+    () => Math.ceil(state.totalOrders / ORDERS_PER_PAGE[state.viewMode]),
+    [state.totalOrders, state.viewMode]
   );
 
   const updateOrderStatus = useCallback(
@@ -935,6 +907,7 @@ export const Orders: React.FC = () => {
         });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
+        fetchData(); // Re-fetch after update
       }
     },
     [state.orders, isRtl, socket, isConnected, emit]
@@ -974,6 +947,7 @@ export const Orders: React.FC = () => {
         });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
+        fetchData(); // Re-fetch after update
       }
     },
     [isRtl, user, socket, isConnected, emit]
@@ -1021,6 +995,7 @@ export const Orders: React.FC = () => {
         });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
+        fetchData(); // Re-fetch after update
       }
     },
     [user, state.assignFormData, state.chefs, socket, isConnected, emit, isRtl]
@@ -1070,44 +1045,8 @@ export const Orders: React.FC = () => {
   }, []);
 
   const handleExportToPDF = useCallback(() => {
-    const headers = [
-      isRtl ? 'رقم الطلب' : 'Order Number',
-      isRtl ? 'الفرع' : 'Branch',
-      isRtl ? 'الحالة' : 'Status',
-      isRtl ? 'المنتجات' : 'Products',
-      isRtl ? 'إجمالي المبلغ' : 'Total Amount',
-      isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
-      isRtl ? 'التاريخ' : 'Date',
-    ];
-    const data = sortedOrders.map(order => ({
-      [headers[0]]: order.orderNumber,
-      [headers[1]]: order.branch.displayName,
-      [headers[2]]: isRtl ? {
-        pending: 'قيد الانتظار',
-        approved: 'تم الموافقة',
-        in_production: 'في الإنتاج',
-        completed: 'مكتمل',
-        in_transit: 'في النقل',
-        delivered: 'تم التسليم',
-        cancelled: 'ملغى'
-      }[order.status] : order.status,
-      [headers[3]]: order.items.map(i => `${i.displayProductName} (${i.quantity} ${i.displayUnit})`).join(', '),
-      [headers[4]]: calculateAdjustedTotal(order),
-      [headers[5]]: `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`,
-      [headers[6]]: order.date,
-    }));
-    exportToPDF({
-      title: isRtl ? 'تقرير الطلبات' : 'Orders Report',
-      headers,
-      data,
-      isRtl,
-      filename: 'Orders_Report.pdf',
-    });
-    toast.success(isRtl ? 'تم تصدير PDF بنجاح' : 'PDF exported successfully', {
-      position: isRtl ? 'top-left' : 'top-right',
-      autoClose: 3000,
-    });
-  }, [sortedOrders, isRtl, calculateAdjustedTotal, calculateTotalQuantity]);
+    exportToPDF(state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, state.filterStatus, state.branches.find(b => b._id === state.filterBranch)?.displayName || '');
+  }, [state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, state.filterStatus, state.filterBranch, state.branches]);
 
   useEffect(() => {
     fetchData();
@@ -1210,7 +1149,7 @@ export const Orders: React.FC = () => {
             </Button>
             <Button
               variant="primary"
-              onClick={() => exportToExcel(sortedOrders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit)}
+              onClick={() => exportToExcel(state.orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit)}
               className="flex items-center gap-2"
               aria-label={isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
             >
@@ -1249,13 +1188,13 @@ export const Orders: React.FC = () => {
             ) : (
               <OrderTableSkeleton isRtl={isRtl} />
             )
-          ) : paginatedOrders.length === 0 ? (
+          ) : state.orders.length === 0 ? (
             <Card className="p-6 text-center">
               <p className="text-gray-500">{isRtl ? 'لا توجد طلبات' : 'No orders found'}</p>
             </Card>
           ) : state.viewMode === 'card' ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {paginatedOrders.map(order => (
+              {state.orders.map(order => (
                 <OrderCard
                   key={order.id}
                   order={order}
@@ -1271,7 +1210,7 @@ export const Orders: React.FC = () => {
             </div>
           ) : (
             <OrderTable
-              orders={paginatedOrders}
+              orders={state.orders}
               calculateAdjustedTotal={calculateAdjustedTotal}
               calculateTotalQuantity={calculateTotalQuantity}
               translateUnit={translateUnit}
