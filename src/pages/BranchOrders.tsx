@@ -578,7 +578,12 @@ const BranchOrders: React.FC = () => {
           sortOrder: state.sortOrder,
           lang: language,
         });
-        if (!Array.isArray(response)) throw new Error('Invalid response format');
+
+        // Validate response
+        if (!Array.isArray(response)) {
+          throw new Error(isRtl ? 'تنسيق استجابة غير صالح' : 'Invalid response format');
+        }
+
         const mappedOrders: Order[] = response
           .filter((order: any) => order && order._id && order.branch && order.branch._id)
           .map((order: any) => ({
@@ -644,17 +649,25 @@ const BranchOrders: React.FC = () => {
                 }))
               : [],
           }));
+
         cacheRef.current.set(cacheKey, mappedOrders);
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
         dispatch({ type: 'SET_ERROR', payload: '' });
-      } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Fetch orders error:`, err.message, err.response?.data);
+      } catch (error: any) {
+        console.error(`[${new Date().toISOString()}] Error fetching orders:`, {
+          message: error.message,
+          status: error.response?.status,
+          data: error.response?.data,
+        });
         if (retryCount < 2) {
           console.log(`Retrying fetchData (attempt ${retryCount + 1})`);
           setTimeout(() => fetchData(retryCount + 1), 1000);
           return;
         }
-        const errorMessage = err.response?.status === 404 ? (isRtl ? 'لم يتم العثور على طلبات' : 'No orders found') : (isRtl ? `خطأ في جلب الطلبات: ${err.message}` : `Error fetching orders: ${err.message}`);
+        const errorMessage =
+          error.response?.status === 404
+            ? t('no_orders_found') || (isRtl ? 'لم يتم العثور على طلبات' : 'No orders found')
+            : t('error_fetching_orders') || (isRtl ? `خطأ في جلب الطلبات: ${error.message}` : `Error fetching orders: ${error.message}`);
         dispatch({ type: 'SET_ERROR', payload: errorMessage });
         toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
       } finally {
@@ -911,7 +924,11 @@ const BranchOrders: React.FC = () => {
           emit('returnCreated', { orderId: order.id, returnId: response._id });
         }
       } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Return item error:`, err.message, err.response?.data);
+        console.error(`[${new Date().toISOString()}] Error submitting return:`, {
+          message: err.message,
+          status: err.response?.status,
+          data: err.response?.data,
+        });
         toast.error(isRtl ? `فشل في تقديم طلب الإرجاع: ${err.message}` : `Failed to submit return: ${err.message}`, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
@@ -1028,7 +1045,11 @@ const BranchOrders: React.FC = () => {
         playNotificationSound('/sounds/order-delivered.mp3', [400, 100, 400]);
         toast.success(isRtl ? 'تم تأكيد التسليم' : 'Delivery confirmed successfully', { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
       } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Confirm delivery error:`, err.message, err.response?.data);
+        console.error(`[${new Date().toISOString()}] Confirm delivery error:`, {
+          message: err.message,
+          status: err.response?.status,
+          data: err.response?.data,
+        });
         toast.error(isRtl ? `فشل في تأكيد التسليم: ${err.message}` : `Failed to confirm delivery: ${err.message}`, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
@@ -1055,7 +1076,11 @@ const BranchOrders: React.FC = () => {
           { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 }
         );
       } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Update order status error:`, err.message, err.response?.data);
+        console.error(`[${new Date().toISOString()}] Update order status error:`, {
+          message: err.message,
+          status: err.response?.status,
+          data: err.response?.data,
+        });
         toast.error(isRtl ? `فشل في تحديث الحالة: ${err.message}` : `Failed to update status: ${err.message}`, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
@@ -1273,3 +1298,6 @@ const BranchOrders: React.FC = () => {
       </Suspense>
     </div>
   );
+};
+
+export default BranchOrders;
