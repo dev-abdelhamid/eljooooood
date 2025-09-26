@@ -16,7 +16,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
-import { Order, ReturnForm, AssignChefsForm, OrderStatus, ItemStatus, ReturnStatus, Priority, Branch, Chef } from '../../types/types';
+import { Order, ReturnForm, AssignChefsForm, OrderStatus, ItemStatus, ReturnStatus, Priority, Branch, Chef } from '../types/types';
 import { formatDate } from '../utils/formatDate';
 import OrderCardSkeleton from '../components/branch/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/branch/OrderTableSkeleton';
@@ -26,8 +26,8 @@ const OrderTable = lazy(() => import('../components/branch/OrderTable'));
 const OrderCard = lazy(() => import('../components/branch/OrderCard'));
 const Pagination = lazy(() => import('../components/branch/Pagination'));
 const ViewModal = lazy(() => import('../components/branch/ViewModal'));
-const AssignChefsModal = lazy(() => import('../components/branch/AssignChefsModal'));
-const ActionModal = lazy(() => import('../components/branch/ActionModal'));
+const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
+const ActionModal = lazy(() => import('../components/Shared/OrderActions'));
 const ReturnModal = lazy(() => import('../components/branch/ReturnModal'));
 
 // State and Action interfaces
