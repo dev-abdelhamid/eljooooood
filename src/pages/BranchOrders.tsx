@@ -1,12 +1,12 @@
 import React, { useReducer, useEffect, useMemo, useCallback, lazy, Suspense, useRef } from 'react';
-import { useLanguage } from '../../contexts/LanguageContext';
-import { useAuth } from '../../contexts/AuthContext';
-import { useSocket } from '../../contexts/SocketContext';
-import { ordersAPI, inventoryAPI, returnsAPI } from '../../services/api';
-import { Card } from '../../components/UI/Card';
-import { Button } from '../../components/UI/Button';
-import { Select } from '../../components/UI/Select';
-import SearchInput from '../../components/UI/SearchInput';
+import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useSocket } from '../contexts/SocketContext';
+import { ordersAPI, inventoryAPI, returnsAPI } from '../services/api';
+import { Card } from '../components/UI/Card';
+import { Button } from '../components/UI/Button';
+import { Select } from '../components/UI/Select';
+import SearchInput from '../components/UI/SearchInput';
 import { ShoppingCart, Download, Upload, Table2, Grid, AlertCircle } from 'lucide-react';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -14,20 +14,20 @@ import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { LoadingSpinner } from '../../components/UI/LoadingSpinner';
-import { useOrderNotifications } from '../../hooks/useOrderNotifications';
-import { Order, ReturnForm, OrderStatus, ItemStatus } from '../../components/branch/types';
-import { formatDate } from '../../utils/formatDate';
-import OrderCardSkeleton from '../../components/branch/OrderCardSkeleton';
-import OrderTableSkeleton from '../../components/branch/OrderTableSkeleton';
+import { LoadingSpinner } from '../components/UI/LoadingSpinner';
+import { useOrderNotifications } from '../hooks/useOrderNotifications';
+import { Order, ReturnForm, OrderStatus, ItemStatus } from '../components/branch/types';
+import { formatDate } from '../utils/formatDate';
 
+import OrderTableSkeleton from '../components/branch/OrderTableSkeleton';
+import OrderCardSkeleton from '../components/branch/OrderCardSkeleton';
 // Lazy-loaded components
-const OrderTable = lazy(() => import('../../components/branch/OrderTable'));
-const OrderCard = lazy(() => import('../../components/branch/OrderCard'));
-const Pagination = lazy(() => import('../../components/branch/Pagination'));
-const ViewModal = lazy(() => import('../../components/branch/ViewModal'));
-const ConfirmDeliveryModal = lazy(() => import('../../components/branch/ConfirmDeliveryModal'));
-const ReturnModal = lazy(() => import('../../components/branch/ReturnModal'));
+const OrderTable = lazy(() => import('../components/branch/OrderTable'));
+const OrderCard = lazy(() => import('../components/branch/OrderCard'));
+const Pagination = lazy(() => import('../components/branch/Pagination'));
+const ViewModal = lazy(() => import('../components/branch/ViewModal'));
+const ConfirmDeliveryModal = lazy(() => import('../components/branch/ConfirmDeliveryModal'));
+const ReturnModal = lazy(() => import('../components/branch/ReturnModal'));
 
 // State and Action interfaces
 interface State {
