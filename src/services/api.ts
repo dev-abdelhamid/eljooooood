@@ -1,7 +1,6 @@
 import axios from 'axios';
-import { notificationsAPI } from './notificationsAPI';
+import { notificationsAPI } from './notifications';
 import { returnsAPI } from './returnsAPI';
-import { ordersAPI } from './ordersAPI';
 import { salesAPI } from './salesAPI';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
@@ -140,7 +139,7 @@ export const productsAPI = {
     }
     const response = await api.get('/products', { params });
     console.log(`[${new Date().toISOString()}] productsAPI.getAll - Response:`, response);
-    return response;
+    return response; // Returns { data: Product[], totalPages: number, currentPage: number, totalItems: number }
   },
   getById: async (id: string) => {
     if (!isValidObjectId(id)) {
@@ -446,6 +445,107 @@ export const usersAPI = {
   },
 };
 
+export const ordersAPI = {
+  create: async (orderData: {
+    orderNumber: string;
+    branchId: string;
+    items: Array<{ productId: string; quantity: number; price: number; department?: { _id: string } }>;
+    status: string;
+    notes?: string;
+    priority?: string;
+    requestedDeliveryDate: string;
+  }) => {
+    console.log(`ordersAPI.create - Sending at ${new Date().toISOString()}:`, orderData);
+    if (!orderData.branchId || !/^[0-9a-fA-F]{24}$/.test(orderData.branchId)) {
+      console.error(`ordersAPI.create - Invalid branchId at ${new Date().toISOString()}:`, orderData.branchId);
+      throw new Error('Invalid branch ID');
+    }
+    const response = await axios.post(`${API_BASE_URL}/orders`, orderData, {
+      headers: { 
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('token')}`
+      },
+    });
+    console.log(`ordersAPI.create - Response at ${new Date().toISOString()}:`, response.data);
+    return response.data;
+  },
+
+  getAll: async (params: { status?: string; branch?: string; page?: number; limit?: number; department?: string; search?: string; sortBy?: string; sortOrder?: 'asc' | 'desc' } = {}) => {
+    const response = await axios.get(`${API_BASE_URL}/orders`, { 
+      params,
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    });
+    console.log(`ordersAPI.getAll - Response at ${new Date().toISOString()}:`, response.data);
+    return response.data;
+  },
+
+  getById: async (id: string) => {
+    if (!/^[0-9a-fA-F]{24}$/.test(id)) {
+      console.error(`ordersAPI.getById - Invalid order ID at ${new Date().toISOString()}:`, id);
+      throw new Error('Invalid order ID');
+    }
+    const response = await axios.get(`${API_BASE_URL}/orders/${id}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    });
+    console.log(`ordersAPI.getById - Response at ${new Date().toISOString()}:`, response.data);
+    return response.data;
+  },
+
+  updateStatus: async (id: string, data: { status: string; notes?: string }) => {
+    if (!/^[0-9a-fA-F]{24}$/.test(id)) {
+      console.error(`ordersAPI.updateStatus - Invalid order ID at ${new Date().toISOString()}:`, id);
+      throw new Error('Invalid order ID');
+    }
+    const response = await axios.patch(`${API_BASE_URL}/orders/${id}/status`, data, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    });
+    console.log(`ordersAPI.updateStatus - Response at ${new Date().toISOString()}:`, response.data);
+    return response.data;
+  },
+
+  updateChefItem: async (orderId: string, data: { taskId: string; status: string }) => {
+    if (!/^[0-9a-fA-F]{24}$/.test(orderId) || !/^[0-9a-fA-F]{24}$/.test(data.taskId)) {
+      console.error(`ordersAPI.updateChefItem - Invalid order ID or task ID at ${new Date().toISOString()}:`, { orderId, taskId: data.taskId });
+      throw new Error('Invalid order ID or task ID');
+    }
+    const response = await axios.patch(`${API_BASE_URL}/orders/${orderId}/tasks/${data.taskId}/status`, { status: data.status }, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    });
+    console.log(`ordersAPI.updateChefItem - Response at ${new Date().toISOString()}:`, response.data);
+    return response.data;
+  },
+
+  assignChef: async (orderId: string, data: { items: Array<{ itemId: string; assignedTo: string }> }) => {
+    console.log(`[${new Date().toISOString()}] ordersAPI.assignChef - Sending:`, { orderId, data });
+    if (!/^[0-9a-fA-F]{24}$/.test(orderId) || data.items.some(item => !/^[0-9a-fA-F]{24}$/.test(item.itemId) || !/^[0-9a-fA-F]{24}$/.test(item.assignedTo))) {
+      console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - بيانات غير صالحة:`, { orderId, data });
+      throw new Error('معرف الطلب أو معرف العنصر أو معرف الشيف غير صالح');
+    }
+    const response = await axios.patch(`${API_BASE_URL}/orders/${orderId}/assign`, {
+      items: data.items,
+      timestamp: new Date().toISOString(),
+    }, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+    });
+    console.log(`[${new Date().toISOString()}] ordersAPI.assignChef - Response:`, response.data);
+    return response.data;
+  },
+
+  confirmDelivery: async (orderId: string) => {
+    if (!/^[0-9a-fA-F]{24}$/.test(orderId)) {
+      console.error(`ordersAPI.confirmDelivery - Invalid order ID at ${new Date().toISOString()}:`, orderId);
+      throw new Error('Invalid order ID');
+    }
+    console.log(`ordersAPI.confirmDelivery - Sending at ${new Date().toISOString()}:`, { orderId });
+    const response = await axios.patch(`${API_BASE_URL}/orders/${orderId}/confirm-delivery`, {}, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+    });
+    console.log(`ordersAPI.confirmDelivery - Response at ${new Date().toISOString()}:`, response.data);
+    return response.data;
+  },
+};
+
+
 export const departmentAPI = {
   getAll: async (params: { page?: number; limit?: number; search?: string } = {}) => {
     const response = await api.get('/departments', { params });
@@ -515,7 +615,7 @@ export const chefsAPI = {
   getById: async (id: string) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.getById - Invalid chef ID:`, id);
-      throw new Error(isRtl ? 'معرف الشيف غير صالح' : 'Invalid chef ID');
+      throw new Error('Invalid chef ID');
     }
     const response = await api.get(`/chefs/${id}`);
     console.log(`[${new Date().toISOString()}] chefsAPI.getById - Response:`, response);
@@ -524,7 +624,7 @@ export const chefsAPI = {
   getByUserId: async (userId: string) => {
     if (!isValidObjectId(userId)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.getByUserId - Invalid user ID:`, userId);
-      throw new Error(isRtl ? 'معرف المستخدم غير صالح' : 'Invalid user ID');
+      throw new Error('Invalid user ID');
     }
     const response = await api.get(`/chefs/by-user/${userId}`);
     console.log(`[${new Date().toISOString()}] chefsAPI.getByUserId - Response:`, response);
@@ -587,7 +687,7 @@ export const chefsAPI = {
   delete: async (id: string) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.delete - Invalid chef ID:`, id);
-      throw new Error(isRtl ? 'معرف الشيف غير صالح' : 'Invalid chef ID');
+      throw new Error('Invalid chef ID');
     }
     const response = await api.delete(`/chefs/${id}`);
     console.log(`[${new Date().toISOString()}] chefsAPI.delete - Response:`, response);
@@ -596,13 +696,15 @@ export const chefsAPI = {
   resetPassword: async (id: string, password: string) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.resetPassword - Invalid chef ID:`, id);
-      throw new Error(isRtl ? 'معرف الشيف غير صالح' : 'Invalid chef ID');
+      throw new Error('Invalid chef ID');
     }
     const response = await api.post(`/chefs/${id}/reset-password`, { password });
     console.log(`[${new Date().toISOString()}] chefsAPI.resetPassword response:`, response);
     return response;
   },
 };
+
+
 
 export const productionAssignmentsAPI = {
   create: async (assignmentData: {
@@ -617,7 +719,7 @@ export const productionAssignmentsAPI = {
         !isValidObjectId(assignmentData.chef) ||
         !isValidObjectId(assignmentData.itemId)) {
       console.error(`[${new Date().toISOString()}] productionAssignmentsAPI.create - Invalid data:`, assignmentData);
-      throw new Error(isRtl ? 'معرف الطلب، المنتج، الشيف، أو العنصر غير صالح' : 'Invalid order ID, product ID, chef ID, or item ID');
+      throw new Error('Invalid order ID, product ID, chef ID, or item ID');
     }
     const response = await api.post('/orders/tasks', assignmentData);
     console.log(`[${new Date().toISOString()}] productionAssignmentsAPI.create - Response:`, response);
@@ -626,7 +728,7 @@ export const productionAssignmentsAPI = {
   getChefTasks: async (chefId: string, query: { page?: number; limit?: number; status?: string; search?: string } = {}) => {
     if (!isValidObjectId(chefId)) {
       console.error(`[${new Date().toISOString()}] productionAssignmentsAPI.getChefTasks - Invalid chefId:`, chefId);
-      throw new Error(isRtl ? 'معرف الشيف غير صالح' : 'Invalid chef ID');
+      throw new Error('Invalid chef ID');
     }
     const response = await api.get(`/orders/tasks/chef/${chefId}`, { params: query });
     console.log(`[${new Date().toISOString()}] productionAssignmentsAPI.getChefTasks - Response:`, response);
@@ -635,7 +737,7 @@ export const productionAssignmentsAPI = {
   updateTaskStatus: async (orderId: string, taskId: string, data: { status: string }) => {
     if (!isValidObjectId(orderId) || !isValidObjectId(taskId)) {
       console.error(`[${new Date().toISOString()}] productionAssignmentsAPI.updateTaskStatus - Invalid orderId or taskId:`, { orderId, taskId });
-      throw new Error(isRtl ? 'معرف الطلب أو المهمة غير صالح' : 'Invalid order ID or task ID');
+      throw new Error('Invalid order ID or task ID');
     }
     const response = await api.patch(`/orders/${orderId}/tasks/${taskId}/status`, data);
     console.log(`[${new Date().toISOString()}] productionAssignmentsAPI.updateTaskStatus - Response:`, response);
@@ -647,6 +749,7 @@ export const productionAssignmentsAPI = {
     return response;
   },
 };
+
 
 export const inventoryAPI = {
   getInventory: async (params: { branch?: string; product?: string } = {}) => {
@@ -973,5 +1076,5 @@ export const factoryInventoryAPI = {
   },
 };
 
-export { notificationsAPI, returnsAPI, ordersAPI, salesAPI };
+export { notificationsAPI, returnsAPI, salesAPI };
 export default api;
