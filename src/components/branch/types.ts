@@ -1,4 +1,3 @@
-// types.ts
 export enum ItemStatus {
   Pending = 'pending',
   Assigned = 'assigned',
@@ -20,29 +19,36 @@ export enum OrderStatus {
 export interface Department {
   _id: string;
   name: string;
+  nameEn?: string;
 }
 
 export interface OrderItem {
   itemId: string;
   productId: string;
   productName: string;
+  productNameEn?: string;
   quantity: number;
   price: number;
   department: Department;
   status: ItemStatus;
   unit: string;
+  unitEn?: string;
   returnedQuantity?: number;
   returnReason?: string;
+  returnReasonEn?: string;
   assignedTo?: { _id: string; username: string };
+  startedAt?: string;
+  completedAt?: string;
 }
 
 export interface User {
   id: string;
-  
   username: string;
   role: 'admin' | 'branch' | 'chef' | 'production';
   name: string;
+  branchId?: string;
   branch?: string;
+  departmentId?: string;
   department?: string;
 }
 
@@ -50,6 +56,7 @@ export interface ReturnItem {
   productId: string;
   quantity: number;
   reason: string;
+  reasonEn?: string;
   status: string;
   reviewNotes?: string;
 }
@@ -74,12 +81,14 @@ export interface Order {
   orderNumber: string;
   branchId: string;
   branchName: string;
-  branch: { _id: string; name: string };
+  branchNameEn?: string;
+  branch: { _id: string; name: string; nameEn?: string };
   items: OrderItem[];
   returns: OrderReturn[];
   status: OrderStatus;
   totalAmount: number;
   date: string;
+  requestedDeliveryDate: string;
   notes?: string;
   priority: 'urgent' | 'high' | 'medium' | 'low';
   createdBy: string;
@@ -90,6 +99,7 @@ export interface ReturnForm {
   itemId: string;
   quantity: number;
   reason: string;
+  reasonEn?: string;
   notes: string;
 }
 
@@ -111,6 +121,7 @@ export interface State {
   socketConnected: boolean;
   socketError: string | null;
   viewMode: 'card' | 'table';
+  inventory: any[];
 }
 
 export type Action =
@@ -128,10 +139,12 @@ export type Action =
   | { type: 'SET_SUBMITTING'; payload: string | null }
   | { type: 'SET_SOCKET_CONNECTED'; payload: boolean }
   | { type: 'SET_SOCKET_ERROR'; payload: string | null }
-  | { type: 'UPDATE_ORDER_STATUS'; orderId: string; status: OrderStatus }
+  | { type: 'UPDATE_ORDER_STATUS'; orderId: string; status: OrderStatus; payload?: Order }
   | { type: 'UPDATE_ITEM_STATUS'; payload: { orderId: string; itemId: string; status: ItemStatus } }
   | { type: 'ADD_RETURN'; orderId: string; returnData: OrderReturn }
   | { type: 'UPDATE_RETURN_STATUS'; orderId: string; returnId: string; status: string }
   | { type: 'TASK_ASSIGNED'; orderId: string; items: { _id: string; assignedTo: { _id: string; username: string } }[] }
   | { type: 'MISSING_ASSIGNMENTS'; orderId: string; itemId: string; productName: string }
-  | { type: 'SET_VIEW_MODE'; payload: 'card' | 'table' };
+  | { type: 'SET_VIEW_MODE'; payload: 'card' | 'table' }
+  | { type: 'SET_INVENTORY'; payload: any[] }
+  | { type: 'UPDATE_INVENTORY'; payload: { productId: string; quantity: number; type: string } };
