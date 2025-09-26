@@ -1,16 +1,16 @@
 import React, { memo } from 'react';
 import { Button } from '../UI/Button';
-import { Eye, Clock, Package, Check, AlertCircle, ChefHat } from 'lucide-react';
-import { Order, OrderStatus } from '../../types/types';
+import { Eye, Truck } from 'lucide-react';
+import { Order } from '../../types/types';
 
 const STATUS_COLORS = {
-  [OrderStatus.Pending]: { color: 'bg-yellow-100 text-yellow-800', label: 'pending' },
-  [OrderStatus.Approved]: { color: 'bg-teal-100 text-teal-800', label: 'approved' },
-  [OrderStatus.InProduction]: { color: 'bg-purple-100 text-purple-800', label: 'in_production' },
-  [OrderStatus.Completed]: { color: 'bg-green-100 text-green-800', label: 'completed' },
-  [OrderStatus.InTransit]: { color: 'bg-blue-100 text-blue-800', label: 'in_transit' },
-  [OrderStatus.Delivered]: { color: 'bg-gray-100 text-gray-800', label: 'delivered' },
-  [OrderStatus.Cancelled]: { color: 'bg-red-100 text-red-800', label: 'cancelled' },
+  pending: { color: 'bg-yellow-100 text-yellow-800', label: 'pending' },
+  approved: { color: 'bg-teal-100 text-teal-800', label: 'approved' },
+  in_production: { color: 'bg-purple-100 text-purple-800', label: 'in_production' },
+  completed: { color: 'bg-green-100 text-green-800', label: 'completed' },
+  in_transit: { color: 'bg-blue-100 text-blue-800', label: 'in_transit' },
+  delivered: { color: 'bg-gray-100 text-gray-800', label: 'delivered' },
+  cancelled: { color: 'bg-red-100 text-red-800', label: 'cancelled' },
 };
 
 const getFirstTwoWords = (name: string | undefined | null): string => {
@@ -25,37 +25,36 @@ interface Props {
   isRtl: boolean;
   calculateAdjustedTotal: (order: Order) => string;
   calculateTotalQuantity: (order: Order) => number;
-  onView: (order: Order) => void;
-  onAssign: (order: Order) => void;
-  onApprove: (order: Order) => void;
-  onReject: (order: Order) => void;
-  onReturn: (order: Order, itemId: string) => void;
-  userRole: string | undefined;
+  startIndex: number;
+  viewOrder: (order: Order) => void;
+  openConfirmDeliveryModal: (order: Order) => void;
+  openReturnModal: (order: Order, itemId: string) => void;
+  user: any;
   submitting: string | null;
 }
 
 const OrderTable: React.FC<Props> = memo(
-  ({ orders, t, isRtl, calculateAdjustedTotal, calculateTotalQuantity, onView, onAssign, onApprove, onReject, onReturn, userRole, submitting }) => (
+  ({ orders, t, isRtl, calculateAdjustedTotal, calculateTotalQuantity, startIndex, viewOrder, openConfirmDeliveryModal, openReturnModal, user, submitting }) => (
     <div className="overflow-x-auto rounded-lg shadow-md border border-gray-200">
       <table className="min-w-full divide-y divide-gray-200 table-auto bg-white">
         <thead className="bg-gray-50">
           <tr>
-            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[5%]">{isRtl ? '#' : '#'}</th>
-            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">{isRtl ? 'رقم الطلب' : 'Order Number'}</th>
-            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">{isRtl ? 'الحالة' : 'Status'}</th>
-            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[30%]">{isRtl ? 'المنتجات' : 'Products'}</th>
-            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">{isRtl ? 'إجمالي المبلغ' : 'Total Amount'}</th>
-            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[10%]">{isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}</th>
-            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">{isRtl ? 'التاريخ' : 'Date'}</th>
-            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">{isRtl ? 'الإجراءات' : 'Actions'}</th>
+            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[5%]">{t('orders.number')}</th>
+            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">{t('orders.order_number')}</th>
+            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">{t('orders.status')}</th>
+            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[30%]">{t('orders.products')}</th>
+            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">{t('orders.total_amount')}</th>
+            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[10%]">{t('orders.total_quantity')}</th>
+            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">{t('orders.date')}</th>
+            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">{t('orders.actions')}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
           {orders.map((order, i) => {
-            const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS[OrderStatus.Pending];
+            const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS.pending;
             return (
               <tr key={order.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{i + 1}</td>
+                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{startIndex + i}</td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{order.orderNumber}</td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-right">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
@@ -73,58 +72,34 @@ const OrderTable: React.FC<Props> = memo(
                     <Button
                       variant="primary"
                       size="sm"
-                      onClick={() => onView(order)}
+                      onClick={() => viewOrder(order)}
                       className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-3 py-1 text-xs"
-                      aria-label={isRtl ? `عرض الطلب ${order.orderNumber}` : `View order ${order.orderNumber}`}
+                      aria-label={t('orders.view_order', { orderNumber: order.orderNumber })}
                     >
-                      <Eye className="w-4 h-4" /> {isRtl ? 'عرض' : 'View'}
+                      <Eye className="w-4 h-4" /> {t('orders.view')}
                     </Button>
-                    {userRole === 'admin' && order.status === OrderStatus.Pending && (
-                      <>
-                        <Button
-                          variant="success"
-                          size="sm"
-                          onClick={() => onApprove(order)}
-                          className="bg-green-500 hover:bg-green-600 text-white rounded-full px-3 py-1 text-xs"
-                          disabled={submitting === order.id}
-                          aria-label={isRtl ? `الموافقة على الطلب ${order.orderNumber}` : `Approve order ${order.orderNumber}`}
-                        >
-                          <Check className="w-4 h-4" /> {isRtl ? 'الموافقة' : 'Approve'}
-                        </Button>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() => onReject(order)}
-                          className="bg-red-500 hover:bg-red-600 text-white rounded-full px-3 py-1 text-xs"
-                          disabled={submitting === order.id}
-                          aria-label={isRtl ? `رفض الطلب ${order.orderNumber}` : `Reject order ${order.orderNumber}`}
-                        >
-                          <AlertCircle className="w-4 h-4" /> {isRtl ? 'رفض' : 'Reject'}
-                        </Button>
-                      </>
-                    )}
-                    {userRole === 'production' && [OrderStatus.Approved, OrderStatus.InProduction].includes(order.status) && (
+                    {order.status === 'in_transit' && user?.role === 'branch' && order.branch._id === user.branchId && (
                       <Button
-                        variant="secondary"
+                        variant="success"
                         size="sm"
-                        onClick={() => onAssign(order)}
-                        className="bg-purple-500 hover:bg-purple-600 text-white rounded-full px-3 py-1 text-xs"
+                        onClick={() => openConfirmDeliveryModal(order)}
+                        className="bg-green-500 hover:bg-green-600 text-white rounded-full px-3 py-1 text-xs"
                         disabled={submitting === order.id}
-                        aria-label={isRtl ? `تعيين الطهاة للطلب ${order.orderNumber}` : `Assign chefs to order ${order.orderNumber}`}
+                        aria-label={t('orders.confirm_delivery', { orderNumber: order.orderNumber })}
                       >
-                        <ChefHat className="w-4 h-4" /> {isRtl ? 'تعيين' : 'Assign'}
+                        {t('orders.confirm_delivery')}
                       </Button>
                     )}
-                    {order.status === OrderStatus.Delivered && userRole === 'branch' && order.branch?._id === order.branchId && (
+                    {order.status === 'delivered' && user?.role === 'branch' && order.branch._id === user.branchId && (
                       <Button
                         variant="secondary"
                         size="sm"
-                        onClick={() => onReturn(order, order.items[0].itemId)}
+                        onClick={() => openReturnModal(order, order.items[0].itemId)}
                         className="bg-red-500 hover:bg-red-600 text-white rounded-full px-3 py-1 text-xs"
-                        disabled={submitting === order.id}
-                        aria-label={isRtl ? `إرجاع الطلب ${order.orderNumber}` : `Return order ${order.orderNumber}`}
+                        disabled={submitting === 'return'}
+                        aria-label={t('orders.return_order', { orderNumber: order.orderNumber })}
                       >
-                        {isRtl ? 'إرجاع' : 'Return'}
+                        {t('orders.return')}
                       </Button>
                     )}
                   </div>

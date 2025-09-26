@@ -1,17 +1,17 @@
 import React, { memo } from 'react';
 import { Button } from '../UI/Button';
-import { Eye, Clock, Package, Check, AlertCircle, ChefHat } from 'lucide-react';
-import { Order, OrderStatus } from '../../types/types';
+import { Eye, Truck, Clock, Package, Check, AlertCircle } from 'lucide-react';
+import { Order } from '../../types/types';
 import { motion } from 'framer-motion';
 
 const STATUS_COLORS = {
-  [OrderStatus.Pending]: { color: 'bg-yellow-100 text-yellow-800', icon: Clock, label: 'pending', progress: 0 },
-  [OrderStatus.Approved]: { color: 'bg-teal-100 text-teal-800', icon: Check, label: 'approved', progress: 25 },
-  [OrderStatus.InProduction]: { color: 'bg-purple-100 text-purple-800', icon: Package, label: 'in_production', progress: 50 },
-  [OrderStatus.Completed]: { color: 'bg-green-100 text-green-800', icon: Check, label: 'completed', progress: 75 },
-  [OrderStatus.InTransit]: { color: 'bg-blue-100 text-blue-800', icon: Package, label: 'in_transit', progress: 90 },
-  [OrderStatus.Delivered]: { color: 'bg-gray-100 text-gray-800', icon: Check, label: 'delivered', progress: 100 },
-  [OrderStatus.Cancelled]: { color: 'bg-red-100 text-red-800', icon: AlertCircle, label: 'cancelled', progress: 0 },
+  pending: { color: 'bg-yellow-100 text-yellow-800', icon: Clock, label: 'pending', progress: 0 },
+  approved: { color: 'bg-teal-100 text-teal-800', icon: Check, label: 'approved', progress: 25 },
+  in_production: { color: 'bg-purple-100 text-purple-800', icon: Package, label: 'in_production', progress: 50 },
+  completed: { color: 'bg-green-100 text-green-800', icon: Check, label: 'completed', progress: 75 },
+  in_transit: { color: 'bg-blue-100 text-blue-800', icon: Truck, label: 'in_transit', progress: 90 },
+  delivered: { color: 'bg-gray-100 text-gray-800', icon: Check, label: 'delivered', progress: 100 },
+  cancelled: { color: 'bg-red-100 text-red-800', icon: AlertCircle, label: 'cancelled', progress: 0 },
 };
 
 const getFirstTwoWords = (name: string | undefined | null): string => {
@@ -26,18 +26,16 @@ interface Props {
   isRtl: boolean;
   calculateAdjustedTotal: (order: Order) => string;
   calculateTotalQuantity: (order: Order) => number;
-  onView: (order: Order) => void;
-  onAssign: (order: Order) => void;
-  onApprove: (order: Order) => void;
-  onReject: (order: Order) => void;
-  onReturn: (order: Order, itemId: string) => void;
-  userRole: string | undefined;
+  viewOrder: (order: Order) => void;
+  openConfirmDeliveryModal: (order: Order) => void;
+  openReturnModal: (order: Order, itemId: string) => void;
+  user: any;
   submitting: string | null;
 }
 
 const OrderCard: React.FC<Props> = memo(
-  ({ order, t, isRtl, calculateAdjustedTotal, calculateTotalQuantity, onView, onAssign, onApprove, onReject, onReturn, userRole, submitting }) => {
-    const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS[OrderStatus.Pending];
+  ({ order, t, isRtl, calculateAdjustedTotal, calculateTotalQuantity, viewOrder, openConfirmDeliveryModal, openReturnModal, user, submitting }) => {
+    const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS.pending;
     const StatusIcon = statusInfo.icon;
 
     return (
@@ -63,50 +61,46 @@ const OrderCard: React.FC<Props> = memo(
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-2 gap-3">
               <div>
-                <p className="text-xs text-gray-500">{isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}</p>
+                <p className="text-xs text-gray-500">{t('orders.total_quantity')}</p>
                 <p className="text-sm font-medium text-gray-800">
-                  {isRtl ? `${calculateTotalQuantity(order)} عنصر` : `${calculateTotalQuantity(order)} items`}
+                  {isRtl ? `${calculateTotalQuantity(order)} ${t('orders.items')}` : `${calculateTotalQuantity(order)} ${t('orders.items')}`}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-gray-500">{isRtl ? 'إجمالي المبلغ' : 'Total Amount'}</p>
+                <p className="text-xs text-gray-500">{t('orders.total_amount')}</p>
                 <p className="text-sm font-semibold text-teal-600">{calculateAdjustedTotal(order)}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-500">{isRtl ? 'التاريخ' : 'Date'}</p>
+                <p className="text-xs text-gray-500">{t('orders.date')}</p>
                 <p className="text-sm font-medium text-gray-800">{order.date}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">{isRtl ? 'الفرع' : 'Branch'}</p>
-                <p className="text-sm font-medium text-gray-800">{order.branch.displayName}</p>
               </div>
             </div>
             <div className="mt-2 p-2 bg-gray-50 rounded-md">
-              <p className="text-xs font-medium text-gray-800">{isRtl ? 'المنتجات' : 'Products'}:</p>
+              <p className="text-xs font-medium text-gray-800">{t('orders.products')}:</p>
               <p className="text-sm text-gray-700">
                 {order.items.map(item => `(${item.quantity} ${t(`units.${item.unit || 'unit'}`)} × ${getFirstTwoWords(item.productName)})`).join(' + ')}
               </p>
             </div>
             {order.returns?.length > 0 && (
               <div className="mt-2 p-2 bg-amber-50 rounded-md">
-                <p className="text-xs font-medium text-amber-800">{isRtl ? 'المرتجعات' : 'Returns'}:</p>
+                <p className="text-xs font-medium text-amber-800">{t('orders.returns')}:</p>
                 {order.returns.map((r, i) => (
                   <p key={i} className="text-xs text-amber-700">
                     {isRtl
-                      ? `إرجاع ${r.items
-                          .map(item => `${item.quantity} ${t(`units.${item.unit || 'unit'}`)} × ${item.productName} (${t(`orders.return_reasons_${item.reason}`)})`)
+                      ? `${t('orders.return')} ${r.items
+                          .map(item => `${item.quantity} ${t(`units.${item.unit || 'unit'}`)} × ${getFirstTwoWords(item.productName)} (${t(`orders.return_reasons_${item.reason}`)})`)
                           .join(', ')} - ${t(`orders.return_status_${r.status}`)}`
-                      : `Return ${r.items
-                          .map(item => `${item.quantity} ${t(`units.${item.unit || 'unit'}`)} × ${item.productName} (${t(`orders.return_reasons_${item.reason}`)})`)
+                      : `${t('orders.return')} ${r.items
+                          .map(item => `${item.quantity} ${t(`units.${item.unit || 'unit'}`)} × ${getFirstTwoWords(item.productName)} (${t(`orders.return_reasons_${item.reason}`)})`)
                           .join(', ')} - ${t(`orders.return_status_${r.status}`)}`}
                   </p>
                 ))}
               </div>
             )}
-            {order.displayNotes && (
+            {order.notes && (
               <div className="mt-2 p-2 bg-amber-50 rounded-md">
                 <p className="text-xs text-amber-800">
-                  <strong>{isRtl ? 'ملاحظات' : 'Notes'}:</strong> {order.displayNotes}
+                  <strong>{t('orders.notes')}:</strong> {order.notes}
                 </p>
               </div>
             )}
@@ -114,58 +108,34 @@ const OrderCard: React.FC<Props> = memo(
               <Button
                 variant="primary"
                 size="sm"
-                onClick={() => onView(order)}
+                onClick={() => viewOrder(order)}
                 className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-3 py-1 text-xs"
-                aria-label={isRtl ? `عرض الطلب ${order.orderNumber}` : `View order ${order.orderNumber}`}
+                aria-label={t('orders.view_order', { orderNumber: order.orderNumber })}
               >
-                <Eye className="w-4 h-4" /> {isRtl ? 'عرض' : 'View'}
+                <Eye className="w-4 h-4" /> {t('orders.view')}
               </Button>
-              {userRole === 'admin' && order.status === OrderStatus.Pending && (
-                <>
-                  <Button
-                    variant="success"
-                    size="sm"
-                    onClick={() => onApprove(order)}
-                    className="bg-green-500 hover:bg-green-600 text-white rounded-full px-3 py-1 text-xs"
-                    disabled={submitting === order.id}
-                    aria-label={isRtl ? `الموافقة على الطلب ${order.orderNumber}` : `Approve order ${order.orderNumber}`}
-                  >
-                    <Check className="w-4 h-4" /> {isRtl ? 'الموافقة' : 'Approve'}
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => onReject(order)}
-                    className="bg-red-500 hover:bg-red-600 text-white rounded-full px-3 py-1 text-xs"
-                    disabled={submitting === order.id}
-                    aria-label={isRtl ? `رفض الطلب ${order.orderNumber}` : `Reject order ${order.orderNumber}`}
-                  >
-                    <AlertCircle className="w-4 h-4" /> {isRtl ? 'رفض' : 'Reject'}
-                  </Button>
-                </>
-              )}
-              {userRole === 'production' && [OrderStatus.Approved, OrderStatus.InProduction].includes(order.status) && (
+              {order.status === 'in_transit' && user?.role === 'branch' && order.branch?._id === user.branchId && (
                 <Button
-                  variant="secondary"
+                  variant="success"
                   size="sm"
-                  onClick={() => onAssign(order)}
-                  className="bg-purple-500 hover:bg-purple-600 text-white rounded-full px-3 py-1 text-xs"
+                  onClick={() => openConfirmDeliveryModal(order)}
+                  className="bg-green-500 hover:bg-green-600 text-white rounded-full px-3 py-1 text-xs"
                   disabled={submitting === order.id}
-                  aria-label={isRtl ? `تعيين الطهاة للطلب ${order.orderNumber}` : `Assign chefs to order ${order.orderNumber}`}
+                  aria-label={t('orders.confirm_delivery', { orderNumber: order.orderNumber })}
                 >
-                  <ChefHat className="w-4 h-4" /> {isRtl ? 'تعيين' : 'Assign'}
+                  {t('orders.confirm_delivery')}
                 </Button>
               )}
-              {order.status === OrderStatus.Delivered && userRole === 'branch' && order.branch?._id === order.branchId && (
+              {order.status === 'delivered' && user?.role === 'branch' && order.branch?._id === user.branchId && (
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => onReturn(order, order.items[0].itemId)}
+                  onClick={() => openReturnModal(order, order.items[0].itemId)}
                   className="bg-red-500 hover:bg-red-600 text-white rounded-full px-3 py-1 text-xs"
-                  disabled={submitting === order.id}
-                  aria-label={isRtl ? `إرجاع الطلب ${order.orderNumber}` : `Return order ${order.orderNumber}`}
+                  disabled={submitting === 'return'}
+                  aria-label={t('orders.return_order', { orderNumber: order.orderNumber })}
                 >
-                  {isRtl ? 'إرجاع' : 'Return'}
+                  {t('orders.return')}
                 </Button>
               )}
             </div>
