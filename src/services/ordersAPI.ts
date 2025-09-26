@@ -1,121 +1,113 @@
-import axios from 'axios';
-import { toast } from 'react-toastify';
+import { api, isValidObjectId } from './api'; // استيراد الكائن api ودالة isValidObjectId
 
 const isRtl = localStorage.getItem('language') === 'ar';
 
-const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
-
 export const ordersAPI = {
-  getAll: async (query: {
-    status?: string;
-    branch?: string;
-    priority?: string;
-    page?: number;
-    limit?: number;
-    lang?: string;
-  } = {}) => {
-    console.log(`[${new Date().toISOString()}] ordersAPI.getAll - Sending:`, query);
-    try {
-      const response = await axios.get('/orders', {
-        baseURL: process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api',
-        params: { ...query, lang: query.lang || (isRtl ? 'ar' : 'en') },
-      });
-      console.log(`[${new Date().toISOString()}] ordersAPI.getAll - Response:`, response.data);
-      return response.data;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] ordersAPI.getAll - Error:`, {
-        message: error.message,
-        status: error.response?.status,
-        data: error.response?.data,
-        url: error.config?.url,
-      });
-      const message = error.response?.data?.message || (isRtl ? 'فشل في جلب الطلبات' : 'Failed to fetch orders');
-      toast.error(message, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
-      throw new Error(message);
-    }
-  },
-
-  getOrderById: async (id: string, lang: string = isRtl ? 'ar' : 'en') => {
-    console.log(`[${new Date().toISOString()}] ordersAPI.getOrderById - Sending:`, { id });
-    if (!isValidObjectId(id)) {
-      const message = isRtl ? 'معرف الطلب غير صالح' : 'Invalid order ID';
-      console.error(`[${new Date().toISOString()}] ordersAPI.getOrderById - Invalid ID:`, { id });
-      toast.error(message, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
-      throw new Error(message);
-    }
-    try {
-      const response = await axios.get(`/orders/${id}`, {
-        baseURL: process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api',
-        params: { lang },
-      });
-      console.log(`[${new Date().toISOString()}] ordersAPI.getOrderById - Response:`, response.data);
-      return response.data;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] ordersAPI.getOrderById - Error:`, {
-        message: error.message,
-        status: error.response?.status,
-        data: error.response?.data,
-        url: error.config?.url,
-      });
-      const message = error.response?.data?.message || (isRtl ? 'فشل في جلب الطلب' : 'Failed to fetch order');
-      toast.error(message, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
-      throw new Error(message);
-    }
-  },
-
-  createOrder: async (data: {
+  create: async (orderData: {
     orderNumber: string;
     branchId: string;
-    items: Array<{
-      product: string;
-      quantity: number;
-      price: number;
-    }>;
-    status?: string;
+    items: Array<{ productId: string; quantity: number; price: number; department?: { _id: string } }>;
+    status: string;
     notes?: string;
+    notesEn?: string;
     priority?: string;
-    lang?: string;
+    requestedDeliveryDate: string;
   }) => {
-    console.log(`[${new Date().toISOString()}] ordersAPI.createOrder - Sending:`, data);
-    if (
-      !data.orderNumber ||
-      !isValidObjectId(data.branchId) ||
-      !data.items?.length ||
-      data.items.some((item) => !isValidObjectId(item.product) || item.quantity < 1 || item.price < 0)
-    ) {
-      console.error(`[${new Date().toISOString()}] ordersAPI.createOrder - Invalid data:`, data);
-      const message = isRtl ? 'بيانات الطلب غير صالحة' : 'Invalid order data';
-      toast.error(message, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
-      throw new Error(message);
+    if (!isValidObjectId(orderData.branchId)) {
+      console.error(`[${new Date().toISOString()}] ordersAPI.create - Invalid branchId:`, orderData.branchId);
+      throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
     }
-    try {
-      const response = await axios.post('/orders', {
-        orderNumber: data.orderNumber,
-        branchId: data.branchId,
-        items: data.items,
-        status: data.status || 'pending',
-        notes: data.notes?.trim(),
-        priority: data.priority || 'medium',
-        lang: data.lang || (isRtl ? 'ar' : 'en'),
-      }, {
-        baseURL: process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api',
-      });
-      console.log(`[${new Date().toISOString()}] ordersAPI.createOrder - Response:`, response.data);
-      toast.success(isRtl ? 'تم إنشاء الطلب بنجاح' : 'Order created successfully', {
-        position: isRtl ? 'top-right' : 'top-left',
-        autoClose: 3000,
-      });
-      return response.data;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] ordersAPI.createOrder - Error:`, {
-        message: error.message,
-        status: error.response?.status,
-        data: error.response?.data,
-        url: error.config?.url,
-      });
-      const message = error.response?.data?.message || (isRtl ? 'فشل في إنشاء الطلب' : 'Failed to create order');
-      toast.error(message, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
-      throw new Error(message);
+    const response = await api.post('/orders', {
+      orderNumber: orderData.orderNumber.trim(),
+      branchId: orderData.branchId,
+      items: orderData.items.map(item => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        price: item.price,
+        department: item.department,
+      })),
+      status: orderData.status.trim(),
+      notes: orderData.notes?.trim(),
+      notesEn: orderData.notesEn?.trim(),
+      priority: orderData.priority?.trim(),
+      requestedDeliveryDate: orderData.requestedDeliveryDate,
+    });
+    console.log(`[${new Date().toISOString()}] ordersAPI.create - Response:`, response);
+    return response;
+  },
+
+  getAll: async (params: { status?: string; branch?: string; page?: number; limit?: number; department?: string; search?: string; sortBy?: string; sortOrder?: 'asc' | 'desc' } = {}) => {
+    if (params.branch && !isValidObjectId(params.branch)) {
+      console.error(`[${new Date().toISOString()}] ordersAPI.getAll - Invalid branch ID:`, params.branch);
+      throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
     }
+    if (params.department && !isValidObjectId(params.department)) {
+      console.error(`[${new Date().toISOString()}] ordersAPI.getAll - Invalid department ID:`, params.department);
+      throw new Error(isRtl ? 'معرف القسم غير صالح' : 'Invalid department ID');
+    }
+    const response = await api.get('/orders', { params });
+    console.log(`[${new Date().toISOString()}] ordersAPI.getAll - Response:`, response);
+    return response;
+  },
+
+  getById: async (id: string) => {
+    if (!isValidObjectId(id)) {
+      console.error(`[${new Date().toISOString()}] ordersAPI.getById - Invalid order ID:`, id);
+      throw new Error(isRtl ? 'معرف الطلب غير صالح' : 'Invalid order ID');
+    }
+    const response = await api.get(`/orders/${id}`);
+    console.log(`[${new Date().toISOString()}] ordersAPI.getById - Response:`, response);
+    return response;
+  },
+
+  updateStatus: async (注文Id: string, data: { status: string; notes?: string; notesEn?: string }) => {
+    if (!isValidObjectId(id)) {
+      console.error(`[${new Date().toISOString()}] ordersAPI.updateStatus - Invalid order ID:`, id);
+      throw new Error(isRtl ? 'معرف الطلب غير صالح' : 'Invalid order ID');
+    }
+    const response = await api.patch(`/orders/${id}/status`, {
+      status: data.status.trim(),
+      notes: data.notes?.trim(),
+      notesEn: data.notesEn?.trim(),
+    });
+    console.log(`[${new Date().toISOString()}] ordersAPI.updateStatus - Response:`, response);
+    return response;
+  },
+
+  updateChefItem: async (orderId: string, data: { taskId: string; status: string }) => {
+    if (!isValidObjectId(orderId) || !isValidObjectId(data.taskId)) {
+      console.error(`[${new Date().toISOString()}] ordersAPI.updateChefItem - Invalid order ID or task ID:`, { orderId, taskId: data.taskId });
+      throw new Error(isRtl ? 'معرف الطلب أو المهمة غير صالح' : 'Invalid order ID or task ID');
+    }
+    const response = await api.patch(`/orders/${orderId}/tasks/${data.taskId}/status`, {
+      status: data.status.trim(),
+    });
+    console.log(`[${new Date().toISOString()}] ordersAPI.updateChefItem - Response:`, response);
+    return response;
+  },
+
+  assignChef: async (orderId: string, data: { items: Array<{ itemId: string; assignedTo: string }>; notes?: string; notesEn?: string }) => {
+    if (!isValidObjectId(orderId) || data.items.some(item => !isValidObjectId(item.itemId) || !isValidObjectId(item.assignedTo))) {
+      console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - Invalid data:`, { orderId, data });
+      throw new Error(isRtl ? 'معرف الطلب، العنصر، أو الشيف غير صالح' : 'Invalid order ID, item ID, or chef ID');
+    }
+    const response = await api.patch(`/orders/${orderId}/assign`, {
+      items: data.items,
+      notes: data.notes?.trim(),
+      notesEn: data.notesEn?.trim(),
+      timestamp: new Date().toISOString(),
+    });
+    console.log(`[${new Date().toISOString()}] ordersAPI.assignChef - Response:`, response);
+    return response;
+  },
+
+  confirmDelivery: async (orderId: string) => {
+    if (!isValidObjectId(orderId)) {
+      console.error(`[${new Date().toISOString()}] ordersAPI.confirmDelivery - Invalid order ID:`, orderId);
+      throw new Error(isRtl ? 'معرف الطلب غير صالح' : 'Invalid order ID');
+    }
+    const response = await api.patch(`/orders/${orderId}/confirm-delivery`, {});
+    console.log(`[${new Date().toISOString()}] ordersAPI.confirmDelivery - Response:`, response);
+    return response;
   },
 };
