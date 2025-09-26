@@ -52,7 +52,7 @@ interface Action {
   type: string;
   payload?: any;
   orderId?: string;
-  status?: Order['status'];
+  status?: Order['status'] | ReturnStatus;
   returnId?: string;
   items?: any[];
   by?: 'date' | 'totalAmount' | 'priority';
@@ -599,7 +599,7 @@ export const Orders: React.FC = () => {
         console.warn('Invalid return status update data:', { orderId, returnId, status });
         return;
       }
-      dispatch({ type: 'UPDATE_RETURN_STATUS', orderId, returnId, status });
+      dispatch({ type: 'UPDATE_RETURN_STATUS', orderId, returnId, status: status as ReturnStatus });
       toast.info(isRtl ? `تم تحديث حالة الإرجاع إلى: ${{
         [ReturnStatus.PendingApproval]: 'قيد الانتظار',
         [ReturnStatus.Approved]: 'تم الموافقة',
