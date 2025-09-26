@@ -1,3 +1,4 @@
+
 import React, { memo, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
@@ -35,6 +36,9 @@ interface OrderTableProps {
   submitting: string | null;
   isRtl: boolean;
   startIndex: number;
+  user: any;
+  onNavigateToDetails: (orderId: string) => void;
+  t: (key: string) => string;
 }
 
 const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
@@ -73,12 +77,10 @@ const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
 );
 
 const OrderTable: React.FC<OrderTableProps> = memo(
-  ({ orders, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, updateOrderStatus, openAssignModal, submitting, isRtl, startIndex }) => {
-    const { user } = useAuth();
-
+  ({ orders, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, updateOrderStatus, openAssignModal, submitting, isRtl, startIndex, user, onNavigateToDetails, t }) => {
     const formatProducts = useMemo(() => (order: Order) => {
       return order.items
-        .map(item => `(${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.productName})`)
+        .map(item => `(${item.quantity.toLocaleString(isRtl ? 'ar-SA' : 'en-US')} ${translateUnit(item.unit, isRtl)} ${item.displayName || item.productName})`)
         .join(' + ');
     }, [isRtl, translateUnit]);
 
@@ -89,38 +91,37 @@ const OrderTable: React.FC<OrderTableProps> = memo(
         transition={{ duration: 0.3 }}
         className="overflow-x-auto rounded-md shadow-md border border-gray-100 bg-white"
         role="table"
-        aria-label={isRtl ? 'جدول الطلبات' : 'Orders Table'}
+        aria-label={t('orders.table_label')}
       >
         <table className="min-w-full divide-y divide-gray-100 text-xs">
           <thead className="bg-gray-50">
             <tr className={isRtl ? 'flex-row-reverse' : ''}>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[40px]">
-                {isRtl ? 'رقم' : 'No.'}
+                {t('orders.number')}
               </th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">
-                {isRtl ? 'رقم الطلب' : 'Order Number'}
+                {t('orders.order_number')}
               </th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">
-                {isRtl ? 'الفرع' : 'Branch'}
+                {t('orders.branch')}
               </th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">
-                {isRtl ? 'الحالة' : 'Status'}
+                {t('orders.status')}
               </th>
-             
-              <th className="px-2 py-2 font-medium text-gray-600  tracking-wider text-center ">
-                {isRtl ? 'المنتجات' : 'Products'}
+              <th className="px-2 py-2 font-medium text-gray-600 tracking-wider text-center">
+                {t('orders.products')}
               </th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">
-                {isRtl ? 'إجمالي المبلغ' : 'Total Amount'}
+                {t('orders.total_amount')}
               </th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">
-                {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
+                {t('orders.total_quantity')}
               </th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">
-                {isRtl ? 'التاريخ' : 'Date'}
+                {t('orders.date')}
               </th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[120px]">
-                {isRtl ? 'الإجراءات' : 'Actions'}
+                {t('orders.actions')}
               </th>
             </tr>
           </thead>
@@ -128,7 +129,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
             {orders.length === 0 ? (
               <tr>
                 <td colSpan={10} className="text-center py-4 text-gray-500 text-xs">
-                  {isRtl ? 'لا توجد طلبات' : 'No orders found'}
+                  {t('orders.no_orders')}
                 </td>
               </tr>
             ) : (
@@ -139,23 +140,18 @@ const OrderTable: React.FC<OrderTableProps> = memo(
 
                 return (
                   <tr key={order.id} className={`hover:bg-gray-50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
-                    <td className="px-2 py-2 text-gray-600 text-center whitespace-nowrap">{startIndex + index}</td>
-                    <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[100px]">{order.orderNumber}</td>
-                    <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[100px]">{order.branchName}</td>
+                    <td className="px-2 py-2 text-gray-600 text-center whitespace-nowrap">{(startIndex + index).toLocaleString(isRtl ? 'ar-SA' : 'en-US')}</td>
+                    <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[100px]">{order.orderNumber.toLocaleString(isRtl ? 'ar-SA' : 'en-US')}</td>
+                    <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[100px]">{order.displayBranchName || order.branchName}</td>
                     <td className="px-2 py-2 text-center whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium items-center gap-1 ${statusInfo.color} ${isRtl ? 'flex-row-reverse' : ''}`}>
                         <StatusIcon className="w-4 h-4" />
-                        {isRtl
-                          ? { pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[order.status]
-                          : statusInfo.label}
+                        {t(`orders.status_${order.status}`)}
                       </span>
                     </td>
-                  
-                    <td className="px-2 py-2 text-gray-600 text-center">
-                      {formatProducts(order)}
-                    </td>
+                    <td className="px-2 py-2 text-gray-600 text-center">{formatProducts(order)}</td>
                     <td className="px-2 py-2 text-gray-600 text-center truncate">{calculateAdjustedTotal(order)}</td>
-                    <td className="px-2 py-2 text-gray-600 text-center">{calculateTotalQuantity(order)}</td>
+                    <td className="px-2 py-2 text-gray-600 text-center">{calculateTotalQuantity(order).toLocaleString(isRtl ? 'ar-SA' : 'en-US')}</td>
                     <td className="px-2 py-2 text-gray-600 text-center truncate">{order.date}</td>
                     <td className="px-2 py-2 text-center">
                       <div className={`flex gap-1 flex-wrap ${isRtl ? 'justify-end' : 'justify-start'}`}>
@@ -164,9 +160,9 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                             variant="primary"
                             size="xs"
                             className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1 text-xs"
-                            aria-label={isRtl ? `عرض طلب رقم ${order.orderNumber}` : `View order #${order.orderNumber}`}
+                            aria-label={t('orders.view_order', { orderNumber: order.orderNumber })}
                           >
-                            {isRtl ? 'عرض' : 'View'}
+                            {t('orders.view')}
                           </Button>
                         </Link>
                         {user?.role === 'production' && order.status === 'pending' && (
@@ -177,9 +173,9 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                               onClick={() => updateOrderStatus(order.id, 'approved')}
                               className="bg-green-500 hover:bg-green-600 text-white rounded-md px-2 py-1 text-xs"
                               disabled={submitting === order.id}
-                              aria-label={isRtl ? `الموافقة على طلب رقم ${order.orderNumber}` : `Approve order #${order.orderNumber}`}
+                              aria-label={t('orders.approve_order', { orderNumber: order.orderNumber })}
                             >
-                              {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : (isRtl ? 'موافقة' : 'Approve')}
+                              {submitting === order.id ? t('common.loading') : t('orders.approve')}
                             </Button>
                             <Button
                               variant="danger"
@@ -187,9 +183,9 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                               onClick={() => updateOrderStatus(order.id, 'cancelled')}
                               className="bg-red-500 hover:bg-red-600 text-white rounded-md px-2 py-1 text-xs"
                               disabled={submitting === order.id}
-                              aria-label={isRtl ? `إلغاء طلب رقم ${order.orderNumber}` : `Cancel order #${order.orderNumber}`}
+                              aria-label={t('orders.cancel_order', { orderNumber: order.orderNumber })}
                             >
-                              {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : (isRtl ? 'إلغاء' : 'Cancel')}
+                              {submitting === order.id ? t('common.loading') : t('orders.cancel')}
                             </Button>
                           </>
                         )}
@@ -200,9 +196,9 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                             onClick={() => openAssignModal(order)}
                             className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1 text-xs"
                             disabled={submitting === order.id}
-                            aria-label={isRtl ? `تعيين طلب رقم ${order.orderNumber}` : `Assign order #${order.orderNumber}`}
+                            aria-label={t('orders.assign_order', { orderNumber: order.orderNumber })}
                           >
-                            {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : (isRtl ? 'توزيع' : 'Assign')}
+                            {submitting === order.id ? t('common.loading') : t('orders.assign')}
                           </Button>
                         )}
                         {user?.role === 'production' && order.status === 'completed' && (
@@ -212,9 +208,9 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                             onClick={() => updateOrderStatus(order.id, 'in_transit')}
                             className="bg-blue-500 hover:bg-blue-600 text-white rounded-md px-2 py-1 text-xs"
                             disabled={submitting === order.id}
-                            aria-label={isRtl ? `شحن طلب رقم ${order.orderNumber}` : `Ship order #${order.orderNumber}`}
+                            aria-label={t('orders.ship_order', { orderNumber: order.orderNumber })}
                           >
-                            {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : (isRtl ? 'شحن' : 'Ship')}
+                            {submitting === order.id ? t('common.loading') : t('orders.ship')}
                           </Button>
                         )}
                       </div>
