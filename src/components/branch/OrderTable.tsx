@@ -2,6 +2,8 @@ import React, { memo } from 'react';
 import { Button } from '../UI/Button';
 import { Eye, Truck } from 'lucide-react';
 import { Order } from '../../types/types';
+import { motion } from 'framer-motion';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const STATUS_COLORS = {
   pending: { color: 'bg-yellow-100 text-yellow-800', label: 'pending' },
@@ -35,18 +37,42 @@ interface Props {
 
 const OrderTable: React.FC<Props> = memo(
   ({ orders, t, isRtl, calculateAdjustedTotal, calculateTotalQuantity, startIndex, viewOrder, openConfirmDeliveryModal, openReturnModal, user, submitting }) => (
-    <div className="overflow-x-auto rounded-lg shadow-md border border-gray-200">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+      className="overflow-x-auto rounded-lg shadow-md border border-gray-200"
+    >
       <table className="min-w-full divide-y divide-gray-200 table-auto bg-white">
         <thead className="bg-gray-50">
           <tr>
-            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[5%]">{isRtl ? '#' : '#'}</th>
-            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">{isRtl ? 'رقم الطلب' : 'Order Number'}</th>
-            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">{isRtl ? 'الحالة' : 'Status'}</th>
-            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[30%]">{isRtl ? 'المنتجات' : 'Products'}</th>
-            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">{isRtl ? 'إجمالي المبلغ' : 'Total Amount'}</th>
-            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[10%]">{isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}</th>
-            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">{isRtl ? 'التاريخ' : 'Date'}</th>
-            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">{isRtl ? 'الإجراءات' : 'Actions'}</th>
+            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[5%]">
+              {isRtl ? '#' : '#'}
+            </th>
+            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">
+              {isRtl ? 'رقم الطلب' : 'Order Number'}
+            </th>
+            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">
+              {isRtl ? 'الحالة' : 'Status'}
+            </th>
+            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[20%]">
+              {isRtl ? 'المنتجات' : 'Products'}
+            </th>
+            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">
+              {isRtl ? 'إجمالي المبلغ' : 'Total Amount'}
+            </th>
+            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[10%]">
+              {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
+            </th>
+            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">
+              {isRtl ? 'التاريخ' : 'Date'}
+            </th>
+            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">
+              {isRtl ? 'الفرع' : 'Branch'}
+            </th>
+            <th className="px-4 py-3 text-sm font-medium text-gray-600 uppercase tracking-wider text-right w-[15%]">
+              {isRtl ? 'الإجراءات' : 'Actions'}
+            </th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -58,58 +84,51 @@ const OrderTable: React.FC<Props> = memo(
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{order.orderNumber}</td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-right">
                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
-                    {isRtl
-                      ? order.status === 'pending'
-                        ? 'معلق'
-                        : order.status === 'approved'
-                        ? 'معتمد'
-                        : order.status === 'in_production'
-                        ? 'قيد الإنتاج'
-                        : order.status === 'completed'
-                        ? 'مكتمل'
-                        : order.status === 'in_transit'
-                        ? 'في النقل'
-                        : order.status === 'delivered'
-                        ? 'تم التسليم'
-                        : 'ملغى'
-                      : t(`orders.status_${statusInfo.label}`)}
+                    {t(`orders.status_${statusInfo.label}`)}
                   </span>
                 </td>
                 <td className="px-4 py-2 text-sm text-gray-600 text-right truncate">
-                  {order.items.map(item => `(${item.quantity} ${t(`${item.unit || 'unit'}`)}  ${getFirstTwoWords(item.productName)})`).join(' + ')}
+                  {order.items
+                    .map(item => `(${item.quantity} ${t(`${item.unit || 'unit'}`)} ${getFirstTwoWords(item.productName)})`)
+                    .join(' + ')}
                 </td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{calculateAdjustedTotal(order)}</td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{calculateTotalQuantity(order)}</td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{order.date}</td>
+                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">
+                  {order.branch?.displayName || (isRtl ? 'غير معروف' : 'Unknown')}
+                </td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-right">
-                  <div className="flex gap-2 justify-end">
+                  <div className={`flex gap-2 ${isRtl ? 'justify-end' : 'justify-start'}`}>
                     <Button
                       variant="primary"
                       size="sm"
                       onClick={() => viewOrder(order)}
-                      className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-3 py-1 text-xs"
+                      className="bg-blue-500 hover:bg-blue-600 text-white rounded-lg px-3 py-1 text-xs shadow-sm"
                       aria-label={isRtl ? `عرض الطلب ${order.orderNumber}` : `View order ${order.orderNumber}`}
                     >
+                      <Eye className="w-4 h-4 mr-1" />
                       {isRtl ? 'عرض' : 'View'}
                     </Button>
-                    {order.status === 'in_transit' && user?.role === 'branch' && order.branch._id === user.branchId && (
+                    {order.status === 'in_transit' && user?.role === 'branch' && order.branch?._id === user.branchId && (
                       <Button
                         variant="success"
                         size="sm"
                         onClick={() => openConfirmDeliveryModal(order)}
-                        className="bg-green-500 hover:bg-green-600 text-white rounded-full px-3 py-1 text-xs"
+                        className="bg-green-500 hover:bg-green-600 text-white rounded-lg px-3 py-1 text-xs shadow-sm"
                         disabled={submitting === order.id}
                         aria-label={isRtl ? `تأكيد تسليم الطلب ${order.orderNumber}` : `Confirm delivery of order ${order.orderNumber}`}
                       >
+                        <Truck className="w-4 h-4 mr-1" />
                         {isRtl ? 'تأكيد التسليم' : 'Confirm Delivery'}
                       </Button>
                     )}
-                    {order.status === 'delivered' && user?.role === 'branch' && order.branch._id === user.branchId && (
+                    {order.status === 'delivered' && user?.role === 'branch' && order.branch?._id === user.branchId && (
                       <Button
                         variant="secondary"
                         size="sm"
                         onClick={() => openReturnModal(order, order.items[0].itemId)}
-                        className="bg-red-500 hover:bg-red-600 text-white rounded-full px-3 py-1 text-xs"
+                        className="bg-red-500 hover:bg-red-600 text-white rounded-lg px-3 py-1 text-xs shadow-sm"
                         disabled={submitting === 'return'}
                         aria-label={isRtl ? `إرجاع الطلب ${order.orderNumber}` : `Return order ${order.orderNumber}`}
                       >
@@ -123,7 +142,7 @@ const OrderTable: React.FC<Props> = memo(
           })}
         </tbody>
       </table>
-    </div>
+    </motion.div>
   )
 );
 
