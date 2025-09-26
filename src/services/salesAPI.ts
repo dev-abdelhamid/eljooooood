@@ -1,97 +1,9 @@
 import axios from 'axios';
 import axiosRetry from 'axios-retry';
 import { toast } from 'react-toastify';
+import api from './api'; // استورد الـ api instance الأساسي
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
-
-const salesAxios = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 30000,
-  headers: { 'Content-Type': 'application/json' },
-});
-
-axiosRetry(salesAxios, { retries: 3, retryDelay: (retryCount) => retryCount * 1000 });
-
-salesAxios.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    console.log(`[${new Date().toISOString()}] Sales API request:`, {
-      url: config.url,
-      method: config.method,
-      headers: config.headers,
-    });
-    return config;
-  },
-  (error) => {
-    console.error(`[${new Date().toISOString()}] Sales API request error:`, error);
-    return Promise.reject(error);
-  }
-);
-
-salesAxios.interceptors.response.use(
-  (response) => response.data,
-  async (error) => {
-    const originalRequest = error.config;
-    console.error(`[${new Date().toISOString()}] Sales API response error:`, {
-      url: error.config?.url,
-      method: error.config?.method,
-      status: error.response?.status,
-      data: error.response?.data,
-      message: error.message,
-    });
-
-    let message = error.response?.data?.message || 'خطأ غير متوقع';
-    if (error.response?.status === 400) message = error.response?.data?.message || 'بيانات غير صالحة';
-    if (error.response?.status === 403) message = error.response?.data?.message || 'عملية غير مصرح بها';
-    if (error.response?.status === 404) message = error.response?.data?.message || 'المورد غير موجود';
-    if (error.response?.status === 429) message = 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا';
-
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
-      try {
-        const refreshToken = localStorage.getItem('refreshToken');
-        if (!refreshToken) {
-          console.error(`[${new Date().toISOString()}] No refresh token available`);
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          localStorage.removeItem('refreshToken');
-          window.location.href = '/login';
-          toast.error('التوكن منتهي الصلاحية، يرجى تسجيل الدخول مجددًا', {
-            position: 'top-right',
-            autoClose: 3000,
-            pauseOnFocusLoss: true,
-          });
-          return Promise.reject({ message: 'التوكن منتهي الصلاحية ولا يوجد توكن منعش', status: 401 });
-        }
-        const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
-        const { accessToken, refreshToken: newRefreshToken } = response.data;
-        localStorage.setItem('token', accessToken);
-        if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
-        console.log(`[${new Date().toISOString()}] Token refreshed successfully`);
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-        return salesAxios(originalRequest);
-      } catch (refreshError) {
-        console.error(`[${new Date().toISOString()}] Refresh token failed:`, refreshError);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        localStorage.removeItem('refreshToken');
-        window.location.href = '/login';
-        toast.error('فشل تجديد التوكن، يرجى تسجيل الدخول مجددًا', {
-          position: 'top-right',
-          autoClose: 3000,
-          pauseOnFocusLoss: true,
-        });
-        return Promise.reject({ message: 'فشل تجديد التوكن', status: 401 });
-      }
-    }
-
-    toast.error(message, { position: 'top-right', autoClose: 3000, pauseOnFocusLoss: true });
-    return Promise.reject({ message, status: error.response?.status });
-  }
-);
+axiosRetry(api, { retries: 3, retryDelay: (retryCount) => retryCount * 1000 });
 
 export const salesAPI = {
   create: async (saleData: {
@@ -112,7 +24,7 @@ export const salesAPI = {
       throw new Error('معرف المنتج غير صالح');
     }
     try {
-      const response = await salesAxios.post('/sales', {
+      const response = await api.post('/sales', {
         items: saleData.items.map(item => ({
           productId: item.productId,
           quantity: item.quantity,
@@ -140,7 +52,7 @@ export const salesAPI = {
     }
     console.log(`[${new Date().toISOString()}] salesAPI.getAll - Params:`, params);
     try {
-      const response = await salesAxios.get('/sales', { params });
+      const response = await api.get('/sales', { params });
       console.log(`[${new Date().toISOString()}] salesAPI.getAll - Response:`, response);
       if (!response || !Array.isArray(response.sales)) {
         console.error(`[${new Date().toISOString()}] Invalid sales response:`, response);
@@ -160,7 +72,7 @@ export const salesAPI = {
       throw new Error('معرف المبيعة غير صالح');
     }
     try {
-      const response = await salesAxios.get(`/sales/${id}`);
+      const response = await api.get(`/sales/${id}`);
       console.log(`[${new Date().toISOString()}] salesAPI.getById - Response:`, response);
       return response;
     } catch (err: any) {
@@ -177,7 +89,7 @@ export const salesAPI = {
     }
     console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Params:`, params);
     try {
-      const response = await salesAxios.get('/sales/analytics', { params });
+      const response = await api.get('/sales/analytics', { params });
       console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Response:`, response);
       return response;
     } catch (err: any) {
