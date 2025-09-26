@@ -1,7 +1,7 @@
 import axios from 'axios';
 import axiosRetry from 'axios-retry';
 import { toast } from 'react-toastify';
-import api from './api'; // استورد الـ api instance الأساسي
+import api from './api'; // استخدام الـ api instance الأساسي بدل salesAxios
 
 axiosRetry(api, { retries: 3, retryDelay: (retryCount) => retryCount * 1000 });
 
@@ -26,13 +26,13 @@ export const salesAPI = {
     try {
       const response = await api.post('/sales', {
         items: saleData.items.map(item => ({
-          productId: item.productId,
+          product: item.productId, // تغيير productId إلى product
           quantity: item.quantity,
           unitPrice: item.unitPrice,
         })),
         branch: saleData.branch,
         notes: saleData.notes?.trim(),
-        paymentMethod: saleData.paymentMethod?.trim(),
+        paymentMethod: saleData.paymentMethod?.trim() || 'cash', // التأكد من إن paymentMethod تكون cash, credit, أو other
         customerName: saleData.customerName?.trim(),
         customerPhone: saleData.customerPhone?.trim(),
       });
