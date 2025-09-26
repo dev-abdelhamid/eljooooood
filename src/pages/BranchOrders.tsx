@@ -1,3 +1,4 @@
+```typescriptreact
 import React, { useReducer, useEffect, useMemo, useCallback, lazy, Suspense, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -16,7 +17,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
-import { Order, ReturnForm, AssignChefsForm, OrderStatus, ItemStatus, ReturnStatus, Priority, Branch, Chef } from '../types/types';
+import { Order, ReturnForm, AssignChefsForm, OrderStatus, ItemStatus, ReturnStatus, Priority, Branch, Chef } from '../../types/types';
 import { formatDate } from '../utils/formatDate';
 import OrderCardSkeleton from '../components/branch/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/branch/OrderTableSkeleton';
@@ -26,8 +27,8 @@ const OrderTable = lazy(() => import('../components/branch/OrderTable'));
 const OrderCard = lazy(() => import('../components/branch/OrderCard'));
 const Pagination = lazy(() => import('../components/branch/Pagination'));
 const ViewModal = lazy(() => import('../components/branch/ViewModal'));
-const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
-const ActionModal = lazy(() => import('../components/Shared/OrderActions'));
+const AssignChefsModal = lazy(() => import('../components/branch/AssignChefsModal'));
+const ActionModal = lazy(() => import('../components/branch/ActionModal'));
 const ReturnModal = lazy(() => import('../components/branch/ReturnModal'));
 
 // State and Action interfaces
@@ -1344,172 +1345,3 @@ const BranchOrders: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
-                <Select
-                  options={sortOptions.map(opt => ({
-                    value: opt.value,
-                    label: t(`orders.${opt.label}`),
-                  }))}
-                  value={state.sortBy}
-                  onChange={value => dispatch({ type: 'SET_SORT', by: value as 'date' | 'totalAmount' | 'priority' | 'orderNumber', order: state.sortOrder })}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
-                />
-              </div>
-            </div>
-          </Card>
-        </motion.div>
-
-        {state.error && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="mb-6 p-4 bg-red-100 text-red-700 rounded-lg flex items-center gap-2"
-          >
-            <AlertCircle className="w-5 h-5" />
-            {state.error}
-          </motion.div>
-        )}
-
-        {state.socketError && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="mb-6 p-4 bg-yellow-100 text-yellow-700 rounded-lg flex items-center gap-2"
-          >
-            <AlertCircle className="w-5 h-5" />
-            {state.socketError}
-          </motion.div>
-        )}
-
-        {state.loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {state.viewMode === 'card'
-              ? Array.from({ length: ORDERS_PER_PAGE.card }).map((_, index) => (
-                  <OrderCardSkeleton key={index} />
-                ))
-              : <OrderTableSkeleton />}
-          </div>
-        ) : paginatedOrders.length === 0 ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="text-center py-10 text-gray-500"
-          >
-            {isRtl ? 'لا توجد طلبات متاحة' : 'No orders available'}
-          </motion.div>
-        ) : (
-          <AnimatePresence>
-            {state.viewMode === 'card' ? (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
-              >
-                {paginatedOrders.map(order => (
-                  <OrderCard
-                    key={order.id}
-                    order={order}
-                    onView={() => viewOrder(order)}
-                    onAssign={() => openAssignChefsModal(order)}
-                    onApprove={() => openActionModal(order, 'approve')}
-                    onReject={() => openActionModal(order, 'reject')}
-                    onReturn={openReturnModal}
-                    calculateAdjustedTotal={calculateAdjustedTotal}
-                    calculateTotalQuantity={calculateTotalQuantity}
-                    userRole={user?.role}
-                    isRtl={isRtl}
-                    t={t}
-                  />
-                ))}
-              </motion.div>
-            ) : (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="overflow-x-auto"
-              >
-                <OrderTable
-                  orders={paginatedOrders}
-                  onView={viewOrder}
-                  onAssign={openAssignChefsModal}
-                  onApprove={order => openActionModal(order, 'approve')}
-                  onReject={order => openActionModal(order, 'reject')}
-                  onReturn={openReturnModal}
-                  calculateAdjustedTotal={calculateAdjustedTotal}
-                  calculateTotalQuantity={calculateTotalQuantity}
-                  userRole={user?.role}
-                  isRtl={isRtl}
-                  t={t}
-                />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        )}
-
-        {state.totalCount > ORDERS_PER_PAGE[state.viewMode] && (
-          <Suspense fallback={<LoadingSpinner size="sm" />}>
-            <Pagination
-              currentPage={state.currentPage}
-              totalCount={state.totalCount}
-              pageSize={ORDERS_PER_PAGE[state.viewMode]}
-              onPageChange={page => dispatch({ type: 'SET_PAGE', payload: page })}
-              isRtl={isRtl}
-            />
-          </Suspense>
-        )}
-
-        <Suspense fallback={<LoadingSpinner size="lg" />}>
-          <ViewModal
-            isOpen={state.isViewModalOpen}
-            onClose={() => dispatch({ type: 'SET_MODAL', modal: 'view', isOpen: false })}
-            order={state.selectedOrder}
-            isRtl={isRtl}
-            t={t}
-          />
-          <AssignChefsModal
-            isOpen={state.isAssignModalOpen}
-            onClose={() => dispatch({ type: 'SET_MODAL', modal: 'assign', isOpen: false })}
-            order={state.selectedOrder}
-            chefs={state.chefs}
-            assignFormData={state.assignFormData}
-            setAssignFormData={data => dispatch({ type: 'SET_ASSIGN_FORM', payload: data })}
-            onSubmit={handleAssignChefs}
-            submitting={state.submitting}
-            isRtl={isRtl}
-            t={t}
-          />
-          <ActionModal
-            isOpen={state.isActionModalOpen}
-            onClose={() => dispatch({ type: 'SET_MODAL', modal: 'action', isOpen: false })}
-            order={state.selectedOrder}
-            actionType={state.actionType}
-            actionNotes={state.actionNotes}
-            setActionNotes={notes => dispatch({ type: 'SET_ACTION_NOTES', payload: notes })}
-            onSubmit={handleAction}
-            submitting={state.submitting}
-            isRtl={isRtl}
-            t={t}
-          />
-          <ReturnModal
-            isOpen={state.isReturnModalOpen}
-            onClose={() => dispatch({ type: 'SET_MODAL', modal: 'return', isOpen: false })}
-            order={state.selectedOrder}
-            returnFormData={state.returnFormData}
-            setReturnFormData={data => dispatch({ type: 'SET_RETURN_FORM', payload: data })}
-            onSubmit={handleReturnItem}
-            submitting={state.submitting}
-            isRtl={isRtl}
-            t={t}
-          />
-        </Suspense>
-      </Suspense>
-    </div>
-  );
-};
-
-// Display name for debugging
-BranchOrders.displayName = 'BranchOrders';
-
-export default BranchOrders;
