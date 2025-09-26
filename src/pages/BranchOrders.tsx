@@ -18,9 +18,9 @@ import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { Order, ReturnForm, OrderStatus, ItemStatus } from '../components/branch/types';
 import { formatDate } from '../utils/formatDate';
-
-import OrderTableSkeleton from '../components/branch/OrderTableSkeleton';
 import OrderCardSkeleton from '../components/branch/OrderCardSkeleton';
+import OrderTableSkeleton from '../components/branch/OrderTableSkeleton';
+
 // Lazy-loaded components
 const OrderTable = lazy(() => import('../components/branch/OrderTable'));
 const OrderCard = lazy(() => import('../components/branch/OrderCard'));
@@ -235,6 +235,7 @@ const reducer = (state: State, action: Action): State => {
 
 // Constants
 const ORDERS_PER_PAGE = { card: 12, table: 50 };
+
 const statusOptions = [
   { value: '', label: 'all_statuses' },
   { value: OrderStatus.Pending, label: 'pending' },
@@ -245,16 +246,16 @@ const statusOptions = [
   { value: OrderStatus.Delivered, label: 'delivered' },
   { value: OrderStatus.Cancelled, label: 'cancelled' },
 ];
+
 const sortOptions = [
   { value: 'date', label: 'sort_date' },
   { value: 'totalAmount', label: 'sort_total_amount' },
 ];
 
 // Utility functions
-const getFirstTwoWords = (name: string | undefined | null): string => {
-  if (!name) return 'غير معروف';
-  const words = name.trim().split(' ');
-  return words.slice(0, 2).join(' ');
+const getDisplayName = (name: string | undefined | null, nameEn: string | undefined | null, isRtl: boolean): string => {
+  if (isRtl) return name || 'غير معروف';
+  return nameEn || name || 'Unknown';
 };
 
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
@@ -289,6 +290,7 @@ const BranchOrders: React.FC = () => {
       dispatch({ type: 'SET_LOADING', payload: false });
       return;
     }
+
     if (!socket) return;
 
     socket.on('connect', () => {
@@ -311,10 +313,11 @@ const BranchOrders: React.FC = () => {
         id: order._id,
         orderNumber: order.orderNumber || 'N/A',
         branchId: order.branch?._id || 'unknown',
-        branchName: order.branch?.name?.[language] || (isRtl ? 'غير معروف' : 'Unknown'),
         branch: {
           _id: order.branch?._id || 'unknown',
-          name: order.branch?.name?.[language] || (isRtl ? 'غير معروف' : 'Unknown'),
+          name: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+          nameEn: order.branch?.nameEn,
+          displayName: getDisplayName(order.branch?.name, order.branch?.nameEn, isRtl),
         },
         items: Array.isArray(order.items)
           ? order.items
@@ -322,18 +325,18 @@ const BranchOrders: React.FC = () => {
               .map((item: any) => ({
                 itemId: item._id || `temp-${Math.random().toString(36).substring(2)}`,
                 productId: item.product._id,
-                productName: item.product?.name?.[language] || (isRtl ? 'غير معروف' : 'Unknown'),
+                productName: getDisplayName(item.product?.name, item.product?.nameEn, isRtl),
                 quantity: Number(item.quantity) || 0,
                 price: Number(item.price) || 0,
                 department: {
                   _id: item.product?.department?._id || 'unknown',
-                  name: item.product?.department?.name?.[language] || (isRtl ? 'غير معروف' : 'Unknown'),
+                  name: getDisplayName(item.product?.department?.name, item.product?.department?.nameEn, isRtl),
                 },
                 status: item.status || ItemStatus.Pending,
-                unit: item.product?.unit?.[language] || 'unit',
+                unit: getDisplayName(item.product?.unit, item.product?.unitEn, isRtl),
                 returnedQuantity: Number(item.returnedQuantity) || 0,
-                returnReason: item.returnReason?.[language] || '',
-                assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username?.[language] || item.assignedTo.username } : undefined,
+                returnReason: item.returnReason || '',
+                assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username } : undefined,
               }))
           : [],
         returns: Array.isArray(order.returns)
@@ -344,28 +347,29 @@ const BranchOrders: React.FC = () => {
                     .filter((item: any) => item && item.product && item.product._id)
                     .map((item: any) => ({
                       productId: item.product._id,
+                      productName: getDisplayName(item.product?.name, item.product?.nameEn, isRtl),
                       quantity: Number(item.quantity) || 0,
-                      reason: item.reason?.[language] || 'unknown',
+                      reason: item.reason || 'unknown',
                       status: item.status || 'pending_approval',
                     }))
                 : [],
               status: ret.status || 'pending_approval',
-              reviewNotes: ret.reviewNotes?.[language] || '',
+              reviewNotes: ret.reviewNotes || '',
               createdAt: formatDate(ret.createdAt ? new Date(ret.createdAt) : new Date(), language),
             }))
           : [],
         status: order.status || OrderStatus.Pending,
         totalAmount: Number(order.totalAmount) || 0,
         date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
-        notes: order.notes?.[language] || '',
+        notes: order.notes || '',
         priority: order.priority || 'medium',
-        createdBy: order.createdBy?.username?.[language] || order.createdBy?.username || (isRtl ? 'غير معروف' : 'Unknown'),
+        createdBy: order.createdBy?.username || (isRtl ? 'غير معروف' : 'Unknown'),
         statusHistory: Array.isArray(order.statusHistory)
           ? order.statusHistory.map((history: any) => ({
               status: history.status || OrderStatus.Pending,
-              changedBy: history.changedBy?.[language] || history.changedBy || 'unknown',
+              changedBy: history.changedBy || 'unknown',
               changedAt: formatDate(history.changedAt ? new Date(history.changedAt) : new Date(), language),
-              notes: history.notes?.[language] || '',
+              notes: history.notes || '',
             }))
           : [],
       };
@@ -389,10 +393,11 @@ const BranchOrders: React.FC = () => {
             id: updatedOrder._id,
             orderNumber: updatedOrder.orderNumber || 'N/A',
             branchId: updatedOrder.branch?._id || 'unknown',
-            branchName: updatedOrder.branch?.name?.[language] || (isRtl ? 'غير معروف' : 'Unknown'),
             branch: {
               _id: updatedOrder.branch?._id || 'unknown',
-              name: updatedOrder.branch?.name?.[language] || (isRtl ? 'غير معروف' : 'Unknown'),
+              name: updatedOrder.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+              nameEn: updatedOrder.branch?.nameEn,
+              displayName: getDisplayName(updatedOrder.branch?.name, updatedOrder.branch?.nameEn, isRtl),
             },
             items: Array.isArray(updatedOrder.items)
               ? updatedOrder.items
@@ -400,18 +405,18 @@ const BranchOrders: React.FC = () => {
                   .map((item: any) => ({
                     itemId: item._id || `temp-${Math.random().toString(36).substring(2)}`,
                     productId: item.product._id,
-                    productName: item.product?.name?.[language] || (isRtl ? 'غير معروف' : 'Unknown'),
+                    productName: getDisplayName(item.product?.name, item.product?.nameEn, isRtl),
                     quantity: Number(item.quantity) || 0,
                     price: Number(item.price) || 0,
                     department: {
                       _id: item.product?.department?._id || 'unknown',
-                      name: item.product?.department?.name?.[language] || (isRtl ? 'غير معروف' : 'Unknown'),
+                      name: getDisplayName(item.product?.department?.name, item.product?.department?.nameEn, isRtl),
                     },
                     status: item.status || ItemStatus.Pending,
-                    unit: item.product?.unit?.[language] || 'unit',
+                    unit: getDisplayName(item.product?.unit, item.product?.unitEn, isRtl),
                     returnedQuantity: Number(item.returnedQuantity) || 0,
-                    returnReason: item.returnReason?.[language] || '',
-                    assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username?.[language] || item.assignedTo.username } : undefined,
+                    returnReason: item.returnReason || '',
+                    assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username } : undefined,
                   }))
               : [],
             returns: Array.isArray(updatedOrder.returns)
@@ -422,28 +427,29 @@ const BranchOrders: React.FC = () => {
                         .filter((item: any) => item && item.product && item.product._id)
                         .map((item: any) => ({
                           productId: item.product._id,
+                          productName: getDisplayName(item.product?.name, item.product?.nameEn, isRtl),
                           quantity: Number(item.quantity) || 0,
-                          reason: item.reason?.[language] || 'unknown',
+                          reason: item.reason || 'unknown',
                           status: item.status || 'pending_approval',
                         }))
                     : [],
                   status: ret.status || 'pending_approval',
-                  reviewNotes: ret.reviewNotes?.[language] || '',
+                  reviewNotes: ret.reviewNotes || '',
                   createdAt: formatDate(ret.createdAt ? new Date(ret.createdAt) : new Date(), language),
                 }))
               : [],
             status: updatedOrder.status || status,
             totalAmount: Number(updatedOrder.totalAmount) || 0,
             date: formatDate(updatedOrder.createdAt ? new Date(updatedOrder.createdAt) : new Date(), language),
-            notes: updatedOrder.notes?.[language] || '',
+            notes: updatedOrder.notes || '',
             priority: updatedOrder.priority || 'medium',
-            createdBy: updatedOrder.createdBy?.username?.[language] || updatedOrder.createdBy?.username || (isRtl ? 'غير معروف' : 'Unknown'),
+            createdBy: updatedOrder.createdBy?.username || (isRtl ? 'غير معروف' : 'Unknown'),
             statusHistory: Array.isArray(updatedOrder.statusHistory)
               ? updatedOrder.statusHistory.map((history: any) => ({
                   status: history.status || OrderStatus.Pending,
-                  changedBy: history.changedBy?.[language] || history.changedBy || 'unknown',
+                  changedBy: history.changedBy || 'unknown',
                   changedAt: formatDate(history.changedAt ? new Date(history.changedAt) : new Date(), language),
-                  notes: history.notes?.[language] || '',
+                  notes: history.notes || '',
                 }))
               : [],
           };
@@ -501,15 +507,15 @@ const BranchOrders: React.FC = () => {
       }
     });
 
-    socket.on('taskAssigned', ({ orderId, items }: { orderId: string; items: { _id: string; assignedTo: { _id: string; username: { ar: string; en: string } } }[] }) => {
+    socket.on('taskAssigned', ({ orderId, items }: { orderId: string; items: { _id: string; assignedTo: { _id: string; username: string } }[] }) => {
       dispatch({ type: 'TASK_ASSIGNED', orderId, items });
       toast.info(isRtl ? 'تم تعيين المهام' : 'Tasks assigned', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
     });
 
-    socket.on('missingAssignments', ({ orderId, itemId, productName }: { orderId: string; itemId: string; productName: { ar: string; en: string } }) => {
+    socket.on('missingAssignments', ({ orderId, itemId, productName }: { orderId: string; itemId: string; productName: string }) => {
       dispatch({ type: 'MISSING_ASSIGNMENTS', orderId, itemId });
       toast.warn(
-        isRtl ? `المنتج ${productName.ar} بحاجة إلى تعيين` : `Product ${productName.en} needs assignment`,
+        isRtl ? `المنتج ${getDisplayName(productName, productName, isRtl)} بحاجة إلى تعيين` : `Product ${getDisplayName(productName, productName, isRtl)} needs assignment`,
         { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
       );
     });
@@ -557,6 +563,7 @@ const BranchOrders: React.FC = () => {
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
       }
+
       dispatch({ type: 'SET_LOADING', payload: true });
       const cacheKey = `${user.branchId}-${state.filterStatus}-${state.currentPage}-${state.viewMode}`;
       if (cacheRef.current.has(cacheKey)) {
@@ -564,6 +571,7 @@ const BranchOrders: React.FC = () => {
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
       }
+
       try {
         const response = await ordersAPI.getAll({
           branch: user.branchId,
@@ -581,10 +589,11 @@ const BranchOrders: React.FC = () => {
             id: order._id,
             orderNumber: order.orderNumber || 'N/A',
             branchId: order.branch?._id || 'unknown',
-            branchName: order.branch?.name?.[language] || (isRtl ? 'غير معروف' : 'Unknown'),
             branch: {
               _id: order.branch?._id || 'unknown',
-              name: order.branch?.name?.[language] || (isRtl ? 'غير معروف' : 'Unknown'),
+              name: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+              nameEn: order.branch?.nameEn,
+              displayName: getDisplayName(order.branch?.name, order.branch?.nameEn, isRtl),
             },
             items: Array.isArray(order.items)
               ? order.items
@@ -592,18 +601,18 @@ const BranchOrders: React.FC = () => {
                   .map((item: any) => ({
                     itemId: item._id || `temp-${Math.random().toString(36).substring(2)}`,
                     productId: item.product._id,
-                    productName: item.product?.name?.[language] || (isRtl ? 'غير معروف' : 'Unknown'),
+                    productName: getDisplayName(item.product?.name, item.product?.nameEn, isRtl),
                     quantity: Number(item.quantity) || 0,
                     price: Number(item.price) || 0,
                     department: {
                       _id: item.product?.department?._id || 'unknown',
-                      name: item.product?.department?.name?.[language] || (isRtl ? 'غير معروف' : 'Unknown'),
+                      name: getDisplayName(item.product?.department?.name, item.product?.department?.nameEn, isRtl),
                     },
                     status: item.status || ItemStatus.Pending,
-                    unit: item.product?.unit?.[language] || 'unit',
+                    unit: getDisplayName(item.product?.unit, item.product?.unitEn, isRtl),
                     returnedQuantity: Number(item.returnedQuantity) || 0,
-                    returnReason: item.returnReason?.[language] || '',
-                    assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username?.[language] || item.assignedTo.username } : undefined,
+                    returnReason: item.returnReason || '',
+                    assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username } : undefined,
                   }))
               : [],
             returns: Array.isArray(order.returns)
@@ -614,28 +623,29 @@ const BranchOrders: React.FC = () => {
                         .filter((item: any) => item && item.product && item.product._id)
                         .map((item: any) => ({
                           productId: item.product._id,
+                          productName: getDisplayName(item.product?.name, item.product?.nameEn, isRtl),
                           quantity: Number(item.quantity) || 0,
-                          reason: item.reason?.[language] || 'unknown',
+                          reason: item.reason || 'unknown',
                           status: item.status || 'pending_approval',
                         }))
                     : [],
                   status: ret.status || 'pending_approval',
-                  reviewNotes: ret.reviewNotes?.[language] || '',
+                  reviewNotes: ret.reviewNotes || '',
                   createdAt: formatDate(ret.createdAt ? new Date(ret.createdAt) : new Date(), language),
                 }))
               : [],
             status: order.status || OrderStatus.Pending,
             totalAmount: Number(order.totalAmount) || 0,
             date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
-            notes: order.notes?.[language] || '',
+            notes: order.notes || '',
             priority: order.priority || 'medium',
-            createdBy: order.createdBy?.username?.[language] || order.createdBy?.username || (isRtl ? 'غير معروف' : 'Unknown'),
+            createdBy: order.createdBy?.username || (isRtl ? 'غير معروف' : 'Unknown'),
             statusHistory: Array.isArray(order.statusHistory)
               ? order.statusHistory.map((history: any) => ({
                   status: history.status || OrderStatus.Pending,
-                  changedBy: history.changedBy?.[language] || history.changedBy || 'unknown',
+                  changedBy: history.changedBy || 'unknown',
                   changedAt: formatDate(history.changedAt ? new Date(history.changedAt) : new Date(), language),
-                  notes: history.notes?.[language] || '',
+                  notes: history.notes || '',
                 }))
               : [],
           }));
@@ -691,15 +701,17 @@ const BranchOrders: React.FC = () => {
       isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
       isRtl ? 'التاريخ' : 'Date',
       isRtl ? 'الأولوية' : 'Priority',
+      isRtl ? 'الفرع' : 'Branch',
     ];
     const data = state.orders.map(order => ({
       [headers[0]]: order.orderNumber,
       [headers[1]]: t(`orders.status_${order.status}`) || order.status,
-      [headers[2]]: order.items.map(item => `(${item.quantity} ${t(`units.${item.unit}`) || item.unit} × ${getFirstTwoWords(item.productName)})`).join(' + '),
+      [headers[2]]: order.items.map(item => `(${item.quantity} ${t(`units.${item.unit}`) || item.unit} × ${item.productName})`).join(' + '),
       [headers[3]]: calculateAdjustedTotal(order),
       [headers[4]]: calculateTotalQuantity(order),
       [headers[5]]: order.date,
       [headers[6]]: t(`orders.priority_${order.priority}`) || order.priority,
+      [headers[7]]: order.branch?.displayName || (isRtl ? 'غير معروف' : 'Unknown'),
     }));
     const ws = XLSX.utils.json_to_sheet(isRtl ? data.map(row => Object.fromEntries(Object.entries(row).reverse())) : data, { header: headers });
     if (isRtl) ws['!views'] = [{ RTL: true }];
@@ -711,6 +723,7 @@ const BranchOrders: React.FC = () => {
       { wch: 15 }, // Total Quantity
       { wch: 20 }, // Date
       { wch: 15 }, // Priority
+      { wch: 20 }, // Branch
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, isRtl ? 'الطلبات' : 'Orders');
@@ -723,6 +736,7 @@ const BranchOrders: React.FC = () => {
     try {
       const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
       doc.setLanguage(isRtl ? 'ar' : 'en');
+
       const fontUrl = '/fonts/Amiri-Regular.ttf';
       const fontName = 'Amiri';
       const fontBytes = await fetch(fontUrl).then(res => {
@@ -733,8 +747,10 @@ const BranchOrders: React.FC = () => {
       doc.addFileToVFS(`${fontName}-Regular.ttf`, base64Font);
       doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
       doc.setFont(fontName);
+
       doc.setFontSize(16);
       doc.text(isRtl ? 'الطلبات' : 'Orders', isRtl ? doc.internal.pageSize.width - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
+
       const headers = [
         isRtl ? 'رقم الطلب' : 'Order Number',
         isRtl ? 'الحالة' : 'Status',
@@ -743,16 +759,20 @@ const BranchOrders: React.FC = () => {
         isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
         isRtl ? 'التاريخ' : 'Date',
         isRtl ? 'الأولوية' : 'Priority',
+        isRtl ? 'الفرع' : 'Branch',
       ];
+
       const data = state.orders.map(order => [
         order.orderNumber,
         t(`orders.status_${order.status}`) || order.status,
-        order.items.map(item => `(${item.quantity} ${t(`units.${item.unit}`) || item.unit} × ${getFirstTwoWords(item.productName)})`).join(' + '),
+        order.items.map(item => `(${item.quantity} ${t(`units.${item.unit}`) || item.unit} × ${item.productName})`).join(' + '),
         calculateAdjustedTotal(order),
         calculateTotalQuantity(order).toString(),
         order.date,
         t(`orders.priority_${order.priority}`) || order.priority,
+        order.branch?.displayName || (isRtl ? 'غير معروف' : 'Unknown'),
       ]);
+
       autoTable(doc, {
         head: [isRtl ? headers.reverse() : headers],
         body: isRtl ? data.map(row => row.reverse()) : data,
@@ -763,11 +783,12 @@ const BranchOrders: React.FC = () => {
         columnStyles: {
           0: { cellWidth: 25 },
           1: { cellWidth: 20 },
-          2: { cellWidth: 100 },
+          2: { cellWidth: 80 },
           3: { cellWidth: 25 },
           4: { cellWidth: 20 },
           5: { cellWidth: 30 },
           6: { cellWidth: 20 },
+          7: { cellWidth: 30 },
         },
         didParseCell: data => {
           if (data.section === 'body' && data.column.index === 3 && isRtl) {
@@ -792,6 +813,7 @@ const BranchOrders: React.FC = () => {
         },
         styles: { overflow: 'linebreak', font: fontName, fontSize: 8, cellPadding: 3, halign: isRtl ? 'right' : 'left' },
       });
+
       doc.save('BranchOrders.pdf');
       toast.success(isRtl ? 'تم تصدير PDF بنجاح' : 'PDF export successful', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
     } catch (err) {
@@ -816,7 +838,7 @@ const BranchOrders: React.FC = () => {
           order.branch &&
           order.branch._id &&
           (order.orderNumber.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.branchName.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            order.branch.displayName.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
             (order.notes || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
             order.items.some(item => item.productName.toLowerCase().includes(state.searchQuery.toLowerCase()))) &&
           (!state.filterStatus || order.status === state.filterStatus)
@@ -876,13 +898,13 @@ const BranchOrders: React.FC = () => {
         const response = await returnsAPI.createReturn({
           orderId: order.id,
           branchId: user.branchId,
-          reason: { [language]: returnFormData.reason },
-          items: [{ product: item.productId, quantity: returnFormData.quantity, reason: { [language]: returnFormData.reason } }],
-          notes: { [language]: returnFormData.notes },
+          reason: returnFormData.reason,
+          items: [{ product: item.productId, quantity: returnFormData.quantity, reason: returnFormData.reason }],
+          notes: returnFormData.notes,
         });
         const returnData = {
           returnId: response._id,
-          items: [{ productId: item.productId, quantity: returnFormData.quantity, reason: returnFormData.reason, status: 'pending_approval' }],
+          items: [{ productId: item.productId, productName: item.productName, quantity: returnFormData.quantity, reason: returnFormData.reason, status: 'pending_approval' }],
           status: 'pending_approval',
           reviewNotes: returnFormData.notes,
           createdAt: formatDate(new Date(), language),
@@ -915,17 +937,24 @@ const BranchOrders: React.FC = () => {
         if (!order || !Array.isArray(order.items)) {
           throw new Error(isRtl ? 'بيانات الطلب غير صالحة' : 'Invalid order data');
         }
+
+        // Validate product IDs
         const invalidItems = order.items.filter(item => !item.product?._id);
         if (invalidItems.length > 0) {
           throw new Error(isRtl ? 'بعض العناصر تحتوي على معرفات منتجات غير صالحة' : 'Some items have invalid product IDs');
         }
+
+        // Confirm delivery
         await ordersAPI.confirmDelivery(orderId, user.id);
+
+        // Update inventory using bulkCreate
         const inventoryItems = order.items.map(item => ({
           productId: item.product._id,
           currentStock: item.quantity,
           minStockLevel: 0,
           maxStockLevel: 1000,
         }));
+
         try {
           await inventoryAPI.bulkCreate({
             branchId: user.branchId,
@@ -949,6 +978,7 @@ const BranchOrders: React.FC = () => {
                   throw getError;
                 }
               }
+
               if (inventoryItem) {
                 try {
                   await inventoryAPI.updateStock(inventoryItem._id, {
@@ -984,13 +1014,14 @@ const BranchOrders: React.FC = () => {
             } catch (itemError: any) {
               console.warn(`Failed to update inventory for product ${item.product._id}:`, itemError.message);
               toast.warn(
-                isRtl ? `فشل تحديث المخزون للمنتج ${item.product?.name?.[language] || 'غير معروف'}: ${itemError.message}` : `Failed to update inventory for product ${item.product?.name?.[language] || 'Unknown'}: ${itemError.message}`,
+                isRtl ? `فشل تحديث المخزون للمنتج ${getDisplayName(item.productName, item.productName, isRtl)}: ${itemError.message}` : `Failed to update inventory for product ${getDisplayName(item.productName, item.productName, isRtl)}: ${itemError.message}`,
                 { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
               );
               continue;
             }
           }
         }
+
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: OrderStatus.Delivered });
         if (socket && isConnected) {
           emit('orderStatusUpdated', { orderId, status: OrderStatus.Delivered });
@@ -1005,7 +1036,7 @@ const BranchOrders: React.FC = () => {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     },
-    [t, isRtl, playNotificationSound, user, socket, isConnected, emit, language]
+    [t, isRtl, playNotificationSound, user, socket, isConnected, emit]
   );
 
   // Update order status
@@ -1049,7 +1080,7 @@ const BranchOrders: React.FC = () => {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-8">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <div>
-              <h1 className="text-xl sm:text-xl font-bold text-gray-800 flex items-center gap-3">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-800 flex items-center gap-3">
                 <ShoppingCart className="w-8 h-8 text-amber-600" />
                 {isRtl ? 'الطلبات' : 'Orders'}
               </h1>

@@ -4,7 +4,7 @@ import { Button } from '../UI/Button';
 import { Input } from '../UI/Input';
 import { Select } from '../UI/Select';
 import { Order, ReturnForm } from '../../types/types';
-import { X } from 'lucide-react';
+import { X, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -37,6 +37,7 @@ const ReturnModal: React.FC<Props> = memo(
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
         transition={{ duration: 0.3 }}
       >
         <Modal
@@ -55,13 +56,12 @@ const ReturnModal: React.FC<Props> = memo(
               <Select
                 options={order.items.map(item => ({
                   value: item.itemId,
-                  label: isRtl
-                    ? `${item.productName} (${item.quantity} ${t(`${item.unit || 'unit'}`)})`
-                    : `${item.productName} (${item.quantity} ${t(`${item.unit || 'unit'}`)})`,
+                  label: `${item.productName} (${item.quantity} ${t(`units.${item.unit}`) || item.unit})`,
                 }))}
                 value={returnFormData.itemId}
                 onChange={value => setReturnFormData({ ...returnFormData, itemId: value })}
                 className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                disabled={submitting === order.id}
               />
             </div>
             <div>
@@ -76,6 +76,7 @@ const ReturnModal: React.FC<Props> = memo(
                 max={selectedItem?.quantity || 1}
                 className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
                 placeholder={isRtl ? 'أدخل الكمية' : 'Enter quantity'}
+                disabled={submitting === order.id}
               />
             </div>
             <div>
@@ -90,6 +91,7 @@ const ReturnModal: React.FC<Props> = memo(
                 value={returnFormData.reason}
                 onChange={value => setReturnFormData({ ...returnFormData, reason: value })}
                 className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                disabled={submitting === order.id}
               />
             </div>
             <div>
@@ -102,23 +104,36 @@ const ReturnModal: React.FC<Props> = memo(
                 onChange={e => setReturnFormData({ ...returnFormData, notes: e.target.value })}
                 className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
                 placeholder={isRtl ? 'أدخل ملاحظات إضافية (اختياري)' : 'Enter additional notes (optional)'}
+                disabled={submitting === order.id}
               />
             </div>
-            <div className={`flex gap-4 ${isRtl ? 'justify-start' : 'justify-end'}`}>
+            <div className={`flex gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
               <Button
-                variant="secondary"
-                onClick={onClose}
-                className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg px-4 py-2 text-sm shadow-sm"
-              >
-                {isRtl ? 'إلغاء' : 'Cancel'}
-              </Button>
-              <Button
-                variant="primary"
                 type="submit"
-                className="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-4 py-2 text-sm shadow-sm"
+                variant="primary"
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-lg px-4 py-2 text-sm shadow-sm"
                 disabled={submitting === order.id}
               >
-                {isRtl ? 'إرسال طلب الإرجاع' : 'Submit Return Request'}
+                {submitting === order.id ? (
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                    className="inline-block"
+                  >
+                    <AlertCircle className="w-5 h-5" />
+                  </motion.div>
+                ) : (
+                  isRtl ? 'تقديم طلب الإرجاع' : 'Submit Return Request'
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={onClose}
+                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg px-4 py-2 text-sm shadow-sm"
+                disabled={submitting === order.id}
+              >
+                {isRtl ? 'إلغاء' : 'Cancel'}
               </Button>
             </div>
           </form>
