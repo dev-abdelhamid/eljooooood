@@ -75,6 +75,9 @@ const translations = {
     orderCreated: 'تم إنشاء الطلب بنجاح',
     orderCleared: 'تم مسح الطلب',
     scrollToSummary: 'التمرير للملخص',
+    branchConfirmed: 'تم تأكيد استلام الطلب',
+    taskStarted: 'بدأ تحضير المنتج',
+    taskCompleted: 'تم اكتمال تحضير المنتج',
   },
   en: {
     createOrder: 'Create New Order',
@@ -109,6 +112,9 @@ const translations = {
     orderCreated: 'Order created successfully',
     orderCleared: 'Order cleared',
     scrollToSummary: 'Scroll to Summary',
+    branchConfirmed: 'Order receipt confirmed',
+    taskStarted: 'Product preparation started',
+    taskCompleted: 'Product preparation completed',
   },
 };
 
@@ -435,7 +441,7 @@ export function NewOrder() {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [branch, setBranch] = useState<string>(user?.branchId?.toString() || '');
   const [notes, setNotes] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState({ products: false, branches: false, departments: false });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [searchInput, setSearchInput] = useState('');
@@ -443,7 +449,9 @@ export function NewOrder() {
   const [filterDepartment, setFilterDepartment] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
-  const socket = useMemo(() => io('https://eljoodia-server-production.up.railway.app'), []);
+  const socket = useMemo(() => io('https://eljoodia-server-production.up.railway.app', {
+    auth: { token: localStorage.getItem('token') },
+  }), []);
 
   const debouncedSearch = useCallback(
     debounce((value: string) => {
@@ -481,8 +489,9 @@ export function NewOrder() {
         if (aCode.startsWith(lowerSearchTerm) && !bCode.startsWith(lowerSearchTerm)) return -1;
         if (!aCode.startsWith(lowerSearchTerm) && bCode.startsWith(lowerSearchTerm)) return 1;
         return aName.localeCompare(bName);
-      });
-  }, [products, searchTerm, filterDepartment, isRtl]);
+      })
+      .slice(0, 100); // حد أقصى لتحسين الأداء
+  }, [products, searchTerm, filterDepartment,   isRtl]);
 
   const skeletonCount = useMemo(() => {
     return filteredProducts.length > 0 ? filteredProducts.length : 6;
@@ -498,11 +507,11 @@ export function NewOrder() {
 
     const loadData = async () => {
       try {
-        setLoading(true);
+        setLoading((prev) => ({ ...prev, products: true, branches: true, departments: true }));
         const [productsResponse, branchesResponse, departmentsResponse] = await Promise.all([
-          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 0 }),
-          branchesAPI.getAll(),
-          departmentAPI.getAll({ limit: 100 }),
+          productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 100, lang: language }),
+          branchesAPI.getAll({ lang: language }),
+          departmentAPI.getAll({ limit: 100, lang: language }),
         ]);
 
         const productsWithDisplay = productsResponse.data.map((product: Product) => ({
@@ -511,7 +520,7 @@ export function NewOrder() {
           displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
         }));
         setProducts(productsWithDisplay);
-        setBranches(Array.isArray(branchesResponse) ? branchesResponse : []);
+        setBranches(Array.isArray(branchesResponse.data) ? branchesResponse.data : []);
         setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data : []);
         if (user?.role === 'branch' && user?.branchId) {
           setBranch(user.branchId.toString());
@@ -522,23 +531,82 @@ export function NewOrder() {
         setError(err.message || t.fetchError);
         toast.error(err.message || t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
       } finally {
-        setLoading(false);
+        setLoading((prev) => ({ ...prev, products: false, branches: false, departments: false }));
       }
     };
     loadData();
-  }, [user, navigate, t, isRtl, filterDepartment, searchTerm]);
+  }, [user, navigate, t, isRtl, filterDepartment, searchTerm, language]);
 
   useEffect(() => {
     socket.on('connect', () => {
       console.log('Connected to Socket.IO server');
+      socket.emit('joinRoom', {
+        userId: user?._id,
+        role: user?.role,
+        branchId: user?.branchId,
+        chefId: user?.role === 'chef' ? user?._id : null,
+        departmentId: user?.departmentId,
+      });
     });
-    socket.on('orderCreated', () => {
-      toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
+
+    socket.on('notification', (data) => {
+      toast.info(data.message, { position: isRtl ? 'top-right' : 'top-left' });
+      if (data.data?.sound) {
+        const audio = new Audio(data.data.sound);
+        audio.play().catch((err) => console.error('Audio play error:', err));
+      }
+      if (data.data?.vibrate && 'vibrate' in navigator) {
+        navigator.vibrate(data.data.vibrate);
+      }
     });
+
+    socket.on('branchConfirmedReceipt', (data) => {
+      toast.success(t.branchConfirmed, { position: isRtl ? 'top-right' : 'top-left' });
+      if (data.sound) {
+        const audio = new Audio(data.sound);
+        audio.play().catch((err) => console.error('Audio play error:', err));
+      }
+      if (data.vibrate && 'vibrate' in navigator) {
+        navigator.vibrate(data.vibrate);
+      }
+    });
+
+    socket.on('taskStarted', (data) => {
+      toast.info(t.taskStarted, { position: isRtl ? 'top-right' : 'top-left' });
+      if (data.sound) {
+        const audio = new Audio(data.sound);
+        audio.play().catch((err) => console.error('Audio play error:', err));
+      }
+      if (data.vibrate && 'vibrate' in navigator) {
+        navigator.vibrate(data.vibrate);
+      }
+    });
+
+    socket.on('taskCompleted', (data) => {
+      toast.success(t.taskCompleted, { position: isRtl ? 'top-right' : 'top-left' });
+      if (data.sound) {
+        const audio = new Audio(data.sound);
+        audio.play().catch((err) => console.error('Audio play error:', err));
+      }
+      if (data.vibrate && 'vibrate' in navigator) {
+        navigator.vibrate(data.vibrate);
+      }
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log(`Disconnected from Socket.IO server: ${reason}`);
+    });
+
     return () => {
+      socket.off('connect');
+      socket.off('notification');
+      socket.off('branchConfirmedReceipt');
+      socket.off('taskStarted');
+      socket.off('taskCompleted');
+      socket.off('disconnect');
       socket.disconnect();
     };
-  }, [socket, t, isRtl]);
+  }, [socket, t, isRtl, user]);
 
   const addToOrder = useCallback((product: Product) => {
     setOrderItems((prev) => {
@@ -620,9 +688,11 @@ export function NewOrder() {
         status: 'pending',
         notes: notes.trim() || undefined,
         requestedDeliveryDate: new Date().toISOString(),
+        lang: language, // إضافة lang لدعم اللغتين
       };
       const response = await ordersAPI.create(orderData);
-      socket.emit('newOrderFromBranch', response);
+      socket.emit('newOrderFromBranch', { ...response, lang: language });
+      toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
       setTimeout(() => navigate('/orders'), 1000);
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Create error:`, err);
@@ -706,13 +776,14 @@ export function NewOrder() {
                   })),
                 ]}
                 ariaLabel={t.department}
+                disabled={loading.departments}
               />
             </div>
             <div className="mt-4 text-center text-sm text-gray-600 font-medium">
               {isRtl ? `عدد المنتجات: ${filteredProducts.length}` : `Products Count: ${filteredProducts.length}`}
             </div>
           </motion.div>
-          {loading ? (
+          {loading.products ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
               <AnimatePresence>
                 {[...Array(skeletonCount)].map((_, index) => (
@@ -845,6 +916,7 @@ export function NewOrder() {
                         })),
                       ]}
                       ariaLabel={t.branch}
+                      disabled={loading.branches}
                     />
                   </div>
                 )}
