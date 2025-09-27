@@ -3,11 +3,13 @@ import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
 import { Order } from '../../types/types';
 
+// Convert numbers to Arabic numerals
 const toArabicNumerals = (number: string | number): string => {
   const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
   return String(number).replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
 };
 
+// Convert Arabic numerals to Latin for parsing
 const fromArabicNumerals = (str: string): string => {
   const arabicMap: { [key: string]: string } = {
     '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
@@ -16,6 +18,7 @@ const fromArabicNumerals = (str: string): string => {
   return str.replace(/[٠-٩]/g, (digit) => arabicMap[digit] || digit);
 };
 
+// Format price to match Orders.tsx, with different formatting for stats
 const formatPrice = (amount: number | undefined, isRtl: boolean, isStats: boolean = false): string => {
   const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount / 100 : 0;
   let formatted: string;
@@ -39,16 +42,19 @@ const formatPrice = (amount: number | undefined, isRtl: boolean, isStats: boolea
   return formatted;
 };
 
+// Format products using displayProductName and displayUnit
 const formatProducts = (items: Order['items'], isRtl: boolean, translateUnit: (unit: string, isRtl: boolean) => string): string => {
   return items
     .map((item) => {
       const quantity = isRtl ? toArabicNumerals(item.quantity) : item.quantity;
-      const name = item.displayProductName;
-      return `${quantity} ${item.displayUnit} ${name}`;
+      const name = item.displayProductName; // Use displayProductName for language-specific product name
+      const unit = item.displayUnit; // Use displayUnit for language-specific unit
+      return `${quantity} ${unit} ${name}`;
     })
     .join(' + ');
 };
 
+// Convert array buffer to base64 for font embedding
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   let binary = '';
   const bytes = new Uint8Array(buffer);
@@ -58,6 +64,7 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   return window.btoa(binary);
 };
 
+// Load Amiri font (regular and bold) from external URLs for reliable Arabic rendering
 const loadFont = async (doc: jsPDF): Promise<boolean> => {
   const fontName = 'Amiri';
   const fontUrls = {
@@ -65,11 +72,17 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
     bold: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Bold.ttf',
   };
   try {
-    const regularFontBytes = await fetch(fontUrls.regular).then((res) => res.arrayBuffer());
+    const regularFontBytes = await fetch(fontUrls.regular).then((res) => {
+      if (!res.ok) throw new Error('فشل تحميل الخط Amiri العادي');
+      return res.arrayBuffer();
+    });
     doc.addFileToVFS(`${fontName}-normal.ttf`, arrayBufferToBase64(regularFontBytes));
     doc.addFont(`${fontName}-normal.ttf`, fontName, 'normal');
 
-    const boldFontBytes = await fetch(fontUrls.bold).then((res) => res.arrayBuffer());
+    const boldFontBytes = await fetch(fontUrls.bold).then((res) => {
+      if (!res.ok) throw new Error('فشل تحميل الخط Amiri الغامق');
+      return res.arrayBuffer();
+    });
     doc.addFileToVFS(`${fontName}-bold.ttf`, arrayBufferToBase64(boldFontBytes));
     doc.addFont(`${fontName}-bold.ttf`, fontName, 'bold');
 
@@ -86,6 +99,7 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
   }
 };
 
+// Generate dynamic file name based on filters
 const generateFileName = (filterStatus: string, filterBranchName: string, isRtl: boolean): string => {
   const date = new Date().toISOString().split('T')[0];
   const statusTranslations = {
@@ -102,6 +116,7 @@ const generateFileName = (filterStatus: string, filterBranchName: string, isRtl:
   return `${status}${branch}_${date}.pdf`;
 };
 
+// Generate PDF header with filter information and footer
 const generatePDFHeader = (
   doc: jsPDF,
   isRtl: boolean,
@@ -165,6 +180,7 @@ const generatePDFHeader = (
   }
 };
 
+// Generate PDF table with correct Arabic headers and bold price
 const generatePDFTable = (
   doc: jsPDF,
   headers: string[],
@@ -210,13 +226,13 @@ const generatePDFTable = (
       fillColor: [245, 245, 245],
     },
     columnStyles: {
-      0: { cellWidth: 30 , fontStyle: 'bold' },
-      1: { cellWidth: 20 , fontStyle: 'bold'  },
-      2: { cellWidth: 30 , fontStyle: 'bold' },
-      3: { cellWidth: 'auto' , fontStyle: 'bold' },
-      4: { cellWidth: 20, fontStyle: 'bold',   halign: isRtl ? 'left' : 'right' },
-      5: { cellWidth: 16 , fontStyle: 'bold' },
-      6: { cellWidth: 42 , fontStyle: 'bold' },
+      0: { cellWidth: 30, fontStyle: 'bold' }, // Order Number
+      1: { cellWidth: 20, fontStyle: 'bold' }, // Branch
+      2: { cellWidth: 30, fontStyle: 'bold' }, // Status
+      3: { cellWidth: 'auto', fontStyle: 'bold' }, // Products
+      4: { cellWidth: 20, fontStyle: 'bold', halign: isRtl ? 'left' : 'right' }, // Total Amount (bold)
+      5: { cellWidth: 16, fontStyle: 'bold' }, // Total Quantity
+      6: { cellWidth: 42, fontStyle: 'bold' }, // Date
     },
     styles: {
       overflow: 'linebreak',
@@ -244,6 +260,7 @@ const generatePDFTable = (
   });
 };
 
+// Main export function
 export const exportToPDF = async (
   orders: Order[],
   isRtl: boolean,
@@ -262,7 +279,7 @@ export const exportToPDF = async (
     const filteredOrders = orders.filter(
       (order) =>
         (!filterStatus || order.status === filterStatus) &&
-        (!filterBranchName || order.branch.displayName === filterBranchName)
+        (!filterBranchName || order.branch.displayName === filterBranchName) // Use displayName for filtering
     );
 
     const totalOrders = filteredOrders.length;
@@ -316,9 +333,9 @@ export const exportToPDF = async (
       }
       return [
         order.orderNumber,
-        order.branch.displayName,
+        order.branch.displayName, // Use displayName for branch
         statusTranslations[order.status] || order.status,
-        formatProducts(order.items, isRtl, translateUnit),
+        formatProducts(order.items, isRtl, translateUnit), // Use displayProductName and displayUnit
         formattedTotalAmount,
         isRtl ? `${toArabicNumerals(calculateTotalQuantity(order))} ${translateUnit('unit', isRtl)}` : `${calculateTotalQuantity(order)} ${translateUnit('unit', isRtl)}`,
         order.date,
