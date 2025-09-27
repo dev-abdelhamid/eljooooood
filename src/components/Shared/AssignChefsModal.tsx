@@ -115,8 +115,8 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                 htmlFor={`chef-select-${index}`}
               >
                 {isRtl
-                  ? `تعيين شيف لـ ${orderItem?.displayProductName} (${item.quantity} ${translateUnit(item.displayUnit, isRtl)})`
-                  : `Assign chef to ${orderItem?.displayProductName} (${item.quantity} ${translateUnit(item.displayUnit, isRtl)})`}
+                  ? `تعيين شيف لـ ${orderItem?.displayProductName} (${item.quantity} ${(item.displayUnit, isRtl)})`
+                  : `Assign chef to ${orderItem?.displayProductName} (${item.quantity} ${(item.displayUnit, isRtl)})`}
               </label>
               <Select
                 id={`chef-select-${index}`}
