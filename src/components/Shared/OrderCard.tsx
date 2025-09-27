@@ -43,7 +43,7 @@ interface OrderCardProps {
 }
 
 const OrderCard: React.FC<OrderCardProps> = memo(
-  ({ order, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, updateOrderStatus, openAssignModal, submitting, isRtl }) => {
+  ({ order, calculateAdjustedTotal, calculateTotalQuantity, updateOrderStatus, openAssignModal, submitting, isRtl }) => {
     const { user } = useAuth();
     const [isItemsExpanded, setIsItemsExpanded] = useState(false);
     const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS.pending;

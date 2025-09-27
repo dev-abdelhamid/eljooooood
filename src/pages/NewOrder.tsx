@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useNotifications } from '../contexts/NotificationContext';
 import { productsAPI, ordersAPI, branchesAPI, departmentAPI } from '../services/api';
 import { ShoppingCart, Plus, Minus, Trash2, Package, AlertCircle, Search, X, ChevronDown } from 'lucide-react';
 import { io } from 'socket.io-client';
@@ -368,7 +369,8 @@ const OrderConfirmModal = ({
 
 export function NewOrder() {
   const { user } = useAuth();
-  const { language } = useLanguage();
+  const { language, t: languageT } = useLanguage();
+  const { addNotification } = useNotifications();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   const summaryRef = useRef<HTMLDivElement>(null);
@@ -477,22 +479,58 @@ export function NewOrder() {
     loadData();
   }, [user, t, isRtl, filterDepartment, searchTerm]);
 
+  // تحديث displayName و displayUnit عند تغيير اللغة
   useEffect(() => {
+    setProducts((prev) =>
+      prev.map((product) => ({
+        ...product,
+        displayName: isRtl ? product.name : (product.nameEn || product.name),
+        displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
+        department: {
+          ...product.department,
+          displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name),
+        },
+      }))
+    );
+  }, [isRtl]);
+
+  useEffect(() => {
+    if (!user || !socket) return;
+
     socket.on('connect', () => {
-      console.log('Connected to Socket.IO server');
+      console.log(`[${new Date().toISOString()}] Connected to Socket.IO server`);
       if (user?.role === 'branch' && user?.branchId) {
         socket.emit('joinRoom', `branch-${user.branchId}`);
       } else if (user?.role === 'admin') {
         socket.emit('joinRoom', 'admin');
       }
     });
+
     socket.on('orderCreated', (orderData) => {
-      toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
+      if (!orderData?._id || !orderData.orderNumber || !orderData.branch) {
+        console.warn(`[${new Date().toISOString()}] Invalid order created data:`, orderData);
+        return;
+      }
+      const eventId = orderData.eventId || crypto.randomUUID();
+      addNotification({
+        _id: eventId,
+        type: 'success',
+        message: languageT('notifications.order_created', {
+          orderNumber: orderData.orderNumber,
+          branchName: isRtl ? orderData.branch.name : (orderData.branch.nameEn || orderData.branch.name),
+        }),
+        data: { orderId: orderData._id, eventId },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: '/sounds/notification.mp3',
+        vibrate: [200, 100, 200],
+      });
     });
+
     return () => {
       socket.disconnect();
     };
-  }, [socket, t, isRtl, user]);
+  }, [socket, languageT, isRtl, user, addNotification]);
 
   const addToOrder = useCallback((product: Product) => {
     setOrderItems((prev) => {
@@ -573,20 +611,40 @@ export function NewOrder() {
           price: item.price,
           productName: item.product.name,
           productNameEn: item.product.nameEn,
-          displayProductName: item.product.displayName,
+          displayProductName: isRtl ? item.product.name : (item.product.nameEn || item.product.name),
           unit: item.product.unit,
           unitEn: item.product.unitEn,
-          displayUnit: item.product.displayUnit,
+          displayUnit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
+          department: item.product.department,
         })),
         status: 'pending',
+        priority: 'medium',
+        createdBy: user?.id || user?._id,
+        isRtl,
       };
       const response = await ordersAPI.create(orderData, isRtl);
+      const eventId = crypto.randomUUID();
       socket.emit('orderCreated', {
-        ...response.data,
+        _id: response.data.id,
+        orderNumber: response.data.orderNumber,
+        branch: response.data.branch,
+        items: response.data.items,
+        eventId,
         isRtl,
-        eventId: `${response.data.orderId}-orderCreated`,
       });
-      toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
+      addNotification({
+        _id: eventId,
+        type: 'success',
+        message: languageT('notifications.order_created', {
+          orderNumber: response.data.orderNumber,
+          branchName: isRtl ? response.data.branch.name : (response.data.branch.nameEn || response.data.branch.name),
+        }),
+        data: { orderId: response.data.id, eventId },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: '/sounds/notification.mp3',
+        vibrate: [200, 100, 200],
+      });
       setOrderItems([]);
       if (user?.role === 'admin') setBranch('');
       setSearchInput('');
