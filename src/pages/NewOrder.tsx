@@ -479,7 +479,7 @@ export function NewOrder() {
     loadData();
   }, [user, t, isRtl, filterDepartment, searchTerm]);
 
-  // تحديث displayName و displayUnit عند تغيير اللغة
+  // تحديث displayName و displayUnit للمنتجات عند تغيير اللغة
   useEffect(() => {
     setProducts((prev) =>
       prev.map((product) => ({
@@ -489,6 +489,21 @@ export function NewOrder() {
         department: {
           ...product.department,
           displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name),
+        },
+      }))
+    );
+    // تحديث orderItems عند تغيير اللغة
+    setOrderItems((prev) =>
+      prev.map((item) => ({
+        ...item,
+        product: {
+          ...item.product,
+          displayName: isRtl ? item.product.name : (item.product.nameEn || item.product.name),
+          displayUnit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
+          department: {
+            ...item.product.department,
+            displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name),
+          },
         },
       }))
     );
@@ -611,10 +626,8 @@ export function NewOrder() {
           price: item.price,
           productName: item.product.name,
           productNameEn: item.product.nameEn,
-          displayProductName: isRtl ? item.product.name : (item.product.nameEn || item.product.name),
           unit: item.product.unit,
           unitEn: item.product.unitEn,
-          displayUnit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
           department: item.product.department,
         })),
         status: 'pending',
