@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../UI/Button';
 import { Link } from 'react-router-dom';
 import { Clock, Check, Package, Truck, AlertCircle } from 'lucide-react';
-import { Order, OrderStatus, ItemStatus } from '../../types/types';
+import { Order, OrderStatus } from '../../types/types';
 
 const STATUS_COLORS: Record<OrderStatus, { color: string; icon: React.FC; label: string }> = {
   pending: { color: 'bg-yellow-100 text-yellow-800', icon: Clock, label: 'pending' },
@@ -103,12 +103,8 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                       {priorityTranslations[order.priority]}
                     </span>
                   </td>
-                  <td className="py-3 px-4 text-sm">
-                    {order.items.map((item) => (
-                      <div key={item._id}>
-                        {item.displayProductName} ({item.quantity} {item.displayUnit})
-                      </div>
-                    ))}
+                  <td className="py-3 px-4 text-sm truncate max-w-xs">
+                    {order.items.length} {isRtl ? 'منتج' : 'products'}
                   </td>
                   <td className="py-3 px-4 text-sm">{calculateAdjustedTotal(order)}</td>
                   <td className="py-3 px-4 text-sm">{calculateTotalQuantity(order)} {isRtl ? 'وحدة' : 'units'}</td>
