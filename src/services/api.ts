@@ -446,16 +446,16 @@ export const usersAPI = {
 };
 
 export const ordersAPI = {
-  create: async (
+create: async (
     orderData: {
       orderNumber: string;
       branchId: string;
-      items: Array<{ productId: string; quantity: number; price: number; department?: { _id: string } }>;
+      items: Array<{ product: string; quantity: number; price: number }>;
       status: string;
       notes?: string;
       notesEn?: string;
       priority?: string;
-      requestedDeliveryDate: string;
+      requestedDeliveryDate?: string;
     },
     isRtl: boolean = false
   ) => {
@@ -468,16 +468,17 @@ export const ordersAPI = {
         orderNumber: orderData.orderNumber.trim(),
         branchId: orderData.branchId,
         items: orderData.items.map(item => ({
-          productId: item.productId,
+          product: item.product, // تغيير productId إلى product لتتوافق مع السكيما
           quantity: item.quantity,
           price: item.price,
-          department: item.department,
         })),
         status: orderData.status.trim(),
         notes: orderData.notes?.trim(),
-        notesEn: orderData.notesEn?.trim(),
-        priority: orderData.priority?.trim(),
-        requestedDeliveryDate: orderData.requestedDeliveryDate,
+        notesEn: orderData.notesEn?.trim() || orderData.notes?.trim() || '', // ضمان وجود notesEn
+        priority: orderData.priority?.trim() || 'medium',
+        requestedDeliveryDate: orderData.requestedDeliveryDate || new Date().toISOString(),
+      }, {
+        params: { isRtl: isRtl.toString() }, // إضافة isRtl كمعامل استعلام
       });
       console.log(`[${new Date().toISOString()}] ordersAPI.create - Response:`, response);
       return response;
