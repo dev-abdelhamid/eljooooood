@@ -99,7 +99,7 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
             { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
             ...availableChefs.map((chef) => ({
               value: chef.userId,
-              label: `${chef.name} (${chef.department?.name || (isRtl ? 'غير معروف' : 'Unknown')})`,
+              label: `${chef.displayName} (${chef.department?.displayName || (isRtl ? 'غير معروف' : 'Unknown')})`,
             })),
           ];
 
@@ -115,8 +115,8 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                 htmlFor={`chef-select-${index}`}
               >
                 {isRtl
-                  ? `تعيين شيف لـ ${orderItem?.productName} (${item.quantity} ${item.unit})`
-                  : `Assign chef to ${orderItem?.productName} (${item.quantity} ${item.unit})`}
+                  ? `تعيين شيف لـ ${orderItem?.displayProductName} (${item.quantity} ${translateUnit(item.displayUnit, isRtl)})`
+                  : `Assign chef to ${orderItem?.displayProductName} (${item.quantity} ${translateUnit(item.displayUnit, isRtl)})`}
               </label>
               <Select
                 id={`chef-select-${index}`}
