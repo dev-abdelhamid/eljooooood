@@ -1,8 +1,10 @@
+// src/components/Shared/AssignChefsModal.tsx
 import React, { useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Modal } from '../../components/UI/Modal';
 import { Button } from '../../components/UI/Button';
 import { Select } from '../../components/UI/Select';
+import { useLanguage } from '../../contexts/LanguageContext';
 import { AlertCircle } from 'lucide-react';
 import { Order, Chef, AssignChefsForm } from '../../types/types';
 
@@ -19,7 +21,7 @@ interface AssignChefsModalProps {
   isRtl: boolean;
 }
 
-const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
+export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   isOpen,
   onClose,
   selectedOrder,
@@ -31,35 +33,47 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   setAssignForm,
   isRtl,
 }) => {
+  const { t } = useLanguage();
+
   const availableChefsByDepartment = useMemo(() => {
-    const map: Record<string, Chef[]> = {};
+    const map = new Map<string, Chef[]>();
     chefs.forEach((chef) => {
       if (chef.department?._id) {
-        if (!map[chef.department._id]) map[chef.department._id] = [];
-        map[chef.department._id].push(chef);
+        if (!map.has(chef.department._id)) {
+          map.set(chef.department._id, []);
+        }
+        map.get(chef.department._id)!.push(chef);
       }
     });
     return map;
   }, [chefs]);
 
   const updateAssignment = (index: number, value: string) => {
-    const updatedItems = [...assignFormData.items];
-    updatedItems[index].assignedTo = value;
-    setAssignForm({ items: updatedItems });
+    setAssignForm({
+      items: assignFormData.items.map((i, idx) =>
+        idx === index ? { ...i, assignedTo: value } : i
+      ),
+    });
   };
 
   useEffect(() => {
     if (!selectedOrder) return;
+
     const updatedItems = assignFormData.items.map((item) => {
       const orderItem = selectedOrder.items.find((i) => i._id === item.itemId);
       const departmentId = orderItem?.department._id || '';
-      const availableChefs = availableChefsByDepartment[departmentId] || [];
-      if (!item.assignedTo && availableChefs.length === 1) {
-        return { ...item, assignedTo: availableChefs[0]._id };
+      const availableChefs = availableChefsByDepartment.get(departmentId) || [];
+
+      if (item.assignedTo === '' && availableChefs.length === 1) {
+        return { ...item, assignedTo: availableChefs[0].userId };
       }
       return item;
     });
-    setAssignForm({ items: updatedItems });
+
+    const hasChanges = updatedItems.some((item, idx) => item.assignedTo !== assignFormData.items[idx].assignedTo);
+    if (hasChanges) {
+      setAssignForm({ items: updatedItems });
+    }
   }, [assignFormData.items, availableChefsByDepartment, selectedOrder, setAssignForm]);
 
   return (
@@ -73,19 +87,20 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          if (selectedOrder?.id) assignChefs(selectedOrder.id);
+          assignChefs(selectedOrder?.id || '');
         }}
-        className="space-y-4 max-h-96 overflow-y-auto px-2"
+        className="space-y-6"
       >
         {assignFormData.items.map((item, index) => {
           const orderItem = selectedOrder?.items.find((i) => i._id === item.itemId);
           const departmentId = orderItem?.department._id || '';
-          const availableChefs = availableChefsByDepartment[departmentId] || [];
+          const availableChefs = availableChefsByDepartment.get(departmentId) || [];
+
           const chefOptions = [
             { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
             ...availableChefs.map((chef) => ({
-              value: chef._id,
-              label: `${chef.displayName} (${chef.department?.displayName || (isRtl ? 'غير معروف' : 'Unknown')})`,
+              value: chef.userId,
+              label: `${chef.name} (${chef.department?.name || (isRtl ? 'غير معروف' : 'Unknown')})`,
             })),
           ];
 
@@ -94,33 +109,54 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
               key={index}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2, delay: index * 0.05 }}
-              className="p-2 bg-gray-50 rounded-md shadow-sm"
+              transition={{ duration: 0.2, delay: index * 0.1 }}
             >
-              <label className={`block text-xs font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
-                {isRtl ? `لـ ${orderItem?.displayProductName} (${item.quantity} ${orderItem?.displayUnit})` : `For ${orderItem?.displayProductName} (${item.quantity} ${orderItem?.displayUnit})`}
+              <label
+                className={`block text-sm font-medium text-gray-900 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}
+                htmlFor={`chef-select-${index}`}
+              >
+                {isRtl
+                  ? `تعيين شيف لـ ${orderItem?.productName} (${item.quantity} ${item.unit})`
+                  : `Assign chef to ${orderItem?.productName} (${item.quantity} ${item.unit})`}
               </label>
               <Select
+                id={`chef-select-${index}`}
                 options={chefOptions}
                 value={item.assignedTo}
                 onChange={(value) => updateAssignment(index, value)}
-                className="w-full rounded-md border-gray-200 focus:ring-blue-500 text-xs shadow-sm"
+                className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                aria-label={isRtl ? 'اختر شيف' : 'Select Chef'}
               />
             </motion.div>
           );
         })}
         {error && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-2 bg-red-50 border border-red-100 rounded-md flex items-center gap-1 text-xs text-red-600">
-            <AlertCircle className="w-4 h-4" />
-            {error}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className={`p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}
+          >
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <span className="text-red-600 text-sm">{error}</span>
           </motion.div>
         )}
-        <div className={`flex gap-2 ${isRtl ? 'justify-start flex-row-reverse' : 'justify-end'}`}>
-          <Button variant="secondary" onClick={onClose} className="text-xs px-3 py-1 rounded-full shadow">
+        <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <Button
+            variant="secondary"
+            onClick={onClose}
+            className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-4 py-2 text-sm shadow-sm"
+            aria-label={isRtl ? 'إلغاء' : 'Cancel'}
+          >
             {isRtl ? 'إلغاء' : 'Cancel'}
           </Button>
-          <Button type="submit" variant="primary" disabled={!!submitting} className="text-xs px-3 py-1 rounded-full shadow">
-            {submitting ? (isRtl ? 'جاري...' : 'Submitting...') : (isRtl ? 'تعيين' : 'Assign')}
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={submitting !== null}
+            className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-4 py-2 text-sm shadow-sm"
+            aria-label={isRtl ? 'تعيين الشيفات' : 'Assign Chefs'}
+          >
+            {submitting ? (isRtl ? 'جارٍ التحميل' : 'Loading') : (isRtl ? 'تعيين الشيفات' : 'Assign Chefs')}
           </Button>
         </div>
       </form>

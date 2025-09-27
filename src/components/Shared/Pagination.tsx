@@ -36,7 +36,7 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, isRtl,
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
-      className={`flex justify-center items-center gap-3 mt-6 ${isRtl ? 'flex-row-reverse' : 'flex-row'}`}
+      className={`flex justify-center items-center gap-3 mt-6 ${isRtl ? 'flex-row' : 'flex-row'}`}
       role="navigation"
       aria-label={paginationText.navigation}
     >
