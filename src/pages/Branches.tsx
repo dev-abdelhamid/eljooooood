@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI } from '../services/api';
-import { MapPin, Edit2, Trash2, Key, AlertCircle, Search, X, ChevronDown } from 'lucide-react';
+import { MapPin, Edit2, Trash2, Key, AlertCircle, Search, X, ChevronDown   , Plus } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
