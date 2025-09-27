@@ -176,7 +176,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                           >
                             <div className="flex items-center justify-between gap-2">
                               <p className="text-xs font-medium text-gray-900 truncate flex-1">
-                                {item.displayProductName} ({item.quantity} {translateUnit(item.displayUnit, isRtl)})
+                                {item.displayProductName} ({item.quantity} {(item.displayUnit, isRtl)})
                               </p>
                               <span
                                 className={`px-1.5 py-0.5 rounded-full text-xs font-small flex items-center gap-1 ${itemStatusInfo.color} ${
@@ -218,12 +218,12 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                   <p key={i} className="text-xs text-amber-700 truncate">
                     {isRtl
                       ? `${r.items
-                          .map((item) => `${item.quantity} ${translateUnit(item.displayUnit, isRtl)} ${item.reason}`)
+                          .map((item) => `${item.quantity} ${(item.displayUnit, isRtl)} ${item.reason}`)
                           .join(', ')} - الحالة: ${
                           isRtl ? { pending: 'قيد الانتظار', approved: 'تمت الموافقة', rejected: 'مرفوض', processed: 'تمت المعالجة' }[r.status] : r.status
                         }`
                       : `${r.items
-                          .map((item) => `${item.quantity} ${translateUnit(item.displayUnit, isRtl)} ${item.reason}`)
+                          .map((item) => `${item.quantity} ${(item.displayUnit, isRtl)} ${item.reason}`)
                           .join(', ')} - Status: ${r.status}`}
                   </p>
                 ))}
