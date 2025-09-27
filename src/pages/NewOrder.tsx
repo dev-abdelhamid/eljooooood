@@ -825,13 +825,7 @@ export function NewOrder() {
                     <ProductDropdown
                       value={branch}
                       onChange={setBranch}
-                      options=[
-                        { value: '', label: t.branchPlaceholder },
-                        ...branches.map((b) => ({
-                          value: b._id,
-                          label: isRtl ? b.name : (b.nameEn || b.name),
-                        })),
-                      ]
+                      options={branches.map((branch) => ({ value: branch._id, label: branch.name }))}
                       ariaLabel={t.branch}
                     />
                   </div>
