@@ -4,7 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { inventoryAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Input } from '../components/UI/Input';
-import { Package, AlertCircle, Search } from 'lucide-react';
+import { Button } from '../components/UI/Button';
+import { Package, AlertCircle, Search, RefreshCw } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -33,9 +34,8 @@ const InventoryCardSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
       <div className="h-4 w-1/3 bg-gray-200 rounded animate-pulse" />
       <div className="h-4 w-1/4 bg-gray-200 rounded animate-pulse" />
       <div className="h-4 w-1/4 bg-gray-200 rounded animate-pulse" />
-    </div> 
-     </motion.div>
-
+    </div>
+  </motion.div>
 );
 
 export const BranchInventory: React.FC = () => {
@@ -56,16 +56,20 @@ export const BranchInventory: React.FC = () => {
         transports: ['websocket'],
         path: '/socket.io',
         autoConnect: true,
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
       });
     } catch (err) {
       console.error('Socket initialization error:', err);
+      setError(isRtl ? 'فشل في تهيئة الاتصال بالمخزن' : 'Failed to initialize socket connection');
       return null;
     }
-  }, []);
+  }, [isRtl]);
 
   const fetchInventory = useCallback(async () => {
     if (!user?.branchId) {
-      setError(isRtl ? 'لا يوجد فرع مرتبط' : 'No branch associated');
+      setError(isRtl ? 'لا يوجد فرع مرتبط بالمستخدم' : 'No branch associated with the user');
       setLoading(false);
       return;
     }
@@ -75,6 +79,11 @@ export const BranchInventory: React.FC = () => {
       const inventoryData = Array.isArray(response) ? response : response.data || [];
       const enhancedInventory = inventoryData.map((item: InventoryItem) => ({
         ...item,
+        product: {
+          _id: item.product?._id || '',
+          name: item.product?.name || 'Unknown Product',
+          code: item.product?.code || 'N/A',
+        },
         status:
           item.currentStock <= item.minStockLevel
             ? 'low'
@@ -85,7 +94,11 @@ export const BranchInventory: React.FC = () => {
       setInventory(enhancedInventory);
       setError('');
     } catch (err: any) {
-      setError(err.message || (isRtl ? 'خطأ في جلب المخزون' : 'Error fetching inventory'));
+      const errorMessage = err.message || (isRtl ? 'خطأ في جلب المخزون' : 'Error fetching inventory');
+      setError(errorMessage);
+      if (err.status === 401) {
+        setError(isRtl ? 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجددًا' : 'Session expired, please log in again');
+      }
     } finally {
       setLoading(false);
     }
@@ -97,17 +110,23 @@ export const BranchInventory: React.FC = () => {
 
   useEffect(() => {
     if (!socket) return;
+
     socket.on('connect', () => console.log('Socket connected:', socket.id));
-    socket.on('connect_error', (err) => console.error('Socket connect error:', err.message));
+    socket.on('connect_error', (err) => {
+      console.error('Socket connect error:', err.message);
+      setError(isRtl ? 'فشل في الاتصال بالمخزن' : 'Failed to connect to socket');
+    });
     socket.on('inventoryUpdated', ({ branchId }) => {
       if (branchId === user?.branchId) {
         fetchInventory();
       }
     });
+
     return () => {
       socket.off('connect');
       socket.off('connect_error');
       socket.off('inventoryUpdated');
+      socket.disconnect();
     };
   }, [socket, user, fetchInventory]);
 
@@ -125,6 +144,11 @@ export const BranchInventory: React.FC = () => {
     [debouncedSearch]
   );
 
+  const handleRetry = useCallback(() => {
+    setError('');
+    fetchInventory();
+  }, [fetchInventory]);
+
   const statusOptions = useMemo(
     () => [
       { value: '', label: isRtl ? 'كل الحالات' : 'All Statuses' },
@@ -141,9 +165,7 @@ export const BranchInventory: React.FC = () => {
         (item) =>
           (!filterStatus || item.status === filterStatus) &&
           (item.product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.product.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.product.name.includes(searchQuery) ||
-            item.product.code.includes(searchQuery))
+            item.product.code.toLowerCase().includes(searchQuery.toLowerCase()))
       ),
     [inventory, searchQuery, filterStatus]
   );
@@ -167,6 +189,13 @@ export const BranchInventory: React.FC = () => {
         <div className="mb-6 p-4 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3 animate-fade-in">
           <AlertCircle className="w-5 h-5 text-red-600" />
           <span className="text-red-600">{error}</span>
+          <Button
+            onClick={handleRetry}
+            className="ml-4 bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            {isRtl ? 'إعادة المحاولة' : 'Retry'}
+          </Button>
         </div>
       )}
 
