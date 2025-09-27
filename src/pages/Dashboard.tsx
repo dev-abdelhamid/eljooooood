@@ -298,7 +298,7 @@ const ChefDashboard: React.FC<{
 });
 
 // مكون لوحة التحكم الرئيسية
-const Dashboard: React.FC = () => {
+export const Dashboard: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
