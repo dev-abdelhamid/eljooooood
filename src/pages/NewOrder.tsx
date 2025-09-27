@@ -500,7 +500,7 @@ export function NewOrder() {
 
   useEffect(() => {
     socket.on('connect', () => {
-      console.log('Connected to Socket.IO server');
+      console.log(`[${new Date().toISOString()}] Connected to Socket.IO server`);
       if (user?.role === 'branch' && user?.branchId) {
         socket.emit('joinRoom', `branch-${user.branchId}`);
       } else if (user?.role === 'admin') {
@@ -508,10 +508,15 @@ export function NewOrder() {
       }
     });
     socket.on('orderCreated', (orderData) => {
+      console.log(`[${new Date().toISOString()}] Received orderCreated event:`, orderData);
       toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
+    });
+    socket.on('connect_error', (error) => {
+      console.error(`[${new Date().toISOString()}] Socket.IO connection error:`, error.message);
     });
     return () => {
       socket.disconnect();
+      console.log(`[${new Date().toISOString()}] Disconnected from Socket.IO server`);
     };
   }, [socket, t, isRtl, user]);
 
@@ -595,9 +600,13 @@ export function NewOrder() {
       };
       const response = await ordersAPI.create(orderData, isRtl);
       socket.emit('orderCreated', {
-        ...response.data,
+        orderId: response.data.data._id,
+        orderNumber: orderData.orderNumber,
+        branchId: orderData.branchId,
+        items: orderData.items,
+        status: orderData.status,
+        eventId: `${response.data.data._id}-orderCreated`,
         isRtl,
-        eventId: `${response.data.orderId}-orderCreated`,
       });
       toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
       setTimeout(() => navigate('/orders'), 1000);
