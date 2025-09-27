@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI } from '../services/api';
-import { MapPin, Plus, Edit2, Trash2, Key, AlertCircle, Search, X, ChevronDown } from 'lucide-react';
+import { MapPin, Edit2, Trash2, Key, AlertCircle, Search, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -166,7 +166,6 @@ const translations = {
     deleteRestricted: 'لا يمكن حذف الفرع لوجود طلبات أو مخزون مرتبط',
     deleteError: 'خطأ أثناء حذف الفرع',
     deleted: 'تم حذف الفرع بنجاح',
-    scrollToForm: 'الذهاب إلى نموذج الإضافة',
     branchCount: 'عدد الفروع',
   },
   en: {
@@ -246,7 +245,6 @@ const translations = {
     deleteRestricted: 'Cannot delete branch with associated orders or inventory',
     deleteError: 'Error deleting branch',
     deleted: 'Branch deleted successfully',
-    scrollToForm: 'Go to Add Form',
     branchCount: 'Branches Count',
   },
 };
@@ -278,7 +276,7 @@ const BranchInput = ({
       onChange={onChange}
       placeholder={placeholder}
       required={required}
-      className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+      className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
       aria-label={ariaLabel}
     />
   );
@@ -298,16 +296,14 @@ const BranchSearchInput = ({
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
-    <div className="relative group">
-      {!value && (
-        <Search className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`} />
-      )}
+    <div className="relative">
+      <Search className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5`} />
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-10 pr-2' : 'pr-10 pl-2'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pl-10 pr-3' : 'pr-10 pl-3'} py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -316,7 +312,7 @@ const BranchSearchInput = ({
           className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
-          <X className="w-4 h-4" />
+          <X className="w-5 h-5" />
         </button>
       )}
     </div>
@@ -341,15 +337,18 @@ const BranchSelect = ({
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
-    <div className="relative group">
+    <div className="relative">
       <select
         id={id}
         value={value}
         onChange={onChange}
         required={required}
-        className={`w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-colors duration-200 bg-white shadow-sm appearance-none text-xs text-gray-700 font-medium ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm text-sm appearance-none ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       >
+        <option value="" disabled>
+          {isRtl ? 'اختر...' : 'Select...'}
+        </option>
         {options.map((option) => (
           <option key={String(option.value)} value={option.value}>
             {option.label}
@@ -357,7 +356,7 @@ const BranchSelect = ({
         ))}
       </select>
       <ChevronDown
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors`}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 w-5 h-5`}
       />
     </div>
   );
@@ -377,29 +376,29 @@ const BranchCard = ({ branch, onEdit, onResetPassword, onDelete, onClick }: {
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
-      className="p-4 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 flex flex-col justify-between border border-gray-100 hover:border-amber-200 cursor-pointer"
+      transition={{ duration: 0.2 }}
+      className="p-4 bg-white rounded-md shadow-sm hover:shadow-md transition-shadow duration-200 border border-gray-200 cursor-pointer"
       onClick={onClick}
     >
       <div className="space-y-2">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-2">
           <h3 className="font-semibold text-gray-900 text-sm truncate">
             {isRtl ? branch.name : branch.nameEn || branch.name}
           </h3>
-          <MapPin className="w-5 h-5 text-amber-600" />
+          <MapPin className="w-5 h-5 text-amber-600 flex-shrink-0" />
         </div>
-        <p className="text-xs text-gray-500">{t.code}: {branch.code}</p>
-        <p className="text-xs text-gray-600 truncate">{t.address}: {isRtl ? branch.address : branch.addressEn || branch.address}</p>
-        <p className="text-xs text-gray-600 truncate">{t.city}: {isRtl ? branch.city : branch.cityEn || branch.city}</p>
-        <p className="text-xs text-gray-600 truncate">{t.phone}: {branch.phone || '-'}</p>
-        <p className={`text-xs font-medium ${branch.isActive ? 'text-teal-600' : 'text-red-600'}`}>
+        <p className="text-sm text-gray-600">{t.code}: {branch.code}</p>
+        <p className="text-sm text-gray-600 truncate">{t.address}: {isRtl ? branch.address : branch.addressEn || branch.address}</p>
+        <p className="text-sm text-gray-600 truncate">{t.city}: {isRtl ? branch.city : branch.cityEn || branch.city}</p>
+        <p className="text-sm text-gray-600">{t.phone}: {branch.phone || '-'}</p>
+        <p className={`text-sm font-medium ${branch.isActive ? 'text-green-600' : 'text-red-600'}`}>
           {t.status}: {branch.isActive ? t.active : t.inactive}
         </p>
       </div>
-      <div className="mt-4 flex items-center justify-end gap-2">
+      <div className="mt-4 flex justify-end gap-2">
         <motion.button
           onClick={onEdit}
-          className="p-2 w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
+          className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-colors duration-200"
           title={t.edit}
           whileHover={{ scale: 1.05 }}
         >
@@ -407,7 +406,7 @@ const BranchCard = ({ branch, onEdit, onResetPassword, onDelete, onClick }: {
         </motion.button>
         <motion.button
           onClick={onResetPassword}
-          className="p-2 w-8 h-8 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
+          className="p-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors duration-200"
           title={t.resetPassword}
           whileHover={{ scale: 1.05 }}
         >
@@ -415,7 +414,7 @@ const BranchCard = ({ branch, onEdit, onResetPassword, onDelete, onClick }: {
         </motion.button>
         <motion.button
           onClick={onDelete}
-          className="p-2 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
+          className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200"
           title={t.delete}
           whileHover={{ scale: 1.05 }}
         >
@@ -427,17 +426,17 @@ const BranchCard = ({ branch, onEdit, onResetPassword, onDelete, onClick }: {
 };
 
 const BranchSkeletonCard = () => (
-  <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-    <div className="space-y-2 animate-pulse">
+  <div className="p-4 bg-white rounded-md shadow-sm border border-gray-200 animate-pulse">
+    <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <div className="h-3 bg-gray-200 rounded w-3/4"></div>
+        <div className="h-4 bg-gray-200 rounded w-3/4"></div>
         <div className="w-5 h-5 bg-gray-200 rounded-full"></div>
       </div>
-      <div className="h-2 bg-gray-200 rounded w-1/4"></div>
-      <div className="h-2 bg-gray-200 rounded w-1/2"></div>
-      <div className="h-2 bg-gray-200 rounded w-1/3"></div>
-      <div className="h-2 bg-gray-200 rounded w-1/4"></div>
-      <div className="h-2 bg-gray-200 rounded w-1/5"></div>
+      <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+      <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+      <div className="h-3 bg-gray-200 rounded w-1/4"></div>
+      <div className="h-3 bg-gray-200 rounded w-1/5"></div>
     </div>
   </div>
 );
@@ -471,22 +470,27 @@ const BranchModal = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
     >
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        transition={{ duration: 0.2, ease: 'easeOut' }}
-        className="bg-white rounded-lg shadow-xl max-w-full w-[90vw] sm:max-w-2xl p-6"
+        transition={{ duration: 0.2 }}
+        className="bg-white rounded-md shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6"
       >
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">{editingBranch ? t.edit : t.add}</h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">{editingBranch ? t.edit : t.add}</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
         <form onSubmit={onSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div>
-                <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
                   {t.name}
                 </label>
                 <BranchInput
@@ -500,7 +504,7 @@ const BranchModal = ({
                 {formErrors.name && <p className="text-red-600 text-xs mt-1">{formErrors.name}</p>}
               </div>
               <div>
-                <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">
+                <label htmlFor="nameEn" className="block text-sm font-medium text-gray-700 mb-1">
                   {t.nameEn}
                 </label>
                 <BranchInput
@@ -509,12 +513,11 @@ const BranchModal = ({
                   onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'nameEn', value: e.target.value })}
                   placeholder={t.nameEnPlaceholder}
                   ariaLabel={t.nameEn}
-                  required
                 />
                 {formErrors.nameEn && <p className="text-red-600 text-xs mt-1">{formErrors.nameEn}</p>}
               </div>
               <div>
-                <label htmlFor="code" className="block text-xs font-medium text-gray-700 mb-1">
+                <label htmlFor="code" className="block text-sm font-medium text-gray-700 mb-1">
                   {t.code}
                 </label>
                 <BranchInput
@@ -528,7 +531,7 @@ const BranchModal = ({
                 {formErrors.code && <p className="text-red-600 text-xs mt-1">{formErrors.code}</p>}
               </div>
               <div>
-                <label htmlFor="address" className="block text-xs font-medium text-gray-700 mb-1">
+                <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
                   {t.address}
                 </label>
                 <BranchInput
@@ -542,7 +545,7 @@ const BranchModal = ({
                 {formErrors.address && <p className="text-red-600 text-xs mt-1">{formErrors.address}</p>}
               </div>
               <div>
-                <label htmlFor="addressEn" className="block text-xs font-medium text-gray-700 mb-1">
+                <label htmlFor="addressEn" className="block text-sm font-medium text-gray-700 mb-1">
                   {t.addressEn}
                 </label>
                 <BranchInput
@@ -551,12 +554,13 @@ const BranchModal = ({
                   onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'addressEn', value: e.target.value })}
                   placeholder={t.addressEnPlaceholder}
                   ariaLabel={t.addressEn}
-                  required
                 />
                 {formErrors.addressEn && <p className="text-red-600 text-xs mt-1">{formErrors.addressEn}</p>}
               </div>
+            </div>
+            <div className="space-y-3">
               <div>
-                <label htmlFor="city" className="block text-xs font-medium text-gray-700 mb-1">
+                <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
                   {t.city}
                 </label>
                 <BranchInput
@@ -570,7 +574,7 @@ const BranchModal = ({
                 {formErrors.city && <p className="text-red-600 text-xs mt-1">{formErrors.city}</p>}
               </div>
               <div>
-                <label htmlFor="cityEn" className="block text-xs font-medium text-gray-700 mb-1">
+                <label htmlFor="cityEn" className="block text-sm font-medium text-gray-700 mb-1">
                   {t.cityEn}
                 </label>
                 <BranchInput
@@ -579,12 +583,11 @@ const BranchModal = ({
                   onChange={(e) => dispatchForm({ type: 'UPDATE_FIELD', field: 'cityEn', value: e.target.value })}
                   placeholder={t.cityEnPlaceholder}
                   ariaLabel={t.cityEn}
-                  required
                 />
                 {formErrors.cityEn && <p className="text-red-600 text-xs mt-1">{formErrors.cityEn}</p>}
               </div>
               <div>
-                <label htmlFor="phone" className="block text-xs font-medium text-gray-700 mb-1">
+                <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
                   {t.phone}
                 </label>
                 <BranchInput
@@ -596,7 +599,7 @@ const BranchModal = ({
                 />
               </div>
               <div>
-                <label htmlFor="isActive" className="block text-xs font-medium text-gray-700 mb-1">
+                <label htmlFor="isActive" className="block text-sm font-medium text-gray-700 mb-1">
                   {t.status}
                 </label>
                 <BranchSelect
@@ -610,10 +613,8 @@ const BranchModal = ({
                   ariaLabel={t.status}
                 />
               </div>
-            </div>
-            <div className="space-y-4">
               <div>
-                <label htmlFor="userName" className="block text-xs font-medium text-gray-700 mb-1">
+                <label htmlFor="userName" className="block text-sm font-medium text-gray-700 mb-1">
                   {t.userName}
                 </label>
                 <BranchInput
@@ -627,7 +628,7 @@ const BranchModal = ({
                 {formErrors.userName && <p className="text-red-600 text-xs mt-1">{formErrors.userName}</p>}
               </div>
               <div>
-                <label htmlFor="userNameEn" className="block text-xs font-medium text-gray-700 mb-1">
+                <label htmlFor="userNameEn" className="block text-sm font-medium text-gray-700 mb-1">
                   {t.userNameEn}
                 </label>
                 <BranchInput
@@ -636,12 +637,11 @@ const BranchModal = ({
                   onChange={(e) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'nameEn', value: e.target.value })}
                   placeholder={t.userNameEnPlaceholder}
                   ariaLabel={t.userNameEn}
-                  required={!editingBranch}
                 />
                 {formErrors.userNameEn && <p className="text-red-600 text-xs mt-1">{formErrors.userNameEn}</p>}
               </div>
               <div>
-                <label htmlFor="username" className="block text-xs font-medium text-gray-700 mb-1">
+                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
                   {t.username}
                 </label>
                 <BranchInput
@@ -655,7 +655,7 @@ const BranchModal = ({
                 {formErrors.username && <p className="text-red-600 text-xs mt-1">{formErrors.username}</p>}
               </div>
               <div>
-                <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1">
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                   {t.email}
                 </label>
                 <BranchInput
@@ -668,7 +668,7 @@ const BranchModal = ({
                 {formErrors.email && <p className="text-red-600 text-xs mt-1">{formErrors.email}</p>}
               </div>
               <div>
-                <label htmlFor="userPhone" className="block text-xs font-medium text-gray-700 mb-1">
+                <label htmlFor="userPhone" className="block text-sm font-medium text-gray-700 mb-1">
                   {t.userPhone}
                 </label>
                 <BranchInput
@@ -680,7 +680,7 @@ const BranchModal = ({
                 />
               </div>
               <div>
-                <label htmlFor="userIsActive" className="block text-xs font-medium text-gray-700 mb-1">
+                <label htmlFor="userIsActive" className="block text-sm font-medium text-gray-700 mb-1">
                   {t.status}
                 </label>
                 <BranchSelect
@@ -696,7 +696,7 @@ const BranchModal = ({
               </div>
               {!editingBranch && (
                 <div>
-                  <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">
+                  <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
                     {t.password}
                   </label>
                   <BranchInput
@@ -714,25 +714,23 @@ const BranchModal = ({
             </div>
           </div>
           {error && (
-            <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-red-600" />
-              <span className="text-red-600 text-xs">{error}</span>
+            <div className="p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-red-600" />
+              <span className="text-red-600 text-sm">{error}</span>
             </div>
           )}
-          <div className="flex justify-end gap-3">
+          <div className="flex justify-end gap-3 mt-4">
             <motion.button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors duration-200"
-              aria-label={t.cancel}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md text-sm transition-colors duration-200"
               whileHover={{ scale: 1.05 }}
             >
               {t.cancel}
             </motion.button>
             <motion.button
               type="submit"
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors duration-200"
-              aria-label={editingBranch ? t.update : t.add}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-sm transition-colors duration-200"
               whileHover={{ scale: 1.05 }}
             >
               {editingBranch ? t.update : t.add}
@@ -769,20 +767,25 @@ const BranchResetPasswordModal = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
     >
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        transition={{ duration: 0.2, ease: 'easeOut' }}
-        className="bg-white rounded-lg shadow-xl max-w-full w-[90vw] sm:max-w-md p-6"
+        transition={{ duration: 0.2 }}
+        className="bg-white rounded-md shadow-xl w-full max-w-md p-6"
       >
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.resetPassword}</h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">{t.resetPassword}</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
         <form onSubmit={onSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
           <div>
-            <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
               {t.newPassword}
             </label>
             <BranchInput
@@ -796,7 +799,7 @@ const BranchResetPasswordModal = ({
             />
           </div>
           <div>
-            <label htmlFor="confirmPassword" className="block text-xs font-medium text-gray-700 mb-1">
+            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
               {t.confirmPassword}
             </label>
             <BranchInput
@@ -810,25 +813,23 @@ const BranchResetPasswordModal = ({
             />
           </div>
           {error && (
-            <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-              <AlertCircle className="w-4 h-4 text-red-600" />
-              <span className="text-red-600 text-xs">{error}</span>
+            <div className="p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-red-600" />
+              <span className="text-red-600 text-sm">{error}</span>
             </div>
           )}
           <div className="flex justify-end gap-3">
             <motion.button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors duration-200"
-              aria-label={t.cancel}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md text-sm transition-colors duration-200"
               whileHover={{ scale: 1.05 }}
             >
               {t.cancel}
             </motion.button>
             <motion.button
               type="submit"
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors duration-200"
-              aria-label={t.reset}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-sm transition-colors duration-200"
               whileHover={{ scale: 1.05 }}
             >
               {t.reset}
@@ -861,37 +862,40 @@ const BranchDeleteModal = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
-      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      transition={{ duration: 0.2 }}
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
     >
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
-        transition={{ duration: 0.2, ease: 'easeOut' }}
-        className="bg-white rounded-lg shadow-xl max-w-full w-[90vw] sm:max-w-md p-6"
+        transition={{ duration: 0.2 }}
+        className="bg-white rounded-md shadow-xl w-full max-w-md p-6"
       >
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.confirmDelete}</h3>
-        <p className="text-xs text-gray-600 mb-4">{t.deleteWarning}</p>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">{t.confirmDelete}</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <p className="text-sm text-gray-600 mb-4">{t.deleteWarning}</p>
         {error && (
-          <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-red-600" />
-            <span className="text-red-600 text-xs">{error}</span>
+          <div className="p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2">
+            <AlertCircle className="w-5 h-5 text-red-600" />
+            <span className="text-red-600 text-sm">{error}</span>
           </div>
         )}
-        <div className="flex justify-end gap-3">
+        <div className="flex justify-end gap-3 mt-4">
           <motion.button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors duration-200"
-            aria-label={t.cancel}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md text-sm transition-colors duration-200"
             whileHover={{ scale: 1.05 }}
           >
             {t.cancel}
           </motion.button>
           <motion.button
             onClick={onConfirm}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs transition-colors duration-200"
-            aria-label={t.delete}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm transition-colors duration-200"
             whileHover={{ scale: 1.05 }}
           >
             {t.delete}
@@ -982,22 +986,17 @@ export const Branches: React.FC = () => {
       .filter((branch) => {
         const name = (isRtl ? branch.name : branch.nameEn || branch.name).toLowerCase();
         const code = branch.code.toLowerCase();
-        return name.startsWith(lowerSearchTerm) || code.startsWith(lowerSearchTerm) || name.includes(lowerSearchTerm);
+        return name.includes(lowerSearchTerm) || code.includes(lowerSearchTerm);
       })
       .sort((a, b) => {
         const aName = (isRtl ? a.name : a.nameEn || a.name).toLowerCase();
         const bName = (isRtl ? b.name : b.nameEn || b.name).toLowerCase();
-        const aCode = a.code.toLowerCase();
-        const bCode = b.code.toLowerCase();
-        if (aName.startsWith(lowerSearchTerm) && !bName.startsWith(lowerSearchTerm)) return -1;
-        if (!aName.startsWith(lowerSearchTerm) && bName.startsWith(lowerSearchTerm)) return 1;
-        if (aCode.startsWith(lowerSearchTerm) && !bCode.startsWith(lowerSearchTerm)) return -1;
-        if (!aCode.startsWith(lowerSearchTerm) && bCode.startsWith(lowerSearchTerm)) return 1;
         return aName.localeCompare(bName);
       });
   }, [branches, searchTerm, isRtl]);
 
   const checkEmailAvailability = useCallback(async (email: string) => {
+    if (!email) return true;
     try {
       const response = await branchesAPI.checkEmail(email);
       return response.available;
@@ -1009,15 +1008,11 @@ export const Branches: React.FC = () => {
   const validateForm = useCallback(async () => {
     const errors: Record<string, string> = {};
     if (!formData.name.trim()) errors.name = t.nameRequired;
-    if (!formData.nameEn.trim()) errors.nameEn = t.nameEnRequired;
     if (!formData.code.trim()) errors.code = t.codeRequired;
     if (!formData.address.trim()) errors.address = t.addressRequired;
-    if (!formData.addressEn.trim()) errors.addressEn = t.addressEnRequired;
     if (!formData.city.trim()) errors.city = t.cityRequired;
-    if (!formData.cityEn.trim()) errors.cityEn = t.cityEnRequired;
     if (!showEditModal) {
       if (!formData.user.name.trim()) errors.userName = t.userNameRequired;
-      if (!formData.user.nameEn.trim()) errors.userNameEn = t.userNameEnRequired;
       if (!formData.user.username.trim()) errors.username = t.usernameRequired;
       if (!formData.user.password.trim()) errors.password = t.passwordRequired;
       if (formData.user.email.trim()) {
@@ -1038,7 +1033,7 @@ export const Branches: React.FC = () => {
     setSelectedBranch(null);
     setFormErrors({});
     setError('');
-    scrollToForm();
+    formRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
   const openEditModal = useCallback((branch: Branch, e: React.MouseEvent) => {
@@ -1064,7 +1059,7 @@ export const Branches: React.FC = () => {
     setSelectedBranch(branch);
     setFormErrors({});
     setError('');
-    scrollToForm();
+    formRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
   const openResetPasswordModal = useCallback((branch: Branch, e: React.MouseEvent) => {
@@ -1119,12 +1114,13 @@ export const Branches: React.FC = () => {
                 isActive: formData.user.isActive,
               },
         };
+        let response;
         if (showEditModal && selectedBranch) {
-          await branchesAPI.update(selectedBranch._id, branchData);
-          setBranches(branches.map((b) => (b._id === selectedBranch._id ? { ...b, ...branchData } : b)));
+          response = await branchesAPI.update(selectedBranch._id, branchData);
+          setBranches(branches.map((b) => (b._id === selectedBranch._id ? { ...b, ...response } : b)));
           toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
         } else {
-          const response = await branchesAPI.create(branchData);
+          response = await branchesAPI.create(branchData);
           setBranches([...branches, response]);
           toast.success(t.added, { position: isRtl ? 'top-right' : 'top-left' });
         }
@@ -1135,12 +1131,11 @@ export const Branches: React.FC = () => {
         console.error(`[${new Date().toISOString()}] Submit error:`, err);
         let errorMessage = showEditModal ? t.updateError : t.createError;
         if (err.response?.data?.message) {
-          const message = err.response.data.message;
           errorMessage =
-            message === 'Branch code already exists' ? t.codeExists :
-            message === 'Username already exists' ? t.usernameExists :
-            message.includes('الإيميل') || message.includes('email') ? t.emailExists :
-            message;
+            err.response.data.message.includes('code') ? t.codeExists :
+            err.response.data.message.includes('username') ? t.usernameExists :
+            err.response.data.message.includes('email') ? t.emailExists :
+            err.response.data.message;
         }
         setError(errorMessage);
         toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
@@ -1174,9 +1169,8 @@ export const Branches: React.FC = () => {
         toast.success(t.passwordResetSuccess, { position: isRtl ? 'top-right' : 'top-left' });
       } catch (err: any) {
         console.error(`[${new Date().toISOString()}] Reset password error:`, err);
-        const errorMessage = err.message || t.passwordResetError;
-        setError(errorMessage);
-        toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+        setError(err.response?.data?.message || t.passwordResetError);
+        toast.error(err.response?.data?.message || t.passwordResetError, { position: isRtl ? 'top-right' : 'top-left' });
       }
     },
     [resetPasswordData, selectedBranch, t, isRtl]
@@ -1192,13 +1186,8 @@ export const Branches: React.FC = () => {
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Delete error:`, err);
-      let errorMessage = t.deleteError;
-      if (err.response?.data?.message) {
-        errorMessage = err.response.data.message === 'Cannot delete branch with associated orders or inventory' ?
-          t.deleteRestricted : err.response.data.message;
-      }
-      setError(errorMessage);
-      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+      setError(err.response?.data?.message || t.deleteError);
+      toast.error(err.response?.data?.message || t.deleteError, { position: isRtl ? 'top-right' : 'top-left' });
     }
   }, [selectedBranch, branches, t, isRtl]);
 
@@ -1206,34 +1195,29 @@ export const Branches: React.FC = () => {
     navigate(`/branches/${branchId}`);
   }, [navigate]);
 
-  const scrollToForm = () => {
-    formRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
   return (
-    <div className={`mx-auto  px-4 sm:px-6 lg:px-8 py-8 min-h-screen overflow-y-auto `}>
+    <div className="container mx-auto px-4 py-8">
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3, ease: 'easeOut' }}
-        className="mb-6 flex flex-col items-center gap-4"
+        transition={{ duration: 0.3 }}
+        className="mb-6"
       >
-        <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-between sm:items-center w-full">
-          <div className={`flex  flex-col  ${isRtl ? 'md:text-right' : ' md:text-left'} text-center gap-3 sm:flex-row sm:items-center gap-3`}>
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+          <div className="flex items-center gap-3">
             <MapPin className="w-6 h-6 text-amber-600" />
-            <div className="text-center sm:text-left">
+            <div>
               <h1 className="text-xl font-bold text-gray-900">{t.manage}</h1>
-              <p className="text-gray-600 text-xs">{t.addBranches}</p>
+              <p className="text-sm text-gray-600">{t.addBranches}</p>
             </div>
           </div>
           {user?.role === 'admin' && (
             <motion.button
               onClick={openAddModal}
-              className="w-full sm:w-auto px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors duration-200 flex items-center justify-center gap-2 shadow-sm"
-              aria-label={t.add}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-sm transition-colors duration-200 flex items-center gap-2"
               whileHover={{ scale: 1.05 }}
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-5 h-5" />
               {t.add}
             </motion.button>
           )}
@@ -1244,96 +1228,80 @@ export const Branches: React.FC = () => {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: 'easeOut' }}
-          className="mb-6 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
+          transition={{ duration: 0.3 }}
+          className="mb-6 p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2"
         >
-          <AlertCircle className="w-4 h-4 text-red-600" />
-          <span className="text-red-600 text-xs">{error}</span>
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <span className="text-red-600 text-sm">{error}</span>
         </motion.div>
       )}
 
-      {user?.role === 'admin' && (
-        <div className={`lg:hidden fixed bottom-6 ${isRtl ? 'left-6' : 'right-6'} z-50`}>
-          <motion.button
-            onClick={openAddModal}
-            className="p-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full shadow-lg transition-colors duration-200"
-            aria-label={t.scrollToForm}
-            whileHover={{ scale: 1.05 }}
-          >
-            <Plus className="w-5 h-5" />
-          </motion.button>
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="mb-6 p-4 bg-white rounded-md shadow-sm border border-gray-200"
+      >
+        <BranchSearchInput
+          value={searchInput}
+          onChange={handleSearchChange}
+          placeholder={t.searchPlaceholder}
+          ariaLabel={t.searchPlaceholder}
+        />
+        <div className="mt-3 text-sm text-gray-600 font-medium text-center">
+          {t.branchCount}: {filteredBranches.length}
         </div>
-      )}
+      </motion.div>
 
-      <div className="space-y-6">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3, ease: 'easeOut' }}
-          className="p-4 bg-white rounded-lg shadow-sm border border-gray-100"
-        >
-          <BranchSearchInput
-            value={searchInput}
-            onChange={handleSearchChange}
-            placeholder={t.searchPlaceholder}
-            ariaLabel={t.searchPlaceholder}
-          />
-          <div className="mt-3 text-center text-xs text-gray-600 font-medium">
-            {isRtl ? `${t.branchCount}: ${filteredBranches.length}` : `${t.branchCount}: ${filteredBranches.length}`}
+      <div ref={formRef}>
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[...Array(6)].map((_, index) => (
+              <BranchSkeletonCard key={index} />
+            ))}
           </div>
-        </motion.div>
-
-        <div ref={formRef} className="lg:overflow-y-auto lg:max-h-[calc(100vh-12rem)] scrollbar-thin">
-          {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[...Array(6)].map((_, index) => (
-                <BranchSkeletonCard key={index} />
-              ))}
-            </div>
-          ) : filteredBranches.length === 0 ? (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, ease: 'easeOut' }}
-              className="p-6 text-center bg-white rounded-lg shadow-sm border border-gray-100"
-            >
-              <MapPin className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-              <p className="text-gray-600 text-xs">{searchTerm ? t.noMatch : t.empty}</p>
-              {user?.role === 'admin' && !searchTerm && (
-                <motion.button
-                  onClick={openAddModal}
-                  className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors duration-200"
-                  aria-label={t.addFirst}
-                  whileHover={{ scale: 1.05 }}
+        ) : filteredBranches.length === 0 ? (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="p-6 text-center bg-white rounded-md shadow-sm border border-gray-200"
+          >
+            <MapPin className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+            <p className="text-sm text-gray-600">{searchTerm ? t.noMatch : t.empty}</p>
+            {user?.role === 'admin' && !searchTerm && (
+              <motion.button
+                onClick={openAddModal}
+                className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-sm transition-colors duration-200"
+                whileHover={{ scale: 1.05 }}
+              >
+                {t.addFirst}
+              </motion.button>
+            )}
+          </motion.div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <AnimatePresence>
+              {filteredBranches.map((branch) => (
+                <motion.div
+                  key={branch._id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
                 >
-                  {t.addFirst}
-                </motion.button>
-              )}
-            </motion.div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <AnimatePresence>
-                {filteredBranches.map((branch, index) => (
-                  <motion.div
-                    key={branch._id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.2, ease: 'easeOut', delay: index * 0.05 }}
-                  >
-                    <BranchCard
-                      branch={branch}
-                      onEdit={(e) => openEditModal(branch, e)}
-                      onResetPassword={(e) => openResetPasswordModal(branch, e)}
-                      onDelete={(e) => openDeleteModal(branch, e)}
-                      onClick={() => handleCardClick(branch._id)}
-                    />
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </div>
-          )}
-        </div>
+                  <BranchCard
+                    branch={branch}
+                    onEdit={(e) => openEditModal(branch, e)}
+                    onResetPassword={(e) => openResetPasswordModal(branch, e)}
+                    onDelete={(e) => openDeleteModal(branch, e)}
+                    onClick={() => handleCardClick(branch._id)}
+                  />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+        )}
       </div>
 
       <BranchModal
