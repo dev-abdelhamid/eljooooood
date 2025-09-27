@@ -57,8 +57,6 @@ const translations = {
     branch: 'الفرع',
     branchPlaceholder: 'اختر الفرع',
     branchRequired: 'الفرع مطلوب',
-    notes: 'ملاحظات',
-    notesPlaceholder: 'أدخل ملاحظات الطلب...',
     clearOrder: 'مسح الطلب',
     submitOrder: 'إرسال الطلب',
     submitting: 'جاري الإرسال...',
@@ -91,8 +89,6 @@ const translations = {
     branch: 'Branch',
     branchPlaceholder: 'Select Branch',
     branchRequired: 'Branch is required',
-    notes: 'Notes',
-    notesPlaceholder: 'Enter order notes...',
     clearOrder: 'Clear Order',
     submitOrder: 'Submit Order',
     submitting: 'Submitting...',
@@ -218,31 +214,6 @@ const ProductDropdown = ({
         )}
       </AnimatePresence>
     </div>
-  );
-};
-
-const ProductTextarea = ({
-  value,
-  onChange,
-  placeholder,
-  ariaLabel,
-}: {
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-  placeholder: string;
-  ariaLabel: string;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  return (
-    <textarea
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-      className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
-      rows={4}
-      aria-label={ariaLabel}
-    />
   );
 };
 
@@ -434,7 +405,6 @@ export function NewOrder() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [branch, setBranch] = useState<string>(user?.branchId?.toString() || '');
-  const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -531,14 +501,19 @@ export function NewOrder() {
   useEffect(() => {
     socket.on('connect', () => {
       console.log('Connected to Socket.IO server');
+      if (user?.role === 'branch' && user?.branchId) {
+        socket.emit('joinRoom', `branch-${user.branchId}`);
+      } else if (user?.role === 'admin') {
+        socket.emit('joinRoom', 'admin');
+      }
     });
-    socket.on('orderCreated', () => {
+    socket.on('orderCreated', (orderData) => {
       toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
     });
     return () => {
       socket.disconnect();
     };
-  }, [socket, t, isRtl]);
+  }, [socket, t, isRtl, user]);
 
   const addToOrder = useCallback((product: Product) => {
     setOrderItems((prev) => {
@@ -577,7 +552,6 @@ export function NewOrder() {
 
   const clearOrder = useCallback(() => {
     setOrderItems([]);
-    setNotes('');
     if (user?.role === 'admin') setBranch('');
     toast.success(t.orderCleared, { position: isRtl ? 'top-right' : 'top-left' });
   }, [user, t, isRtl]);
@@ -613,16 +587,19 @@ export function NewOrder() {
         orderNumber: `ORD-${Date.now()}`,
         branchId: user?.role === 'branch' ? user?.branchId?.toString() : branch,
         items: orderItems.map((item) => ({
-          productId: item.productId,
+          product: item.productId,
           quantity: item.quantity,
           price: item.price,
         })),
         status: 'pending',
-        notes: notes.trim() || undefined,
-        requestedDeliveryDate: new Date().toISOString(),
       };
-      const response = await ordersAPI.create(orderData);
-      socket.emit('newOrderFromBranch', response);
+      const response = await ordersAPI.create(orderData, isRtl);
+      socket.emit('orderCreated', {
+        ...response.data,
+        isRtl,
+        eventId: `${response.data.orderId}-orderCreated`,
+      });
+      toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
       setTimeout(() => navigate('/orders'), 1000);
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Create error:`, err);
@@ -848,17 +825,6 @@ export function NewOrder() {
                     />
                   </div>
                 )}
-                <div>
-                  <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
-                    {t.notes}
-                  </label>
-                  <ProductTextarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder={t.notesPlaceholder}
-                    ariaLabel={t.notes}
-                  />
-                </div>
                 <div className="flex gap-3">
                   <motion.button
                     onClick={clearOrder}

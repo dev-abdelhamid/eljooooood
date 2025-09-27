@@ -445,17 +445,24 @@ export const usersAPI = {
   },
 };
 
+const createErrorMessage = (errorType: string, isRtl: boolean): string => {
+  const messages: { [key: string]: { ar: string; en: string } } = {
+    invalidBranchId: { ar: 'معرف الفرع غير صالح', en: 'Invalid branch ID' },
+    invalidOrderId: { ar: 'معرف الطلب غير صالح', en: 'Invalid order ID' },
+    invalidDepartmentId: { ar: 'معرف القسم غير صالح', en: 'Invalid department ID' },
+    invalidOrderOrTaskId: { ar: 'معرف الطلب أو المهمة غير صالح', en: 'Invalid order or task ID' },
+    invalidOrderOrItemOrChefId: { ar: 'معرف الطلب، العنصر، أو الشيف غير صالح', en: 'Invalid order, item, or chef ID' },
+  };
+  return isRtl ? messages[errorType].ar : messages[errorType].en;
+};
+
 export const ordersAPI = {
-create: async (
+  create: async (
     orderData: {
       orderNumber: string;
       branchId: string;
       items: Array<{ product: string; quantity: number; price: number }>;
       status: string;
-      notes?: string;
-      notesEn?: string;
-      priority?: string;
-      requestedDeliveryDate?: string;
     },
     isRtl: boolean = false
   ) => {
@@ -468,17 +475,13 @@ create: async (
         orderNumber: orderData.orderNumber.trim(),
         branchId: orderData.branchId,
         items: orderData.items.map(item => ({
-          product: item.product, // تغيير productId إلى product لتتوافق مع السكيما
+          product: item.product,
           quantity: item.quantity,
           price: item.price,
         })),
         status: orderData.status.trim(),
-        notes: orderData.notes?.trim(),
-        notesEn: orderData.notesEn?.trim() || orderData.notes?.trim() || '', // ضمان وجود notesEn
-        priority: orderData.priority?.trim() || 'medium',
-        requestedDeliveryDate: orderData.requestedDeliveryDate || new Date().toISOString(),
       }, {
-        params: { isRtl: isRtl.toString() }, // إضافة isRtl كمعامل استعلام
+        params: { isRtl: isRtl.toString() },
       });
       console.log(`[${new Date().toISOString()}] ordersAPI.create - Response:`, response);
       return response;
@@ -525,7 +528,7 @@ create: async (
     }
   },
 
-  updateStatus: async (orderId: string, data: { status: string; notes?: string; notesEn?: string }, isRtl: boolean = false) => {
+  updateStatus: async (orderId: string, data: { status: string }, isRtl: boolean = false) => {
     if (!isValidObjectId(orderId)) {
       console.error(`[${new Date().toISOString()}] ordersAPI.updateStatus - Invalid order ID:`, orderId);
       throw new Error(createErrorMessage('invalidOrderId', isRtl));
@@ -533,8 +536,6 @@ create: async (
     try {
       const response = await api.patch(`/orders/${orderId}/status`, {
         status: data.status.trim(),
-        notes: data.notes?.trim(),
-        notesEn: data.notesEn?.trim(),
       });
       console.log(`[${new Date().toISOString()}] ordersAPI.updateStatus - Response:`, response);
       return response;
@@ -563,7 +564,7 @@ create: async (
 
   assignChef: async (
     orderId: string,
-    data: { items: Array<{ itemId: string; assignedTo: string }>; notes?: string; notesEn?: string },
+    data: { items: Array<{ itemId: string; assignedTo: string }> },
     isRtl: boolean = false
   ) => {
     if (!isValidObjectId(orderId) || data.items.some(item => !isValidObjectId(item.itemId) || !isValidObjectId(item.assignedTo))) {
@@ -573,8 +574,6 @@ create: async (
     try {
       const response = await api.patch(`/orders/${orderId}/assign`, {
         items: data.items,
-        notes: data.notes?.trim(),
-        notesEn: data.notesEn?.trim(),
         timestamp: new Date().toISOString(),
       });
       console.log(`[${new Date().toISOString()}] ordersAPI.assignChef - Response:`, response);
