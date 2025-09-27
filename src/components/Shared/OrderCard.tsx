@@ -5,7 +5,20 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, Check, Package, Truck, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Order, OrderStatus, ItemStatus } from '../../types/types';
+ 
 
+
+   
+
+    const validTransitions = {
+      pending: [OrderStatus.Approved, OrderStatus.Cancelled],
+      approved: [OrderStatus.InProduction, OrderStatus.Cancelled],
+      in_production: [OrderStatus.Completed, OrderStatus.Cancelled],
+      completed: [OrderStatus.InTransit],
+      in_transit: [OrderStatus.Delivered],
+      delivered: [],
+      cancelled: [],
+    };
 const STATUS_COLORS: Record<OrderStatus, { color: string; icon: React.FC; label: string; progress: number }> = {
   pending: { color: 'bg-yellow-100 text-yellow-800', icon: Clock, label: 'pending', progress: 0 },
   approved: { color: 'bg-teal-100 text-teal-800', icon: Check, label: 'approved', progress: 25 },
@@ -23,6 +36,16 @@ const ITEM_STATUS_COLORS: Record<ItemStatus, { label: string; color: string; ico
   completed: { label: 'completed', color: 'bg-green-50 text-green-600', icon: Check },
   cancelled: { label: 'cancelled', color: 'bg-red-50 text-red-600', icon: AlertCircle },
 };
+
+
+    const statusTranslations = {
+      pending: 'pending',
+      approved: 'approved',
+      in_production: 'in_production',
+      completed: 'completed',
+      in_transit: 'in_transit',
+      delivered: 'delivered',
+      cancelled: 'cancelled',};
 
 const PRIORITY_COLORS: Record<Order['priority'], string> = {
   low: 'bg-gray-100 text-gray-700',

@@ -61,8 +61,8 @@ const OrderTable: React.FC<Props> = memo(
                     {t(`orders.status_${statusInfo.label}`)}
                   </span>
                 </td>
-                <td className="px-4 py-2 text-sm text-gray-600 text-right truncate">
-                  {order.items.map(item => `(${item.quantity} ${t(`units.${item.unit || 'unit'}`)} × ${getFirstTwoWords(item.productName)})`).join(' + ')}
+                <td className="px-4 py-2 leading-6 whitespace-nowrap text-sm text-gray-600 text-right ">
+                  {order.items.map(item => `(${item.quantity} ${t(`${item.unit || 'unit'}`)} × ${getFirstTwoWords(item.productName)})`).join(' + ')}
                 </td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{calculateAdjustedTotal(order)}</td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{calculateTotalQuantity(order)}</td>
