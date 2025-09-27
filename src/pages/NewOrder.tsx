@@ -1,13 +1,38 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { useNotifications } from '../contexts/NotificationContext';
 import { productsAPI, ordersAPI, branchesAPI, departmentAPI } from '../services/api';
 import { ShoppingCart, Plus, Minus, Trash2, Package, AlertCircle, Search, X, ChevronDown } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
+
+interface Product {
+  _id: string;
+  name: string;
+  nameEn?: string;
+  code: string;
+  department: { _id: string; name: string; nameEn?: string };
+  price: number;
+  unit?: string;
+  unitEn?: string;
+  displayName: string;
+  displayUnit: string;
+}
+
+interface Branch {
+  _id: string;
+  name: string;
+  nameEn?: string;
+}
+
+interface Department {
+  _id: string;
+  name: string;
+  nameEn?: string;
+}
 
 interface OrderItem {
   productId: string;
@@ -259,7 +284,7 @@ const ProductCard = ({ product, cartItem, onAdd, onUpdate, onRemove }: {
           <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>{product.displayName}</h3>
           <p className="text-sm text-gray-500">{product.code}</p>
         </div>
-        <p className="text-sm text-amber-600">{t.department}: {product.department.displayName}</p>
+        <p className="text-sm text-amber-600">{t.department}: {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}</p>
         <p className="font-semibold text-gray-900 text-sm">{t.price}: {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}</p>
       </div>
       <div className="mt-4 flex justify-end">
@@ -369,10 +394,10 @@ const OrderConfirmModal = ({
 
 export function NewOrder() {
   const { user } = useAuth();
-  const { language, t: languageT } = useLanguage();
-  const { addNotification } = useNotifications();
+  const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
+  const navigate = useNavigate();
   const summaryRef = useRef<HTMLDivElement>(null);
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -407,12 +432,9 @@ export function NewOrder() {
 
   const filteredProducts = useMemo(() => {
     const lowerSearchTerm = searchTerm.toLowerCase();
-    const seenIds = new Set<string>();
     return products
       .filter((product) => {
-        if (seenIds.has(product._id)) return false;
-        seenIds.add(product._id);
-        const name = product.displayName.toLowerCase();
+        const name = (isRtl ? product.name : product.nameEn || product.name).toLowerCase();
         const code = product.code.toLowerCase();
         return (
           (filterDepartment ? product.department._id === filterDepartment : true) &&
@@ -420,8 +442,8 @@ export function NewOrder() {
         );
       })
       .sort((a, b) => {
-        const aName = a.displayName.toLowerCase();
-        const bName = b.displayName.toLowerCase();
+        const aName = (isRtl ? a.name : a.nameEn || a.name).toLowerCase();
+        const bName = (isRtl ? b.name : b.nameEn || b.name).toLowerCase();
         const aCode = a.code.toLowerCase();
         const bCode = b.code.toLowerCase();
         if (aName.startsWith(lowerSearchTerm) && !bName.startsWith(lowerSearchTerm)) return -1;
@@ -430,7 +452,7 @@ export function NewOrder() {
         if (!aCode.startsWith(lowerSearchTerm) && bCode.startsWith(lowerSearchTerm)) return 1;
         return aName.localeCompare(bName);
       });
-  }, [products, searchTerm, filterDepartment]);
+  }, [products, searchTerm, filterDepartment, isRtl]);
 
   const skeletonCount = useMemo(() => {
     return filteredProducts.length > 0 ? filteredProducts.length : 6;
@@ -439,6 +461,7 @@ export function NewOrder() {
   useEffect(() => {
     if (!user || !['admin', 'branch'].includes(user.role)) {
       setError(t.unauthorized);
+      navigate('/branch-orders');
       toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
@@ -456,10 +479,6 @@ export function NewOrder() {
           ...product,
           displayName: isRtl ? product.name : (product.nameEn || product.name),
           displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
-          department: {
-            ...product.department,
-            displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name),
-          },
         }));
         setProducts(productsWithDisplay);
         setBranches(Array.isArray(branchesResponse) ? branchesResponse : []);
@@ -477,75 +496,24 @@ export function NewOrder() {
       }
     };
     loadData();
-  }, [user, t, isRtl, filterDepartment, searchTerm]);
-
-  // تحديث displayName و displayUnit للمنتجات عند تغيير اللغة
-  useEffect(() => {
-    setProducts((prev) =>
-      prev.map((product) => ({
-        ...product,
-        displayName: isRtl ? product.name : (product.nameEn || product.name),
-        displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
-        department: {
-          ...product.department,
-          displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name),
-        },
-      }))
-    );
-    // تحديث orderItems عند تغيير اللغة
-    setOrderItems((prev) =>
-      prev.map((item) => ({
-        ...item,
-        product: {
-          ...item.product,
-          displayName: isRtl ? item.product.name : (item.product.nameEn || item.product.name),
-          displayUnit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
-          department: {
-            ...item.product.department,
-            displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name),
-          },
-        },
-      }))
-    );
-  }, [isRtl]);
+  }, [user, navigate, t, isRtl, filterDepartment, searchTerm]);
 
   useEffect(() => {
-    if (!user || !socket) return;
-
     socket.on('connect', () => {
-      console.log(`[${new Date().toISOString()}] Connected to Socket.IO server`);
+      console.log('Connected to Socket.IO server');
       if (user?.role === 'branch' && user?.branchId) {
         socket.emit('joinRoom', `branch-${user.branchId}`);
       } else if (user?.role === 'admin') {
         socket.emit('joinRoom', 'admin');
       }
     });
-
     socket.on('orderCreated', (orderData) => {
-      if (!orderData?._id || !orderData.orderNumber || !orderData.branch) {
-        console.warn(`[${new Date().toISOString()}] Invalid order created data:`, orderData);
-        return;
-      }
-      const eventId = orderData.eventId || crypto.randomUUID();
-      addNotification({
-        _id: eventId,
-        type: 'success',
-        message: languageT('notifications.order_created', {
-          orderNumber: orderData.orderNumber,
-          branchName: isRtl ? orderData.branch.name : (orderData.branch.nameEn || orderData.branch.name),
-        }),
-        data: { orderId: orderData._id, eventId },
-        read: false,
-        createdAt: new Date().toISOString(),
-        sound: '/sounds/notification.mp3',
-        vibrate: [200, 100, 200],
-      });
+      toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
     });
-
     return () => {
       socket.disconnect();
     };
-  }, [socket, languageT, isRtl, user, addNotification]);
+  }, [socket, t, isRtl, user]);
 
   const addToOrder = useCallback((product: Product) => {
     setOrderItems((prev) => {
@@ -585,9 +553,6 @@ export function NewOrder() {
   const clearOrder = useCallback(() => {
     setOrderItems([]);
     if (user?.role === 'admin') setBranch('');
-    setSearchInput('');
-    setSearchTerm('');
-    setFilterDepartment('');
     toast.success(t.orderCleared, { position: isRtl ? 'top-right' : 'top-left' });
   }, [user, t, isRtl]);
 
@@ -616,6 +581,7 @@ export function NewOrder() {
 
   const confirmOrder = async () => {
     setSubmitting(true);
+    setShowConfirmModal(false);
     try {
       const orderData = {
         orderNumber: `ORD-${Date.now()}`,
@@ -624,47 +590,17 @@ export function NewOrder() {
           product: item.productId,
           quantity: item.quantity,
           price: item.price,
-          productName: item.product.name,
-          productNameEn: item.product.nameEn,
-          unit: item.product.unit,
-          unitEn: item.product.unitEn,
-          department: item.product.department,
         })),
         status: 'pending',
-        priority: 'medium',
-        createdBy: user?.id || user?._id,
-        isRtl,
       };
       const response = await ordersAPI.create(orderData, isRtl);
-      const eventId = crypto.randomUUID();
       socket.emit('orderCreated', {
-        _id: response.data.id,
-        orderNumber: response.data.orderNumber,
-        branch: response.data.branch,
-        items: response.data.items,
-        eventId,
+        ...response.data,
         isRtl,
+        eventId: `${response.data.orderId}-orderCreated`,
       });
-      addNotification({
-        _id: eventId,
-        type: 'success',
-        message: languageT('notifications.order_created', {
-          orderNumber: response.data.orderNumber,
-          branchName: isRtl ? response.data.branch.name : (response.data.branch.nameEn || response.data.branch.name),
-        }),
-        data: { orderId: response.data.id, eventId },
-        read: false,
-        createdAt: new Date().toISOString(),
-        sound: '/sounds/notification.mp3',
-        vibrate: [200, 100, 200],
-      });
-      setOrderItems([]);
-      if (user?.role === 'admin') setBranch('');
-      setSearchInput('');
-      setSearchTerm('');
-      setFilterDepartment('');
-      setShowConfirmModal(false);
-      setError('');
+      toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
+      setTimeout(() => navigate('/orders'), 1000);
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Create error:`, err);
       setError(err.message || t.createError);
@@ -743,7 +679,7 @@ export function NewOrder() {
                   { value: '', label: isRtl ? 'كل الأقسام' : 'All Departments' },
                   ...departments.map((d) => ({
                     value: d._id,
-                    label: d.displayName,
+                    label: isRtl ? d.name : (d.nameEn || d.name),
                   })),
                 ]}
                 ariaLabel={t.department}
@@ -882,7 +818,7 @@ export function NewOrder() {
                         { value: '', label: t.branchPlaceholder },
                         ...branches.map((b) => ({
                           value: b._id,
-                          label: b.displayName,
+                          label: isRtl ? b.name : (b.nameEn || b.name),
                         })),
                       ]}
                       ariaLabel={t.branch}
