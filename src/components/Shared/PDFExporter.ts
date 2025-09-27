@@ -1,3 +1,4 @@
+// src/components/Shared/PDFExporter.tsx
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
@@ -69,8 +70,8 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
 const loadFont = async (doc: jsPDF): Promise<boolean> => {
   const fontName = 'Amiri';
   const fontUrls = {
-    regular: '/fonts/Amiri-Regular.ttf',
-    bold: '/fonts/Amiri-Bold.ttf',
+    regular: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Regular.ttf',
+    bold: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Bold.ttf',
   };
   try {
     const regularFontBytes = await fetch(fontUrls.regular).then((res) => {
