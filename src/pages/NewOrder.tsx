@@ -8,6 +8,7 @@ import { io } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
+import { isValidObjectId } from 'mongoose';
 
 interface Product {
   _id: string;
@@ -26,6 +27,7 @@ interface Branch {
   _id: string;
   name: string;
   nameEn?: string;
+  displayName: string;
 }
 
 interface Department {
@@ -443,7 +445,10 @@ export function NewOrder() {
   const [filterDepartment, setFilterDepartment] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
-  const socket = useMemo(() => io('https://eljoodia-server-production.up.railway.app'), []);
+  const socket = useMemo(() => io('https://eljoodia-server-production.up.railway.app', {
+    withCredentials: true,
+    transports: ['websocket', 'polling'],
+  }), []);
 
   const debouncedSearch = useCallback(
     debounce((value: string) => {
@@ -468,18 +473,12 @@ export function NewOrder() {
         const code = product.code.toLowerCase();
         return (
           (filterDepartment ? product.department._id === filterDepartment : true) &&
-          (name.startsWith(lowerSearchTerm) || code.startsWith(lowerSearchTerm) || name.includes(lowerSearchTerm))
+          (name.includes(lowerSearchTerm) || code.includes(lowerSearchTerm))
         );
       })
       .sort((a, b) => {
         const aName = (isRtl ? a.name : a.nameEn || a.name).toLowerCase();
         const bName = (isRtl ? b.name : b.nameEn || b.name).toLowerCase();
-        const aCode = a.code.toLowerCase();
-        const bCode = b.code.toLowerCase();
-        if (aName.startsWith(lowerSearchTerm) && !bName.startsWith(lowerSearchTerm)) return -1;
-        if (!aName.startsWith(lowerSearchTerm) && bName.startsWith(lowerSearchTerm)) return 1;
-        if (aCode.startsWith(lowerSearchTerm) && !bCode.startsWith(lowerSearchTerm)) return -1;
-        if (!aCode.startsWith(lowerSearchTerm) && bCode.startsWith(lowerSearchTerm)) return 1;
         return aName.localeCompare(bName);
       });
   }, [products, searchTerm, filterDepartment, isRtl]);
@@ -489,10 +488,10 @@ export function NewOrder() {
   }, [filteredProducts]);
 
   useEffect(() => {
-    if (!user || !['admin', 'branch'].includes(user.role)) {
+    if (!user || user.role !== 'branch') {
       setError(t.unauthorized);
-      navigate('/branch-orders');
       toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
+      navigate('/orders');
       return;
     }
 
@@ -511,9 +510,12 @@ export function NewOrder() {
           displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
         }));
         setProducts(productsWithDisplay);
-        setBranches(Array.isArray(branchesResponse) ? branchesResponse : []);
+        setBranches(Array.isArray(branchesResponse) ? branchesResponse.map((b: Branch) => ({
+          ...b,
+          displayName: isRtl ? b.name : (b.nameEn || b.name),
+        })) : []);
         setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data : []);
-        if (user?.role === 'branch' && user?.branchId) {
+        if (user?.role === 'branch' && user?.branchId && isValidObjectId(user.branchId)) {
           setBranch(user.branchId.toString());
         }
         setError('');
@@ -530,9 +532,13 @@ export function NewOrder() {
 
   useEffect(() => {
     socket.on('connect', () => {
-      console.log('Connected to Socket.IO server');
+      console.log(`[${new Date().toISOString()}] Socket connected`);
     });
-    socket.on('orderCreated', () => {
+    socket.on('connect_error', (err) => {
+      console.error(`[${new Date().toISOString()}] Socket connect error:`, err.message);
+    });
+    socket.on('orderCreated', (order) => {
+      console.log(`[${new Date().toISOString()}] Order created via socket:`, order);
       toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
     });
     return () => {
@@ -541,6 +547,13 @@ export function NewOrder() {
   }, [socket, t, isRtl]);
 
   const addToOrder = useCallback((product: Product) => {
+    if (!isValidObjectId(product._id)) {
+      console.error(`[${new Date().toISOString()}] addToOrder - Invalid product ID:`, product._id);
+      toast.error(isRtl ? 'معرف المنتج غير صالح' : 'Invalid product ID', {
+        position: isRtl ? 'top-right' : 'top-left',
+      });
+      return;
+    }
     setOrderItems((prev) => {
       const existingItem = prev.find((item) => item.productId === product._id);
       if (existingItem) {
@@ -550,9 +563,16 @@ export function NewOrder() {
       }
       return [...prev, { productId: product._id, product, quantity: 1, price: product.price }];
     });
-  }, []);
+  }, [isRtl]);
 
   const updateQuantity = useCallback((productId: string, quantity: number) => {
+    if (!isValidObjectId(productId)) {
+      console.error(`[${new Date().toISOString()}] updateQuantity - Invalid product ID:`, productId);
+      toast.error(isRtl ? 'معرف المنتج غير صالح' : 'Invalid product ID', {
+        position: isRtl ? 'top-right' : 'top-left',
+      });
+      return;
+    }
     if (quantity <= 0) {
       removeFromOrder(productId);
       return;
@@ -560,27 +580,32 @@ export function NewOrder() {
     setOrderItems((prev) =>
       prev.map((item) => (item.productId === productId ? { ...item, quantity } : item))
     );
-  }, []);
+  }, [isRtl]);
 
-  const handleQuantityInput = useCallback((productId: string, value: string) => {
-    const quantity = parseInt(value) || 0;
-    if (value === '' || quantity <= 0) {
-      updateQuantity(productId, 0);
-      return;
-    }
-    updateQuantity(productId, quantity);
-  }, [updateQuantity]);
+  const handleQuantityInput = useCallback(
+    (productId: string, value: string) => {
+      const quantity = parseInt(value) || 0;
+      updateQuantity(productId, quantity);
+    },
+    [updateQuantity]
+  );
 
   const removeFromOrder = useCallback((productId: string) => {
+    if (!isValidObjectId(productId)) {
+      console.error(`[${new Date().toISOString()}] removeFromOrder - Invalid product ID:`, productId);
+      toast.error(isRtl ? 'معرف المنتج غير صالح' : 'Invalid product ID', {
+        position: isRtl ? 'top-right' : 'top-left',
+      });
+      return;
+    }
     setOrderItems((prev) => prev.filter((item) => item.productId !== productId));
-  }, []);
+  }, [isRtl]);
 
   const clearOrder = useCallback(() => {
     setOrderItems([]);
     setNotes('');
-    if (user?.role === 'admin') setBranch('');
     toast.success(t.orderCleared, { position: isRtl ? 'top-right' : 'top-left' });
-  }, [user, t, isRtl]);
+  }, [t, isRtl]);
 
   const getTotalAmount = useMemo(
     () => orderItems.reduce((total, item) => total + item.price * item.quantity, 0).toFixed(2),
@@ -595,14 +620,14 @@ export function NewOrder() {
         toast.error(t.cartEmpty, { position: isRtl ? 'top-right' : 'top-left' });
         return;
       }
-      if (!branch && user?.role === 'admin') {
+      if (!branch || !isValidObjectId(branch)) {
         setError(t.branchRequired);
         toast.error(t.branchRequired, { position: isRtl ? 'top-right' : 'top-left' });
         return;
       }
       setShowConfirmModal(true);
     },
-    [orderItems, branch, user, t, isRtl]
+    [orderItems, branch, t, isRtl]
   );
 
   const confirmOrder = async () => {
@@ -611,7 +636,7 @@ export function NewOrder() {
     try {
       const orderData = {
         orderNumber: `ORD-${Date.now()}`,
-        branchId: user?.role === 'branch' ? user?.branchId?.toString() : branch,
+        branchId: branch,
         items: orderItems.map((item) => ({
           productId: item.productId,
           quantity: item.quantity,
@@ -621,11 +646,17 @@ export function NewOrder() {
         notes: notes.trim() || undefined,
         requestedDeliveryDate: new Date().toISOString(),
       };
+      console.log(`[${new Date().toISOString()}] confirmOrder - Submitting order:`, orderData);
       const response = await ordersAPI.create(orderData);
+      console.log(`[${new Date().toISOString()}] confirmOrder - Order created:`, response);
       socket.emit('newOrderFromBranch', response);
+      toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
       setTimeout(() => navigate('/orders'), 1000);
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Create error:`, err);
+      console.error(`[${new Date().toISOString()}] Create error:`, {
+        message: err.message,
+        response: err.response?.data,
+      });
       setError(err.message || t.createError);
       toast.error(err.message || t.createError, { position: isRtl ? 'top-right' : 'top-left' });
     } finally {
@@ -829,25 +860,6 @@ export function NewOrder() {
               className="p-6 bg-white rounded-xl shadow-sm border border-gray-100"
             >
               <form onSubmit={handleSubmit} className="space-y-6">
-                {user?.role === 'admin' && (
-                  <div>
-                    <label htmlFor="branch" className="block text-sm font-medium text-gray-700 mb-2">
-                      {t.branch}
-                    </label>
-                    <ProductDropdown
-                      value={branch}
-                      onChange={setBranch}
-                      options={[
-                        { value: '', label: t.branchPlaceholder },
-                        ...branches.map((b) => ({
-                          value: b._id,
-                          label: isRtl ? b.name : (b.nameEn || b.name),
-                        })),
-                      ]}
-                      ariaLabel={t.branch}
-                    />
-                  </div>
-                )}
                 <div>
                   <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
                     {t.notes}
