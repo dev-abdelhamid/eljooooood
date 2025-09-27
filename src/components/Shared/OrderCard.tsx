@@ -64,17 +64,6 @@ const OrderCard: React.FC<OrderCardProps> = memo(
       cancelled: isRtl ? 'ملغى' : 'Cancelled',
     };
 
-    // Define valid state transitions for orders
-    const validTransitions: Record<OrderStatus, OrderStatus[]> = {
-      pending: ['approved', 'cancelled'],
-      approved: ['in_production', 'cancelled'],
-      in_production: ['completed', 'cancelled'],
-      completed: ['in_transit'],
-      in_transit: ['delivered'],
-      delivered: [],
-      cancelled: [],
-    };
-
     return (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -88,7 +77,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
           <div className="flex flex-col gap-3">
             <div className={`flex items-center justify-between ${isRtl ? 'flex-row' : ''}`}>
               <div className="flex items-center gap-1">
-                <h3 id={`order-${order.id}`} className="text-base font-bold text-gray-800 truncate max-w-[220px]">
+                <h3 id={`order-${order.id}`} className="text-base font-semibold text-gray-800 truncate max-w-[220px]">
                   {isRtl ? `طلب ${order.orderNumber || 'غير معروف'}` : `Order #${order.orderNumber || 'Unknown'}`}
                 </h3>
                 {order.priority !== 'medium' && (
@@ -133,7 +122,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
               <div>
                 <p className="text-xs text-gray-500">{isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}</p>
                 <p className="text-xs font-medium text-gray-800">
-                  {calculateTotalQuantity(order)} {isRtl ? 'عنصر' : 'items'}
+                  {isRtl ? `${calculateTotalQuantity(order)} عنصر` : `${calculateTotalQuantity(order)} items`}
                 </p>
               </div>
               <div>
@@ -146,7 +135,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
               </div>
               <div>
                 <p className="text-xs text-gray-500">{isRtl ? 'الفرع' : 'Branch'}</p>
-                <p className="text-xs font-medium text-gray-800 truncate">{order.branch.displayName}</p>
+                <p className="text-xs font-medium text-gray-800 truncate">{order.branchName}</p>
               </div>
             </div>
             <div>
@@ -187,13 +176,14 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                           >
                             <div className="flex items-center justify-between gap-2">
                               <p className="text-xs font-medium text-gray-900 truncate flex-1">
-                                {item.displayProductName} ({item.quantity} {item.displayUnit})
+                                {item.productName} ({item.quantity} {translateUnit(item.unit, isRtl)})
                               </p>
                               <span
                                 className={`px-1.5 py-0.5 rounded-full text-xs font-small flex items-center gap-1 ${itemStatusInfo.color} ${
                                   isRtl ? 'flex-row-reverse' : ''
                                 }`}
                               >
+                                <ItemStatusIcon className="w-3 h-3" />
                                 {isRtl ? { pending: 'قيد الانتظار', assigned: 'معين', in_progress: 'قيد التقدم', completed: 'مكتمل', cancelled: 'ملغى' }[item.status] : itemStatusInfo.label}
                               </span>
                             </div>
@@ -201,8 +191,8 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                               {item.assignedTo && (
                                 <p className="text-xs text-gray-600 truncate">
                                   {isRtl
-                                    ? `معين لـ: شيف ${item.assignedTo.displayName} (${item.department?.displayName || 'Unknown'})`
-                                    : `Assigned to: Chef ${item.assignedTo.displayName} (${item.department?.displayName || 'Unknown'})`}
+                                    ? `معين لـ: شيف ${item.assignedTo.name} (${item.department?.name || 'غير معروف'})`
+                                    : `Assigned to: Chef ${item.assignedTo.name} (${item.department?.name || 'Unknown'})`}
                                 </p>
                               )}
                             </div>
@@ -228,12 +218,12 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                   <p key={i} className="text-xs text-amber-700 truncate">
                     {isRtl
                       ? `${r.items
-                          .map((item) => `${item.quantity} ${item.displayUnit} ${item.reason}`)
+                          .map((item) => `${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.reason}`)
                           .join(', ')} - الحالة: ${
                           isRtl ? { pending: 'قيد الانتظار', approved: 'تمت الموافقة', rejected: 'مرفوض', processed: 'تمت المعالجة' }[r.status] : r.status
                         }`
                       : `${r.items
-                          .map((item) => `${item.quantity} ${item.displayUnit} ${item.reason}`)
+                          .map((item) => `${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.reason}`)
                           .join(', ')} - Status: ${r.status}`}
                   </p>
                 ))}
@@ -301,21 +291,6 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                 >
                   {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : (isRtl ? 'شحن' : 'Ship')}
                 </Button>
-              )}
-              {user?.role === 'admin' && validTransitions[order.status].length > 0 && (
-                validTransitions[order.status].map((status) => (
-                  <Button
-                    key={status}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => updateOrderStatus(order.id, status)}
-                    disabled={submitting === order.id}
-                    className="text-xs"
-                    aria-label={isRtl ? `تغيير الحالة إلى ${statusTranslations[status]}` : `Change status to ${statusTranslations[status]}`}
-                  >
-                    {statusTranslations[status]}
-                  </Button>
-                ))
               )}
             </div>
           </div>

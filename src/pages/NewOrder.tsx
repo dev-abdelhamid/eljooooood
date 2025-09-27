@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { productsAPI, ordersAPI, branchesAPI, departmentAPI } from '../services/api';
@@ -397,7 +396,6 @@ export function NewOrder() {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
-  const navigate = useNavigate();
   const summaryRef = useRef<HTMLDivElement>(null);
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -438,18 +436,12 @@ export function NewOrder() {
         const code = product.code.toLowerCase();
         return (
           (filterDepartment ? product.department._id === filterDepartment : true) &&
-          (name.startsWith(lowerSearchTerm) || code.startsWith(lowerSearchTerm) || name.includes(lowerSearchTerm))
+          (name.includes(lowerSearchTerm) || code.includes(lowerSearchTerm))
         );
       })
       .sort((a, b) => {
         const aName = (isRtl ? a.name : a.nameEn || a.name).toLowerCase();
         const bName = (isRtl ? b.name : b.nameEn || b.name).toLowerCase();
-        const aCode = a.code.toLowerCase();
-        const bCode = b.code.toLowerCase();
-        if (aName.startsWith(lowerSearchTerm) && !bName.startsWith(lowerSearchTerm)) return -1;
-        if (!aName.startsWith(lowerSearchTerm) && bName.startsWith(lowerSearchTerm)) return 1;
-        if (aCode.startsWith(lowerSearchTerm) && !bCode.startsWith(lowerSearchTerm)) return -1;
-        if (!aCode.startsWith(lowerSearchTerm) && bCode.startsWith(lowerSearchTerm)) return 1;
         return aName.localeCompare(bName);
       });
   }, [products, searchTerm, filterDepartment, isRtl]);
@@ -461,7 +453,6 @@ export function NewOrder() {
   useEffect(() => {
     if (!user || !['admin', 'branch'].includes(user.role)) {
       setError(t.unauthorized);
-      navigate('/branch-orders');
       toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
@@ -475,12 +466,14 @@ export function NewOrder() {
           departmentAPI.getAll({ limit: 100 }),
         ]);
 
-        const productsWithDisplay = productsResponse.data.map((product: Product) => ({
-          ...product,
-          displayName: isRtl ? product.name : (product.nameEn || product.name),
-          displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
-        }));
-        setProducts(productsWithDisplay);
+        const uniqueProducts = Array.from(
+          new Map(productsResponse.data.map((product: Product) => [product._id, {
+            ...product,
+            displayName: isRtl ? product.name : (product.nameEn || product.name),
+            displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
+          }])).values()
+        );
+        setProducts(uniqueProducts);
         setBranches(Array.isArray(branchesResponse) ? branchesResponse : []);
         setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data : []);
         if (user?.role === 'branch' && user?.branchId) {
@@ -496,11 +489,11 @@ export function NewOrder() {
       }
     };
     loadData();
-  }, [user, navigate, t, isRtl, filterDepartment, searchTerm]);
+  }, [user, t, isRtl, filterDepartment, searchTerm]);
 
   useEffect(() => {
     socket.on('connect', () => {
-      console.log('Connected to Socket.IO server');
+      console.log(`[${new Date().toISOString()}] Connected to Socket.IO server`);
       if (user?.role === 'branch' && user?.branchId) {
         socket.emit('joinRoom', `branch-${user.branchId}`);
       } else if (user?.role === 'admin') {
@@ -508,10 +501,15 @@ export function NewOrder() {
       }
     });
     socket.on('orderCreated', (orderData) => {
+      console.log(`[${new Date().toISOString()}] Received orderCreated event:`, orderData);
       toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
+    });
+    socket.on('connect_error', (error) => {
+      console.error(`[${new Date().toISOString()}] Socket.IO connection error:`, error.message);
     });
     return () => {
       socket.disconnect();
+      console.log(`[${new Date().toISOString()}] Disconnected from Socket.IO server`);
     };
   }, [socket, t, isRtl, user]);
 
@@ -553,6 +551,9 @@ export function NewOrder() {
   const clearOrder = useCallback(() => {
     setOrderItems([]);
     if (user?.role === 'admin') setBranch('');
+    setSearchInput('');
+    setSearchTerm('');
+    setFilterDepartment('');
     toast.success(t.orderCleared, { position: isRtl ? 'top-right' : 'top-left' });
   }, [user, t, isRtl]);
 
@@ -595,12 +596,22 @@ export function NewOrder() {
       };
       const response = await ordersAPI.create(orderData, isRtl);
       socket.emit('orderCreated', {
-        ...response.data,
+        orderId: response.data.data._id,
+        orderNumber: orderData.orderNumber,
+        branchId: orderData.branchId,
+        items: orderData.items,
+        status: orderData.status,
+        eventId: `${response.data.data._id}-orderCreated`,
         isRtl,
-        eventId: `${response.data.orderId}-orderCreated`,
       });
       toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
-      setTimeout(() => navigate('/orders'), 1000);
+      // Reset form after successful submission
+      setOrderItems([]);
+      if (user?.role === 'admin') setBranch('');
+      setSearchInput('');
+      setSearchTerm('');
+      setFilterDepartment('');
+      setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Create error:`, err);
       setError(err.message || t.createError);
@@ -814,13 +825,7 @@ export function NewOrder() {
                     <ProductDropdown
                       value={branch}
                       onChange={setBranch}
-                      options={[
-                        { value: '', label: t.branchPlaceholder },
-                        ...branches.map((b) => ({
-                          value: b._id,
-                          label: isRtl ? b.name : (b.nameEn || b.name),
-                        })),
-                      ]}
+                      options={branches.map((branch) => ({ value: branch._id, label: branch.name }))}
                       ariaLabel={t.branch}
                     />
                   </div>
