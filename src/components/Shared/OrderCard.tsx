@@ -64,12 +64,13 @@ const OrderCard: React.FC<OrderCardProps> = memo(
       cancelled: isRtl ? 'ملغى' : 'Cancelled',
     };
 
-    const validTransitions = {
-      pending: [OrderStatus.Approved, OrderStatus.Cancelled],
-      approved: [OrderStatus.InProduction, OrderStatus.Cancelled],
-      in_production: [OrderStatus.Completed, OrderStatus.Cancelled],
-      completed: [OrderStatus.InTransit],
-      in_transit: [OrderStatus.Delivered],
+    // Define valid state transitions for orders
+    const validTransitions: Record<OrderStatus, OrderStatus[]> = {
+      pending: ['approved', 'cancelled'],
+      approved: ['in_production', 'cancelled'],
+      in_production: ['completed', 'cancelled'],
+      completed: ['in_transit'],
+      in_transit: ['delivered'],
       delivered: [],
       cancelled: [],
     };
@@ -128,23 +129,22 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                 </span>
               </motion.div>
             )}
-            <div className="grid  grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <div>
                 <p className="text-xs text-gray-500">{isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}</p>
                 <p className="text-xs font-medium text-gray-800">
                   {calculateTotalQuantity(order)} {isRtl ? 'عنصر' : 'items'}
                 </p>
-                
               </div>
               <div>
                 <p className="text-xs text-gray-500">{isRtl ? 'إجمالي المبلغ' : 'Total Amount'}</p>
-                <p className="text-xs  font-semibold text-teal-600">{calculateAdjustedTotal(order)}</p>
+                <p className="text-xs font-semibold text-teal-600">{calculateAdjustedTotal(order)}</p>
               </div>
-              <div >
+              <div>
                 <p className="text-xs text-gray-500">{isRtl ? 'التاريخ' : 'Date'}</p>
                 <p className="text-xs font-medium text-gray-800 truncate">{order.date}</p>
               </div>
-              <div >
+              <div>
                 <p className="text-xs text-gray-500">{isRtl ? 'الفرع' : 'Branch'}</p>
                 <p className="text-xs font-medium text-gray-800 truncate">{order.branch.displayName}</p>
               </div>
@@ -250,16 +250,56 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                   {isRtl ? 'عرض' : 'View'}
                 </Button>
               </Link>
-              {user?.role === 'production' && unassignedItems.length > 0 && (
+              {user?.role === 'production' && order.status === 'pending' && (
+                <>
+                  <Button
+                    variant="success"
+                    size="sm"
+                    icon={Check}
+                    onClick={() => updateOrderStatus(order.id, 'approved')}
+                    className="bg-green-500 hover:bg-green-600 text-white rounded-full px-3 py-1 text-xs"
+                    disabled={submitting === order.id}
+                    aria-label={isRtl ? `الموافقة على طلب رقم ${order.orderNumber}` : `Approve order #${order.orderNumber}`}
+                  >
+                    {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : (isRtl ? 'موافقة' : 'Approve')}
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    icon={AlertCircle}
+                    onClick={() => updateOrderStatus(order.id, 'cancelled')}
+                    className="bg-red-500 hover:bg-red-600 text-white rounded-full px-3 py-1 text-xs"
+                    disabled={submitting === order.id}
+                    aria-label={isRtl ? `إلغاء طلب رقم ${order.orderNumber}` : `Cancel order #${order.orderNumber}`}
+                  >
+                    {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : (isRtl ? 'إلغاء' : 'Cancel')}
+                  </Button>
+                </>
+              )}
+              {user?.role === 'production' && order.status === 'approved' && unassignedItems.length > 0 && (
                 <Button
                   variant="primary"
                   size="sm"
+                  icon={Package}
                   onClick={() => openAssignModal(order)}
-                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-2.5 py-1 text-xs"
+                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-3 py-1 text-xs"
                   disabled={submitting === order.id}
                   aria-label={isRtl ? `تعيين طلب رقم ${order.orderNumber}` : `Assign order #${order.orderNumber}`}
                 >
-                  {isRtl ? 'تعيين' : 'Assign'}
+                  {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : (isRtl ? 'توزيع' : 'Assign')}
+                </Button>
+              )}
+              {user?.role === 'production' && order.status === 'completed' && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={Truck}
+                  onClick={() => updateOrderStatus(order.id, 'in_transit')}
+                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-3 py-1 text-xs"
+                  disabled={submitting === order.id}
+                  aria-label={isRtl ? `شحن طلب رقم ${order.orderNumber}` : `Ship order #${order.orderNumber}`}
+                >
+                  {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : (isRtl ? 'شحن' : 'Ship')}
                 </Button>
               )}
               {user?.role === 'admin' && validTransitions[order.status].length > 0 && (
