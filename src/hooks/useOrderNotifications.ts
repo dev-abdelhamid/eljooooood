@@ -19,12 +19,13 @@ interface SocketEventData {
     unit?: string;
     unitEn?: string;
     status?: string;
-    assignedTo?: { _id: string; username?: string; name?: string; nameEn?: string };
+    assignedTo?: { _id: string; username?: string; name?: string; nameEn?: string; department?: { _id: string; name: string; nameEn?: string } };
     department?: { _id: string; name: string; nameEn?: string };
   }>;
   eventId?: string;
   status?: string;
   chefId?: string;
+  returnId?: string;
 }
 
 interface SocketEventConfig {
@@ -41,6 +42,16 @@ export const useOrderNotifications = (
   const { socket } = useSocket();
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
+
+  const playNotificationSound = useCallback((sound: string, vibrate: number[]) => {
+    try {
+      const audio = new Audio(sound);
+      audio.play().catch(err => console.error(`[${new Date().toISOString()}] Audio play error:`, err.message));
+      if (navigator.vibrate) navigator.vibrate(vibrate);
+    } catch (err) {
+      console.error(`[${new Date().toISOString()}] Notification sound error:`, err);
+    }
+  }, []);
 
   const translateUnit = useCallback((unit: string | undefined) => {
     const translations: Record<string, { ar: string; en: string }> = {
@@ -76,7 +87,7 @@ export const useOrderNotifications = (
       {
         name: 'orderCreated',
         handler: (newOrder: any) => {
-          if (!newOrder?._id || !Array.isArray(newOrder.items) || !newOrder.orderNumber || !newOrder.branch?.name) {
+          if (!newOrder?._id || !Array.isArray(newOrder.items) || !newOrder.orderNumber || !newOrder.branch?._id) {
             console.warn(`[${new Date().toISOString()}] Invalid order data:`, newOrder);
             return;
           }
@@ -94,53 +105,88 @@ export const useOrderNotifications = (
           const mappedOrder: Order = {
             id: newOrder._id,
             orderNumber: newOrder.orderNumber || t('orders.unknown'),
-            branchName: newOrder.branch?.name || t('branches.unknown'),
             branchId: newOrder.branch?._id || 'unknown',
-            branch: newOrder.branch || { _id: 'unknown', name: t('branches.unknown') },
+            branch: {
+              _id: newOrder.branch?._id || 'unknown',
+              name: newOrder.branch?.name || t('branches.unknown'),
+              nameEn: newOrder.branch?.nameEn,
+              displayName: isRtl ? newOrder.branch?.name : (newOrder.branch?.nameEn || newOrder.branch?.name || t('branches.unknown')),
+            },
             items: newOrder.items.map((item: any) => ({
               _id: item._id || crypto.randomUUID(),
-              itemId: item._id || crypto.randomUUID(),
               productId: item.product?._id || 'unknown',
               productName: item.product?.name || t('products.unknown'),
               productNameEn: item.product?.nameEn,
               displayProductName: isRtl ? item.product?.name : (item.product?.nameEn || item.product?.name || t('products.unknown')),
               quantity: Number(item.quantity) || 1,
               price: Number(item.price) || 0,
-              unit: translateUnit(item.unit || item.product?.unit),
-              department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
+              unit: item.product?.unit || 'unit',
+              unitEn: item.product?.unitEn,
+              displayUnit: translateUnit(item.product?.unit || 'unit'),
+              department: {
+                _id: item.product?.department?._id || 'unknown',
+                name: item.product?.department?.name || t('departments.unknown'),
+                nameEn: item.product?.department?.nameEn,
+                displayName: isRtl ? item.product?.department?.name : (item.product?.department?.nameEn || item.product?.department?.name || t('departments.unknown')),
+              },
+              assignedTo: item.assignedTo ? {
+                _id: item.assignedTo._id,
+                username: item.assignedTo.username,
+                name: item.assignedTo.name || item.assignedTo.username || t('users.unknown'),
+                nameEn: item.assignedTo.nameEn,
+                displayName: isRtl ? item.assignedTo.name : (item.assignedTo.nameEn || item.assignedTo.name || t('users.unknown')),
+                department: item.assignedTo.department
+              } : undefined,
               status: item.status || 'pending',
-              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username, name: item.assignedTo.name, nameEn: item.assignedTo.nameEn } : undefined,
               returnedQuantity: Number(item.returnedQuantity) || 0,
               returnReason: item.returnReason || '',
             })),
-            status: newOrder.status || 'pending',
-            totalAmount: Number(newOrder.totalAmount) || 0,
-            adjustedTotal: typeof newOrder.adjustedTotal === 'number' ? newOrder.adjustedTotal : Number(newOrder.totalAmount) || 0,
-            date: formatDate(newOrder.createdAt || new Date(), t('language')),
-            notes: newOrder.notes || '',
-            priority: newOrder.priority || 'medium',
-            createdBy: newOrder.createdBy?.username || t('orders.unknown'),
-            statusHistory: Array.isArray(newOrder.statusHistory)
-              ? newOrder.statusHistory.map((history: any) => ({
-                  status: history.status || 'pending',
-                  changedBy: history.changedBy || t('orders.unknown'),
-                  changedAt: formatDate(history.changedAt || new Date(), t('language')),
-                  notes: history.notes || '',
-                }))
-              : [],
             returns: Array.isArray(newOrder.returns)
               ? newOrder.returns.map((ret: any) => ({
                   returnId: ret._id || crypto.randomUUID(),
+                  returnNumber: ret.returnNumber || t('returns.unknown'),
                   items: Array.isArray(ret.items)
                     ? ret.items.map((item: any) => ({
                         productId: item.product?._id || 'unknown',
+                        productName: item.product?.name || t('products.unknown'),
+                        productNameEn: item.product?.nameEn,
                         quantity: Number(item.quantity) || 0,
-                        reason: item.reason || '',
+                        reason: item.reason || t('returns.unspecified'),
+                        unit: item.product?.unit || 'unit',
+                        unitEn: item.product?.unitEn,
+                        displayUnit: translateUnit(item.product?.unit || 'unit'),
                       }))
                     : [],
-                  status: ret.status || 'pending_approval',
-                  reviewNotes: ret.reviewNotes || '',
-                  createdAt: formatDate(ret.createdAt || new Date(), t('language')),
+                  status: ret.status || 'pending',
+                  reviewNotes: ret.notes || '',
+                  createdAt: formatDate(ret.createdAt ? new Date(ret.createdAt) : new Date(), language),
+                  createdBy: {
+                    _id: ret.createdBy?._id,
+                    username: ret.createdBy?.username,
+                    name: ret.createdBy?.name || t('users.unknown'),
+                    nameEn: ret.createdBy?.nameEn,
+                    displayName: isRtl ? ret.createdBy?.name : (ret.createdBy?.nameEn || ret.createdBy?.name || t('users.unknown')),
+                  },
+                }))
+              : [],
+            status: newOrder.status || 'pending',
+            totalAmount: Number(newOrder.totalAmount) || 0,
+            adjustedTotal: Number(newOrder.adjustedTotal) || Number(newOrder.totalAmount) || 0,
+            date: formatDate(newOrder.createdAt ? new Date(newOrder.createdAt) : new Date(), language),
+            requestedDeliveryDate: newOrder.requestedDeliveryDate ? new Date(newOrder.requestedDeliveryDate) : undefined,
+            notes: newOrder.notes || '',
+            priority: newOrder.priority || 'medium',
+            createdBy: newOrder.createdBy?.name || t('users.unknown'),
+            approvedBy: newOrder.approvedBy ? { _id: newOrder.approvedBy._id, name: newOrder.approvedBy.name || t('users.unknown') } : undefined,
+            approvedAt: newOrder.approvedAt ? new Date(newOrder.approvedAt) : undefined,
+            deliveredAt: newOrder.deliveredAt ? new Date(newOrder.deliveredAt) : undefined,
+            transitStartedAt: newOrder.transitStartedAt ? new Date(newOrder.transitStartedAt) : undefined,
+            statusHistory: Array.isArray(newOrder.statusHistory)
+              ? newOrder.statusHistory.map((history: any) => ({
+                  status: history.status || 'pending',
+                  changedBy: history.changedBy?.name || t('users.unknown'),
+                  changedAt: formatDate(history.changedAt ? new Date(history.changedAt) : new Date(), language),
+                  notes: history.notes || '',
                 }))
               : [],
           };
@@ -156,9 +202,10 @@ export const useOrderNotifications = (
             data: { orderId: newOrder._id, eventId },
             read: false,
             createdAt: new Date().toISOString(),
-            sound: '/sounds/notification.mp3',
+            sound: '/sounds/new-order.mp3',
             vibrate: [200, 100, 200],
           });
+          playNotificationSound('/sounds/new-order.mp3', [200, 100, 200]);
         },
         config: {
           type: 'ADD_ORDER',
@@ -169,7 +216,7 @@ export const useOrderNotifications = (
         name: 'orderConfirmed',
         handler: (data: SocketEventData) => {
           if (!['admin', 'branch'].includes(user.role)) return;
-          if (!data.orderId || !data.orderNumber || !data.branchName) {
+          if (!data.orderId || !data.orderNumber || !data.branchId) {
             console.warn(`[${new Date().toISOString()}] Invalid order confirmed data:`, data);
             return;
           }
@@ -179,7 +226,7 @@ export const useOrderNotifications = (
           if (notificationIds.has(eventId)) return;
           notificationIds.add(eventId);
 
-          dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'confirmed' });
+          dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'approved' });
           addNotification({
             _id: eventId,
             type: 'success',
@@ -193,6 +240,7 @@ export const useOrderNotifications = (
             sound: '/sounds/notification.mp3',
             vibrate: [200, 100, 200],
           });
+          playNotificationSound('/sounds/notification.mp3', [200, 100, 200]);
         },
         config: {
           type: 'UPDATE_ORDER_STATUS',
@@ -203,7 +251,7 @@ export const useOrderNotifications = (
         name: 'taskAssigned',
         handler: (notification: any) => {
           const data: SocketEventData = notification.data || notification;
-          if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName) {
+          if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchId) {
             console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, data);
             return;
           }
@@ -217,19 +265,28 @@ export const useOrderNotifications = (
           const mappedItems = data.items
             .filter((item: any) => item.itemId && item.productName && item.assignedTo?._id)
             .map((item: any) => ({
-              _id: item.itemId || crypto.randomUUID(),
-              itemId: item.itemId || crypto.randomUUID(),
+              _id: item.itemId,
               productId: item.productId || 'unknown',
               productName: item.productName || t('products.unknown'),
               productNameEn: item.productNameEn,
               displayProductName: isRtl ? item.productName : (item.productNameEn || item.productName || t('products.unknown')),
               quantity: Number(item.quantity) || 1,
-              unit: translateUnit(item.unit || item.unitEn),
-              department: item.department || { _id: 'unknown', name: t('departments.unknown') },
+              unit: item.unit || item.unitEn || 'unit',
+              displayUnit: translateUnit(item.unit || item.unitEn || 'unit'),
+              department: item.department || {
+                _id: 'unknown',
+                name: t('departments.unknown'),
+                displayName: t('departments.unknown'),
+              },
               status: item.status || 'assigned',
-              assignedTo: item.assignedTo
-                ? { _id: item.assignedTo._id, username: item.assignedTo.username, name: item.assignedTo.name, nameEn: item.assignedTo.nameEn }
-                : undefined,
+              assignedTo: item.assignedTo ? {
+                _id: item.assignedTo._id,
+                username: item.assignedTo.username,
+                name: item.assignedTo.name || item.assignedTo.username || t('users.unknown'),
+                nameEn: item.assignedTo.nameEn,
+                displayName: isRtl ? item.assignedTo.name : (item.assignedTo.nameEn || item.assignedTo.name || t('users.unknown')),
+                department: item.assignedTo.department
+              } : undefined,
             }));
 
           if (mappedItems.length === 0) {
@@ -237,25 +294,26 @@ export const useOrderNotifications = (
             return;
           }
 
-          dispatch({ type: 'TASK_ASSIGNED', payload: { orderId: data.orderId, items: mappedItems, orderNumber: data.orderNumber, branchName: data.branchName } });
+          dispatch({ type: 'TASK_ASSIGNED', orderId: data.orderId, items: mappedItems });
           mappedItems.forEach((item: any) => {
             addNotification({
-              _id: `${eventId}-${item.itemId}`,
+              _id: `${eventId}-${item._id}`,
               type: 'info',
               message: t('notifications.task_assigned_to_chef', {
                 chefName: item.assignedTo?.name || item.assignedTo?.username || t('chefs.unknown'),
                 productName: item.displayProductName,
                 quantity: item.quantity,
-                unit: item.unit,
+                unit: item.displayUnit,
                 orderNumber: data.orderNumber,
                 branchName: data.branchName || t('branches.unknown'),
               }),
-              data: { orderId: data.orderId, itemId: item.itemId, eventId },
+              data: { orderId: data.orderId, itemId: item._id, eventId },
               read: false,
               createdAt: new Date().toISOString(),
               sound: '/sounds/notification.mp3',
               vibrate: [400, 100, 400],
             });
+            playNotificationSound('/sounds/notification.mp3', [400, 100, 400]);
           });
         },
         config: {
@@ -279,7 +337,8 @@ export const useOrderNotifications = (
 
           dispatch({
             type: 'UPDATE_ITEM_STATUS',
-            payload: { orderId: data.orderId, itemId: data.itemId, status: data.status },
+            orderId: data.orderId,
+            payload: { itemId: data.itemId, status: data.status },
           });
 
           try {
@@ -304,6 +363,7 @@ export const useOrderNotifications = (
                 sound: '/sounds/notification.mp3',
                 vibrate: [400, 100, 400],
               });
+              playNotificationSound('/sounds/notification.mp3', [400, 100, 400]);
             }
           } catch (err) {
             console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
@@ -324,6 +384,7 @@ export const useOrderNotifications = (
             sound: '/sounds/notification.mp3',
             vibrate: [200, 100, 200],
           });
+          playNotificationSound('/sounds/notification.mp3', [200, 100, 200]);
         },
         config: {
           type: 'UPDATE_ITEM_STATUS',
@@ -334,7 +395,7 @@ export const useOrderNotifications = (
         name: 'orderStatusUpdated',
         handler: (data: SocketEventData) => {
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
-          if (!data.orderId || !data.status || !data.orderNumber || !data.branchName) {
+          if (!data.orderId || !data.status || !data.orderNumber || !data.branchId) {
             console.warn(`[${new Date().toISOString()}] Invalid order status update data:`, data);
             return;
           }
@@ -359,6 +420,7 @@ export const useOrderNotifications = (
             sound: '/sounds/notification.mp3',
             vibrate: [200, 100, 200],
           });
+          playNotificationSound('/sounds/notification.mp3', [200, 100, 200]);
         },
         config: {
           type: 'UPDATE_ORDER_STATUS',
@@ -369,7 +431,7 @@ export const useOrderNotifications = (
         name: 'orderCompleted',
         handler: async (data: SocketEventData) => {
           if (!['admin', 'branch', 'production', 'chef'].includes(user.role)) return;
-          if (!data.orderId || !data.orderNumber || !data.branchName) {
+          if (!data.orderId || !data.orderNumber || !data.branchId) {
             console.warn(`[${new Date().toISOString()}] Invalid order completed data:`, data);
             return;
           }
@@ -388,53 +450,88 @@ export const useOrderNotifications = (
             const mappedOrder: Order = {
               id: updatedOrder._id,
               orderNumber: updatedOrder.orderNumber || t('orders.unknown'),
-              branchName: updatedOrder.branch?.name || t('branches.unknown'),
               branchId: updatedOrder.branch?._id || 'unknown',
-              branch: updatedOrder.branch || { _id: 'unknown', name: t('branches.unknown') },
+              branch: {
+                _id: updatedOrder.branch?._id || 'unknown',
+                name: updatedOrder.branch?.name || t('branches.unknown'),
+                nameEn: updatedOrder.branch?.nameEn,
+                displayName: isRtl ? updatedOrder.branch?.name : (updatedOrder.branch?.nameEn || updatedOrder.branch?.name || t('branches.unknown')),
+              },
               items: updatedOrder.items.map((item: any) => ({
                 _id: item._id || crypto.randomUUID(),
-                itemId: item._id || crypto.randomUUID(),
                 productId: item.product?._id || 'unknown',
                 productName: item.product?.name || t('products.unknown'),
                 productNameEn: item.product?.nameEn,
                 displayProductName: isRtl ? item.product?.name : (item.product?.nameEn || item.product?.name || t('products.unknown')),
                 quantity: Number(item.quantity) || 1,
                 price: Number(item.price) || 0,
-                unit: translateUnit(item.unit || item.product?.unit),
-                department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
+                unit: item.product?.unit || 'unit',
+                unitEn: item.product?.unitEn,
+                displayUnit: translateUnit(item.product?.unit || 'unit'),
+                department: {
+                  _id: item.product?.department?._id || 'unknown',
+                  name: item.product?.department?.name || t('departments.unknown'),
+                  nameEn: item.product?.department?.nameEn,
+                  displayName: isRtl ? item.product?.department?.name : (item.product?.department?.nameEn || item.product?.department?.name || t('departments.unknown')),
+                },
+                assignedTo: item.assignedTo ? {
+                  _id: item.assignedTo._id,
+                  username: item.assignedTo.username,
+                  name: item.assignedTo.name || item.assignedTo.username || t('users.unknown'),
+                  nameEn: item.assignedTo.nameEn,
+                  displayName: isRtl ? item.assignedTo.name : (item.assignedTo.nameEn || item.assignedTo.name || t('users.unknown')),
+                  department: item.assignedTo.department
+                } : undefined,
                 status: item.status || 'completed',
-                assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username, name: item.assignedTo.name, nameEn: item.assignedTo.nameEn } : undefined,
                 returnedQuantity: Number(item.returnedQuantity) || 0,
                 returnReason: item.returnReason || '',
               })),
-              status: 'completed',
-              totalAmount: Number(updatedOrder.totalAmount) || 0,
-              adjustedTotal: Number(updatedOrder.adjustedTotal) || 0,
-              date: formatDate(updatedOrder.createdAt || new Date(), t('language')),
-              notes: updatedOrder.notes || '',
-              priority: updatedOrder.priority || 'medium',
-              createdBy: updatedOrder.createdBy?.username || t('orders.unknown'),
-              statusHistory: Array.isArray(updatedOrder.statusHistory)
-                ? updatedOrder.statusHistory.map((history: any) => ({
-                    status: history.status || 'pending',
-                    changedBy: history.changedBy || t('orders.unknown'),
-                    changedAt: formatDate(history.changedAt || new Date(), t('language')),
-                    notes: history.notes || '',
-                  }))
-                : [],
               returns: Array.isArray(updatedOrder.returns)
                 ? updatedOrder.returns.map((ret: any) => ({
                     returnId: ret._id || crypto.randomUUID(),
+                    returnNumber: ret.returnNumber || t('returns.unknown'),
                     items: Array.isArray(ret.items)
                       ? ret.items.map((item: any) => ({
                           productId: item.product?._id || 'unknown',
+                          productName: item.product?.name || t('products.unknown'),
+                          productNameEn: item.product?.nameEn,
                           quantity: Number(item.quantity) || 0,
-                          reason: item.reason || '',
+                          reason: item.reason || t('returns.unspecified'),
+                          unit: item.product?.unit || 'unit',
+                          unitEn: item.product?.unitEn,
+                          displayUnit: translateUnit(item.product?.unit || 'unit'),
                         }))
                       : [],
-                    status: ret.status || 'pending_approval',
-                    reviewNotes: ret.reviewNotes || '',
-                    createdAt: formatDate(ret.createdAt || new Date(), t('language')),
+                    status: ret.status || 'pending',
+                    reviewNotes: ret.notes || '',
+                    createdAt: formatDate(ret.createdAt ? new Date(ret.createdAt) : new Date(), language),
+                    createdBy: {
+                      _id: ret.createdBy?._id,
+                      username: ret.createdBy?.username,
+                      name: ret.createdBy?.name || t('users.unknown'),
+                      nameEn: ret.createdBy?.nameEn,
+                      displayName: isRtl ? ret.createdBy?.name : (ret.createdBy?.nameEn || ret.createdBy?.name || t('users.unknown')),
+                    },
+                  }))
+                : [],
+              status: 'completed',
+              totalAmount: Number(updatedOrder.totalAmount) || 0,
+              adjustedTotal: Number(updatedOrder.adjustedTotal) || 0,
+              date: formatDate(updatedOrder.createdAt ? new Date(updatedOrder.createdAt) : new Date(), language),
+              requestedDeliveryDate: updatedOrder.requestedDeliveryDate ? new Date(updatedOrder.requestedDeliveryDate) : undefined,
+              notes: updatedOrder.notes || '',
+              priority: updatedOrder.priority || 'medium',
+              createdBy: updatedOrder.createdBy?.name || t('users.unknown'),
+              approvedBy: updatedOrder.approvedBy ? { _id: updatedOrder.approvedBy._id, name: updatedOrder.approvedBy.name || t('users.unknown') } : undefined,
+              approvedAt: updatedOrder.approvedAt ? new Date(updatedOrder.approvedAt) : undefined,
+              deliveredAt: updatedOrder.deliveredAt ? new Date(updatedOrder.deliveredAt) : undefined,
+              transitStartedAt: updatedOrder.transitStartedAt ? new Date(updatedOrder.transitStartedAt) : undefined,
+              statusHistory: Array.isArray(updatedOrder.statusHistory)
+                ? updatedOrder.statusHistory.map((history: any) => ({
+                    status: history.status || 'pending',
+                    changedBy: history.changedBy?.name || t('users.unknown'),
+                    changedAt: formatDate(history.changedAt ? new Date(history.changedAt) : new Date(), language),
+                    notes: history.notes || '',
                   }))
                 : [],
             };
@@ -452,6 +549,7 @@ export const useOrderNotifications = (
               sound: '/sounds/notification.mp3',
               vibrate: [400, 100, 400],
             });
+            playNotificationSound('/sounds/notification.mp3', [400, 100, 400]);
           } catch (err) {
             console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
           }
@@ -465,7 +563,7 @@ export const useOrderNotifications = (
         name: 'orderShipped',
         handler: async (data: SocketEventData) => {
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
-          if (!data.orderId || !data.orderNumber || !data.branchName || !data.branchId) {
+          if (!data.orderId || !data.orderNumber || !data.branchId) {
             console.warn(`[${new Date().toISOString()}] Invalid order shipped data:`, data);
             return;
           }
@@ -484,53 +582,88 @@ export const useOrderNotifications = (
             const mappedOrder: Order = {
               id: updatedOrder._id,
               orderNumber: updatedOrder.orderNumber || t('orders.unknown'),
-              branchName: updatedOrder.branch?.name || t('branches.unknown'),
               branchId: updatedOrder.branch?._id || 'unknown',
-              branch: updatedOrder.branch || { _id: 'unknown', name: t('branches.unknown') },
+              branch: {
+                _id: updatedOrder.branch?._id || 'unknown',
+                name: updatedOrder.branch?.name || t('branches.unknown'),
+                nameEn: updatedOrder.branch?.nameEn,
+                displayName: isRtl ? updatedOrder.branch?.name : (updatedOrder.branch?.nameEn || updatedOrder.branch?.name || t('branches.unknown')),
+              },
               items: updatedOrder.items.map((item: any) => ({
                 _id: item._id || crypto.randomUUID(),
-                itemId: item._id || crypto.randomUUID(),
                 productId: item.product?._id || 'unknown',
                 productName: item.product?.name || t('products.unknown'),
                 productNameEn: item.product?.nameEn,
                 displayProductName: isRtl ? item.product?.name : (item.product?.nameEn || item.product?.name || t('products.unknown')),
                 quantity: Number(item.quantity) || 1,
                 price: Number(item.price) || 0,
-                unit: translateUnit(item.unit || item.product?.unit),
-                department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
+                unit: item.product?.unit || 'unit',
+                unitEn: item.product?.unitEn,
+                displayUnit: translateUnit(item.product?.unit || 'unit'),
+                department: {
+                  _id: item.product?.department?._id || 'unknown',
+                  name: item.product?.department?.name || t('departments.unknown'),
+                  nameEn: item.product?.department?.nameEn,
+                  displayName: isRtl ? item.product?.department?.name : (item.product?.department?.nameEn || item.product?.department?.name || t('departments.unknown')),
+                },
+                assignedTo: item.assignedTo ? {
+                  _id: item.assignedTo._id,
+                  username: item.assignedTo.username,
+                  name: item.assignedTo.name || item.assignedTo.username || t('users.unknown'),
+                  nameEn: item.assignedTo.nameEn,
+                  displayName: isRtl ? item.assignedTo.name : (item.assignedTo.nameEn || item.assignedTo.name || t('users.unknown')),
+                  department: item.assignedTo.department
+                } : undefined,
                 status: item.status || 'completed',
-                assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username, name: item.assignedTo.name, nameEn: item.assignedTo.nameEn } : undefined,
                 returnedQuantity: Number(item.returnedQuantity) || 0,
                 returnReason: item.returnReason || '',
               })),
-              status: 'in_transit',
-              totalAmount: Number(updatedOrder.totalAmount) || 0,
-              adjustedTotal: Number(updatedOrder.adjustedTotal) || 0,
-              date: formatDate(updatedOrder.createdAt || new Date(), t('language')),
-              notes: updatedOrder.notes || '',
-              priority: updatedOrder.priority || 'medium',
-              createdBy: updatedOrder.createdBy?.username || t('orders.unknown'),
-              statusHistory: Array.isArray(updatedOrder.statusHistory)
-                ? updatedOrder.statusHistory.map((history: any) => ({
-                    status: history.status || 'pending',
-                    changedBy: history.changedBy || t('orders.unknown'),
-                    changedAt: formatDate(history.changedAt || new Date(), t('language')),
-                    notes: history.notes || '',
-                  }))
-                : [],
               returns: Array.isArray(updatedOrder.returns)
                 ? updatedOrder.returns.map((ret: any) => ({
                     returnId: ret._id || crypto.randomUUID(),
+                    returnNumber: ret.returnNumber || t('returns.unknown'),
                     items: Array.isArray(ret.items)
                       ? ret.items.map((item: any) => ({
                           productId: item.product?._id || 'unknown',
+                          productName: item.product?.name || t('products.unknown'),
+                          productNameEn: item.product?.nameEn,
                           quantity: Number(item.quantity) || 0,
-                          reason: item.reason || '',
+                          reason: item.reason || t('returns.unspecified'),
+                          unit: item.product?.unit || 'unit',
+                          unitEn: item.product?.unitEn,
+                          displayUnit: translateUnit(item.product?.unit || 'unit'),
                         }))
                       : [],
-                    status: ret.status || 'pending_approval',
-                    reviewNotes: ret.reviewNotes || '',
-                    createdAt: formatDate(ret.createdAt || new Date(), t('language')),
+                    status: ret.status || 'pending',
+                    reviewNotes: ret.notes || '',
+                    createdAt: formatDate(ret.createdAt ? new Date(ret.createdAt) : new Date(), language),
+                    createdBy: {
+                      _id: ret.createdBy?._id,
+                      username: ret.createdBy?.username,
+                      name: ret.createdBy?.name || t('users.unknown'),
+                      nameEn: ret.createdBy?.nameEn,
+                      displayName: isRtl ? ret.createdBy?.name : (ret.createdBy?.nameEn || ret.createdBy?.name || t('users.unknown')),
+                    },
+                  }))
+                : [],
+              status: 'in_transit',
+              totalAmount: Number(updatedOrder.totalAmount) || 0,
+              adjustedTotal: Number(updatedOrder.adjustedTotal) || 0,
+              date: formatDate(updatedOrder.createdAt ? new Date(updatedOrder.createdAt) : new Date(), language),
+              requestedDeliveryDate: updatedOrder.requestedDeliveryDate ? new Date(updatedOrder.requestedDeliveryDate) : undefined,
+              notes: updatedOrder.notes || '',
+              priority: updatedOrder.priority || 'medium',
+              createdBy: updatedOrder.createdBy?.name || t('users.unknown'),
+              approvedBy: updatedOrder.approvedBy ? { _id: updatedOrder.approvedBy._id, name: updatedOrder.approvedBy.name || t('users.unknown') } : undefined,
+              approvedAt: updatedOrder.approvedAt ? new Date(updatedOrder.approvedAt) : undefined,
+              deliveredAt: updatedOrder.deliveredAt ? new Date(updatedOrder.deliveredAt) : undefined,
+              transitStartedAt: updatedOrder.transitStartedAt ? new Date(updatedOrder.transitStartedAt) : undefined,
+              statusHistory: Array.isArray(updatedOrder.statusHistory)
+                ? updatedOrder.statusHistory.map((history: any) => ({
+                    status: history.status || 'pending',
+                    changedBy: history.changedBy?.name || t('users.unknown'),
+                    changedAt: formatDate(history.changedAt ? new Date(history.changedAt) : new Date(), language),
+                    notes: history.notes || '',
                   }))
                 : [],
             };
@@ -548,6 +681,7 @@ export const useOrderNotifications = (
               sound: '/sounds/notification.mp3',
               vibrate: [400, 100, 400],
             });
+            playNotificationSound('/sounds/notification.mp3', [400, 100, 400]);
           } catch (err) {
             console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
           }
@@ -561,7 +695,7 @@ export const useOrderNotifications = (
         name: 'orderDelivered',
         handler: async (data: SocketEventData) => {
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
-          if (!data.orderId || !data.orderNumber || !data.branchName) {
+          if (!data.orderId || !data.orderNumber || !data.branchId) {
             console.warn(`[${new Date().toISOString()}] Invalid order delivered data:`, data);
             return;
           }
@@ -580,53 +714,88 @@ export const useOrderNotifications = (
             const mappedOrder: Order = {
               id: updatedOrder._id,
               orderNumber: updatedOrder.orderNumber || t('orders.unknown'),
-              branchName: updatedOrder.branch?.name || t('branches.unknown'),
               branchId: updatedOrder.branch?._id || 'unknown',
-              branch: updatedOrder.branch || { _id: 'unknown', name: t('branches.unknown') },
+              branch: {
+                _id: updatedOrder.branch?._id || 'unknown',
+                name: updatedOrder.branch?.name || t('branches.unknown'),
+                nameEn: updatedOrder.branch?.nameEn,
+                displayName: isRtl ? updatedOrder.branch?.name : (updatedOrder.branch?.nameEn || updatedOrder.branch?.name || t('branches.unknown')),
+              },
               items: updatedOrder.items.map((item: any) => ({
                 _id: item._id || crypto.randomUUID(),
-                itemId: item._id || crypto.randomUUID(),
                 productId: item.product?._id || 'unknown',
                 productName: item.product?.name || t('products.unknown'),
                 productNameEn: item.product?.nameEn,
                 displayProductName: isRtl ? item.product?.name : (item.product?.nameEn || item.product?.name || t('products.unknown')),
                 quantity: Number(item.quantity) || 1,
                 price: Number(item.price) || 0,
-                unit: translateUnit(item.unit || item.product?.unit),
-                department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
+                unit: item.product?.unit || 'unit',
+                unitEn: item.product?.unitEn,
+                displayUnit: translateUnit(item.product?.unit || 'unit'),
+                department: {
+                  _id: item.product?.department?._id || 'unknown',
+                  name: item.product?.department?.name || t('departments.unknown'),
+                  nameEn: item.product?.department?.nameEn,
+                  displayName: isRtl ? item.product?.department?.name : (item.product?.department?.nameEn || item.product?.department?.name || t('departments.unknown')),
+                },
+                assignedTo: item.assignedTo ? {
+                  _id: item.assignedTo._id,
+                  username: item.assignedTo.username,
+                  name: item.assignedTo.name || item.assignedTo.username || t('users.unknown'),
+                  nameEn: item.assignedTo.nameEn,
+                  displayName: isRtl ? item.assignedTo.name : (item.assignedTo.nameEn || item.assignedTo.name || t('users.unknown')),
+                  department: item.assignedTo.department
+                } : undefined,
                 status: item.status || 'completed',
-                assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username, name: item.assignedTo.name, nameEn: item.assignedTo.nameEn } : undefined,
                 returnedQuantity: Number(item.returnedQuantity) || 0,
                 returnReason: item.returnReason || '',
               })),
-              status: 'delivered',
-              totalAmount: Number(updatedOrder.totalAmount) || 0,
-              adjustedTotal: Number(updatedOrder.adjustedTotal) || 0,
-              date: formatDate(updatedOrder.createdAt || new Date(), t('language')),
-              notes: updatedOrder.notes || '',
-              priority: updatedOrder.priority || 'medium',
-              createdBy: updatedOrder.createdBy?.username || t('orders.unknown'),
-              statusHistory: Array.isArray(updatedOrder.statusHistory)
-                ? updatedOrder.statusHistory.map((history: any) => ({
-                    status: history.status || 'pending',
-                    changedBy: history.changedBy || t('orders.unknown'),
-                    changedAt: formatDate(history.changedAt || new Date(), t('language')),
-                    notes: history.notes || '',
-                  }))
-                : [],
               returns: Array.isArray(updatedOrder.returns)
                 ? updatedOrder.returns.map((ret: any) => ({
                     returnId: ret._id || crypto.randomUUID(),
+                    returnNumber: ret.returnNumber || t('returns.unknown'),
                     items: Array.isArray(ret.items)
                       ? ret.items.map((item: any) => ({
                           productId: item.product?._id || 'unknown',
+                          productName: item.product?.name || t('products.unknown'),
+                          productNameEn: item.product?.nameEn,
                           quantity: Number(item.quantity) || 0,
-                          reason: item.reason || '',
+                          reason: item.reason || t('returns.unspecified'),
+                          unit: item.product?.unit || 'unit',
+                          unitEn: item.product?.unitEn,
+                          displayUnit: translateUnit(item.product?.unit || 'unit'),
                         }))
                       : [],
-                    status: ret.status || 'pending_approval',
-                    reviewNotes: ret.reviewNotes || '',
-                    createdAt: formatDate(ret.createdAt || new Date(), t('language')),
+                    status: ret.status || 'pending',
+                    reviewNotes: ret.notes || '',
+                    createdAt: formatDate(ret.createdAt ? new Date(ret.createdAt) : new Date(), language),
+                    createdBy: {
+                      _id: ret.createdBy?._id,
+                      username: ret.createdBy?.username,
+                      name: ret.createdBy?.name || t('users.unknown'),
+                      nameEn: ret.createdBy?.nameEn,
+                      displayName: isRtl ? ret.createdBy?.name : (ret.createdBy?.nameEn || ret.createdBy?.name || t('users.unknown')),
+                    },
+                  }))
+                : [],
+              status: 'delivered',
+              totalAmount: Number(updatedOrder.totalAmount) || 0,
+              adjustedTotal: Number(updatedOrder.adjustedTotal) || 0,
+              date: formatDate(updatedOrder.createdAt ? new Date(updatedOrder.createdAt) : new Date(), language),
+              requestedDeliveryDate: updatedOrder.requestedDeliveryDate ? new Date(updatedOrder.requestedDeliveryDate) : undefined,
+              notes: updatedOrder.notes || '',
+              priority: updatedOrder.priority || 'medium',
+              createdBy: updatedOrder.createdBy?.name || t('users.unknown'),
+              approvedBy: updatedOrder.approvedBy ? { _id: updatedOrder.approvedBy._id, name: updatedOrder.approvedBy.name || t('users.unknown') } : undefined,
+              approvedAt: updatedOrder.approvedAt ? new Date(updatedOrder.approvedAt) : undefined,
+              deliveredAt: updatedOrder.deliveredAt ? new Date(updatedOrder.deliveredAt) : undefined,
+              transitStartedAt: updatedOrder.transitStartedAt ? new Date(updatedOrder.transitStartedAt) : undefined,
+              statusHistory: Array.isArray(updatedOrder.statusHistory)
+                ? updatedOrder.statusHistory.map((history: any) => ({
+                    status: history.status || 'pending',
+                    changedBy: history.changedBy?.name || t('users.unknown'),
+                    changedAt: formatDate(history.changedAt ? new Date(history.changedAt) : new Date(), language),
+                    notes: history.notes || '',
                   }))
                 : [],
             };
@@ -644,6 +813,7 @@ export const useOrderNotifications = (
               sound: '/sounds/notification.mp3',
               vibrate: [400, 100, 400],
             });
+            playNotificationSound('/sounds/notification.mp3', [400, 100, 400]);
           } catch (err) {
             console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
           }
@@ -657,7 +827,7 @@ export const useOrderNotifications = (
         name: 'returnStatusUpdated',
         handler: (data: SocketEventData) => {
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
-          if (!data.orderId || !data.returnId || !data.status || !data.orderNumber) {
+          if (!data.orderId || !data.returnId || !data.status || !data.orderNumber || !data.branchId) {
             console.warn(`[${new Date().toISOString()}] Invalid return status update data:`, data);
             return;
           }
@@ -682,6 +852,7 @@ export const useOrderNotifications = (
             sound: '/sounds/notification.mp3',
             vibrate: [200, 100, 200],
           });
+          playNotificationSound('/sounds/notification.mp3', [200, 100, 200]);
         },
         config: {
           type: 'RETURN_STATUS_UPDATED',
@@ -692,7 +863,7 @@ export const useOrderNotifications = (
         name: 'missingAssignments',
         handler: (data: SocketEventData) => {
           if (!['admin', 'production'].includes(user.role)) return;
-          if (!data.orderId || !data.itemId || !data.orderNumber || !data.productName) {
+          if (!data.orderId || !data.itemId || !data.orderNumber || !data.productName || !data.branchId) {
             console.warn(`[${new Date().toISOString()}] Invalid missing assignments data:`, data);
             return;
           }
@@ -716,6 +887,7 @@ export const useOrderNotifications = (
             sound: '/sounds/notification.mp3',
             vibrate: [300, 100, 300],
           });
+          playNotificationSound('/sounds/notification.mp3', [300, 100, 300]);
         },
         config: {
           type: 'MISSING_ASSIGNMENTS',
@@ -763,7 +935,7 @@ export const useOrderNotifications = (
     return () => {
       events.forEach(({ name, handler }) => socket.off(name, handler));
     };
-  }, [socket, user, dispatch, stateRef, t, isRtl, addNotification, translateUnit]);
+  }, [socket, user, dispatch, stateRef, t, isRtl, addNotification, translateUnit, playNotificationSound]);
 
-  return {};
+  return { playNotificationSound };
 };

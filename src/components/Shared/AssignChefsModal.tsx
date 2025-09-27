@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Modal } from '../../components/UI/Modal';
 import { Button } from '../../components/UI/Button';
@@ -19,6 +19,20 @@ interface AssignChefsModalProps {
   setAssignForm: (formData: AssignChefsForm) => void;
   isRtl: boolean;
 }
+
+const translateUnit = (unit: string, isRtl: boolean) => {
+  const translations: Record<string, { ar: string; en: string }> = {
+    'كيلو': { ar: 'كيلو', en: 'kg' },
+    'قطعة': { ar: 'قطعة', en: 'piece' },
+    'علبة': { ar: 'علبة', en: 'pack' },
+    'صينية': { ar: 'صينية', en: 'tray' },
+    'kg': { ar: 'كجم', en: 'kg' },
+    'piece': { ar: 'قطعة', en: 'piece' },
+    'pack': { ar: 'علبة', en: 'pack' },
+    'tray': { ar: 'صينية', en: 'tray' },
+  };
+  return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
+};
 
 export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
   isOpen,
@@ -47,13 +61,16 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
     return map;
   }, [chefs]);
 
-  const updateAssignment = (index: number, value: string) => {
-    setAssignForm({
-      items: assignFormData.items.map((i, idx) =>
-        idx === index ? { ...i, assignedTo: value } : i
-      ),
-    });
-  };
+  const updateAssignment = useCallback(
+    (index: number, value: string) => {
+      setAssignForm({
+        items: assignFormData.items.map((i, idx) =>
+          idx === index ? { ...i, assignedTo: value } : i
+        ),
+      });
+    },
+    [assignFormData.items, setAssignForm]
+  );
 
   useEffect(() => {
     if (!selectedOrder) return;
@@ -66,14 +83,17 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
       if (item.assignedTo === '' && availableChefs.length === 1) {
         return { ...item, assignedTo: availableChefs[0].userId };
       }
-      return item;
+      return {
+        ...item,
+        unit: translateUnit(orderItem?.unit || 'unit', isRtl),
+      };
     });
 
-    const hasChanges = updatedItems.some((item, idx) => item.assignedTo !== assignFormData.items[idx].assignedTo);
+    const hasChanges = updatedItems.some((item, idx) => item.assignedTo !== assignFormData.items[idx].assignedTo || item.unit !== assignFormData.items[idx].unit);
     if (hasChanges) {
       setAssignForm({ items: updatedItems });
     }
-  }, [assignFormData.items, availableChefsByDepartment, selectedOrder, setAssignForm]);
+  }, [assignFormData.items, availableChefsByDepartment, selectedOrder, setAssignForm, isRtl]);
 
   return (
     <Modal
@@ -115,8 +135,8 @@ export const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                 htmlFor={`chef-select-${index}`}
               >
                 {isRtl
-                  ? `تعيين شيف لـ ${orderItem?.displayProductName} (${item.quantity} ${(item.displayUnit, isRtl)})`
-                  : `Assign chef to ${orderItem?.displayProductName} (${item.quantity} ${(item.displayUnit, isRtl)})`}
+                  ? `تعيين شيف لـ ${orderItem?.displayProductName} (${item.quantity} ${item.unit})`
+                  : `Assign chef to ${orderItem?.displayProductName} (${item.quantity} ${item.unit})`}
               </label>
               <Select
                 id={`chef-select-${index}`}
