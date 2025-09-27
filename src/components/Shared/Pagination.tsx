@@ -1,4 +1,3 @@
-// src/components/Shared/Pagination.tsx
 import React, { useCallback, useMemo } from 'react';
 import { Button } from '../UI/Button';
 import { motion } from 'framer-motion';
@@ -7,21 +6,21 @@ interface PaginationProps {
   currentPage: number;
   totalPages: number;
   isRtl: boolean;
-  onPageChange: (page: number) => void;
+  handlePageChange: (page: number) => void;
 }
 
-const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, isRtl, onPageChange }) => {
+const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, isRtl, handlePageChange }) => {
   const handlePrevious = useCallback(() => {
     if (currentPage > 1) {
-      onPageChange(currentPage - 1);
+      handlePageChange(currentPage - 1);
     }
-  }, [currentPage, onPageChange]);
+  }, [currentPage, handlePageChange]);
 
   const handleNext = useCallback(() => {
     if (currentPage < totalPages) {
-      onPageChange(currentPage + 1);
+      handlePageChange(currentPage + 1);
     }
-  }, [currentPage, totalPages, onPageChange]);
+  }, [currentPage, totalPages, handlePageChange]);
 
   const paginationText = useMemo(() => ({
     previous: isRtl ? 'السابق' : 'Previous',
@@ -37,7 +36,7 @@ const Pagination: React.FC<PaginationProps> = ({ currentPage, totalPages, isRtl,
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
-      className={`flex justify-center items-center gap-3 mt-6 ${isRtl ? 'flex-row-reverse' : 'flex-row'}`}
+      className={`flex justify-center items-center gap-3 mt-6 ${isRtl ? 'flex-row' : ''}`}
       role="navigation"
       aria-label={paginationText.navigation}
     >
