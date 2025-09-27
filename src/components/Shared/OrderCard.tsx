@@ -135,7 +135,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
               </div>
               <div>
                 <p className="text-xs text-gray-500">{isRtl ? 'الفرع' : 'Branch'}</p>
-                <p className="text-xs font-medium text-gray-800 truncate">{order.branchName}</p>
+                <p className="text-xs font-medium text-gray-800 truncate">{order.branch.displayName || 'غير معروف'}</p>
               </div>
             </div>
             <div>
@@ -176,7 +176,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                           >
                             <div className="flex items-center justify-between gap-2">
                               <p className="text-xs font-medium text-gray-900 truncate flex-1">
-                                {item.productName} ({item.quantity} {translateUnit(item.unit, isRtl)})
+                                {item.displayProductName} ({item.quantity} {translateUnit(item.displayUnit, isRtl)})
                               </p>
                               <span
                                 className={`px-1.5 py-0.5 rounded-full text-xs font-small flex items-center gap-1 ${itemStatusInfo.color} ${
@@ -191,8 +191,8 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                               {item.assignedTo && (
                                 <p className="text-xs text-gray-600 truncate">
                                   {isRtl
-                                    ? `معين لـ: شيف ${item.assignedTo.name} (${item.department?.name || 'غير معروف'})`
-                                    : `Assigned to: Chef ${item.assignedTo.name} (${item.department?.name || 'Unknown'})`}
+                                    ? `معين لـ: شيف ${item.assignedTo.displayName} (${item.department?.displayName || 'غير معروف'})`
+                                    : `Assigned to: Chef ${item.assignedTo.displayName} (${item.department?.displayName || 'Unknown'})`}
                                 </p>
                               )}
                             </div>
@@ -218,12 +218,12 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                   <p key={i} className="text-xs text-amber-700 truncate">
                     {isRtl
                       ? `${r.items
-                          .map((item) => `${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.reason}`)
+                          .map((item) => `${item.quantity} ${translateUnit(item.displayUnit, isRtl)} ${item.reason}`)
                           .join(', ')} - الحالة: ${
                           isRtl ? { pending: 'قيد الانتظار', approved: 'تمت الموافقة', rejected: 'مرفوض', processed: 'تمت المعالجة' }[r.status] : r.status
                         }`
                       : `${r.items
-                          .map((item) => `${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.reason}`)
+                          .map((item) => `${item.quantity} ${translateUnit(item.displayUnit, isRtl)} ${item.reason}`)
                           .join(', ')} - Status: ${r.status}`}
                   </p>
                 ))}
