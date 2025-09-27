@@ -3,11 +3,13 @@ import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
 import { Order } from '../../types/types';
 
+// Convert numbers to Arabic numerals
 const toArabicNumerals = (number: string | number): string => {
   const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
   return String(number).replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
 };
 
+// Convert Arabic numerals to Latin for parsing
 const fromArabicNumerals = (str: string): string => {
   const arabicMap: { [key: string]: string } = {
     '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
@@ -16,16 +18,19 @@ const fromArabicNumerals = (str: string): string => {
   return str.replace(/[٠-٩]/g, (digit) => arabicMap[digit] || digit);
 };
 
+// Format price to match Orders.tsx, with different formatting for stats
 const formatPrice = (amount: number | undefined, isRtl: boolean, isStats: boolean = false): string => {
-  const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount / 100 : 0;
+  const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount / 100 : 0; // Divide by 100 to convert halala to riyal
   let formatted: string;
   if (isStats) {
+    // For stats in header: no currency symbol at start for Arabic, add it manually at end
     formatted = validAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     });
     formatted = isRtl ? `${toArabicNumerals(formatted)} ر.س` : `${formatted} SAR`;
   } else {
+    // For table: match calculateAdjustedTotal
     formatted = validAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
       style: 'currency',
       currency: 'SAR',
@@ -39,16 +44,18 @@ const formatPrice = (amount: number | undefined, isRtl: boolean, isStats: boolea
   return formatted;
 };
 
+// Format products for Arabic and English with correct separator
 const formatProducts = (items: Order['items'], isRtl: boolean, translateUnit: (unit: string, isRtl: boolean) => string): string => {
   return items
     .map((item) => {
       const quantity = isRtl ? toArabicNumerals(item.quantity) : item.quantity;
-      const name = item.displayProductName;
-      return `${quantity} ${translateUnit(item.displayUnit, isRtl)} ${name}`;
+      const name = isRtl && item.productNameEn ? item.productNameEn : item.productName;
+      return `${quantity} ${translateUnit(item.unit, isRtl)} ${name}`;
     })
     .join(' + ');
 };
 
+// Convert array buffer to base64 for font embedding
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   let binary = '';
   const bytes = new Uint8Array(buffer);
@@ -58,11 +65,12 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   return window.btoa(binary);
 };
 
+// Load Amiri font (regular and bold) for reliable Arabic rendering
 const loadFont = async (doc: jsPDF): Promise<boolean> => {
   const fontName = 'Amiri';
   const fontUrls = {
-    regular: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Regular.ttf',
-    bold: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Bold.ttf',
+    regular: '/fonts/Amiri-Regular.ttf',
+    bold: '/fonts/Amiri-Bold.ttf',
   };
   try {
     const regularFontBytes = await fetch(fontUrls.regular).then((res) => {
@@ -92,6 +100,7 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
   }
 };
 
+// Generate dynamic file name based on filters
 const generateFileName = (filterStatus: string, filterBranchName: string, isRtl: boolean): string => {
   const date = new Date().toISOString().split('T')[0];
   const statusTranslations = {
@@ -108,6 +117,7 @@ const generateFileName = (filterStatus: string, filterBranchName: string, isRtl:
   return `${status}${branch}_${date}.pdf`;
 };
 
+// Generate PDF header with filter information and footer
 const generatePDFHeader = (
   doc: jsPDF,
   isRtl: boolean,
@@ -126,8 +136,10 @@ const generatePDFHeader = (
   const pageWidth = doc.internal.pageSize.width;
   const pageHeight = doc.internal.pageSize.height;
 
+  // Add main title
   doc.text(isRtl ? title : title, isRtl ? pageWidth - 20 : 20, 12, { align: isRtl ? 'right' : 'left' });
 
+  // Add filter information
   doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
   const statusTranslations = {
@@ -146,13 +158,16 @@ const generatePDFHeader = (
     ? `إجمالي الطلبات: ${toArabicNumerals(totalOrders)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${formatPrice(totalAmount, isRtl, true)}`
     : `Total Orders: ${totalOrders} | Total Quantity: ${totalQuantity} units | Total Amount: ${formatPrice(totalAmount, isRtl, true)}`;
 
+  // Position filter info and stats correctly
   doc.text(filterInfo, isRtl ? pageWidth - 20 : 20, 20, { align: isRtl ? 'right' : 'left' });
   doc.text(stats, isRtl ? pageWidth - 20 : 20, 28, { align: isRtl ? 'right' : 'left' });
 
+  // Add separator line
   doc.setLineWidth(0.5);
   doc.setDrawColor(255, 193, 7);
   doc.line(20, 33, pageWidth - 20, 33);
 
+  // Add page number and footer
   const pageCount = doc.getNumberOfPages();
   const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
     year: 'numeric',
@@ -171,6 +186,7 @@ const generatePDFHeader = (
   }
 };
 
+// Generate PDF table with correct Arabic headers and bold price
 const generatePDFTable = (
   doc: jsPDF,
   headers: string[],
@@ -216,13 +232,13 @@ const generatePDFTable = (
       fillColor: [245, 245, 245],
     },
     columnStyles: {
-      0: { cellWidth: 30 , fontStyle: 'bold' },
-      1: { cellWidth: 20 , fontStyle: 'bold'  },
-      2: { cellWidth: 30 , fontStyle: 'bold' },
-      3: { cellWidth: 'auto' , fontStyle: 'bold' },
-      4: { cellWidth: 20, fontStyle: 'bold',   halign: isRtl ? 'left' : 'right' },
-      5: { cellWidth: 16 , fontStyle: 'bold' },
-      6: { cellWidth: 42 , fontStyle: 'bold' },
+      0: { cellWidth: 30 , fontStyle: 'bold' }, // Order Number
+      1: { cellWidth: 20 , fontStyle: 'bold'  }, // Branch
+      2: { cellWidth: 30 , fontStyle: 'bold' }, // Status
+      3: { cellWidth: 'auto' , fontStyle: 'bold' }, // Products
+      4: { cellWidth: 20, fontStyle: 'bold',   halign: isRtl ? 'left' : 'right' }, // Total Amount (bold)
+      5: { cellWidth: 16 , fontStyle: 'bold' }, // Total Quantity
+      6: { cellWidth: 42 , fontStyle: 'bold' }, // Date
     },
     styles: {
       overflow: 'linebreak',
@@ -234,11 +250,11 @@ const generatePDFTable = (
     },
     didParseCell: (data) => {
       data.cell.styles.halign = isRtl ? 'left' : 'right';
-      if (data.column.index === (isRtl ? headers.length - 5 : 4)) {
+      if (data.column.index === (isRtl ? headers.length - 5 : 4)) { // Total Amount column
         if (!data.cell.text[0] || data.cell.text[0].includes('NaN')) {
           data.cell.text[0] = formatPrice(0, isRtl);
         }
-        data.cell.styles.fontStyle = 'bold';
+        data.cell.styles.fontStyle = 'bold'; // Ensure bold for price
       }
       if (isRtl) {
         data.cell.text = data.cell.text.map(text => doc.processArabic(text));
@@ -250,6 +266,7 @@ const generatePDFTable = (
   });
 };
 
+// Main export function
 export const exportToPDF = async (
   orders: Order[],
   isRtl: boolean,
@@ -262,24 +279,28 @@ export const exportToPDF = async (
   try {
     const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
 
+    // Load Amiri font
     const fontName = 'Amiri';
     const fontLoaded = await loadFont(doc);
 
+    // Filter orders
     const filteredOrders = orders.filter(
       (order) =>
         (!filterStatus || order.status === filterStatus) &&
-        (!filterBranchName || order.branch.displayName === filterBranchName)
+        (!filterBranchName || order.branchName === filterBranchName)
     );
 
+    // Calculate statistics
     const totalOrders = filteredOrders.length;
     const totalQuantity = filteredOrders.reduce((sum, order) => sum + calculateTotalQuantity(order), 0);
     const totalAmount = filteredOrders.reduce((sum, order) => {
       const amountStr = calculateAdjustedTotal(order);
       const numericStr = fromArabicNumerals(amountStr);
-      const cleaned = numericStr.replace(/[^0-9.]/g, '');
+      const cleaned = numericStr.replace(/[^0-9.]/g, ''); // Remove everything except numbers and decimal point
       return sum + (cleaned && !isNaN(parseFloat(cleaned)) ? parseFloat(cleaned) : 0);
     }, 0);
 
+    // Generate header
     generatePDFHeader(
       doc,
       isRtl,
@@ -293,6 +314,7 @@ export const exportToPDF = async (
       fontLoaded
     );
 
+    // Prepare table headers
     const headers = [
       isRtl ? 'رقم الطلب' : 'Order Number',
       isRtl ? 'الفرع' : 'Branch',
@@ -303,6 +325,7 @@ export const exportToPDF = async (
       isRtl ? 'التاريخ' : 'Date',
     ];
 
+    // Prepare table data
     const data = filteredOrders.map((order) => {
       const statusTranslations = {
         pending: isRtl ? 'قيد الانتظار' : 'Pending',
@@ -318,11 +341,11 @@ export const exportToPDF = async (
       if (totalAmountStr.includes('NaN')) {
         formattedTotalAmount = formatPrice(0, isRtl);
       } else {
-        formattedTotalAmount = totalAmountStr;
+        formattedTotalAmount = totalAmountStr; // Use the formatted string from calculateAdjustedTotal
       }
       return [
-        order.orderNumber,
-        order.branch.displayName,
+        order.orderNumber, // Always use Latin numerals for orderNumber
+        order.branchName,
         statusTranslations[order.status] || order.status,
         formatProducts(order.items, isRtl, translateUnit),
         formattedTotalAmount,
@@ -331,8 +354,10 @@ export const exportToPDF = async (
       ];
     });
 
+    // Generate table
     generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName, calculateAdjustedTotal, calculateTotalQuantity, translateUnit);
 
+    // Save the PDF
     const fileName = generateFileName(filterStatus, filterBranchName, isRtl);
     doc.save(fileName);
 
