@@ -61,24 +61,24 @@ const OrderCard: React.FC<Props> = memo(
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-2 gap-3">
               <div>
-                <p className="text-xs text-gray-500">{t('orders.total_quantity')}</p>
+                <p className="text-xs  leading-relaxed text-gray-500">{t('orders.total_quantity')}</p>
                 <p className="text-sm font-medium text-gray-800">
                   {isRtl ? `${calculateTotalQuantity(order)} ${t('orders.items')}` : `${calculateTotalQuantity(order)} ${t('orders.items')}`}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-gray-500">{t('orders.total_amount')}</p>
+                <p className="text-xs leading-relaxed text-gray-500">{t('orders.total_amount')}</p>
                 <p className="text-sm font-semibold text-teal-600">{calculateAdjustedTotal(order)}</p>
               </div>
               <div>
-                <p className="text-xs text-gray-500">{t('orders.date')}</p>
+                <p className="text-xs leading-relaxed text-gray-500">{t('orders.date')}</p>
                 <p className="text-sm font-medium text-gray-800">{order.date}</p>
               </div>
             </div>
-            <div className="mt-2 p-2 bg-gray-50 rounded-md">
+            <div className="mt-2 p-2 leading-relaxed bg-gray-50 rounded-md">
               <p className="text-xs font-medium text-gray-800">{t('orders.products')}:</p>
               <p className="text-sm text-gray-700">
-                {order.items.map(item => `(${item.quantity} ${t(`units.${item.unit || 'unit'}`)} × ${getFirstTwoWords(item.productName)})`).join(' + ')}
+                {order.items.map(item => `(${item.quantity} ${t(`${item.unit || 'unit'}`)} × ${getFirstTwoWords(item.productName)})`).join(' + ')}
               </p>
             </div>
             {order.returns?.length > 0 && (
