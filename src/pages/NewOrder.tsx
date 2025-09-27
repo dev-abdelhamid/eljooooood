@@ -479,8 +479,9 @@ export function NewOrder() {
     loadData();
   }, [user, t, isRtl, filterDepartment, searchTerm]);
 
-  // تحديث displayName و displayUnit للمنتجات عند تغيير اللغة
+  // تحديث displayName و displayUnit للمنتجات و orderItems عند تغيير اللغة
   useEffect(() => {
+    // تحديث المنتجات
     setProducts((prev) =>
       prev.map((product) => ({
         ...product,
@@ -492,7 +493,7 @@ export function NewOrder() {
         },
       }))
     );
-    // تحديث orderItems عند تغيير اللغة
+    // تحديث orderItems
     setOrderItems((prev) =>
       prev.map((item) => ({
         ...item,
@@ -555,9 +556,22 @@ export function NewOrder() {
           item.productId === product._id ? { ...item, quantity: item.quantity + 1 } : item
         );
       }
-      return [...prev, { productId: product._id, product, quantity: 1, price: product.price }];
+      return [...prev, { 
+        productId: product._id, 
+        product: {
+          ...product,
+          displayName: isRtl ? product.name : (product.nameEn || product.name),
+          displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
+          department: {
+            ...product.department,
+            displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name),
+          },
+        }, 
+        quantity: 1, 
+        price: product.price 
+      }];
     });
-  }, []);
+  }, [isRtl]);
 
   const updateQuantity = useCallback((productId: string, quantity: number) => {
     if (quantity <= 0) {
@@ -665,6 +679,7 @@ export function NewOrder() {
       setFilterDepartment('');
       setShowConfirmModal(false);
       setError('');
+      toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Create error:`, err);
       setError(err.message || t.createError);
