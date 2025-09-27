@@ -5,20 +5,7 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, Check, Package, Truck, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Order, OrderStatus, ItemStatus } from '../../types/types';
- 
 
-
-   
-
-    const validTransitions = {
-      pending: [OrderStatus.Approved, OrderStatus.Cancelled],
-      approved: [OrderStatus.InProduction, OrderStatus.Cancelled],
-      in_production: [OrderStatus.Completed, OrderStatus.Cancelled],
-      completed: [OrderStatus.InTransit],
-      in_transit: [OrderStatus.Delivered],
-      delivered: [],
-      cancelled: [],
-    };
 const STATUS_COLORS: Record<OrderStatus, { color: string; icon: React.FC; label: string; progress: number }> = {
   pending: { color: 'bg-yellow-100 text-yellow-800', icon: Clock, label: 'pending', progress: 0 },
   approved: { color: 'bg-teal-100 text-teal-800', icon: Check, label: 'approved', progress: 25 },
@@ -37,8 +24,6 @@ const ITEM_STATUS_COLORS: Record<ItemStatus, { label: string; color: string; ico
   cancelled: { label: 'cancelled', color: 'bg-red-50 text-red-600', icon: AlertCircle },
 };
 
-
-    
 const PRIORITY_COLORS: Record<Order['priority'], string> = {
   low: 'bg-gray-100 text-gray-700',
   medium: 'bg-blue-100 text-blue-700',
@@ -69,7 +54,6 @@ const OrderCard: React.FC<OrderCardProps> = memo(
       setIsItemsExpanded((prev) => !prev);
     }, []);
 
-
     const statusTranslations = {
       pending: isRtl ? 'قيد الانتظار' : 'Pending',
       approved: isRtl ? 'تم الموافقة' : 'Approved',
@@ -80,6 +64,15 @@ const OrderCard: React.FC<OrderCardProps> = memo(
       cancelled: isRtl ? 'ملغى' : 'Cancelled',
     };
 
+    const validTransitions = {
+      pending: [OrderStatus.Approved, OrderStatus.Cancelled],
+      approved: [OrderStatus.InProduction, OrderStatus.Cancelled],
+      in_production: [OrderStatus.Completed, OrderStatus.Cancelled],
+      completed: [OrderStatus.InTransit],
+      in_transit: [OrderStatus.Delivered],
+      delivered: [],
+      cancelled: [],
+    };
 
     return (
       <motion.div
@@ -113,7 +106,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                 }`}
               >
                 <StatusIcon className="w-3 h-3" />
-                {isRtl ? { pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[order.status] : statusInfo.label}
+                {statusTranslations[order.status]}
               </span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-1.5">
