@@ -935,7 +935,7 @@ export const Orders: React.FC = () => {
       });
       dispatch({ type: 'SET_MODAL', modal: 'assign', isOpen: true });
     },
-    [[isRtl]
+    [isRtl]
   );
 
   useEffect(() => {
