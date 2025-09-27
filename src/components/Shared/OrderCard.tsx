@@ -38,15 +38,7 @@ const ITEM_STATUS_COLORS: Record<ItemStatus, { label: string; color: string; ico
 };
 
 
-    const statusTranslations = {
-      pending: 'pending',
-      approved: 'approved',
-      in_production: 'in_production',
-      completed: 'completed',
-      in_transit: 'in_transit',
-      delivered: 'delivered',
-      cancelled: 'cancelled',};
-
+    
 const PRIORITY_COLORS: Record<Order['priority'], string> = {
   low: 'bg-gray-100 text-gray-700',
   medium: 'bg-blue-100 text-blue-700',
@@ -76,6 +68,18 @@ const OrderCard: React.FC<OrderCardProps> = memo(
     const toggleItemsExpanded = useCallback(() => {
       setIsItemsExpanded((prev) => !prev);
     }, []);
+
+
+    const statusTranslations = {
+      pending: isRtl ? 'قيد الانتظار' : 'Pending',
+      approved: isRtl ? 'تم الموافقة' : 'Approved',
+      in_production: isRtl ? 'في الإنتاج' : 'In Production',
+      completed: isRtl ? 'مكتمل' : 'Completed',
+      in_transit: isRtl ? 'في النقل' : 'In Transit',
+      delivered: isRtl ? 'تم التسليم' : 'Delivered',
+      cancelled: isRtl ? 'ملغى' : 'Cancelled',
+    };
+
 
     return (
       <motion.div
