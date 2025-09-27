@@ -9,7 +9,6 @@ import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// واجهات البيانات (Interfaces)
 interface Product {
   _id: string;
   name: string;
@@ -42,7 +41,6 @@ interface OrderItem {
   price: number;
 }
 
-// ترجمات النصوص
 const translations = {
   ar: {
     createOrder: 'إنشاء طلب جديد',
@@ -114,7 +112,6 @@ const translations = {
   },
 };
 
-// مكون البحث
 const ProductSearchInput = ({
   value,
   onChange,
@@ -163,7 +160,6 @@ const ProductSearchInput = ({
   );
 };
 
-// مكون القائمة المنسدلة
 const ProductDropdown = ({
   value,
   onChange,
@@ -225,7 +221,6 @@ const ProductDropdown = ({
   );
 };
 
-// مكون حقل النص
 const ProductTextarea = ({
   value,
   onChange,
@@ -251,7 +246,6 @@ const ProductTextarea = ({
   );
 };
 
-// مكون إدخال الكمية
 const QuantityInput = ({
   value,
   onChange,
@@ -297,7 +291,6 @@ const QuantityInput = ({
   );
 };
 
-// مكون بطاقة المنتج
 const ProductCard = ({ product, cartItem, onAdd, onUpdate, onRemove }: {
   product: Product;
   cartItem?: OrderItem;
@@ -333,10 +326,7 @@ const ProductCard = ({ product, cartItem, onAdd, onUpdate, onRemove }: {
           />
         ) : (
           <motion.button
-            onClick={() => {
-              console.log('Adding product to cart:', product._id);
-              onAdd();
-            }}
+            onClick={onAdd}
             className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors duration-200 flex items-center justify-center gap-2 shadow-sm"
             aria-label={t.addToCart}
             whileHover={{ scale: 1.05 }}
@@ -351,7 +341,6 @@ const ProductCard = ({ product, cartItem, onAdd, onUpdate, onRemove }: {
   );
 };
 
-// مكون بطاقة التحميل (Skeleton)
 const ProductSkeletonCard = () => (
   <motion.div
     initial={{ opacity: 0 }}
@@ -373,7 +362,6 @@ const ProductSkeletonCard = () => (
   </motion.div>
 );
 
-// مكون نافذة التأكيد
 const OrderConfirmModal = ({
   isOpen,
   onClose,
@@ -409,10 +397,7 @@ const OrderConfirmModal = ({
         <p className="text-sm text-gray-600 mb-6">{t.confirmMessage}</p>
         <div className="flex justify-end gap-3">
           <motion.button
-            onClick={() => {
-              console.log('Cancel button clicked');
-              onClose();
-            }}
+            onClick={onClose}
             className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
             aria-label={t.cancel}
             whileHover={{ scale: 1.05 }}
@@ -421,10 +406,7 @@ const OrderConfirmModal = ({
             {t.cancel}
           </motion.button>
           <motion.button
-            onClick={() => {
-              console.log('Confirm button clicked');
-              onConfirm();
-            }}
+            onClick={onConfirm}
             disabled={submitting}
             className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
             aria-label={submitting ? t.submitting : t.confirm}
@@ -439,9 +421,7 @@ const OrderConfirmModal = ({
   );
 };
 
-// المكون الرئيسي
 export function NewOrder() {
-  // الحالة (State) والسياقات (Contexts)
   const { user } = useAuth();
   const { language } = useLanguage();
   const isRtl = language === 'ar';
@@ -463,26 +443,23 @@ export function NewOrder() {
   const [filterDepartment, setFilterDepartment] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
 
-  // إعداد Socket.IO
   const socket = useMemo(() => io('https://eljoodia-server-production.up.railway.app'), []);
 
-  // دالة البحث المؤخر
   const debouncedSearch = useCallback(
     debounce((value: string) => {
-      console.log('Search term updated:', value);
       setSearchTerm(value.trim());
     }, 500),
     []
   );
 
-  // معالجة تغيير البحث
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchInput(value);
-    debouncedSearch(value);
+    if (value.length >= 2 || value === '') {
+      debouncedSearch(value);
+    }
   };
 
-  // تصفية المنتجات
   const filteredProducts = useMemo(() => {
     const lowerSearchTerm = searchTerm.toLowerCase();
     return products
@@ -491,25 +468,28 @@ export function NewOrder() {
         const code = product.code.toLowerCase();
         return (
           (filterDepartment ? product.department._id === filterDepartment : true) &&
-          (name.includes(lowerSearchTerm) || code.includes(lowerSearchTerm))
+          (name.startsWith(lowerSearchTerm) || code.startsWith(lowerSearchTerm) || name.includes(lowerSearchTerm))
         );
       })
       .sort((a, b) => {
         const aName = (isRtl ? a.name : a.nameEn || a.name).toLowerCase();
         const bName = (isRtl ? b.name : b.nameEn || b.name).toLowerCase();
+        const aCode = a.code.toLowerCase();
+        const bCode = b.code.toLowerCase();
+        if (aName.startsWith(lowerSearchTerm) && !bName.startsWith(lowerSearchTerm)) return -1;
+        if (!aName.startsWith(lowerSearchTerm) && bName.startsWith(lowerSearchTerm)) return 1;
+        if (aCode.startsWith(lowerSearchTerm) && !bCode.startsWith(lowerSearchTerm)) return -1;
+        if (!aCode.startsWith(lowerSearchTerm) && bCode.startsWith(lowerSearchTerm)) return 1;
         return aName.localeCompare(bName);
       });
   }, [products, searchTerm, filterDepartment, isRtl]);
 
-  // عدد بطاقات التحميل
   const skeletonCount = useMemo(() => {
     return filteredProducts.length > 0 ? filteredProducts.length : 6;
   }, [filteredProducts]);
 
-  // جلب البيانات عند تحميل المكون
   useEffect(() => {
     if (!user || !['admin', 'branch'].includes(user.role)) {
-      console.log('Unauthorized access, redirecting to /branch-orders');
       setError(t.unauthorized);
       navigate('/branch-orders');
       toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
@@ -531,7 +511,7 @@ export function NewOrder() {
           displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
         }));
         setProducts(productsWithDisplay);
-        setBranches(Array.isArray(branchesResponse) ? branchesResponse : branchesResponse.data || []);
+        setBranches(Array.isArray(branchesResponse) ? branchesResponse : []);
         setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data : []);
         if (user?.role === 'branch' && user?.branchId) {
           setBranch(user.branchId.toString());
@@ -548,24 +528,19 @@ export function NewOrder() {
     loadData();
   }, [user, navigate, t, isRtl, filterDepartment, searchTerm]);
 
-  // إعداد Socket.IO
   useEffect(() => {
     socket.on('connect', () => {
       console.log('Connected to Socket.IO server');
     });
     socket.on('orderCreated', () => {
-      console.log('Order created event received');
       toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
     });
     return () => {
       socket.disconnect();
-      console.log('Socket.IO disconnected');
     };
   }, [socket, t, isRtl]);
 
-  // إضافة منتج إلى الطلب
   const addToOrder = useCallback((product: Product) => {
-    console.log('Adding product to order:', product._id);
     setOrderItems((prev) => {
       const existingItem = prev.find((item) => item.productId === product._id);
       if (existingItem) {
@@ -577,11 +552,9 @@ export function NewOrder() {
     });
   }, []);
 
-  // تحديث الكمية
   const updateQuantity = useCallback((productId: string, quantity: number) => {
-    console.log('Updating quantity for product:', productId, 'to:', quantity);
     if (quantity <= 0) {
-      setOrderItems((prev) => prev.filter((item) => item.productId !== productId));
+      removeFromOrder(productId);
       return;
     }
     setOrderItems((prev) =>
@@ -589,39 +562,34 @@ export function NewOrder() {
     );
   }, []);
 
-  // معالجة إدخال الكمية
   const handleQuantityInput = useCallback((productId: string, value: string) => {
     const quantity = parseInt(value) || 0;
-    console.log('Handling quantity input for product:', productId, 'value:', value);
+    if (value === '' || quantity <= 0) {
+      updateQuantity(productId, 0);
+      return;
+    }
     updateQuantity(productId, quantity);
   }, [updateQuantity]);
 
-  // إزالة منتج من الطلب
   const removeFromOrder = useCallback((productId: string) => {
-    console.log('Removing product from order:', productId);
     setOrderItems((prev) => prev.filter((item) => item.productId !== productId));
   }, []);
 
-  // مسح الطلب
   const clearOrder = useCallback(() => {
-    console.log('Clearing order');
     setOrderItems([]);
     setNotes('');
     if (user?.role === 'admin') setBranch('');
     toast.success(t.orderCleared, { position: isRtl ? 'top-right' : 'top-left' });
   }, [user, t, isRtl]);
 
-  // حساب الإجمالي
   const getTotalAmount = useMemo(
     () => orderItems.reduce((total, item) => total + item.price * item.quantity, 0).toFixed(2),
     [orderItems]
   );
 
-  // معالجة إرسال الطلب
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
-      console.log('Submitting order');
       if (orderItems.length === 0) {
         setError(t.cartEmpty);
         toast.error(t.cartEmpty, { position: isRtl ? 'top-right' : 'top-left' });
@@ -637,9 +605,7 @@ export function NewOrder() {
     [orderItems, branch, user, t, isRtl]
   );
 
-  // تأكيد الطلب
   const confirmOrder = async () => {
-    console.log('Confirming order');
     setSubmitting(true);
     setShowConfirmModal(false);
     try {
@@ -655,9 +621,8 @@ export function NewOrder() {
         notes: notes.trim() || undefined,
         requestedDeliveryDate: new Date().toISOString(),
       };
-      const response = await ordersAPI.create(orderData, isRtl);
+      const response = await ordersAPI.create(orderData);
       socket.emit('newOrderFromBranch', response);
-      console.log('Order created successfully:', response);
       setTimeout(() => navigate('/orders'), 1000);
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Create error:`, err);
@@ -668,21 +633,12 @@ export function NewOrder() {
     }
   };
 
-  // التمرير إلى ملخص الطلب
   const scrollToSummary = () => {
-    console.log('Scrolling to summary');
     summaryRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  // واجهة المستخدم
   return (
-    <div
-      className={`mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${
-        isRtl ? 'font-arabic' : ''
-      }`}
-      dir={isRtl ? 'rtl' : 'ltr'}
-    >
-      {/* العنوان */}
+    <div className={`mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -698,7 +654,6 @@ export function NewOrder() {
         </div>
       </motion.div>
 
-      {/* رسالة الخطأ */}
       {error && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -711,7 +666,6 @@ export function NewOrder() {
         </motion.div>
       )}
 
-      {/* زر التمرير إلى الملخص */}
       {orderItems.length > 0 && (
         <div className={`lg:hidden fixed bottom-8 ${isRtl ? 'left-8' : 'right-8'} z-50`}>
           <motion.button
@@ -726,9 +680,7 @@ export function NewOrder() {
         </div>
       )}
 
-      {/* تخطيط الصفحة */}
       <div className={`space-y-8 ${orderItems.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-6 lg:space-y-0' : ''}`}>
-        {/* قسم المنتجات */}
         <div className={`${orderItems.length > 0 ? 'lg:col-span-2 lg:overflow-y-auto lg:max-h-[calc(100vh-10rem)] scrollbar-none' : ''}`}>
           <motion.div
             initial={{ opacity: 0, y: 10 }}
@@ -813,7 +765,6 @@ export function NewOrder() {
           )}
         </div>
 
-        {/* ملخص الطلب */}
         {orderItems.length > 0 && (
           <motion.div
             initial={{ opacity: 0, x: isRtl ? -10 : 10 }}
@@ -849,10 +800,7 @@ export function NewOrder() {
                           onDecrement={() => updateQuantity(item.productId, item.quantity - 1)}
                         />
                         <motion.button
-                          onClick={() => {
-                            console.log('Removing item:', item.productId);
-                            removeFromOrder(item.productId);
-                          }}
+                          onClick={() => removeFromOrder(item.productId)}
                           className="w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
                           aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
                           whileHover={{ scale: 1.1 }}
@@ -913,11 +861,7 @@ export function NewOrder() {
                 </div>
                 <div className="flex gap-3">
                   <motion.button
-                    onClick={() => {
-                      console.log('Clear order button clicked');
-                      clearOrder();
-                    }}
-                    type="button"
+                    onClick={clearOrder}
                     className="flex-1 px-4 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm"
                     disabled={submitting || orderItems.length === 0}
                     aria-label={t.clearOrder}
@@ -943,7 +887,6 @@ export function NewOrder() {
         )}
       </div>
 
-      {/* نافذة تأكيد الطلب */}
       <OrderConfirmModal
         isOpen={showConfirmModal}
         onClose={() => setShowConfirmModal(false)}
