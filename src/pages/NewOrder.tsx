@@ -9,11 +9,38 @@ import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 
+interface Product {
+  _id: string;
+  name: string;
+  nameEn?: string;
+  code: string;
+  price: number;
+  unit?: string;
+  unitEn?: string;
+  department: { _id: string; name: string; nameEn?: string; displayName: string };
+  displayName: string;
+  displayUnit: string;
+}
+
 interface OrderItem {
   productId: string;
   product: Product;
   quantity: number;
   price: number;
+}
+
+interface Branch {
+  _id: string;
+  name: string;
+  nameEn?: string;
+  displayName: string;
+}
+
+interface Department {
+  _id: string;
+  name: string;
+  nameEn?: string;
+  displayName: string;
 }
 
 const translations = {
@@ -462,8 +489,22 @@ export function NewOrder() {
           },
         }));
         setProducts(productsWithDisplay);
-        setBranches(Array.isArray(branchesResponse) ? branchesResponse : []);
-        setDepartments(Array.isArray(departmentsResponse.data) ? departmentsResponse.data : []);
+        setBranches(
+          Array.isArray(branchesResponse)
+            ? branchesResponse.map((b: Branch) => ({
+                ...b,
+                displayName: isRtl ? b.name : (b.nameEn || b.name),
+              }))
+            : []
+        );
+        setDepartments(
+          Array.isArray(departmentsResponse.data)
+            ? departmentsResponse.data.map((d: Department) => ({
+                ...d,
+                displayName: isRtl ? d.name : (d.nameEn || d.name),
+              }))
+            : []
+        );
         if (user?.role === 'branch' && user?.branchId) {
           setBranch(user.branchId.toString());
         }
@@ -556,20 +597,23 @@ export function NewOrder() {
           item.productId === product._id ? { ...item, quantity: item.quantity + 1 } : item
         );
       }
-      return [...prev, { 
-        productId: product._id, 
-        product: {
-          ...product,
-          displayName: isRtl ? product.name : (product.nameEn || product.name),
-          displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
-          department: {
-            ...product.department,
-            displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name),
+      return [
+        ...prev,
+        {
+          productId: product._id,
+          product: {
+            ...product,
+            displayName: isRtl ? product.name : (product.nameEn || product.name),
+            displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
+            department: {
+              ...product.department,
+              displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name),
+            },
           },
-        }, 
-        quantity: 1, 
-        price: product.price 
-      }];
+          quantity: 1,
+          price: product.price,
+        },
+      ];
     });
   }, [isRtl]);
 
@@ -583,14 +627,17 @@ export function NewOrder() {
     );
   }, []);
 
-  const handleQuantityInput = useCallback((productId: string, value: string) => {
-    const quantity = parseInt(value) || 0;
-    if (value === '' || quantity <= 0) {
-      updateQuantity(productId, 0);
-      return;
-    }
-    updateQuantity(productId, quantity);
-  }, [updateQuantity]);
+  const handleQuantityInput = useCallback(
+    (productId: string, value: string) => {
+      const quantity = parseInt(value) || 0;
+      if (value === '' || quantity <= 0) {
+        updateQuantity(productId, 0);
+        return;
+      }
+      updateQuantity(productId, quantity);
+    },
+    [updateQuantity]
+  );
 
   const removeFromOrder = useCallback((productId: string) => {
     setOrderItems((prev) => prev.filter((item) => item.productId !== productId));
@@ -631,6 +678,7 @@ export function NewOrder() {
   const confirmOrder = async () => {
     setSubmitting(true);
     try {
+      const eventId = crypto.randomUUID();
       const orderData = {
         orderNumber: `ORD-${Date.now()}`,
         branchId: user?.role === 'branch' ? user?.branchId?.toString() : branch,
@@ -648,13 +696,14 @@ export function NewOrder() {
         priority: 'medium',
         createdBy: user?.id || user?._id,
         isRtl,
+        eventId,
       };
       const response = await ordersAPI.create(orderData, isRtl);
-      const eventId = crypto.randomUUID();
+      const branchData = branches.find((b) => b._id === orderData.branchId);
       socket.emit('orderCreated', {
         _id: response.data.id,
         orderNumber: response.data.orderNumber,
-        branch: response.data.branch,
+        branch: branchData || { _id: orderData.branchId, name: t.branches?.unknown || 'Unknown', nameEn: t.branches?.unknown || 'Unknown' },
         items: response.data.items,
         eventId,
         isRtl,
@@ -664,7 +713,7 @@ export function NewOrder() {
         type: 'success',
         message: languageT('notifications.order_created', {
           orderNumber: response.data.orderNumber,
-          branchName: isRtl ? response.data.branch.name : (response.data.branch.nameEn || response.data.branch.name),
+          branchName: isRtl ? branchData?.name : (branchData?.nameEn || branchData?.name || t.branches?.unknown || 'Unknown'),
         }),
         data: { orderId: response.data.id, eventId },
         read: false,
@@ -679,7 +728,7 @@ export function NewOrder() {
       setFilterDepartment('');
       setShowConfirmModal(false);
       setError('');
-      toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left', toastId: eventId });
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Create error:`, err);
       setError(err.message || t.createError);
