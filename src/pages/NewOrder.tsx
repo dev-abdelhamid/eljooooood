@@ -1,38 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useNotifications } from '../contexts/NotificationContext';
 import { productsAPI, ordersAPI, branchesAPI, departmentAPI } from '../services/api';
 import { ShoppingCart, Plus, Minus, Trash2, Package, AlertCircle, Search, X, ChevronDown } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-
-interface Product {
-  _id: string;
-  name: string;
-  nameEn?: string;
-  code: string;
-  department: { _id: string; name: string; nameEn?: string };
-  price: number;
-  unit?: string;
-  unitEn?: string;
-  displayName: string;
-  displayUnit: string;
-}
-
-interface Branch {
-  _id: string;
-  name: string;
-  nameEn?: string;
-}
-
-interface Department {
-  _id: string;
-  name: string;
-  nameEn?: string;
-}
 
 interface OrderItem {
   productId: string;
@@ -57,8 +32,6 @@ const translations = {
     branch: 'الفرع',
     branchPlaceholder: 'اختر الفرع',
     branchRequired: 'الفرع مطلوب',
-    notes: 'ملاحظات',
-    notesPlaceholder: 'أدخل ملاحظات الطلب...',
     clearOrder: 'مسح الطلب',
     submitOrder: 'إرسال الطلب',
     submitting: 'جاري الإرسال...',
@@ -91,8 +64,6 @@ const translations = {
     branch: 'Branch',
     branchPlaceholder: 'Select Branch',
     branchRequired: 'Branch is required',
-    notes: 'Notes',
-    notesPlaceholder: 'Enter order notes...',
     clearOrder: 'Clear Order',
     submitOrder: 'Submit Order',
     submitting: 'Submitting...',
@@ -221,31 +192,6 @@ const ProductDropdown = ({
   );
 };
 
-const ProductTextarea = ({
-  value,
-  onChange,
-  placeholder,
-  ariaLabel,
-}: {
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-  placeholder: string;
-  ariaLabel: string;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  return (
-    <textarea
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-      className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
-      rows={4}
-      aria-label={ariaLabel}
-    />
-  );
-};
-
 const QuantityInput = ({
   value,
   onChange,
@@ -313,7 +259,7 @@ const ProductCard = ({ product, cartItem, onAdd, onUpdate, onRemove }: {
           <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>{product.displayName}</h3>
           <p className="text-sm text-gray-500">{product.code}</p>
         </div>
-        <p className="text-sm text-amber-600">{t.department}: {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}</p>
+        <p className="text-sm text-amber-600">{t.department}: {product.department.displayName}</p>
         <p className="font-semibold text-gray-900 text-sm">{t.price}: {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}</p>
       </div>
       <div className="mt-4 flex justify-end">
@@ -423,10 +369,10 @@ const OrderConfirmModal = ({
 
 export function NewOrder() {
   const { user } = useAuth();
-  const { language } = useLanguage();
+  const { language, t: languageT } = useLanguage();
+  const { addNotification } = useNotifications();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
-  const navigate = useNavigate();
   const summaryRef = useRef<HTMLDivElement>(null);
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -434,7 +380,6 @@ export function NewOrder() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [branch, setBranch] = useState<string>(user?.branchId?.toString() || '');
-  const [notes, setNotes] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -462,9 +407,12 @@ export function NewOrder() {
 
   const filteredProducts = useMemo(() => {
     const lowerSearchTerm = searchTerm.toLowerCase();
+    const seenIds = new Set<string>();
     return products
       .filter((product) => {
-        const name = (isRtl ? product.name : product.nameEn || product.name).toLowerCase();
+        if (seenIds.has(product._id)) return false;
+        seenIds.add(product._id);
+        const name = product.displayName.toLowerCase();
         const code = product.code.toLowerCase();
         return (
           (filterDepartment ? product.department._id === filterDepartment : true) &&
@@ -472,8 +420,8 @@ export function NewOrder() {
         );
       })
       .sort((a, b) => {
-        const aName = (isRtl ? a.name : a.nameEn || a.name).toLowerCase();
-        const bName = (isRtl ? b.name : b.nameEn || b.name).toLowerCase();
+        const aName = a.displayName.toLowerCase();
+        const bName = b.displayName.toLowerCase();
         const aCode = a.code.toLowerCase();
         const bCode = b.code.toLowerCase();
         if (aName.startsWith(lowerSearchTerm) && !bName.startsWith(lowerSearchTerm)) return -1;
@@ -482,7 +430,7 @@ export function NewOrder() {
         if (!aCode.startsWith(lowerSearchTerm) && bCode.startsWith(lowerSearchTerm)) return 1;
         return aName.localeCompare(bName);
       });
-  }, [products, searchTerm, filterDepartment, isRtl]);
+  }, [products, searchTerm, filterDepartment]);
 
   const skeletonCount = useMemo(() => {
     return filteredProducts.length > 0 ? filteredProducts.length : 6;
@@ -491,7 +439,6 @@ export function NewOrder() {
   useEffect(() => {
     if (!user || !['admin', 'branch'].includes(user.role)) {
       setError(t.unauthorized);
-      navigate('/branch-orders');
       toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
@@ -509,6 +456,10 @@ export function NewOrder() {
           ...product,
           displayName: isRtl ? product.name : (product.nameEn || product.name),
           displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
+          department: {
+            ...product.department,
+            displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name),
+          },
         }));
         setProducts(productsWithDisplay);
         setBranches(Array.isArray(branchesResponse) ? branchesResponse : []);
@@ -526,19 +477,75 @@ export function NewOrder() {
       }
     };
     loadData();
-  }, [user, navigate, t, isRtl, filterDepartment, searchTerm]);
+  }, [user, t, isRtl, filterDepartment, searchTerm]);
+
+  // تحديث displayName و displayUnit للمنتجات عند تغيير اللغة
+  useEffect(() => {
+    setProducts((prev) =>
+      prev.map((product) => ({
+        ...product,
+        displayName: isRtl ? product.name : (product.nameEn || product.name),
+        displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
+        department: {
+          ...product.department,
+          displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name),
+        },
+      }))
+    );
+    // تحديث orderItems عند تغيير اللغة
+    setOrderItems((prev) =>
+      prev.map((item) => ({
+        ...item,
+        product: {
+          ...item.product,
+          displayName: isRtl ? item.product.name : (item.product.nameEn || item.product.name),
+          displayUnit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
+          department: {
+            ...item.product.department,
+            displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name),
+          },
+        },
+      }))
+    );
+  }, [isRtl]);
 
   useEffect(() => {
+    if (!user || !socket) return;
+
     socket.on('connect', () => {
-      console.log('Connected to Socket.IO server');
+      console.log(`[${new Date().toISOString()}] Connected to Socket.IO server`);
+      if (user?.role === 'branch' && user?.branchId) {
+        socket.emit('joinRoom', `branch-${user.branchId}`);
+      } else if (user?.role === 'admin') {
+        socket.emit('joinRoom', 'admin');
+      }
     });
-    socket.on('orderCreated', () => {
-      toast.success(t.orderCreated, { position: isRtl ? 'top-right' : 'top-left' });
+
+    socket.on('orderCreated', (orderData) => {
+      if (!orderData?._id || !orderData.orderNumber || !orderData.branch) {
+        console.warn(`[${new Date().toISOString()}] Invalid order created data:`, orderData);
+        return;
+      }
+      const eventId = orderData.eventId || crypto.randomUUID();
+      addNotification({
+        _id: eventId,
+        type: 'success',
+        message: languageT('notifications.order_created', {
+          orderNumber: orderData.orderNumber,
+          branchName: isRtl ? orderData.branch.name : (orderData.branch.nameEn || orderData.branch.name),
+        }),
+        data: { orderId: orderData._id, eventId },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: '/sounds/notification.mp3',
+        vibrate: [200, 100, 200],
+      });
     });
+
     return () => {
       socket.disconnect();
     };
-  }, [socket, t, isRtl]);
+  }, [socket, languageT, isRtl, user, addNotification]);
 
   const addToOrder = useCallback((product: Product) => {
     setOrderItems((prev) => {
@@ -577,8 +584,10 @@ export function NewOrder() {
 
   const clearOrder = useCallback(() => {
     setOrderItems([]);
-    setNotes('');
     if (user?.role === 'admin') setBranch('');
+    setSearchInput('');
+    setSearchTerm('');
+    setFilterDepartment('');
     toast.success(t.orderCleared, { position: isRtl ? 'top-right' : 'top-left' });
   }, [user, t, isRtl]);
 
@@ -607,23 +616,55 @@ export function NewOrder() {
 
   const confirmOrder = async () => {
     setSubmitting(true);
-    setShowConfirmModal(false);
     try {
       const orderData = {
         orderNumber: `ORD-${Date.now()}`,
         branchId: user?.role === 'branch' ? user?.branchId?.toString() : branch,
         items: orderItems.map((item) => ({
-          productId: item.productId,
+          product: item.productId,
           quantity: item.quantity,
           price: item.price,
+          productName: item.product.name,
+          productNameEn: item.product.nameEn,
+          unit: item.product.unit,
+          unitEn: item.product.unitEn,
+          department: item.product.department,
         })),
         status: 'pending',
-        notes: notes.trim() || undefined,
-        requestedDeliveryDate: new Date().toISOString(),
+        priority: 'medium',
+        createdBy: user?.id || user?._id,
+        isRtl,
       };
-      const response = await ordersAPI.create(orderData);
-      socket.emit('newOrderFromBranch', response);
-      setTimeout(() => navigate('/orders'), 1000);
+      const response = await ordersAPI.create(orderData, isRtl);
+      const eventId = crypto.randomUUID();
+      socket.emit('orderCreated', {
+        _id: response.data.id,
+        orderNumber: response.data.orderNumber,
+        branch: response.data.branch,
+        items: response.data.items,
+        eventId,
+        isRtl,
+      });
+      addNotification({
+        _id: eventId,
+        type: 'success',
+        message: languageT('notifications.order_created', {
+          orderNumber: response.data.orderNumber,
+          branchName: isRtl ? response.data.branch.name : (response.data.branch.nameEn || response.data.branch.name),
+        }),
+        data: { orderId: response.data.id, eventId },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: '/sounds/notification.mp3',
+        vibrate: [200, 100, 200],
+      });
+      setOrderItems([]);
+      if (user?.role === 'admin') setBranch('');
+      setSearchInput('');
+      setSearchTerm('');
+      setFilterDepartment('');
+      setShowConfirmModal(false);
+      setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Create error:`, err);
       setError(err.message || t.createError);
@@ -702,7 +743,7 @@ export function NewOrder() {
                   { value: '', label: isRtl ? 'كل الأقسام' : 'All Departments' },
                   ...departments.map((d) => ({
                     value: d._id,
-                    label: isRtl ? d.name : (d.nameEn || d.name),
+                    label: d.displayName,
                   })),
                 ]}
                 ariaLabel={t.department}
@@ -841,24 +882,13 @@ export function NewOrder() {
                         { value: '', label: t.branchPlaceholder },
                         ...branches.map((b) => ({
                           value: b._id,
-                          label: isRtl ? b.name : (b.nameEn || b.name),
+                          label: b.displayName,
                         })),
                       ]}
                       ariaLabel={t.branch}
                     />
                   </div>
                 )}
-                <div>
-                  <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-2">
-                    {t.notes}
-                  </label>
-                  <ProductTextarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder={t.notesPlaceholder}
-                    ariaLabel={t.notes}
-                  />
-                </div>
                 <div className="flex gap-3">
                   <motion.button
                     onClick={clearOrder}
