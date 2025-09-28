@@ -297,6 +297,34 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     const events: { name: string; handler: (data: any) => void; config: SocketEventConfig }[] = [
       {
+        name: 'newNotification',
+        handler: (data: any) => {
+          if (!data?._id || !data.type || !data.message || !data.data?.eventId) {
+            console.warn(`[${new Date().toISOString()}] Invalid newNotification data:`, data);
+            return;
+          }
+          const eventId = data.data.eventId;
+          if (notificationIds.current.has(eventId)) return;
+          notificationIds.current.add(eventId);
+          addNotification({
+            _id: data._id,
+            type: data.type,
+            message: data.message,
+            data: data.data,
+            read: data.read || false,
+            createdAt: data.createdAt || new Date().toISOString(),
+            sound: data.sound || '/sounds/notification.mp3',
+            vibrate: data.vibrate || [200, 100, 200],
+          });
+        },
+        config: {
+          type: 'NEW_NOTIFICATION',
+          sound: '/sounds/notification.mp3',
+          vibrate: [200, 100, 200],
+          roles: ['admin', 'branch', 'production', 'chef'],
+        },
+      },
+      {
         name: 'orderCreated',
         handler: (newOrder: any) => {
           if (!newOrder?._id || !Array.isArray(newOrder.items) || !newOrder.orderNumber || !newOrder.branch?.name) {
