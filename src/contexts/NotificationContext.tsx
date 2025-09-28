@@ -5,6 +5,7 @@ import { useSocket } from './SocketContext';
 import { toast } from 'react-toastify';
 import { notificationService } from './NotificationService';
 import debounce from 'lodash/debounce';
+import { ordersAPI } from '../services/api';
 
 type NotificationType = 'success' | 'error' | 'info' | 'warning';
 
@@ -34,23 +35,17 @@ interface SocketEventData {
   branchName?: string;
   branchId?: string;
   items?: Array<{
-    _id: string;
+    itemId: string;
     productId?: string;
     productName?: string;
-    productNameEn?: string;
     quantity?: number;
     unit?: string;
-    unitEn?: string;
     status?: string;
     assignedTo?: { _id: string; username?: string; name?: string };
-    department?: { _id: string; name: string; nameEn?: string };
+    department?: { _id: string; name: string };
   }>;
   eventId?: string;
   status?: string;
-  chefId?: string;
-  returnId?: string;
-  productName?: string;
-  itemId?: string;
 }
 
 interface SocketEventConfig {
@@ -82,22 +77,20 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [hasInteracted, setHasInteracted] = useState(false);
   const notificationIds = React.useRef(new Set<string>());
 
-  const translateUnit = useCallback(
-    (unit: string | undefined) => {
-      const translations: Record<string, { ar: string; en: string }> = {
-        'كيلو': { ar: 'كيلو', en: 'kg' },
-        'قطعة': { ar: 'قطعة', en: 'piece' },
-        'علبة': { ar: 'علبة', en: 'pack' },
-        'صينية': { ar: 'صينية', en: 'tray' },
-        'kg': { ar: 'كجم', en: 'kg' },
-        'piece': { ar: 'قطعة', en: 'piece' },
-        'pack': { ar: 'علبة', en: 'pack' },
-        'tray': { ar: 'صينية', en: 'tray' },
-      };
-      return unit && translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
-    },
-    [isRtl]
-  );
+  // دالة ترجمة الوحدات
+  const translateUnit = (unit: string | undefined) => {
+    const translations: Record<string, { ar: string; en: string }> = {
+      'كيلو': { ar: 'كيلو', en: 'kg' },
+      'قطعة': { ar: 'قطعة', en: 'piece' },
+      'علبة': { ar: 'علبة', en: 'pack' },
+      'صينية': { ar: 'صينية', en: 'tray' },
+      'kg': { ar: 'كجم', en: 'kg' },
+      'piece': { ar: 'قطعة', en: 'piece' },
+      'pack': { ar: 'علبة', en: 'pack' },
+      'tray': { ar: 'صينية', en: 'tray' },
+    };
+    return unit && translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
+  };
 
   const playNotificationSound = useCallback(
     (soundUrl = '/sounds/notification.mp3', vibrate?: number[]) => {
@@ -305,14 +298,14 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const events: { name: string; handler: (data: any) => void; config: SocketEventConfig }[] = [
       {
         name: 'orderCreated',
-        handler: (newOrder: SocketEventData) => {
-          if (!newOrder?._id || !Array.isArray(newOrder.items) || !newOrder.orderNumber || !newOrder.branchName) {
-            console.warn(`[${new Date().toISOString()}] Invalid order created data:`, newOrder);
+        handler: (newOrder: any) => {
+          if (!newOrder?._id || !Array.isArray(newOrder.items) || !newOrder.orderNumber || !newOrder.branch?.name) {
+            console.warn(`[${new Date().toISOString()}] Invalid order data:`, newOrder);
             return;
           }
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
-          if (user.role === 'production' && user.department && !newOrder.items.some((item) => item?.department?._id === user.department._id)) return;
-          if (user.role === 'branch' && newOrder.branchId !== user.branchId) return;
+          if (user.role === 'production' && user.department && !newOrder.items.some((item: any) => item?.product?.department?._id === user.department._id)) return;
+          if (user.role === 'branch' && newOrder.branch?._id !== user.branchId) return;
 
           const eventId = newOrder.eventId || crypto.randomUUID();
           if (notificationIds.current.has(eventId)) return;
@@ -322,7 +315,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             type: 'success',
             message: t('notifications.order_created', {
               orderNumber: newOrder.orderNumber,
-              branchName: isRtl ? newOrder.branchName : (newOrder.branchName || t('branches.unknown')),
+              branchName: newOrder.branch?.name || t('branches.unknown'),
             }),
             data: { orderId: newOrder._id, eventId },
             read: false,
@@ -372,55 +365,55 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           roles: ['admin', 'branch'],
         },
       },
-      {
-        name: 'taskAssigned',
-        handler: (notification: any) => {
-          console.log(`[${new Date().toISOString()}] taskAssigned - Received data:`, JSON.stringify(notification, null, 2));
-          const data: SocketEventData = notification.data || notification;
-          if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName) {
-            console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, data);
-            return;
-          }
-          if (!['admin', 'production', 'chef'].includes(user.role)) return;
-          if (user.role === 'chef' && !data.items.some((item: any) => item.assignedTo?._id === user._id)) return;
-
-          const eventId = data.eventId || crypto.randomUUID();
-          if (notificationIds.current.has(eventId)) return;
-          notificationIds.current.add(eventId);
-          data.items.forEach((item) => {
-            if (!item._id || !item.productName || !item.quantity || !(item.assignedTo?.name || item.assignedTo?.username)) {
-              console.warn(`[${new Date().toISOString()}] Invalid item data for notification:`, item);
-              return;
-            }
-            const itemEventId = `${eventId}-${item._id}`;
-            if (notificationIds.current.has(itemEventId)) return;
-            notificationIds.current.add(itemEventId);
-            addNotification({
-              _id: itemEventId,
-              type: 'info',
-              message: t('notifications.task_assigned_to_chef', {
-                chefName: item.assignedTo?.name || item.assignedTo?.username || t('chefs.unknown'),
-                productName: isRtl ? item.productName : (item.productNameEn || item.productName || t('products.unknown')),
-                quantity: item.quantity || 'غير معروف',
-                unit: translateUnit(item.unit || item.unitEn),
-                orderNumber: data.orderNumber,
-                branchName: data.branchName || t('branches.unknown'),
-              }),
-              data: { orderId: data.orderId, itemId: item._id, eventId: itemEventId },
-              read: false,
-              createdAt: new Date().toISOString(),
-              sound: '/sounds/notification.mp3',
-              vibrate: [400, 100, 400],
-            });
-          });
-        },
-        config: {
-          type: 'TASK_ASSIGNED',
-          sound: '/sounds/notification.mp3',
-          vibrate: [400, 100, 400],
-          roles: ['admin', 'production', 'chef'],
-        },
-      },
+     {
+  name: 'taskAssigned',
+  handler: (notification: any) => {
+    console.log(`[${new Date().toISOString()}] taskAssigned - Received data:`, JSON.stringify(notification, null, 2));
+    const data: SocketEventData = notification.data || notification;
+    if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName) {
+      console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, data);
+      return;
+    }
+    if (!['admin', 'production', 'chef'].includes(user.role)) return;
+    if (user.role === 'chef' && !data.items.some((item: any) => item.assignedTo?._id === user._id)) return;
+    const eventId = data.eventId || crypto.randomUUID();
+    if (notificationIds.current.has(eventId)) return;
+    notificationIds.current.add(eventId);
+    data.items.forEach((item: any) => {
+      // تعديل: استخدام item._id بدلاً من item.itemId، وitem.product.name بدلاً من item.productName، وجعل username اختياريًا
+      if (!item._id || !item.product?.name || !item.quantity || !(item.assignedTo?.name || item.assignedTo?.username)) {
+        console.warn(`[${new Date().toISOString()}] Invalid item data for notification:`, item);
+        return;
+      }
+      const itemEventId = `${eventId}-${item._id}`;
+      if (notificationIds.current.has(itemEventId)) return;
+      notificationIds.current.add(itemEventId);
+      addNotification({
+        _id: itemEventId,
+        type: 'info',
+        message: t('notifications.task_assigned_to_chef', {
+          chefName: item.assignedTo.name || item.assignedTo.username || t('chefs.unknown'),
+          productName: item.product?.name || t('products.unknown'),
+          quantity: item.quantity || 'غير معروف',
+          unit: translateUnit(item.unit || item.product?.unit),
+          orderNumber: data.orderNumber,
+          branchName: data.branchName || t('branches.unknown'),
+        }),
+        data: { orderId: data.orderId, itemId: item._id, eventId: itemEventId },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: '/sounds/notification.mp3',
+        vibrate: [400, 100, 400],
+      });
+    });
+  },
+  config: {
+    type: 'TASK_ASSIGNED',
+    sound: '/sounds/notification.mp3',
+    vibrate: [400, 100, 400],
+    roles: ['admin', 'production', 'chef'],
+  },
+},
       {
         name: 'itemStatusUpdated',
         handler: async (data: SocketEventData) => {
@@ -431,9 +424,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           }
           if (user.role === 'chef' && data.chefId !== user._id) return;
 
-          const eventId = data.eventId || crypto.randomUUID();
-          if (notificationIds.current.has(eventId)) return;
-          notificationIds.current.add(eventId);
           try {
             const updatedOrder = await ordersAPI.getById(data.orderId);
             if (!updatedOrder || !updatedOrder._id || !Array.isArray(updatedOrder.items)) {
@@ -609,7 +599,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           roles: ['admin', 'branch', 'production'],
         },
       },
-     {
+      {
         name: 'returnStatusUpdated',
         handler: (data: SocketEventData) => {
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
@@ -617,7 +607,6 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             console.warn(`[${new Date().toISOString()}] Invalid return status update data:`, data);
             return;
           }
-          if (user.role === 'branch' && data.branchId !== user.branchId) return;
           const eventId = data.eventId || crypto.randomUUID();
           if (notificationIds.current.has(eventId)) return;
           notificationIds.current.add(eventId);
@@ -626,7 +615,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             type: 'info',
             message: t('notifications.return_status_updated', {
               orderNumber: data.orderNumber,
-              status: t(`return_status.${data.status}`),
+              status: t(`returns.${data.status}`),
               branchName: data.branchName || t('branches.unknown'),
             }),
             data: { orderId: data.orderId, returnId: data.returnId, eventId },
@@ -637,32 +626,32 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           });
         },
         config: {
-          type: 'UPDATE_RETURN_STATUS',
+          type: 'RETURN_STATUS_UPDATED',
           sound: '/sounds/notification.mp3',
           vibrate: [200, 100, 200],
           roles: ['admin', 'branch', 'production'],
         },
       },
       {
-        name: 'returnCreated',
+        name: 'missingAssignments',
         handler: (data: SocketEventData) => {
-          if (!['admin', 'branch', 'production'].includes(user.role)) return;
-          if (!data.orderId || !data.returnId || !data.orderNumber || !data.branchName) {
-            console.warn(`[${new Date().toISOString()}] Invalid return created data:`, data);
+          if (!['admin', 'production'].includes(user.role)) return;
+          if (!data.orderId || !data.itemId || !data.orderNumber || !data.productName) {
+            console.warn(`[${new Date().toISOString()}] Invalid missing assignments data:`, data);
             return;
           }
-          if (user.role === 'branch' && data.branchId !== user.branchId) return;
           const eventId = data.eventId || crypto.randomUUID();
           if (notificationIds.current.has(eventId)) return;
           notificationIds.current.add(eventId);
           addNotification({
             _id: eventId,
             type: 'warning',
-            message: t('notifications.return_created', {
+            message: t('notifications.missing_assignments', {
               orderNumber: data.orderNumber,
+              productName: data.productName || t('products.unknown'),
               branchName: data.branchName || t('branches.unknown'),
             }),
-            data: { orderId: data.orderId, returnId: data.returnId, eventId },
+            data: { orderId: data.orderId, itemId: data.itemId, eventId },
             read: false,
             createdAt: new Date().toISOString(),
             sound: '/sounds/notification.mp3',
@@ -670,140 +659,52 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           });
         },
         config: {
-          type: 'CREATE_RETURN',
+          type: 'MISSING_ASSIGNMENTS',
           sound: '/sounds/notification.mp3',
           vibrate: [300, 100, 300],
-          roles: ['admin', 'branch', 'production'],
+          roles: ['admin', 'production'],
         },
       },
       {
-        name: 'taskStarted',
-        handler: (data: SocketEventData) => {
-          if (!['admin', 'production', 'chef'].includes(user.role)) return;
-          if (!data.orderId || !data.itemId || !data.orderNumber || !data.branchName || !data.productName) {
-            console.warn(`[${new Date().toISOString()}] Invalid task started data:`, data);
+        name: 'notificationRead',
+        handler: async (data: any) => {
+          if (!data.notificationId) {
+            console.warn(`[${new Date().toISOString()}] Invalid notification read data:`, data);
             return;
           }
-          if (user.role === 'chef' && data.chefId !== user._id) return;
-          const eventId = data.eventId || crypto.randomUUID();
-          if (notificationIds.current.has(eventId)) return;
-          notificationIds.current.add(eventId);
-          addNotification({
-            _id: eventId,
-            type: 'info',
-            message: t('notifications.task_started', {
-              productName: isRtl ? data.productName : (data.productNameEn || data.productName || t('products.unknown')),
-              quantity: data.quantity || 'غير معروف',
-              unit: translateUnit(data.unit || data.unitEn),
-              orderNumber: data.orderNumber,
-              branchName: data.branchName || t('branches.unknown'),
-            }),
-            data: { orderId: data.orderId, itemId: data.itemId, eventId },
-            read: false,
-            createdAt: new Date().toISOString(),
-            sound: '/sounds/notification.mp3',
-            vibrate: [200, 100, 200],
-          });
-        },
-        config: {
-          type: 'UPDATE_TASK_STATUS',
-          sound: '/sounds/notification.mp3',
-          vibrate: [200, 100, 200],
-          roles: ['admin', 'production', 'chef'],
-        },
-      },
-      {
-        name: 'taskCompleted',
-        handler: (data: SocketEventData) => {
-          if (!['admin', 'production', 'chef'].includes(user.role)) return;
-          if (!data.orderId || !data.itemId || !data.orderNumber || !data.branchName || !data.productName) {
-            console.warn(`[${new Date().toISOString()}] Invalid task completed data:`, data);
-            return;
+          try {
+            await markAsRead(data.notificationId);
+          } catch (err) {
+            console.error(`[${new Date().toISOString()}] Failed to mark notification as read:`, err);
           }
-          if (user.role === 'chef' && data.chefId !== user._id) return;
-          const eventId = data.eventId || crypto.randomUUID();
-          if (notificationIds.current.has(eventId)) return;
-          notificationIds.current.add(eventId);
-          addNotification({
-            _id: eventId,
-            type: 'success',
-            message: t('notifications.task_completed', {
-              productName: isRtl ? data.productName : (data.productNameEn || data.productName || t('products.unknown')),
-              quantity: data.quantity || 'غير معروف',
-              unit: translateUnit(data.unit || data.unitEn),
-              orderNumber: data.orderNumber,
-              branchName: data.branchName || t('branches.unknown'),
-            }),
-            data: { orderId: data.orderId, itemId: data.itemId, eventId },
-            read: false,
-            createdAt: new Date().toISOString(),
-            sound: '/sounds/notification.mp3',
-            vibrate: [400, 100, 400],
-          });
         },
         config: {
-          type: 'UPDATE_TASK_STATUS',
-          sound: '/sounds/notification.mp3',
-          vibrate: [400, 100, 400],
-          roles: ['admin', 'production', 'chef'],
+          type: 'NOTIFICATION_READ',
+          sound: '',
+          vibrate: [],
+          roles: ['admin', 'branch', 'production', 'chef'],
         },
       },
     ];
 
-    events.forEach(({ name, handler, config }) => {
-      if (config.roles.includes(user.role)) {
-        socket.on(name, handler);
-      }
-    });
-
-    socket.on('connect', () => {
-      console.log(`[${new Date().toISOString()}] Socket connected for user: ${user._id}, role: ${user.role}`);
-      socket.emit('joinRoom', {
-        role: user.role,
-        branchId: user.branchId,
-        chefId: user.role === 'chef' ? user._id : undefined,
-        departmentId: user.role === 'production' ? user.department?._id : undefined,
-        userId: user._id,
-      });
-    });
-
-    socket.on('disconnect', () => {
-      console.warn(`[${new Date().toISOString()}] Socket disconnected for user: ${user._id}`);
-    });
-
+    events.forEach(({ name, handler }) => socket.on(name, handler));
     return () => {
-      events.forEach(({ name, handler }) => {
-        socket.off(name, handler);
-      });
-      socket.off('connect');
-      socket.off('disconnect');
+      events.forEach(({ name, handler }) => socket.off(name, handler));
+      notificationIds.current.clear();
     };
-  }, [socket, user, t, isRtl, addNotification, translateUnit]);
-
-  const contextValue = useMemo(
-    () => ({
-      notifications,
-      unreadCount,
-      unreadByPath,
-      addNotification,
-      markAsRead,
-      markAllAsRead,
-      clearNotifications,
-    }),
-    [notifications, unreadCount, unreadByPath, addNotification, markAsRead, markAllAsRead, clearNotifications]
-  );
+  }, [socket, user, addNotification, markAsRead, t, isRtl, playNotificationSound, fetchNotifications]);
 
   return (
-    <NotificationContext.Provider value={contextValue}>
+    <NotificationContext.Provider
+      value={{ notifications, unreadCount, unreadByPath, addNotification, markAsRead, markAllAsRead, clearNotifications }}
+    >
       {children}
     </NotificationContext.Provider>
   );
 };
 
-export const useNotifications = (): NotificationContextType => {
+export const useNotifications = () => {
   const context = useContext(NotificationContext);
-  if (!context) {
-    throw new Error('useNotifications must be used within a NotificationProvider');
-  }
+  if (!context) throw new Error('يجب استخدام useNotifications داخل NotificationProvider');
   return context;
 };
