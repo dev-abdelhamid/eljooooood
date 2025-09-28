@@ -520,9 +520,7 @@ export function NewOrder() {
     loadData();
   }, [user, t, isRtl, filterDepartment, searchTerm]);
 
-  // تحديث displayName و displayUnit للمنتجات و orderItems عند تغيير اللغة
   useEffect(() => {
-    // تحديث المنتجات
     setProducts((prev) =>
       prev.map((product) => ({
         ...product,
@@ -534,7 +532,6 @@ export function NewOrder() {
         },
       }))
     );
-    // تحديث orderItems
     setOrderItems((prev) =>
       prev.map((item) => ({
         ...item,
@@ -630,10 +627,6 @@ export function NewOrder() {
   const handleQuantityInput = useCallback(
     (productId: string, value: string) => {
       const quantity = parseInt(value) || 0;
-      if (value === '' || quantity <= 0) {
-        updateQuantity(productId, 0);
-        return;
-      }
       updateQuantity(productId, quantity);
     },
     [updateQuantity]
@@ -658,7 +651,7 @@ export function NewOrder() {
   );
 
   const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
+    (e: React.FormEvent) => {
       e.preventDefault();
       if (orderItems.length === 0) {
         setError(t.cartEmpty);
@@ -708,19 +701,7 @@ export function NewOrder() {
         eventId,
         isRtl,
       });
-      addNotification({
-        _id: eventId,
-        type: 'success',
-        message: languageT('notifications.order_created', {
-          orderNumber: response.data.orderNumber,
-          branchName: isRtl ? branchData?.name : (branchData?.nameEn || branchData?.name || t.branches?.unknown || 'Unknown'),
-        }),
-        data: { orderId: response.data.id, eventId },
-        read: false,
-        createdAt: new Date().toISOString(),
-        sound: '/sounds/notification.mp3',
-        vibrate: [200, 100, 200],
-      });
+      // Removed local addNotification to avoid duplication; rely on socket listener
       setOrderItems([]);
       if (user?.role === 'admin') setBranch('');
       setSearchInput('');
@@ -825,7 +806,7 @@ export function NewOrder() {
                     key={index}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3, delay: index * 0.1 }}
+                    transition={{ duration: 0.3 }}
                   >
                     <ProductSkeletonCard />
                   </motion.div>
@@ -844,16 +825,17 @@ export function NewOrder() {
             </motion.div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-              <AnimatePresence>
+              <AnimatePresence mode="wait">
                 {filteredProducts.map((product, index) => {
                   const cartItem = orderItems.find((item) => item.productId === product._id);
                   return (
                     <motion.div
                       key={product._id}
+                      layout
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -20 }}
-                      transition={{ duration: 0.3, ease: 'easeOut', delay: index * 0.05 }}
+                      transition={{ duration: 0.2 }}
                     >
                       <ProductCard
                         product={product}
@@ -888,7 +870,7 @@ export function NewOrder() {
                       initial={{ opacity: 0, x: isRtl ? -5 : 5 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: isRtl ? 5 : -5 }}
-                      transition={{ duration: 0.15, delay: index * 0.02 }}
+                      transition={{ duration: 0.15 }}
                       className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100"
                     >
                       <div className="flex-1">
