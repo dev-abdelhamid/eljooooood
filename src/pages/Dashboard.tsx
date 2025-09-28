@@ -294,7 +294,7 @@ const ChefDashboard: React.FC<{
 });
 
 // Main Dashboard Component
-const Dashboard: React.FC = () => {
+export const Dashboard: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
