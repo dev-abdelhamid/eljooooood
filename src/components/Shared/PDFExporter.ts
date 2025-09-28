@@ -135,7 +135,7 @@ const generatePDFHeader = (
   const pageWidth = doc.internal.pageSize.width;
   const pageHeight = doc.internal.pageSize.height;
 
-  doc.text(isRtl ? title : title, isRtl ? pageWidth - 20 : 20, 12, { align: isRtl ? 'left' : 'right' });
+  doc.text(isRtl ? title : title, isRtl ? pageWidth - 20 : 20, 12, { align: isRtl ? 'right' : 'left' });
 
   doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
@@ -205,7 +205,7 @@ const generatePDFTable = (
       fillColor: [255, 193, 7],
       textColor: [33, 33, 33],
       fontSize: 10,
-      halign: isRtl ? 'left' : 'right',
+      halign: isRtl ? 'center ' : 'center ',
       font: fontLoaded ? fontName : 'helvetica',
       fontStyle: 'bold',
       cellPadding: 4,
@@ -213,7 +213,7 @@ const generatePDFTable = (
     },
     bodyStyles: {
       fontSize: 9,
-      halign: isRtl ? 'left' : 'right',
+      halign: isRtl ? 'center' : 'center ',
       font: fontLoaded ? fontName : 'helvetica',
       fontStyle: 'bold',
       cellPadding: 4,
@@ -238,12 +238,11 @@ const generatePDFTable = (
       overflow: 'linebreak',
       cellWidth: 'wrap',
       font: fontLoaded ? fontName : 'helvetica',
-      halign: isRtl ? 'left' : 'right',
       valign: 'middle',
       fontStyle: 'normal',
     },
     didParseCell: (data) => {
-      data.cell.styles.halign = isRtl ? 'left' : 'right';
+      data.cell.styles.halign = isRtl ? 'center' : 'center';
       if (data.column.index === (isRtl ? headers.length - 5 : 4)) {
         if (!data.cell.text[0] || data.cell.text[0].includes('NaN')) {
           data.cell.text[0] = formatPrice(0, isRtl);
