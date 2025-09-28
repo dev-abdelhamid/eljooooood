@@ -887,7 +887,7 @@ export const Dashboard: React.FC = () => {
               className="p-3 bg-gray-50 rounded-lg border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors duration-200 shadow-sm"
             >
               <h4 className="font-semibold text-sm text-gray-800 mb-2 truncate">
-                {order.orderNumber} - {order.branchDisplayName}
+                {order.orderNumber} - {isRtl ? order.branchName : order.branchNameEn || order.branchName}
               </h4>
               <span
                 className={`px-2 py-1 rounded-full text-xs font-medium ${
@@ -1076,7 +1076,7 @@ export const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto px-2 sm:px-3 lg:px-4 py-3 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
       {renderContent()}
     </div>
   );
