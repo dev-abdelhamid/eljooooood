@@ -135,7 +135,7 @@ const generatePDFHeader = (
   const pageWidth = doc.internal.pageSize.width;
   const pageHeight = doc.internal.pageSize.height;
 
-  doc.text(isRtl ? title : title, isRtl ? pageWidth - 20 : 20, 12, { align: isRtl ? 'right' : 'left' });
+  doc.text(isRtl ? title : title, isRtl ? pageWidth - 20 : 20, 12, { align: isRtl ? 'left' : 'right' });
 
   doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
@@ -207,7 +207,7 @@ const generatePDFTable = (
       fontSize: 10,
       halign: isRtl ? 'left' : 'right',
       font: fontLoaded ? fontName : 'helvetica',
-      fontStyle: 'normal',
+      fontStyle: 'bold',
       cellPadding: 4,
       minCellHeight: 8,
     },
@@ -215,7 +215,7 @@ const generatePDFTable = (
       fontSize: 9,
       halign: isRtl ? 'left' : 'right',
       font: fontLoaded ? fontName : 'helvetica',
-      fontStyle: 'normal',
+      fontStyle: 'bold',
       cellPadding: 4,
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
@@ -238,7 +238,7 @@ const generatePDFTable = (
       overflow: 'linebreak',
       cellWidth: 'wrap',
       font: fontLoaded ? fontName : 'helvetica',
-      halign: isRtl ? 'right' : 'left',
+      halign: isRtl ? 'left' : 'right',
       valign: 'middle',
       fontStyle: 'normal',
     },
