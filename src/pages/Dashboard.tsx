@@ -14,7 +14,7 @@ import { formatDate } from '../utils/formatDate';
 // In-memory cache
 const cache = new Map<string, any>();
 
-// تعريف الأنواع
+// Type Definitions
 interface Stats {
   totalOrders: number;
   pendingOrders: number;
@@ -38,7 +38,6 @@ interface Task {
   status: 'pending' | 'assigned' | 'in_progress' | 'completed';
   branchName: string;
   createdAt: string;
-  eventId?: string;
 }
 
 interface BranchPerformance {
@@ -111,17 +110,23 @@ const timeFilterOptions = [
   { value: 'year', label: 'هذا العام', enLabel: 'This Year' },
 ];
 
-// مكون مؤشر التحميل
+// Loader Component
 const Loader: React.FC = () => (
-  <div className="flex justify-center items-center h-screen">
+  <div className="flex justify-center items-center h-screen" aria-live="polite">
     <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
   </div>
 );
 
-// مكون بطاقة الإحصائيات
+// StatsCard Component
 const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color: string; ariaLabel: string }> = React.memo(
   ({ title, value, icon: Icon, color, ariaLabel }) => (
-    <div className={`p-2 bg-${color}-100 rounded-lg border border-${color}-200 cursor-pointer hover:bg-${color}-200 transition-colors`} aria-label={ariaLabel}>
+    <div
+      className={`p-2 bg-${color}-100 rounded-lg border border-${color}-200 cursor-pointer hover:bg-${color}-200 transition-colors duration-200`}
+      aria-label={ariaLabel}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.focus()}
+    >
       <div className="flex items-center gap-2">
         <Icon className={`w-4 h-4 text-${color}-700`} />
         <div>
@@ -133,7 +138,7 @@ const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color:
   )
 );
 
-// مكون لوحة تحكم الشيف
+// ChefDashboard Component
 const ChefDashboard: React.FC<{
   stats: Stats;
   tasks: Task[];
@@ -141,7 +146,7 @@ const ChefDashboard: React.FC<{
   language: string;
   handleStartTask: (taskId: string, orderId: string) => void;
   handleCompleteTask: (taskId: string, orderId: string) => void;
-}> = ({ stats, tasks, isRtl, language, handleStartTask, handleCompleteTask }) => {
+}> = React.memo(({ stats, tasks, isRtl, language, handleStartTask, handleCompleteTask }) => {
   const [filter, setFilter] = useState<FilterState>({ status: 'all', search: '' });
 
   const filteredTasks = useMemo(() => {
@@ -217,7 +222,7 @@ const ChefDashboard: React.FC<{
             />
           </div>
         </div>
-        <div className="space-y-2 overflow-y-auto max-h-80">
+        <div className="space-y-2 overflow-y-auto max-h-80" role="list" aria-label={isRtl ? 'قائمة المهام' : 'Task List'}>
           <AnimatePresence>
             {filteredTasks.length === 0 ? (
               <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد مهام' : 'No tasks available'}</p>
@@ -230,6 +235,7 @@ const ChefDashboard: React.FC<{
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ duration: 0.2 }}
                   className="border border-amber-200 rounded-lg p-2 bg-amber-50 shadow-sm"
+                  role="listitem"
                 >
                   <div className="flex items-center justify-between mb-1">
                     <h4 className="font-medium text-xs text-gray-800 truncate">
@@ -261,7 +267,7 @@ const ChefDashboard: React.FC<{
                     {(task.status === 'pending' || task.status === 'assigned') && (
                       <button
                         onClick={() => handleStartTask(task.id, task.orderId)}
-                        className="bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600 transition-colors"
+                        className="bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600 transition-colors duration-150"
                         aria-label={isRtl ? 'بدء المهمة' : 'Start Task'}
                       >
                         {isRtl ? 'بدء' : 'Start'}
@@ -270,7 +276,7 @@ const ChefDashboard: React.FC<{
                     {task.status === 'in_progress' && (
                       <button
                         onClick={() => handleCompleteTask(task.id, task.orderId)}
-                        className="bg-green-500 text-white px-2 py-1 rounded text-xs hover:bg-green-600 transition-colors"
+                        className="bg-green-500 text-white px-2 py-1 rounded text-xs hover:bg-green-600 transition-colors duration-150"
                         aria-label={isRtl ? 'إكمال المهمة' : 'Complete Task'}
                       >
                         {isRtl ? 'إكمال' : 'Complete'}
@@ -285,10 +291,10 @@ const ChefDashboard: React.FC<{
       </div>
     </div>
   );
-};
+});
 
-// مكون لوحة التحكم الرئيسية
-export const Dashboard: React.FC = () => {
+// Main Dashboard Component
+const Dashboard: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
@@ -317,10 +323,10 @@ export const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // مفتاح الكاش
+  // Cache key for memoization
   const cacheKey = useMemo(() => `${user?.id || user?._id}-${user?.role}-${timeFilter}`, [user, timeFilter]);
 
-  // دالة جلب البيانات
+  // Fetch dashboard data with debouncing
   const fetchDashboardData = useCallback(
     debounce(async (forceRefresh = false) => {
       if (!user?.id && !user?._id) {
@@ -339,7 +345,7 @@ export const Dashboard: React.FC = () => {
         return;
       }
 
-      if (!forceRefresh && cache.has(cacheKey) ) {
+      if (!forceRefresh && cache.has(cacheKey)) {
         const cachedData = cache.get(cacheKey);
         setOrders(cachedData.orders);
         setTasks(cachedData.tasks);
@@ -376,7 +382,7 @@ export const Dashboard: React.FC = () => {
             startDate.setDate(now.getDate() - 7);
         }
 
-        const query: Record<string, any> = { startDate: startDate.toISOString(), endDate: now.toISOString(), limit: 20 };
+        const query: Record<string, any> = { startDate: startDate.toISOString(), endDate: now.toISOString(), limit: 20, isRtl };
         let ordersResponse: any[] = [];
         let tasksResponse: any[] = [];
         let chefsResponse: any[] = [];
@@ -391,24 +397,25 @@ export const Dashboard: React.FC = () => {
           tasksResponse = await productionAssignmentsAPI.getChefTasks(chefId, { limit: 20 });
         } else {
           if (user.role === 'branch') query.branch = user.id || user._id;
-          if (user.role === 'production' && user.department) query.departmentId = user.department._id;
+          if (user.role === 'production' && user.department) query.department = user.department._id;
           [ordersResponse, tasksResponse, chefsResponse, branchesResponse] = await Promise.all([
-            ordersAPI.getAll(query).catch(() => []),
-            productionAssignmentsAPI.getAllTasks(query).catch(() => []),
+            ordersAPI.getAll(query).catch(() => ({ data: [] })),
+            productionAssignmentsAPI.getAllTasks().catch(() => []),
             ['admin', 'production'].includes(user.role) ? chefsAPI.getAll().catch(() => []) : Promise.resolve([]),
             ['admin', 'production'].includes(user.role) ? branchesAPI.getAll().catch(() => []) : Promise.resolve([]),
           ]);
+          ordersResponse = ordersResponse.data || [];
         }
 
         const mappedOrders = ordersResponse.map((order: any) => ({
           id: order._id || crypto.randomUUID(),
           orderNumber: order.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
-          branchName: order.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
+          branchName: isRtl ? order.branch?.name : order.branch?.nameEn || order.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
           branchId: order.branch?._id || 'unknown',
           items: (order.items || []).map((item: any) => ({
             _id: item._id || crypto.randomUUID(),
             productId: item.product?._id || 'unknown',
-            productName: item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+            productName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
             quantity: Number(item.quantity) || 1,
             price: Number(item.price) || 0,
             department: item.product?.department || { _id: 'unknown', name: isRtl ? 'قسم غير معروف' : 'Unknown Department' },
@@ -442,11 +449,11 @@ export const Dashboard: React.FC = () => {
           id: task._id || crypto.randomUUID(),
           orderId: task.order?._id || 'unknown',
           orderNumber: task.order?.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
-          productName: task.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+          productName: isRtl ? task.product?.name : task.product?.nameEn || task.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
           quantity: Number(task.quantity) || 0,
           unit: task.product?.unit || 'unit',
           status: task.status || 'pending',
-          branchName: task.order?.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
+          branchName: isRtl ? task.order?.branch?.name : task.order?.branch?.nameEn || task.order?.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
           createdAt: formatDate(task.createdAt || new Date(), language),
         }));
 
@@ -454,16 +461,16 @@ export const Dashboard: React.FC = () => {
           _id: chef._id || crypto.randomUUID(),
           userId: chef.user?._id || chef._id,
           username: chef.user?.username || chef.username || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'),
-          name: chef.user?.name || chef.name || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'),
+          name: isRtl ? chef.user?.name : chef.user?.nameEn || chef.user?.name || chef.name || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'),
           department: chef.department || null,
         }));
 
         const mappedBranches = branchesResponse
           .map((branch: any) => ({
             _id: branch._id || crypto.randomUUID(),
-            name: branch.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
+            name: isRtl ? branch.name : branch.nameEn || branch.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
           }))
-          .sort((a: any, b: any) => a.name.localeCompare(b.name));
+          .sort((a: any, b: any) => a.name.localeCompare(b.name, language));
 
         const branchPerf = mappedBranches.map((branch: any) => {
           const branchOrders = mappedOrders.filter((o) => o.branchId === branch._id);
@@ -528,7 +535,9 @@ export const Dashboard: React.FC = () => {
         setStats(newData.stats);
         setError('');
       } catch (err: any) {
-        const errorMessage = err.status === 403 ? (isRtl ? 'الوصول غير مصرح به' : 'Unauthorized access') : (isRtl ? 'خطأ في الخادم' : 'Server error');
+        const errorMessage = err.status === 401 || err.status === 403
+          ? (isRtl ? 'الوصول غير مصرح به' : 'Unauthorized access')
+          : (isRtl ? 'خطأ في الخادم' : 'Server error');
         setError(errorMessage);
         toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
         addNotification({
@@ -546,15 +555,17 @@ export const Dashboard: React.FC = () => {
     [user, isRtl, language, cacheKey, addNotification]
   );
 
+  // Initial data fetch and cleanup
   useEffect(() => {
     fetchDashboardData();
     return () => fetchDashboardData.cancel();
   }, [fetchDashboardData, timeFilter]);
 
+  // Socket event listeners
   useEffect(() => {
     if (!socket || !user || !isConnected) return;
 
-    socket.on('connect_error', () => {
+    const handleConnectError = () => {
       const errorMessage = isRtl ? 'خطأ في الاتصال بالسوكت' : 'Socket connection error';
       addNotification({
         _id: `socket-error-${Date.now()}`,
@@ -564,9 +575,9 @@ export const Dashboard: React.FC = () => {
         createdAt: new Date().toLocaleString(language),
         path: '/dashboard',
       });
-    });
+    };
 
-    socket.on('taskAssigned', (data: any) => {
+    const handleTaskAssigned = (data: any) => {
       if (!data.taskId || !data.orderId || !data.productName || !data.orderNumber || !data.branchName || !data.quantity || !data.eventId) return;
 
       if (data.chefId === (user?.id || user?._id) || ['admin', 'production'].includes(user.role)) {
@@ -603,13 +614,13 @@ export const Dashboard: React.FC = () => {
               branchName: data.branchName,
               createdAt: formatDate(new Date(), language),
             },
-            ...prev.filter((t) => t.id !== data.taskId),
+            ...prev.filter((t) => t.id !== data.taskId).slice(0, 19), // Limit to 20 tasks
           ]);
         }
       }
-    });
+    };
 
-    socket.on('orderCompleted', (data: any) => {
+    const handleOrderCompleted = (data: any) => {
       if (!data.orderId || !data.orderNumber || !data.branchName || !data.eventId) return;
 
       if (['admin', 'branch', 'production'].includes(user.role)) {
@@ -623,15 +634,15 @@ export const Dashboard: React.FC = () => {
             eventId: data.eventId,
           },
           read: false,
-          createdAt: new Date().toLocaleString(language),
+          createdAt: formatDate(new Date(), language),
           sound: '/sounds/order-completed.mp3',
           vibrate: [400, 100, 400],
           path: '/dashboard',
         });
       }
-    });
+    };
 
-    socket.on('itemStatusUpdated', (data: any) => {
+    const handleItemStatusUpdated = (data: any) => {
       if (!data.orderId || !data.itemId || !data.status || !data.eventId) return;
 
       setTasks((prev) =>
@@ -646,16 +657,21 @@ export const Dashboard: React.FC = () => {
           ? `تم تحديث حالة المهمة: ${data.productName} للطلب ${data.orderNumber} إلى ${data.status === 'in_progress' ? 'قيد التنفيذ' : 'مكتمل'}`
           : `Task status updated: ${data.productName} for order ${data.orderNumber} to ${data.status}`,
         read: false,
-        createdAt: new Date().toLocaleString(language),
+        createdAt: formatDate(new Date(), language),
         path: '/dashboard',
       });
-    });
+    };
+
+    socket.on('connect_error', handleConnectError);
+    socket.on('taskAssigned', handleTaskAssigned);
+    socket.on('orderCompleted', handleOrderCompleted);
+    socket.on('itemStatusUpdated', handleItemStatusUpdated);
 
     return () => {
-      socket.off('connect_error');
-      socket.off('taskAssigned');
-      socket.off('orderCompleted');
-      socket.off('itemStatusUpdated');
+      socket.off('connect_error', handleConnectError);
+      socket.off('taskAssigned', handleTaskAssigned);
+      socket.off('orderCompleted', handleOrderCompleted);
+      socket.off('itemStatusUpdated', handleItemStatusUpdated);
     };
   }, [socket, user, isRtl, language, addNotification, fetchDashboardData, isConnected]);
 
@@ -674,7 +690,7 @@ export const Dashboard: React.FC = () => {
       }
 
       try {
-        await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'in_progress' });
+        await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'in_progress' }, isRtl);
         setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, status: 'in_progress' } : task)));
         const task = tasks.find((t) => t.id === taskId);
         const eventId = crypto.randomUUID();
@@ -689,6 +705,7 @@ export const Dashboard: React.FC = () => {
           productName: task?.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
           quantity: task?.quantity || 0,
           unit: task?.unit || 'unit',
+          isRtl,
         });
         addNotification({
           _id: `success-task-${taskId}-${Date.now()}`,
@@ -731,7 +748,7 @@ export const Dashboard: React.FC = () => {
       }
 
       try {
-        await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'completed' });
+        await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'completed' }, isRtl);
         setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, status: 'completed' } : task)));
         const task = tasks.find((t) => t.id === taskId);
         const eventId = crypto.randomUUID();
@@ -746,6 +763,7 @@ export const Dashboard: React.FC = () => {
           productName: task?.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
           quantity: task?.quantity || 0,
           unit: task?.unit || 'unit',
+          isRtl,
         });
         addNotification({
           _id: `success-complete-${taskId}-${Date.now()}`,
@@ -786,6 +804,8 @@ export const Dashboard: React.FC = () => {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mb-3"
+      role="region"
+      aria-label={isRtl ? 'إحصائيات لوحة التحكم' : 'Dashboard Statistics'}
     >
       <StatsCard
         title={isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
@@ -847,7 +867,7 @@ export const Dashboard: React.FC = () => {
   );
 
   const renderPendingItems = () => (
-    <div className="bg-white p-3 rounded-lg shadow-sm mb-3 border border-gray-200">
+    <div className="bg-white p-3 rounded-lg shadow-sm mb-3 border border-gray-200" role="region" aria-label={isRtl ? 'الطلبات المعلقة' : 'Pending Orders'}>
       <h3 className="text-base font-semibold mb-2 flex items-center gap-2 text-gray-800">
         <Clock className="w-4 h-4 text-gray-600" />
         {isRtl ? 'أحدث الطلبات المعلقة' : 'Latest Pending Orders'}
@@ -865,7 +885,11 @@ export const Dashboard: React.FC = () => {
               exit={{ opacity: 0, y: -10 }}
               transition={{ delay: index * 0.1 }}
               onClick={() => navigate(`/orders/${order.id}`)}
-              className="p-2 bg-gray-50 rounded-md border border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
+              className="p-2 bg-gray-50 rounded-md border border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors duration-150"
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === 'Enter' && navigate(`/orders/${order.id}`)}
+              aria-label={isRtl ? `عرض الطلب ${order.orderNumber}` : `View order ${order.orderNumber}`}
             >
               <h4 className="font-medium text-xs text-gray-800 mb-1 truncate">{order.orderNumber} - {order.branchName}</h4>
               <span
@@ -898,7 +922,7 @@ export const Dashboard: React.FC = () => {
   );
 
   const renderBranchPerformance = () => (
-    <div className="bg-white p-3 rounded-lg shadow-sm mb-3 border border-gray-200">
+    <div className="bg-white p-3 rounded-lg shadow-sm mb-3 border border-gray-200" role="region" aria-label={isRtl ? 'أداء الفروع' : 'Branch Performance'}>
       <h3 className="text-base font-semibold mb-2 flex items-center gap-2 text-gray-800">
         <BarChart3 className="w-4 h-4 text-gray-600" />
         {isRtl ? 'أداء الفروع' : 'Branch Performance'}
@@ -926,7 +950,7 @@ export const Dashboard: React.FC = () => {
   );
 
   const renderChefPerformance = () => (
-    <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200">
+    <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200" role="region" aria-label={isRtl ? 'أداء الطهاة' : 'Chef Performance'}>
       <h3 className="text-base font-semibold mb-2 flex items-center gap-2 text-gray-800">
         <BarChart3 className="w-4 h-4 text-gray-600" />
         {isRtl ? 'أداء الطهاة' : 'Chef Performance'}
@@ -960,7 +984,7 @@ export const Dashboard: React.FC = () => {
 
     if (error) {
       return (
-        <div className="p-3 text-center bg-red-50 rounded-lg shadow-sm border border-red-200">
+        <div className="p-3 text-center bg-red-50 rounded-lg shadow-sm border border-red-200" role="alert" aria-live="assertive">
           <div className="flex items-center justify-center gap-2 mb-3">
             <AlertCircle className="w-5 h-5 text-red-600" />
             <p className="text-red-600 text-sm font-medium">{error}</p>
@@ -969,11 +993,12 @@ export const Dashboard: React.FC = () => {
             onClick={() => {
               localStorage.removeItem('token');
               localStorage.removeItem('refreshToken');
-              window.location.href = '/login';
+              navigate('/login');
             }}
-            className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-1.5 text-sm shadow-sm transition-colors"
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-1.5 text-sm shadow-sm transition-colors duration-150"
+            aria-label={isRtl ? 'تسجيل الخروج' : 'Log out'}
           >
-            {isRtl ? 'تسجيل الدخول مرة أخرى' : 'Login Again'}
+            {isRtl ? 'تسجيل الخروج' : 'Log out'}
           </button>
         </div>
       );
@@ -1055,7 +1080,7 @@ export const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto px-2 sm:px-3 lg:px-4 py-3 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="mx-auto px-2 sm:px-3 lg:px-4 py-3 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'} role="main" aria-label={isRtl ? 'لوحة التحكم' : 'Dashboard'}>
       {renderContent()}
     </div>
   );
