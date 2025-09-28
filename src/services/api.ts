@@ -68,7 +68,7 @@ api.interceptors.response.use(
           window.location.href = '/login';
           return Promise.reject({ message: isRtl ? 'التوكن منتهي الصلاحية ولا يوجد توكن منعش' : 'Token expired and no refresh token available', status: 401 });
         }
-        const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
+        const response = await axios.post<{ accessToken: string; refreshToken?: string }>(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
         const { accessToken, refreshToken: newRefreshToken } = response.data;
         localStorage.setItem('token', accessToken);
         if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
@@ -769,10 +769,9 @@ export const productionAssignmentsAPI = {
     if (!isValidObjectId(assignmentData.order) ||
         !isValidObjectId(assignmentData.product) ||
         !isValidObjectId(assignmentData.chef) ||
-        !assignmentData.quantity || assignmentData.quantity < 1 ||
         !isValidObjectId(assignmentData.itemId)) {
       console.error(`[${new Date().toISOString()}] productionAssignmentsAPI.create - Invalid data:`, assignmentData);
-      throw new Error('Invalid order ID, product ID, chef ID, quantity, or item ID');
+      throw new Error('Invalid order ID, product ID, chef ID, or item ID');
     }
     const response = await api.post('/orders/tasks', assignmentData);
     console.log(`[${new Date().toISOString()}] productionAssignmentsAPI.create - Response:`, response);
@@ -849,10 +848,12 @@ export const inventoryAPI = {
     userId: string;
     orderId?: string;
   }) => {
-    if (!isValidObjectId(data.branchId) ||
-        !isValidObjectId(data.productId) ||
-        !isValidObjectId(data.userId) ||
-        (data.orderId && !isValidObjectId(data.orderId))) {
+    if (
+      !isValidObjectId(data.branchId) ||
+      !isValidObjectId(data.productId) ||
+      !isValidObjectId(data.userId) ||
+      (data.orderId && !isValidObjectId(data.orderId))
+    ) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.create - Invalid data:`, data);
       throw new Error(isRtl ? 'معرف الفرع، المنتج، المستخدم، أو الطلب غير صالح' : 'Invalid branch ID, product ID, user ID, or order ID');
     }
@@ -990,16 +991,15 @@ export const inventoryAPI = {
     console.log(`[${new Date().toISOString()}] inventoryAPI.getRestockRequests - Response:`, response);
     return response.restockRequests;
   },
-  approveRestockRequest: async (requestId: string, data: { approvedQuantity: number }) => {
-    if (!isValidObjectId(requestId)) {
-      console.error(`[${new Date().toISOString()}] inventoryAPI.approveRestockRequest - Invalid request ID:`, requestId);
-      throw new Error(isRtl ? 'معرف الطلب غير صالح' : 'Invalid request ID');
+  approveRestockRequest: async (requestId: string, data: { approvedQuantity: number; userId: string }) => {
+    if (!isValidObjectId(requestId) || !isValidObjectId(data.userId) || data.approvedQuantity < 1) {
+      console.error(`[${new Date().toISOString()}] inventoryAPI.approveRestockRequest - Invalid data:`, { requestId, data });
+      throw new Error(isRtl ? 'معرف الطلب، المستخدم، أو الكمية المعتمدة غير صالحة' : 'Invalid request ID, user ID, or approved quantity');
     }
-    if (data.approvedQuantity < 1) {
-      console.error(`[${new Date().toISOString()}] inventoryAPI.approveRestockRequest - Invalid approved quantity:`, data.approvedQuantity);
-      throw new Error(isRtl ? 'الكمية المعتمدة غير صالحة' : 'Invalid approved quantity');
-    }
-    const response = await api.patch(`/inventory/restock-requests/${requestId}/approve`, data);
+    const response = await api.patch(`/inventory/restock-requests/${requestId}/approve`, {
+      approvedQuantity: data.approvedQuantity,
+      userId: data.userId,
+    });
     console.log(`[${new Date().toISOString()}] inventoryAPI.approveRestockRequest - Response:`, response);
     return response.restockRequest;
   },
