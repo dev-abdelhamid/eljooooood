@@ -622,7 +622,7 @@ export const Dashboard: React.FC = () => {
             eventId: data.eventId,
           },
           read: false,
-          createdAt: formatDate(new Date(), language),
+          createdAt: new Date().toLocaleString(language),
           sound: '/sounds/order-completed.mp3',
           vibrate: [400, 100, 400],
           path: '/dashboard',
@@ -645,7 +645,7 @@ export const Dashboard: React.FC = () => {
           ? `تم تحديث حالة المهمة: ${data.productName} للطلب ${data.orderNumber} إلى ${data.status === 'in_progress' ? 'قيد التنفيذ' : 'مكتمل'}`
           : `Task status updated: ${data.productName} for order ${data.orderNumber} to ${data.status}`,
         read: false,
-        createdAt: formatDate(new Date(), language),
+        createdAt: new Date().toLocaleString(language),
         path: '/dashboard',
       });
     });
@@ -972,6 +972,7 @@ export const Dashboard: React.FC = () => {
             }}
             className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-1.5 text-sm shadow-sm transition-colors"
           >
+            {isRtl ? 'تسجيل الدخول مرة أخرى' : 'Login Again'}
           </button>
         </div>
       );
