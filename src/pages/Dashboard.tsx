@@ -425,13 +425,14 @@ export const Dashboard: React.FC = () => {
             productNameEn: item.product?.nameEn || item.product?.name || 'Unknown',
             quantity: Number(item.quantity) || 1,
             price: Number(item.price) || 0,
-            department: item.product?.department || { _id: 'unknown', name: isRtl ? 'قسم غير معروف' : 'Unknown Department' },
+            department: item.product?.department || { _id: 'unknown', name: isRtl ? 'قسم غير معروف' : 'Unknown Department', nameEn: 'Unknown' },
             status: item.status || 'pending',
             assignedTo: item.assignedTo
-              ? { _id: item.assignedTo._id, username: item.assignedTo.username || (isRtl ? 'شيف غير معروف' : 'Unknown Chef') }
+              ? { _id: item.assignedTo._id, username: item.assignedTo.username || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'), nameEn: item.assignedTo.nameEn || item.assignedTo.name || 'Unknown' }
               : undefined,
             returnedQuantity: Number(item.returnedQuantity) || 0,
             returnReason: item.returnReason || '',
+            returnReasonEn: item.returnReasonEn || item.returnReason || '',
           })),
           status: order.status || 'pending',
           totalAmount: Number(order.totalAmount || order.totalPrice) || 0,
@@ -445,9 +446,11 @@ export const Dashboard: React.FC = () => {
               productId: item.product?._id || 'unknown',
               quantity: Number(item.quantity) || 0,
               reason: item.reason || '',
+              reasonEn: item.reasonEn || item.reason || '',
             })),
             status: ret.status || 'pending_approval',
             reviewNotes: ret.reviewNotes || '',
+            reviewNotesEn: ret.reviewNotesEn || ret.reviewNotes || '',
             createdAt: formatDate(ret.createdAt || new Date(), language),
           })),
         }));
@@ -1076,7 +1079,7 @@ export const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-4 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="mx-auto px-2 sm:px-3 lg:px-4 py-3 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
       {renderContent()}
     </div>
   );
