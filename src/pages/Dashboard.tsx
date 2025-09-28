@@ -33,16 +33,19 @@ interface Task {
   orderId: string;
   orderNumber: string;
   productName: string;
+  productNameEn?: string; // إضافة دعم للاسم الإنجليزي
   quantity: number;
   unit: string;
+  unitEn?: string; // إضافة دعم للوحدة الإنجليزية
   status: 'pending' | 'assigned' | 'in_progress' | 'completed';
   branchName: string;
+  branchDisplayName: string; // دعم لـ displayName
   createdAt: string;
-  eventId?: string;
 }
 
 interface BranchPerformance {
   branchName: string;
+  branchDisplayName: string; // دعم لـ displayName
   performance: number;
   totalOrders: number;
   completedOrders: number;
@@ -50,6 +53,7 @@ interface BranchPerformance {
 
 interface ChefPerformance {
   chefName: string;
+  chefDisplayName: string; // دعم لـ displayName
   performance: number;
   totalTasks: number;
   completedTasks: number;
@@ -59,18 +63,21 @@ interface Order {
   id: string;
   orderNumber: string;
   branchName: string;
+  branchDisplayName: string; // دعم لـ displayName
   branchId: string;
   items: Array<{
     _id: string;
     productId: string;
     productName: string;
+    productNameEn?: string; // إضافة دعم للاسم الإنجليزي
     quantity: number;
     price: number;
-    department: { _id: string; name: string };
-    assignedTo?: { _id: string; username: string };
+    department: { _id: string; name: string; nameEn?: string }; // دعم للاسم الإنجليزي
+    assignedTo?: { _id: string; username: string; nameEn?: string }; // دعم للاسم الإنجليزي
     status: 'pending' | 'assigned' | 'in_progress' | 'completed';
     returnedQuantity?: number;
     returnReason?: string;
+    returnReasonEn?: string; // إضافة دعم للسبب الإنجليزي
   }>;
   returns?: Array<{
     returnId: string;
@@ -79,8 +86,10 @@ interface Order {
       productId: string;
       quantity: number;
       reason: string;
+      reasonEn?: string; // إضافة دعم للسبب الإنجليزي
     }>;
     reviewNotes?: string;
+    reviewNotesEn?: string; // إضافة دعم للملاحظات الإنجليزية
     createdAt: string;
   }>;
   status: 'pending' | 'approved' | 'in_production' | 'completed' | 'in_transit' | 'delivered' | 'cancelled';
@@ -96,7 +105,8 @@ interface Chef {
   userId: string;
   username: string;
   name: string;
-  department: { _id: string; name: string } | null;
+  nameEn?: string; // إضافة دعم للاسم الإنجليزي
+  department: { _id: string; name: string; nameEn?: string } | null; // دعم للاسم الإنجليزي
 }
 
 interface FilterState {
@@ -114,19 +124,19 @@ const timeFilterOptions = [
 // مكون مؤشر التحميل
 const Loader: React.FC = () => (
   <div className="flex justify-center items-center h-screen">
-    <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-blue-500"></div>
+    <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-amber-600"></div>
   </div>
 );
 
 // مكون بطاقة الإحصائيات
 const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color: string; ariaLabel: string }> = React.memo(
   ({ title, value, icon: Icon, color, ariaLabel }) => (
-    <div className={`p-2 bg-${color}-100 rounded-lg border border-${color}-200 cursor-pointer hover:bg-${color}-200 transition-colors`} aria-label={ariaLabel}>
-      <div className="flex items-center gap-2">
-        <Icon className={`w-4 h-4 text-${color}-700`} />
+    <div className={`p-4 bg-${color}-50 rounded-lg border border-${color}-100 cursor-pointer hover:bg-${color}-100 transition-colors duration-200`} aria-label={ariaLabel}>
+      <div className="flex items-center gap-3">
+        <Icon className={`w-6 h-6 text-${color}-600`} />
         <div>
-          <p className="text-xs text-gray-700">{title}</p>
-          <p className="text-sm font-medium text-gray-900">{value}</p>
+          <p className="text-sm text-gray-600">{title}</p>
+          <p className="text-lg font-semibold text-gray-900">{value}</p>
         </div>
       </div>
     </div>
@@ -141,7 +151,7 @@ const ChefDashboard: React.FC<{
   language: string;
   handleStartTask: (taskId: string, orderId: string) => void;
   handleCompleteTask: (taskId: string, orderId: string) => void;
-}> = ({ stats, tasks, isRtl, language, handleStartTask, handleCompleteTask }) => {
+}> = React.memo(({ stats, tasks, isRtl, language, handleStartTask, handleCompleteTask }) => {
   const [filter, setFilter] = useState<FilterState>({ status: 'all', search: '' });
 
   const filteredTasks = useMemo(() => {
@@ -149,21 +159,21 @@ const ChefDashboard: React.FC<{
       .filter((task) => filter.status === 'all' || task.status === filter.status)
       .filter(
         (task) =>
-          task.productName.toLowerCase().includes(filter.search.toLowerCase()) ||
+          (isRtl ? task.productName : task.productNameEn).toLowerCase().includes(filter.search.toLowerCase()) ||
           task.orderNumber.toLowerCase().includes(filter.search.toLowerCase())
       )
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 6);
-  }, [tasks, filter.status, filter.search]);
+  }, [tasks, filter.status, filter.search, isRtl]);
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard
           title={isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
           value={stats.totalOrders.toString()}
           icon={ShoppingCart}
-          color="blue"
+          color="amber"
           ariaLabel={isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
         />
         <StatsCard
@@ -177,7 +187,7 @@ const ChefDashboard: React.FC<{
           title={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
           value={stats.inProgressTasks.toString()}
           icon={Clock}
-          color="yellow"
+          color="blue"
           ariaLabel={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
         />
         <StatsCard
@@ -188,17 +198,17 @@ const ChefDashboard: React.FC<{
           ariaLabel={isRtl ? 'الطلبات المعلقة' : 'Pending Orders'}
         />
       </div>
-      <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-200">
-        <div className="flex flex-col sm:flex-row items-center justify-between mb-2 gap-2">
-          <h3 className="text-base font-semibold text-gray-800 flex items-center">
-            <ChefHat className={`w-4 h-4 ${isRtl ? 'ml-1.5' : 'mr-1.5'} text-amber-600`} />
+      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+        <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-4">
+          <h3 className="text-lg font-semibold text-gray-800 flex items-center">
+            <ChefHat className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
             {isRtl ? 'أحدث الطلبات قيد الإنتاج' : 'Latest In Production'}
           </h3>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
             <select
               value={filter.status}
               onChange={(e) => setFilter((prev) => ({ ...prev, status: e.target.value }))}
-              className="w-full sm:w-32 p-1.5 rounded-md border border-gray-300 text-xs focus:ring-2 focus:ring-blue-400 bg-white"
+              className="w-full sm:w-48 p-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 bg-white"
               aria-label={isRtl ? 'حالة المهمة' : 'Task Status'}
             >
               <option value="all">{isRtl ? 'الكل' : 'All'}</option>
@@ -211,16 +221,16 @@ const ChefDashboard: React.FC<{
               type="text"
               value={filter.search}
               onChange={(e) => setFilter((prev) => ({ ...prev, search: e.target.value }))}
-              placeholder={isRtl ? 'البحث' : 'Search'}
-              className="w-full sm:w-32 p-1.5 rounded-md border border-gray-300 text-xs focus:ring-2 focus:ring-blue-400 bg-white"
+              placeholder={isRtl ? 'ابحث عن اسم المنتج أو رقم الطلب' : 'Search by product name or order number'}
+              className="w-full sm:w-48 p-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 bg-white"
               aria-label={isRtl ? 'البحث' : 'Search'}
             />
           </div>
         </div>
-        <div className="space-y-2 overflow-y-auto max-h-80">
+        <div className="space-y-3 overflow-y-auto max-h-96">
           <AnimatePresence>
             {filteredTasks.length === 0 ? (
-              <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد مهام' : 'No tasks available'}</p>
+              <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد مهام' : 'No tasks available'}</p>
             ) : (
               filteredTasks.map((task) => (
                 <motion.div
@@ -229,14 +239,14 @@ const ChefDashboard: React.FC<{
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ duration: 0.2 }}
-                  className="border border-amber-200 rounded-lg p-2 bg-amber-50 shadow-sm"
+                  className="border border-amber-100 rounded-lg p-3 bg-amber-50 shadow-sm"
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <h4 className="font-medium text-xs text-gray-800 truncate">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="font-semibold text-sm text-gray-800 truncate">
                       {isRtl ? `طلب رقم ${task.orderNumber}` : `Order #${task.orderNumber}`}
                     </h4>
                     <span
-                      className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
+                      className={`px-2 py-1 rounded-full text-xs font-medium ${
                         task.status === 'pending' || task.status === 'assigned'
                           ? 'bg-amber-100 text-amber-800'
                           : task.status === 'in_progress'
@@ -255,13 +265,15 @@ const ChefDashboard: React.FC<{
                         : task.status.charAt(0).toUpperCase() + task.status.slice(1)}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-600 mb-1 truncate">{`${task.quantity} ${task.productName}`}</p>
-                  <p className="text-xs text-gray-500 mb-2">{isRtl ? `تم الإنشاء في: ${task.createdAt}` : `Created At: ${task.createdAt}`}</p>
-                  <div className="flex items-center gap-2">
+                  <p className="text-sm text-gray-600 mb-2 truncate">
+                    {`${task.quantity} ${isRtl ? task.productName : task.productNameEn || task.productName} (${isRtl ? task.unit : task.unitEn || task.unit})`}
+                  </p>
+                  <p className="text-xs text-gray-500 mb-3">{isRtl ? `تم الإنشاء في: ${task.createdAt}` : `Created At: ${task.createdAt}`}</p>
+                  <div className="flex items-center gap-3">
                     {(task.status === 'pending' || task.status === 'assigned') && (
                       <button
                         onClick={() => handleStartTask(task.id, task.orderId)}
-                        className="bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600 transition-colors"
+                        className="bg-amber-600 text-white px-3 py-1.5 rounded text-sm hover:bg-amber-700 transition-colors duration-200"
                         aria-label={isRtl ? 'بدء المهمة' : 'Start Task'}
                       >
                         {isRtl ? 'بدء' : 'Start'}
@@ -270,7 +282,7 @@ const ChefDashboard: React.FC<{
                     {task.status === 'in_progress' && (
                       <button
                         onClick={() => handleCompleteTask(task.id, task.orderId)}
-                        className="bg-green-500 text-white px-2 py-1 rounded text-xs hover:bg-green-600 transition-colors"
+                        className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700 transition-colors duration-200"
                         aria-label={isRtl ? 'إكمال المهمة' : 'Complete Task'}
                       >
                         {isRtl ? 'إكمال' : 'Complete'}
@@ -298,7 +310,7 @@ export const Dashboard: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [chefs, setChefs] = useState<Chef[]>([]);
-  const [branches, setBranches] = useState<{ _id: string; name: string }[]>([]);
+  const [branches, setBranches] = useState<{ _id: string; name: string; displayName: string }[]>([]);
   const [branchPerformance, setBranchPerformance] = useState<BranchPerformance[]>([]);
   const [chefPerformance, setChefPerformance] = useState<ChefPerformance[]>([]);
   const [stats, setStats] = useState<Stats>({
@@ -339,7 +351,7 @@ export const Dashboard: React.FC = () => {
         return;
       }
 
-      if (!forceRefresh && cache.has(cacheKey) ) {
+      if (!forceRefresh && cache.has(cacheKey)) {
         const cachedData = cache.get(cacheKey);
         setOrders(cachedData.orders);
         setTasks(cachedData.tasks);
@@ -404,20 +416,23 @@ export const Dashboard: React.FC = () => {
           id: order._id || crypto.randomUUID(),
           orderNumber: order.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
           branchName: order.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
+          branchDisplayName: isRtl ? order.branch?.name : (order.branch?.nameEn || order.branch?.name || 'Unknown'),
           branchId: order.branch?._id || 'unknown',
           items: (order.items || []).map((item: any) => ({
             _id: item._id || crypto.randomUUID(),
             productId: item.product?._id || 'unknown',
             productName: item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+            productNameEn: item.product?.nameEn || item.product?.name || 'Unknown', // دعم للاسم الإنجليزي
             quantity: Number(item.quantity) || 1,
             price: Number(item.price) || 0,
-            department: item.product?.department || { _id: 'unknown', name: isRtl ? 'قسم غير معروف' : 'Unknown Department' },
+            department: item.product?.department || { _id: 'unknown', name: isRtl ? 'قسم غير معروف' : 'Unknown Department', nameEn: 'Unknown' },
             status: item.status || 'pending',
             assignedTo: item.assignedTo
-              ? { _id: item.assignedTo._id, username: item.assignedTo.username || (isRtl ? 'شيف غير معروف' : 'Unknown Chef') }
+              ? { _id: item.assignedTo._id, username: item.assignedTo.username || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'), nameEn: item.assignedTo.nameEn || item.assignedTo.name || 'Unknown' }
               : undefined,
             returnedQuantity: Number(item.returnedQuantity) || 0,
             returnReason: item.returnReason || '',
+            returnReasonEn: item.returnReasonEn || item.returnReason || '', // دعم للسبب الإنجليزي
           })),
           status: order.status || 'pending',
           totalAmount: Number(order.totalAmount || order.totalPrice) || 0,
@@ -431,9 +446,11 @@ export const Dashboard: React.FC = () => {
               productId: item.product?._id || 'unknown',
               quantity: Number(item.quantity) || 0,
               reason: item.reason || '',
+              reasonEn: item.reasonEn || item.reason || '', // دعم للسبب الإنجليزي
             })),
             status: ret.status || 'pending_approval',
             reviewNotes: ret.reviewNotes || '',
+            reviewNotesEn: ret.reviewNotesEn || ret.reviewNotes || '', // دعم للملاحظات الإنجليزية
             createdAt: formatDate(ret.createdAt || new Date(), language),
           })),
         }));
@@ -443,10 +460,13 @@ export const Dashboard: React.FC = () => {
           orderId: task.order?._id || 'unknown',
           orderNumber: task.order?.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
           productName: task.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+          productNameEn: task.product?.nameEn || task.product?.name || 'Unknown', // دعم للاسم الإنجليزي
           quantity: Number(task.quantity) || 0,
           unit: task.product?.unit || 'unit',
+          unitEn: task.product?.unitEn || task.product?.unit || 'N/A', // دعم للوحدة الإنجليزية
           status: task.status || 'pending',
           branchName: task.order?.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
+          branchDisplayName: isRtl ? task.order?.branch?.name : (task.order?.branch?.nameEn || task.order?.branch?.name || 'Unknown'),
           createdAt: formatDate(task.createdAt || new Date(), language),
         }));
 
@@ -455,6 +475,7 @@ export const Dashboard: React.FC = () => {
           userId: chef.user?._id || chef._id,
           username: chef.user?.username || chef.username || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'),
           name: chef.user?.name || chef.name || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'),
+          nameEn: chef.user?.nameEn || chef.name || 'Unknown', // دعم للاسم الإنجليزي
           department: chef.department || null,
         }));
 
@@ -462,6 +483,8 @@ export const Dashboard: React.FC = () => {
           .map((branch: any) => ({
             _id: branch._id || crypto.randomUUID(),
             name: branch.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
+            nameEn: branch.nameEn || branch.name || 'Unknown', // دعم للاسم الإنجليزي
+            displayName: isRtl ? branch.name : (branch.nameEn || branch.name || 'Unknown'), // دعم لـ displayName
           }))
           .sort((a: any, b: any) => a.name.localeCompare(b.name));
 
@@ -470,7 +493,7 @@ export const Dashboard: React.FC = () => {
           const total = branchOrders.length;
           const completed = branchOrders.filter((o) => o.status === 'completed' || o.status === 'delivered').length;
           const perf = total > 0 ? (completed / total) * 100 : 0;
-          return { branchName: branch.name, performance: perf, totalOrders: total, completedOrders: completed };
+          return { branchName: branch.name, branchDisplayName: branch.displayName, performance: perf, totalOrders: total, completedOrders: completed };
         }).filter((b: any) => b.totalOrders > 0);
 
         const chefPerf = mappedChefs.map((chef: any) => {
@@ -481,7 +504,7 @@ export const Dashboard: React.FC = () => {
           const total = chefTasks.length;
           const completed = chefTasks.filter((t) => t.status === 'completed').length;
           const perf = total > 0 ? (completed / total) * 100 : 0;
-          return { chefName: chef.name, performance: perf, totalTasks: total, completedTasks: completed };
+          return { chefName: chef.name, chefDisplayName: isRtl ? chef.name : (chef.nameEn || chef.name || 'Unknown'), performance: perf, totalTasks: total, completedTasks: completed };
         }).filter((c: any) => c.totalTasks > 0);
 
         const totalOrders = user.role === 'chef' ? mappedTasks.length : mappedOrders.length;
@@ -623,7 +646,7 @@ export const Dashboard: React.FC = () => {
             eventId: data.eventId,
           },
           read: false,
-          createdAt: new Date().toLocaleString(language),
+          createdAt: formatDate(new Date(), language),
           sound: '/sounds/order-completed.mp3',
           vibrate: [400, 100, 400],
           path: '/dashboard',
@@ -646,7 +669,7 @@ export const Dashboard: React.FC = () => {
           ? `تم تحديث حالة المهمة: ${data.productName} للطلب ${data.orderNumber} إلى ${data.status === 'in_progress' ? 'قيد التنفيذ' : 'مكتمل'}`
           : `Task status updated: ${data.productName} for order ${data.orderNumber} to ${data.status}`,
         read: false,
-        createdAt: new Date().toLocaleString(language),
+        createdAt: formatDate(new Date(), language),
         path: '/dashboard',
       });
     });
@@ -867,7 +890,7 @@ export const Dashboard: React.FC = () => {
               onClick={() => navigate(`/orders/${order.id}`)}
               className="p-2 bg-gray-50 rounded-md border border-gray-200 cursor-pointer hover:bg-gray-100 transition-colors"
             >
-              <h4 className="font-medium text-xs text-gray-800 mb-1 truncate">{order.orderNumber} - {order.branchName}</h4>
+              <h4 className="font-medium text-xs text-gray-800 mb-1 truncate">{order.orderNumber} - {order.branchDisplayName}</h4>
               <span
                 className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                   order.status === 'pending'
@@ -906,7 +929,7 @@ export const Dashboard: React.FC = () => {
       <div className="space-y-2">
         {branchPerformance.map((branch, index) => (
           <div key={index} className="flex items-center gap-2">
-            <span className="w-20 text-xs font-medium text-gray-700 truncate">{branch.branchName}</span>
+            <span className="w-20 text-xs font-medium text-gray-700 truncate">{branch.branchDisplayName}</span>
             <div className="flex-1 bg-gray-200 rounded-full h-2.5">
               <motion.div
                 className="bg-blue-500 h-2.5 rounded-full"
@@ -934,7 +957,7 @@ export const Dashboard: React.FC = () => {
       <div className="space-y-2">
         {chefPerformance.map((chef, index) => (
           <div key={index} className="flex items-center gap-2">
-            <span className="w-20 text-xs font-medium text-gray-700 truncate">{chef.chefName}</span>
+            <span className="w-20 text-xs font-medium text-gray-700 truncate">{chef.chefDisplayName}</span>
             <div className="flex-1 bg-gray-200 rounded-full h-2.5">
               <motion.div
                 className="bg-green-500 h-2.5 rounded-full"
@@ -973,7 +996,6 @@ export const Dashboard: React.FC = () => {
             }}
             className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-1.5 text-sm shadow-sm transition-colors"
           >
-            {isRtl ? 'تسجيل الدخول مرة أخرى' : 'Login Again'}
           </button>
         </div>
       );
