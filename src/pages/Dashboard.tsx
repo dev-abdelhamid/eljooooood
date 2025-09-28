@@ -38,6 +38,7 @@ interface Task {
   status: 'pending' | 'assigned' | 'in_progress' | 'completed';
   branchName: string;
   createdAt: string;
+  eventId?: string;
 }
 
 interface BranchPerformance {
@@ -338,7 +339,7 @@ export const Dashboard: React.FC = () => {
         return;
       }
 
-      if (!forceRefresh && cache.has(cacheKey)) {
+      if (!forceRefresh && cache.has(cacheKey) ) {
         const cachedData = cache.get(cacheKey);
         setOrders(cachedData.orders);
         setTasks(cachedData.tasks);
