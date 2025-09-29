@@ -21,6 +21,8 @@ import Pagination from '../components/Shared/Pagination';
 
 const OrderTable = lazy(() => import('../components/Shared/OrderTable'));
 const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
+const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
+
 
 // Function to normalize text for search (handles Arabic diacritics and variations)
 const normalizeText = (text: string) => {
