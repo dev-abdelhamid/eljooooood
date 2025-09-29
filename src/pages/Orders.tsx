@@ -25,6 +25,18 @@ const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
 const OrderTable = lazy(() => import('../components/Shared/OrderTable'));
 const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
 
+// Function to normalize text for search (handles Arabic diacritics and variations)
+const normalizeText = (text: string) => {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E8\u06EA-\u06ED]/g, '') // Remove Arabic diacritics
+    .replace(/أ|إ|آ|ٱ/g, 'ا') // Normalize Alef variants
+    .replace(/ى/g, 'ي') // Normalize Ya
+    .replace(/ة/g, 'ه') // Normalize Ta Marbuta
+    .toLowerCase()
+    .trim();
+};
+
 interface State {
   orders: Order[];
   selectedOrder: Order | null;
@@ -661,7 +673,7 @@ export const Orders: React.FC = () => {
         });
         dispatch({ type: 'SET_ERROR', payload: '' });
       } catch (err: any) {
-        console.error('Fetch data error:', err.message);
+        console.error(`[${new Date().toISOString()}] Fetch data error:`, err);
         if (retryCount < 2) {
           setTimeout(() => fetchData(retryCount + 1), 1000);
           return;
@@ -691,11 +703,11 @@ export const Orders: React.FC = () => {
       state.orders
         .filter(
           order =>
-            order.orderNumber.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.branch.displayName.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            (order.orderNumber || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            (order.branch.displayName || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
             (order.notes || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.createdBy.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.items.some(item => item.displayProductName.toLowerCase().includes(state.searchQuery.toLowerCase()))
+            (order.createdBy || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            order.items.some(item => (item.displayProductName || '').toLowerCase().includes(state.searchQuery.toLowerCase()))
         )
         .filter(
           order =>
@@ -882,6 +894,44 @@ export const Orders: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
+  const getStatusLabel = (status: string) => {
+    const labelsAr = {
+      '': 'كل الحالات',
+      pending: 'قيد الانتظار',
+      approved: 'تم الموافقة',
+      in_production: 'في الإنتاج',
+      completed: 'مكتمل',
+      in_transit: 'في النقل',
+      delivered: 'تم التسليم',
+      cancelled: 'ملغى',
+    };
+    const labelsEn = {
+      '': 'All Statuses',
+      pending: 'Pending',
+      approved: 'Approved',
+      in_production: 'In Production',
+      completed: 'Completed',
+      in_transit: 'In Transit',
+      delivered: 'Delivered',
+      cancelled: 'Cancelled',
+    };
+    return isRtl ? (labelsAr[status] || status) : (labelsEn[status] || status);
+  };
+
+  const getSortLabel = (value: string) => {
+    const labelsAr = {
+      date: 'التاريخ',
+      totalAmount: 'إجمالي المبلغ',
+      priority: 'الأولوية',
+    };
+    const labelsEn = {
+      date: 'Date',
+      totalAmount: 'Total Amount',
+      priority: 'Priority',
+    };
+    return isRtl ? (labelsAr[value] || value) : (labelsEn[value] || value);
+  };
+
   return (
     <div className="px-2 py-4">
       <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
@@ -924,7 +974,7 @@ export const Orders: React.FC = () => {
               </Button>
             </div>
           </div>
-          <Card className="p-3 mt-6 bg-white shadow-md  border border-gray-200">
+          <Card className="p-3 mt-6 bg-white shadow-md rounded-xl border border-gray-200">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
@@ -932,9 +982,11 @@ export const Orders: React.FC = () => {
                   <Search className={`w-4 h-4 text-gray-500 absolute top-2 ${isRtl ? 'left-2' : 'right-2'}`} />
                   <Input
                     value={state.searchQuery}
-                    onChange={(e) => handleSearchChange(e?.target?.value || '')}
+                    onChange={(e) => handleSearchChange(e.target.value)}
                     placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
                     className={`w-full ${isRtl ? 'pl-8 ' : 'pr-8'} rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200`}
+                    dir={isRtl ? 'rtl' : 'ltr'}
+                    lang={isRtl ? 'ar' : 'en'}
                   />
                 </div>
               </div>
@@ -992,7 +1044,7 @@ export const Orders: React.FC = () => {
               {state.loading ? (
                 <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }} className="space-y-1">
                   {state.viewMode === 'card' ? (
-                    <div className="grid grid-cols-1  gap-1">
+                    <div className="grid grid-cols-1 gap-1">
                       {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)}
                     </div>
                   ) : (
@@ -1000,7 +1052,7 @@ export const Orders: React.FC = () => {
                   )}
                 </motion.div>
               ) : state.error ? (
-                <motion.div key="error" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }} className="mt-6">
+                <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }} className="mt-6">
                   <Card className="p-5 max-w-md mx-auto text-center bg-red-50 shadow-md rounded-xl border border-red-100">
                     <div className={`flex items-center justify-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
                       <AlertCircle className="w-5 h-5 text-red-600" />
