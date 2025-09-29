@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo, useReducer } from 'react';
+import React, { useState, useEffect, useCallback, useReducer, useTransition  , useMemo} from 'react'; // أضفت useTransition لـ React 19 smooth
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { branchesAPI } from '../services/api';
+import { branchesAPI, ordersAPI, salesAPI } from '../services/api'; // مستورد salesAPI
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Edit2, Trash2, Key, AlertCircle, MapPin, ChevronDown } from 'lucide-react';
@@ -40,6 +40,22 @@ interface Branch {
   displayName: string;
   displayAddress: string;
   displayCity: string;
+}
+
+// افترض interfaces للـ Orders و Sales (عدل حسب API حقيقي)
+interface Order {
+  _id: string;
+  orderNumber: string;
+  status: string;
+  total: number;
+  createdAt: string;
+}
+
+interface Sale {
+  _id: string;
+  saleNumber: string;
+  total: number;
+  createdAt: string;
 }
 
 interface FormState {
@@ -147,6 +163,15 @@ const translations = {
     deleteWarning: 'هل أنت متأكد من حذف هذا الفرع؟ لا يمكن التراجع عن هذا الإجراء.',
     deleteRestricted: 'لا يمكن حذف الفرع لوجود طلبات أو مخزون مرتبط',
     confirmDelete: 'تأكيد حذف الفرع',
+    ordersTab: 'طلبات الفرع',
+    salesTab: 'مبيعات الفرع',
+    additionalDetailsTab: 'تفاصيل إضافية',
+    noOrders: 'لا توجد طلبات',
+    noSales: 'لا توجد مبيعات',
+    orderNumber: 'رقم الطلب',
+    status: 'الحالة',
+    total: 'الإجمالي',
+    saleNumber: 'رقم المبيعة',
   },
   en: {
     branchDetails: 'Branch Details',
@@ -196,6 +221,15 @@ const translations = {
     deleteWarning: 'Are you sure you want to delete this branch? This action cannot be undone.',
     deleteRestricted: 'Cannot delete branch with associated orders or inventory',
     confirmDelete: 'Confirm Branch Deletion',
+    ordersTab: 'Branch Orders',
+    salesTab: 'Branch Sales',
+    additionalDetailsTab: 'Additional Details',
+    noOrders: 'No orders available',
+    noSales: 'No sales available',
+    orderNumber: 'Order Number',
+    status: 'Status',
+    total: 'Total',
+    saleNumber: 'Sale Number',
   },
 };
 
@@ -232,10 +266,10 @@ const ProfileInput = ({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         required={required}
-        className={`w-full px-3 py-2 border ${error ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-amber-50 shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full px-3 py-3 border ${error ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`} // تحسين: py-3, text-sm
         aria-label={label}
       />
-      {error && <p className="text-red-600 text-xs mt-1">{error}</p>}
+      {error && <p className="text-red-600 text-sm mt-1">{error}</p>} // زد text-sm
     </div>
   );
 };
@@ -265,14 +299,14 @@ const ProfileSelect = ({
       <div className="relative group">
         <select
           id={id}
-          value={value}
+          value={value.toString()}
           onChange={(e) => onChange(e.target.value)}
           required={required}
-          className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-amber-50 shadow-sm hover:shadow-md appearance-none text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'}`}
+          className={`w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'}`} // py-3, text-sm
           aria-label={label}
         >
           {options.map((option) => (
-            <option key={String(option.value)} value={option.value}>
+            <option key={String(option.value)} value={option.value.toString()}>
               {option.label}
             </option>
           ))}
@@ -293,7 +327,7 @@ const ProfileCard = ({ title, details }: { title: string; details: { label: stri
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
-      className="p-6 bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-all duration-200"
+      className="p-6 bg-white rounded-2xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200" // تحسين: rounded-2xl, shadow-md to lg
     >
       <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
         <MapPin className="w-5 h-5 text-amber-600" />
@@ -308,7 +342,7 @@ const ProfileCard = ({ title, details }: { title: string; details: { label: stri
             transition={{ duration: 0.3, delay: index * 0.1 }}
           >
             <p className="text-sm text-gray-600 font-medium">{detail.label}</p>
-            <p className={`text-sm text-gray-800 ${detail.className || ''}`}>{detail.value}</p>
+            <p className={`text-sm text-gray-800 overflow-hidden whitespace-nowrap text-ellipsis ${detail.className || ''}`}>{detail.value}</p> // nowrap + ellipsis
           </motion.div>
         ))}
       </div>
@@ -317,7 +351,7 @@ const ProfileCard = ({ title, details }: { title: string; details: { label: stri
 };
 
 const ProfileSkeletonCard = () => (
-  <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+  <div className="p-6 bg-white rounded-2xl shadow-md border border-gray-100">
     <div className="space-y-4 animate-pulse">
       <div className="flex items-center gap-2">
         <div className="w-5 h-5 bg-gray-200 rounded-full"></div>
@@ -361,7 +395,7 @@ const ProfileModal = ({
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-2xl p-6"
+        className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-2xl p-6 overflow-y-auto max-h-[90vh]"
       >
         <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.editBranch}</h3>
         <form onSubmit={onSubmit} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
@@ -513,7 +547,7 @@ const ProfileModal = ({
               className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
             >
               <AlertCircle className="w-4 h-4 text-red-600" />
-              <span className="text-red-600 text-xs">{error}</span>
+              <span className="text-red-600 text-sm">{error}</span> // text-sm
             </motion.div>
           )}
           <div className="flex justify-end gap-3 mt-6">
@@ -558,6 +592,9 @@ const ProfileResetPasswordModal = ({
   t: typeof translations['ar' | 'en'];
   isRtl: boolean;
 }) => {
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -565,28 +602,52 @@ const ProfileResetPasswordModal = ({
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-6"
+        className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-6"
       >
         <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.resetPassword}</h3>
         <form onSubmit={onSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
-          <ProfileInput
-            id="password"
-            label={t.newPassword}
-            value={passwordData.password}
-            onChange={(value) => setPasswordData({ ...passwordData, password: value })}
-            placeholder={t.passwordPlaceholder}
-            type="password"
-            required
-          />
-          <ProfileInput
-            id="confirmPassword"
-            label={t.confirmPassword}
-            value={passwordData.confirmPassword}
-            onChange={(value) => setPasswordData({ ...passwordData, confirmPassword: value })}
-            placeholder={t.confirmPasswordPlaceholder}
-            type="password"
-            required
-          />
+          <div className="relative">
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+              {t.newPassword}
+            </label>
+            <input
+              id="password"
+              type={showPassword ? 'text' : 'password'}
+              value={passwordData.password}
+              onChange={(e) => setPasswordData({ ...passwordData, password: e.target.value })}
+              placeholder={t.passwordPlaceholder}
+              className={`w-full px-3 py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className={`absolute inset-y-0 ${isRtl ? 'left-0 pl-3' : 'right-0 pr-3'} flex items-center mt-7 text-gray-400 hover:text-amber-600 transition-colors`}
+            >
+              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+          <div className="relative">
+            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+              {t.confirmPassword}
+            </label>
+            <input
+              id="confirmPassword"
+              type={showConfirm ? 'text' : 'password'}
+              value={passwordData.confirmPassword}
+              onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
+              placeholder={t.confirmPasswordPlaceholder}
+              className={`w-full px-3 py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+              required
+            />
+            <button
+              type="button"
+              onClick={() => setShowConfirm(!showConfirm)}
+              className={`absolute inset-y-0 ${isRtl ? 'left-0 pl-3' : 'right-0 pr-3'} flex items-center mt-7 text-gray-400 hover:text-amber-600 transition-colors`}
+            >
+              {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
           {error && (
             <motion.div
               initial={{ opacity: 0, y: -10 }}
@@ -595,7 +656,7 @@ const ProfileResetPasswordModal = ({
               className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
             >
               <AlertCircle className="w-4 h-4 text-red-600" />
-              <span className="text-red-600 text-xs">{error}</span>
+              <span className="text-red-600 text-sm">{error}</span>
             </motion.div>
           )}
           <div className="flex justify-end gap-3 mt-6">
@@ -643,7 +704,7 @@ const ProfileDeleteModal = ({
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-6"
+        className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-6"
       >
         <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.confirmDelete}</h3>
         <p className="text-sm text-gray-600 mb-4">{t.deleteWarning}</p>
@@ -655,7 +716,7 @@ const ProfileDeleteModal = ({
             className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 mb-4"
           >
             <AlertCircle className="w-4 h-4 text-red-600" />
-            <span className="text-red-600 text-xs">{error}</span>
+            <span className="text-red-600 text-sm">{error}</span>
           </motion.div>
         )}
         <div className="flex justify-end gap-3">
@@ -688,13 +749,19 @@ export const BranchProfile: React.FC = () => {
   const t = translations[isRtl ? 'ar' : 'en'];
 
   const [branch, setBranch] = useState<Branch | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [activeTab, setActiveTab] = useState('info');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [passwordData, setPasswordData] = useState({ password: '', confirmPassword: '' });
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [loading, setLoading] = useState(false);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [salesLoading, setSalesLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isPending, startTransition] = useTransition(); // React 19 لـ smooth tab switch
 
   const [formData, dispatchForm] = useReducer(formReducer, {
     name: '',
@@ -753,6 +820,33 @@ export const BranchProfile: React.FC = () => {
       setLoading(false);
     }
   }, [id, isRtl, t]);
+
+  const fetchOrders = useCallback(async () => {
+    if (!id) return;
+    setOrdersLoading(true);
+    try {
+      const response = await ordersAPI.getAll({ branch: id });
+      setOrders(response.data || []); // افترض response { data: [], totalPages, ... }
+    } catch (err: any) {
+      toast.error('خطأ في جلب الطلبات', { position: isRtl ? 'top-right' : 'top-left' });
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, [id, isRtl]);
+
+  const fetchSales = useCallback(async () => {
+    if (!id) return;
+    setSalesLoading(true);
+    try {
+      // افترض salesAPI.getByBranch(id) أو getAll({ branch: id })
+      const response = await salesAPI.getAll({ branch: id }); // عدل لو الـ endpoint مختلف
+      setSales(response.data || []);
+    } catch (err: any) {
+      toast.error('خطأ في جلب المبيعات', { position: isRtl ? 'top-right' : 'top-left' });
+    } finally {
+      setSalesLoading(false);
+    }
+  }, [id, isRtl]);
 
   useEffect(() => {
     fetchBranch();
@@ -1000,11 +1094,11 @@ export const BranchProfile: React.FC = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}
-          className="p-6 bg-white rounded-xl shadow-sm"
+          className="p-6 bg-white rounded-2xl shadow-md"
         >
           <ProfileSkeletonCard />
         </motion.div>
-    </div>
+      </div>
     );
   }
 
@@ -1015,7 +1109,7 @@ export const BranchProfile: React.FC = () => {
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="text-center p-6 bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-sm border border-gray-100"
+          className="text-center p-6 bg-white rounded-2xl shadow-md border border-gray-100"
         >
           <MapPin className="w-10 h-10 text-gray-400 mx-auto mb-3" />
           <h2 className="text-2xl font-semibold text-gray-900 mb-4">{t.branchNotFound}</h2>
@@ -1038,7 +1132,7 @@ export const BranchProfile: React.FC = () => {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4"
+        className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4 shadow-sm bg-white p-4 rounded-2xl"
       >
         <div className="flex items-center gap-3">
           <button
@@ -1089,17 +1183,149 @@ export const BranchProfile: React.FC = () => {
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 shadow-sm"
+            className="mb-8 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 shadow-sm"
           >
             <AlertCircle className="w-5 h-5 text-red-600" />
             <span className="text-red-600 text-sm font-medium">{error}</span>
           </motion.div>
         )}
       </AnimatePresence>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ProfileCard title={t.branchDetails} details={branchDetails} />
-        {branch.user && <ProfileCard title={t.user} details={userDetails} />}
+
+      {/* Tabs */}
+      <div className="flex border-b border-gray-200 mb-6">
+        <button
+          onClick={() => startTransition(() => setActiveTab('info'))}
+          className={`px-4 py-2 text-sm font-medium ${activeTab === 'info' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600'} transition-colors`}
+        >
+          {t.infoTab}
+        </button>
+        <button
+          onClick={() => startTransition(() => setActiveTab('orders'))}
+          className={`px-4 py-2 text-sm font-medium ${activeTab === 'orders' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600'} transition-colors`}
+        >
+          {t.ordersTab}
+        </button>
+        <button
+          onClick={() => startTransition(() => setActiveTab('sales'))}
+          className={`px-4 py-2 text-sm font-medium ${activeTab === 'sales' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600'} transition-colors`}
+        >
+          {t.salesTab}
+        </button>
+        <button
+          onClick={() => startTransition(() => setActiveTab('additional'))}
+          className={`px-4 py-2 text-sm font-medium ${activeTab === 'additional' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600'} transition-colors`}
+        >
+          {t.additionalDetailsTab}
+        </button>
       </div>
+
+      <AnimatePresence mode="wait">
+        {activeTab === 'info' ? (
+          <motion.div
+            key="info"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.3 }}
+            className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+          >
+            <ProfileCard title={t.branchDetails} details={branchDetails} />
+            {branch.user && <ProfileCard title={t.user} details={userDetails} />}
+          </motion.div>
+        ) : activeTab === 'orders' ? (
+          <motion.div
+            key="orders"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3 }}
+            className="space-y-4"
+          >
+            <h2 className="text-lg font-semibold text-gray-900">{t.ordersTab}</h2>
+            {ordersLoading ? (
+              <div className="text-center text-sm text-gray-600">جاري التحميل...</div>
+            ) : orders.length === 0 ? (
+              <div className="text-center text-sm text-gray-600">{t.noOrders}</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.orderNumber}</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.status}</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.total}</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.createdAt}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {orders.map((order) => (
+                      <tr key={order._id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{order.orderNumber}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{order.status}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{order.total}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{new Date(order.createdAt).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </motion.div>
+        ) : activeTab === 'sales' ? (
+          <motion.div
+            key="sales"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ duration: 0.3 }}
+            className="space-y-4"
+          >
+            <h2 className="text-lg font-semibold text-gray-900">{t.salesTab}</h2>
+            {salesLoading ? (
+              <div className="text-center text-sm text-gray-600">جاري التحميل...</div>
+            ) : sales.length === 0 ? (
+              <div className="text-center text-sm text-gray-600">{t.noSales}</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.saleNumber}</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.total}</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.createdAt}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {sales.map((sale) => (
+                      <tr key={sale._id}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{sale.saleNumber}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{sale.total}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{new Date(sale.createdAt).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="additional"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3 }}
+            className="space-y-4"
+          >
+            <h2 className="text-lg font-semibold text-gray-900">{t.additionalDetailsTab}</h2>
+            {/* هنا أضف stats أو inventory, e.g. fetch from inventoryAPI.getByBranch(id) */}
+            <p className="text-sm text-gray-600">عدد الطلبات: {orders.length}</p>
+            <p className="text-sm text-gray-600">إجمالي المبيعات: {sales.reduce((sum, sale) => sum + sale.total, 0)}</p>
+            {/* أضف المزيد لو في API */}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <ProfileModal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}

@@ -567,7 +567,7 @@ export function Chefs() {
             {loggedInUser?.role === 'admin' && !searchTerm && (
               <button
                 onClick={openAddModal}
-                className="mt-3 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md" {/* زد حجم */}
+                className="mt-3 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md" 
                 aria-label={t.addFirst}
               >
                 {t.addFirst}
