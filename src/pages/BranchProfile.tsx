@@ -20,9 +20,12 @@ ChartJS.register(ArcElement, BarElement, LineElement, CategoryScale, LinearScale
 interface Branch {
   id: string;
   name: string;
+  nameEn?: string;
   code: string;
   address: string;
+  addressEn?: string;
   city: string;
+  cityEn?: string;
   phone?: string;
   user?: {
     id: string;
@@ -61,7 +64,7 @@ interface Order {
   totalQuantity: number;
   createdAt: string;
   items: Array<{
-    product: string;
+    productId: string;
     quantity: number;
     price: number;
   }>;
@@ -89,9 +92,12 @@ interface Sale {
 
 interface FormState {
   name: string;
+  nameEn?: string;
   code: string;
   address: string;
+  addressEn?: string;
   city: string;
+  cityEn?: string;
   phone: string;
   user: {
     name: string;
@@ -107,7 +113,7 @@ interface State {
   returns: Return[];
   sales: Sale[];
   products: Product[];
-  activeTab: 'info' | 'stats' | 'orders' | 'returns';
+  activeTab: 'info' | 'stats' | 'orders' | 'returns' | 'sales';
   isEditModalOpen: boolean;
   isResetPasswordModalOpen: boolean;
   isDeleteModalOpen: boolean;
@@ -141,9 +147,12 @@ const initialState: State = {
   isDeleteModalOpen: false,
   formData: {
     name: '',
+    nameEn: '',
     code: '',
     address: '',
+    addressEn: '',
     city: '',
+    cityEn: '',
     phone: '',
     user: {
       name: '',
@@ -212,10 +221,14 @@ const translations = {
     statsTab: 'إحصائيات الفرع',
     ordersTab: 'الطلبات الحديثة',
     returnsTab: 'المرتجعات الحديثة',
+    salesTab: 'المبيعات الحديثة',
     name: 'اسم الفرع',
+    nameEn: 'اسم الفرع (بالإنجليزية)',
     code: 'الكود',
     address: 'العنوان',
+    addressEn: 'العنوان (بالإنجليزية)',
     city: 'المدينة',
+    cityEn: 'المدينة (بالإنجليزية)',
     phone: 'رقم الهاتف',
     user: 'المستخدم',
     userName: 'اسم المستخدم',
@@ -252,9 +265,11 @@ const translations = {
     confirmDelete: 'تأكيد حذف الفرع',
     noOrders: 'لا توجد طلبات حديثة',
     noReturns: 'لا توجد مرتجعات حديثة',
+    noSales: 'لا توجد مبيعات حديثة',
     noProducts: 'لا توجد منتجات',
     orderNumber: 'رقم الطلب',
     returnNumber: 'رقم المرتجع',
+    saleNumber: 'رقم المبيعة',
     status: 'الحالة',
     total: 'الإجمالي',
     totalQuantity: 'الكمية الإجمالية',
@@ -264,6 +279,7 @@ const translations = {
     avgDailyOrders: 'متوسط الطلبات اليومي',
     topProducts: 'المنتجات الأكثر طلبًا',
     ordersVsReturns: 'حركة الطلبات والمرتجعات',
+    salesTrend: 'اتجاه المبيعات',
     ordersByStatus: 'الطلبات حسب الحالة',
     status_mukammal: 'مكتمل',
     status_qaid_al_tanfeez: 'قيد التنفيذ',
@@ -278,10 +294,14 @@ const translations = {
     statsTab: 'Branch Stats',
     ordersTab: 'Recent Orders',
     returnsTab: 'Recent Returns',
+    salesTab: 'Recent Sales',
     name: 'Branch Name',
+    nameEn: 'Branch Name (English)',
     code: 'Code',
     address: 'Address',
+    addressEn: 'Address (English)',
     city: 'City',
+    cityEn: 'City (English)',
     phone: 'Phone',
     user: 'User',
     userName: 'User Name',
@@ -318,9 +338,11 @@ const translations = {
     confirmDelete: 'Confirm Branch Deletion',
     noOrders: 'No recent orders available',
     noReturns: 'No recent returns available',
+    noSales: 'No recent sales available',
     noProducts: 'No products available',
     orderNumber: 'Order Number',
     returnNumber: 'Return Number',
+    saleNumber: 'Sale Number',
     status: 'Status',
     total: 'Total',
     totalQuantity: 'Total Quantity',
@@ -330,6 +352,7 @@ const translations = {
     avgDailyOrders: 'Average Daily Orders',
     topProducts: 'Top Ordered Products',
     ordersVsReturns: 'Orders vs Returns Activity',
+    salesTrend: 'Sales Trend',
     ordersByStatus: 'Orders by Status',
     status_mukammal: 'Completed',
     status_qaid_al_tanfeez: 'In Progress',
@@ -370,9 +393,12 @@ const BranchProfile: React.FC = () => {
         const branchData: Branch = {
           id: response._id,
           name: response.name,
+          nameEn: response.nameEn,
           code: response.code,
           address: response.address,
+          addressEn: response.addressEn,
           city: response.city,
+          cityEn: response.cityEn,
           phone: response.phone,
           user: response.user
             ? {
@@ -395,18 +421,21 @@ const BranchProfile: React.FC = () => {
             : undefined,
           createdAt: response.createdAt,
           updatedAt: response.updatedAt,
-          displayName: response.name,
-          displayAddress: response.address,
-          displayCity: response.city,
+          displayName: isRtl ? response.name : (response.nameEn || response.name),
+          displayAddress: isRtl ? response.address : (response.addressEn || response.address),
+          displayCity: isRtl ? response.city : (response.cityEn || response.city),
         };
         dispatch({ type: 'SET_BRANCH', payload: branchData });
         dispatch({
           type: 'SET_FORM_DATA',
           payload: {
             name: branchData.name,
+            nameEn: branchData.nameEn || '',
             code: branchData.code,
             address: branchData.address,
+            addressEn: branchData.addressEn || '',
             city: branchData.city,
+            cityEn: branchData.cityEn || '',
             phone: branchData.phone || '',
             user: {
               name: branchData.user?.name || '',
@@ -452,7 +481,7 @@ const BranchProfile: React.FC = () => {
           totalQuantity: order.items.reduce((sum: number, item: any) => sum + item.quantity, 0),
           createdAt: order.createdAt,
           items: order.items.map((item: any) => ({
-            product: item.product,
+            productId: item.product,
             quantity: item.quantity,
             price: item.price,
           })),
@@ -535,7 +564,7 @@ const BranchProfile: React.FC = () => {
           setTimeout(() => fetchSales(retryCount + 1), 1000);
           return;
         }
-        toast.error(t.serverError, { position: isRtl ? 'top-right' : 'top-left' });
+        toast.error(t.noSales, { position: isRtl ? 'top-right' : 'top-left' });
       } finally {
         dispatch({ type: 'SET_SALES_LOADING', payload: false });
       }
@@ -604,9 +633,12 @@ const BranchProfile: React.FC = () => {
         dispatch({ type: 'SET_LOADING', payload: true });
         const branchData = {
           name: state.formData.name.trim(),
+          nameEn: state.formData.nameEn?.trim() || undefined,
           code: state.formData.code.trim(),
           address: state.formData.address.trim(),
+          addressEn: state.formData.addressEn?.trim() || undefined,
           city: state.formData.city.trim(),
+          cityEn: state.formData.cityEn?.trim() || undefined,
           phone: state.formData.phone.trim() || undefined,
           user: {
             name: state.formData.user.name.trim(),
@@ -620,9 +652,9 @@ const BranchProfile: React.FC = () => {
           type: 'SET_BRANCH',
           payload: {
             ...response,
-            displayName: response.name,
-            displayAddress: response.address,
-            displayCity: response.city,
+            displayName: isRtl ? response.name : (response.nameEn || response.name),
+            displayAddress: isRtl ? response.address : (response.addressEn || response.address),
+            displayCity: isRtl ? response.city : (response.cityEn || response.city),
             user: response.user
               ? { ...response.user, displayName: response.user.name }
               : undefined,
@@ -708,7 +740,7 @@ const BranchProfile: React.FC = () => {
 
     const productQuantities = state.orders.reduce((acc, order) => {
       order.items.forEach(item => {
-        acc[item.product] = (acc[item.product] || 0) + item.quantity;
+        acc[item.productId] = (acc[item.productId] || 0) + item.quantity;
       });
       return acc;
     }, {} as Record<string, number>);
@@ -756,6 +788,7 @@ const BranchProfile: React.FC = () => {
     const activityDates = [...new Set([
       ...state.orders.map(o => new Date(o.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')),
       ...state.returns.map(r => new Date(r.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')),
+      ...state.sales.map(s => new Date(s.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')),
     ])].sort();
 
     const ordersByDate = activityDates.reduce((acc, date) => {
@@ -765,6 +798,12 @@ const BranchProfile: React.FC = () => {
 
     const returnsByDate = activityDates.reduce((acc, date) => {
       acc[date] = state.returns.filter(r => new Date(r.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US') === date).length;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const salesByDate = activityDates.reduce((acc, date) => {
+      acc[date] = state.sales.filter(s => new Date(s.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US') === date)
+        .reduce((sum, sale) => sum + sale.totalAmount, 0);
       return acc;
     }, {} as Record<string, number>);
 
@@ -788,6 +827,18 @@ const BranchProfile: React.FC = () => {
           tension: 0.4,
         },
       ],
+    };
+
+    const salesTrendData = {
+      labels: activityDates,
+      datasets: [{
+        label: t.salesTrend,
+        data: activityDates.map(date => salesByDate[date] || 0),
+        borderColor: 'rgba(16, 185, 129, 1)',
+        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+        fill: true,
+        tension: 0.4,
+      }],
     };
 
     const statusCounts = state.orders.reduce((acc, order) => {
@@ -816,7 +867,7 @@ const BranchProfile: React.FC = () => {
       }],
     };
 
-    return { totalOrders, totalReturns, totalSales, avgDailyOrders, topProductsData, ordersVsReturnsData, pieData };
+    return { totalOrders, totalReturns, totalSales, avgDailyOrders, topProductsData, ordersVsReturnsData, salesTrendData, pieData };
   }, [state.orders, state.returns, state.sales, state.products, t, isRtl]);
 
   useEffect(() => {
@@ -937,6 +988,13 @@ const BranchProfile: React.FC = () => {
               >
                 {t.returnsTab}
               </button>
+              <button
+                onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'sales' })}
+                className={`px-4 py-2 text-xs font-medium ${state.activeTab === 'sales' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600 hover:text-amber-600'} transition-colors`}
+                aria-label={t.salesTab}
+              >
+                {t.salesTab}
+              </button>
             </div>
 
             <AnimatePresence mode="wait">
@@ -1019,8 +1077,8 @@ const BranchProfile: React.FC = () => {
                 >
                   <h2 className="text-lg font-semibold text-gray-900">{t.statsTab}</h2>
                   {state.ordersLoading || state.returnsLoading || state.salesLoading || state.productsLoading ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {[...Array(3)].map((_, index) => (
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      {[...Array(4)].map((_, index) => (
                         <div key={index} className="p-3 bg-gray-50 rounded-lg animate-pulse">
                           <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
                           <div className="h-6 bg-gray-200 rounded w-3/4"></div>
@@ -1031,35 +1089,55 @@ const BranchProfile: React.FC = () => {
                     <div className="text-center text-xs text-gray-600">{t.noOrders}</div>
                   ) : (
                     <div className="space-y-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                        <motion.div
+                          className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2"
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.3 }}
+                        >
                           <Box className="w-5 h-5 text-amber-600" />
                           <div>
                             <p className="text-xs text-gray-600">{t.totalOrders}</p>
                             <p className="text-lg font-semibold text-gray-900">{statsData.totalOrders}</p>
                           </div>
-                        </div>
-                        <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2">
+                        </motion.div>
+                        <motion.div
+                          className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2"
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.3, delay: 0.1 }}
+                        >
                           <Package className="w-5 h-5 text-amber-600" />
                           <div>
                             <p className="text-xs text-gray-600">{t.totalReturns}</p>
                             <p className="text-lg font-semibold text-gray-900">{statsData.totalReturns}</p>
                           </div>
-                        </div>
-                        <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2">
+                        </motion.div>
+                        <motion.div
+                          className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2"
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.3, delay: 0.2 }}
+                        >
                           <TrendingUp className="w-5 h-5 text-amber-600" />
                           <div>
                             <p className="text-xs text-gray-600">{t.totalSales}</p>
                             <p className="text-lg font-semibold text-gray-900">{statsData.totalSales.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}</p>
                           </div>
-                        </div>
-                        <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2">
+                        </motion.div>
+                        <motion.div
+                          className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2"
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.3, delay: 0.3 }}
+                        >
                           <Calendar className="w-5 h-5 text-amber-600" />
                           <div>
                             <p className="text-xs text-gray-600">{t.avgDailyOrders}</p>
                             <p className="text-lg font-semibold text-gray-900">{statsData.avgDailyOrders}</p>
                           </div>
-                        </div>
+                        </motion.div>
                       </div>
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         <motion.div
@@ -1174,6 +1252,60 @@ const BranchProfile: React.FC = () => {
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ duration: 0.3, delay: 0.2 }}
                         >
+                          <h3 className="text-sm font-medium text-gray-900 mb-3">{t.salesTrend}</h3>
+                          <div className="h-64">
+                            <Suspense fallback={<LoadingSpinner size="sm" />}>
+                              <Line
+                                data={statsData.salesTrendData}
+                                options={{
+                                  responsive: true,
+                                  maintainAspectRatio: false,
+                                  plugins: {
+                                    legend: { position: 'bottom', labels: { font: { size: 12 } } },
+                                    tooltip: {
+                                      backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                      titleFont: { size: 12 },
+                                      bodyFont: { size: 12 },
+                                      padding: 10,
+                                    },
+                                  },
+                                  scales: {
+                                    y: {
+                                      beginAtZero: true,
+                                      title: {
+                                        display: true,
+                                        text: isRtl ? 'القيمة (ريال)' : 'Value (SAR)',
+                                        font: { size: 12 },
+                                      },
+                                      ticks: {
+                                        font: { size: 10 },
+                                        callback: (value) => value.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' }),
+                                      },
+                                    },
+                                    x: {
+                                      title: {
+                                        display: true,
+                                        text: isRtl ? 'التاريخ' : 'Date',
+                                        font: { size: 12 },
+                                      },
+                                      ticks: { font: { size: 10 } },
+                                    },
+                                  },
+                                  animation: {
+                                    duration: 1000,
+                                    easing: 'easeOutQuart',
+                                  },
+                                }}
+                              />
+                            </Suspense>
+                          </div>
+                        </motion.div>
+                        <motion.div
+                          className="p-4 bg-white rounded-lg shadow-sm border border-gray-100"
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.3, delay: 0.3 }}
+                        >
                           <h3 className="text-sm font-medium text-gray-900 mb-3">{t.ordersByStatus}</h3>
                           <div className="h-64">
                             <Suspense fallback={<LoadingSpinner size="sm" />}>
@@ -1252,7 +1384,7 @@ const BranchProfile: React.FC = () => {
                     </div>
                   )}
                 </motion.div>
-              ) : (
+              ) : state.activeTab === 'returns' ? (
                 <motion.div
                   key="returns"
                   initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
@@ -1300,7 +1432,51 @@ const BranchProfile: React.FC = () => {
                     </div>
                   )}
                 </motion.div>
-              )}
+              ) : state.activeTab === 'sales' ? (
+                <motion.div
+                  key="sales"
+                  initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: isRtl ? -20 : 20 }}
+                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  className="space-y-4"
+                >
+                  <h2 className="text-lg font-semibold text-gray-900">{t.salesTab}</h2>
+                  {state.salesLoading ? (
+                    <div className="space-y-3">
+                      {[...Array(3)].map((_, index) => (
+                        <div key={index} className="p-3 bg-gray-50 rounded-lg animate-pulse">
+                          <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+                          <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : state.sales.length === 0 ? (
+                    <div className="text-center text-xs text-gray-600">{t.noSales}</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.saleNumber}</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.total}</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.createdAt}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {state.sales.map((sale) => (
+                            <tr key={sale.id}>
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-900">{sale.orderId}</td>
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{sale.totalAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}</td>
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{new Date(sale.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </motion.div>
+              ) : null}
             </AnimatePresence>
 
             {user?.role === 'admin' && (
@@ -1367,6 +1543,15 @@ const BranchProfile: React.FC = () => {
                       {state.formErrors.name && <p className="text-xs text-red-600 mt-1">{state.formErrors.name}</p>}
                     </div>
                     <div>
+                      <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">{t.nameEn}</label>
+                      <FormInput
+                        value={state.formData.nameEn}
+                        onChange={(value) => dispatch({ type: 'SET_FORM_DATA', payload: { ...state.formData, nameEn: value } })}
+                        placeholder={t.nameEn}
+                        ariaLabel={t.nameEn}
+                      />
+                    </div>
+                    <div>
                       <label htmlFor="code" className="block text-xs font-medium text-gray-700 mb-1">{t.code}</label>
                       <FormInput
                         value={state.formData.code}
@@ -1389,6 +1574,15 @@ const BranchProfile: React.FC = () => {
                       {state.formErrors.address && <p className="text-xs text-red-600 mt-1">{state.formErrors.address}</p>}
                     </div>
                     <div>
+                      <label htmlFor="addressEn" className="block text-xs font-medium text-gray-700 mb-1">{t.addressEn}</label>
+                      <FormInput
+                        value={state.formData.addressEn}
+                        onChange={(value) => dispatch({ type: 'SET_FORM_DATA', payload: { ...state.formData, addressEn: value } })}
+                        placeholder={t.addressEn}
+                        ariaLabel={t.addressEn}
+                      />
+                    </div>
+                    <div>
                       <label htmlFor="city" className="block text-xs font-medium text-gray-700 mb-1">{t.city}</label>
                       <FormInput
                         value={state.formData.city}
@@ -1400,17 +1594,25 @@ const BranchProfile: React.FC = () => {
                       {state.formErrors.city && <p className="text-xs text-red-600 mt-1">{state.formErrors.city}</p>}
                     </div>
                     <div>
+                      <label htmlFor="cityEn" className="block text-xs font-medium text-gray-700 mb-1">{t.cityEn}</label>
+                      <FormInput
+                        value={state.formData.cityEn}
+                        onChange={(value) => dispatch({ type: 'SET_FORM_DATA', payload: { ...state.formData, cityEn: value } })}
+                        placeholder={t.cityEn}
+                        ariaLabel={t.cityEn}
+                      />
+                    </div>
+                    <div>
                       <label htmlFor="phone" className="block text-xs font-medium text-gray-700 mb-1">{t.phone}</label>
                       <FormInput
                         value={state.formData.phone}
                         onChange={(value) => dispatch({ type: 'SET_FORM_DATA', payload: { ...state.formData, phone: value } })}
                         placeholder={t.phone}
                         ariaLabel={t.phone}
-                        type="tel"
                       />
                     </div>
                     <div>
-                      <label htmlFor="userName" className="block text-xs font-medium text-gray-700 mb-1">{t.userName}</label>
+                      <label htmlFor="user.name" className="block text-xs font-medium text-gray-700 mb-1">{t.userName}</label>
                       <FormInput
                         value={state.formData.user.name}
                         onChange={(value) => dispatch({ type: 'SET_FORM_DATA', payload: { ...state.formData, user: { ...state.formData.user, name: value } } })}
@@ -1421,7 +1623,7 @@ const BranchProfile: React.FC = () => {
                       {state.formErrors['user.name'] && <p className="text-xs text-red-600 mt-1">{state.formErrors['user.name']}</p>}
                     </div>
                     <div>
-                      <label htmlFor="username" className="block text-xs font-medium text-gray-700 mb-1">{t.username}</label>
+                      <label htmlFor="user.username" className="block text-xs font-medium text-gray-700 mb-1">{t.username}</label>
                       <FormInput
                         value={state.formData.user.username}
                         onChange={(value) => dispatch({ type: 'SET_FORM_DATA', payload: { ...state.formData, user: { ...state.formData.user, username: value } } })}
@@ -1432,34 +1634,26 @@ const BranchProfile: React.FC = () => {
                       {state.formErrors['user.username'] && <p className="text-xs text-red-600 mt-1">{state.formErrors['user.username']}</p>}
                     </div>
                     <div>
-                      <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1">{t.email}</label>
+                      <label htmlFor="user.email" className="block text-xs font-medium text-gray-700 mb-1">{t.email}</label>
                       <FormInput
                         value={state.formData.user.email}
                         onChange={(value) => dispatch({ type: 'SET_FORM_DATA', payload: { ...state.formData, user: { ...state.formData.user, email: value } } })}
                         placeholder={t.email}
                         ariaLabel={t.email}
-                        type="email"
                         error={state.formErrors['user.email']}
                       />
                       {state.formErrors['user.email'] && <p className="text-xs text-red-600 mt-1">{state.formErrors['user.email']}</p>}
                     </div>
                     <div>
-                      <label htmlFor="userPhone" className="block text-xs font-medium text-gray-700 mb-1">{t.userPhone}</label>
+                      <label htmlFor="user.phone" className="block text-xs font-medium text-gray-700 mb-1">{t.userPhone}</label>
                       <FormInput
                         value={state.formData.user.phone}
                         onChange={(value) => dispatch({ type: 'SET_FORM_DATA', payload: { ...state.formData, user: { ...state.formData.user, phone: value } } })}
                         placeholder={t.userPhone}
                         ariaLabel={t.userPhone}
-                        type="tel"
                       />
                     </div>
                   </div>
-                  {state.error && (
-                    <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 text-red-600" />
-                      <span className="text-red-600 text-xs">{state.error}</span>
-                    </div>
-                  )}
                   <div className="flex justify-end gap-2 mt-4">
                     <button
                       type="button"
@@ -1471,17 +1665,20 @@ const BranchProfile: React.FC = () => {
                     </button>
                     <button
                       type="submit"
-                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                      disabled={state.loading}
+                      className={`px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md ${state.loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                       aria-label={t.save}
                     >
-                      {t.save}
+                      {state.loading ? <LoadingSpinner size="sm" /> : t.save}
                     </button>
                   </div>
                 </form>
               </motion.div>
             </motion.div>
           )}
+        </AnimatePresence>
 
+        <AnimatePresence>
           {state.isResetPasswordModalOpen && (
             <motion.div
               initial={{ opacity: 0 }}
@@ -1496,43 +1693,71 @@ const BranchProfile: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 50 }}
                 transition={{ duration: 0.15, ease: 'easeInOut' }}
-                className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-5"
+                className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5"
                 onClick={(e) => e.stopPropagation()}
               >
                 <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.resetPassword}</h3>
                 <form onSubmit={handleResetPassword} className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
                   <div>
-                    <label htmlFor="newPassword" className="block text-xs font-medium text-gray-700 mb-1">{t.newPassword}</label>
-                    <FormInput
-                      value={state.passwordData.password}
-                      onChange={(value) => dispatch({ type: 'SET_PASSWORD_DATA', payload: { ...state.passwordData, password: value } })}
-                      placeholder={t.passwordPlaceholder}
-                      ariaLabel={t.newPassword}
-                      type={state.showPassword ? 'text' : 'password'}
-                      showPasswordToggle
-                      showPassword={state.showPassword}
-                      togglePasswordVisibility={() => dispatch({ type: 'TOGGLE_PASSWORD_VISIBILITY', payload: { field: 'showPassword' } })}
-                    />
+                    <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">{t.newPassword}</label>
+                    <div className="relative">
+                      <FormInput
+                        value={state.passwordData.password}
+                        onChange={(value) => dispatch({ type: 'SET_PASSWORD_DATA', payload: { ...state.passwordData, password: value } })}
+                        placeholder={t.passwordPlaceholder}
+                        ariaLabel={t.newPassword}
+                        type={state.showPassword ? 'text' : 'password'}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => dispatch({ type: 'TOGGLE_PASSWORD_VISIBILITY', payload: { field: 'showPassword' } })}
+                        className="absolute inset-y-0 right-2 flex items-center text-gray-500 hover:text-gray-700"
+                        aria-label={state.showPassword ? (isRtl ? 'إخفاء كلمة المرور' : 'Hide password') : (isRtl ? 'إظهار كلمة المرور' : 'Show password')}
+                      >
+                        {state.showPassword ? (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        )}
+                      </button>
+                    </div>
+                    {state.error && state.error.includes('password') && <p className="text-xs text-red-600 mt-1">{state.error}</p>}
                   </div>
                   <div>
                     <label htmlFor="confirmPassword" className="block text-xs font-medium text-gray-700 mb-1">{t.confirmPassword}</label>
-                    <FormInput
-                      value={state.passwordData.confirmPassword}
-                      onChange={(value) => dispatch({ type: 'SET_PASSWORD_DATA', payload: { ...state.passwordData, confirmPassword: value } })}
-                      placeholder={t.confirmPasswordPlaceholder}
-                      ariaLabel={t.confirmPassword}
-                      type={state.showConfirmPassword ? 'text' : 'password'}
-                      showPasswordToggle
-                      showPassword={state.showConfirmPassword}
-                      togglePasswordVisibility={() => dispatch({ type: 'TOGGLE_PASSWORD_VISIBILITY', payload: { field: 'showConfirmPassword' } })}
-                    />
-                  </div>
-                  {state.error && (
-                    <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 text-red-600" />
-                      <span className="text-red-600 text-xs">{state.error}</span>
+                    <div className="relative">
+                      <FormInput
+                        value={state.passwordData.confirmPassword}
+                        onChange={(value) => dispatch({ type: 'SET_PASSWORD_DATA', payload: { ...state.passwordData, confirmPassword: value } })}
+                        placeholder={t.confirmPasswordPlaceholder}
+                        ariaLabel={t.confirmPassword}
+                        type={state.showConfirmPassword ? 'text' : 'password'}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => dispatch({ type: 'TOGGLE_PASSWORD_VISIBILITY', payload: { field: 'showConfirmPassword' } })}
+                        className="absolute inset-y-0 right-2 flex items-center text-gray-500 hover:text-gray-700"
+                        aria-label={state.showConfirmPassword ? (isRtl ? 'إخفاء تأكيد كلمة المرور' : 'Hide confirm password') : (isRtl ? 'إظهار تأكيد كلمة المرور' : 'Show confirm password')}
+                      >
+                        {state.showConfirmPassword ? (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        )}
+                      </button>
                     </div>
-                  )}
+                    {state.error && state.error.includes('match') && <p className="text-xs text-red-600 mt-1">{state.error}</p>}
+                  </div>
                   <div className="flex justify-end gap-2 mt-4">
                     <button
                       type="button"
@@ -1544,10 +1769,11 @@ const BranchProfile: React.FC = () => {
                     </button>
                     <button
                       type="submit"
-                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                      disabled={state.loading}
+                      className={`px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md ${state.loading ? 'opacity-50 cursor-not-allowed' : ''}`}
                       aria-label={t.save}
                     >
-                      {t.save}
+                      {state.loading ? <LoadingSpinner size="sm" /> : t.save}
                     </button>
                   </div>
                 </form>
@@ -1555,10 +1781,53 @@ const BranchProfile: React.FC = () => {
             </motion.div>
           )}
         </AnimatePresence>
+
+        <AnimatePresence>
+          {state.isDeleteModalOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15, ease: 'easeInOut' }}
+              className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50"
+              onClick={() => dispatch({ type: 'SET_MODAL', payload: { modal: 'isDeleteModalOpen', isOpen: false } })}
+            >
+              <motion.div
+                initial={{ opacity: 0, y: 50 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 50 }}
+                transition={{ duration: 0.15, ease: 'easeInOut' }}
+                className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.confirmDelete}</h3>
+                <p className="text-xs text-gray-600 mb-4">{t.deleteWarning}</p>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => dispatch({ type: 'SET_MODAL', payload: { modal: 'isDeleteModalOpen', isOpen: false } })}
+                    className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                    aria-label={t.cancel}
+                  >
+                    {t.cancel}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={state.loading}
+                    className={`px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md ${state.loading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    aria-label={t.deleteBranch}
+                  >
+                    {state.loading ? <LoadingSpinner size="sm" /> : t.deleteBranch}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </Suspense>
     </div>
   );
-}
-
+};
 
 export default BranchProfile;

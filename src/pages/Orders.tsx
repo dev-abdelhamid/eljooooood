@@ -488,6 +488,7 @@ export const Orders: React.FC = () => {
       }
       dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
     });
+    socket.off('itemStatusUpdated');
     socket.on('itemStatusUpdated', ({ orderId, itemId, status }: { orderId: string; itemId: string; status: string }) => {
       if (!orderId || !itemId || !status) {
         console.warn('Invalid item status update data:', { orderId, itemId, status });
@@ -673,7 +674,7 @@ export const Orders: React.FC = () => {
         });
         dispatch({ type: 'SET_ERROR', payload: '' });
       } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Fetch data error:`, err);
+        console.error('Fetch data error:', err.message);
         if (retryCount < 2) {
           setTimeout(() => fetchData(retryCount + 1), 1000);
           return;
@@ -699,15 +700,23 @@ export const Orders: React.FC = () => {
   );
 
   const filteredOrders = useMemo(
-    () =>
-      state.orders
+    () => {
+      const normalizedQuery = normalizeText(state.searchQuery);
+      return state.orders
+        .filter(order => order)
         .filter(
           order =>
-            (order.orderNumber || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            (order.branch.displayName || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            (order.notes || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            (order.createdBy || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.items.some(item => (item.displayProductName || '').toLowerCase().includes(state.searchQuery.toLowerCase()))
+            normalizeText(order.orderNumber || '').includes(normalizedQuery) ||
+            normalizeText(order.branch.displayName || '').includes(normalizedQuery) ||
+            normalizeText(order.branch.name || '').includes(normalizedQuery) ||
+            normalizeText(order.branch.nameEn || '').includes(normalizedQuery) ||
+            normalizeText(order.notes || '').includes(normalizedQuery) ||
+            normalizeText(order.createdBy || '').includes(normalizedQuery) ||
+            order.items.some(item =>
+              normalizeText(item.displayProductName || '').includes(normalizedQuery) ||
+              normalizeText(item.productName || '').includes(normalizedQuery) ||
+              normalizeText(item.productNameEn || '').includes(normalizedQuery)
+            )
         )
         .filter(
           order =>
@@ -716,7 +725,8 @@ export const Orders: React.FC = () => {
             (user?.role === 'production' && user?.department
               ? order.items.some(item => item.department._id === user.department._id)
               : true)
-        ),
+        );
+    },
     [state.orders, state.searchQuery, state.filterStatus, state.filterBranch, user]
   );
 
@@ -894,44 +904,6 @@ export const Orders: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
-  const getStatusLabel = (status: string) => {
-    const labelsAr = {
-      '': 'كل الحالات',
-      pending: 'قيد الانتظار',
-      approved: 'تم الموافقة',
-      in_production: 'في الإنتاج',
-      completed: 'مكتمل',
-      in_transit: 'في النقل',
-      delivered: 'تم التسليم',
-      cancelled: 'ملغى',
-    };
-    const labelsEn = {
-      '': 'All Statuses',
-      pending: 'Pending',
-      approved: 'Approved',
-      in_production: 'In Production',
-      completed: 'Completed',
-      in_transit: 'In Transit',
-      delivered: 'Delivered',
-      cancelled: 'Cancelled',
-    };
-    return isRtl ? (labelsAr[status] || status) : (labelsEn[status] || status);
-  };
-
-  const getSortLabel = (value: string) => {
-    const labelsAr = {
-      date: 'التاريخ',
-      totalAmount: 'إجمالي المبلغ',
-      priority: 'الأولوية',
-    };
-    const labelsEn = {
-      date: 'Date',
-      totalAmount: 'Total Amount',
-      priority: 'Priority',
-    };
-    return isRtl ? (labelsAr[value] || value) : (labelsEn[value] || value);
-  };
-
   return (
     <div className="px-2 py-4">
       <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
@@ -1040,19 +1012,46 @@ export const Orders: React.FC = () => {
             </div>
           </Card>
           <div ref={listRef} className="mt-6 min-h-[300px]">
-            <AnimatePresence mode="wait">
+            <AnimatePresence>
               {state.loading ? (
-                <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }} className="space-y-1">
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-1"
+                >
                   {state.viewMode === 'card' ? (
                     <div className="grid grid-cols-1 gap-1">
-                      {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)}
+                      {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => (
+                        <motion.div
+                          key={i}
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.3, delay: i * 0.05 }}
+                        >
+                          <OrderCardSkeleton isRtl={isRtl} />
+                        </motion.div>
+                      ))}
                     </div>
                   ) : (
-                    <OrderTableSkeleton isRtl={isRtl} rows={ORDERS_PER_PAGE.table} />
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <OrderTableSkeleton isRtl={isRtl} rows={ORDERS_PER_PAGE.table} />
+                    </motion.div>
                   )}
                 </motion.div>
               ) : state.error ? (
-                <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }} className="mt-6">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.4 }}
+                  className="mt-6"
+                >
                   <Card className="p-5 max-w-md mx-auto text-center bg-red-50 shadow-md rounded-xl border border-red-100">
                     <div className={`flex items-center justify-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
                       <AlertCircle className="w-5 h-5 text-red-600" />
@@ -1069,21 +1068,25 @@ export const Orders: React.FC = () => {
                   </Card>
                 </motion.div>
               ) : (
-                <AnimatePresence mode="wait">
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.4 }}
+                  className="space-y-3"
+                >
                   {paginatedOrders.length === 0 ? (
-                    <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }} className="mt-6">
-                      <Card className="p-6 text-center bg-white shadow-md rounded-xl border border-gray-100">
-                        <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-                        <h3 className="text-base font-medium text-gray-800 mb-1">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
-                        <p className="text-xs text-gray-500">
-                          {state.filterStatus || state.filterBranch || state.searchQuery
-                            ? isRtl ? 'لا توجد طلبات مطابقة' : 'No matching orders'
-                            : isRtl ? 'لا توجد طلبات بعد' : 'No orders yet'}
-                        </p>
-                      </Card>
-                    </motion.div>
+                    <Card className="p-6 text-center bg-white shadow-md rounded-xl border border-gray-100">
+                      <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+                      <h3 className="text-base font-medium text-gray-800 mb-1">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
+                      <p className="text-xs text-gray-500">
+                        {state.filterStatus || state.filterBranch || state.searchQuery
+                          ? isRtl ? 'لا توجد طلبات مطابقة' : 'No matching orders'
+                          : isRtl ? 'لا توجد طلبات بعد' : 'No orders yet'}
+                      </p>
+                    </Card>
                   ) : (
-                    <motion.div key="orders-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }} className="space-y-3">
+                    <>
                       {state.viewMode === 'table' ? (
                         <OrderTable
                           orders={paginatedOrders.filter(o => o && o.id && o.branchId && o.orderNumber)}
@@ -1121,7 +1124,7 @@ export const Orders: React.FC = () => {
                           handlePageChange={handlePageChange}
                         />
                       )}
-                    </motion.div>
+                    </>
                   )}
                   <AssignChefsModal
                     isOpen={state.isAssignModalOpen}
@@ -1139,7 +1142,7 @@ export const Orders: React.FC = () => {
                     submitting={state.submitting}
                     isRtl={isRtl}
                   />
-                </AnimatePresence>
+                </motion.div>
               )}
             </AnimatePresence>
           </div>
