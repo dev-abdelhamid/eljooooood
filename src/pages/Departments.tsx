@@ -325,7 +325,7 @@ export function Departments() {
         ease: 'easeOut',
         delay: index * 0.1,
       },
-    ),
+    }),
     exit: {
       opacity: 0,
       y: -20,
