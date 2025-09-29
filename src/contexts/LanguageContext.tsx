@@ -26,6 +26,8 @@ const translations = {
     "edit": "تعديل",
     "delete": "حذف",
     "add": "إضافة",
+    "setings": "الاعدادات",
+    
     "view": "عرض",
     "search": "بحث",
     "filter": "تصفية",

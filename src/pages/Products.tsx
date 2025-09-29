@@ -17,6 +17,7 @@ interface Product {
   unit?: string;
   unitEn?: string;
   image?: string;
+  status: 'Available' | 'Unavailable';
   displayName: string;
   displayUnit: string;
 }
@@ -27,11 +28,101 @@ interface Department {
   nameEn?: string;
 }
 
+const translations = {
+  ar: {
+    manage: 'إدارة المنتجات',
+    add: 'إضافة منتج جديد',
+    addFirst: 'إضافة أول منتج',
+    empty: 'لا توجد منتجات متاحة',
+    noMatch: 'لا توجد منتجات مطابقة',
+    searchPlaceholder: 'ابحث عن المنتجات...',
+    filterDepartment: 'تصفية حسب القسم',
+    allDepartments: 'كل الأقسام',
+    name: 'اسم المنتج',
+    nameEn: 'الاسم بالإنجليزية',
+    code: 'رمز المنتج',
+    department: 'القسم',
+    price: 'السعر',
+    unit: 'الوحدة',
+    status: 'الحالة',
+    edit: 'تعديل',
+    delete: 'حذف',
+    namePlaceholder: 'أدخل اسم المنتج',
+    nameEnPlaceholder: 'أدخل الاسم بالإنجليزية',
+    codePlaceholder: 'أدخل رمز المنتج',
+    pricePlaceholder: 'أدخل السعر',
+    unitPlaceholder: 'اختر الوحدة',
+    departmentPlaceholder: 'اختر القسم',
+    statusPlaceholder: 'اختر الحالة',
+    update: 'تحديث المنتج',
+    requiredFields: 'يرجى ملء جميع الحقول المطلوبة',
+    invalidUnit: 'الوحدة غير صالحة، اختر من القائمة',
+    invalidStatus: 'الحالة غير صالحة، اختر من القائمة',
+    invalidPrice: 'السعر يجب أن يكون رقمًا إيجابيًا',
+    unauthorized: 'غير مصرح',
+    fetchError: 'خطأ في جلب البيانات',
+    saveError: 'خطأ في حفظ المنتج',
+    deleteError: 'خطأ في حذف المنتج',
+    added: 'تم إنشاء المنتج بنجاح',
+    updated: 'تم تحديث المنتج بنجاح',
+    deleted: 'تم حذف المنتج بنجاح',
+    confirmDelete: 'تأكيد الحذف',
+    deleteWarning: 'هل أنت متأكد من حذف هذا المنتج؟',
+    cancel: 'إلغاء',
+  },
+  en: {
+    manage: 'Manage Products',
+    add: 'Add New Product',
+    addFirst: 'Add First Product',
+    empty: 'No products available',
+    noMatch: 'No matching products',
+    searchPlaceholder: 'Search products...',
+    filterDepartment: 'Filter by department',
+    allDepartments: 'All Departments',
+    name: 'Product Name',
+    nameEn: 'English Name',
+    code: 'Product Code',
+    department: 'Department',
+    price: 'Price',
+    unit: 'Unit',
+    status: 'Status',
+    edit: 'Edit',
+    delete: 'Delete',
+    namePlaceholder: 'Enter product name',
+    nameEnPlaceholder: 'Enter English name',
+    codePlaceholder: 'Enter product code',
+    pricePlaceholder: 'Enter price',
+    unitPlaceholder: 'Select Unit',
+    departmentPlaceholder: 'Select Department',
+    statusPlaceholder: 'Select Status',
+    update: 'Update Product',
+    requiredFields: 'Please fill all required fields',
+    invalidUnit: 'Invalid unit, please select from the list',
+    invalidStatus: 'Invalid status, please select from the list',
+    invalidPrice: 'Price must be a positive number',
+    unauthorized: 'Unauthorized',
+    fetchError: 'Error fetching data',
+    saveError: 'Error saving product',
+    deleteError: 'Error deleting product',
+    added: 'Product created successfully',
+    updated: 'Product updated successfully',
+    deleted: 'Product deleted successfully',
+    confirmDelete: 'Confirm Deletion',
+    deleteWarning: 'Are you sure you want to delete this product?',
+    cancel: 'Cancel',
+  },
+};
+
 const unitOptions = [
   { value: 'كيلو', valueEn: 'Kilo', labelAr: 'كيلو', labelEn: 'Kilo' },
   { value: 'قطعة', valueEn: 'Piece', labelAr: 'قطعة', labelEn: 'Piece' },
   { value: 'علبة', valueEn: 'Pack', labelAr: 'علبة', labelEn: 'Pack' },
   { value: 'صينية', valueEn: 'Tray', labelAr: 'صينية', labelEn: 'Tray' },
+];
+
+const statusOptions = [
+  { value: 'Available', labelAr: 'متوفر', labelEn: 'Available' },
+  { value: 'Unavailable', labelAr: 'غير متوفر', labelEn: 'Unavailable' },
 ];
 
 const CustomInput = ({
@@ -148,6 +239,7 @@ const CustomDropdown = ({
 export function Products() {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
+  const t = translations[isRtl ? 'ar' : 'en'];
   const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -170,8 +262,9 @@ export function Products() {
 
   useEffect(() => {
     if (!user || !['admin', 'production'].includes(user.role)) {
-      setError(isRtl ? 'غير مصرح' : 'Unauthorized');
+      setError(t.unauthorized);
       setLoading(false);
+      toast.error(t.unauthorized);
       return;
     }
 
@@ -193,18 +286,19 @@ export function Products() {
         setError('');
       } catch (err: any) {
         console.error('Fetch error:', err);
-        setError(err.response?.data?.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
-        toast.error(err.response?.data?.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
+        setError(err.response?.data?.message || t.fetchError);
+        toast.error(err.response?.data?.message || t.fetchError);
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [isRtl, user, filterDepartment, searchTerm]);
+  }, [isRtl, user, filterDepartment, searchTerm, t]);
 
   const openModal = (product?: Product) => {
     if (!user || !['admin', 'production'].includes(user.role)) {
-      setError(isRtl ? 'غير مصرح' : 'Unauthorized');
+      setError(t.unauthorized);
+      toast.error(t.unauthorized);
       return;
     }
     if (product) {
@@ -215,7 +309,8 @@ export function Products() {
         code: product.code,
         department: product.department._id,
         price: product.price.toString(),
-        unit: product.unit || '', // لو الوحدة مش موجودة، نتركها فارغة
+        unit: product.unit || '',
+        status: product.status || 'Available',
       });
     } else {
       setEditingProduct(null);
@@ -225,7 +320,8 @@ export function Products() {
         code: '',
         department: departments[0]?._id || '',
         price: '',
-        unit: '', // فارغة للإضافة الجديدة
+        unit: '',
+        status: 'Available',
       });
     }
     setIsModalOpen(true);
@@ -244,23 +340,40 @@ export function Products() {
     department: '',
     price: '',
     unit: '',
+    status: 'Available' as 'Available' | 'Unavailable',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // فحص إذا كانت الوحدة موجودة في الخيارات
-    if (!unitOptions.some((opt) => opt.value === formData.unit)) {
-      setError(isRtl ? 'الوحدة غير صالحة، اختر من القائمة' : 'Invalid unit, please select from the list');
+    if (!formData.name || !formData.code || !formData.department || !formData.price) {
+      setError(t.requiredFields);
+      toast.error(t.requiredFields);
+      return;
+    }
+    if (isNaN(parseFloat(formData.price)) || parseFloat(formData.price) <= 0) {
+      setError(t.invalidPrice);
+      toast.error(t.invalidPrice);
+      return;
+    }
+    if (formData.unit && !unitOptions.some((opt) => opt.value === formData.unit)) {
+      setError(t.invalidUnit);
+      toast.error(t.invalidUnit);
+      return;
+    }
+    if (!statusOptions.some((opt) => opt.value === formData.status)) {
+      setError(t.invalidStatus);
+      toast.error(t.invalidStatus);
       return;
     }
     try {
       const productData = {
-        name: formData.name,
-        nameEn: formData.nameEn || undefined,
-        code: formData.code,
+        name: formData.name.trim(),
+        nameEn: formData.nameEn?.trim() || undefined,
+        code: formData.code.trim(),
         department: formData.department,
         price: parseFloat(formData.price),
         unit: formData.unit || undefined,
+        status: formData.status,
       };
       if (editingProduct) {
         const updatedProduct = await productsAPI.update(editingProduct._id, productData);
@@ -275,7 +388,7 @@ export function Products() {
               : p
           )
         );
-        toast.success(isRtl ? 'تم تحديث المنتج بنجاح' : 'Product updated successfully');
+        toast.success(t.updated);
       } else {
         const newProduct = await productsAPI.create(productData);
         setProducts([
@@ -286,13 +399,13 @@ export function Products() {
             displayUnit: isRtl ? (newProduct.unit || 'غير محدد') : (newProduct.unitEn || newProduct.unit || 'N/A'),
           },
         ]);
-        toast.success(isRtl ? 'تم إنشاء المنتج بنجاح' : 'Product created successfully');
+        toast.success(t.added);
       }
       closeModal();
     } catch (err: any) {
       console.error('Submit error:', err);
-      setError(err.response?.data?.message || (isRtl ? 'خطأ في حفظ المنتج' : 'Error saving product'));
-      toast.error(err.response?.data?.message || (isRtl ? 'خطأ في حفظ المنتج' : 'Error saving product'));
+      setError(err.response?.data?.message || t.saveError);
+      toast.error(err.response?.data?.message || t.saveError);
     }
   };
 
@@ -309,18 +422,19 @@ export function Products() {
   const confirmDelete = async () => {
     if (!deletingProductId) return;
     if (!user || !['admin', 'production'].includes(user.role)) {
-      setError(isRtl ? 'غير مصرح' : 'Unauthorized');
+      setError(t.unauthorized);
+      toast.error(t.unauthorized);
       return;
     }
     try {
       await productsAPI.delete(deletingProductId);
       setProducts(products.filter((p) => p._id !== deletingProductId));
-      toast.success(isRtl ? 'تم حذف المنتج بنجاح' : 'Product deleted successfully');
+      toast.success(t.deleted);
       closeDeleteModal();
     } catch (err: any) {
       console.error('Delete error:', err);
-      setError(err.response?.data?.message || (isRtl ? 'خطأ في حذف المنتج' : 'Error deleting product'));
-      toast.error(err.response?.data?.message || (isRtl ? 'خطأ في حذف المنتج' : 'Error deleting product'));
+      setError(err.response?.data?.message || t.deleteError);
+      toast.error(err.response?.data?.message || t.deleteError);
     }
   };
 
@@ -330,20 +444,18 @@ export function Products() {
         <div className="flex items-center gap-2">
           <Package className="w-6 h-6 text-amber-600" />
           <div>
-            <h1 className="text-xl font-bold text-gray-900">{isRtl ? 'إدارة المنتجات' : 'Manage Products'}</h1>
-            <p className="text-gray-600 text-xs">
-              {isRtl ? 'قم بإضافة المنتجات أو تعديلها أو حذفها' : 'Add, edit, or delete products'}
-            </p>
+            <h1 className="text-xl font-bold text-gray-900">{t.manage}</h1>
+            <p className="text-gray-600 text-xs">{isRtl ? 'قم بإضافة المنتجات أو تعديلها أو حذفها' : 'Add, edit, or delete products'}</p>
           </div>
         </div>
         {['admin', 'production'].includes(user?.role ?? '') && (
           <button
             onClick={() => openModal()}
             className="w-full sm:w-auto px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
-            aria-label={isRtl ? 'إضافة منتج جديد' : 'Add New Product'}
+            aria-label={t.add}
           >
             <Plus className="w-3.5 h-3.5" />
-            {isRtl ? 'إضافة منتج جديد' : 'Add New Product'}
+            {t.add}
           </button>
         )}
       </div>
@@ -364,20 +476,20 @@ export function Products() {
                 setSearchInput(e.target.value);
                 debouncedSearch(e.target.value);
               }}
-              placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
-              ariaLabel={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
+              placeholder={t.searchPlaceholder}
+              ariaLabel={t.searchPlaceholder}
             />
             <CustomDropdown
               value={filterDepartment}
               onChange={setFilterDepartment}
               options={[
-                { value: '', label: isRtl ? 'كل الأقسام' : 'All Departments' },
+                { value: '', label: t.allDepartments },
                 ...departments.map((d) => ({
                   value: d._id,
                   label: isRtl ? d.name : (d.nameEn || d.name),
                 })),
               ]}
-              ariaLabel={isRtl ? 'تصفية حسب القسم' : 'Filter by department'}
+              ariaLabel={t.filterDepartment}
             />
           </div>
         </div>
@@ -400,14 +512,14 @@ export function Products() {
         ) : products.length === 0 ? (
           <div className="p-6 text-center bg-white rounded-xl shadow-sm">
             <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-            <p className="text-gray-600 text-xs">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
+            <p className="text-gray-600 text-xs">{searchTerm || filterDepartment ? t.noMatch : t.empty}</p>
             {['admin', 'production'].includes(user?.role ?? '') && !searchTerm && !filterDepartment && (
               <button
                 onClick={() => openModal()}
                 className="mt-3 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
-                aria-label={isRtl ? 'إضافة أول منتج' : 'Add First Product'}
+                aria-label={t.addFirst}
               >
-                {isRtl ? 'إضافة أول منتج' : 'Add First Product'}
+                {t.addFirst}
               </button>
             )}
           </div>
@@ -420,9 +532,7 @@ export function Products() {
               >
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between gap-3">
-                    <h3 className="font-semibold text-gray-900 text-sm truncate">
-                      {product.displayName}
-                    </h3>
+                    <h3 className="font-semibold text-gray-900 text-sm truncate">{product.displayName}</h3>
                     <p className="text-xs text-gray-500">{product.code}</p>
                   </div>
                   <p className="text-xs text-amber-600">
@@ -437,14 +547,14 @@ export function Products() {
                     <button
                       onClick={() => openModal(product)}
                       className="p-1.5 w-7 h-7 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center"
-                      title={isRtl ? 'تعديل' : 'Edit'}
+                      title={t.edit}
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => openDeleteModal(product._id)}
                       className="p-1.5 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center"
-                      title={isRtl ? 'حذف' : 'Delete'}
+                      title={t.delete}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -459,73 +569,62 @@ export function Products() {
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
           <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">
-              {editingProduct ? (isRtl ? 'تعديل المنتج' : 'Edit Product') : (isRtl ? 'إضافة منتج جديد' : 'Add New Product')}
-            </h3>
-            <form onSubmit={handleSubmit} className="space-y-3">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">{editingProduct ? t.edit : t.add}</h3>
+            <form onSubmit={handleSubmit} className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">
-                    {isRtl ? 'اسم المنتج' : 'Product Name'}
-                  </label>
+                  <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">{t.name}</label>
                   <input
                     id="name"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder={isRtl ? 'أدخل اسم المنتج' : 'Enter product name'}
+                    placeholder={t.namePlaceholder}
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
                   />
                 </div>
                 <div>
-                  <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">
-                    {isRtl ? 'الاسم بالإنجليزية' : 'English Name'}
-                  </label>
+                  <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">{t.nameEn}</label>
                   <input
                     id="nameEn"
                     value={formData.nameEn}
                     onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
-                    placeholder={isRtl ? 'أدخل الاسم بالإنجليزية' : 'Enter English name'}
+                    placeholder={t.nameEnPlaceholder}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
                   />
                 </div>
                 <div>
-                  <label htmlFor="code" className="block text-xs font-medium text-gray-700 mb-1">
-                    {isRtl ? 'رمز المنتج' : 'Product Code'}
-                  </label>
+                  <label htmlFor="code" className="block text-xs font-medium text-gray-700 mb-1">{t.code}</label>
                   <input
                     id="code"
                     value={formData.code}
                     onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                    placeholder={isRtl ? 'أدخل رمز المنتج' : 'Enter product code'}
+                    placeholder={t.codePlaceholder}
                     required
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
                   />
                 </div>
                 <div>
-                  <label htmlFor="department" className="block text-xs font-medium text-gray-700 mb-1">
-                    {isRtl ? 'القسم' : 'Department'}
-                  </label>
+                  <label htmlFor="department" className="block text-xs font-medium text-gray-700 mb-1">{t.department}</label>
                   <CustomDropdown
                     value={formData.department}
                     onChange={(value) => setFormData({ ...formData, department: value })}
                     options={[
-                      { value: '', label: isRtl ? 'اختر القسم' : 'Select Department' },
+                      { value: '', label: t.departmentPlaceholder },
                       ...departments.map((d) => ({
                         value: d._id,
                         label: isRtl ? d.name : (d.nameEn || d.name),
                       })),
                     ]}
-                    ariaLabel={isRtl ? 'القسم' : 'Department'}
+                    ariaLabel={t.department}
                   />
                 </div>
                 <div>
-                  <label htmlFor="price" className="block text-xs font-medium text-gray-700 mb-1">
-                    {isRtl ? 'السعر' : 'Price'}
-                  </label>
+                  <label htmlFor="price" className="block text-xs font-medium text-gray-700 mb-1">{t.price}</label>
                   <input
                     id="price"
                     type="number"
+                    step="0.01"
                     value={formData.price}
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
                     placeholder="0.00"
@@ -534,20 +633,30 @@ export function Products() {
                   />
                 </div>
                 <div>
-                  <label htmlFor="unit" className="block text-xs font-medium text-gray-700 mb-1">
-                    {isRtl ? 'الوحدة' : 'Unit'}
-                  </label>
+                  <label htmlFor="unit" className="block text-xs font-medium text-gray-700 mb-1">{t.unit}</label>
                   <CustomDropdown
                     value={formData.unit}
                     onChange={(value) => setFormData({ ...formData, unit: value })}
                     options={[
-                      { value: '', label: isRtl ? 'اختر الوحدة' : 'Select Unit' }, // خيار افتراضي فارغ
+                      { value: '', label: t.unitPlaceholder },
                       ...unitOptions.map((opt) => ({
                         value: opt.value,
                         label: isRtl ? opt.labelAr : opt.labelEn,
                       })),
                     ]}
-                    ariaLabel={isRtl ? 'الوحدة' : 'Unit'}
+                    ariaLabel={t.unit}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="status" className="block text-xs font-medium text-gray-700 mb-1">{t.status}</label>
+                  <CustomDropdown
+                    value={formData.status}
+                    onChange={(value) => setFormData({ ...formData, status: value as 'Available' | 'Unavailable' })}
+                    options={statusOptions.map((opt) => ({
+                      value: opt.value,
+                      label: isRtl ? opt.labelAr : opt.labelEn,
+                    }))}
+                    ariaLabel={t.status}
                   />
                 </div>
               </div>
@@ -562,16 +671,16 @@ export function Products() {
                   type="button"
                   onClick={closeModal}
                   className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors"
-                  aria-label={isRtl ? 'إلغاء' : 'Cancel'}
+                  aria-label={t.cancel}
                 >
-                  {isRtl ? 'إلغاء' : 'Cancel'}
+                  {t.cancel}
                 </button>
                 <button
                   type="submit"
                   className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
-                  aria-label={editingProduct ? (isRtl ? 'تحديث المنتج' : 'Update Product') : (isRtl ? 'إضافة المنتج' : 'Add Product')}
+                  aria-label={editingProduct ? t.update : t.add}
                 >
-                  {editingProduct ? (isRtl ? 'تحديث المنتج' : 'Update Product') : (isRtl ? 'إضافة المنتج' : 'Add Product')}
+                  {editingProduct ? t.update : t.add}
                 </button>
               </div>
             </form>
@@ -582,8 +691,8 @@ export function Products() {
       {isDeleteModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) closeDeleteModal(); }}>
           <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">{isRtl ? 'تأكيد الحذف' : 'Confirm Deletion'}</h3>
-            <p className="text-xs text-gray-600 mb-4">{isRtl ? 'هل أنت متأكد من حذف هذا المنتج؟' : 'Are you sure you want to delete this product?'}</p>
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.confirmDelete}</h3>
+            <p className="text-xs text-gray-600 mb-4">{t.deleteWarning}</p>
             {error && (
               <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 mb-4">
                 <AlertCircle className="w-4 h-4 text-red-600" />
@@ -594,16 +703,16 @@ export function Products() {
               <button
                 onClick={closeDeleteModal}
                 className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors"
-                aria-label={isRtl ? 'إلغاء' : 'Cancel'}
+                aria-label={t.cancel}
               >
-                {isRtl ? 'إلغاء' : 'Cancel'}
+                {t.cancel}
               </button>
               <button
                 onClick={confirmDelete}
                 className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs transition-colors"
-                aria-label={isRtl ? 'حذف' : 'Delete'}
+                aria-label={t.delete}
               >
-                {isRtl ? 'حذف' : 'Delete'}
+                {t.delete}
               </button>
             </div>
           </div>
