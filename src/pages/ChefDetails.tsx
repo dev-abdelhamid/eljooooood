@@ -6,7 +6,8 @@ import { chefsAPI, departmentAPI } from '../services/api';
 import { ChefHat, AlertCircle, Edit2, Trash2, Key, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CustomInput, CustomDropdown } from './Chefs'; // استيراد المكونات المخصصة
+import { CustomInput } from '../components/UI/CustomInput';
+import { CustomDropdown } from '../components/UI/CustomDropdown';
 
 interface Department {
   id: string;
