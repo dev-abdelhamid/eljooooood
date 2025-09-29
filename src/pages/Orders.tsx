@@ -19,10 +19,9 @@ import { OrderCardSkeleton } from '../components/Shared/OrderSkeletons';
 import { OrderTableSkeleton } from '../components/Shared/OrderSkeletons';
 import Pagination from '../components/Shared/Pagination';
 
-const OrderTable = lazy(() => import('../components/Shared/OrderTable'));
 const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
+const OrderTable = lazy(() => import('../components/Shared/OrderTable'));
 const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
-
 
 // Function to normalize text for search (handles Arabic diacritics and variations)
 const normalizeText = (text: string) => {
@@ -36,42 +35,39 @@ const normalizeText = (text: string) => {
     .trim();
 };
 
-// CustomInput component (optimized for Arabic input and RTL support)
+// CustomInput component (optimized for instant display and debounced search)
 const CustomInput = ({
-  value,
   onChange,
   placeholder,
   ariaLabel,
 }: {
-  value: string;
   onChange: (value: string) => void;
   placeholder: string;
   ariaLabel: string;
 }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
+  const [localValue, setLocalValue] = useState('');
+  const debouncedOnChange = useMemo(() => debounce(onChange, 100), [onChange]);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Handle composition events to prevent partial input issues in Arabic
-  const [isComposing, setIsComposing] = useState(false);
+  useEffect(() => {
+    return () => {
+      debouncedOnChange.cancel();
+    };
+  }, [debouncedOnChange]);
 
-  const handleCompositionStart = () => setIsComposing(true);
-  const handleCompositionEnd = (e: React.CompositionEvent<HTMLInputElement>) => {
-    setIsComposing(false);
-    onChange(e.currentTarget.value);
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!isComposing) {
-      onChange(e.target.value);
-    }
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setLocalValue(value);
+    debouncedOnChange(normalizeText(value));
   };
 
   return (
     <div className="relative group">
       <motion.div
-        initial={{ opacity: value ? 0 : 1 }}
-        animate={{ opacity: value ? 0 : 1 }}
+        initial={{ opacity: localValue ? 0 : 1 }}
+        animate={{ opacity: localValue ? 0 : 1 }}
         transition={{ duration: 0.15 }}
         className={`absolute ${isRtl ? 'left-3' : 'right-3'} flex items-center justify-center top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`}
       >
@@ -80,10 +76,8 @@ const CustomInput = ({
       <input
         ref={inputRef}
         type="text"
-        value={value}
-        onChange={handleInputChange}
-        onCompositionStart={handleCompositionStart}
-        onCompositionEnd={handleCompositionEnd}
+        value={localValue}
+        onChange={handleChange}
         placeholder={placeholder}
         className={`w-full ${isRtl ? 'pl-10 pr-2' : 'pr-10 pl-2'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
@@ -92,14 +86,15 @@ const CustomInput = ({
         inputMode="text"
       />
       <motion.div
-        initial={{ opacity: value ? 1 : 0 }}
-        animate={{ opacity: value ? 1 : 0 }}
+        initial={{ opacity: localValue ? 1 : 0 }}
+        animate={{ opacity: localValue ? 1 : 0 }}
         transition={{ duration: 0.15 }}
         className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 flex items-center justify-center transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
       >
         <button
           onClick={() => {
-            onChange('');
+            setLocalValue('');
+            debouncedOnChange('');
             inputRef.current?.focus();
           }}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
@@ -112,7 +107,7 @@ const CustomInput = ({
   );
 };
 
-// CustomDropdown component (with RTL and dir="auto" support)
+// CustomDropdown component (enhanced, removed scale, added dir)
 const CustomDropdown = ({
   value,
   onChange,
@@ -191,7 +186,7 @@ const CustomDropdown = ({
         aria-label={ariaLabel}
         aria-expanded={isOpen}
         role="combobox"
-        dir="auto"
+        dir={isRtl ? 'rtl' : 'ltr'}
       >
         <span className="truncate font-medium">{selectedOption.label}</span>
         <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
@@ -206,7 +201,7 @@ const CustomDropdown = ({
             animate="visible"
             exit="exit"
             className="absolute w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-20 max-h-48 overflow-y-auto"
-            dir="auto"
+            dir={isRtl ? 'rtl' : 'ltr'}
           >
             {options.map((option, index) => (
               <motion.div
@@ -892,13 +887,9 @@ export const Orders: React.FC = () => {
     [user, state.sortBy, state.sortOrder, isRtl, language]
   );
 
-  const handleSearchChange = useMemo(
-    () =>
-      debounce((value: string) => {
-        dispatch({ type: 'SET_SEARCH_QUERY', payload: normalizeText(value) });
-      }, 200), // Reduced debounce delay for faster response
-    []
-  );
+  const handleSearchChange = (value: string) => {
+    debouncedOnChange(value);
+  };
 
   const filteredOrders = useMemo(
     () => {
@@ -1190,7 +1181,6 @@ export const Orders: React.FC = () => {
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
                 <CustomInput
-                  value={state.searchQuery}
                   onChange={handleSearchChange}
                   placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
                   ariaLabel={isRtl ? 'بحث' : 'Search'}
