@@ -1,4 +1,4 @@
-import React, { useReducer, useEffect, useMemo, useCallback, useRef, lazy, Suspense, useState } from 'react';
+import React, { useReducer, useEffect, useMemo, useCallback, useRef, lazy, Suspense  , useState} from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
@@ -48,19 +48,12 @@ const CustomInput = ({
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const [localValue, setLocalValue] = useState('');
-  const debouncedOnChange = useMemo(() => debounce(onChange, 100), [onChange]);
   const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    return () => {
-      debouncedOnChange.cancel();
-    };
-  }, [debouncedOnChange]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setLocalValue(value);
-    debouncedOnChange(normalizeText(value));
+    onChange(normalizeText(value));
   };
 
   return (
@@ -94,7 +87,7 @@ const CustomInput = ({
         <button
           onClick={() => {
             setLocalValue('');
-            debouncedOnChange('');
+            onChange('');
             inputRef.current?.focus();
           }}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
@@ -888,7 +881,7 @@ export const Orders: React.FC = () => {
   );
 
   const handleSearchChange = (value: string) => {
-    debouncedOnChange(value);
+    dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
   };
 
   const filteredOrders = useMemo(
