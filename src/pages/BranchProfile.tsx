@@ -2,21 +2,22 @@ import React, { useReducer, useEffect, useCallback, useMemo, lazy, Suspense } fr
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { branchesAPI, ordersAPI, salesAPI, returnsAPI } from '../services/api';
+import { branchesAPI, ordersAPI, returnsAPI, productsAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Edit2, Trash2, Key, AlertCircle, MapPin, Box, TrendingUp, Calendar, Package } from 'lucide-react';
 import { FormInput } from './ChefDetails';
-import { Chart as ChartJS, ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
+import { Chart as ChartJS, ArcElement, BarElement, LineElement, CategoryScale, LinearScale, PointElement, Tooltip, Legend } from 'chart.js';
 import { debounce } from 'lodash';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
-import { CustomDropdown } from '../components/UI/CustomDropdown';
 
 // Lazy-loaded components
 const Bar = lazy(() => import('react-chartjs-2').then(module => ({ default: module.Bar })));
+const Line = lazy(() => import('react-chartjs-2').then(module => ({ default: module.Line })));
 const Pie = lazy(() => import('react-chartjs-2').then(module => ({ default: module.Pie })));
+const CustomDropdown = lazy(() => import('../components/UI/CustomDropdown'));
 
-ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
+ChartJS.register(ArcElement, BarElement, LineElement, CategoryScale, LinearScale, PointElement, Tooltip, Legend);
 
 // Interfaces
 interface Branch {
@@ -48,28 +49,34 @@ interface Branch {
   displayCity: string;
 }
 
+interface Product {
+  id: string;
+  name: string;
+}
+
 interface Order {
   id: string;
   orderNumber: string;
   status: string;
   total: number;
   createdAt: string;
-  items: { itemId: string; name: string; quantity: number }[];
-}
-
-interface Sale {
-  id: string;
-  saleNumber: string;
-  total: number;
-  createdAt: string;
+  items: Array<{
+    product: string;
+    quantity: number;
+    price: number;
+  }>;
 }
 
 interface Return {
   id: string;
   returnNumber: string;
+  status: string;
   total: number;
   createdAt: string;
-  items: { itemId: string; name: string; quantity: number }[];
+  items: Array<{
+    productId: string;
+    quantity: number;
+  }>;
 }
 
 interface FormState {
@@ -89,9 +96,9 @@ interface FormState {
 interface State {
   branch: Branch | null;
   orders: Order[];
-  sales: Sale[];
   returns: Return[];
-  activeTab: 'info' | 'stats';
+  products: Product[];
+  activeTab: 'info' | 'stats' | 'orders' | 'returns';
   isEditModalOpen: boolean;
   isResetPasswordModalOpen: boolean;
   isDeleteModalOpen: boolean;
@@ -101,8 +108,8 @@ interface State {
   error: string;
   loading: boolean;
   ordersLoading: boolean;
-  salesLoading: boolean;
   returnsLoading: boolean;
+  productsLoading: boolean;
   showPassword: boolean;
   showConfirmPassword: boolean;
 }
@@ -116,8 +123,8 @@ interface Action {
 const initialState: State = {
   branch: null,
   orders: [],
-  sales: [],
   returns: [],
+  products: [],
   activeTab: 'info',
   isEditModalOpen: false,
   isResetPasswordModalOpen: false,
@@ -140,8 +147,8 @@ const initialState: State = {
   error: '',
   loading: true,
   ordersLoading: true,
-  salesLoading: true,
   returnsLoading: true,
+  productsLoading: true,
   showPassword: false,
   showConfirmPassword: false,
 };
@@ -153,10 +160,10 @@ const reducer = (state: State, action: Action): State => {
       return { ...state, branch: action.payload, loading: false };
     case 'SET_ORDERS':
       return { ...state, orders: action.payload, ordersLoading: false };
-    case 'SET_SALES':
-      return { ...state, sales: action.payload, salesLoading: false };
     case 'SET_RETURNS':
       return { ...state, returns: action.payload, returnsLoading: false };
+    case 'SET_PRODUCTS':
+      return { ...state, products: action.payload, productsLoading: false };
     case 'SET_ACTIVE_TAB':
       return { ...state, activeTab: action.payload };
     case 'SET_MODAL':
@@ -173,10 +180,10 @@ const reducer = (state: State, action: Action): State => {
       return { ...state, loading: action.payload };
     case 'SET_ORDERS_LOADING':
       return { ...state, ordersLoading: action.payload };
-    case 'SET_SALES_LOADING':
-      return { ...state, salesLoading: action.payload };
     case 'SET_RETURNS_LOADING':
       return { ...state, returnsLoading: action.payload };
+    case 'SET_PRODUCTS_LOADING':
+      return { ...state, productsLoading: action.payload };
     case 'TOGGLE_PASSWORD_VISIBILITY':
       return { ...state, [action.payload.field]: !state[action.payload.field] };
     default:
@@ -190,6 +197,8 @@ const translations = {
     branchDetails: 'تفاصيل الفرع',
     branchInfoTab: 'معلومات الفرع',
     statsTab: 'إحصائيات الفرع',
+    ordersTab: 'الطلبات',
+    returnsTab: 'المرتجعات',
     name: 'اسم الفرع',
     code: 'الكود',
     address: 'العنوان',
@@ -229,29 +238,30 @@ const translations = {
     deleteRestricted: 'لا يمكن حذف الفرع لوجود طلبات أو مخزون مرتبط',
     confirmDelete: 'تأكيد حذف الفرع',
     noOrders: 'لا توجد طلبات',
-    noSales: 'لا توجد مبيعات',
     noReturns: 'لا توجد مرتجعات',
+    noProducts: 'لا توجد منتجات',
     orderNumber: 'رقم الطلب',
+    returnNumber: 'رقم المرتجع',
     status: 'الحالة',
     total: 'الإجمالي',
-    saleNumber: 'رقم المبيعة',
-    returnNumber: 'رقم المرتجع',
     totalOrders: 'إجمالي الطلبات',
-    totalSales: 'إجمالي المبيعات',
     totalReturns: 'إجمالي المرتجعات',
     avgDailyOrders: 'متوسط الطلبات اليومي',
-    salesOverTime: 'المبيعات عبر الزمن',
-    ordersByStatus: 'الطلبات حسب الحالة',
-    topOrderedProducts: 'المنتجات الأكثر طلبًا',
-    ordersAndReturnsTrend: 'حركة الطلبات والمرتجعات',
+    topProducts: 'المنتجات الأكثر طلبًا',
+    ordersVsReturns: 'حركة الطلبات والمرتجعات',
     status_mukammal: 'مكتمل',
     status_qaid_al_tanfeez: 'قيد التنفيذ',
     status_malgha: 'ملغى',
+    status_approved: 'معتمد',
+    status_rejected: 'مرفوض',
+    status_pending: 'قيد الانتظار',
   },
   en: {
     branchDetails: 'Branch Details',
     branchInfoTab: 'Branch Info',
     statsTab: 'Branch Stats',
+    ordersTab: 'Orders',
+    returnsTab: 'Returns',
     name: 'Branch Name',
     code: 'Code',
     address: 'Address',
@@ -291,24 +301,23 @@ const translations = {
     deleteRestricted: 'Cannot delete branch with associated orders or inventory',
     confirmDelete: 'Confirm Branch Deletion',
     noOrders: 'No orders available',
-    noSales: 'No sales available',
     noReturns: 'No returns available',
+    noProducts: 'No products available',
     orderNumber: 'Order Number',
+    returnNumber: 'Return Number',
     status: 'Status',
     total: 'Total',
-    saleNumber: 'Sale Number',
-    returnNumber: 'Return Number',
     totalOrders: 'Total Orders',
-    totalSales: 'Total Sales',
     totalReturns: 'Total Returns',
     avgDailyOrders: 'Average Daily Orders',
-    salesOverTime: 'Sales Over Time',
-    ordersByStatus: 'Orders by Status',
-    topOrderedProducts: 'Top Ordered Products',
-    ordersAndReturnsTrend: 'Orders and Returns Trend',
+    topProducts: 'Top Ordered Products',
+    ordersVsReturns: 'Orders vs Returns Activity',
     status_mukammal: 'Completed',
     status_qaid_al_tanfeez: 'In Progress',
     status_malgha: 'Cancelled',
+    status_approved: 'Approved',
+    status_rejected: 'Rejected',
+    status_pending: 'Pending',
   },
 };
 
@@ -389,8 +398,8 @@ const BranchProfile: React.FC = () => {
           setTimeout(() => fetchBranch(retryCount + 1), 1000);
           return;
         }
-        dispatch({ type: 'SET_ERROR', payload: err.response?.data?.message || t.branchNotFound });
-        toast.error(err.response?.data?.message || t.branchNotFound, { position: isRtl ? 'top-right' : 'top-left' });
+        dispatch({ type: 'SET_ERROR', payload: err.message || t.branchNotFound });
+        toast.error(err.message || t.branchNotFound, { position: isRtl ? 'top-right' : 'top-left' });
       } finally {
         dispatch({ type: 'SET_LOADING', payload: false });
       }
@@ -412,9 +421,9 @@ const BranchProfile: React.FC = () => {
           total: Number(order.totalAmount) || 0,
           createdAt: order.createdAt,
           items: order.items.map((item: any) => ({
-            itemId: item._id,
-            name: item.name,
+            product: item.product,
             quantity: item.quantity,
+            price: item.price,
           })),
         }));
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
@@ -431,48 +440,21 @@ const BranchProfile: React.FC = () => {
     [id, t, isRtl]
   );
 
-  // Fetch sales
-  const fetchSales = useCallback(
-    async (retryCount = 0) => {
-      if (!id) return;
-      dispatch({ type: 'SET_SALES_LOADING', payload: true });
-      try {
-        const response = await salesAPI.getAll({ branch: id });
-        const mappedSales: Sale[] = response.map((sale: any) => ({
-          id: sale._id,
-          saleNumber: sale.saleNumber,
-          total: Number(sale.total) || 0,
-          createdAt: sale.createdAt,
-        }));
-        dispatch({ type: 'SET_SALES', payload: mappedSales });
-      } catch (err: any) {
-        if (retryCount < 2) {
-          setTimeout(() => fetchSales(retryCount + 1), 1000);
-          return;
-        }
-        toast.error(t.noSales, { position: isRtl ? 'top-right' : 'top-left' });
-      } finally {
-        dispatch({ type: 'SET_SALES_LOADING', payload: false });
-      }
-    },
-    [id, t, isRtl]
-  );
-
   // Fetch returns
   const fetchReturns = useCallback(
     async (retryCount = 0) => {
       if (!id) return;
       dispatch({ type: 'SET_RETURNS_LOADING', payload: true });
       try {
-        const response = await returnsAPI.getAll({ branch: id });
+        const response = await returnsAPI.getAll({ branchId: id });
         const mappedReturns: Return[] = response.map((returnItem: any) => ({
           id: returnItem._id,
           returnNumber: returnItem.returnNumber,
-          total: Number(returnItem.total) || 0,
+          status: returnItem.status,
+          total: Number(returnItem.items.reduce((sum: number, item: any) => sum + item.quantity * item.price, 0)) || 0,
           createdAt: returnItem.createdAt,
           items: returnItem.items.map((item: any) => ({
-            itemId: item._id,
-            name: item.name,
+            productId: item.productId,
             quantity: item.quantity,
           })),
         }));
@@ -488,6 +470,30 @@ const BranchProfile: React.FC = () => {
       }
     },
     [id, t, isRtl]
+  );
+
+  // Fetch products
+  const fetchProducts = useCallback(
+    async (retryCount = 0) => {
+      dispatch({ type: 'SET_PRODUCTS_LOADING', payload: true });
+      try {
+        const response = await productsAPI.getAll();
+        const mappedProducts: Product[] = response.data.map((product: any) => ({
+          id: product._id,
+          name: product.name,
+        }));
+        dispatch({ type: 'SET_PRODUCTS', payload: mappedProducts });
+      } catch (err: any) {
+        if (retryCount < 2) {
+          setTimeout(() => fetchProducts(retryCount + 1), 1000);
+          return;
+        }
+        toast.error(t.noProducts, { position: isRtl ? 'top-right' : 'top-left' });
+      } finally {
+        dispatch({ type: 'SET_PRODUCTS_LOADING', payload: false });
+      }
+    },
+    [t, isRtl]
   );
 
   // Validate form
@@ -559,9 +565,9 @@ const BranchProfile: React.FC = () => {
         dispatch({ type: 'SET_MODAL', payload: { modal: 'isEditModalOpen', isOpen: false } });
       } catch (err: any) {
         const errorMessage =
-          err.response?.data?.message?.includes('code') ? t.codeInUse :
-          err.response?.data?.message?.includes('username') ? t.usernameInUse :
-          err.response?.data?.message?.includes('email') ? t.emailInUse : t.serverError;
+          err.message?.includes('code') ? t.codeInUse :
+          err.message?.includes('username') ? t.usernameInUse :
+          err.message?.includes('email') ? t.emailInUse : t.serverError;
         dispatch({ type: 'SET_ERROR', payload: errorMessage });
         toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       } finally {
@@ -597,8 +603,8 @@ const BranchProfile: React.FC = () => {
         dispatch({ type: 'SET_MODAL', payload: { modal: 'isResetPasswordModalOpen', isOpen: false } });
         dispatch({ type: 'SET_PASSWORD_DATA', payload: { password: '', confirmPassword: '' } });
       } catch (err: any) {
-        dispatch({ type: 'SET_ERROR', payload: err.response?.data?.message || t.serverError });
-        toast.error(err.response?.data?.message || t.serverError, { position: isRtl ? 'top-right' : 'top-left' });
+        dispatch({ type: 'SET_ERROR', payload: err.message || t.serverError });
+        toast.error(err.message || t.serverError, { position: isRtl ? 'top-right' : 'top-left' });
       } finally {
         dispatch({ type: 'SET_LOADING', payload: false });
       }
@@ -615,7 +621,7 @@ const BranchProfile: React.FC = () => {
         toast.success(t.branchDeleted, { position: isRtl ? 'top-right' : 'top-left' });
         navigate('/branches');
       } catch (err: any) {
-        const errorMessage = err.response?.data?.message?.includes('orders or inventory') ? t.deleteRestricted : t.serverError;
+        const errorMessage = err.message?.includes('orders or inventory') ? t.deleteRestricted : t.serverError;
         dispatch({ type: 'SET_ERROR', payload: errorMessage });
         toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       } finally {
@@ -625,89 +631,102 @@ const BranchProfile: React.FC = () => {
     [id, t, isRtl, navigate]
   );
 
-  // Stats data for charts
+  // Stats and chart data
   const statsData = useMemo(() => {
     const totalOrders = state.orders.length;
-    const totalSales = state.sales.reduce((sum, sale) => sum + sale.total, 0);
     const totalReturns = state.returns.length;
     const days = [...new Set(state.orders.map(item => item.createdAt))].length;
     const avgDailyOrders = days > 0 ? (totalOrders / days).toFixed(2) : '0';
+
+    // Top products by order quantity
+    const productQuantities = state.orders.reduce((acc, order) => {
+      order.items.forEach(item => {
+        acc[item.product] = (acc[item.product] || 0) + item.quantity;
+      });
+      return acc;
+    }, {} as Record<string, number>);
+
+    const topProducts = Object.entries(productQuantities)
+      .map(([productId, quantity]) => ({
+        productId,
+        quantity,
+        name: state.products.find(p => p.id === productId)?.name || productId,
+      }))
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5);
+
+    const topProductsData = {
+      labels: topProducts.map(p => p.name),
+      datasets: [{
+        label: t.topProducts,
+        data: topProducts.map(p => p.quantity),
+        backgroundColor: 'rgba(245, 158, 11, 0.6)',
+        borderColor: 'rgba(245, 158, 11, 1)',
+        borderWidth: 1,
+      }],
+    };
+
+    // Orders vs Returns activity
+    const activityDates = [...new Set([
+      ...state.orders.map(o => new Date(o.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')),
+      ...state.returns.map(r => new Date(r.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')),
+    ])].sort();
+
+    const ordersByDate = activityDates.reduce((acc, date) => {
+      acc[date] = state.orders.filter(o => new Date(o.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US') === date).length;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const returnsByDate = activityDates.reduce((acc, date) => {
+      acc[date] = state.returns.filter(r => new Date(r.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US') === date).length;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const ordersVsReturnsData = {
+      labels: activityDates,
+      datasets: [
+        {
+          label: t.ordersTab,
+          data: activityDates.map(date => ordersByDate[date] || 0),
+          borderColor: 'rgba(245, 158, 11, 1)',
+          backgroundColor: 'rgba(245, 158, 11, 0.2)',
+          fill: true,
+        },
+        {
+          label: t.returnsTab,
+          data: activityDates.map(date => returnsByDate[date] || 0),
+          borderColor: 'rgba(239, 68, 68, 1)',
+          backgroundColor: 'rgba(239, 68, 68, 0.2)',
+          fill: true,
+        },
+      ],
+    };
 
     const statusCounts = state.orders.reduce((acc, order) => {
       acc[order.status] = (acc[order.status] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
-    // Top ordered products
-    const productQuantities = state.orders.reduce((acc, order) => {
-      order.items.forEach(item => {
-        acc[item.name] = (acc[item.name] || 0) + item.quantity;
-      });
-      return acc;
-    }, {} as Record<string, number>);
-
-    const topProducts = Object.entries(productQuantities)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 5); // Top 5 products
-
     const pieData = {
-      labels: topProducts.map(([name]) => name),
+      labels: Object.keys(statusCounts).map(status => t[`status_${status}`] || status),
       datasets: [{
-        data: topProducts.map(([, quantity]) => quantity),
-        backgroundColor: ['rgba(245, 158, 11, 0.6)', 'rgba(59, 130, 246, 0.6)', 'rgba(239, 68, 68, 0.6)', 'rgba(16, 185, 129, 0.6)', 'rgba(139, 92, 246, 0.6)'],
-        borderColor: ['rgba(245, 158, 11, 1)', 'rgba(59, 130, 246, 1)', 'rgba(239, 68, 68, 1)', 'rgba(16, 185, 129, 1)', 'rgba(139, 92, 246, 1)'],
+        data: Object.values(statusCounts),
+        backgroundColor: ['rgba(245, 158, 11, 0.6)', 'rgba(59, 130, 246, 0.6)', 'rgba(239, 68, 68, 0.6)', 'rgba(16, 185, 129, 0.6)'],
+        borderColor: ['rgba(245, 158, 11, 1)', 'rgba(59, 130, 246, 1)', 'rgba(239, 68, 68, 1)', 'rgba(16, 185, 129, 1)'],
         borderWidth: 1,
       }],
     };
 
-    // Orders and returns trend
-    const dates = [...new Set([
-      ...state.orders.map(o => new Date(o.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')),
-      ...state.returns.map(r => new Date(r.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')),
-    ])].sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-
-    const ordersByDate = state.orders.reduce((acc, order) => {
-      const date = new Date(order.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US');
-      acc[date] = (acc[date] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    const returnsByDate = state.returns.reduce((acc, returnItem) => {
-      const date = new Date(returnItem.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US');
-      acc[date] = (acc[date] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    const trendData = {
-      labels: dates,
-      datasets: [
-        {
-          label: t.totalOrders,
-          data: dates.map(date => ordersByDate[date] || 0),
-          backgroundColor: 'rgba(245, 158, 11, 0.6)',
-          borderColor: 'rgba(245, 158, 11, 1)',
-          borderWidth: 1,
-        },
-        {
-          label: t.totalReturns,
-          data: dates.map(date => returnsByDate[date] || 0),
-          backgroundColor: 'rgba(239, 68, 68, 0.6)',
-          borderColor: 'rgba(239, 68, 68, 1)',
-          borderWidth: 1,
-        },
-      ],
-    };
-
-    return { totalOrders, totalSales, totalReturns, avgDailyOrders, pieData, trendData, statusCounts };
-  }, [state.orders, state.sales, state.returns, t, isRtl]);
+    return { totalOrders, totalReturns, avgDailyOrders, topProductsData, ordersVsReturnsData, pieData };
+  }, [state.orders, state.returns, state.products, t, isRtl]);
 
   // Initial data fetch
   useEffect(() => {
     fetchBranch();
     fetchOrders();
-    fetchSales();
     fetchReturns();
-  }, [fetchBranch, fetchOrders, fetchSales, fetchReturns]);
+    fetchProducts();
+  }, [fetchBranch, fetchOrders, fetchReturns, fetchProducts]);
 
   // Render
   return (
@@ -789,6 +808,20 @@ const BranchProfile: React.FC = () => {
               >
                 {t.statsTab}
               </button>
+              <button
+                onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'orders' })}
+                className={`px-4 py-2 text-xs font-medium ${state.activeTab === 'orders' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600 hover:text-amber-600'} transition-colors`}
+                aria-label={t.ordersTab}
+              >
+                {t.ordersTab}
+              </button>
+              <button
+                onClick={() => dispatch({ type: 'SET_ACTIVE_TAB', payload: 'returns' })}
+                className={`px-4 py-2 text-xs font-medium ${state.activeTab === 'returns' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600 hover:text-amber-600'} transition-colors`}
+                aria-label={t.returnsTab}
+              >
+                {t.returnsTab}
+              </button>
             </div>
 
             <AnimatePresence mode="wait">
@@ -860,7 +893,7 @@ const BranchProfile: React.FC = () => {
                     )}
                   </div>
                 </motion.div>
-              ) : (
+              ) : state.activeTab === 'stats' ? (
                 <motion.div
                   key="stats"
                   initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
@@ -870,7 +903,7 @@ const BranchProfile: React.FC = () => {
                   className="space-y-4"
                 >
                   <h2 className="text-lg font-semibold text-gray-900">{t.statsTab}</h2>
-                  {(state.ordersLoading || state.salesLoading || state.returnsLoading) ? (
+                  {(state.ordersLoading || state.returnsLoading || state.productsLoading) ? (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       {[...Array(3)].map((_, index) => (
                         <div key={index} className="p-3 bg-gray-50 rounded-lg animate-pulse">
@@ -879,7 +912,7 @@ const BranchProfile: React.FC = () => {
                         </div>
                       ))}
                     </div>
-                  ) : (state.orders.length === 0 && state.sales.length === 0 && state.returns.length === 0) ? (
+                  ) : (state.orders.length === 0 && state.returns.length === 0) ? (
                     <div className="text-center text-xs text-gray-600">{t.noOrders}</div>
                   ) : (
                     <div className="space-y-4">
@@ -892,23 +925,55 @@ const BranchProfile: React.FC = () => {
                           </div>
                         </div>
                         <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2">
-                          <TrendingUp className="w-5 h-5 text-amber-600" />
-                          <div>
-                            <p className="text-xs text-gray-600">{t.totalSales}</p>
-                            <p className="text-lg font-semibold text-gray-900">{statsData.totalSales.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}</p>
-                          </div>
-                        </div>
-                        <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2">
                           <Package className="w-5 h-5 text-amber-600" />
                           <div>
                             <p className="text-xs text-gray-600">{t.totalReturns}</p>
                             <p className="text-lg font-semibold text-gray-900">{statsData.totalReturns}</p>
                           </div>
                         </div>
+                        <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2">
+                          <Calendar className="w-5 h-5 text-amber-600" />
+                          <div>
+                            <p className="text-xs text-gray-600">{t.avgDailyOrders}</p>
+                            <p className="text-lg font-semibold text-gray-900">{statsData.avgDailyOrders}</p>
+                          </div>
+                        </div>
                       </div>
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-                          <h3 className="text-sm font-medium text-gray-900 mb-3">{t.topOrderedProducts}</h3>
+                          <h3 className="text-sm font-medium text-gray-900 mb-3">{t.topProducts}</h3>
+                          <div className="h-64">
+                            <Suspense fallback={<LoadingSpinner size="sm" />}>
+                              <Bar
+                                data={statsData.topProductsData}
+                                options={{
+                                  responsive: true,
+                                  maintainAspectRatio: false,
+                                  plugins: { legend: { display: false } },
+                                  scales: { y: { beginAtZero: true } },
+                                }}
+                              />
+                            </Suspense>
+                          </div>
+                        </div>
+                        <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                          <h3 className="text-sm font-medium text-gray-900 mb-3">{t.ordersVsReturns}</h3>
+                          <div className="h-64">
+                            <Suspense fallback={<LoadingSpinner size="sm" />}>
+                              <Line
+                                data={statsData.ordersVsReturnsData}
+                                options={{
+                                  responsive: true,
+                                  maintainAspectRatio: false,
+                                  plugins: { legend: { position: 'bottom', labels: { font: { size: 12 } } } },
+                                  scales: { y: { beginAtZero: true } },
+                                }}
+                              />
+                            </Suspense>
+                          </div>
+                        </div>
+                        <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                          <h3 className="text-sm font-medium text-gray-900 mb-3">{t.ordersByStatus}</h3>
                           <div className="h-64">
                             <Suspense fallback={<LoadingSpinner size="sm" />}>
                               <Pie
@@ -922,135 +987,99 @@ const BranchProfile: React.FC = () => {
                             </Suspense>
                           </div>
                         </div>
-                        <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-                          <h3 className="text-sm font-medium text-gray-900 mb-3">{t.ordersAndReturnsTrend}</h3>
-                          <div className="h-64">
-                            <Suspense fallback={<LoadingSpinner size="sm" />}>
-                              <Bar
-                                data={statsData.trendData}
-                                options={{
-                                  responsive: true,
-                                  maintainAspectRatio: false,
-                                  plugins: { legend: { position: 'top', labels: { font: { size: 12 } } } },
-                                  scales: { y: { beginAtZero: true } },
-                                }}
-                              />
-                            </Suspense>
-                          </div>
-                        </div>
                       </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-                          <h3 className="text-sm font-medium text-gray-900 mb-2">{t.ordersTab}</h3>
-                          {state.ordersLoading ? (
-                            <div className="space-y-3">
-                              {[...Array(3)].map((_, index) => (
-                                <div key={index} className="p-3 bg-gray-50 rounded-lg animate-pulse">
-                                  <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
-                                  <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                                </div>
-                              ))}
-                            </div>
-                          ) : state.orders.length === 0 ? (
-                            <div className="text-center text-xs text-gray-600">{t.noOrders}</div>
-                          ) : (
-                            <div className="overflow-x-auto">
-                              <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                  <tr>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.orderNumber}</th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.status}</th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.total}</th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.createdAt}</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                  {state.orders.map((order) => (
-                                    <tr key={order.id}>
-                                      <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-900">{order.orderNumber}</td>
-                                      <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{t[`status_${order.status}`] || order.status}</td>
-                                      <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{order.total.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}</td>
-                                      <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{new Date(order.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
+                    </div>
+                  )}
+                </motion.div>
+              ) : state.activeTab === 'orders' ? (
+                <motion.div
+                  key="orders"
+                  initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: isRtl ? -20 : 20 }}
+                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  className="space-y-4"
+                >
+                  <h2 className="text-lg font-semibold text-gray-900">{t.ordersTab}</h2>
+                  {state.ordersLoading ? (
+                    <div className="space-y-3">
+                      {[...Array(3)].map((_, index) => (
+                        <div key={index} className="p-3 bg-gray-50 rounded-lg animate-pulse">
+                          <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+                          <div className="h-3 bg-gray-200 rounded w-1/3"></div>
                         </div>
-                        <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-                          <h3 className="text-sm font-medium text-gray-900 mb-2">{t.salesTab}</h3>
-                          {state.salesLoading ? (
-                            <div className="space-y-3">
-                              {[...Array(3)].map((_, index) => (
-                                <div key={index} className="p-3 bg-gray-50 rounded-lg animate-pulse">
-                                  <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
-                                  <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                                </div>
-                              ))}
-                            </div>
-                          ) : state.sales.length === 0 ? (
-                            <div className="text-center text-xs text-gray-600">{t.noSales}</div>
-                          ) : (
-                            <div className="overflow-x-auto">
-                              <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                  <tr>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.saleNumber}</th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.total}</th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.createdAt}</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                  {state.sales.map((sale) => (
-                                    <tr key={sale.id}>
-                                      <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-900">{sale.saleNumber}</td>
-                                      <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{sale.total.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}</td>
-                                      <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{new Date(sale.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
+                      ))}
+                    </div>
+                  ) : state.orders.length === 0 ? (
+                    <div className="text-center text-xs text-gray-600">{t.noOrders}</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.orderNumber}</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.status}</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.total}</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.createdAt}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {state.orders.map((order) => (
+                            <tr key={order.id}>
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-900">{order.orderNumber}</td>
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{t[`status_${order.status}`] || order.status}</td>
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{order.total.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}</td>
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{new Date(order.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="returns"
+                  initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: isRtl ? -20 : 20 }}
+                  transition={{ duration: 0.2, ease: 'easeInOut' }}
+                  className="space-y-4"
+                >
+                  <h2 className="text-lg font-semibold text-gray-900">{t.returnsTab}</h2>
+                  {state.returnsLoading ? (
+                    <div className="space-y-3">
+                      {[...Array(3)].map((_, index) => (
+                        <div key={index} className="p-3 bg-gray-50 rounded-lg animate-pulse">
+                          <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+                          <div className="h-3 bg-gray-200 rounded w-1/3"></div>
                         </div>
-                        <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-                          <h3 className="text-sm font-medium text-gray-900 mb-2">{t.returnsTab}</h3>
-                          {state.returnsLoading ? (
-                            <div className="space-y-3">
-                              {[...Array(3)].map((_, index) => (
-                                <div key={index} className="p-3 bg-gray-50 rounded-lg animate-pulse">
-                                  <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
-                                  <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                                </div>
-                              ))}
-                            </div>
-                          ) : state.returns.length === 0 ? (
-                            <div className="text-center text-xs text-gray-600">{t.noReturns}</div>
-                          ) : (
-                            <div className="overflow-x-auto">
-                              <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
-                                  <tr>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.returnNumber}</th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.total}</th>
-                                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.createdAt}</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                  {state.returns.map((returnItem) => (
-                                    <tr key={returnItem.id}>
-                                      <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-900">{returnItem.returnNumber}</td>
-                                      <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{returnItem.total.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}</td>
-                                      <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{new Date(returnItem.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                      ))}
+                    </div>
+                  ) : state.returns.length === 0 ? (
+                    <div className="text-center text-xs text-gray-600">{t.noReturns}</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.returnNumber}</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.status}</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.total}</th>
+                            <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.createdAt}</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {state.returns.map((returnItem) => (
+                            <tr key={returnItem.id}>
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-900">{returnItem.returnNumber}</td>
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{t[`status_${returnItem.status}`] || returnItem.status}</td>
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{returnItem.total.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}</td>
+                              <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{new Date(returnItem.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </motion.div>
@@ -1355,7 +1384,6 @@ const BranchProfile: React.FC = () => {
           )}
         </AnimatePresence>
       </Suspense>
-    
     </div>
   );
 };
