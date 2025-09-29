@@ -70,14 +70,14 @@ export const CustomDropdown = memo(
           ref={buttonRef}
           onClick={() => setIsOpen(!isOpen)}
           onKeyDown={handleKeyDown}
-          className={`w-full px-4 py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm hover:shadow-md text-sm text-gray-800 transition-colors flex justify-between items-center ${isRtl ? 'text-right' : 'text-left'}`}
+          className={`w-full px-4 py-1.5 border border-gray-200 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm hover:shadow-md text-sm text-gray-800 transition-colors flex justify-between items-center ${isRtl ? 'text-right' : 'text-left'}`}
           aria-label={ariaLabel}
           aria-expanded={isOpen}
           role="combobox"
         >
           <span className="truncate">{selectedOption.label}</span>
           <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
-            <ChevronDown className="w-5 h-5 text-gray-500" />
+            <ChevronDown className="w-4 h-4 text-gray-500" />
           </motion.div>
         </motion.button>
         <AnimatePresence>
@@ -98,7 +98,7 @@ export const CustomDropdown = memo(
                     buttonRef.current?.focus();
                   }}
                   onKeyDown={(e) => handleKeyDown(e, option.value)}
-                  className={`px-4 py-2 text-sm text-gray-800 hover:bg-blue-50 cursor-pointer transition-colors focus:outline-none focus:bg-blue-50 focus:text-blue-600 ${isRtl ? 'text-right' : 'text-left'}`}
+                  className={`px-4 py-1.5 text-sm text-gray-800 hover:bg-blue-50 cursor-pointer transition-colors focus:outline-none focus:bg-blue-50 focus:text-blue-600 ${isRtl ? 'text-right' : 'text-left'}`}
                   role="option"
                   aria-selected={option.value === value}
                   tabIndex={0}
