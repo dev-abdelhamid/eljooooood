@@ -169,7 +169,7 @@ const translations = {
   },
 };
 
-const FormInput = ({
+export const FormInput = ({
   value,
   onChange,
   placeholder,
