@@ -567,12 +567,12 @@ export function Chefs() {
   };
 
   return (
-    <div className="mx-auto px-4 py-6 min-h-screen bg-white" dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="mx-auto px-4 py-6 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-3 shadow-sm bg-white p-4 rounded-xl"
+        className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-3 shadow-sm  p-4 rounded-xl"
       >
         <div className="flex items-center gap-2">
           <ChefHat className="w-6 h-6 text-amber-600" />

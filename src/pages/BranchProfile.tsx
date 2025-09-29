@@ -1120,7 +1120,7 @@ export const BranchProfile: React.FC = () => {
   }
 
   return (
-    <div className={`mx-auto max-w-7xl p-4 sm:p-6 min-h-screen bg-gray-50 ${isRtl ? 'font-arabic' : 'font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`mx-auto  p-4 sm:p-6 min-h-screen`}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
