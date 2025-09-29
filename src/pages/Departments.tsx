@@ -315,7 +315,7 @@ export function Departments() {
   };
 
   return (
-    <div className="mx-auto px-4 py-6 min-h-screen bg-white" dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`mx-auto px-4 py-6 min-h-screen `}>
       <div className="mb-4 flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-3">
         <div className="flex items-center gap-2">
           <Layers className="w-6 h-6 text-amber-600" />
