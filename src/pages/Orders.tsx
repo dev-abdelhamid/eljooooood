@@ -18,60 +18,11 @@ import { exportToPDF } from '../components/Shared/PDFExporter';
 import { OrderCardSkeleton } from '../components/Shared/OrderSkeletons';
 import { OrderTableSkeleton } from '../components/Shared/OrderSkeletons';
 import Pagination from '../components/Shared/Pagination';
+import { CustomInput } from '../components/UI/CustomInput';
 
 const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
 const OrderTable = lazy(() => import('../components/Shared/OrderTable'));
 const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
-
-// CustomInput component (similar to Departments)
-const CustomInput = ({
-  value,
-  onChange,
-  placeholder,
-  ariaLabel,
-}: {
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  placeholder: string;
-  ariaLabel: string;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  return (
-    <div className="relative group">
-      <motion.div
-        initial={{ opacity: value ? 0 : 1 }}
-        animate={{ opacity: value ? 0 : 1 }}
-        transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} flex items-center justify-center top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`}
-      >
-        <Search className="w-4 h-4" />
-      </motion.div>
-      <input
-        type="text"
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-10 pr-2' : 'pr-10 pl-2'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
-        aria-label={ariaLabel}
-      />
-      <motion.div
-        initial={{ opacity: value ? 1 : 0 }}
-        animate={{ opacity: value ? 1 : 0 }}
-        transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 flex items-center justify-center transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
-      >
-        <button
-          onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
-          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
-          className="flex items-center justify-center"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </motion.div>
-    </div>
-  );
-};
 
 // CustomDropdown component (enhanced)
 const CustomDropdown = ({
