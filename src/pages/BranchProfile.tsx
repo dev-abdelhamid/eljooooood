@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI, ordersAPI, salesAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Edit2, Trash2, Key, AlertCircle, MapPin, ChevronDown } from 'lucide-react';
+import { ArrowLeft, Edit2, Trash2, Key, AlertCircle, MapPin, ChevronDown , EyeOff , Eye  } from 'lucide-react';
 
 interface Branch {
   _id: string;
@@ -535,10 +535,10 @@ const ProfileModal = ({
                 label={t.userStatus}
                 value={formData.user.isActive}
                 onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'isActive', value: value === 'true' })}
-                options=[
+                options={[
                   { value: true, label: t.active },
                   { value: false, label: t.inactive },
-                ]
+                ]}
               />
             </div>
           </div>
