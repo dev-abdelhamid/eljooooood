@@ -7,7 +7,6 @@ import { Button } from '../components/UI/Button';
 import { Select } from '../components/UI/Select';
 import { Input } from '../components/UI/Input';
 import { ShoppingCart, AlertCircle, Search, Table2, Grid, Download } from 'lucide-react';
-import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
@@ -20,10 +19,6 @@ import { exportToPDF } from '../components/Shared/PDFExporter';
 import { OrderCardSkeleton } from '../components/Shared/OrderSkeletons';
 import { OrderTableSkeleton } from '../components/Shared/OrderSkeletons';
 import Pagination from '../components/Shared/Pagination';
-
-const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
-const OrderTable = lazy(() => import('../components/Shared/OrderTable'));
-const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
 
 // Function to normalize text for search (handles Arabic diacritics and variations)
 const normalizeText = (text: string) => {
@@ -488,7 +483,6 @@ export const Orders: React.FC = () => {
       }
       dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
     });
-    socket.off('itemStatusUpdated');
     socket.on('itemStatusUpdated', ({ orderId, itemId, status }: { orderId: string; itemId: string; status: string }) => {
       if (!orderId || !itemId || !status) {
         console.warn('Invalid item status update data:', { orderId, itemId, status });
@@ -521,6 +515,8 @@ export const Orders: React.FC = () => {
     return () => {
       socket.off('connect');
       socket.off('connect_error');
+      socket.off('reconnect');
+      socket.off('disconnect');
       socket.off('newOrder');
       socket.off('orderStatusUpdated');
       socket.off('itemStatusUpdated');
@@ -691,13 +687,9 @@ export const Orders: React.FC = () => {
     [user, state.sortBy, state.sortOrder, isRtl, language]
   );
 
-  const handleSearchChange = useMemo(
-    () =>
-      debounce((value: string) => {
-        dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
-      }, 300),
-    []
-  );
+  const handleSearchChange = useCallback((value: string) => {
+    dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
+  }, []);
 
   const filteredOrders = useMemo(
     () => {
@@ -950,13 +942,17 @@ export const Orders: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
-                <div className="relative ">
+                <div className="relative">
                   <Search className={`w-4 h-4 text-gray-500 absolute top-2 ${isRtl ? 'left-2' : 'right-2'}`} />
                   <Input
                     value={state.searchQuery}
-                    onChange={(e) => handleSearchChange(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement> | string) => {
+                      console.log('onChange event:', e);
+                      const value = typeof e === 'string' ? e : e.target.value;
+                      handleSearchChange(value);
+                    }}
                     placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
-                    className={`w-full ${isRtl ? 'pl-8 ' : 'pr-8'} rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200`}
+                    className={`w-full ${isRtl ? 'pl-8' : 'pr-8'} rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200`}
                     dir={isRtl ? 'rtl' : 'ltr'}
                     lang={isRtl ? 'ar' : 'en'}
                   />
@@ -967,7 +963,7 @@ export const Orders: React.FC = () => {
                 <Select
                   options={statusOptions.map(opt => ({
                     value: opt.value,
-                    label: isRtl ? { '': 'كل الحالات', pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[opt.value] : { '': 'All Statuses', pending: 'Pending', approved: 'Approved', in_production: 'In Production', completed: 'Completed', in_transit: 'In Transit', delivered: 'Delivered', cancelled: 'Cancelled' }[opt.value],
+                    label: isRtl ? { '': 'كل الحالات', pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[opt.value] : opt.label,
                   }))}
                   value={state.filterStatus}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
@@ -988,7 +984,7 @@ export const Orders: React.FC = () => {
                 <Select
                   options={sortOptions.map(opt => ({
                     value: opt.value,
-                    label: isRtl ? { date: 'التاريخ', totalAmount: 'إجمالي المبلغ', priority: 'الأولوية' }[opt.value] : { date: 'Date', totalAmount: 'Total Amount', priority: 'Priority' }[opt.value],
+                    label: isRtl ? { date: 'التاريخ', totalAmount: 'إجمالي المبلغ', priority: 'الأولوية' }[opt.value] : opt.label,
                   }))}
                   value={state.sortBy}
                   onChange={(value) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
