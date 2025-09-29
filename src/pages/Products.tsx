@@ -7,6 +7,7 @@ import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 
+
 interface Product {
   _id: string;
   name: string;
