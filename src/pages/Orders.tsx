@@ -19,6 +19,9 @@ import { OrderCardSkeleton } from '../components/Shared/OrderSkeletons';
 import { OrderTableSkeleton } from '../components/Shared/OrderSkeletons';
 import Pagination from '../components/Shared/Pagination';
 
+const OrderTable = lazy(() => import('../components/Shared/OrderTable'));
+const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
+
 // Function to normalize text for search (handles Arabic diacritics and variations)
 const normalizeText = (text: string) => {
   return text
