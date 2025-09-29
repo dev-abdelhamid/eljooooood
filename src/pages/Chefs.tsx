@@ -586,10 +586,10 @@ export function Chefs() {
                 key={chef.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, ease: 'easeOut' }} {/* smoother animation */}
+                transition={{ duration: 0.3, ease: 'easeOut' }} 
               >
                 <div
-                  className="p-5 bg-white rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer border border-gray-100 max-w-sm mx-auto" {/* تحسين: زد padding, rounded-2xl, shadow-md, max-w-sm للتجاوب */}
+                  className="p-5 bg-white rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer border border-gray-100 max-w-sm mx-auto" 
                   onClick={() => navigate(`/chefs/${chef.id}`)}
                 >
                   <div className="space-y-3"> {/* زد space-y-3 */}
@@ -620,7 +620,7 @@ export function Chefs() {
                           e.stopPropagation();
                           openEditModal(chef);
                         }}
-                        className="p-2 w-10 h-10 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md" {/* زد حجم button */}
+                        className="p-2 w-10 h-10 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md" 
                         title={t.edit}
                       >
                         <Edit2 className="w-5 h-5" />
@@ -660,7 +660,7 @@ export function Chefs() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6" {/* rounded-2xl للـ modal */}
+            className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6"
           >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{isEditMode ? t.edit : t.add}</h3>
             <form onSubmit={handleSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
@@ -672,7 +672,7 @@ export function Chefs() {
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder={t.namePlaceholder}
-                    className={`w-full px-3 py-3 border ${formErrors.name ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`} {/* py-3, text-sm */}
+                    className={`w-full px-3 py-3 border ${formErrors.name ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`} 
                   />
                   {formErrors.name && <p className="text-sm text-red-600 mt-1">{formErrors.name}</p>}
                 </div>
@@ -760,7 +760,7 @@ export function Chefs() {
                     <button
                       type="button"
                       onClick={() => setShowNewPassword(!showNewPassword)}
-                      className={`absolute inset-y-0 ${isRtl ? 'left-0 pl-3' : 'right-0 pr-3'} flex items-center mt-7 text-gray-400 hover:text-amber-600 transition-colors`} {/* تعديل position */}
+                      className={`absolute inset-y-0 ${isRtl ? 'left-0 pl-3' : 'right-0 pr-3'} flex items-center mt-7 text-gray-400 hover:text-amber-600 transition-colors`} 
                     >
                       {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -778,7 +778,7 @@ export function Chefs() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md" {/* زد حجم */}
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md" 
                 >
                   {t.cancel}
                 </button>
