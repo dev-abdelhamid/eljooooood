@@ -75,14 +75,14 @@ export const CustomDropdown = memo(
             setIsOpen(!isOpen);
           }}
           onKeyDown={handleKeyDown}
-          className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white dark:bg-gray-800 shadow-sm hover:shadow-md text-xs text-gray-700 dark:text-gray-200 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500`}
+          className={`w-full px-3 py-2 border border-gray-300  rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white  shadow-sm hover:shadow-md text-xs text-gray-700 dark:text-gray-200 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600`}
           aria-label={ariaLabel}
           aria-expanded={isOpen}
           role="combobox"
         >
           <span className="truncate">{selectedOption.label}</span>
           <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
-            <ChevronDown className="w-4 h-4 text-gray-400 group-focus-within:text-amber-500 dark:group-focus-within:text-amber-400 transition-colors" />
+            <ChevronDown className="w-4 h-4 text-gray-400 group-focus-within:text-amber-600 dark:group-focus-within:text-amber-400 transition-colors" />
           </motion.div>
         </motion.button>
         <AnimatePresence>
@@ -92,7 +92,7 @@ export const CustomDropdown = memo(
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.15 }}
-              className="absolute w-full mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-300 dark:border-gray-600 z-20 max-h-48 overflow-y-auto scrollbar-none"
+              className="absolute w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-300 dark:border-gray-600 z-20 max-h-48 overflow-y-auto scrollbar-none"
               onClick={(e) => e.stopPropagation()}
             >
               {options.map((option, index) => (
@@ -106,7 +106,7 @@ export const CustomDropdown = memo(
                     buttonRef.current?.focus();
                   }}
                   onKeyDown={(e) => handleKeyDown(e, option.value)}
-                  className={`px-3 py-2 text-xs text-gray-700 dark:text-gray-200 hover:bg-amber-50 dark:hover:bg-amber-900 hover:text-amber-600 dark:hover:text-amber-400 cursor-pointer transition-colors duration-200 focus:outline-none focus:bg-amber-50 dark:focus:bg-amber-900 focus:text-amber-600 dark:focus:text-amber-400 ${isRtl ? 'text-right' : 'text-left'}`}
+                  className={`px-3 py-2 text-xs text-gray-700  hover:bg-amber-50  cursor-pointer transition-colors duration-200 focus:outline-none focus:bg-amber-50 dark:focus:bg-amber-900 focus:text-amber-600 dark:focus:text-amber-400 ${isRtl ? 'text-right' : 'text-left'}`}
                   role="option"
                   aria-selected={option.value === value}
                   tabIndex={0}
