@@ -745,8 +745,8 @@ export function ChefDetails() {
                     value={formData.isActive}
                     onChange={(value) => setFormData({ ...formData, isActive: value === 'true' })}
                     options={[
-                      { value: true, label: t.active },
-                      { value: false, label: t.inactive },
+                      { value: 'true', label: t.active },
+                      { value: 'false', label: t.inactive },
                     ]}
                     ariaLabel={t.status}
                   />
@@ -798,7 +798,7 @@ export function ChefDetails() {
                   value={resetPasswordData.password}
                   onChange={(e) => setResetPasswordData({ ...resetPasswordData, password: e.target.value })}
                   placeholder={t.newPasswordPlaceholder}
-                  className={`w-full px-3 py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                  className={`w-full px-3 py-3  border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                 />
                 <button
                   type="button"

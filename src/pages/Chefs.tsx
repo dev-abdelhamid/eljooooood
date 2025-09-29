@@ -1,14 +1,12 @@
-// src/pages/Chefs.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { chefsAPI, departmentAPI } from '../services/api';
-import { ChefHat, AlertCircle, Plus, Edit2, Trash2, Key } from 'lucide-react';
+import { ChefHat, AlertCircle, Plus, Edit2, Trash2, Key, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { debounce } from 'lodash';
-import { CustomInput } from '../components/UI/CustomInput';
 import { CustomDropdown } from '../components/UI/CustomDropdown';
 
 interface Department {
@@ -28,7 +26,6 @@ interface Chef {
     username: string;
     email?: string;
     phone?: string;
-    isActive: boolean;
     createdAt: string;
     updatedAt: string;
   } | null;
@@ -95,9 +92,6 @@ const translations = {
     deleted: 'تم الحذف بنجاح',
     noDepartments: 'لا توجد أقسام متاحة',
     invalidUser: 'مستخدم غير صالح',
-    status: 'الحالة',
-    active: 'نشط',
-    inactive: 'غير نشط',
   },
   en: {
     manage: 'Manage Chefs',
@@ -156,10 +150,103 @@ const translations = {
     deleted: 'Deleted successfully',
     noDepartments: 'No departments available',
     invalidUser: 'Invalid user',
-    status: 'Status',
-    active: 'Active',
-    inactive: 'Inactive',
   },
+};
+
+const SearchInput = ({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  ariaLabel: string;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="relative group">
+      <motion.div
+        initial={{ opacity: value ? 0 : 1 }}
+        animate={{ opacity: value ? 0 : 1 }}
+        transition={{ duration: 0.15 }}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} flex items-center justify-center top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`}
+      >
+        <Search className="w-4 h-4" />
+      </motion.div>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={`w-full ${isRtl ? 'pl-10 pr-2' : 'pr-10 pl-2'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={ariaLabel}
+      />
+      <motion.div
+        initial={{ opacity: value ? 1 : 0 }}
+        animate={{ opacity: value ? 1 : 0 }}
+        transition={{ duration: 0.15 }}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 flex items-center justify-center transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
+      >
+        <button
+          onClick={() => onChange('')}
+          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
+          className="flex items-center justify-center"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </motion.div>
+    </div>
+  );
+};
+
+const FormInput = ({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+  type = 'text',
+  showPasswordToggle = false,
+  showPassword = false,
+  togglePasswordVisibility,
+  error,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  ariaLabel: string;
+  type?: string;
+  showPasswordToggle?: boolean;
+  showPassword?: boolean;
+  togglePasswordVisibility?: () => void;
+  error?: string;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="relative">
+      <input
+        type={showPassword ? 'text' : type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={`w-full px-3 ${showPasswordToggle ? (isRtl ? 'pl-10 pr-3' : 'pr-10 pl-3') : ''} py-2 border ${error ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={ariaLabel}
+      />
+      {showPasswordToggle && (
+        <button
+          type="button"
+          onClick={togglePasswordVisibility}
+          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
+          aria-label={showPassword ? (isRtl ? 'إخفاء كلمة المرور' : 'Hide password') : (isRtl ? 'إظهار كلمة المرور' : 'Show password')}
+        >
+          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </button>
+      )}
+    </div>
+  );
 };
 
 export function Chefs() {
@@ -188,7 +275,6 @@ export function Chefs() {
     phone: '',
     department: '',
     password: '',
-    isActive: true,
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [showPassword, setShowPassword] = useState<Record<string, boolean>>({});
@@ -224,7 +310,6 @@ export function Chefs() {
           username: chef.user.username,
           email: chef.user.email,
           phone: chef.user.phone,
-          isActive: chef.user.isActive,
           createdAt: chef.user.createdAt,
           updatedAt: chef.user.updatedAt,
         },
@@ -298,7 +383,6 @@ export function Chefs() {
       phone: '',
       department: departments[0].id,
       password: '',
-      isActive: true,
     });
     setIsEditMode(false);
     setSelectedChef(null);
@@ -316,7 +400,6 @@ export function Chefs() {
       phone: chef.user?.phone || '',
       department: chef.department?.id || '',
       password: '',
-      isActive: chef.user?.isActive ?? true,
     });
     setIsEditMode(true);
     setSelectedChef(chef);
@@ -354,7 +437,6 @@ export function Chefs() {
           email: formData.email.trim() || undefined,
           phone: formData.phone.trim() || undefined,
           role: 'chef',
-          isActive: formData.isActive,
           ...(isEditMode ? {} : { password: formData.password.trim() }),
         },
         department: formData.department,
@@ -403,7 +485,6 @@ export function Chefs() {
               username: newChef.user.username,
               email: newChef.user.email,
               phone: newChef.user.phone,
-              isActive: newChef.user.isActive,
               createdAt: newChef.user.createdAt,
               updatedAt: newChef.user.updatedAt,
             },
@@ -485,27 +566,8 @@ export function Chefs() {
     setShowPassword((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl w-full px-4">
-          {[...Array(6)].map((_, index) => (
-            <div key={index} className="p-4 bg-white rounded-xl shadow-sm">
-              <div className="space-y-2 animate-pulse">
-                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                <div className="h-3 bg-gray-200 rounded w-2/3"></div>
-                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className={`mx-auto px-4 py-6 min-h-screen overflow-y-auto scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100 `}>
+    <div className="mx-auto px-4 py-6 min-h-screen bg-white" dir={isRtl ? 'rtl' : 'ltr'}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -548,7 +610,7 @@ export function Chefs() {
 
       <div className="space-y-3">
         <div className="p-4 bg-white rounded-xl shadow-sm">
-          <CustomInput
+          <SearchInput
             value={searchInput}
             onChange={(value) => {
               setSearchInput(value);
@@ -562,7 +624,26 @@ export function Chefs() {
           {isRtl ? `عدد الشيفات: ${filteredChefs.length}` : `Chefs Count: ${filteredChefs.length}`}
         </div>
 
-        {filteredChefs.length === 0 ? (
+        {loading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {[...Array(6)].map((_, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: index * 0.1 }}
+                className="p-4 bg-white rounded-xl shadow-sm"
+              >
+                <div className="space-y-2 animate-pulse">
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                  <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        ) : filteredChefs.length === 0 ? (
           <div className="p-6 text-center bg-white rounded-xl shadow-sm">
             <ChefHat className="w-10 h-10 text-gray-400 mx-auto mb-3" />
             <p className="text-gray-600 text-xs">{searchTerm ? t.noMatch : t.empty}</p>
@@ -578,7 +659,7 @@ export function Chefs() {
           </div>
         ) : (
           <motion.div
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto scrollbar-none"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ staggerChildren: 0.1 }}
@@ -588,73 +669,56 @@ export function Chefs() {
                 key={chef.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+                onClick={() => navigate(`/chefs/${chef.id}`)}
               >
-                <div
-                  className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer border border-gray-100"
-                  onClick={() => navigate(`/chefs/${chef.id}`)}
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="font-semibold text-gray-900 text-sm truncate">
-                        {isRtl ? chef.user?.name : chef.user?.nameEn || chef.user?.name}
-                      </h3>
-                      <ChefHat className="w-5 h-5 text-amber-600" />
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <span className="w-20 font-medium">{t.username}:</span>
-                      <span className="truncate flex-1">{chef.user?.username || '-'}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <span className="w-20 font-medium">{t.email}:</span>
-                      <span className="truncate flex-1">{chef.user?.email || '-'}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <span className="w-20 font-medium">{t.department}:</span>
-                      <span className="truncate flex-1">{isRtl ? chef.department?.name : chef.department?.nameEn || chef.department?.name || '-'}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="w-20 font-medium">{t.status}:</span>
-                      <span className={`truncate flex-1 ${chef.user?.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                        {chef.user?.isActive ? t.active : t.inactive}
-                      </span>
-                    </div>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-semibold text-gray-900 text-sm truncate">
+                      {isRtl ? chef.user?.name : chef.user?.nameEn || chef.user?.name}
+                    </h3>
+                    <p className="text-xs text-gray-500">{chef.user?.username || '-'}</p>
                   </div>
-                  {loggedInUser?.role === 'admin' && (
-                    <div className="mt-3 flex items-center justify-end gap-1.5">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openEditModal(chef);
-                        }}
-                        className="p-1.5 w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
-                        title={t.edit}
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openResetPasswordModal(chef);
-                        }}
-                        className="p-1.5 w-8 h-8 bg-amber-500 hover:bg-amber-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
-                        title={t.resetPassword}
-                      >
-                        <Key className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openDeleteModal(chef);
-                        }}
-                        className="p-1.5 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
-                        title={t.delete}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  )}
+                  <p className="text-xs text-amber-600">
+                    {isRtl ? chef.department?.name : chef.department?.nameEn || chef.department?.name || '-'}
+                  </p>
+                  <p className="text-xs text-gray-600 truncate">{chef.user?.email || '-'}</p>
                 </div>
+                {loggedInUser?.role === 'admin' && (
+                  <div className="mt-3 flex items-center justify-end gap-1.5">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditModal(chef);
+                      }}
+                      className="p-1.5 w-7 h-7 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center"
+                      title={t.edit}
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openResetPasswordModal(chef);
+                      }}
+                      className="p-1.5 w-7 h-7 bg-amber-500 hover:bg-amber-600 text-white rounded-full transition-colors flex items-center justify-center"
+                      title={t.resetPassword}
+                    >
+                      <Key className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDeleteModal(chef);
+                      }}
+                      className="p-1.5 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center"
+                      title={t.delete}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
               </motion.div>
             ))}
           </motion.div>
@@ -662,49 +726,53 @@ export function Chefs() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}>
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6"
+            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5"
+            onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{isEditMode ? t.edit : t.add}</h3>
-            <form onSubmit={handleSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">{isEditMode ? t.edit : t.add}</h3>
+            <form onSubmit={handleSubmit} className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">{t.name}</label>
-                  <CustomInput
+                  <FormInput
                     value={formData.name}
                     onChange={(value) => setFormData({ ...formData, name: value })}
                     placeholder={t.namePlaceholder}
                     ariaLabel={t.name}
+                    error={formErrors.name}
                   />
                   {formErrors.name && <p className="text-xs text-red-600 mt-1">{formErrors.name}</p>}
                 </div>
                 <div>
                   <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">{t.nameEn}</label>
-                  <CustomInput
+                  <FormInput
                     value={formData.nameEn}
                     onChange={(value) => setFormData({ ...formData, nameEn: value })}
                     placeholder={t.nameEnPlaceholder}
                     ariaLabel={t.nameEn}
+                    error={formErrors.nameEn}
                   />
                   {formErrors.nameEn && <p className="text-xs text-red-600 mt-1">{formErrors.nameEn}</p>}
                 </div>
                 <div>
                   <label htmlFor="username" className="block text-xs font-medium text-gray-700 mb-1">{t.username}</label>
-                  <CustomInput
+                  <FormInput
                     value={formData.username}
                     onChange={(value) => setFormData({ ...formData, username: value })}
                     placeholder={t.usernamePlaceholder}
                     ariaLabel={t.username}
+                    error={formErrors.username}
                   />
                   {formErrors.username && <p className="text-xs text-red-600 mt-1">{formErrors.username}</p>}
                 </div>
                 <div>
                   <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1">{t.email}</label>
-                  <CustomInput
+                  <FormInput
                     value={formData.email}
                     onChange={(value) => setFormData({ ...formData, email: value })}
                     placeholder={t.emailPlaceholder}
@@ -713,7 +781,7 @@ export function Chefs() {
                 </div>
                 <div>
                   <label htmlFor="phone" className="block text-xs font-medium text-gray-700 mb-1">{t.phone}</label>
-                  <CustomInput
+                  <FormInput
                     value={formData.phone}
                     onChange={(value) => setFormData({ ...formData, phone: value })}
                     placeholder={t.phonePlaceholder}
@@ -736,22 +804,10 @@ export function Chefs() {
                   />
                   {formErrors.department && <p className="text-xs text-red-600 mt-1">{formErrors.department}</p>}
                 </div>
-                <div>
-                  <label htmlFor="status" className="block text-xs font-medium text-gray-700 mb-1">{t.status}</label>
-                  <CustomDropdown
-                    value={formData.isActive}
-                    onChange={(value) => setFormData({ ...formData, isActive: value === 'true' })}
-                    options={[
-                      { value: true, label: t.active },
-                      { value: false, label: t.inactive },
-                    ]}
-                    ariaLabel={t.status}
-                  />
-                </div>
                 {!isEditMode && (
                   <div>
                     <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">{t.password}</label>
-                    <CustomInput
+                    <FormInput
                       value={formData.password}
                       onChange={(value) => setFormData({ ...formData, password: value })}
                       placeholder={t.passwordPlaceholder}
@@ -760,6 +816,7 @@ export function Chefs() {
                       showPasswordToggle
                       showPassword={showPassword['new']}
                       togglePasswordVisibility={() => togglePasswordVisibility('new')}
+                      error={formErrors.password}
                     />
                     {formErrors.password && <p className="text-xs text-red-600 mt-1">{formErrors.password}</p>}
                   </div>
@@ -775,13 +832,15 @@ export function Chefs() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors"
+                  aria-label={t.cancel}
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
+                  aria-label={isEditMode ? t.update : t.add}
                 >
                   {isEditMode ? t.update : t.add}
                 </button>
@@ -792,18 +851,19 @@ export function Chefs() {
       )}
 
       {isResetPasswordModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setIsResetPasswordModalOpen(false); }}>
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6"
+            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-5"
+            onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.resetPassword}</h3>
-            <form onSubmit={handleResetPassword} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.resetPassword}</h3>
+            <form onSubmit={handleResetPassword} className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
               <div>
                 <label htmlFor="newPassword" className="block text-xs font-medium text-gray-700 mb-1">{t.newPassword}</label>
-                <CustomInput
+                <FormInput
                   value={resetPasswordData.password}
                   onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
                   placeholder={t.newPasswordPlaceholder}
@@ -816,7 +876,7 @@ export function Chefs() {
               </div>
               <div>
                 <label htmlFor="confirmPassword" className="block text-xs font-medium text-gray-700 mb-1">{t.confirmPassword}</label>
-                <CustomInput
+                <FormInput
                   value={resetPasswordData.confirmPassword}
                   onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
                   placeholder={t.confirmPasswordPlaceholder}
@@ -837,13 +897,15 @@ export function Chefs() {
                 <button
                   type="button"
                   onClick={() => setIsResetPasswordModalOpen(false)}
-                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors"
+                  aria-label={t.cancel}
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
+                  aria-label={t.reset}
                 >
                   {t.reset}
                 </button>
@@ -854,38 +916,37 @@ export function Chefs() {
       )}
 
       {isDeleteModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) setIsDeleteModalOpen(false); }}>
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6"
+            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-5"
+            onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.confirmDelete}</h3>
-            <div className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
-              <p className="text-gray-600 text-xs">{t.deleteWarning}</p>
-              {error && (
-                <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-600" />
-                  <span className="text-red-600 text-xs">{error}</span>
-                </div>
-              )}
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsDeleteModalOpen(false)}
-                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
-                >
-                  {t.cancel}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
-                >
-                  {t.delete}
-                </button>
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.confirmDelete}</h3>
+            <p className="text-xs text-gray-600 mb-4">{t.deleteWarning}</p>
+            {error && (
+              <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 mb-4">
+                <AlertCircle className="w-4 h-4 text-red-600" />
+                <span className="text-red-600 text-xs">{error}</span>
               </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setIsDeleteModalOpen(false)}
+                className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors"
+                aria-label={t.cancel}
+              >
+                {t.cancel}
+              </button>
+              <button
+                onClick={handleDelete}
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs transition-colors"
+                aria-label={t.delete}
+              >
+                {t.delete}
+              </button>
             </div>
           </motion.div>
         </div>
