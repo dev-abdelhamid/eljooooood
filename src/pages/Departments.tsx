@@ -304,9 +304,7 @@ export function Departments() {
 
   return (
     <div
-      className={`mx-auto max-w-6xl px-4 py-6 min-h-screen overflow-y-auto scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100 bg-gray-50 font-sans ${
-        isRtl ? 'rtl font-arabic' : 'ltr'
-      }`}
+      className={`mx-auto px-4 py-6 min-h-screen overflow-y-auto scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100 `}
       dir={isRtl ? 'rtl' : 'ltr'}
     >
       <motion.div
@@ -315,8 +313,8 @@ export function Departments() {
         transition={{ duration: 0.5 }}
         className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-3 shadow-sm bg-white p-4 rounded-xl"
       >
-        <div className="flex items-center gap-2">
-          <Layers className="w-6 h-6 text-amber-600" />
+        <div className="flex items-center flex-col sm:flex-row gap-2">
+          <Layers className="w-6 h-6 text-amber-600 bg-amber-100/50 p-2 rounded-full" />
           <div>
             <h1 className="text-xl font-bold text-gray-900">{t.manage}</h1>
             <p className="text-gray-600 text-sm">{isRtl ? 'إضافة، تعديل، أو حذف الأقسام' : 'Add, edit, or delete departments'}</p> {/* زد text-sm */}

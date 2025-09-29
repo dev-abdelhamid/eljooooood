@@ -456,9 +456,7 @@ export function ChefDetails() {
 
   return (
     <div
-      className={`mx-auto max-w-3xl px-4 py-6 min-h-screen overflow-y-auto scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100 bg-gray-50 font-sans ${
-        isRtl ? 'rtl font-arabic' : 'ltr'
-      }`}
+      className={`mx-auto  px-4 py-6 min-h-screen overflow-y-auto scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100 `}
       dir={isRtl ? 'rtl' : 'ltr'}
     >
       <motion.div
