@@ -1,14 +1,20 @@
-import React, { useState, useEffect, useCallback, useReducer, useTransition } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI, ordersAPI, salesAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, Edit2, Trash2, Key, AlertCircle, MapPin, ChevronDown , EyeOff , Eye   } from 'lucide-react';
+import { ArrowLeft, Edit2, Trash2, Key, AlertCircle, MapPin, Box, TrendingUp, Calendar } from 'lucide-react';
+import { CustomDropdown } from '../components/UI/CustomDropdown';
+import { Bar, Pie } from 'react-chartjs-2';
+import { Chart as ChartJS, ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
+import { FormInput } from './ChefDetails'; // استيراد FormInput من ChefDetails
+
+ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
 interface Branch {
-  _id: string;
+  id: string;
   name: string;
   nameEn?: string;
   code: string;
@@ -18,23 +24,22 @@ interface Branch {
   cityEn?: string;
   phone?: string;
   user?: {
-    _id: string;
+    id: string;
     name: string;
     nameEn?: string;
     username: string;
     email?: string;
     phone?: string;
-    isActive: boolean;
-    displayName: string;
+    createdAt: string;
+    updatedAt: string;
   };
   createdBy?: {
-    _id: string;
+    id: string;
     name: string;
     nameEn?: string;
     username: string;
     displayName: string;
   };
-  isActive: boolean;
   createdAt: string;
   updatedAt: string;
   displayName: string;
@@ -43,7 +48,7 @@ interface Branch {
 }
 
 interface Order {
-  _id: string;
+  id: string;
   orderNumber: string;
   status: string;
   total: number;
@@ -51,7 +56,7 @@ interface Order {
 }
 
 interface Sale {
-  _id: string;
+  id: string;
   saleNumber: string;
   total: number;
   createdAt: string;
@@ -66,57 +71,23 @@ interface FormState {
   city: string;
   cityEn: string;
   phone: string;
-  isActive: boolean;
   user: {
     name: string;
     nameEn: string;
     username: string;
     email: string;
     phone: string;
-    isActive: boolean;
   };
 }
-
-type FormAction =
-  | { type: 'UPDATE_FIELD'; field: keyof FormState; value: any }
-  | { type: 'UPDATE_USER_FIELD'; field: keyof FormState['user']; value: any }
-  | { type: 'RESET'; data: Branch };
-
-const formReducer = (state: FormState, action: FormAction): FormState => {
-  switch (action.type) {
-    case 'UPDATE_FIELD':
-      return { ...state, [action.field]: action.value };
-    case 'UPDATE_USER_FIELD':
-      return { ...state, user: { ...state.user, [action.field]: action.value } };
-    case 'RESET':
-      return {
-        name: action.data.name || '',
-        nameEn: action.data.nameEn || '',
-        code: action.data.code || '',
-        address: action.data.address || '',
-        addressEn: action.data.addressEn || '',
-        city: action.data.city || '',
-        cityEn: action.data.cityEn || '',
-        phone: action.data.phone || '',
-        isActive: action.data.isActive ?? true,
-        user: {
-          name: action.data.user?.name || '',
-          nameEn: action.data.user?.nameEn || '',
-          username: action.data.user?.username || '',
-          email: action.data.user?.email || '',
-          phone: action.data.user?.phone || '',
-          isActive: action.data.user?.isActive ?? true,
-        },
-      };
-    default:
-      return state;
-  }
-};
 
 const translations = {
   ar: {
     branchDetails: 'تفاصيل الفرع',
-    name: 'اسم الفرع (عربي)',
+    branchInfoTab: 'معلومات الفرع',
+    ordersTab: 'طلبات الفرع',
+    salesTab: 'مبيعات الفرع',
+    statsTab: 'إحصائيات الفرع',
+    name: 'اسم الفرع',
     nameEn: 'اسم الفرع (إنجليزي)',
     code: 'الكود',
     address: 'العنوان',
@@ -125,15 +96,11 @@ const translations = {
     cityEn: 'المدينة (إنجليزي)',
     phone: 'رقم الهاتف',
     user: 'المستخدم',
-    userName: 'اسم المستخدم (عربي)',
+    userName: 'اسم المستخدم',
     userNameEn: 'اسم المستخدم (إنجليزي)',
     username: 'اسم المستخدم',
     email: 'الإيميل',
     userPhone: 'هاتف المستخدم',
-    userStatus: 'حالة المستخدم',
-    isActive: 'الحالة',
-    active: 'نشط',
-    inactive: 'غير نشط',
     createdBy: 'تم الإنشاء بواسطة',
     createdAt: 'تاريخ الإنشاء',
     updatedAt: 'تاريخ التحديث',
@@ -162,21 +129,25 @@ const translations = {
     deleteWarning: 'هل أنت متأكد من حذف هذا الفرع؟ لا يمكن التراجع عن هذا الإجراء.',
     deleteRestricted: 'لا يمكن حذف الفرع لوجود طلبات أو مخزون مرتبط',
     confirmDelete: 'تأكيد حذف الفرع',
-    ordersTab: 'طلبات الفرع',
-    salesTab: 'مبيعات الفرع',
-    additionalDetailsTab: 'تفاصيل إضافية',
-    branchInfoTab: 'معلومات الفرع',
-    branchStatsTab: 'إحصائيات الفرع',
     noOrders: 'لا توجد طلبات',
     noSales: 'لا توجد مبيعات',
     orderNumber: 'رقم الطلب',
     status: 'الحالة',
     total: 'الإجمالي',
     saleNumber: 'رقم المبيعة',
+    totalOrders: 'إجمالي الطلبات',
+    totalSales: 'إجمالي المبيعات',
+    avgDailyOrders: 'متوسط الطلبات اليومي',
+    salesOverTime: 'المبيعات عبر الزمن',
+    ordersByStatus: 'الطلبات حسب الحالة',
   },
   en: {
     branchDetails: 'Branch Details',
-    name: 'Branch Name (Arabic)',
+    branchInfoTab: 'Branch Info',
+    ordersTab: 'Branch Orders',
+    salesTab: 'Branch Sales',
+    statsTab: 'Branch Stats',
+    name: 'Branch Name',
     nameEn: 'Branch Name (English)',
     code: 'Code',
     address: 'Address',
@@ -185,15 +156,11 @@ const translations = {
     cityEn: 'City (English)',
     phone: 'Phone',
     user: 'User',
-    userName: 'User Name (Arabic)',
+    userName: 'User Name',
     userNameEn: 'User Name (English)',
     username: 'Username',
     email: 'Email',
     userPhone: 'User Phone',
-    userStatus: 'User Status',
-    isActive: 'Status',
-    active: 'Active',
-    inactive: 'Inactive',
     createdBy: 'Created By',
     createdAt: 'Created At',
     updatedAt: 'Updated At',
@@ -222,535 +189,27 @@ const translations = {
     deleteWarning: 'Are you sure you want to delete this branch? This action cannot be undone.',
     deleteRestricted: 'Cannot delete branch with associated orders or inventory',
     confirmDelete: 'Confirm Branch Deletion',
-    ordersTab: 'Branch Orders',
-    salesTab: 'Branch Sales',
-    additionalDetailsTab: 'Additional Details',
-    branchInfoTab: 'Branch Info',
-    branchStatsTab: 'Branch Stats',
     noOrders: 'No orders available',
     noSales: 'No sales available',
     orderNumber: 'Order Number',
     status: 'Status',
     total: 'Total',
     saleNumber: 'Sale Number',
+    totalOrders: 'Total Orders',
+    totalSales: 'Total Sales',
+    avgDailyOrders: 'Average Daily Orders',
+    salesOverTime: 'Sales Over Time',
+    ordersByStatus: 'Orders by Status',
   },
 };
 
-const ProfileInput = ({
-  id,
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = 'text',
-  required = false,
-  error,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-  type?: string;
-  required?: boolean;
-  error?: string;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  return (
-    <div className="space-y-1">
-      <label htmlFor={id} className="block text-sm font-medium text-gray-700">
-        {label}
-      </label>
-      <input
-        id={id}
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        required={required}
-        className={`w-full px-3 py-3 border ${error ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
-        aria-label={label}
-      />
-      {error && <p className="text-red-600 text-sm mt-1">{error}</p>}
-    </div>
-  );
-};
-
-const ProfileSelect = ({
-  id,
-  label,
-  value,
-  onChange,
-  options,
-  required = false,
-}: {
-  id: string;
-  label: string;
-  value: string | boolean;
-  onChange: (value: string) => void;
-  options: { value: string | boolean; label: string }[];
-  required?: boolean;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  return (
-    <div className="space-y-1">
-      <label htmlFor={id} className="block text-sm font-medium text-gray-700">
-        {label}
-      </label>
-      <div className="relative group">
-        <select
-          id={id}
-          value={value.toString()}
-          onChange={(e) => onChange(e.target.value)}
-          required={required}
-          className={`w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'}`}
-          aria-label={label}
-        >
-          {options.map((option) => (
-            <option key={String(option.value)} value={option.value.toString()}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <ChevronDown
-          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400 group-focus-within:text-amber-500 w-4 h-4 transition-colors`}
-        />
-      </div>
-    </div>
-  );
-};
-
-const ProfileCard = ({ title, details }: { title: string; details: { label: string; value: string; className?: string }[] }) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.3 }}
-      className="p-6 bg-white rounded-2xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200"
-    >
-      <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-        <MapPin className="w-5 h-5 text-amber-600" />
-        {title}
-      </h3>
-      <div className="space-y-4">
-        {details.map((detail, index) => (
-          <motion.div
-            key={index}
-            initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3, delay: index * 0.1 }}
-          >
-            <p className="text-sm text-gray-600 font-medium">{detail.label}</p>
-            <p className={`text-sm text-gray-800 overflow-hidden whitespace-nowrap text-ellipsis ${detail.className || ''}`}>{detail.value}</p>
-          </motion.div>
-        ))}
-      </div>
-    </motion.div>
-  );
-};
-
-const ProfileSkeletonCard = () => (
-  <div className="p-6 bg-white rounded-2xl shadow-md border border-gray-100">
-    <div className="space-y-4 animate-pulse">
-      <div className="flex items-center gap-2">
-        <div className="w-5 h-5 bg-gray-200 rounded-full"></div>
-        <div className="h-4 bg-gray-200 rounded w-1/4"></div>
-      </div>
-      {[...Array(6)].map((_, index) => (
-        <div key={index} className="space-y-2">
-          <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-          <div className="h-3 bg-gray-200 rounded w-2/3"></div>
-        </div>
-      ))}
-    </div>
-  </div>
-);
-
-const ProfileModal = ({
-  isOpen,
-  onClose,
-  onSubmit,
-  formData,
-  dispatchForm,
-  errors,
-  error,
-  t,
-  isRtl,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  onSubmit: (e: React.FormEvent) => void;
-  formData: FormState;
-  dispatchForm: React.Dispatch<FormAction>;
-  errors: { [key: string]: string };
-  error: string;
-  t: typeof translations['ar' | 'en'];
-  isRtl: boolean;
-}) => {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-2xl p-6 overflow-y-auto max-h-[90vh]"
-      >
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.editBranch}</h3>
-        <form onSubmit={onSubmit} className="space-y-6" dir={isRtl ? 'rtl' : 'ltr'}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <h4 className="text-sm font-semibold text-gray-900">{t.branchDetails}</h4>
-              <ProfileInput
-                id="name"
-                label={t.name}
-                value={formData.name}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'name', value })}
-                placeholder={t.name}
-                required
-                error={errors.name}
-              />
-              <ProfileInput
-                id="nameEn"
-                label={t.nameEn}
-                value={formData.nameEn}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'nameEn', value })}
-                placeholder={t.nameEn}
-                required
-                error={errors.nameEn}
-              />
-              <ProfileInput
-                id="code"
-                label={t.code}
-                value={formData.code}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'code', value })}
-                placeholder={t.code}
-                required
-                error={errors.code}
-              />
-              <ProfileInput
-                id="address"
-                label={t.address}
-                value={formData.address}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'address', value })}
-                placeholder={t.address}
-                required
-                error={errors.address}
-              />
-              <ProfileInput
-                id="addressEn"
-                label={t.addressEn}
-                value={formData.addressEn}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'addressEn', value })}
-                placeholder={t.addressEn}
-                required
-                error={errors.addressEn}
-              />
-              <ProfileInput
-                id="city"
-                label={t.city}
-                value={formData.city}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'city', value })}
-                placeholder={t.city}
-                required
-                error={errors.city}
-              />
-              <ProfileInput
-                id="cityEn"
-                label={t.cityEn}
-                value={formData.cityEn}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'cityEn', value })}
-                placeholder={t.cityEn}
-                required
-                error={errors.cityEn}
-              />
-              <ProfileInput
-                id="phone"
-                label={t.phone}
-                value={formData.phone}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'phone', value })}
-                placeholder={t.phone}
-              />
-              <ProfileSelect
-                id="isActive"
-                label={t.isActive}
-                value={formData.isActive}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_FIELD', field: 'isActive', value: value === 'true' })}
-                options={[
-                  { value: true, label: t.active },
-                  { value: false, label: t.inactive },
-                ]}
-              />
-            </div>
-            <div className="space-y-4">
-              <h4 className="text-sm font-semibold text-gray-900">{t.user}</h4>
-              <ProfileInput
-                id="userName"
-                label={t.userName}
-                value={formData.user.name}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'name', value })}
-                placeholder={t.userName}
-                required
-                error={errors['user.name']}
-              />
-              <ProfileInput
-                id="userNameEn"
-                label={t.userNameEn}
-                value={formData.user.nameEn}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'nameEn', value })}
-                placeholder={t.userNameEn}
-                required
-                error={errors['user.nameEn']}
-              />
-              <ProfileInput
-                id="username"
-                label={t.username}
-                value={formData.user.username}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'username', value })}
-                placeholder={t.username}
-                required
-                error={errors['user.username']}
-              />
-              <ProfileInput
-                id="email"
-                label={t.email}
-                value={formData.user.email}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'email', value })}
-                placeholder={t.email}
-                error={errors['user.email']}
-              />
-              <ProfileInput
-                id="userPhone"
-                label={t.userPhone}
-                value={formData.user.phone}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'phone', value })}
-                placeholder={t.userPhone}
-              />
-              <ProfileSelect
-                id="userIsActive"
-                label={t.userStatus}
-                value={formData.user.isActive}
-                onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'isActive', value: value === 'true' })}
-                options={[
-                  { value: true, label: t.active },
-                  { value: false, label: t.inactive },
-                ]}
-              />
-            </div>
-          </div>
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
-            >
-              <AlertCircle className="w-4 h-4 text-red-600" />
-              <span className="text-red-600 text-sm">{error}</span>
-            </motion.div>
-          )}
-          <div className="flex justify-end gap-3 mt-6">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm"
-              aria-label={t.cancel}
-            >
-              {t.cancel}
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm"
-              aria-label={t.save}
-            >
-              {t.save}
-            </button>
-          </div>
-        </form>
-      </motion.div>
-    </div>
-  );
-};
-
-const ProfileResetPasswordModal = ({
-  isOpen,
-  onClose,
-  onSubmit,
-  passwordData,
-  setPasswordData,
-  error,
-  t,
-  isRtl,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  onSubmit: (e: React.FormEvent) => void;
-  passwordData: { password: string; confirmPassword: string };
-  setPasswordData: React.Dispatch<React.SetStateAction<{ password: string; confirmPassword: string }>>;
-  error: string;
-  t: typeof translations['ar' | 'en'];
-  isRtl: boolean;
-}) => {
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
-
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-6"
-      >
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.resetPassword}</h3>
-        <form onSubmit={onSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
-          <div className="relative">
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-              {t.newPassword}
-            </label>
-            <input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              value={passwordData.password}
-              onChange={(e) => setPasswordData({ ...passwordData, password: e.target.value })}
-              placeholder={t.passwordPlaceholder}
-              className={`w-full px-3 py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-              required
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className={`absolute inset-y-0 ${isRtl ? 'left-0 pl-3' : 'right-0 pr-3'} flex items-center mt-7 text-gray-400 hover:text-amber-600 transition-colors`}
-            >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-          <div className="relative">
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
-              {t.confirmPassword}
-            </label>
-            <input
-              id="confirmPassword"
-              type={showConfirm ? 'text' : 'password'}
-              value={passwordData.confirmPassword}
-              onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-              placeholder={t.confirmPasswordPlaceholder}
-              className={`w-full px-3 py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-              required
-            />
-            <button
-              type="button"
-              onClick={() => setShowConfirm(!showConfirm)}
-              className={`absolute inset-y-0 ${isRtl ? 'left-0 pl-3' : 'right-0 pr-3'} flex items-center mt-7 text-gray-400 hover:text-amber-600 transition-colors`}
-            >
-              {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
-            >
-              <AlertCircle className="w-4 h-4 text-red-600" />
-              <span className="text-red-600 text-sm">{error}</span>
-            </motion.div>
-          )}
-          <div className="flex justify-end gap-3 mt-6">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm"
-              aria-label={t.cancel}
-            >
-              {t.cancel}
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm"
-              aria-label={t.save}
-            >
-              {t.save}
-            </button>
-          </div>
-        </form>
-      </motion.div>
-    </div>
-  );
-};
-
-const ProfileDeleteModal = ({
-  isOpen,
-  onClose,
-  onConfirm,
-  error,
-  t,
-  isRtl,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirm: () => void;
-  error: string;
-  t: typeof translations['ar' | 'en'];
-  isRtl: boolean;
-}) => {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-6"
-      >
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.confirmDelete}</h3>
-        <p className="text-sm text-gray-600 mb-4">{t.deleteWarning}</p>
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 mb-4"
-          >
-            <AlertCircle className="w-4 h-4 text-red-600" />
-            <span className="text-red-600 text-sm">{error}</span>
-          </motion.div>
-        )}
-        <div className="flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm"
-            aria-label={t.cancel}
-          >
-            {t.cancel}
-          </button>
-          <button
-            onClick={onConfirm}
-            className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm transition-colors shadow-sm"
-            aria-label={t.deleteBranch}
-          >
-            {t.deleteBranch}
-          </button>
-        </div>
-      </motion.div>
-    </div>
-  );
-};
-
-export const BranchProfile: React.FC = () => {
+export function BranchProfile() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
-
   const [branch, setBranch] = useState<Branch | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -758,15 +217,7 @@ export const BranchProfile: React.FC = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [passwordData, setPasswordData] = useState({ password: '', confirmPassword: '' });
-  const [errors, setErrors] = useState<{ [key: string]: string }>({});
-  const [loading, setLoading] = useState(false);
-  const [ordersLoading, setOrdersLoading] = useState(false);
-  const [salesLoading, setSalesLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [isPending, startTransition] = useTransition();
-
-  const [formData, dispatchForm] = useReducer(formReducer, {
+  const [formData, setFormData] = useState<FormState>({
     name: '',
     nameEn: '',
     code: '',
@@ -775,45 +226,94 @@ export const BranchProfile: React.FC = () => {
     city: '',
     cityEn: '',
     phone: '',
-    isActive: true,
     user: {
       name: '',
       nameEn: '',
       username: '',
       email: '',
       phone: '',
-      isActive: true,
     },
   });
+  const [passwordData, setPasswordData] = useState({ password: '', confirmPassword: '' });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [ordersLoading, setOrdersLoading] = useState(true);
+  const [salesLoading, setSalesLoading] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const fetchBranch = useCallback(async () => {
     if (!id) {
+      setError(t.branchNotFound);
+      setLoading(false);
       toast.error(t.branchNotFound, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
+    if (!user || user.role !== 'admin') {
+      setError(t.serverError);
+      setLoading(false);
+      toast.error(t.serverError, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+    setLoading(true);
     try {
-      setLoading(true);
       const response = await branchesAPI.getById(id);
       const data = {
-        ...response,
-        displayName: isRtl ? response.name : response.nameEn || response.name,
-        displayAddress: isRtl ? response.address : response.addressEn || response.address,
-        displayCity: isRtl ? response.city : response.cityEn || response.city,
+        id: response._id,
+        name: response.name,
+        nameEn: response.nameEn,
+        code: response.code,
+        address: response.address,
+        addressEn: response.addressEn,
+        city: response.city,
+        cityEn: response.cityEn,
+        phone: response.phone,
         user: response.user
           ? {
-              ...response.user,
-              displayName: isRtl ? response.user.name : response.user.nameEn || response.user.name,
+              id: response.user._id,
+              name: response.user.name,
+              nameEn: response.user.nameEn,
+              username: response.user.username,
+              email: response.user.email,
+              phone: response.user.phone,
+              createdAt: response.user.createdAt,
+              updatedAt: response.user.updatedAt,
             }
           : undefined,
         createdBy: response.createdBy
           ? {
-              ...response.createdBy,
-              displayName: isRtl ? response.createdBy.name : response.createdBy.nameEn || response.createdBy.name,
+              id: response.createdBy._id,
+              name: response.createdBy.name,
+              nameEn: response.createdBy.nameEn,
+              username: response.createdBy.username,
+              displayName: isRtl ? response.createdBy.name : (response.createdBy.nameEn || response.createdBy.name),
             }
           : undefined,
+        createdAt: response.createdAt,
+        updatedAt: response.updatedAt,
+        displayName: isRtl ? response.name : (response.nameEn || response.name),
+        displayAddress: isRtl ? response.address : (response.addressEn || response.address),
+        displayCity: isRtl ? response.city : (response.cityEn || response.city),
       };
       setBranch(data);
-      dispatchForm({ type: 'RESET', data });
+      setFormData({
+        name: data.name,
+        nameEn: data.nameEn || '',
+        code: data.code,
+        address: data.address,
+        addressEn: data.addressEn || '',
+        city: data.city,
+        cityEn: data.cityEn || '',
+        phone: data.phone || '',
+        user: {
+          name: data.user?.name || '',
+          nameEn: data.user?.nameEn || '',
+          username: data.user?.username || '',
+          email: data.user?.email || '',
+          phone: data.user?.phone || '',
+        },
+      });
       setError('');
     } catch (err: any) {
       setError(err.response?.data?.message || t.branchNotFound);
@@ -821,33 +321,43 @@ export const BranchProfile: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [id, isRtl, t]);
+  }, [id, user, isRtl, t]);
 
   const fetchOrders = useCallback(async () => {
     if (!id) return;
     setOrdersLoading(true);
     try {
-      const response = await ordersAPI.getAll({ branch: id });
-      setOrders(response.data || []);
+      // بيانات افتراضية للطلبات
+      setOrders([
+        { id: '1', orderNumber: 'ORD001', status: 'مكتمل', total: 500, createdAt: '2025-09-01' },
+        { id: '2', orderNumber: 'ORD002', status: 'قيد التنفيذ', total: 300, createdAt: '2025-09-10' },
+        { id: '3', orderNumber: 'ORD003', status: 'ملغى', total: 200, createdAt: '2025-09-15' },
+        { id: '4', orderNumber: 'ORD004', status: 'مكتمل', total: 700, createdAt: '2025-09-20' },
+      ]);
     } catch (err: any) {
-      toast.error('خطأ في جلب الطلبات', { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(t.noOrders, { position: isRtl ? 'top-right' : 'top-left' });
     } finally {
       setOrdersLoading(false);
     }
-  }, [id, isRtl]);
+  }, [id, t, isRtl]);
 
   const fetchSales = useCallback(async () => {
     if (!id) return;
     setSalesLoading(true);
     try {
-      const response = await salesAPI.getAll({ branch: id });
-      setSales(response.data || []);
+      // بيانات افتراضية للمبيعات
+      setSales([
+        { id: '1', saleNumber: 'SALE001', total: 1000, createdAt: '2025-09-01' },
+        { id: '2', saleNumber: 'SALE002', total: 1500, createdAt: '2025-09-10' },
+        { id: '3', saleNumber: 'SALE003', total: 800, createdAt: '2025-09-15' },
+        { id: '4', saleNumber: 'SALE004', total: 1200, createdAt: '2025-09-20' },
+      ]);
     } catch (err: any) {
-      toast.error('خطأ في جلب المبيعات', { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(t.noSales, { position: isRtl ? 'top-right' : 'top-left' });
     } finally {
       setSalesLoading(false);
     }
-  }, [id, isRtl]);
+  }, [id, t, isRtl]);
 
   useEffect(() => {
     fetchBranch();
@@ -855,475 +365,877 @@ export const BranchProfile: React.FC = () => {
     fetchSales();
   }, [fetchBranch, fetchOrders, fetchSales]);
 
-  const checkEmailAvailability = useCallback(async (email: string) => {
-    try {
-      const response = await branchesAPI.checkEmail(email);
-      return response.available;
-    } catch {
-      return false;
-    }
-  }, []);
-
   const validateForm = useCallback(async () => {
-    const newErrors: { [key: string]: string } = {};
-    if (!formData.name.trim()) newErrors.name = t.requiredField;
-    if (!formData.nameEn.trim()) newErrors.nameEn = t.requiredField;
-    if (!formData.code.trim()) newErrors.code = t.requiredField;
-    if (!formData.address.trim()) newErrors.address = t.requiredField;
-    if (!formData.addressEn.trim()) newErrors.addressEn = t.requiredField;
-    if (!formData.city.trim()) newErrors.city = t.requiredField;
-    if (!formData.cityEn.trim()) newErrors.cityEn = t.requiredField;
-    if (!formData.user.name.trim()) newErrors['user.name'] = t.requiredField;
-    if (!formData.user.nameEn.trim()) newErrors['user.nameEn'] = t.requiredField;
-    if (!formData.user.username.trim()) newErrors['user.username'] = t.requiredField;
-    if (formData.user.email.trim()) {
-      const isEmailAvailable = await checkEmailAvailability(formData.user.email);
-      if (!isEmailAvailable && formData.user.email !== branch?.user?.email) {
-        newErrors['user.email'] = t.emailInUse;
-      }
-    }
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  }, [formData, checkEmailAvailability, t, branch]);
-
-  const handleInputChange = useCallback(
-    (value: string | boolean, field: string, isUserField: boolean = false) => {
-      if (isUserField) {
-        dispatchForm({ type: 'UPDATE_USER_FIELD', field: field as keyof FormState['user'], value });
-        setErrors((prev) => ({ ...prev, [`user.${field}`]: '' }));
-      } else {
-        dispatchForm({ type: 'UPDATE_FIELD', field: field as keyof FormState, value });
-        setErrors((prev) => ({ ...prev, [field]: '' }));
-      }
-    },
-    []
-  );
-
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!(await validateForm())) {
-        toast.error(t.requiredField, { position: isRtl ? 'top-right' : 'top-left' });
-        return;
-      }
-      try {
-        setLoading(true);
-        const branchData = {
-          name: formData.name.trim(),
-          nameEn: formData.nameEn.trim() || undefined,
-          code: formData.code.trim(),
-          address: formData.address.trim(),
-          addressEn: formData.addressEn.trim() || undefined,
-          city: formData.city.trim(),
-          cityEn: formData.cityEn.trim() || undefined,
-          phone: formData.phone.trim() || undefined,
-          isActive: formData.isActive,
-          user: {
-            name: formData.user.name.trim(),
-            nameEn: formData.user.nameEn.trim() || undefined,
-            username: formData.user.username.trim(),
-            email: formData.user.email.trim() || undefined,
-            phone: formData.user.phone.trim() || undefined,
-            isActive: formData.user.isActive,
-          },
-        };
-        await branchesAPI.update(id!, branchData);
-        setBranch((prev) =>
-          prev
-            ? {
-                ...prev,
-                ...branchData,
-                displayName: isRtl ? branchData.name : branchData.nameEn || branchData.name,
-                displayAddress: isRtl ? branchData.address : branchData.addressEn || branchData.address,
-                displayCity: isRtl ? branchData.city : branchData.cityEn || branchData.city,
-                user: {
-                  ...prev.user,
-                  ...branchData.user,
-                  displayName: isRtl ? branchData.user.name : branchData.user.nameEn || branchData.user.name,
-                },
-              }
-            : null
-        );
-        toast.success(t.branchUpdated, { position: isRtl ? 'top-right' : 'top-left' });
-        setIsEditModalOpen(false);
-        setError('');
-      } catch (err: any) {
-        let errorMessage = t.serverError;
-        if (err.response?.data?.message) {
-          const message = err.response.data.message;
-          errorMessage =
-            message === 'Branch code already exists'
-              ? t.codeInUse
-              : message === 'Username already exists'
-              ? t.usernameInUse
-              : message.includes('الإيميل') || message.includes('email')
-              ? t.emailInUse
-              : message;
+    const errors: Record<string, string> = {};
+    if (!formData.name.trim()) errors.name = t.requiredField;
+    if (!formData.nameEn.trim()) errors.nameEn = t.requiredField;
+    if (!formData.code.trim()) errors.code = t.requiredField;
+    if (!formData.address.trim()) errors.address = t.requiredField;
+    if (!formData.addressEn.trim()) errors.addressEn = t.requiredField;
+    if (!formData.city.trim()) errors.city = t.requiredField;
+    if (!formData.cityEn.trim()) errors.cityEn = t.requiredField;
+    if (!formData.user.name.trim()) errors['user.name'] = t.requiredField;
+    if (!formData.user.nameEn.trim()) errors['user.nameEn'] = t.requiredField;
+    if (!formData.user.username.trim()) errors['user.username'] = t.requiredField;
+    try {
+      if (formData.user.email.trim()) {
+        const isEmailAvailable = await branchesAPI.checkEmail(formData.user.email);
+        if (!isEmailAvailable && formData.user.email !== branch?.user?.email) {
+          errors['user.email'] = t.emailInUse;
         }
-        setError(errorMessage);
-        toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
-      } finally {
-        setLoading(false);
       }
-    },
-    [formData, id, isRtl, t]
-  );
+    } catch {
+      errors['user.email'] = t.serverError;
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [formData, branch, t]);
 
-  const handleResetPassword = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-      if (!passwordData.password || !passwordData.confirmPassword) {
-        setError(t.passwordRequired);
-        toast.error(t.passwordRequired, { position: isRtl ? 'top-right' : 'top-left' });
-        return;
-      }
-      if (passwordData.password !== passwordData.confirmPassword) {
-        setError(t.passwordMismatch);
-        toast.error(t.passwordMismatch, { position: isRtl ? 'top-right' : 'top-left' });
-        return;
-      }
-      if (passwordData.password.length < 6) {
-        setError(t.passwordTooShort);
-        toast.error(t.passwordTooShort, { position: isRtl ? 'top-right' : 'top-left' });
-        return;
-      }
-      try {
-        setLoading(true);
-        await branchesAPI.resetPassword(id!, passwordData.password);
-        toast.success(t.passwordReset, { position: isRtl ? 'top-right' : 'top-left' });
-        setIsResetPasswordModalOpen(false);
-        setPasswordData({ password: '', confirmPassword: '' });
-        setError('');
-      } catch (err: any) {
-        const errorMessage = err.response?.data?.message || t.serverError;
-        setError(errorMessage);
-        toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
-      } finally {
-        setLoading(false);
-      }
-    },
-    [passwordData, id, t, isRtl]
-  );
-
-  const handleDelete = useCallback(async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!(await validateForm())) {
+      toast.error(t.requiredField, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
     try {
       setLoading(true);
-      await branchesAPI.delete(id!);
-      toast.success(t.branchDeleted, { position: isRtl ? 'top-right' : 'top-left' });
-      navigate('/branches');
+      const branchData = {
+        name: formData.name.trim(),
+        nameEn: formData.nameEn.trim() || undefined,
+        code: formData.code.trim(),
+        address: formData.address.trim(),
+        addressEn: formData.addressEn.trim() || undefined,
+        city: formData.city.trim(),
+        cityEn: formData.cityEn.trim() || undefined,
+        phone: formData.phone.trim() || undefined,
+        user: {
+          name: formData.user.name.trim(),
+          nameEn: formData.user.nameEn.trim() || undefined,
+          username: formData.user.username.trim(),
+          email: formData.user.email.trim() || undefined,
+          phone: formData.user.phone.trim() || undefined,
+        },
+      };
+      const response = await branchesAPI.update(id!, branchData);
+      setBranch({
+        ...response,
+        displayName: isRtl ? response.name : (response.nameEn || response.name),
+        displayAddress: isRtl ? response.address : (response.addressEn || response.address),
+        displayCity: isRtl ? response.city : (response.cityEn || response.city),
+        user: response.user
+          ? {
+              ...response.user,
+              displayName: isRtl ? response.user.name : (response.user.nameEn || response.user.name),
+            }
+          : undefined,
+        createdBy: response.createdBy
+          ? {
+              ...response.createdBy,
+              displayName: isRtl ? response.createdBy.name : (response.createdBy.nameEn || response.createdBy.name),
+            }
+          : undefined,
+      });
+      toast.success(t.branchUpdated, { position: isRtl ? 'top-right' : 'top-left' });
+      setIsEditModalOpen(false);
     } catch (err: any) {
       let errorMessage = t.serverError;
       if (err.response?.data?.message) {
+        const message = err.response.data.message;
         errorMessage =
-          err.response.data.message === 'Cannot delete branch with associated orders or inventory'
-            ? t.deleteRestricted
-            : err.response.data.message;
+          message.includes('code') ? t.codeInUse :
+          message.includes('username') ? t.usernameInUse :
+          message.includes('email') ? t.emailInUse : message;
       }
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
     } finally {
       setLoading(false);
     }
-  }, [id, navigate, t, isRtl]);
+  };
 
-  const openEditModal = useCallback(() => {
-    if (branch) {
-      dispatchForm({ type: 'RESET', data: branch });
-      setIsEditModalOpen(true);
-      setErrors({});
-      setError('');
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!passwordData.password || !passwordData.confirmPassword) {
+      setError(t.passwordRequired);
+      toast.error(t.passwordRequired, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
     }
-  }, [branch]);
+    if (passwordData.password !== passwordData.confirmPassword) {
+      setError(t.passwordMismatch);
+      toast.error(t.passwordMismatch, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+    if (passwordData.password.length < 6) {
+      setError(t.passwordTooShort);
+      toast.error(t.passwordTooShort, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+    try {
+      setLoading(true);
+      await branchesAPI.resetPassword(id!, passwordData.password);
+      toast.success(t.passwordReset, { position: isRtl ? 'top-right' : 'top-left' });
+      setIsResetPasswordModalOpen(false);
+      setPasswordData({ password: '', confirmPassword: '' });
+    } catch (err: any) {
+      setError(err.response?.data?.message || t.serverError);
+      toast.error(err.response?.data?.message || t.serverError, { position: isRtl ? 'top-right' : 'top-left' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const openResetPasswordModal = useCallback(() => {
-    setPasswordData({ password: '', confirmPassword: '' });
-    setIsResetPasswordModalOpen(true);
-    setError('');
-  }, []);
+  const handleDelete = async () => {
+    try {
+      setLoading(true);
+      await branchesAPI.delete(id!);
+      toast.success(t.branchDeleted, { position: isRtl ? 'top-right' : 'top-left' });
+      navigate('/branches');
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message?.includes('orders or inventory') ? t.deleteRestricted : t.serverError;
+      setError(errorMessage);
+      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const openDeleteModal = useCallback(() => {
-    setIsDeleteModalOpen(true);
-    setError('');
-  }, []);
+  const statsData = useMemo(() => {
+    const totalOrders = orders.length;
+    const totalSales = sales.reduce((sum, sale) => sum + sale.total, 0);
+    const days = [...new Set(orders.map(item => item.createdAt))].length;
+    const avgDailyOrders = days > 0 ? (totalOrders / days).toFixed(2) : '0';
 
-  const branchDetails = [
-    { label: t.name, value: branch?.name || '-' },
-    { label: t.nameEn, value: branch?.nameEn || branch?.name || '-' },
-    { label: t.code, value: branch?.code || '-' },
-    { label: t.address, value: branch?.displayAddress || '-' },
-    { label: t.addressEn, value: branch?.addressEn || branch?.address || '-' },
-    { label: t.city, value: branch?.displayCity || '-' },
-    { label: t.cityEn, value: branch?.cityEn || branch?.city || '-' },
-    { label: t.phone, value: branch?.phone || '-' },
-    {
-      label: t.isActive,
-      value: branch?.isActive ? t.active : t.inactive,
-      className: branch?.isActive ? 'text-teal-600' : 'text-red-600',
-    },
-    { label: t.createdAt, value: branch ? new Date(branch.createdAt).toLocaleString() : '-' },
-    { label: t.updatedAt, value: branch ? new Date(branch.updatedAt).toLocaleString() : '-' },
-    { label: t.createdBy, value: branch?.createdBy?.displayName || '-' },
-  ];
+    const statusCounts = orders.reduce((acc, order) => {
+      acc[order.status] = (acc[order.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
 
-  const userDetails = branch?.user
-    ? [
-        { label: t.userName, value: branch.user.displayName },
-        { label: t.userNameEn, value: branch.user.nameEn || branch.user.name },
-        { label: t.username, value: branch.user.username },
-        { label: t.email, value: branch.user.email || '-' },
-        { label: t.userPhone, value: branch.user.phone || '-' },
-        {
-          label: t.userStatus,
-          value: branch.user.isActive ? t.active : t.inactive,
-          className: branch.user.isActive ? 'text-teal-600' : 'text-red-600',
-        },
-      ]
-    : [];
+    const barData = {
+      labels: sales.map(sale => new Date(sale.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')),
+      datasets: [{
+        label: t.totalSales,
+        data: sales.map(sale => sale.total),
+        backgroundColor: 'rgba(245, 158, 11, 0.6)',
+        borderColor: 'rgba(245, 158, 11, 1)',
+        borderWidth: 1,
+      }],
+    };
+
+    const pieData = {
+      labels: Object.keys(statusCounts),
+      datasets: [{
+        data: Object.values(statusCounts),
+        backgroundColor: ['rgba(245, 158, 11, 0.6)', 'rgba(59, 130, 246, 0.6)', 'rgba(239, 68, 68, 0.6)'],
+        borderColor: ['rgba(245, 158, 11, 1)', 'rgba(59, 130, 246, 1)', 'rgba(239, 68, 68, 1)'],
+        borderWidth: 1,
+      }],
+    };
+
+    return { totalOrders, totalSales, avgDailyOrders, barData, pieData };
+  }, [orders, sales, t, isRtl]);
 
   if (loading) {
     return (
-      <div className={`flex items-center justify-center min-h-screen bg-gray-50 ${isRtl ? 'font-arabic' : 'font-sans'}`}>
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.3 }}
-          className="p-6 bg-white rounded-2xl shadow-md"
-        >
-          <ProfileSkeletonCard />
-        </motion.div>
+      <div className="flex items-center justify-center min-h-screen bg-gray-50" dir={isRtl ? 'rtl' : 'ltr'}>
+        <div className="p-5 bg-white rounded-xl shadow-sm max-w-md w-full">
+          <div className="space-y-3 animate-pulse">
+            <div className="h-6 bg-gray-200 rounded w-3/4"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+            <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+            <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (!branch) {
     return (
-      <div className={`mx-auto p-4 sm:p-6 min-h-screen bg-gray-50 ${isRtl ? 'font-arabic' : 'font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
-          className="text-center p-6 bg-white rounded-2xl shadow-md border border-gray-100"
-        >
-          <MapPin className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-          <h2 className="text-2xl font-semibold text-gray-900 mb-4">{t.branchNotFound}</h2>
+      <div className="flex items-center justify-center min-h-screen bg-gray-50" dir={isRtl ? 'rtl' : 'ltr'}>
+        <div className="p-5 bg-white rounded-xl shadow-sm max-w-md w-full text-center">
+          <AlertCircle className="w-10 h-10 text-red-600 mx-auto mb-3" />
+          <p className="text-gray-600 text-sm">{t.branchNotFound}</p>
           <button
             onClick={() => navigate('/branches')}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm flex items-center gap-2 mx-auto"
+            className="mt-3 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors flex items-center gap-1.5 mx-auto shadow-sm hover:shadow-md"
             aria-label={t.back}
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft className="w-3.5 h-3.5" />
             {t.back}
           </button>
-        </motion.div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className={`mx-auto  p-4 sm:p-6 min-h-screen`}>
+    <div className="mx-auto px-4 py-6 min-h-screen bg-white" dir={isRtl ? 'rtl' : 'ltr'}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4 shadow-sm bg-white p-4 rounded-2xl"
+        transition={{ duration: 0.3, ease: 'easeInOut' }}
+        className="flex items-center justify-between mb-4 shadow-sm bg-white p-4 rounded-xl"
       >
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/branches')}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm flex items-center gap-2"
-            aria-label={t.back}
-          >
-            <ArrowLeft className="w-4 h-4" />
-            {t.back}
-          </button>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <MapPin className="w-6 h-6 text-amber-600" />
-            {branch.displayName}
-          </h1>
+        <div className="flex items-center gap-2">
+          <MapPin className="w-6 h-6 text-amber-600" />
+          <h1 className="text-xl font-bold text-gray-900">{t.branchDetails}</h1>
         </div>
-        {user?.role === 'admin' && (
-          <div className="flex gap-3">
-            <button
-              onClick={openEditModal}
-              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm transition-colors shadow-sm flex items-center gap-2"
-              aria-label={t.editBranch}
-            >
-              <Edit2 className="w-4 h-4" />
-              {t.editBranch}
-            </button>
-            <button
-              onClick={openResetPasswordModal}
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm flex items-center gap-2"
-              aria-label={t.resetPassword}
-            >
-              <Key className="w-4 h-4" />
-              {t.resetPassword}
-            </button>
-            <button
-              onClick={openDeleteModal}
-              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm transition-colors shadow-sm flex items-center gap-2"
-              aria-label={t.deleteBranch}
-            >
-              <Trash2 className="w-4 h-4" />
-              {t.deleteBranch}
-            </button>
-          </div>
-        )}
+        <button
+          onClick={() => navigate('/branches')}
+          className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm hover:shadow-md"
+          aria-label={t.back}
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          {t.back}
+        </button>
       </motion.div>
+
       <AnimatePresence>
         {error && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="mb-8 p-4 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-3 shadow-sm"
+            transition={{ duration: 0.15 }}
+            className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
           >
-            <AlertCircle className="w-5 h-5 text-red-600" />
-            <span className="text-red-600 text-sm font-medium">{error}</span>
+            <AlertCircle className="w-4 h-4 text-red-600" />
+            <span className="text-red-600 text-xs">{error}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="flex border-b border-gray-200 mb-6">
-        <button
-          onClick={() => startTransition(() => setActiveTab('info'))}
-          className={`px-4 py-2 text-sm font-medium ${activeTab === 'info' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600'} transition-colors`}
-        >
-          {t.branchInfoTab}
-        </button>
-        <button
-          onClick={() => startTransition(() => setActiveTab('stats'))}
-          className={`px-4 py-2 text-sm font-medium ${activeTab === 'stats' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600'} transition-colors`}
-        >
-          {t.branchStatsTab}
-        </button>
-      </div>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+        className="bg-white rounded-xl shadow-sm p-5"
+      >
+        <div className="flex border-b border-gray-200 mb-4">
+          <button
+            onClick={() => setActiveTab('info')}
+            className={`px-4 py-2 text-xs font-medium ${activeTab === 'info' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600 hover:text-amber-600'} transition-colors`}
+            aria-label={t.branchInfoTab}
+          >
+            {t.branchInfoTab}
+          </button>
+          <button
+            onClick={() => setActiveTab('stats')}
+            className={`px-4 py-2 text-xs font-medium ${activeTab === 'stats' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600 hover:text-amber-600'} transition-colors`}
+            aria-label={t.statsTab}
+          >
+            {t.statsTab}
+          </button>
+        </div>
 
-      <AnimatePresence mode="wait">
-        {activeTab === 'info' ? (
+        <AnimatePresence mode="wait">
+          {activeTab === 'info' ? (
+            <motion.div
+              key="info"
+              initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: isRtl ? -20 : 20 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="space-y-3"
+            >
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-semibold text-gray-900">{branch.displayName}</h2>
+                <MapPin className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <span className="block text-xs font-medium text-gray-700">{t.name}</span>
+                  <span className="text-xs text-gray-600">{branch.displayName}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-medium text-gray-700">{t.nameEn}</span>
+                  <span className="text-xs text-gray-600">{branch.nameEn || branch.name}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-medium text-gray-700">{t.code}</span>
+                  <span className="text-xs text-gray-600">{branch.code || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-medium text-gray-700">{t.address}</span>
+                  <span className="text-xs text-gray-600">{branch.displayAddress || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-medium text-gray-700">{t.addressEn}</span>
+                  <span className="text-xs text-gray-600">{branch.addressEn || branch.address || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-medium text-gray-700">{t.city}</span>
+                  <span className="text-xs text-gray-600">{branch.displayCity || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-medium text-gray-700">{t.cityEn}</span>
+                  <span className="text-xs text-gray-600">{branch.cityEn || branch.city || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-medium text-gray-700">{t.phone}</span>
+                  <span className="text-xs text-gray-600">{branch.phone || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-medium text-gray-700">{t.createdBy}</span>
+                  <span className="text-xs text-gray-600">{branch.createdBy?.displayName || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-medium text-gray-700">{t.createdAt}</span>
+                  <span className="text-xs text-gray-600">{new Date(branch.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</span>
+                </div>
+                <div>
+                  <span className="block text-xs font-medium text-gray-700">{t.updatedAt}</span>
+                  <span className="text-xs text-gray-600">{new Date(branch.updatedAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</span>
+                </div>
+                {branch.user && (
+                  <>
+                    <div>
+                      <span className="block text-xs font-medium text-gray-700">{t.userName}</span>
+                      <span className="text-xs text-gray-600">{isRtl ? branch.user.name : (branch.user.nameEn || branch.user.name)}</span>
+                    </div>
+                    <div>
+                      <span className="block text-xs font-medium text-gray-700">{t.userNameEn}</span>
+                      <span className="text-xs text-gray-600">{branch.user.nameEn || branch.user.name}</span>
+                    </div>
+                    <div>
+                      <span className="block text-xs font-medium text-gray-700">{t.username}</span>
+                      <span className="text-xs text-gray-600">{branch.user.username || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-xs font-medium text-gray-700">{t.email}</span>
+                      <span className="text-xs text-gray-600">{branch.user.email || '-'}</span>
+                    </div>
+                    <div>
+                      <span className="block text-xs font-medium text-gray-700">{t.userPhone}</span>
+                      <span className="text-xs text-gray-600">{branch.user.phone || '-'}</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="stats"
+              initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: isRtl ? -20 : 20 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="space-y-4"
+            >
+              <h2 className="text-lg font-semibold text-gray-900">{t.statsTab}</h2>
+              {(ordersLoading || salesLoading) ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[...Array(3)].map((_, index) => (
+                    <div key={index} className="p-3 bg-gray-50 rounded-lg animate-pulse">
+                      <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+                      <div className="h-6 bg-gray-200 rounded w-3/4"></div>
+                    </div>
+                  ))}
+                </div>
+              ) : (orders.length === 0 && sales.length === 0) ? (
+                <div className="text-center text-xs text-gray-600">{t.noOrders}</div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2">
+                      <Box className="w-5 h-5 text-amber-600" />
+                      <div>
+                        <p className="text-xs text-gray-600">{t.totalOrders}</p>
+                        <p className="text-lg font-semibold text-gray-900">{statsData.totalOrders}</p>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-amber-600" />
+                      <div>
+                        <p className="text-xs text-gray-600">{t.totalSales}</p>
+                        <p className="text-lg font-semibold text-gray-900">{statsData.totalSales}</p>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-amber-600" />
+                      <div>
+                        <p className="text-xs text-gray-600">{t.avgDailyOrders}</p>
+                        <p className="text-lg font-semibold text-gray-900">{statsData.avgDailyOrders}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                      <h3 className="text-sm font-medium text-gray-900 mb-3">{t.salesOverTime}</h3>
+                      <div className="h-64">
+                        <Bar
+                          data={statsData.barData}
+                          options={{
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true } },
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                      <h3 className="text-sm font-medium text-gray-900 mb-3">{t.ordersByStatus}</h3>
+                      <div className="h-64">
+                        <Pie
+                          data={statsData.pieData}
+                          options={{
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { position: 'bottom' } },
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                      <h3 className="text-sm font-medium text-gray-900 mb-2">{t.ordersTab}</h3>
+                      {ordersLoading ? (
+                        <div className="space-y-3">
+                          {[...Array(3)].map((_, index) => (
+                            <div key={index} className="p-3 bg-gray-50 rounded-lg animate-pulse">
+                              <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+                              <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : orders.length === 0 ? (
+                        <div className="text-center text-xs text-gray-600">{t.noOrders}</div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.orderNumber}</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.status}</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.total}</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.createdAt}</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {orders.map((order) => (
+                                <tr key={order.id}>
+                                  <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-900">{order.orderNumber}</td>
+                                  <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{order.status}</td>
+                                  <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{order.total}</td>
+                                  <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{new Date(order.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                      <h3 className="text-sm font-medium text-gray-900 mb-2">{t.salesTab}</h3>
+                      {salesLoading ? (
+                        <div className="space-y-3">
+                          {[...Array(3)].map((_, index) => (
+                            <div key={index} className="p-3 bg-gray-50 rounded-lg animate-pulse">
+                              <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+                              <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : sales.length === 0 ? (
+                        <div className="text-center text-xs text-gray-600">{t.noSales}</div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.saleNumber}</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.total}</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.createdAt}</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {sales.map((sale) => (
+                                <tr key={sale.id}>
+                                  <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-900">{sale.saleNumber}</td>
+                                  <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{sale.total}</td>
+                                  <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{new Date(sale.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {user?.role === 'admin' && (
+          <div className="flex justify-end gap-2 mt-4">
+            <button
+              onClick={() => setIsEditModalOpen(true)}
+              className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm hover:shadow-md"
+              aria-label={t.editBranch}
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+              {t.editBranch}
+            </button>
+            <button
+              onClick={() => setIsResetPasswordModalOpen(true)}
+              className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm hover:shadow-md"
+              aria-label={t.resetPassword}
+            >
+              <Key className="w-3.5 h-3.5" />
+              {t.resetPassword}
+            </button>
+            <button
+              onClick={() => setIsDeleteModalOpen(true)}
+              className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm hover:shadow-md"
+              aria-label={t.deleteBranch}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {t.deleteBranch}
+            </button>
+          </div>
+        )}
+      </motion.div>
+
+      <AnimatePresence>
+        {isEditModalOpen && (
           <motion.div
-            key="info"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
-            transition={{ duration: 0.3 }}
-            className="grid grid-cols-1 lg:grid-cols-2 gap-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeInOut' }}
+            className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setIsEditModalOpen(false)}
           >
-            <ProfileCard title={t.branchDetails} details={branchDetails} />
-            {branch.user && <ProfileCard title={t.user} details={userDetails} />}
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              transition={{ duration: 0.15, ease: 'easeInOut' }}
+              className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-2xl p-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.editBranch}</h3>
+              <form onSubmit={handleSubmit} className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">{t.name}</label>
+                    <FormInput
+                      value={formData.name}
+                      onChange={(value) => setFormData({ ...formData, name: value })}
+                      placeholder={t.name}
+                      ariaLabel={t.name}
+                      error={formErrors.name}
+                    />
+                    {formErrors.name && <p className="text-xs text-red-600 mt-1">{formErrors.name}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">{t.nameEn}</label>
+                    <FormInput
+                      value={formData.nameEn}
+                      onChange={(value) => setFormData({ ...formData, nameEn: value })}
+                      placeholder={t.nameEn}
+                      ariaLabel={t.nameEn}
+                      error={formErrors.nameEn}
+                    />
+                    {formErrors.nameEn && <p className="text-xs text-red-600 mt-1">{formErrors.nameEn}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="code" className="block text-xs font-medium text-gray-700 mb-1">{t.code}</label>
+                    <FormInput
+                      value={formData.code}
+                      onChange={(value) => setFormData({ ...formData, code: value })}
+                      placeholder={t.code}
+                      ariaLabel={t.code}
+                      error={formErrors.code}
+                    />
+                    {formErrors.code && <p className="text-xs text-red-600 mt-1">{formErrors.code}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="address" className="block text-xs font-medium text-gray-700 mb-1">{t.address}</label>
+                    <FormInput
+                      value={formData.address}
+                      onChange={(value) => setFormData({ ...formData, address: value })}
+                      placeholder={t.address}
+                      ariaLabel={t.address}
+                      error={formErrors.address}
+                    />
+                    {formErrors.address && <p className="text-xs text-red-600 mt-1">{formErrors.address}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="addressEn" className="block text-xs font-medium text-gray-700 mb-1">{t.addressEn}</label>
+                    <FormInput
+                      value={formData.addressEn}
+                      onChange={(value) => setFormData({ ...formData, addressEn: value })}
+                      placeholder={t.addressEn}
+                      ariaLabel={t.addressEn}
+                      error={formErrors.addressEn}
+                    />
+                    {formErrors.addressEn && <p className="text-xs text-red-600 mt-1">{formErrors.addressEn}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="city" className="block text-xs font-medium text-gray-700 mb-1">{t.city}</label>
+                    <FormInput
+                      value={formData.city}
+                      onChange={(value) => setFormData({ ...formData, city: value })}
+                      placeholder={t.city}
+                      ariaLabel={t.city}
+                      error={formErrors.city}
+                    />
+                    {formErrors.city && <p className="text-xs text-red-600 mt-1">{formErrors.city}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="cityEn" className="block text-xs font-medium text-gray-700 mb-1">{t.cityEn}</label>
+                    <FormInput
+                      value={formData.cityEn}
+                      onChange={(value) => setFormData({ ...formData, cityEn: value })}
+                      placeholder={t.cityEn}
+                      ariaLabel={t.cityEn}
+                      error={formErrors.cityEn}
+                    />
+                    {formErrors.cityEn && <p className="text-xs text-red-600 mt-1">{formErrors.cityEn}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="phone" className="block text-xs font-medium text-gray-700 mb-1">{t.phone}</label>
+                    <FormInput
+                      value={formData.phone}
+                      onChange={(value) => setFormData({ ...formData, phone: value })}
+                      placeholder={t.phone}
+                      ariaLabel={t.phone}
+                      type="tel"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="userName" className="block text-xs font-medium text-gray-700 mb-1">{t.userName}</label>
+                    <FormInput
+                      value={formData.user.name}
+                      onChange={(value) => setFormData({ ...formData, user: { ...formData.user, name: value } })}
+                      placeholder={t.userName}
+                      ariaLabel={t.userName}
+                      error={formErrors['user.name']}
+                    />
+                    {formErrors['user.name'] && <p className="text-xs text-red-600 mt-1">{formErrors['user.name']}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="userNameEn" className="block text-xs font-medium text-gray-700 mb-1">{t.userNameEn}</label>
+                    <FormInput
+                      value={formData.user.nameEn}
+                      onChange={(value) => setFormData({ ...formData, user: { ...formData.user, nameEn: value } })}
+                      placeholder={t.userNameEn}
+                      ariaLabel={t.userNameEn}
+                      error={formErrors['user.nameEn']}
+                    />
+                    {formErrors['user.nameEn'] && <p className="text-xs text-red-600 mt-1">{formErrors['user.nameEn']}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="username" className="block text-xs font-medium text-gray-700 mb-1">{t.username}</label>
+                    <FormInput
+                      value={formData.user.username}
+                      onChange={(value) => setFormData({ ...formData, user: { ...formData.user, username: value } })}
+                      placeholder={t.username}
+                      ariaLabel={t.username}
+                      error={formErrors['user.username']}
+                    />
+                    {formErrors['user.username'] && <p className="text-xs text-red-600 mt-1">{formErrors['user.username']}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1">{t.email}</label>
+                    <FormInput
+                      value={formData.user.email}
+                      onChange={(value) => setFormData({ ...formData, user: { ...formData.user, email: value } })}
+                      placeholder={t.email}
+                      ariaLabel={t.email}
+                      type="email"
+                      error={formErrors['user.email']}
+                    />
+                    {formErrors['user.email'] && <p className="text-xs text-red-600 mt-1">{formErrors['user.email']}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="userPhone" className="block text-xs font-medium text-gray-700 mb-1">{t.userPhone}</label>
+                    <FormInput
+                      value={formData.user.phone}
+                      onChange={(value) => setFormData({ ...formData, user: { ...formData.user, phone: value } })}
+                      placeholder={t.userPhone}
+                      ariaLabel={t.userPhone}
+                      type="tel"
+                    />
+                  </div>
+                </div>
+                {error && (
+                  <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-600" />
+                    <span className="text-red-600 text-xs">{error}</span>
+                  </div>
+                )}
+                <div className="flex justify-end gap-2 mt-4">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(false)}
+                    className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                    aria-label={t.cancel}
+                  >
+                    {t.cancel}
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                    aria-label={t.save}
+                  >
+                    {t.save}
+                  </button>
+                </div>
+                <div className="flex justify-end gap-2 mt-2">
+                  <button
+                    onClick={() => setIsEditModalOpen(true)}
+                    className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm hover:shadow-md"
+                    aria-label={t.editBranch}
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    {t.editBranch}
+                  </button>
+                  <button
+                    onClick={() => { setIsEditModalOpen(false); setIsResetPasswordModalOpen(true); }}
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm hover:shadow-md"
+                    aria-label={t.resetPassword}
+                  >
+                    <Key className="w-3.5 h-3.5" />
+                    {t.resetPassword}
+                  </button>
+                  <button
+                    onClick={() => { setIsEditModalOpen(false); setIsDeleteModalOpen(true); }}
+                    className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm hover:shadow-md"
+                    aria-label={t.deleteBranch}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {t.deleteBranch}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
           </motion.div>
-        ) : (
+        )}
+
+        {isResetPasswordModalOpen && (
           <motion.div
-            key="stats"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.3 }}
-            className="space-y-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeInOut' }}
+            className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setIsResetPasswordModalOpen(false)}
           >
-            <h2 className="text-lg font-semibold text-gray-900">{t.branchStatsTab}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="p-4 bg-white rounded-2xl shadow-md border border-gray-100">
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">{t.ordersTab}</h3>
-                {ordersLoading ? (
-                  <div className="text-center text-sm text-gray-600">جاري التحميل...</div>
-                ) : orders.length === 0 ? (
-                  <div className="text-center text-sm text-gray-600">{t.noOrders}</div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.orderNumber}</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.status}</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.total}</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.createdAt}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {orders.map((order) => (
-                          <tr key={order._id}>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{order.orderNumber}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{order.status}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{order.total}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{new Date(order.createdAt).toLocaleDateString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              transition={{ duration: 0.15, ease: 'easeInOut' }}
+              className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.resetPassword}</h3>
+              <form onSubmit={handleResetPassword} className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
+                <div>
+                  <label htmlFor="newPassword" className="block text-xs font-medium text-gray-700 mb-1">{t.newPassword}</label>
+                  <FormInput
+                    value={passwordData.password}
+                    onChange={(value) => setPasswordData({ ...passwordData, password: value })}
+                    placeholder={t.passwordPlaceholder}
+                    ariaLabel={t.newPassword}
+                    type="password"
+                    showPasswordToggle
+                    showPassword={showPassword}
+                    togglePasswordVisibility={() => setShowPassword(!showPassword)}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="confirmPassword" className="block text-xs font-medium text-gray-700 mb-1">{t.confirmPassword}</label>
+                  <FormInput
+                    value={passwordData.confirmPassword}
+                    onChange={(value) => setPasswordData({ ...passwordData, confirmPassword: value })}
+                    placeholder={t.confirmPasswordPlaceholder}
+                    ariaLabel={t.confirmPassword}
+                    type="password"
+                    showPasswordToggle
+                    showPassword={showConfirmPassword}
+                    togglePasswordVisibility={() => setShowConfirmPassword(!showConfirmPassword)}
+                  />
+                </div>
+                {error && (
+                  <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-600" />
+                    <span className="text-red-600 text-xs">{error}</span>
                   </div>
                 )}
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsResetPasswordModalOpen(false)}
+                    className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                    aria-label={t.cancel}
+                  >
+                    {t.cancel}
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                    aria-label={t.save}
+                  >
+                    {t.save}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {isDeleteModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeInOut' }}
+            className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setIsDeleteModalOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              transition={{ duration: 0.15, ease: 'easeInOut' }}
+              className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.confirmDelete}</h3>
+              <p className="text-xs text-gray-600 mb-4">{t.deleteWarning}</p>
+              {error && (
+                <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 mb-4">
+                  <AlertCircle className="w-4 h-4 text-red-600" />
+                  <span className="text-red-600 text-xs">{error}</span>
+                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  aria-label={t.cancel}
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  aria-label={t.deleteBranch}
+                >
+                  {t.deleteBranch}
+                </button>
               </div>
-              <div className="p-4 bg-white rounded-2xl shadow-md border border-gray-100">
-                <h3 className="text-sm font-semibold text-gray-900 mb-2">{t.salesTab}</h3>
-                {salesLoading ? (
-                  <div className="text-center text-sm text-gray-600">جاري التحميل...</div>
-                ) : sales.length === 0 ? (
-                  <div className="text-center text-sm text-gray-600">{t.noSales}</div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.saleNumber}</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.total}</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.createdAt}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {sales.map((sale) => (
-                          <tr key={sale._id}>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{sale.saleNumber}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{sale.total}</td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{new Date(sale.createdAt).toLocaleDateString()}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="p-4 bg-white rounded-2xl shadow-md border border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-900 mb-2">{t.additionalDetailsTab}</h3>
-              <p className="text-sm text-gray-600">عدد الطلبات: {orders.length}</p>
-              <p className="text-sm text-gray-600">إجمالي المبيعات: {sales.reduce((sum, sale) => sum + sale.total, 0)}</p>
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
-
-      <ProfileModal
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        onSubmit={handleSubmit}
-        formData={formData}
-        dispatchForm={dispatchForm}
-        errors={errors}
-        error={error}
-        t={t}
-        isRtl={isRtl}
-      />
-      <ProfileResetPasswordModal
-        isOpen={isResetPasswordModalOpen}
-        onClose={() => setIsResetPasswordModalOpen(false)}
-        onSubmit={handleResetPassword}
-        passwordData={passwordData}
-        setPasswordData={setPasswordData}
-        error={error}
-        t={t}
-        isRtl={isRtl}
-      />
-      <ProfileDeleteModal
-        isOpen={isDeleteModalOpen}
-        onClose={() => setIsDeleteModalOpen(false)}
-        onConfirm={handleDelete}
-        error={error}
-        t={t}
-        isRtl={isRtl}
-      />
     </div>
   );
-};
-
-export default BranchProfile;
+}
