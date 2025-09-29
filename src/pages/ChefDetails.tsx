@@ -3,11 +3,19 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { chefsAPI, departmentAPI } from '../services/api';
-import { ChefHat, AlertCircle, Edit2, Trash2, Key, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { ChefHat, AlertCircle, Edit2, Trash2, Key, ArrowLeft } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CustomInput } from '../components/UI/CustomInput';
 import { CustomDropdown } from '../components/UI/CustomDropdown';
+
+// افترض إن في interface للـ Production (مثل منتجات الشيف)
+interface ProductionItem {
+  id: string;
+  name: string;
+  date: string;
+  quantity: number;
+}
 
 interface Department {
   id: string;
@@ -39,6 +47,8 @@ interface Chef {
 const translations = {
   ar: {
     chefDetails: 'تفاصيل الشيف',
+    infoTab: 'معلومات الشيف',
+    productionTab: 'إنتاج الشيف',
     back: 'رجوع',
     name: 'اسم الشيف (عربي)',
     nameEn: 'اسم الشيف (إنجليزي)',
@@ -88,9 +98,15 @@ const translations = {
     deleted: 'تم الحذف بنجاح',
     noDepartments: 'لا توجد أقسام متاحة',
     notFound: 'الشيف غير موجود',
+    noProduction: 'لا يوجد إنتاج متاح',
+    productionName: 'اسم المنتج',
+    productionDate: 'تاريخ الإنتاج',
+    productionQuantity: 'الكمية',
   },
   en: {
     chefDetails: 'Chef Details',
+    infoTab: 'Chef Information',
+    productionTab: 'Chef Production',
     back: 'Back',
     name: 'Chef Name (Arabic)',
     nameEn: 'Chef Name (English)',
@@ -140,6 +156,10 @@ const translations = {
     deleted: 'Deleted successfully',
     noDepartments: 'No departments available',
     notFound: 'Chef not found',
+    noProduction: 'No production available',
+    productionName: 'Product Name',
+    productionDate: 'Production Date',
+    productionQuantity: 'Quantity',
   },
 };
 
@@ -152,8 +172,11 @@ export function ChefDetails() {
   const t = translations[isRtl ? 'ar' : 'en'];
   const [chef, setChef] = useState<Chef | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [production, setProduction] = useState<ProductionItem[]>([]); // state للـ production
   const [loading, setLoading] = useState(true);
+  const [productionLoading, setProductionLoading] = useState(true);
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState('info'); // state للـ tabs
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -170,7 +193,7 @@ export function ChefDetails() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [showPassword, setShowPassword] = useState<Record<string, boolean>>({});
 
-  const fetchData = useCallback(async () => {
+  const fetchChefData = useCallback(async () => {
     if (!id) {
       setError(t.notFound);
       setLoading(false);
@@ -186,11 +209,10 @@ export function ChefDetails() {
     setLoading(true);
     try {
       const [chefResponse, departmentsResponse] = await Promise.all([
-        chefsAPI.getById(id), // استخدام getById
+        chefsAPI.getById(id),
         departmentAPI.getAll({ isRtl }),
       ]);
 
-      // الاستجابة من /chefs/:id لا تحتوي على مفتاح data
       const chefData = chefResponse;
       if (!chefData || !chefData.user || !chefData.department) {
         setError(t.notFound);
@@ -246,9 +268,29 @@ export function ChefDetails() {
     }
   }, [id, user, t, isRtl]);
 
+  const fetchProduction = useCallback(async () => {
+    if (!id) return;
+    setProductionLoading(true);
+    try {
+      // افترض API لجلب الـ production (عدلها لو في endpoint حقيقي)
+      // const response = await chefsAPI.getProduction(id);
+      // setProduction(response.data);
+      // هنا placeholder بيانات وهمية
+      setProduction([
+        { id: '1', name: 'منتج 1', date: '2023-01-01', quantity: 100 },
+        { id: '2', name: 'منتج 2', date: '2023-02-01', quantity: 150 },
+      ]);
+    } catch (err: any) {
+      toast.error('خطأ في جلب الإنتاج', { position: isRtl ? 'top-right' : 'top-left' });
+    } finally {
+      setProductionLoading(false);
+    }
+  }, [id, isRtl]);
+
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchChefData();
+    fetchProduction();
+  }, [fetchChefData, fetchProduction]);
 
   const validateForm = () => {
     const errors: Record<string, string> = {};
@@ -311,7 +353,7 @@ export function ChefDetails() {
         department: formData.department,
       };
       const response = await chefsAPI.update(chef!.id, chefData);
-      const updatedChef = response; // الاستجابة لا تحتوي على مفتاح data
+      const updatedChef = response;
       setChef({
         ...chef!,
         user: {
@@ -391,7 +433,7 @@ export function ChefDetails() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="p-6 bg-white rounded-xl shadow-sm max-w-md w-full">
           <div className="space-y-4 animate-pulse">
             <div className="h-6 bg-gray-200 rounded w-3/4"></div>
@@ -406,7 +448,7 @@ export function ChefDetails() {
 
   if (!chef) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="p-6 bg-white rounded-xl shadow-sm max-w-md w-full text-center">
           <AlertCircle className="w-10 h-10 text-red-600 mx-auto mb-3" />
           <p className="text-gray-600 text-sm">{t.notFound}</p>
@@ -417,7 +459,7 @@ export function ChefDetails() {
 
   return (
     <div
-      className={`mx-auto max-w-3xl px-4 py-6 min-h-screen bg-gray-100 font-sans ${
+      className={`mx-auto max-w-3xl px-4 py-6 min-h-screen overflow-y-auto scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100 bg-gray-50 font-sans ${
         isRtl ? 'rtl font-arabic' : 'ltr'
       }`}
       dir={isRtl ? 'rtl' : 'ltr'}
@@ -426,7 +468,7 @@ export function ChefDetails() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="flex items-center justify-between mb-6"
+        className="flex items-center justify-between mb-6 shadow-sm bg-white p-4 rounded-xl"
       >
         <div className="flex items-center gap-2">
           <ChefHat className="w-6 h-6 text-amber-600" />
@@ -460,87 +502,153 @@ export function ChefDetails() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.5 }}
-        className="bg-white rounded-xl shadow-sm p-6"
+        className="bg-white rounded-xl shadow-md p-6" // زدت shadow-md عشان أجمل
       >
-        <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold text-gray-900">
-              {isRtl ? chef.user?.name : chef.user?.nameEn || chef.user?.name}
-            </h2>
-            <ChefHat className="w-6 h-6 text-amber-600" />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <span className="block text-sm font-medium text-gray-700">{t.name}</span>
-              <span className="text-sm text-gray-600">{chef.user?.name || '-'}</span>
-            </div>
-            <div>
-              <span className="block text-sm font-medium text-gray-700">{t.nameEn}</span>
-              <span className="text-sm text-gray-600">{chef.user?.nameEn || '-'}</span>
-            </div>
-            <div>
-              <span className="block text-sm font-medium text-gray-700">{t.username}</span>
-              <span className="text-sm text-gray-600">{chef.user?.username || '-'}</span>
-            </div>
-            <div>
-              <span className="block text-sm font-medium text-gray-700">{t.email}</span>
-              <span className="text-sm text-gray-600">{chef.user?.email || '-'}</span>
-            </div>
-            <div>
-              <span className="block text-sm font-medium text-gray-700">{t.phone}</span>
-              <span className="text-sm text-gray-600">{chef.user?.phone || '-'}</span>
-            </div>
-            <div>
-              <span className="block text-sm font-medium text-gray-700">{t.department}</span>
-              <span className="text-sm text-gray-600">{chef.department?.displayName || '-'}</span>
-            </div>
-            <div>
-              <span className="block text-sm font-medium text-gray-700">{t.status}</span>
-              <span className={`text-sm ${chef.user?.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                {chef.user?.isActive ? t.active : t.inactive}
-              </span>
-            </div>
-            <div>
-              <span className="block text-sm font-medium text-gray-700">{t.createdAt}</span>
-              <span className="text-sm text-gray-600">
-                {new Date(chef.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
-              </span>
-            </div>
-            <div>
-              <span className="block text-sm font-medium text-gray-700">{t.updatedAt}</span>
-              <span className="text-sm text-gray-600">
-                {new Date(chef.updatedAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
-              </span>
-            </div>
-          </div>
-          {user?.role === 'admin' && (
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                onClick={openEditModal}
-                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm transition-colors flex items-center gap-2 shadow-sm hover:shadow-md"
-              >
-                <Edit2 className="w-4 h-4" />
-                {t.edit}
-              </button>
-              <button
-                onClick={openResetPasswordModal}
-                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm transition-colors flex items-center gap-2 shadow-sm hover:shadow-md"
-              >
-                <Key className="w-4 h-4" />
-                {t.resetPassword}
-              </button>
-              <button
-                onClick={openDeleteModal}
-                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm transition-colors flex items-center gap-2 shadow-sm hover:shadow-md"
-              >
-                <Trash2 className="w-4 h-4" />
-                {t.delete}
-              </button>
-            </div>
-          )}
+        {/* Tabs */}
+        <div className="flex border-b border-gray-200 mb-6">
+          <button
+            onClick={() => setActiveTab('info')}
+            className={`px-4 py-2 text-sm font-medium ${activeTab === 'info' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600'} transition-colors`}
+          >
+            {t.infoTab}
+          </button>
+          <button
+            onClick={() => setActiveTab('production')}
+            className={`px-4 py-2 text-sm font-medium ${activeTab === 'production' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600'} transition-colors`}
+          >
+            {t.productionTab}
+          </button>
         </div>
+
+        <AnimatePresence mode="wait">
+          {activeTab === 'info' ? (
+            <motion.div
+              key="info"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-4"
+            >
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-semibold text-gray-900">
+                  {isRtl ? chef.user?.name : chef.user?.nameEn || chef.user?.name}
+                </h2>
+                <ChefHat className="w-6 h-6 text-amber-600" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <span className="block text-sm font-medium text-gray-700">{t.name}</span>
+                  <span className="text-sm text-gray-600">{chef.user?.name || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-sm font-medium text-gray-700">{t.nameEn}</span>
+                  <span className="text-sm text-gray-600">{chef.user?.nameEn || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-sm font-medium text-gray-700">{t.username}</span>
+                  <span className="text-sm text-gray-600">{chef.user?.username || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-sm font-medium text-gray-700">{t.email}</span>
+                  <span className="text-sm text-gray-600">{chef.user?.email || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-sm font-medium text-gray-700">{t.phone}</span>
+                  <span className="text-sm text-gray-600">{chef.user?.phone || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-sm font-medium text-gray-700">{t.department}</span>
+                  <span className="text-sm text-gray-600">{chef.department?.displayName || '-'}</span>
+                </div>
+                <div>
+                  <span className="block text-sm font-medium text-gray-700">{t.status}</span>
+                  <span className={`text-sm ${chef.user?.isActive ? 'text-green-600' : 'text-red-600'}`}>
+                    {chef.user?.isActive ? t.active : t.inactive}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-sm font-medium text-gray-700">{t.createdAt}</span>
+                  <span className="text-sm text-gray-600">
+                    {new Date(chef.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-sm font-medium text-gray-700">{t.updatedAt}</span>
+                  <span className="text-sm text-gray-600">
+                    {new Date(chef.updatedAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
+                  </span>
+                </div>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="production"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-4"
+            >
+              <h2 className="text-lg font-semibold text-gray-900">{t.productionTab}</h2>
+              {productionLoading ? (
+                <div className="text-center text-sm text-gray-600">جاري التحميل...</div>
+              ) : production.length === 0 ? (
+                <div className="text-center text-sm text-gray-600">{t.noProduction}</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.productionName}</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.productionDate}</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.productionQuantity}</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {production.map((item) => (
+                        <tr key={item.id}>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.name}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{item.date}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{item.quantity}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {user?.role === 'admin' && (
+          <div className="flex justify-end gap-2 mt-6"> {/* نقل الأزرار تحت */}
+            <button
+              onClick={openEditModal}
+              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm transition-colors flex items-center gap-2 shadow-sm hover:shadow-md"
+            >
+              <Edit2 className="w-4 h-4" />
+              {t.edit}
+            </button>
+            <button
+              onClick={openResetPasswordModal}
+              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm transition-colors flex items-center gap-2 shadow-sm hover:shadow-md"
+            >
+              <Key className="w-4 h-4" />
+              {t.resetPassword}
+            </button>
+            <button
+              onClick={openDeleteModal}
+              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm transition-colors flex items-center gap-2 shadow-sm hover:shadow-md"
+            >
+              <Trash2 className="w-4 h-4" />
+              {t.delete}
+            </button>
+          </div>
+        )}
       </motion.div>
 
+      {/* الـ modals زي ما هم، بس حسنت الحجم والـ py-3 للـ inputs */}
       {isEditModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <motion.div
@@ -684,58 +792,56 @@ export function ChefDetails() {
           >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.resetPassword}</h3>
             <form onSubmit={handleResetPassword} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
-                    {t.newPassword}
-                  </label>
-                  <CustomInput
-                    value={resetPasswordData.password}
-                    onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
-                    placeholder={t.newPasswordPlaceholder}
-                    ariaLabel={t.newPassword}
-                    type="password"
-                    showPasswordToggle
-                    showPassword={showPassword['reset']}
-                    togglePasswordVisibility={() => togglePasswordVisibility('reset')}
-                  />
+              <div>
+                <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                  {t.newPassword}
+                </label>
+                <CustomInput
+                  value={resetPasswordData.password}
+                  onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
+                  placeholder={t.newPasswordPlaceholder}
+                  ariaLabel={t.newPassword}
+                  type="password"
+                  showPasswordToggle
+                  showPassword={showPassword['reset']}
+                  togglePasswordVisibility={() => togglePasswordVisibility('reset')}
+                />
+              </div>
+              <div>
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                  {t.confirmPassword}
+                </label>
+                <CustomInput
+                  value={resetPasswordData.confirmPassword}
+                  onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
+                  placeholder={t.confirmPasswordPlaceholder}
+                  ariaLabel={t.confirmPassword}
+                  type="password"
+                  showPasswordToggle
+                  showPassword={showPassword['confirm']}
+                  togglePasswordVisibility={() => togglePasswordVisibility('confirm')}
+                />
+              </div>
+              {error && (
+                <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600" />
+                  <span className="text-red-600 text-sm">{error}</span>
                 </div>
-                <div>
-                  <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
-                    {t.confirmPassword}
-                  </label>
-                  <CustomInput
-                    value={resetPasswordData.confirmPassword}
-                    onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
-                    placeholder={t.confirmPasswordPlaceholder}
-                    ariaLabel={t.confirmPassword}
-                    type="password"
-                    showPasswordToggle
-                    showPassword={showPassword['confirm']}
-                    togglePasswordVisibility={() => togglePasswordVisibility('confirm')}
-                  />
-                </div>
-                {error && (
-                  <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-red-600" />
-                    <span className="text-red-600 text-sm">{error}</span>
-                  </div>
-                )}
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIsResetPasswordModalOpen(false)}
-                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
-                  >
-                    {t.cancel}
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
-                  >
-                    {t.reset}
-                  </button>
-                </div>
+              )}
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsResetPasswordModalOpen(false)}
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
+                >
+                  {t.reset}
+                </button>
               </div>
             </form>
           </motion.div>
