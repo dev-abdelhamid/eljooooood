@@ -34,9 +34,9 @@ export const CustomInput: React.FC<CustomInputProps> = ({
           initial={{ opacity: value ? 0 : 1 }}
           animate={{ opacity: value ? 0 : 1 }}
           transition={{ duration: 0.15 }}
-          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-600`}
+          className={`absolute flex justify-center items-center align-center ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-600`}
         >
-          <Search />
+          <Search className="w-4 h-4" />
         </motion.div>
       )}
       <input
@@ -51,7 +51,7 @@ export const CustomInput: React.FC<CustomInputProps> = ({
         <button
           type="button"
           onClick={togglePasswordVisibility}
-          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-600 transition-colors`}
+          className={`absolute  flex justify-center items-center align-center ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-600 transition-colors`}
         >
           {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
         </button>
@@ -60,7 +60,7 @@ export const CustomInput: React.FC<CustomInputProps> = ({
           initial={{ opacity: value ? 1 : 0 }}
           animate={{ opacity: value ? 1 : 0 }}
           transition={{ duration: 0.15 }}
-          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-600 transition-colors`}
+          className={`absolute ${isRtl ? 'left-3' : 'right-3'}  flex justify-center items-center align-center top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-600 transition-colors`}
         >
           <button
             type="button"

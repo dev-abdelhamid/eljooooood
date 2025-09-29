@@ -1,10 +1,9 @@
-// src/pages/Chefs.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { chefsAPI, departmentAPI } from '../services/api';
-import { ChefHat, AlertCircle, Plus, Edit2, Trash2, Key } from 'lucide-react';
+import { ChefHat, AlertCircle, Plus, Edit2, Trash2, Key, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { debounce } from 'lodash';
@@ -192,6 +191,9 @@ export function Chefs() {
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [showPassword, setShowPassword] = useState<Record<string, boolean>>({});
+  const [showNewPassword, setShowNewPassword] = useState(false); // للـ password في add
+  const [showResetPassword, setShowResetPassword] = useState(false); // للـ reset modal password
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false); // للـ confirm in reset
 
   const debouncedSearch = useCallback(
     debounce((value: string) => {
@@ -481,16 +483,12 @@ export function Chefs() {
     }
   };
 
-  const togglePasswordVisibility = (id: string) => {
-    setShowPassword((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl w-full px-4">
           {[...Array(6)].map((_, index) => (
-            <div key={index} className="p-4 bg-white rounded-xl shadow-sm">
+            <div key={index} className="p-5 bg-white rounded-xl shadow-sm"> {/* زد padding */}
               <div className="space-y-2 animate-pulse">
                 <div className="h-4 bg-gray-200 rounded w-3/4"></div>
                 <div className="h-3 bg-gray-200 rounded w-1/2"></div>
@@ -505,7 +503,7 @@ export function Chefs() {
   }
 
   return (
-    <div className={`mx-auto px-4 py-6 min-h-screen overflow-y-auto scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100 `}>
+    <div className={`mx-auto max-w-6xl px-4 py-6 min-h-screen overflow-y-auto scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100 bg-gray-50 font-sans ${isRtl ? 'rtl font-arabic' : 'ltr'}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -516,16 +514,16 @@ export function Chefs() {
           <ChefHat className="w-6 h-6 text-amber-600" />
           <div>
             <h1 className="text-xl font-bold text-gray-900">{t.manage}</h1>
-            <p className="text-gray-600 text-xs">{isRtl ? 'إضافة، تعديل، أو حذف الشيفات' : 'Add, edit, or delete chefs'}</p>
+            <p className="text-gray-600 text-sm">{isRtl ? 'إضافة، تعديل، أو حذف الشيفات' : 'Add, edit, or delete chefs'}</p> {/* زد text-sm */}
           </div>
         </div>
         {loggedInUser?.role === 'admin' && (
           <button
             onClick={openAddModal}
-            className="w-full sm:w-auto px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm hover:shadow-md"
+            className="w-full sm:w-auto px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5 shadow-sm hover:shadow-md" {/* زد حجم button */}
             aria-label={t.add}
           >
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-4 h-4" />
             {t.add}
           </button>
         )}
@@ -541,12 +539,12 @@ export function Chefs() {
             className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
           >
             <AlertCircle className="w-4 h-4 text-red-600" />
-            <span className="text-red-600 text-xs">{error}</span>
+            <span className="text-red-600 text-sm">{error}</span> {/* زد text-sm */}
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="space-y-3">
+      <div className="space-y-4"> {/* زد space-y-4 */}
         <div className="p-4 bg-white rounded-xl shadow-sm">
           <CustomInput
             value={searchInput}
@@ -558,18 +556,18 @@ export function Chefs() {
             ariaLabel={t.searchPlaceholder}
           />
         </div>
-        <div className="text-center text-xs text-gray-600">
+        <div className="text-center text-sm text-gray-600"> {/* زد text-sm */}
           {isRtl ? `عدد الشيفات: ${filteredChefs.length}` : `Chefs Count: ${filteredChefs.length}`}
         </div>
 
         {filteredChefs.length === 0 ? (
           <div className="p-6 text-center bg-white rounded-xl shadow-sm">
             <ChefHat className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-            <p className="text-gray-600 text-xs">{searchTerm ? t.noMatch : t.empty}</p>
+            <p className="text-gray-600 text-sm">{searchTerm ? t.noMatch : t.empty}</p> {/* زد text-sm */}
             {loggedInUser?.role === 'admin' && !searchTerm && (
               <button
                 onClick={openAddModal}
-                className="mt-3 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                className="mt-3 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md" {/* زد حجم */}
                 aria-label={t.addFirst}
               >
                 {t.addFirst}
@@ -588,69 +586,64 @@ export function Chefs() {
                 key={chef.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }} {/* smoother animation */}
               >
                 <div
-                  className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer border border-gray-100"
+                  className="p-5 bg-white rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer border border-gray-100 max-w-sm mx-auto" {/* تحسين: زد padding, rounded-2xl, shadow-md, max-w-sm للتجاوب */}
                   onClick={() => navigate(`/chefs/${chef.id}`)}
                 >
-                  <div className="space-y-2">
+                  <div className="space-y-3"> {/* زد space-y-3 */}
                     <div className="flex items-center justify-between gap-3">
                       <h3 className="font-semibold text-gray-900 text-sm truncate">
                         {isRtl ? chef.user?.name : chef.user?.nameEn || chef.user?.name}
                       </h3>
-                      <ChefHat className="w-5 h-5 text-amber-600" />
+                      <ChefHat className="w-5 h-5 text-amber-600 flex-shrink-0" />
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <span className="w-20 font-medium">{t.username}:</span>
-                      <span className="truncate flex-1">{chef.user?.username || '-'}</span>
+                    <div className="flex items-center gap-2 text-sm text-gray-600 overflow-hidden whitespace-nowrap"> {/* nowrap و text-sm */}
+                      <span className="min-w-[80px] font-medium flex-shrink-0">{t.username}:</span>
+                      <span className="truncate overflow-hidden text-ellipsis flex-1">{chef.user?.username || '-'}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <span className="w-20 font-medium">{t.email}:</span>
-                      <span className="truncate flex-1">{chef.user?.email || '-'}</span>
+                    <div className="flex items-center gap-2 text-sm text-gray-600 overflow-hidden whitespace-nowrap">
+                      <span className="min-w-[80px] font-medium flex-shrink-0">{t.email}:</span>
+                      <span className="truncate overflow-hidden text-ellipsis flex-1">{chef.user?.email || '-'}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <span className="w-20 font-medium">{t.department}:</span>
-                      <span className="truncate flex-1">{isRtl ? chef.department?.name : chef.department?.nameEn || chef.department?.name || '-'}</span>
+                    <div className="flex items-center gap-2 text-sm text-gray-600 overflow-hidden whitespace-nowrap">
+                      <span className="min-w-[80px] font-medium flex-shrink-0">{t.department}:</span>
+                      <span className="truncate overflow-hidden text-ellipsis flex-1">{isRtl ? chef.department?.name : chef.department?.nameEn || chef.department?.name || '-'}</span>
                     </div>
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="w-20 font-medium">{t.status}:</span>
-                      <span className={`truncate flex-1 ${chef.user?.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                        {chef.user?.isActive ? t.active : t.inactive}
-                      </span>
-                    </div>
+                    {/* شيلت الـ status */}
                   </div>
                   {loggedInUser?.role === 'admin' && (
-                    <div className="mt-3 flex items-center justify-end gap-1.5">
+                    <div className="mt-4 flex items-center justify-end gap-2"> {/* زد mt-4 و gap-2 */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           openEditModal(chef);
                         }}
-                        className="p-1.5 w-8 h-8 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
+                        className="p-2 w-10 h-10 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md" {/* زد حجم button */}
                         title={t.edit}
                       >
-                        <Edit2 className="w-4 h-4" />
+                        <Edit2 className="w-5 h-5" />
                       </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           openResetPasswordModal(chef);
                         }}
-                        className="p-1.5 w-8 h-8 bg-amber-500 hover:bg-amber-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
+                        className="p-2 w-10 h-10 bg-amber-500 hover:bg-amber-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
                         title={t.resetPassword}
                       >
-                        <Key className="w-4 h-4" />
+                        <Key className="w-5 h-5" />
                       </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           openDeleteModal(chef);
                         }}
-                        className="p-1.5 w-8 h-8 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
+                        className="p-2 w-10 h-10 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
                         title={t.delete}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-5 h-5" />
                       </button>
                     </div>
                   )}
@@ -667,61 +660,66 @@ export function Chefs() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6"
+            className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6" {/* rounded-2xl للـ modal */}
           >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{isEditMode ? t.edit : t.add}</h3>
             <form onSubmit={handleSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">{t.name}</label>
-                  <CustomInput
+                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">{t.name}</label> {/* text-sm */}
+                  <input
+                    id="name"
                     value={formData.name}
-                    onChange={(value) => setFormData({ ...formData, name: value })}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder={t.namePlaceholder}
-                    ariaLabel={t.name}
+                    className={`w-full px-3 py-3 border ${formErrors.name ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`} {/* py-3, text-sm */}
                   />
-                  {formErrors.name && <p className="text-xs text-red-600 mt-1">{formErrors.name}</p>}
+                  {formErrors.name && <p className="text-sm text-red-600 mt-1">{formErrors.name}</p>}
                 </div>
                 <div>
-                  <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">{t.nameEn}</label>
-                  <CustomInput
+                  <label htmlFor="nameEn" className="block text-sm font-medium text-gray-700 mb-1">{t.nameEn}</label>
+                  <input
+                    id="nameEn"
                     value={formData.nameEn}
-                    onChange={(value) => setFormData({ ...formData, nameEn: value })}
+                    onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
                     placeholder={t.nameEnPlaceholder}
-                    ariaLabel={t.nameEn}
+                    className={`w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                   />
-                  {formErrors.nameEn && <p className="text-xs text-red-600 mt-1">{formErrors.nameEn}</p>}
+                  {formErrors.nameEn && <p className="text-sm text-red-600 mt-1">{formErrors.nameEn}</p>}
                 </div>
                 <div>
-                  <label htmlFor="username" className="block text-xs font-medium text-gray-700 mb-1">{t.username}</label>
-                  <CustomInput
+                  <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">{t.username}</label>
+                  <input
+                    id="username"
                     value={formData.username}
-                    onChange={(value) => setFormData({ ...formData, username: value })}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                     placeholder={t.usernamePlaceholder}
-                    ariaLabel={t.username}
+                    className={`w-full px-3 py-3 border ${formErrors.username ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                   />
-                  {formErrors.username && <p className="text-xs text-red-600 mt-1">{formErrors.username}</p>}
+                  {formErrors.username && <p className="text-sm text-red-600 mt-1">{formErrors.username}</p>}
                 </div>
                 <div>
-                  <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1">{t.email}</label>
-                  <CustomInput
+                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">{t.email}</label>
+                  <input
+                    id="email"
                     value={formData.email}
-                    onChange={(value) => setFormData({ ...formData, email: value })}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     placeholder={t.emailPlaceholder}
-                    ariaLabel={t.email}
+                    className={`w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                   />
                 </div>
                 <div>
-                  <label htmlFor="phone" className="block text-xs font-medium text-gray-700 mb-1">{t.phone}</label>
-                  <CustomInput
+                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">{t.phone}</label>
+                  <input
+                    id="phone"
                     value={formData.phone}
-                    onChange={(value) => setFormData({ ...formData, phone: value })}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     placeholder={t.phonePlaceholder}
-                    ariaLabel={t.phone}
+                    className={`w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                   />
                 </div>
                 <div>
-                  <label htmlFor="department" className="block text-xs font-medium text-gray-700 mb-1">{t.department}</label>
+                  <label htmlFor="department" className="block text-sm font-medium text-gray-700 mb-1">{t.department}</label>
                   <CustomDropdown
                     value={formData.department}
                     onChange={(value) => setFormData({ ...formData, department: value })}
@@ -734,10 +732,10 @@ export function Chefs() {
                     ]}
                     ariaLabel={t.department}
                   />
-                  {formErrors.department && <p className="text-xs text-red-600 mt-1">{formErrors.department}</p>}
+                  {formErrors.department && <p className="text-sm text-red-600 mt-1">{formErrors.department}</p>}
                 </div>
                 <div>
-                  <label htmlFor="status" className="block text-xs font-medium text-gray-700 mb-1">{t.status}</label>
+                  <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">{t.status}</label>
                   <CustomDropdown
                     value={formData.isActive}
                     onChange={(value) => setFormData({ ...formData, isActive: value === 'true' })}
@@ -749,39 +747,44 @@ export function Chefs() {
                   />
                 </div>
                 {!isEditMode && (
-                  <div>
-                    <label htmlFor="password" className="block text-xs font-medium text-gray-700 mb-1">{t.password}</label>
-                    <CustomInput
+                  <div className="relative">
+                    <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">{t.password}</label>
+                    <input
+                      id="password"
+                      type={showNewPassword ? 'text' : 'password'}
                       value={formData.password}
-                      onChange={(value) => setFormData({ ...formData, password: value })}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                       placeholder={t.passwordPlaceholder}
-                      ariaLabel={t.password}
-                      type="password"
-                      showPasswordToggle
-                      showPassword={showPassword['new']}
-                      togglePasswordVisibility={() => togglePasswordVisibility('new')}
+                      className={`w-full px-3 py-3 pr-10 border ${formErrors.password ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                     />
-                    {formErrors.password && <p className="text-xs text-red-600 mt-1">{formErrors.password}</p>}
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPassword(!showNewPassword)}
+                      className={`absolute inset-y-0 ${isRtl ? 'left-0 pl-3' : 'right-0 pr-3'} flex items-center mt-7 text-gray-400 hover:text-amber-600 transition-colors`} {/* تعديل position */}
+                    >
+                      {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                    {formErrors.password && <p className="text-sm text-red-600 mt-1">{formErrors.password}</p>}
                   </div>
                 )}
               </div>
               {error && (
                 <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-red-600" />
-                  <span className="text-red-600 text-xs">{error}</span>
+                  <span className="text-red-600 text-sm">{error}</span>
                 </div>
               )}
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md" {/* زد حجم */}
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
                 >
                   {isEditMode ? t.update : t.add}
                 </button>
@@ -797,53 +800,63 @@ export function Chefs() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6"
+            className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6"
           >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.resetPassword}</h3>
             <form onSubmit={handleResetPassword} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
-              <div>
-                <label htmlFor="newPassword" className="block text-xs font-medium text-gray-700 mb-1">{t.newPassword}</label>
-                <CustomInput
+              <div className="relative">
+                <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">{t.newPassword}</label>
+                <input
+                  id="newPassword"
+                  type={showResetPassword ? 'text' : 'password'}
                   value={resetPasswordData.password}
-                  onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
+                  onChange={(e) => setResetPasswordData({ ...resetPasswordData, password: e.target.value })}
                   placeholder={t.newPasswordPlaceholder}
-                  ariaLabel={t.newPassword}
-                  type="password"
-                  showPasswordToggle
-                  showPassword={showPassword['newPassword']}
-                  togglePasswordVisibility={() => togglePasswordVisibility('newPassword')}
+                  className={`w-full px-3 py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowResetPassword(!showResetPassword)}
+                  className={`absolute inset-y-0 ${isRtl ? 'left-0 pl-3' : 'right-0 pr-3'} flex items-center mt-7 text-gray-400 hover:text-amber-600 transition-colors`}
+                >
+                  {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
-              <div>
-                <label htmlFor="confirmPassword" className="block text-xs font-medium text-gray-700 mb-1">{t.confirmPassword}</label>
-                <CustomInput
+              <div className="relative">
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">{t.confirmPassword}</label>
+                <input
+                  id="confirmPassword"
+                  type={showConfirmPassword ? 'text' : 'password'}
                   value={resetPasswordData.confirmPassword}
-                  onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
+                  onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
                   placeholder={t.confirmPasswordPlaceholder}
-                  ariaLabel={t.confirmPassword}
-                  type="password"
-                  showPasswordToggle
-                  showPassword={showPassword['confirmPassword']}
-                  togglePasswordVisibility={() => togglePasswordVisibility('confirmPassword')}
+                  className={`w-full px-3 py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className={`absolute inset-y-0 ${isRtl ? 'left-0 pl-3' : 'right-0 pr-3'} flex items-center mt-7 text-gray-400 hover:text-amber-600 transition-colors`}
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
               {error && (
                 <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-red-600" />
-                  <span className="text-red-600 text-xs">{error}</span>
+                  <span className="text-red-600 text-sm">{error}</span>
                 </div>
               )}
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsResetPasswordModalOpen(false)}
-                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
                 >
                   {t.reset}
                 </button>
@@ -859,29 +872,29 @@ export function Chefs() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6"
+            className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6"
           >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.confirmDelete}</h3>
             <div className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
-              <p className="text-gray-600 text-xs">{t.deleteWarning}</p>
+              <p className="text-gray-600 text-sm">{t.deleteWarning}</p> {/* text-sm */}
               {error && (
                 <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-red-600" />
-                  <span className="text-red-600 text-xs">{error}</span>
+                  <span className="text-red-600 text-sm">{error}</span>
                 </div>
               )}
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsDeleteModalOpen(false)}
-                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="button"
                   onClick={handleDelete}
-                  className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
                 >
                   {t.delete}
                 </button>
