@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
-import { ShoppingCart, AlertCircle, Search, Table2, Grid, Download, X , ChevronDown  } from 'lucide-react';
+import { ShoppingCart, AlertCircle, Search, Table2, Grid, Download, X, ChevronDown  } from 'lucide-react';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -315,7 +315,7 @@ const reducer = (state: State, action: Action): State => {
                       assignedTo: assignment.assignedTo
                         ? { 
                             ...assignment.assignedTo, 
-                            displayName: state.isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name 
+                            displayName: assignment.assignedTo.nameEn || assignment.assignedTo.name 
                           }
                         : undefined,
                       status: assignment.status || i.status,
@@ -337,7 +337,7 @@ const reducer = (state: State, action: Action): State => {
                     assignedTo: assignment.assignedTo
                       ? { 
                           ...assignment.assignedTo, 
-                          displayName: state.isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name 
+                          displayName: assignment.assignedTo.nameEn || assignment.assignedTo.name 
                         }
                       : undefined,
                     status: assignment.status || i.status,
@@ -547,40 +547,41 @@ export const Orders: React.FC = () => {
         console.warn('Invalid new order data:', order);
         return;
       }
+      const unknown = isRtl ? 'غير معروف' : 'Unknown';
       const mappedOrder: Order = {
         id: order._id,
         orderNumber: order.orderNumber,
         branchId: order.branch?._id || 'unknown',
         branch: {
           _id: order.branch?._id || 'unknown',
-          name: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-          nameEn: order.branch?.nameEn,
-          displayName: isRtl ? order.branch?.name : order.branch?.nameEn || order.branch?.name,
+          name: order.branch?.name || unknown,
+          nameEn: order.branch?.nameEn || '',
+          displayName: isRtl ? (order.branch?.name || unknown) : (order.branch?.nameEn || order.branch?.name || unknown),
         },
         items: Array.isArray(order.items)
           ? order.items.map((item: any) => ({
               _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
               productId: item.product?._id || 'unknown',
-              productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              productNameEn: item.product?.nameEn,
-              displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
+              productName: item.product?.name || unknown,
+              productNameEn: item.product?.nameEn || '',
+              displayProductName: isRtl ? (item.product?.name || unknown) : (item.product?.nameEn || item.product?.name || unknown),
               quantity: Number(item.quantity) || 1,
               price: Number(item.price) || 0,
               unit: item.product?.unit || 'unit',
-              unitEn: item.product?.unitEn,
-              displayUnit: isRtl ? item.product?.unit : item.product?.unitEn || item.product?.unit,
+              unitEn: item.product?.unitEn || '',
+              displayUnit: isRtl ? (item.product?.unit || 'وحدة') : (item.product?.unitEn || item.product?.unit || 'unit'),
               department: {
                 _id: item.product?.department?._id || 'unknown',
-                name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: item.product?.department?.nameEn,
-                displayName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name,
+                name: item.product?.department?.name || unknown,
+                nameEn: item.product?.department?.nameEn || '',
+                displayName: isRtl ? (item.product?.department?.name || unknown) : (item.product?.department?.nameEn || item.product?.department?.name || unknown),
               },
               assignedTo: item.assignedTo ? { 
                 _id: item.assignedTo._id, 
                 username: item.assignedTo.username, 
-                name: item.assignedTo.name || item.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), 
-                nameEn: item.assignedTo.nameEn,
-                displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
+                name: item.assignedTo.name || item.assignedTo.username || unknown, 
+                nameEn: item.assignedTo.nameEn || '',
+                displayName: isRtl ? (item.assignedTo.name || unknown) : (item.assignedTo.nameEn || item.assignedTo.name || unknown),
                 department: item.assignedTo.department 
               } : undefined,
               status: item.status || 'pending',
@@ -591,17 +592,17 @@ export const Orders: React.FC = () => {
         returns: Array.isArray(order.returns)
           ? order.returns.map((ret: any) => ({
               returnId: ret._id || `temp-${Math.random().toString(36).substring(2)}`,
-              returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
+              returnNumber: ret.returnNumber || unknown,
               items: Array.isArray(ret.items)
                 ? ret.items.map((item: any) => ({
                     productId: item.product?._id || 'unknown',
-                    productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    productNameEn: item.product?.nameEn,
+                    productName: item.product?.name || unknown,
+                    productNameEn: item.product?.nameEn || '',
                     quantity: Number(item.quantity) || 0,
                     reason: item.reason || (isRtl ? 'غير محدد' : 'Unspecified'),
                     unit: item.product?.unit || 'unit',
-                    unitEn: item.product?.unitEn,
-                    displayUnit: isRtl ? item.product?.unit : item.product?.unitEn || item.product?.unit,
+                    unitEn: item.product?.unitEn || '',
+                    displayUnit: isRtl ? (item.product?.unit || 'وحدة') : (item.product?.unitEn || item.product?.unit || 'unit'),
                   }))
                 : [],
               status: ret.status || 'pending',
@@ -610,9 +611,9 @@ export const Orders: React.FC = () => {
               createdBy: {
                 _id: ret.createdBy?._id,
                 username: ret.createdBy?.username,
-                name: ret.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: ret.createdBy?.nameEn,
-                displayName: isRtl ? ret.createdBy?.name : ret.createdBy?.nameEn || ret.createdBy?.name,
+                name: ret.createdBy?.name || unknown,
+                nameEn: ret.createdBy?.nameEn || '',
+                displayName: isRtl ? (ret.createdBy?.name || unknown) : (ret.createdBy?.nameEn || ret.createdBy?.name || unknown),
               },
             }))
           : [],
@@ -623,8 +624,8 @@ export const Orders: React.FC = () => {
         requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : undefined,
         notes: order.notes || '',
         priority: order.priority || 'medium',
-        createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-        approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
+        createdBy: order.createdBy?.name || unknown,
+        approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || unknown } : undefined,
         approvedAt: order.approvedAt ? new Date(order.approvedAt) : undefined,
         deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : undefined,
         transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : undefined,
@@ -679,6 +680,8 @@ export const Orders: React.FC = () => {
     return () => {
       socket.off('connect');
       socket.off('connect_error');
+      socket.off('reconnect');
+      socket.off('disconnect');
       socket.off('newOrder');
       socket.off('orderStatusUpdated');
       socket.off('itemStatusUpdated');
@@ -706,6 +709,7 @@ export const Orders: React.FC = () => {
           chefsAPI.getAll(),
           branchesAPI.getAll(),
         ]);
+        const unknown = isRtl ? 'غير معروف' : 'Unknown';
         const mappedOrders: Order[] = ordersResponse
           .filter((order: any) => order && order._id && order.orderNumber)
           .map((order: any) => ({
@@ -714,34 +718,34 @@ export const Orders: React.FC = () => {
             branchId: order.branch?._id || 'unknown',
             branch: {
               _id: order.branch?._id || 'unknown',
-              name: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              nameEn: order.branch?.nameEn,
-              displayName: isRtl ? order.branch?.name : order.branch?.nameEn || order.branch?.name,
+              name: order.branch?.name || unknown,
+              nameEn: order.branch?.nameEn || '',
+              displayName: isRtl ? (order.branch?.name || unknown) : (order.branch?.nameEn || order.branch?.name || unknown),
             },
             items: Array.isArray(order.items)
               ? order.items.map((item: any) => ({
                   _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
                   productId: item.product?._id || 'unknown',
-                  productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                  productNameEn: item.product?.nameEn,
-                  displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
+                  productName: item.product?.name || unknown,
+                  productNameEn: item.product?.nameEn || '',
+                  displayProductName: isRtl ? (item.product?.name || unknown) : (item.product?.nameEn || item.product?.name || unknown),
                   quantity: Number(item.quantity) || 1,
                   price: Number(item.price) || 0,
                   unit: item.product?.unit || 'unit',
-                  unitEn: item.product?.unitEn,
-                  displayUnit: isRtl ? item.product?.unit : item.product?.unitEn || item.product?.unit,
+                  unitEn: item.product?.unitEn || '',
+                  displayUnit: isRtl ? (item.product?.unit || 'وحدة') : (item.product?.unitEn || item.product?.unit || 'unit'),
                   department: {
                     _id: item.product?.department?._id || 'unknown',
-                    name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    nameEn: item.product?.department?.nameEn,
-                    displayName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name,
+                    name: item.product?.department?.name || unknown,
+                    nameEn: item.product?.department?.nameEn || '',
+                    displayName: isRtl ? (item.product?.department?.name || unknown) : (item.product?.department?.nameEn || item.product?.department?.name || unknown),
                   },
                   assignedTo: item.assignedTo ? { 
                     _id: item.assignedTo._id, 
                     username: item.assignedTo.username, 
-                    name: item.assignedTo.name || item.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), 
-                    nameEn: item.assignedTo.nameEn,
-                    displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
+                    name: item.assignedTo.name || item.assignedTo.username || unknown, 
+                    nameEn: item.assignedTo.nameEn || '',
+                    displayName: isRtl ? (item.assignedTo.name || unknown) : (item.assignedTo.nameEn || item.assignedTo.name || unknown),
                     department: item.assignedTo.department 
                   } : undefined,
                   status: item.status || 'pending',
@@ -752,17 +756,17 @@ export const Orders: React.FC = () => {
             returns: Array.isArray(order.returns)
               ? order.returns.map((ret: any) => ({
                   returnId: ret._id || `temp-${Math.random().toString(36).substring(2)}`,
-                  returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
+                  returnNumber: ret.returnNumber || unknown,
                   items: Array.isArray(ret.items)
                     ? ret.items.map((item: any) => ({
                         productId: item.product?._id || 'unknown',
-                        productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                        productNameEn: item.product?.nameEn,
+                        productName: item.product?.name || unknown,
+                        productNameEn: item.product?.nameEn || '',
                         quantity: Number(item.quantity) || 0,
                         reason: item.reason || (isRtl ? 'غير محدد' : 'Unspecified'),
                         unit: item.product?.unit || 'unit',
-                        unitEn: item.product?.unitEn,
-                        displayUnit: isRtl ? item.product?.unit : item.product?.unitEn || item.product?.unit,
+                        unitEn: item.product?.unitEn || '',
+                        displayUnit: isRtl ? (item.product?.unit || 'وحدة') : (item.product?.unitEn || item.product?.unit || 'unit'),
                       }))
                     : [],
                   status: ret.status || 'pending',
@@ -771,9 +775,9 @@ export const Orders: React.FC = () => {
                   createdBy: {
                     _id: ret.createdBy?._id,
                     username: ret.createdBy?.username,
-                    name: ret.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    nameEn: ret.createdBy?.nameEn,
-                    displayName: isRtl ? ret.createdBy?.name : ret.createdBy?.nameEn || ret.createdBy?.name,
+                    name: ret.createdBy?.name || unknown,
+                    nameEn: ret.createdBy?.nameEn || '',
+                    displayName: isRtl ? (ret.createdBy?.name || unknown) : (ret.createdBy?.nameEn || ret.createdBy?.name || unknown),
                   },
                 }))
               : [],
@@ -784,8 +788,8 @@ export const Orders: React.FC = () => {
             requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : undefined,
             notes: order.notes || '',
             priority: order.priority || 'medium',
-            createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-            approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
+            createdBy: order.createdBy?.name || unknown,
+            approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || unknown } : undefined,
             approvedAt: order.approvedAt ? new Date(order.approvedAt) : undefined,
             deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : undefined,
             transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : undefined,
@@ -806,14 +810,14 @@ export const Orders: React.FC = () => {
             .map((chef: any) => ({
               _id: chef._id,
               userId: chef.user._id,
-              name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              nameEn: chef.user?.nameEn || chef.nameEn,
-              displayName: isRtl ? (chef.user?.name || chef.name) : (chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name),
+              name: chef.user?.name || chef.name || unknown,
+              nameEn: chef.user?.nameEn || chef.nameEn || '',
+              displayName: isRtl ? (chef.user?.name || chef.name || unknown) : (chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name || unknown),
               department: chef.department ? { 
                 _id: chef.department._id, 
-                name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: chef.department.nameEn,
-                displayName: isRtl ? chef.department.name : chef.department.nameEn || chef.department.name 
+                name: chef.department.name || unknown,
+                nameEn: chef.department.nameEn || '',
+                displayName: isRtl ? (chef.department.name || unknown) : (chef.department.nameEn || chef.department.name || unknown) 
               } : null,
               status: chef.status || 'active',
             })),
@@ -824,11 +828,11 @@ export const Orders: React.FC = () => {
             .filter((branch: any) => branch && branch._id)
             .map((branch: any) => ({
               _id: branch._id,
-              name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              nameEn: branch.nameEn,
-              displayName: isRtl ? branch.name : branch.nameEn || branch.name,
+              name: branch.name || unknown,
+              nameEn: branch.nameEn || '',
+              displayName: isRtl ? (branch.name || unknown) : (branch.nameEn || branch.name || unknown),
             }))
-            .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language)),
+            .sort((a: Branch, b: Branch) => (a.displayName || '').localeCompare(b.displayName || '', language)),
         });
         dispatch({ type: 'SET_ERROR', payload: '' });
       } catch (err: any) {
@@ -862,16 +866,16 @@ export const Orders: React.FC = () => {
       state.orders
         .filter(
           order =>
-            order.orderNumber.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.branch.displayName.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.branch.name.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.branch.nameEn?.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            (order.orderNumber || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            (order.branch.displayName || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            (order.branch.name || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            (order.branch.nameEn || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
             (order.notes || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.createdBy.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            (order.createdBy || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
             order.items.some(item => 
-              item.displayProductName.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-              item.productName.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-              item.productNameEn?.toLowerCase().includes(state.searchQuery.toLowerCase())
+              (item.displayProductName || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+              (item.productName || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+              (item.productNameEn || '').toLowerCase().includes(state.searchQuery.toLowerCase())
             )
         )
         .filter(
@@ -1080,7 +1084,7 @@ export const Orders: React.FC = () => {
       delivered: 'Delivered',
       cancelled: 'Cancelled',
     };
-    return isRtl ? labelsAr[status] : labelsEn[status];
+    return isRtl ? (labelsAr[status] || status) : (labelsEn[status] || status);
   };
 
   const getSortLabel = (value: string) => {
@@ -1094,7 +1098,7 @@ export const Orders: React.FC = () => {
       totalAmount: 'Total Amount',
       priority: 'Priority',
     };
-    return isRtl ? labelsAr[value] : labelsEn[value];
+    return isRtl ? (labelsAr[value] || value) : (labelsEn[value] || value);
   };
 
   return (
