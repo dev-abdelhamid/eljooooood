@@ -7,7 +7,7 @@ import { Layers, Plus, Edit2, Trash2, AlertCircle, ChevronLeft, ChevronRight, Se
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { debounce } from 'lodash';
-import { CustomDropdown } from './CustomDropdown';
+import { CustomDropdown } from '../components/UI/CustomDropdown';
 
 interface Department {
   id: string;
