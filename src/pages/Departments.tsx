@@ -422,7 +422,7 @@ export function Departments() {
                           e.stopPropagation();
                           openEditModal(department);
                         }}
-                        className="p-2 w-10 h-10 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md" {/* زد حجم button */}
+                        className="p-2 w-10 h-10 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md" 
                         title={t.edit}
                       >
                         <Edit2 className="w-5 h-5" />
