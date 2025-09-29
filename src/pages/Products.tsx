@@ -7,7 +7,6 @@ import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 
-
 interface Product {
   _id: string;
   name: string;
@@ -54,7 +53,7 @@ const CustomInput = ({
         initial={{ opacity: value ? 0 : 1 }}
         animate={{ opacity: value ? 0 : 1 }}
         transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'}  flex items-center justify-center align-center  top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} flex items-center justify-center align-center top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`}
       >
         <Search className="w-4 h-4" />
       </motion.div>
@@ -70,7 +69,7 @@ const CustomInput = ({
         initial={{ opacity: value ? 1 : 0 }}
         animate={{ opacity: value ? 1 : 0 }}
         transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2  flex items-center justify-center align-center transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 flex items-center justify-center align-center transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
       >
         <button
           onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
@@ -98,7 +97,7 @@ const CustomDropdown = ({
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
-  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { label: isRtl ? 'اختر' : 'Select' };
+  const selectedOption = options.find((opt) => opt.value === value) || { value: '', label: isRtl ? 'اختر' : 'Select' };
 
   return (
     <div className="relative group" onClick={(e) => e.stopPropagation()}>
@@ -216,7 +215,7 @@ export function Products() {
         code: product.code,
         department: product.department._id,
         price: product.price.toString(),
-        unit: product.unit || 'كيلو',
+        unit: product.unit || '', // لو الوحدة مش موجودة، نتركها فارغة
       });
     } else {
       setEditingProduct(null);
@@ -226,7 +225,7 @@ export function Products() {
         code: '',
         department: departments[0]?._id || '',
         price: '',
-        unit: 'كيلو',
+        unit: '', // فارغة للإضافة الجديدة
       });
     }
     setIsModalOpen(true);
@@ -249,6 +248,11 @@ export function Products() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // فحص إذا كانت الوحدة موجودة في الخيارات
+    if (!unitOptions.some((opt) => opt.value === formData.unit)) {
+      setError(isRtl ? 'الوحدة غير صالحة، اختر من القائمة' : 'Invalid unit, please select from the list');
+      return;
+    }
     try {
       const productData = {
         name: formData.name,
@@ -536,10 +540,13 @@ export function Products() {
                   <CustomDropdown
                     value={formData.unit}
                     onChange={(value) => setFormData({ ...formData, unit: value })}
-                    options={unitOptions.map((opt) => ({
-                      value: opt.value,
-                      label: isRtl ? opt.labelAr : opt.labelEn,
-                    }))}
+                    options={[
+                      { value: '', label: isRtl ? 'اختر الوحدة' : 'Select Unit' }, // خيار افتراضي فارغ
+                      ...unitOptions.map((opt) => ({
+                        value: opt.value,
+                        label: isRtl ? opt.labelAr : opt.labelEn,
+                      })),
+                    ]}
                     ariaLabel={isRtl ? 'الوحدة' : 'Unit'}
                   />
                 </div>
