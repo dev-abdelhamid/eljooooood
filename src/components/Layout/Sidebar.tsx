@@ -83,7 +83,10 @@ export function Sidebar({
     ];
 
     const productionItems = [
-      
+
+
+      { path: '/products', icon: Box, label: t('products.manage') },
+      { path: '/departments', icon: Users2, label: t('departments') },
       { path: '/orders', icon: ShoppingBag, label: t('orders') },
       { path: '/returns', icon: RefreshCcw, label: t('returns') },
       { path: '/reports', icon: BarChart2, label: t('reports') },
