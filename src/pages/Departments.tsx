@@ -393,7 +393,7 @@ export function Departments() {
                 transition={{ duration: 0.3, ease: 'easeOut' }}
               >
                 <div
-                  className="p-5 bg-white rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer border border-gray-100 max-w-sm mx-auto" {/* تحسين: زد padding, rounded-2xl, shadow-md, max-w-sm */}
+                  className="p-5 bg-white rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer border border-gray-100 max-w-sm mx-auto" 
                   onClick={() => navigate(`/departments/${department.id}`)}
                 >
                   <div className="space-y-3"> {/* زد space-y-3 */}

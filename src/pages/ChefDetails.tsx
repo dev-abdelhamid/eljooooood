@@ -3,10 +3,9 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { chefsAPI, departmentAPI } from '../services/api';
-import { ChefHat, AlertCircle, Edit2, Trash2, Key, ArrowLeft } from 'lucide-react';
+import { ChefHat, AlertCircle, Edit2, Trash2, Key, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CustomInput } from '../components/UI/CustomInput';
 import { CustomDropdown } from '../components/UI/CustomDropdown';
 
 // افترض إن في interface للـ Production (مثل منتجات الشيف)
@@ -191,7 +190,9 @@ export function ChefDetails() {
   });
   const [resetPasswordData, setResetPasswordData] = useState({ password: '', confirmPassword: '' });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [showPassword, setShowPassword] = useState<Record<string, boolean>>({});
+  const [showEditPassword, setShowEditPassword] = useState(false); // لو كان في password في edit (مش موجود)
+  const [showResetPassword, setShowResetPassword] = useState(false); // للـ reset modal
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false); // للـ confirm in reset
 
   const fetchChefData = useCallback(async () => {
     if (!id) {
@@ -427,10 +428,6 @@ export function ChefDetails() {
     }
   };
 
-  const togglePasswordVisibility = (id: string) => {
-    setShowPassword((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -648,14 +645,13 @@ export function ChefDetails() {
         )}
       </motion.div>
 
-      {/* الـ modals زي ما هم، بس حسنت الحجم والـ py-3 للـ inputs */}
       {isEditModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6"
+            className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6" {/* rounded-2xl */}
           >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.edit}</h3>
             <form onSubmit={handleSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
@@ -664,12 +660,12 @@ export function ChefDetails() {
                   <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
                     {t.name}
                   </label>
-                  <CustomInput
+                  <input
+                    id="name"
                     value={formData.name}
-                    onChange={(value) => setFormData({ ...formData, name: value })}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder={t.namePlaceholder}
-                    ariaLabel={t.name}
-                    type="text"
+                    className={`w-full px-3 py-3 border ${formErrors.name ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                   />
                   {formErrors.name && <p className="text-sm text-red-600 mt-1">{formErrors.name}</p>}
                 </div>
@@ -677,12 +673,12 @@ export function ChefDetails() {
                   <label htmlFor="nameEn" className="block text-sm font-medium text-gray-700 mb-1">
                     {t.nameEn}
                   </label>
-                  <CustomInput
+                  <input
+                    id="nameEn"
                     value={formData.nameEn}
-                    onChange={(value) => setFormData({ ...formData, nameEn: value })}
+                    onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
                     placeholder={t.nameEnPlaceholder}
-                    ariaLabel={t.nameEn}
-                    type="text"
+                    className={`w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                   />
                   {formErrors.nameEn && <p className="text-sm text-red-600 mt-1">{formErrors.nameEn}</p>}
                 </div>
@@ -690,12 +686,12 @@ export function ChefDetails() {
                   <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
                     {t.username}
                   </label>
-                  <CustomInput
+                  <input
+                    id="username"
                     value={formData.username}
-                    onChange={(value) => setFormData({ ...formData, username: value })}
+                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                     placeholder={t.usernamePlaceholder}
-                    ariaLabel={t.username}
-                    type="text"
+                    className={`w-full px-3 py-3 border ${formErrors.username ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                   />
                   {formErrors.username && <p className="text-sm text-red-600 mt-1">{formErrors.username}</p>}
                 </div>
@@ -703,24 +699,26 @@ export function ChefDetails() {
                   <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                     {t.email}
                   </label>
-                  <CustomInput
+                  <input
+                    id="email"
                     value={formData.email}
-                    onChange={(value) => setFormData({ ...formData, email: value })}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     placeholder={t.emailPlaceholder}
-                    ariaLabel={t.email}
                     type="email"
+                    className={`w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                   />
                 </div>
                 <div>
                   <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
                     {t.phone}
                   </label>
-                  <CustomInput
+                  <input
+                    id="phone"
                     value={formData.phone}
-                    onChange={(value) => setFormData({ ...formData, phone: value })}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                     placeholder={t.phonePlaceholder}
-                    ariaLabel={t.phone}
                     type="tel"
+                    className={`w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                   />
                 </div>
                 <div>
@@ -788,39 +786,49 @@ export function ChefDetails() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6"
+            className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6"
           >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.resetPassword}</h3>
             <form onSubmit={handleResetPassword} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
-              <div>
+              <div className="relative">
                 <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
                   {t.newPassword}
                 </label>
-                <CustomInput
+                <input
+                  id="newPassword"
+                  type={showResetPassword ? 'text' : 'password'}
                   value={resetPasswordData.password}
-                  onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
+                  onChange={(e) => setResetPasswordData({ ...resetPasswordData, password: e.target.value })}
                   placeholder={t.newPasswordPlaceholder}
-                  ariaLabel={t.newPassword}
-                  type="password"
-                  showPasswordToggle
-                  showPassword={showPassword['reset']}
-                  togglePasswordVisibility={() => togglePasswordVisibility('reset')}
+                  className={`w-full px-3 py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowResetPassword(!showResetPassword)}
+                  className={`absolute inset-y-0 ${isRtl ? 'left-0 pl-3' : 'right-0 pr-3'} flex items-center mt-7 text-gray-400 hover:text-amber-600 transition-colors`}
+                >
+                  {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
-              <div>
+              <div className="relative">
                 <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
                   {t.confirmPassword}
                 </label>
-                <CustomInput
+                <input
+                  id="confirmPassword"
+                  type={showConfirmPassword ? 'text' : 'password'}
                   value={resetPasswordData.confirmPassword}
-                  onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
+                  onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
                   placeholder={t.confirmPasswordPlaceholder}
-                  ariaLabel={t.confirmPassword}
-                  type="password"
-                  showPasswordToggle
-                  showPassword={showPassword['confirm']}
-                  togglePasswordVisibility={() => togglePasswordVisibility('confirm')}
+                  className={`w-full px-3 py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className={`absolute inset-y-0 ${isRtl ? 'left-0 pl-3' : 'right-0 pr-3'} flex items-center mt-7 text-gray-400 hover:text-amber-600 transition-colors`}
+                >
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
               {error && (
                 <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
@@ -854,7 +862,7 @@ export function ChefDetails() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6"
+            className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6"
           >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.confirmDelete}</h3>
             <p className="text-sm text-gray-600 mb-4">{t.deleteWarning}</p>
