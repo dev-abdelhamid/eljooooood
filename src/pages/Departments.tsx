@@ -314,26 +314,6 @@ export function Departments() {
     }
   };
 
-  const cardVariants = {
-    hidden: { opacity: 0, y: 30, scale: 0.95 },
-    visible: (index: number) => ({
-      opacity: 1,
-      y: 0,
-      scale: 1,
-      transition: {
-        duration: 0.5,
-        ease: [0.25, 0.1, 0.25, 1],
-        delay: index * 0.15,
-      },
-    }),
-    exit: {
-      opacity: 0,
-      y: -30,
-      scale: 0.95,
-      transition: { duration: 0.3, ease: [0.25, 0.1, 0.25, 1] },
-    },
-  };
-
   return (
     <div className="mx-auto px-4 py-6 min-h-screen bg-white" dir={isRtl ? 'rtl' : 'ltr'}>
       <div className="mb-4 flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-3">
@@ -388,7 +368,7 @@ export function Departments() {
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {[...Array(6)].map((_, index) => (
               <motion.div
                 key={index}
@@ -421,70 +401,55 @@ export function Departments() {
           </div>
         ) : (
           <motion.div
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-            initial="hidden"
-            animate="visible"
-            exit="exit"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ staggerChildren: 0.1 }}
           >
-            <AnimatePresence mode="wait">
-              {filteredDepartments.map((department, index) => (
-                <motion.div
-                  key={department.id}
-                  variants={cardVariants}
-                  custom={index}
-                  initial="hidden"
-                  animate="visible"
-                  exit="exit"
-                  layout
-                  className="relative p-5 bg-white rounded-xl shadow-lg hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden group border border-gray-200 hover:border-amber-300"
-                  onClick={() => navigate(`/departments/${department.id}`)}
-                >
-                  <div className="absolute top-0 left-1/2 transform -translate-x-1/2 w-28 h-28 bg-gradient-to-br from-amber-100 to-amber-300 rounded-full opacity-20 group-hover:opacity-40 transition-opacity duration-300 blur-sm"></div>
-                  <div className="relative flex justify-center mb-4">
-                    <div className="w-14 h-14 bg-amber-50 rounded-full flex items-center justify-center z-10 shadow-md">
-                      <Layers className="w-7 h-7 text-amber-600" />
-                    </div>
+            {filteredDepartments.map((department) => (
+              <motion.div
+                key={department.id}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
+                className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+                onClick={() => navigate(`/departments/${department.id}`)}
+              >
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-semibold text-gray-900 text-sm truncate">{department.displayName}</h3>
+                    <p className="text-xs text-gray-500">{department.code}</p>
                   </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-bold text-gray-900 text-base truncate">{department.displayName}</h3>
-                      <p className="text-sm text-amber-600 font-semibold">{department.code}</p>
-                    </div>
-                    {department.description && (
-                      <p className="text-xs text-gray-700 line-clamp-3">{department.description}</p>
-                    )}
-                  </div>
-                  {['admin', 'production'].includes(user?.role ?? '') && (
-                    <div className="mt-4 flex items-center justify-end gap-2">
-                      <motion.button
-                        whileHover={{ scale: 1.05, rotate: 5 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openModal(department);
-                        }}
-                        className="p-2 w-10 h-10 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors flex items-center justify-center shadow-md"
-                        title={t.edit}
-                      >
-                        <Edit2 className="w-5 h-5" />
-                      </motion.button>
-                      <motion.button
-                        whileHover={{ scale: 1.05, rotate: -5 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          openDeleteModal(department.id);
-                        }}
-                        className="p-2 w-10 h-10 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors flex items-center justify-center shadow-md"
-                        title={t.delete}
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </motion.button>
-                    </div>
+                  {department.description && (
+                    <p className="text-xs text-gray-600 truncate">{department.description}</p>
                   )}
-                </motion.div>
-              ))}
-            </AnimatePresence>
+                </div>
+                {['admin', 'production'].includes(user?.role ?? '') && (
+                  <div className="mt-3 flex items-center justify-end gap-1.5">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openModal(department);
+                      }}
+                      className="p-1.5 w-7 h-7 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center"
+                      title={t.edit}
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDeleteModal(department.id);
+                      }}
+                      className="p-1.5 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center"
+                      title={t.delete}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </motion.div>
+            ))}
           </motion.div>
         )}
       </div>
