@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef, memo } from 'react';
-import { useLanguage } from '../../contexts/LanguageContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 
 interface CustomDropdownProps {
-  value: string | boolean;
+  value: string;
   onChange: (value: string) => void;
-  options: { value: string | boolean; label: string }[];
+  options: { value: string; label: string }[];
   ariaLabel: string;
   className?: string;
 }
@@ -19,7 +19,8 @@ export const CustomDropdown = memo(
     const dropdownRef = useRef<HTMLDivElement>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
     const firstOptionRef = useRef<HTMLDivElement>(null);
-    const selectedOption = options.find((opt) => opt.value === value) || options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
+    const selectedOption =
+      options.find((opt) => opt.value === value) || { value: '', label: isRtl ? 'اختر' : 'Select' };
 
     // إغلاق الـ dropdown لما نضغط برا
     useEffect(() => {
@@ -30,7 +31,6 @@ export const CustomDropdown = memo(
       };
       if (isOpen) {
         document.addEventListener('mousedown', handleClickOutside);
-        // التركيز على أول خيار لما الـ dropdown يفتح
         firstOptionRef.current?.focus();
       }
       return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -41,9 +41,9 @@ export const CustomDropdown = memo(
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
         if (optionValue !== undefined) {
-          onChange(optionValue.toString());
+          onChange(optionValue);
           setIsOpen(false);
-          buttonRef.current?.focus(); // إرجاع التركيز للزر بعد الاختيار
+          buttonRef.current?.focus();
         } else {
           setIsOpen(!isOpen);
         }
@@ -54,13 +54,13 @@ export const CustomDropdown = memo(
         e.preventDefault();
         const currentIndex = options.findIndex((opt) => opt.value === value);
         const nextIndex = (currentIndex + 1) % options.length;
-        onChange(options[nextIndex].value.toString());
+        onChange(options[nextIndex].value);
         (dropdownRef.current?.querySelectorAll('[role="option"]')[nextIndex] as HTMLElement)?.focus();
       } else if (e.key === 'ArrowUp' && isOpen) {
         e.preventDefault();
         const currentIndex = options.findIndex((opt) => opt.value === value);
         const prevIndex = (currentIndex - 1 + options.length) % options.length;
-        onChange(options[prevIndex].value.toString());
+        onChange(options[prevIndex].value);
         (dropdownRef.current?.querySelectorAll('[role="option"]')[prevIndex] as HTMLElement)?.focus();
       }
     };
@@ -75,14 +75,14 @@ export const CustomDropdown = memo(
             setIsOpen(!isOpen);
           }}
           onKeyDown={handleKeyDown}
-          className={`w-full px-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white dark:bg-gray-800 shadow-sm hover:shadow-md text-sm text-gray-700 dark:text-gray-200 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600`}
+          className={`w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white dark:bg-gray-800 shadow-sm hover:shadow-md text-xs text-gray-700 dark:text-gray-200 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500`}
           aria-label={ariaLabel}
           aria-expanded={isOpen}
           role="combobox"
         >
           <span className="truncate">{selectedOption.label}</span>
-          <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2, ease: 'easeInOut' }}>
-            <ChevronDown className="w-5 h-5 text-gray-400 group-focus-within:text-amber-600 dark:group-focus-within:text-amber-400 transition-colors" />
+          <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+            <ChevronDown className="w-4 h-4 text-gray-400 group-focus-within:text-amber-500 dark:group-focus-within:text-amber-400 transition-colors" />
           </motion.div>
         </motion.button>
         <AnimatePresence>
@@ -91,22 +91,22 @@ export const CustomDropdown = memo(
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.15, ease: 'easeOut' }}
-              className="absolute w-full mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-300 dark:border-gray-600 z-20 max-h-48 overflow-y-auto scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100 dark:scrollbar-track-gray-700"
+              transition={{ duration: 0.15 }}
+              className="absolute w-full mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-300 dark:border-gray-600 z-20 max-h-48 overflow-y-auto scrollbar-none"
               onClick={(e) => e.stopPropagation()}
             >
               {options.map((option, index) => (
                 <motion.div
-                  key={option.value.toString()}
+                  key={option.value}
                   ref={index === 0 ? firstOptionRef : null}
                   onClick={(e) => {
                     e.stopPropagation();
-                    onChange(option.value.toString());
+                    onChange(option.value);
                     setIsOpen(false);
                     buttonRef.current?.focus();
                   }}
-                  onKeyDown={(e) => handleKeyDown(e, option.value.toString())}
-                  className={`px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-amber-50 dark:hover:bg-amber-900 hover:text-amber-600 dark:hover:text-amber-400 cursor-pointer transition-colors duration-200 focus:outline-none focus:bg-amber-50 dark:focus:bg-amber-900 focus:text-amber-600 dark:focus:text-amber-400 ${isRtl ? 'text-right' : 'text-left'}`}
+                  onKeyDown={(e) => handleKeyDown(e, option.value)}
+                  className={`px-3 py-2 text-xs text-gray-700 dark:text-gray-200 hover:bg-amber-50 dark:hover:bg-amber-900 hover:text-amber-600 dark:hover:text-amber-400 cursor-pointer transition-colors duration-200 focus:outline-none focus:bg-amber-50 dark:focus:bg-amber-900 focus:text-amber-600 dark:focus:text-amber-400 ${isRtl ? 'text-right' : 'text-left'}`}
                   role="option"
                   aria-selected={option.value === value}
                   tabIndex={0}
