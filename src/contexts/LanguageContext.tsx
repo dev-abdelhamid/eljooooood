@@ -27,7 +27,7 @@ const translations = {
     "delete": "حذف",
     "add": "إضافة",
     "setings": "الاعدادات",
-    
+    "header.logout": "تسجيل الخروج",
     "view": "عرض",
     "search": "بحث",
     "filter": "تصفية",
@@ -399,6 +399,8 @@ const translations = {
     "common.debug_info": "Debug Information",
     "common.user_role": "User Role",
     "common.token": "Token",
+    "header.logout": "Logout",
+    "settings": "Settings",
     "common.present": "Present",
     "common.absent": "Absent",
     "pagination.previous": "Previous",
@@ -605,6 +607,8 @@ const translations = {
     "chefs.all_chefs": "All Chefs",
     "chefs.select_chef": "Select Chef",
   
+
+    
     // Sales
     "sales": "Sales",
     "sales.daily": "Daily Sales",
