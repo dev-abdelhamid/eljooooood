@@ -476,7 +476,7 @@ export function Departments() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6" {/* rounded-2xl */}
+            className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6" 
           >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{isEditMode ? t.edit : t.add}</h3>
             <form onSubmit={handleSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
@@ -488,7 +488,7 @@ export function Departments() {
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder={t.namePlaceholder}
-                    className={`w-full px-3 py-3 border ${formErrors.name ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`} {/* py-3, text-sm */}
+                    className={`w-full px-3 py-3 border ${formErrors.name ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`} 
                   />
                   {formErrors.name && <p className="text-sm text-red-600 mt-1">{formErrors.name}</p>}
                 </div>
