@@ -10,7 +10,6 @@ import { debounce } from 'lodash';
 import { CustomInput } from '../components/UI/CustomInput';
 import { CustomDropdown } from '../components/UI/CustomDropdown';
 
-
 interface Department {
   id: string;
   name: string;
@@ -287,7 +286,7 @@ export function Departments() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl w-full px-4">
           {[...Array(6)].map((_, index) => (
             <div key={index} className="p-4 bg-white rounded-xl shadow-sm">
@@ -305,7 +304,7 @@ export function Departments() {
 
   return (
     <div
-      className={`mx-auto max-w-6xl px-4 py-6 min-h-screen overflow-y-auto scrollbar-none bg-gray-100 font-sans ${
+      className={`mx-auto max-w-6xl px-4 py-6 min-h-screen overflow-y-auto scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100 bg-gray-50 font-sans ${
         isRtl ? 'rtl font-arabic' : 'ltr'
       }`}
       dir={isRtl ? 'rtl' : 'ltr'}
@@ -314,7 +313,7 @@ export function Departments() {
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-3"
+        className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-3 shadow-sm bg-white p-4 rounded-xl"
       >
         <div className="flex items-center gap-2">
           <Layers className="w-6 h-6 text-amber-600" />
@@ -391,10 +390,10 @@ export function Departments() {
                 key={department.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
               >
                 <div
-                  className="p-4 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer border border-gray-100"
+                  className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer border border-gray-100"
                   onClick={() => navigate(`/departments/${department.id}`)}
                 >
                   <div className="space-y-2">
@@ -414,12 +413,7 @@ export function Departments() {
                         <span className="truncate" style={{ whiteSpace: 'nowrap' }}>{department.description}</span>
                       </div>
                     )}
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="w-20 font-medium flex-shrink-0">{t.status}:</span>
-                      <span className={`truncate ${department.isActive ? 'text-green-600' : 'text-red-600'}`} style={{ whiteSpace: 'nowrap' }}>
-                        {department.isActive ? t.active : t.inactive}
-                      </span>
-                    </div>
+                    {/* إخفاء الـ status هنا */}
                   </div>
                   {user?.role === 'admin' && (
                     <div className="mt-3 flex items-center justify-end gap-2">
@@ -457,7 +451,7 @@ export function Departments() {
           <button
             onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
             disabled={currentPage === 1}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm hover:shadow-md"
           >
             <ChevronLeft className="w-4 h-4" />
             {t.previous}
@@ -468,7 +462,7 @@ export function Departments() {
           <button
             onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
             disabled={currentPage === totalPages}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-sm hover:shadow-md"
           >
             {t.next}
             <ChevronRight className="w-4 h-4" />
@@ -489,35 +483,30 @@ export function Departments() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">{t.name}</label>
-                  <input
-                    id="name"
+                  <CustomInput
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={(value) => setFormData({ ...formData, name: value })}
                     placeholder={t.namePlaceholder}
-                    required
-                    className={`w-full px-3 py-2 border ${formErrors.name ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                    ariaLabel={t.name}
                   />
                   {formErrors.name && <p className="text-xs text-red-600 mt-1">{formErrors.name}</p>}
                 </div>
                 <div>
                   <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">{t.nameEn}</label>
-                  <input
-                    id="nameEn"
+                  <CustomInput
                     value={formData.nameEn}
-                    onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
+                    onChange={(value) => setFormData({ ...formData, nameEn: value })}
                     placeholder={t.nameEnPlaceholder}
-                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                    ariaLabel={t.nameEn}
                   />
                 </div>
                 <div>
                   <label htmlFor="code" className="block text-xs font-medium text-gray-700 mb-1">{t.code}</label>
-                  <input
-                    id="code"
+                  <CustomInput
                     value={formData.code}
-                    onChange={(e) => setFormData({ ...formData, code: e.target.value })}
+                    onChange={(value) => setFormData({ ...formData, code: value })}
                     placeholder={t.codePlaceholder}
-                    required
-                    className={`w-full px-3 py-2 border ${formErrors.code ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                    ariaLabel={t.code}
                   />
                   {formErrors.code && <p className="text-xs text-red-600 mt-1">{formErrors.code}</p>}
                 </div>
@@ -540,8 +529,8 @@ export function Departments() {
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     placeholder={t.descriptionPlaceholder}
-                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
-                    rows={3}
+                    className={`w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                    rows={4}
                   />
                 </div>
               </div>

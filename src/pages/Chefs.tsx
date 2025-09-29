@@ -8,8 +8,8 @@ import { ChefHat, AlertCircle, Plus, Edit2, Trash2, Key } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { debounce } from 'lodash';
-import { CustomInput } from '../components/CustomInput';
-import { CustomDropdown } from '../components/CustomDropdown';
+import { CustomInput } from '../components/UI/CustomInput';
+import { CustomDropdown } from '../components/UI/CustomDropdown';
 
 interface Department {
   id: string;
@@ -505,7 +505,7 @@ export function Chefs() {
   }
 
   return (
-    <div className={`mx-auto max-w-6xl px-4 py-6 min-h-screen overflow-y-auto scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100 bg-gray-50 font-sans ${isRtl ? 'rtl font-arabic' : 'ltr'}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`mx-auto px-4 py-6 min-h-screen overflow-y-auto scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100 `}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
