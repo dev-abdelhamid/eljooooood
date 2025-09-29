@@ -370,11 +370,8 @@ export function Departments() {
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {[...Array(6)].map((_, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: index * 0.1 }}
+              <div
+           
                 className="p-4 bg-white rounded-xl shadow-sm"
               >
                 <div className="space-y-2 animate-pulse">
@@ -382,7 +379,7 @@ export function Departments() {
                   <div className="h-3 bg-gray-200 rounded w-1/4"></div>
                   <div className="h-3 bg-gray-200 rounded w-1/2"></div>
                 </div>
-              </motion.div>
+              </div>
             ))}
           </div>
         ) : filteredDepartments.length === 0 ? (
