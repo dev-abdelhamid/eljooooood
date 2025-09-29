@@ -1,12 +1,15 @@
+// src/pages/Chefs.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { chefsAPI, departmentAPI } from '../services/api';
-import { ChefHat, Search, AlertCircle, Plus, Edit2, Trash2, ChevronDown, Key, X , Eye , EyeOff } from 'lucide-react';
+import { ChefHat, AlertCircle, Plus, Edit2, Trash2, Key } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { debounce } from 'lodash';
+import { CustomInput } from '../components/CustomInput';
+import { CustomDropdown } from '../components/CustomDropdown';
 
 interface Department {
   id: string;
@@ -157,131 +160,6 @@ const translations = {
     active: 'Active',
     inactive: 'Inactive',
   },
-};
-
-export const CustomInput = ({
-  value,
-  onChange,
-  placeholder,
-  ariaLabel,
-  type = 'text',
-  showPasswordToggle = false,
-  showPassword = false,
-  togglePasswordVisibility,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-  ariaLabel: string;
-  type?: string;
-  showPasswordToggle?: boolean;
-  showPassword?: boolean;
-  togglePasswordVisibility?: () => void;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  return (
-    <div className="relative group">
-      {!showPasswordToggle && (
-        <motion.div
-          initial={{ opacity: value ? 0 : 1 }}
-          animate={{ opacity: value ? 0 : 1 }}
-          transition={{ duration: 0.15 }}
-          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-600`}
-        >
-          <Search />
-        </motion.div>
-      )}
-      <input
-        type={showPasswordToggle ? (showPassword ? 'text' : 'password') : type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-10 pr-2' : 'pr-10 pl-2'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
-        aria-label={ariaLabel}
-      />
-      {showPasswordToggle ? (
-        <button
-          type="button"
-          onClick={togglePasswordVisibility}
-          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-600 transition-colors`}
-        >
-          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-        </button>
-      ) : (
-        <motion.div
-          initial={{ opacity: value ? 1 : 0 }}
-          animate={{ opacity: value ? 1 : 0 }}
-          transition={{ duration: 0.15 }}
-          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-600 transition-colors`}
-        >
-          <button
-            onClick={() => onChange('')}
-            aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </motion.div>
-      )}
-    </div>
-  );
-};
-
-export const CustomDropdown = ({
-  value,
-  onChange,
-  options,
-  ariaLabel,
-}: {
-  value: string | boolean;
-  onChange: (value: string) => void;
-  options: { value: string | boolean; label: string }[];
-  ariaLabel: string;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  const [isOpen, setIsOpen] = useState(false);
-  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { label: isRtl ? 'اختر' : 'Select' };
-
-  return (
-    <div className="relative group">
-      <motion.button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center`}
-        aria-label={ariaLabel}
-      >
-        <span className="truncate">{selectedOption.label}</span>
-        <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
-          <ChevronDown className="w-4 h-4 text-gray-400 group-focus-within:text-amber-600 transition-colors" />
-        </motion.div>
-      </motion.button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.15 }}
-            className="absolute w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-300 z-20 max-h-48 overflow-y-auto scrollbar-none"
-          >
-            {options.map((option) => (
-              <motion.div
-                key={option.value.toString()}
-                onClick={() => {
-                  onChange(option.value.toString());
-                  setIsOpen(false);
-                }}
-                className="px-3 py-2 text-xs text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
-                whileHover={{ backgroundColor: '#fef3c7' }}
-              >
-                {option.label}
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
 };
 
 export function Chefs() {
@@ -609,8 +487,8 @@ export function Chefs() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-100">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-6xl w-full px-4">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl w-full px-4">
           {[...Array(6)].map((_, index) => (
             <div key={index} className="p-4 bg-white rounded-xl shadow-sm">
               <div className="space-y-2 animate-pulse">
@@ -627,12 +505,12 @@ export function Chefs() {
   }
 
   return (
-    <div className={`mx-auto max-w-6xl px-4 py-6 min-h-screen overflow-y-auto scrollbar-none bg-gray-100 font-sans ${isRtl ? 'rtl font-arabic' : 'ltr'}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`mx-auto max-w-6xl px-4 py-6 min-h-screen overflow-y-auto scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100 bg-gray-50 font-sans ${isRtl ? 'rtl font-arabic' : 'ltr'}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-3"
+        className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-3 shadow-sm bg-white p-4 rounded-xl"
       >
         <div className="flex items-center gap-2">
           <ChefHat className="w-6 h-6 text-amber-600" />
@@ -700,7 +578,7 @@ export function Chefs() {
           </div>
         ) : (
           <motion.div
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto scrollbar-none"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto scrollbar-none"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ staggerChildren: 0.1 }}
@@ -796,58 +674,50 @@ export function Chefs() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">{t.name}</label>
-                  <input
-                    id="name"
+                  <CustomInput
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={(value) => setFormData({ ...formData, name: value })}
                     placeholder={t.namePlaceholder}
-                    required
-                    className={`w-full px-3 py-2 border ${formErrors.name ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                    ariaLabel={t.name}
                   />
                   {formErrors.name && <p className="text-xs text-red-600 mt-1">{formErrors.name}</p>}
                 </div>
                 <div>
                   <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">{t.nameEn}</label>
-                  <input
-                    id="nameEn"
+                  <CustomInput
                     value={formData.nameEn}
-                    onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
+                    onChange={(value) => setFormData({ ...formData, nameEn: value })}
                     placeholder={t.nameEnPlaceholder}
-                    required
-                    className={`w-full px-3 py-2 border ${formErrors.nameEn ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                    ariaLabel={t.nameEn}
                   />
                   {formErrors.nameEn && <p className="text-xs text-red-600 mt-1">{formErrors.nameEn}</p>}
                 </div>
                 <div>
                   <label htmlFor="username" className="block text-xs font-medium text-gray-700 mb-1">{t.username}</label>
-                  <input
-                    id="username"
+                  <CustomInput
                     value={formData.username}
-                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                    onChange={(value) => setFormData({ ...formData, username: value })}
                     placeholder={t.usernamePlaceholder}
-                    required
-                    className={`w-full px-3 py-2 border ${formErrors.username ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                    ariaLabel={t.username}
                   />
                   {formErrors.username && <p className="text-xs text-red-600 mt-1">{formErrors.username}</p>}
                 </div>
                 <div>
                   <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1">{t.email}</label>
-                  <input
-                    id="email"
+                  <CustomInput
                     value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    onChange={(value) => setFormData({ ...formData, email: value })}
                     placeholder={t.emailPlaceholder}
-                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                    ariaLabel={t.email}
                   />
                 </div>
                 <div>
                   <label htmlFor="phone" className="block text-xs font-medium text-gray-700 mb-1">{t.phone}</label>
-                  <input
-                    id="phone"
+                  <CustomInput
                     value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    onChange={(value) => setFormData({ ...formData, phone: value })}
                     placeholder={t.phonePlaceholder}
-                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
+                    ariaLabel={t.phone}
                   />
                 </div>
                 <div>
@@ -889,7 +759,7 @@ export function Chefs() {
                       type="password"
                       showPasswordToggle
                       showPassword={showPassword['new']}
-                      togglePasswordVisibility={() => setShowPassword((prev) => ({ ...prev, new: !prev.new }))}
+                      togglePasswordVisibility={() => togglePasswordVisibility('new')}
                     />
                     {formErrors.password && <p className="text-xs text-red-600 mt-1">{formErrors.password}</p>}
                   </div>
@@ -941,7 +811,7 @@ export function Chefs() {
                   type="password"
                   showPasswordToggle
                   showPassword={showPassword['newPassword']}
-                  togglePasswordVisibility={() => setShowPassword((prev) => ({ ...prev, newPassword: !prev.newPassword }))}
+                  togglePasswordVisibility={() => togglePasswordVisibility('newPassword')}
                 />
               </div>
               <div>
@@ -954,7 +824,7 @@ export function Chefs() {
                   type="password"
                   showPasswordToggle
                   showPassword={showPassword['confirmPassword']}
-                  togglePasswordVisibility={() => setShowPassword((prev) => ({ ...prev, confirmPassword: !prev.confirmPassword }))}
+                  togglePasswordVisibility={() => togglePasswordVisibility('confirmPassword')}
                 />
               </div>
               {error && (

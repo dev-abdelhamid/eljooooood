@@ -7,7 +7,9 @@ import { Layers, Plus, Edit2, Trash2, AlertCircle, ChevronLeft, ChevronRight } f
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { debounce } from 'lodash';
-import { CustomInput, CustomDropdown } from './Chefs'; // استيراد المكونات المخصصة من صفحة الشيفات
+import { CustomInput } from '../components/UI/CustomInput';
+import { CustomDropdown } from '../components/UI/CustomDropdown';
+
 
 interface Department {
   id: string;
