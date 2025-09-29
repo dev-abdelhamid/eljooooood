@@ -56,7 +56,11 @@ const translations = {
     "branch.dashboard": "لوحة تحكم الفرع",
     "chef.dashboard": "لوحة تحكم الشيف",
     "production.dashboard": "لوحة تحكم الإنتاج",
+  "orders.review": " الطلبات ",
+    "sales.review": " المبيعات ",
+    "productionTasks": " مهامي  ",
 
+    "returns.review": " المرتجعات ",
     // الطلبات
     "orders": "الطلبات",
     "item_completed": "تم إكمال الصنف",
@@ -405,6 +409,12 @@ const translations = {
     "common.absent": "Absent",
     "pagination.previous": "Previous",
     "pagination.next": "Next",
+    "orders.review": " orders Review",
+    "sales.review": " sales Review",
+    "productionTasks": " production tasks ",
+
+    "returns.review": " returns Review",
+
     "pagination.page": "Page {current} of {total}",
 
     // Dashboards
