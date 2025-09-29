@@ -100,9 +100,12 @@ const CustomDropdown = ({
   const selectedOption = options.find((opt) => opt.value === value) || options[0] || { label: isRtl ? 'اختر' : 'Select' };
 
   return (
-    <div className="relative group">
+    <div className="relative group" onClick={(e) => e.stopPropagation()}>
       <motion.button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsOpen(!isOpen);
+        }}
         className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center`}
         aria-label={ariaLabel}
       >
@@ -123,7 +126,8 @@ const CustomDropdown = ({
             {options.map((option) => (
               <motion.div
                 key={option.value}
-                onClick={() => {
+                onClick={(e) => {
+                  e.stopPropagation();
                   onChange(option.value);
                   setIsOpen(false);
                 }}
@@ -147,6 +151,8 @@ export function Products() {
   const [products, setProducts] = useState<Product[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -162,7 +168,7 @@ export function Products() {
   );
 
   useEffect(() => {
-    if (!user || !['admin'].includes(user.role)) {
+    if (!user || !['admin', 'production'].includes(user.role)) {
       setError(isRtl ? 'غير مصرح' : 'Unauthorized');
       setLoading(false);
       return;
@@ -196,7 +202,7 @@ export function Products() {
   }, [isRtl, user, filterDepartment, searchTerm]);
 
   const openModal = (product?: Product) => {
-    if (!user || !['admin'].includes(user.role)) {
+    if (!user || !['admin', 'production'].includes(user.role)) {
       setError(isRtl ? 'غير مصرح' : 'Unauthorized');
       return;
     }
@@ -284,21 +290,31 @@ export function Products() {
     }
   };
 
-  const deleteProduct = async (id: string) => {
-    if (!user || !['admin'].includes(user.role)) {
+  const openDeleteModal = (id: string) => {
+    setDeletingProductId(id);
+    setIsDeleteModalOpen(true);
+  };
+
+  const closeDeleteModal = () => {
+    setIsDeleteModalOpen(false);
+    setDeletingProductId(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingProductId) return;
+    if (!user || !['admin', 'production'].includes(user.role)) {
       setError(isRtl ? 'غير مصرح' : 'Unauthorized');
       return;
     }
-    if (confirm(isRtl ? 'هل أنت متأكد من حذف المنتج؟' : 'Are you sure you want to delete this product?')) {
-      try {
-        await productsAPI.delete(id);
-        setProducts(products.filter((p) => p._id !== id));
-        toast.success(isRtl ? 'تم حذف المنتج بنجاح' : 'Product deleted successfully');
-      } catch (err: any) {
-        console.error('Delete error:', err);
-        setError(err.response?.data?.message || (isRtl ? 'خطأ في حذف المنتج' : 'Error deleting product'));
-        toast.error(err.response?.data?.message || (isRtl ? 'خطأ في حذف المنتج' : 'Error deleting product'));
-      }
+    try {
+      await productsAPI.delete(deletingProductId);
+      setProducts(products.filter((p) => p._id !== deletingProductId));
+      toast.success(isRtl ? 'تم حذف المنتج بنجاح' : 'Product deleted successfully');
+      closeDeleteModal();
+    } catch (err: any) {
+      console.error('Delete error:', err);
+      setError(err.response?.data?.message || (isRtl ? 'خطأ في حذف المنتج' : 'Error deleting product'));
+      toast.error(err.response?.data?.message || (isRtl ? 'خطأ في حذف المنتج' : 'Error deleting product'));
     }
   };
 
@@ -314,7 +330,7 @@ export function Products() {
             </p>
           </div>
         </div>
-        {user?.role === 'admin' && (
+        {['admin', 'production'].includes(user?.role ?? '') && (
           <button
             onClick={() => openModal()}
             className="w-full sm:w-auto px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
@@ -379,7 +395,7 @@ export function Products() {
           <div className="p-6 text-center bg-white rounded-xl shadow-sm">
             <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
             <p className="text-gray-600 text-xs">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
-            {user?.role === 'admin' && !searchTerm && !filterDepartment && (
+            {['admin', 'production'].includes(user?.role ?? '') && !searchTerm && !filterDepartment && (
               <button
                 onClick={() => openModal()}
                 className="mt-3 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
@@ -410,7 +426,7 @@ export function Products() {
                     {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
                   </p>
                 </div>
-                {user?.role === 'admin' && (
+                {['admin', 'production'].includes(user?.role ?? '') && (
                   <div className="mt-3 flex items-center justify-end gap-1.5">
                     <button
                       onClick={() => openModal(product)}
@@ -420,7 +436,7 @@ export function Products() {
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
-                      onClick={() => deleteProduct(product._id)}
+                      onClick={() => openDeleteModal(product._id)}
                       className="p-1.5 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center"
                       title={isRtl ? 'حذف' : 'Delete'}
                     >
@@ -435,8 +451,8 @@ export function Products() {
       </div>
 
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
+          <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-semibold text-gray-900 mb-3">
               {editingProduct ? (isRtl ? 'تعديل المنتج' : 'Edit Product') : (isRtl ? 'إضافة منتج جديد' : 'Add New Product')}
             </h3>
@@ -550,6 +566,37 @@ export function Products() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {isDeleteModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) closeDeleteModal(); }}>
+          <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">{isRtl ? 'تأكيد الحذف' : 'Confirm Deletion'}</h3>
+            <p className="text-xs text-gray-600 mb-4">{isRtl ? 'هل أنت متأكد من حذف هذا المنتج؟' : 'Are you sure you want to delete this product?'}</p>
+            {error && (
+              <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 mb-4">
+                <AlertCircle className="w-4 h-4 text-red-600" />
+                <span className="text-red-600 text-xs">{error}</span>
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={closeDeleteModal}
+                className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors"
+                aria-label={isRtl ? 'إلغاء' : 'Cancel'}
+              >
+                {isRtl ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs transition-colors"
+                aria-label={isRtl ? 'حذف' : 'Delete'}
+              >
+                {isRtl ? 'حذف' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}
