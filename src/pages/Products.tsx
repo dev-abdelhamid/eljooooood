@@ -2,10 +2,11 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { productsAPI, departmentAPI } from '../services/api';
-import { Package, Plus, Edit2, Trash2, Search, AlertCircle, X, ChevronDown } from 'lucide-react';
+import { Package, Plus, Edit2, Trash2, Search, AlertCircle, X } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
+import { CustomDropdown } from '../components/UI/CustomDropdown';
 
 interface Product {
   _id: string;
@@ -27,6 +28,85 @@ interface Department {
   nameEn?: string;
 }
 
+const translations = {
+  ar: {
+    manage: 'إدارة المنتجات',
+    add: 'إضافة منتج جديد',
+    addFirst: 'إضافة أول منتج',
+    empty: 'لا توجد منتجات متاحة',
+    noMatch: 'لا توجد منتجات مطابقة',
+    searchPlaceholder: 'ابحث عن المنتجات...',
+    filterDepartment: 'تصفية حسب القسم',
+    allDepartments: 'كل الأقسام',
+    name: 'اسم المنتج',
+    nameEn: 'الاسم بالإنجليزية',
+    code: 'رمز المنتج',
+    department: 'القسم',
+    price: 'السعر',
+    unit: 'الوحدة',
+    edit: 'تعديل',
+    delete: 'حذف',
+    namePlaceholder: 'أدخل اسم المنتج',
+    nameEnPlaceholder: 'أدخل الاسم بالإنجليزية',
+    codePlaceholder: 'أدخل رمز المنتج',
+    pricePlaceholder: 'أدخل السعر',
+    unitPlaceholder: 'اختر الوحدة',
+    departmentPlaceholder: 'اختر القسم',
+    update: 'تحديث المنتج',
+    requiredFields: 'يرجى ملء جميع الحقول المطلوبة',
+    invalidUnit: 'الوحدة غير صالحة، اختر من القائمة',
+    invalidPrice: 'السعر يجب أن يكون رقمًا إيجابيًا',
+    unauthorized: 'غير مصرح',
+    fetchError: 'خطأ في جلب البيانات',
+    saveError: 'خطأ في حفظ المنتج',
+    deleteError: 'خطأ في حذف المنتج',
+    added: 'تم إنشاء المنتج بنجاح',
+    updated: 'تم تحديث المنتج بنجاح',
+    deleted: 'تم حذف المنتج بنجاح',
+    confirmDelete: 'تأكيد الحذف',
+    deleteWarning: 'هل أنت متأكد من حذف هذا المنتج؟',
+    cancel: 'إلغاء',
+  },
+  en: {
+    manage: 'Manage Products',
+    add: 'Add New Product',
+    addFirst: 'Add First Product',
+    empty: 'No products available',
+    noMatch: 'No matching products',
+    searchPlaceholder: 'Search products...',
+    filterDepartment: 'Filter by department',
+    allDepartments: 'All Departments',
+    name: 'Product Name',
+    nameEn: 'English Name',
+    code: 'Product Code',
+    department: 'Department',
+    price: 'Price',
+    unit: 'Unit',
+    edit: 'Edit',
+    delete: 'Delete',
+    namePlaceholder: 'Enter product name',
+    nameEnPlaceholder: 'Enter English name',
+    codePlaceholder: 'Enter product code',
+    pricePlaceholder: 'Enter price',
+    unitPlaceholder: 'Select Unit',
+    departmentPlaceholder: 'Select Department',
+    update: 'Update Product',
+    requiredFields: 'Please fill all required fields',
+    invalidUnit: 'Invalid unit, please select from the list',
+    invalidPrice: 'Price must be a positive number',
+    unauthorized: 'Unauthorized',
+    fetchError: 'Error fetching data',
+    saveError: 'Error saving product',
+    deleteError: 'Error deleting product',
+    added: 'Product created successfully',
+    updated: 'Product updated successfully',
+    deleted: 'Product deleted successfully',
+    confirmDelete: 'Confirm Deletion',
+    deleteWarning: 'Are you sure you want to delete this product?',
+    cancel: 'Cancel',
+  },
+};
+
 const unitOptions = [
   { value: 'كيلو', valueEn: 'Kilo', labelAr: 'كيلو', labelEn: 'Kilo' },
   { value: 'قطعة', valueEn: 'Piece', labelAr: 'قطعة', labelEn: 'Piece' },
@@ -34,120 +114,62 @@ const unitOptions = [
   { value: 'صينية', valueEn: 'Tray', labelAr: 'صينية', labelEn: 'Tray' },
 ];
 
-const CustomInput = ({
-  value,
-  onChange,
-  placeholder,
-  ariaLabel,
-}: {
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  placeholder: string;
-  ariaLabel: string;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  return (
-    <div className="relative group">
-      <motion.div
-        initial={{ opacity: value ? 0 : 1 }}
-        animate={{ opacity: value ? 0 : 1 }}
-        transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} flex items-center justify-center align-center top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`}
-      >
-        <Search className="w-4 h-4" />
-      </motion.div>
-      <input
-        type="text"
-        value={value}
-        onChange={onChange}
-        placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-10 pr-2' : 'pr-10 pl-2'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
-        aria-label={ariaLabel}
-      />
-      <motion.div
-        initial={{ opacity: value ? 1 : 0 }}
-        animate={{ opacity: value ? 1 : 0 }}
-        transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 flex items-center justify-center align-center transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
-      >
-        <button
-          onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
-          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
-          className="flex items-center justify-center"
+const CustomInput = React.memo(
+  ({
+    value,
+    onChange,
+    placeholder,
+    ariaLabel,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    placeholder: string;
+    ariaLabel: string;
+  }) => {
+    const { language } = useLanguage();
+    const isRtl = language === 'ar';
+    return (
+      <div className="relative group">
+        <motion.div
+          initial={{ opacity: value ? 0 : 1 }}
+          animate={{ opacity: value ? 0 : 1 }}
+          transition={{ duration: 0.15 }}
+          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-600 dark:text-gray-500 dark:group-focus-within:text-amber-400`}
         >
-          <X className="w-4 h-4" />
-        </button>
-      </motion.div>
-    </div>
-  );
-};
-
-const CustomDropdown = ({
-  value,
-  onChange,
-  options,
-  ariaLabel,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-  ariaLabel: string;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  const [isOpen, setIsOpen] = useState(false);
-  const selectedOption = options.find((opt) => opt.value === value) || { value: '', label: isRtl ? 'اختر' : 'Select' };
-
-  return (
-    <div className="relative group" onClick={(e) => e.stopPropagation()}>
-      <motion.button
-        onClick={(e) => {
-          e.stopPropagation();
-          setIsOpen(!isOpen);
-        }}
-        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center`}
-        aria-label={ariaLabel}
-      >
-        <span className="truncate">{selectedOption.label}</span>
-        <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
-          <ChevronDown className="w-4 h-4 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
+          <Search className="w-5 h-5" />
         </motion.div>
-      </motion.button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            onClick={(e) => e.stopPropagation()}
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.15 }}
-            className="absolute w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-300 z-20 max-h-48 overflow-y-auto scrollbar-none"
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={`w-full ${isRtl ? 'pl-10 pr-3' : 'pr-10 pl-3'} py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white dark:bg-gray-800 shadow-sm hover:shadow-md text-sm placeholder-gray-400 dark:placeholder-gray-500 dark:text-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600`}
+          aria-label={ariaLabel}
+        />
+        <motion.div
+          initial={{ opacity: value ? 1 : 0 }}
+          animate={{ opacity: value ? 1 : 0 }}
+          transition={{ duration: 0.15 }}
+          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-600 dark:text-gray-500 dark:hover:text-amber-400 transition-colors`}
+        >
+          <button
+            type="button"
+            onClick={() => onChange('')}
+            aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
+            className="flex items-center justify-center"
           >
-            {options.map((option) => (
-              <motion.div
-                key={option.value}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onChange(option.value);
-                  setIsOpen(false);
-                }}
-                className="px-3 py-2 text-xs text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
-                whileHover={{ backgroundColor: '#fef3c7' }}
-              >
-                {option.label}
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
+            <X className="w-5 h-5" />
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+);
 
 export function Products() {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
+  const t = translations[isRtl ? 'ar' : 'en'];
   const { user } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -160,18 +182,20 @@ export function Products() {
   const [filterDepartment, setFilterDepartment] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const debouncedSearch = useCallback(
     debounce((value: string) => {
       setSearchTerm(value);
-    }, 500),
+    }, 300),
     []
   );
 
   useEffect(() => {
     if (!user || !['admin', 'production'].includes(user.role)) {
-      setError(isRtl ? 'غير مصرح' : 'Unauthorized');
+      setError(t.unauthorized);
       setLoading(false);
+      toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left', theme: isRtl ? 'light' : 'dark' });
       return;
     }
 
@@ -193,18 +217,19 @@ export function Products() {
         setError('');
       } catch (err: any) {
         console.error('Fetch error:', err);
-        setError(err.response?.data?.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
-        toast.error(err.response?.data?.message || (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'));
+        setError(err.response?.data?.message || t.fetchError);
+        toast.error(err.response?.data?.message || t.fetchError, { position: isRtl ? 'top-right' : 'top-left', theme: isRtl ? 'light' : 'dark' });
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [isRtl, user, filterDepartment, searchTerm]);
+  }, [isRtl, user, filterDepartment, searchTerm, t]);
 
   const openModal = (product?: Product) => {
     if (!user || !['admin', 'production'].includes(user.role)) {
-      setError(isRtl ? 'غير مصرح' : 'Unauthorized');
+      setError(t.unauthorized);
+      toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left', theme: isRtl ? 'light' : 'dark' });
       return;
     }
     if (product) {
@@ -215,7 +240,7 @@ export function Products() {
         code: product.code,
         department: product.department._id,
         price: product.price.toString(),
-        unit: product.unit || '', // لو الوحدة مش موجودة، نتركها فارغة
+        unit: product.unit || '',
       });
     } else {
       setEditingProduct(null);
@@ -225,9 +250,10 @@ export function Products() {
         code: '',
         department: departments[0]?._id || '',
         price: '',
-        unit: '', // فارغة للإضافة الجديدة
+        unit: '',
       });
     }
+    setFormErrors({});
     setIsModalOpen(true);
   };
 
@@ -235,6 +261,7 @@ export function Products() {
     setIsModalOpen(false);
     setEditingProduct(null);
     setError('');
+    setFormErrors({});
   };
 
   const [formData, setFormData] = useState({
@@ -246,18 +273,34 @@ export function Products() {
     unit: '',
   });
 
+  const validateForm = () => {
+    const errors: Record<string, string> = {};
+    if (!formData.name) errors.name = t.requiredFields;
+    if (!formData.code) errors.code = t.requiredFields;
+    if (!formData.department) errors.department = t.requiredFields;
+    if (!formData.price) {
+      errors.price = t.requiredFields;
+    } else if (isNaN(parseFloat(formData.price)) || parseFloat(formData.price) <= 0) {
+      errors.price = t.invalidPrice;
+    }
+    if (formData.unit && !unitOptions.some((opt) => opt.value === formData.unit)) {
+      errors.unit = t.invalidUnit;
+    }
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // فحص إذا كانت الوحدة موجودة في الخيارات
-    if (!unitOptions.some((opt) => opt.value === formData.unit)) {
-      setError(isRtl ? 'الوحدة غير صالحة، اختر من القائمة' : 'Invalid unit, please select from the list');
+    if (!validateForm()) {
+      toast.error(t.requiredFields, { position: isRtl ? 'top-right' : 'top-left', theme: isRtl ? 'light' : 'dark' });
       return;
     }
     try {
       const productData = {
-        name: formData.name,
-        nameEn: formData.nameEn || undefined,
-        code: formData.code,
+        name: formData.name.trim(),
+        nameEn: formData.nameEn?.trim() || undefined,
+        code: formData.code.trim(),
         department: formData.department,
         price: parseFloat(formData.price),
         unit: formData.unit || undefined,
@@ -275,7 +318,7 @@ export function Products() {
               : p
           )
         );
-        toast.success(isRtl ? 'تم تحديث المنتج بنجاح' : 'Product updated successfully');
+        toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left', theme: isRtl ? 'light' : 'dark' });
       } else {
         const newProduct = await productsAPI.create(productData);
         setProducts([
@@ -286,13 +329,14 @@ export function Products() {
             displayUnit: isRtl ? (newProduct.unit || 'غير محدد') : (newProduct.unitEn || newProduct.unit || 'N/A'),
           },
         ]);
-        toast.success(isRtl ? 'تم إنشاء المنتج بنجاح' : 'Product created successfully');
+        toast.success(t.added, { position: isRtl ? 'top-right' : 'top-left', theme: isRtl ? 'light' : 'dark' });
       }
       closeModal();
     } catch (err: any) {
       console.error('Submit error:', err);
-      setError(err.response?.data?.message || (isRtl ? 'خطأ في حفظ المنتج' : 'Error saving product'));
-      toast.error(err.response?.data?.message || (isRtl ? 'خطأ في حفظ المنتج' : 'Error saving product'));
+      const errorMessage = err.response?.data?.message || t.saveError;
+      setError(errorMessage);
+      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left', theme: isRtl ? 'light' : 'dark' });
     }
   };
 
@@ -304,309 +348,353 @@ export function Products() {
   const closeDeleteModal = () => {
     setIsDeleteModalOpen(false);
     setDeletingProductId(null);
+    setError('');
   };
 
   const confirmDelete = async () => {
     if (!deletingProductId) return;
     if (!user || !['admin', 'production'].includes(user.role)) {
-      setError(isRtl ? 'غير مصرح' : 'Unauthorized');
+      setError(t.unauthorized);
+      toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left', theme: isRtl ? 'light' : 'dark' });
       return;
     }
     try {
       await productsAPI.delete(deletingProductId);
       setProducts(products.filter((p) => p._id !== deletingProductId));
-      toast.success(isRtl ? 'تم حذف المنتج بنجاح' : 'Product deleted successfully');
+      toast.success(t.deleted, { position: isRtl ? 'top-right' : 'top-left', theme: isRtl ? 'light' : 'dark' });
       closeDeleteModal();
     } catch (err: any) {
       console.error('Delete error:', err);
-      setError(err.response?.data?.message || (isRtl ? 'خطأ في حذف المنتج' : 'Error deleting product'));
-      toast.error(err.response?.data?.message || (isRtl ? 'خطأ في حذف المنتج' : 'Error deleting product'));
+      const errorMessage = err.response?.data?.message || t.deleteError;
+      setError(errorMessage);
+      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left', theme: isRtl ? 'light' : 'dark' });
     }
   };
 
   return (
-    <div className="mx-auto px-4 py-6 min-h-screen overflow-y-auto scrollbar-none" dir={isRtl ? 'rtl' : 'ltr'}>
-      <div className="mb-4 flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-3">
-        <div className="flex items-center gap-2">
-          <Package className="w-6 h-6 text-amber-600" />
+    <div
+      className="mx-auto px-4 sm:px-6 lg:px-8 py-6 min-h-screen overflow-y-auto scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100 dark:scrollbar-track-gray-800 bg-gray-50 dark:bg-gray-900"
+      dir={isRtl ? 'rtl' : 'ltr'}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="mb-6 flex flex-col items-center sm:flex-row sm:justify-between sm:items-center gap-4 shadow-sm bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl"
+      >
+        <div className="flex items-center flex-col sm:flex-row gap-3">
+          <Package className="w-8 h-8 text-amber-600 dark:text-amber-400 bg-amber-100/50 dark:bg-amber-900/50 p-2 rounded-full" />
           <div>
-            <h1 className="text-xl font-bold text-gray-900">{isRtl ? 'إدارة المنتجات' : 'Manage Products'}</h1>
-            <p className="text-gray-600 text-xs">
-              {isRtl ? 'قم بإضافة المنتجات أو تعديلها أو حذفها' : 'Add, edit, or delete products'}
-            </p>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">{t.manage}</h1>
+            <p className="text-gray-600 dark:text-gray-400 text-sm">{isRtl ? 'قم بإضافة المنتجات أو تعديلها أو حذفها' : 'Add, edit, or delete products'}</p>
           </div>
         </div>
         {['admin', 'production'].includes(user?.role ?? '') && (
           <button
             onClick={() => openModal()}
-            className="w-full sm:w-auto px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
-            aria-label={isRtl ? 'إضافة منتج جديد' : 'Add New Product'}
+            className="w-full sm:w-auto px-4 sm:px-6 py-2.5 bg-amber-600 hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600 text-white rounded-lg text-sm transition-colors flex items-center justify-center gap-2 shadow-sm hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600"
+            aria-label={t.add}
           >
-            <Plus className="w-3.5 h-3.5" />
-            {isRtl ? 'إضافة منتج جديد' : 'Add New Product'}
+            <Plus className="w-5 h-5" />
+            {t.add}
           </button>
         )}
-      </div>
+      </motion.div>
 
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-red-600" />
-          <span className="text-red-600 text-xs">{error}</span>
-        </div>
-      )}
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.15 }}
+            className="mb-4 p-3 bg-red-50 dark:bg-red-900/50 border border-red-200 dark:border-red-700 rounded-lg flex items-center gap-2 shadow-sm"
+          >
+            <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+            <span className="text-red-600 dark:text-red-400 text-sm">{error}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      <div className="space-y-3">
-        <div className="p-4 bg-white rounded-xl shadow-sm">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="space-y-6">
+        <div className="p-4 sm:p-6 bg-white dark:bg-gray-800 rounded-xl shadow-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <CustomInput
               value={searchInput}
-              onChange={(e) => {
-                setSearchInput(e.target.value);
-                debouncedSearch(e.target.value);
+              onChange={(value) => {
+                setSearchInput(value);
+                debouncedSearch(value);
               }}
-              placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
-              ariaLabel={isRtl ? 'ابحث عن المنتجات' : 'Search products'}
+              placeholder={t.searchPlaceholder}
+              ariaLabel={t.searchPlaceholder}
             />
             <CustomDropdown
               value={filterDepartment}
               onChange={setFilterDepartment}
               options={[
-                { value: '', label: isRtl ? 'كل الأقسام' : 'All Departments' },
+                { value: '', label: t.allDepartments },
                 ...departments.map((d) => ({
                   value: d._id,
                   label: isRtl ? d.name : (d.nameEn || d.name),
                 })),
               ]}
-              ariaLabel={isRtl ? 'تصفية حسب القسم' : 'Filter by department'}
+              ariaLabel={t.filterDepartment}
             />
           </div>
         </div>
-        <div className="text-center text-xs text-gray-600">
+        <div className="text-center text-sm text-gray-600 dark:text-gray-400">
           {isRtl ? `عدد المنتجات: ${products.length}` : `Products Count: ${products.length}`}
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto scrollbar-none">
-            {[...Array(6)].map((_, index) => (
-              <div key={index} className="p-4 bg-white rounded-xl shadow-sm">
-                <div className="space-y-2 animate-pulse">
-                  <div className="h-3 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-2 bg-gray-200 rounded w-1/4"></div>
-                  <div className="h-2 bg-gray-200 rounded w-1/2"></div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+            {[...Array(8)].map((_, index) => (
+              <div key={index} className="p-5 bg-white dark:bg-gray-800 rounded-2xl shadow-sm">
+                <div className="space-y-3 animate-pulse">
+                  <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
+                  <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+                  <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-2/3"></div>
                 </div>
               </div>
             ))}
           </div>
         ) : products.length === 0 ? (
-          <div className="p-6 text-center bg-white rounded-xl shadow-sm">
-            <Package className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-            <p className="text-gray-600 text-xs">{isRtl ? 'لا توجد منتجات متاحة' : 'No products available'}</p>
+          <div className="p-6 sm:p-8 text-center bg-white dark:bg-gray-800 rounded-xl shadow-sm">
+            <Package className="w-12 h-12 text-gray-400 dark:text-gray-500 mx-auto mb-3" />
+            <p className="text-gray-600 dark:text-gray-400 text-sm">{searchTerm || filterDepartment ? t.noMatch : t.empty}</p>
             {['admin', 'production'].includes(user?.role ?? '') && !searchTerm && !filterDepartment && (
               <button
                 onClick={() => openModal()}
-                className="mt-3 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
-                aria-label={isRtl ? 'إضافة أول منتج' : 'Add First Product'}
+                className="mt-4 px-4 sm:px-6 py-2.5 bg-amber-600 hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600"
+                aria-label={t.addFirst}
               >
-                {isRtl ? 'إضافة أول منتج' : 'Add First Product'}
+                {t.addFirst}
               </button>
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto scrollbar-none">
+          <motion.div
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ staggerChildren: 0.1 }}
+          >
             {products.map((product) => (
-              <div
+              <motion.div
                 key={product._id}
-                className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, ease: 'easeOut' }}
               >
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="font-semibold text-gray-900 text-sm truncate">
-                      {product.displayName}
-                    </h3>
-                    <p className="text-xs text-gray-500">{product.code}</p>
+                <div className="p-5 sm:p-6 bg-white dark:bg-gray-800 rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1 border border-gray-100 dark:border-gray-700 max-w-sm mx-auto group relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-r from-amber-100/50 to-amber-200/50 dark:from-amber-900/50 dark:to-amber-800/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <div className="relative space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-base sm:text-lg truncate" style={{ whiteSpace: 'nowrap' }}>
+                        {product.displayName}
+                      </h3>
+                      <p className="text-sm text-gray-500 dark:text-gray-400">{product.code}</p>
+                    </div>
+                    <p className="text-sm text-amber-600 dark:text-amber-400">
+                      {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
+                    </p>
+                    <p className="font-semibold text-gray-900 dark:text-gray-100 text-sm">
+                      {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
+                    </p>
                   </div>
-                  <p className="text-xs text-amber-600">
-                    {isRtl ? product.department.name : (product.department.nameEn || product.department.name)}
-                  </p>
-                  <p className="font-semibold text-gray-900 text-xs">
-                    {product.price} {isRtl ? 'ريال' : 'SAR'} / {product.displayUnit}
-                  </p>
+                  {['admin', 'production'].includes(user?.role ?? '') && (
+                    <div className="mt-4 flex items-center justify-end gap-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openModal(product);
+                        }}
+                        className="p-2 w-10 h-10 bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
+                        title={t.edit}
+                        aria-label={t.edit}
+                      >
+                        <Edit2 className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openDeleteModal(product._id);
+                        }}
+                        className="p-2 w-10 h-10 bg-red-500 hover:bg-red-600 dark:bg-red-600 dark:hover:bg-red-700 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600"
+                        title={t.delete}
+                        aria-label={t.delete}
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
+                  )}
                 </div>
-                {['admin', 'production'].includes(user?.role ?? '') && (
-                  <div className="mt-3 flex items-center justify-end gap-1.5">
-                    <button
-                      onClick={() => openModal(product)}
-                      className="p-1.5 w-7 h-7 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center"
-                      title={isRtl ? 'تعديل' : 'Edit'}
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => openDeleteModal(product._id)}
-                      className="p-1.5 w-7 h-7 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center"
-                      title={isRtl ? 'حذف' : 'Delete'}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         )}
       </div>
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}>
-          <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">
-              {editingProduct ? (isRtl ? 'تعديل المنتج' : 'Edit Product') : (isRtl ? 'إضافة منتج جديد' : 'Add New Product')}
-            </h3>
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6 sm:p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">{editingProduct ? t.edit : t.add}</h3>
+            <form onSubmit={handleSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">
-                    {isRtl ? 'اسم المنتج' : 'Product Name'}
-                  </label>
+                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.name}</label>
                   <input
                     id="name"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder={isRtl ? 'أدخل اسم المنتج' : 'Enter product name'}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
+                    placeholder={t.namePlaceholder}
+                    className={`w-full px-3 py-3 border ${formErrors.name ? 'border-red-300 dark:border-red-700' : 'border-gray-300 dark:border-gray-600'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white dark:bg-gray-800 shadow-sm hover:shadow-md text-sm dark:text-gray-200 ${isRtl ? 'text-right' : 'text-left'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600`}
+                    aria-invalid={!!formErrors.name}
+                    aria-describedby={formErrors.name ? 'name-error' : undefined}
                   />
+                  {formErrors.name && <p id="name-error" className="text-sm text-red-600 dark:text-red-400 mt-1">{formErrors.name}</p>}
                 </div>
                 <div>
-                  <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">
-                    {isRtl ? 'الاسم بالإنجليزية' : 'English Name'}
-                  </label>
+                  <label htmlFor="nameEn" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.nameEn}</label>
                   <input
                     id="nameEn"
                     value={formData.nameEn}
                     onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
-                    placeholder={isRtl ? 'أدخل الاسم بالإنجليزية' : 'Enter English name'}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
+                    placeholder={t.nameEnPlaceholder}
+                    className={`w-full px-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white dark:bg-gray-800 shadow-sm hover:shadow-md text-sm dark:text-gray-200 ${isRtl ? 'text-right' : 'text-left'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600`}
                   />
                 </div>
                 <div>
-                  <label htmlFor="code" className="block text-xs font-medium text-gray-700 mb-1">
-                    {isRtl ? 'رمز المنتج' : 'Product Code'}
-                  </label>
+                  <label htmlFor="code" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.code}</label>
                   <input
                     id="code"
                     value={formData.code}
                     onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                    placeholder={isRtl ? 'أدخل رمز المنتج' : 'Enter product code'}
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
+                    placeholder={t.codePlaceholder}
+                    className={`w-full px-3 py-3 border ${formErrors.code ? 'border-red-300 dark:border-red-700' : 'border-gray-300 dark:border-gray-600'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white dark:bg-gray-800 shadow-sm hover:shadow-md text-sm dark:text-gray-200 ${isRtl ? 'text-right' : 'text-left'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600`}
+                    aria-invalid={!!formErrors.code}
+                    aria-describedby={formErrors.code ? 'code-error' : undefined}
                   />
+                  {formErrors.code && <p id="code-error" className="text-sm text-red-600 dark:text-red-400 mt-1">{formErrors.code}</p>}
                 </div>
                 <div>
-                  <label htmlFor="department" className="block text-xs font-medium text-gray-700 mb-1">
-                    {isRtl ? 'القسم' : 'Department'}
-                  </label>
+                  <label htmlFor="department" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.department}</label>
                   <CustomDropdown
                     value={formData.department}
                     onChange={(value) => setFormData({ ...formData, department: value })}
                     options={[
-                      { value: '', label: isRtl ? 'اختر القسم' : 'Select Department' },
+                      { value: '', label: t.departmentPlaceholder },
                       ...departments.map((d) => ({
                         value: d._id,
                         label: isRtl ? d.name : (d.nameEn || d.name),
                       })),
                     ]}
-                    ariaLabel={isRtl ? 'القسم' : 'Department'}
+                    ariaLabel={t.department}
+                    className={formErrors.department ? 'border-red-300 dark:border-red-700' : ''}
                   />
+                  {formErrors.department && <p id="department-error" className="text-sm text-red-600 dark:text-red-400 mt-1">{formErrors.department}</p>}
                 </div>
                 <div>
-                  <label htmlFor="price" className="block text-xs font-medium text-gray-700 mb-1">
-                    {isRtl ? 'السعر' : 'Price'}
-                  </label>
+                  <label htmlFor="price" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.price}</label>
                   <input
                     id="price"
                     type="number"
+                    step="0.01"
                     value={formData.price}
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                    placeholder="0.00"
-                    required
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
+                    placeholder={t.pricePlaceholder}
+                    className={`w-full px-3 py-3 border ${formErrors.price ? 'border-red-300 dark:border-red-700' : 'border-gray-300 dark:border-gray-600'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white dark:bg-gray-800 shadow-sm hover:shadow-md text-sm dark:text-gray-200 ${isRtl ? 'text-right' : 'text-left'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600`}
+                    aria-invalid={!!formErrors.price}
+                    aria-describedby={formErrors.price ? 'price-error' : undefined}
                   />
+                  {formErrors.price && <p id="price-error" className="text-sm text-red-600 dark:text-red-400 mt-1">{formErrors.price}</p>}
                 </div>
                 <div>
-                  <label htmlFor="unit" className="block text-xs font-medium text-gray-700 mb-1">
-                    {isRtl ? 'الوحدة' : 'Unit'}
-                  </label>
+                  <label htmlFor="unit" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.unit}</label>
                   <CustomDropdown
                     value={formData.unit}
                     onChange={(value) => setFormData({ ...formData, unit: value })}
                     options={[
-                      { value: '', label: isRtl ? 'اختر الوحدة' : 'Select Unit' }, // خيار افتراضي فارغ
+                      { value: '', label: t.unitPlaceholder },
                       ...unitOptions.map((opt) => ({
                         value: opt.value,
                         label: isRtl ? opt.labelAr : opt.labelEn,
                       })),
                     ]}
-                    ariaLabel={isRtl ? 'الوحدة' : 'Unit'}
+                    ariaLabel={t.unit}
+                    className={formErrors.unit ? 'border-red-300 dark:border-red-700' : ''}
                   />
+                  {formErrors.unit && <p id="unit-error" className="text-sm text-red-600 dark:text-red-400 mt-1">{formErrors.unit}</p>}
                 </div>
               </div>
               {error && (
-                <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-600" />
-                  <span className="text-red-600 text-xs">{error}</span>
+                <div className="p-2 bg-red-50 dark:bg-red-900/50 border border-red-200 dark:border-red-700 rounded-lg flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                  <span className="text-red-600 dark:text-red-400 text-sm">{error}</span>
                 </div>
               )}
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors"
-                  aria-label={isRtl ? 'إلغاء' : 'Cancel'}
+                  className="px-4 sm:px-6 py-2.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-600"
+                  aria-label={t.cancel}
                 >
-                  {isRtl ? 'إلغاء' : 'Cancel'}
+                  {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors"
-                  aria-label={editingProduct ? (isRtl ? 'تحديث المنتج' : 'Update Product') : (isRtl ? 'إضافة المنتج' : 'Add Product')}
+                  className="px-4 sm:px-6 py-2.5 bg-amber-600 hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-600"
+                  aria-label={editingProduct ? t.update : t.add}
                 >
-                  {editingProduct ? (isRtl ? 'تحديث المنتج' : 'Update Product') : (isRtl ? 'إضافة المنتج' : 'Add Product')}
+                  {editingProduct ? t.update : t.add}
                 </button>
               </div>
             </form>
-          </div>
+          </motion.div>
         </div>
       )}
 
       {isDeleteModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(e) => { if (e.target === e.currentTarget) closeDeleteModal(); }}>
-          <div className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-5" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">{isRtl ? 'تأكيد الحذف' : 'Confirm Deletion'}</h3>
-            <p className="text-xs text-gray-600 mb-4">{isRtl ? 'هل أنت متأكد من حذف هذا المنتج؟' : 'Are you sure you want to delete this product?'}</p>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={(esz) => { if (e.target === e.currentTarget) closeDeleteModal(); }}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6 sm:p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">{t.confirmDelete}</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">{t.deleteWarning}</p>
             {error && (
-              <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 mb-4">
-                <AlertCircle className="w-4 h-4 text-red-600" />
-                <span className="text-red-600 text-xs">{error}</span>
+              <div className="p-2 bg-red-50 dark:bg-red-900/50 border border-red-200 dark:border-red-700 rounded-lg flex items-center gap-2 mb-4">
+                <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                <span className="text-red-600 dark:text-red-400 text-sm">{error}</span>
               </div>
             )}
             <div className="flex justify-end gap-2">
               <button
                 onClick={closeDeleteModal}
-                className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors"
-                aria-label={isRtl ? 'إلغاء' : 'Cancel'}
+                className="px-4 sm:px-6 py-2.5 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-600"
+                aria-label={t.cancel}
               >
-                {isRtl ? 'إلغاء' : 'Cancel'}
+                {t.cancel}
               </button>
               <button
                 onClick={confirmDelete}
-                className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs transition-colors"
-                aria-label={isRtl ? 'حذف' : 'Delete'}
+                className="px-4 sm:px-6 py-2.5 bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600"
+                aria-label={t.delete}
               >
-                {isRtl ? 'حذف' : 'Delete'}
+                {t.delete}
               </button>
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
     </div>
