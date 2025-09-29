@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback, useReducer, useTransition  , useMemo} from 'react'; // أضفت useTransition لـ React 19 smooth
+import React, { useState, useEffect, useCallback, useReducer, useTransition } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { branchesAPI, ordersAPI, salesAPI } from '../services/api'; // مستورد salesAPI
+import { branchesAPI, ordersAPI, salesAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowLeft, Edit2, Trash2, Key, AlertCircle, MapPin, ChevronDown } from 'lucide-react';
@@ -42,7 +42,6 @@ interface Branch {
   displayCity: string;
 }
 
-// افترض interfaces للـ Orders و Sales (عدل حسب API حقيقي)
 interface Order {
   _id: string;
   orderNumber: string;
@@ -166,6 +165,8 @@ const translations = {
     ordersTab: 'طلبات الفرع',
     salesTab: 'مبيعات الفرع',
     additionalDetailsTab: 'تفاصيل إضافية',
+    branchInfoTab: 'معلومات الفرع',
+    branchStatsTab: 'إحصائيات الفرع',
     noOrders: 'لا توجد طلبات',
     noSales: 'لا توجد مبيعات',
     orderNumber: 'رقم الطلب',
@@ -224,6 +225,8 @@ const translations = {
     ordersTab: 'Branch Orders',
     salesTab: 'Branch Sales',
     additionalDetailsTab: 'Additional Details',
+    branchInfoTab: 'Branch Info',
+    branchStatsTab: 'Branch Stats',
     noOrders: 'No orders available',
     noSales: 'No sales available',
     orderNumber: 'Order Number',
@@ -266,10 +269,10 @@ const ProfileInput = ({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         required={required}
-        className={`w-full px-3 py-3 border ${error ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`} // تحسين: py-3, text-sm
+        className={`w-full px-3 py-3 border ${error ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={label}
       />
-      {error && <p className="text-red-600 text-sm mt-1">{error}</p>} // زد text-sm
+      {error && <p className="text-red-600 text-sm mt-1">{error}</p>}
     </div>
   );
 };
@@ -302,7 +305,7 @@ const ProfileSelect = ({
           value={value.toString()}
           onChange={(e) => onChange(e.target.value)}
           required={required}
-          className={`w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'}`} // py-3, text-sm
+          className={`w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md appearance-none text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'}`}
           aria-label={label}
         >
           {options.map((option) => (
@@ -327,7 +330,7 @@ const ProfileCard = ({ title, details }: { title: string; details: { label: stri
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.3 }}
-      className="p-6 bg-white rounded-2xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200" // تحسين: rounded-2xl, shadow-md to lg
+      className="p-6 bg-white rounded-2xl shadow-md border border-gray-100 hover:shadow-lg transition-all duration-200"
     >
       <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
         <MapPin className="w-5 h-5 text-amber-600" />
@@ -342,7 +345,7 @@ const ProfileCard = ({ title, details }: { title: string; details: { label: stri
             transition={{ duration: 0.3, delay: index * 0.1 }}
           >
             <p className="text-sm text-gray-600 font-medium">{detail.label}</p>
-            <p className={`text-sm text-gray-800 overflow-hidden whitespace-nowrap text-ellipsis ${detail.className || ''}`}>{detail.value}</p> // nowrap + ellipsis
+            <p className={`text-sm text-gray-800 overflow-hidden whitespace-nowrap text-ellipsis ${detail.className || ''}`}>{detail.value}</p>
           </motion.div>
         ))}
       </div>
@@ -532,10 +535,10 @@ const ProfileModal = ({
                 label={t.userStatus}
                 value={formData.user.isActive}
                 onChange={(value) => dispatchForm({ type: 'UPDATE_USER_FIELD', field: 'isActive', value: value === 'true' })}
-                options={[
+                options=[
                   { value: true, label: t.active },
                   { value: false, label: t.inactive },
-                ]}
+                ]
               />
             </div>
           </div>
@@ -547,7 +550,7 @@ const ProfileModal = ({
               className="p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2"
             >
               <AlertCircle className="w-4 h-4 text-red-600" />
-              <span className="text-red-600 text-sm">{error}</span> // text-sm
+              <span className="text-red-600 text-sm">{error}</span>
             </motion.div>
           )}
           <div className="flex justify-end gap-3 mt-6">
@@ -761,7 +764,7 @@ export const BranchProfile: React.FC = () => {
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [salesLoading, setSalesLoading] = useState(false);
   const [error, setError] = useState('');
-  const [isPending, startTransition] = useTransition(); // React 19 لـ smooth tab switch
+  const [isPending, startTransition] = useTransition();
 
   const [formData, dispatchForm] = useReducer(formReducer, {
     name: '',
@@ -813,7 +816,6 @@ export const BranchProfile: React.FC = () => {
       dispatchForm({ type: 'RESET', data });
       setError('');
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Fetch branch error:`, err);
       setError(err.response?.data?.message || t.branchNotFound);
       toast.error(t.branchNotFound, { position: isRtl ? 'top-right' : 'top-left' });
     } finally {
@@ -826,7 +828,7 @@ export const BranchProfile: React.FC = () => {
     setOrdersLoading(true);
     try {
       const response = await ordersAPI.getAll({ branch: id });
-      setOrders(response.data || []); // افترض response { data: [], totalPages, ... }
+      setOrders(response.data || []);
     } catch (err: any) {
       toast.error('خطأ في جلب الطلبات', { position: isRtl ? 'top-right' : 'top-left' });
     } finally {
@@ -838,8 +840,7 @@ export const BranchProfile: React.FC = () => {
     if (!id) return;
     setSalesLoading(true);
     try {
-      // افترض salesAPI.getByBranch(id) أو getAll({ branch: id })
-      const response = await salesAPI.getAll({ branch: id }); // عدل لو الـ endpoint مختلف
+      const response = await salesAPI.getAll({ branch: id });
       setSales(response.data || []);
     } catch (err: any) {
       toast.error('خطأ في جلب المبيعات', { position: isRtl ? 'top-right' : 'top-left' });
@@ -850,7 +851,9 @@ export const BranchProfile: React.FC = () => {
 
   useEffect(() => {
     fetchBranch();
-  }, [fetchBranch]);
+    fetchOrders();
+    fetchSales();
+  }, [fetchBranch, fetchOrders, fetchSales]);
 
   const checkEmailAvailability = useCallback(async (email: string) => {
     try {
@@ -945,7 +948,6 @@ export const BranchProfile: React.FC = () => {
         setIsEditModalOpen(false);
         setError('');
       } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Update branch error:`, err);
         let errorMessage = t.serverError;
         if (err.response?.data?.message) {
           const message = err.response.data.message;
@@ -993,7 +995,6 @@ export const BranchProfile: React.FC = () => {
         setPasswordData({ password: '', confirmPassword: '' });
         setError('');
       } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Reset password error:`, err);
         const errorMessage = err.response?.data?.message || t.serverError;
         setError(errorMessage);
         toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
@@ -1011,7 +1012,6 @@ export const BranchProfile: React.FC = () => {
       toast.success(t.branchDeleted, { position: isRtl ? 'top-right' : 'top-left' });
       navigate('/branches');
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Delete branch error:`, err);
       let errorMessage = t.serverError;
       if (err.response?.data?.message) {
         errorMessage =
@@ -1046,46 +1046,39 @@ export const BranchProfile: React.FC = () => {
     setError('');
   }, []);
 
-  const branchDetails = useMemo(
-    () => [
-      { label: t.name, value: branch?.name || '-' },
-      { label: t.nameEn, value: branch?.nameEn || branch?.name || '-' },
-      { label: t.code, value: branch?.code || '-' },
-      { label: t.address, value: branch?.displayAddress || '-' },
-      { label: t.addressEn, value: branch?.addressEn || branch?.address || '-' },
-      { label: t.city, value: branch?.displayCity || '-' },
-      { label: t.cityEn, value: branch?.cityEn || branch?.city || '-' },
-      { label: t.phone, value: branch?.phone || '-' },
-      {
-        label: t.isActive,
-        value: branch?.isActive ? t.active : t.inactive,
-        className: branch?.isActive ? 'text-teal-600' : 'text-red-600',
-      },
-      { label: t.createdAt, value: branch ? new Date(branch.createdAt).toLocaleString() : '-' },
-      { label: t.updatedAt, value: branch ? new Date(branch.updatedAt).toLocaleString() : '-' },
-      { label: t.createdBy, value: branch?.createdBy?.displayName || '-' },
-    ],
-    [branch, t]
-  );
+  const branchDetails = [
+    { label: t.name, value: branch?.name || '-' },
+    { label: t.nameEn, value: branch?.nameEn || branch?.name || '-' },
+    { label: t.code, value: branch?.code || '-' },
+    { label: t.address, value: branch?.displayAddress || '-' },
+    { label: t.addressEn, value: branch?.addressEn || branch?.address || '-' },
+    { label: t.city, value: branch?.displayCity || '-' },
+    { label: t.cityEn, value: branch?.cityEn || branch?.city || '-' },
+    { label: t.phone, value: branch?.phone || '-' },
+    {
+      label: t.isActive,
+      value: branch?.isActive ? t.active : t.inactive,
+      className: branch?.isActive ? 'text-teal-600' : 'text-red-600',
+    },
+    { label: t.createdAt, value: branch ? new Date(branch.createdAt).toLocaleString() : '-' },
+    { label: t.updatedAt, value: branch ? new Date(branch.updatedAt).toLocaleString() : '-' },
+    { label: t.createdBy, value: branch?.createdBy?.displayName || '-' },
+  ];
 
-  const userDetails = useMemo(
-    () =>
-      branch?.user
-        ? [
-            { label: t.userName, value: branch.user.displayName },
-            { label: t.userNameEn, value: branch.user.nameEn || branch.user.name },
-            { label: t.username, value: branch.user.username },
-            { label: t.email, value: branch.user.email || '-' },
-            { label: t.userPhone, value: branch.user.phone || '-' },
-            {
-              label: t.userStatus,
-              value: branch.user.isActive ? t.active : t.inactive,
-              className: branch.user.isActive ? 'text-teal-600' : 'text-red-600',
-            },
-          ]
-        : [],
-    [branch, t]
-  );
+  const userDetails = branch?.user
+    ? [
+        { label: t.userName, value: branch.user.displayName },
+        { label: t.userNameEn, value: branch.user.nameEn || branch.user.name },
+        { label: t.username, value: branch.user.username },
+        { label: t.email, value: branch.user.email || '-' },
+        { label: t.userPhone, value: branch.user.phone || '-' },
+        {
+          label: t.userStatus,
+          value: branch.user.isActive ? t.active : t.inactive,
+          className: branch.user.isActive ? 'text-teal-600' : 'text-red-600',
+        },
+      ]
+    : [];
 
   if (loading) {
     return (
@@ -1191,31 +1184,18 @@ export const BranchProfile: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Tabs */}
       <div className="flex border-b border-gray-200 mb-6">
         <button
           onClick={() => startTransition(() => setActiveTab('info'))}
           className={`px-4 py-2 text-sm font-medium ${activeTab === 'info' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600'} transition-colors`}
         >
-          {t.infoTab}
+          {t.branchInfoTab}
         </button>
         <button
-          onClick={() => startTransition(() => setActiveTab('orders'))}
-          className={`px-4 py-2 text-sm font-medium ${activeTab === 'orders' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600'} transition-colors`}
+          onClick={() => startTransition(() => setActiveTab('stats'))}
+          className={`px-4 py-2 text-sm font-medium ${activeTab === 'stats' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600'} transition-colors`}
         >
-          {t.ordersTab}
-        </button>
-        <button
-          onClick={() => startTransition(() => setActiveTab('sales'))}
-          className={`px-4 py-2 text-sm font-medium ${activeTab === 'sales' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600'} transition-colors`}
-        >
-          {t.salesTab}
-        </button>
-        <button
-          onClick={() => startTransition(() => setActiveTab('additional'))}
-          className={`px-4 py-2 text-sm font-medium ${activeTab === 'additional' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600'} transition-colors`}
-        >
-          {t.additionalDetailsTab}
+          {t.branchStatsTab}
         </button>
       </div>
 
@@ -1232,96 +1212,83 @@ export const BranchProfile: React.FC = () => {
             <ProfileCard title={t.branchDetails} details={branchDetails} />
             {branch.user && <ProfileCard title={t.user} details={userDetails} />}
           </motion.div>
-        ) : activeTab === 'orders' ? (
-          <motion.div
-            key="orders"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.3 }}
-            className="space-y-4"
-          >
-            <h2 className="text-lg font-semibold text-gray-900">{t.ordersTab}</h2>
-            {ordersLoading ? (
-              <div className="text-center text-sm text-gray-600">جاري التحميل...</div>
-            ) : orders.length === 0 ? (
-              <div className="text-center text-sm text-gray-600">{t.noOrders}</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.orderNumber}</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.status}</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.total}</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.createdAt}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {orders.map((order) => (
-                      <tr key={order._id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{order.orderNumber}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{order.status}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{order.total}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{new Date(order.createdAt).toLocaleDateString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </motion.div>
-        ) : activeTab === 'sales' ? (
-          <motion.div
-            key="sales"
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
-            transition={{ duration: 0.3 }}
-            className="space-y-4"
-          >
-            <h2 className="text-lg font-semibold text-gray-900">{t.salesTab}</h2>
-            {salesLoading ? (
-              <div className="text-center text-sm text-gray-600">جاري التحميل...</div>
-            ) : sales.length === 0 ? (
-              <div className="text-center text-sm text-gray-600">{t.noSales}</div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.saleNumber}</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.total}</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.createdAt}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {sales.map((sale) => (
-                      <tr key={sale._id}>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{sale.saleNumber}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{sale.total}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{new Date(sale.createdAt).toLocaleDateString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </motion.div>
         ) : (
           <motion.div
-            key="additional"
+            key="stats"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.3 }}
-            className="space-y-4"
+            className="space-y-6"
           >
-            <h2 className="text-lg font-semibold text-gray-900">{t.additionalDetailsTab}</h2>
-            {/* هنا أضف stats أو inventory, e.g. fetch from inventoryAPI.getByBranch(id) */}
-            <p className="text-sm text-gray-600">عدد الطلبات: {orders.length}</p>
-            <p className="text-sm text-gray-600">إجمالي المبيعات: {sales.reduce((sum, sale) => sum + sale.total, 0)}</p>
-            {/* أضف المزيد لو في API */}
+            <h2 className="text-lg font-semibold text-gray-900">{t.branchStatsTab}</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="p-4 bg-white rounded-2xl shadow-md border border-gray-100">
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">{t.ordersTab}</h3>
+                {ordersLoading ? (
+                  <div className="text-center text-sm text-gray-600">جاري التحميل...</div>
+                ) : orders.length === 0 ? (
+                  <div className="text-center text-sm text-gray-600">{t.noOrders}</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.orderNumber}</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.status}</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.total}</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.createdAt}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {orders.map((order) => (
+                          <tr key={order._id}>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{order.orderNumber}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{order.status}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{order.total}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{new Date(order.createdAt).toLocaleDateString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+              <div className="p-4 bg-white rounded-2xl shadow-md border border-gray-100">
+                <h3 className="text-sm font-semibold text-gray-900 mb-2">{t.salesTab}</h3>
+                {salesLoading ? (
+                  <div className="text-center text-sm text-gray-600">جاري التحميل...</div>
+                ) : sales.length === 0 ? (
+                  <div className="text-center text-sm text-gray-600">{t.noSales}</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.saleNumber}</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.total}</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.createdAt}</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {sales.map((sale) => (
+                          <tr key={sale._id}>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{sale.saleNumber}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{sale.total}</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{new Date(sale.createdAt).toLocaleDateString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="p-4 bg-white rounded-2xl shadow-md border border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-900 mb-2">{t.additionalDetailsTab}</h3>
+              <p className="text-sm text-gray-600">عدد الطلبات: {orders.length}</p>
+              <p className="text-sm text-gray-600">إجمالي المبيعات: {sales.reduce((sum, sale) => sum + sale.total, 0)}</p>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
