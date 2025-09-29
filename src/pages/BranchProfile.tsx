@@ -1239,3 +1239,5 @@ export function BranchProfile() {
     </div>
   );
 }
+
+export default BranchProfile;
