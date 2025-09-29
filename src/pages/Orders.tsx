@@ -4,9 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
-import { Select } from '../components/UI/Select';
-import { Input } from '../components/UI/Input';
-import { ShoppingCart, AlertCircle, Search, Table2, Grid, Download } from 'lucide-react';
+import { ShoppingCart, AlertCircle, Search, Table2, Grid, Download, X } from 'lucide-react';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -24,6 +22,179 @@ import Pagination from '../components/Shared/Pagination';
 const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
 const OrderTable = lazy(() => import('../components/Shared/OrderTable'));
 const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
+
+// CustomInput component (similar to Departments)
+const CustomInput = ({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  ariaLabel: string;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="relative group">
+      <motion.div
+        initial={{ opacity: value ? 0 : 1 }}
+        animate={{ opacity: value ? 0 : 1 }}
+        transition={{ duration: 0.15 }}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} flex items-center justify-center top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`}
+      >
+        <Search className="w-4 h-4" />
+      </motion.div>
+      <input
+        type="text"
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={`w-full ${isRtl ? 'pl-10 pr-2' : 'pr-10 pl-2'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={ariaLabel}
+      />
+      <motion.div
+        initial={{ opacity: value ? 1 : 0 }}
+        animate={{ opacity: value ? 1 : 0 }}
+        transition={{ duration: 0.15 }}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 flex items-center justify-center transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
+      >
+        <button
+          onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
+          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
+          className="flex items-center justify-center"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </motion.div>
+    </div>
+  );
+};
+
+// CustomDropdown component (enhanced)
+const CustomDropdown = ({
+  value,
+  onChange,
+  options,
+  ariaLabel,
+  className = '',
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  ariaLabel: string;
+  className?: string;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const selectedOption =
+    options.find((opt) => opt.value === value) || { value: '', label: isRtl ? 'اختر' : 'Select' };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  const handleKeyDown = (e: React.KeyboardEvent, optionValue?: string) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (optionValue !== undefined) {
+        onChange(optionValue);
+        setIsOpen(false);
+        buttonRef.current?.focus();
+      } else {
+        setIsOpen(!isOpen);
+      }
+    } else if (e.key === 'Escape') {
+      setIsOpen(false);
+      buttonRef.current?.focus();
+    } else if (e.key === 'ArrowDown' && isOpen) {
+      e.preventDefault();
+      const currentIndex = options.findIndex((opt) => opt.value === value);
+      const nextIndex = (currentIndex + 1) % options.length;
+      onChange(options[nextIndex].value);
+      (dropdownRef.current?.querySelectorAll('[role="option"]')[nextIndex] as HTMLElement)?.focus();
+    } else if (e.key === 'ArrowUp' && isOpen) {
+      e.preventDefault();
+      const currentIndex = options.findIndex((opt) => opt.value === value);
+      const prevIndex = (currentIndex - 1 + options.length) % options.length;
+      onChange(options[prevIndex].value);
+      (dropdownRef.current?.querySelectorAll('[role="option"]')[prevIndex] as HTMLElement)?.focus();
+    }
+  };
+
+  const dropdownVariants = {
+    hidden: { opacity: 0, y: -10, scale: 0.95 },
+    visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.2, ease: [0.25, 0.1, 0.25, 1] } },
+    exit: { opacity: 0, y: -10, scale: 0.95, transition: { duration: 0.15, ease: [0.25, 0.1, 0.25, 1] } },
+  };
+
+  return (
+    <div className={`relative ${className}`} ref={dropdownRef}>
+      <motion.button
+        type="button"
+        ref={buttonRef}
+        onClick={() => setIsOpen(!isOpen)}
+        onKeyDown={handleKeyDown}
+        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm hover:shadow-md text-xs text-gray-800 transition-all duration-300 flex justify-between items-center ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={ariaLabel}
+        aria-expanded={isOpen}
+        role="combobox"
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+      >
+        <span className="truncate font-medium">{selectedOption.label}</span>
+        <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+          <ChevronDown className="w-4 h-4 text-gray-500" />
+        </motion.div>
+      </motion.button>
+      <AnimatePresence mode="wait">
+        {isOpen && (
+          <motion.div
+            variants={dropdownVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="absolute w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-20 max-h-48 overflow-y-auto"
+          >
+            {options.map((option, index) => (
+              <motion.div
+                key={option.value}
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0, transition: { delay: index * 0.05, duration: 0.2 } }}
+                exit={{ opacity: 0, y: -5 }}
+                onClick={() => {
+                  onChange(option.value);
+                  setIsOpen(false);
+                  buttonRef.current?.focus();
+                }}
+                onKeyDown={(e) => handleKeyDown(e, option.value)}
+                className={`px-3 py-2 text-xs text-gray-800 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-all duration-200 focus:outline-none focus:bg-amber-50 focus:text-amber-600 ${isRtl ? 'text-right' : 'text-left'}`}
+                role="option"
+                aria-selected={option.value === value}
+                tabIndex={0}
+              >
+                {option.label}
+              </motion.div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
 
 interface State {
   orders: Order[];
@@ -693,9 +864,15 @@ export const Orders: React.FC = () => {
           order =>
             order.orderNumber.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
             order.branch.displayName.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            order.branch.name.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            order.branch.nameEn?.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
             (order.notes || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
             order.createdBy.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.items.some(item => item.displayProductName.toLowerCase().includes(state.searchQuery.toLowerCase()))
+            order.items.some(item => 
+              item.displayProductName.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+              item.productName.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+              item.productNameEn?.toLowerCase().includes(state.searchQuery.toLowerCase())
+            )
         )
         .filter(
           order =>
@@ -882,6 +1059,44 @@ export const Orders: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
+  const getStatusLabel = (status: string) => {
+    const labelsAr = {
+      '': 'كل الحالات',
+      pending: 'قيد الانتظار',
+      approved: 'تم الموافقة',
+      in_production: 'في الإنتاج',
+      completed: 'مكتمل',
+      in_transit: 'في النقل',
+      delivered: 'تم التسليم',
+      cancelled: 'ملغى',
+    };
+    const labelsEn = {
+      '': 'All Statuses',
+      pending: 'Pending',
+      approved: 'Approved',
+      in_production: 'In Production',
+      completed: 'Completed',
+      in_transit: 'In Transit',
+      delivered: 'Delivered',
+      cancelled: 'Cancelled',
+    };
+    return isRtl ? labelsAr[status] : labelsEn[status];
+  };
+
+  const getSortLabel = (value: string) => {
+    const labelsAr = {
+      date: 'التاريخ',
+      totalAmount: 'إجمالي المبلغ',
+      priority: 'الأولوية',
+    };
+    const labelsEn = {
+      date: 'Date',
+      totalAmount: 'Total Amount',
+      priority: 'Priority',
+    };
+    return isRtl ? labelsAr[value] : labelsEn[value];
+  };
+
   return (
     <div className="px-2 py-4">
       <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
@@ -924,51 +1139,48 @@ export const Orders: React.FC = () => {
               </Button>
             </div>
           </div>
-          <Card className="p-3 mt-6 bg-white shadow-md  border border-gray-200">
+          <Card className="p-3 mt-6 bg-white shadow-md rounded-xl border border-gray-200">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
-                <div className="relative ">
-                  <Search className={`w-4 h-4 text-gray-500 absolute top-2 ${isRtl ? 'left-2' : 'right-2'}`} />
-                  <Input
-                    value={state.searchQuery}
-                    onChange={(e) => handleSearchChange(e?.target?.value || '')}
-                    placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
-                    className={`w-full ${isRtl ? 'pl-8 ' : 'pr-8'} rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200`}
-                  />
-                </div>
+                <CustomInput
+                  value={state.searchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
+                  ariaLabel={isRtl ? 'بحث' : 'Search'}
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
-                <Select
+                <CustomDropdown
                   options={statusOptions.map(opt => ({
                     value: opt.value,
-                    label: isRtl ? { '': 'كل الحالات', pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[opt.value] : { '': 'All Statuses', pending: 'Pending', approved: 'Approved', in_production: 'In Production', completed: 'Completed', in_transit: 'In Transit', delivered: 'Delivered', cancelled: 'Cancelled' }[opt.value],
+                    label: getStatusLabel(opt.value),
                   }))}
                   value={state.filterStatus}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
-                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
+                  ariaLabel={isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}
                 />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الفرع' : 'Filter by Branch'}</label>
-                <Select
+                <CustomDropdown
                   options={[{ value: '', label: isRtl ? 'جميع الفروع' : 'All Branches' }, ...state.branches.map(b => ({ value: b._id, label: b.displayName }))]}
                   value={state.filterBranch}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_BRANCH', payload: value })}
-                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
+                  ariaLabel={isRtl ? 'تصفية حسب الفرع' : 'Filter by Branch'}
                 />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
-                <Select
+                <CustomDropdown
                   options={sortOptions.map(opt => ({
                     value: opt.value,
-                    label: isRtl ? { date: 'التاريخ', totalAmount: 'إجمالي المبلغ', priority: 'الأولوية' }[opt.value] : { date: 'Date', totalAmount: 'Total Amount', priority: 'Priority' }[opt.value],
+                    label: getSortLabel(opt.value),
                   }))}
                   value={state.sortBy}
                   onChange={(value) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
-                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
+                  ariaLabel={isRtl ? 'ترتيب حسب' : 'Sort By'}
                 />
               </div>
             </div>
@@ -992,7 +1204,7 @@ export const Orders: React.FC = () => {
               {state.loading ? (
                 <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }} className="space-y-1">
                   {state.viewMode === 'card' ? (
-                    <div className="grid grid-cols-1  gap-1">
+                    <div className="grid grid-cols-1 gap-1">
                       {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)}
                     </div>
                   ) : (
