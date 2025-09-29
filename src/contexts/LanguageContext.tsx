@@ -26,7 +26,7 @@ const translations = {
     "edit": "تعديل",
     "delete": "حذف",
     "add": "إضافة",
-    "setings": "الاعدادات",
+    "settings": "الاعدادات",
     "header.logout": "تسجيل الخروج",
     "view": "عرض",
     "search": "بحث",
