@@ -6,6 +6,7 @@ import { Package, Plus, Edit2, Trash2, Search, AlertCircle, X, ChevronDown } fro
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
+import { CustomDropdown } from '../components/UI/CustomDropdown';
 
 interface Product {
   _id: string;
@@ -174,67 +175,7 @@ const CustomInput = ({
   );
 };
 
-const CustomDropdown = ({
-  value,
-  onChange,
-  options,
-  ariaLabel,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-  ariaLabel: string;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  const [isOpen, setIsOpen] = useState(false);
-  const selectedOption = options.find((opt) => opt.value === value) || { value: '', label: isRtl ? 'اختر' : 'Select' };
 
-  return (
-    <div className="relative group" onClick={(e) => e.stopPropagation()}>
-      <motion.button
-        onClick={(e) => {
-          e.stopPropagation();
-          setIsOpen(!isOpen);
-        }}
-        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center`}
-        aria-label={ariaLabel}
-      >
-        <span className="truncate">{selectedOption.label}</span>
-        <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
-          <ChevronDown className="w-4 h-4 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
-        </motion.div>
-      </motion.button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            onClick={(e) => e.stopPropagation()}
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.15 }}
-            className="absolute w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-300 z-20 max-h-48 overflow-y-auto scrollbar-none"
-          >
-            {options.map((option) => (
-              <motion.div
-                key={option.value}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onChange(option.value);
-                  setIsOpen(false);
-                }}
-                className="px-3 py-2 text-xs text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
-                whileHover={{ backgroundColor: '#fef3c7' }}
-              >
-                {option.label}
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
 
 export function Products() {
   const { language } = useLanguage();
