@@ -651,7 +651,7 @@ export function ChefDetails() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6" {/* rounded-2xl */}
+            className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6" 
           >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.edit}</h3>
             <form onSubmit={handleSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
