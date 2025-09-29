@@ -896,7 +896,7 @@ const BranchProfile: React.FC = () => {
   }, [fetchBranch, fetchOrders, fetchReturns, fetchSales, fetchProducts, t, isRtl]);
 
   return (
-    <div className="mx-auto px-4 py-6 min-h-screen bg-white" dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="mx-auto px-4 py-6 min-h-screen ">
       <Suspense fallback={<LoadingSpinner size="lg" />}>
         <motion.div
           initial={{ opacity: 0, y: -20 }}
