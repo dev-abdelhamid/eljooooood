@@ -289,7 +289,7 @@ export function Departments() {
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-w-6xl w-full px-4">
           {[...Array(6)].map((_, index) => (
-            <div key={index} className="p-4 bg-white rounded-xl shadow-sm">
+            <div key={index} className="p-5 bg-white rounded-2xl shadow-sm"> {/* تحسين: زد padding, rounded-2xl */}
               <div className="space-y-2 animate-pulse">
                 <div className="h-4 bg-gray-200 rounded w-3/4"></div>
                 <div className="h-3 bg-gray-200 rounded w-1/2"></div>
@@ -319,7 +319,7 @@ export function Departments() {
           <Layers className="w-6 h-6 text-amber-600" />
           <div>
             <h1 className="text-xl font-bold text-gray-900">{t.manage}</h1>
-            <p className="text-gray-600 text-xs">{isRtl ? 'إضافة، تعديل، أو حذف الأقسام' : 'Add, edit, or delete departments'}</p>
+            <p className="text-gray-600 text-sm">{isRtl ? 'إضافة، تعديل، أو حذف الأقسام' : 'Add, edit, or delete departments'}</p> {/* زد text-sm */}
           </div>
         </div>
         {user?.role === 'admin' && (
@@ -344,7 +344,7 @@ export function Departments() {
             className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
           >
             <AlertCircle className="w-4 h-4 text-red-600" />
-            <span className="text-red-600 text-xs">{error}</span>
+            <span className="text-red-600 text-sm">{error}</span> {/* زد text-sm */}
           </motion.div>
         )}
       </AnimatePresence>
@@ -361,13 +361,13 @@ export function Departments() {
             ariaLabel={t.searchPlaceholder}
           />
         </div>
-        <div className="text-center text-xs text-gray-600">
+        <div className="text-center text-sm text-gray-600"> {/* زد text-sm */}
           {isRtl ? `عدد الأقسام: ${filteredDepartments.length}` : `Departments Count: ${filteredDepartments.length}`}
         </div>
         {filteredDepartments.length === 0 ? (
           <div className="p-6 text-center bg-white rounded-xl shadow-sm">
             <Layers className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-            <p className="text-gray-600 text-xs">{searchTerm ? t.noMatch : t.empty}</p>
+            <p className="text-gray-600 text-sm">{searchTerm ? t.noMatch : t.empty}</p> {/* زد text-sm */}
             {user?.role === 'admin' && !searchTerm && (
               <button
                 onClick={openAddModal}
@@ -393,49 +393,49 @@ export function Departments() {
                 transition={{ duration: 0.3, ease: 'easeOut' }}
               >
                 <div
-                  className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1 cursor-pointer border border-gray-100"
+                  className="p-5 bg-white rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 hover:-translate-y-1 cursor-pointer border border-gray-100 max-w-sm mx-auto" {/* تحسين: زد padding, rounded-2xl, shadow-md, max-w-sm */}
                   onClick={() => navigate(`/departments/${department.id}`)}
                 >
-                  <div className="space-y-2">
+                  <div className="space-y-3"> {/* زد space-y-3 */}
                     <div className="flex items-center justify-between gap-3">
                       <h3 className="font-semibold text-gray-900 text-sm truncate" style={{ whiteSpace: 'nowrap' }}>
                         {department.displayName}
                       </h3>
                       <Layers className="w-5 h-5 text-amber-600 flex-shrink-0" />
                     </div>
-                    <div className="flex items-center gap-2 text-xs text-gray-600">
-                      <span className="w-20 font-medium flex-shrink-0">{t.code}:</span>
-                      <span className="truncate" style={{ whiteSpace: 'nowrap' }}>{department.code}</span>
+                    <div className="flex items-center gap-2 text-sm text-gray-600 overflow-hidden whitespace-nowrap"> {/* nowrap و text-sm */}
+                      <span className="min-w-[80px] font-medium flex-shrink-0">{t.code}:</span>
+                      <span className="truncate overflow-hidden text-ellipsis flex-1">{department.code}</span>
                     </div>
                     {department.description && (
-                      <div className="flex items-center gap-2 text-xs text-gray-600">
-                        <span className="w-20 font-medium flex-shrink-0">{t.description}:</span>
-                        <span className="truncate" style={{ whiteSpace: 'nowrap' }}>{department.description}</span>
+                      <div className="flex items-center gap-2 text-sm text-gray-600 overflow-hidden whitespace-nowrap">
+                        <span className="min-w-[80px] font-medium flex-shrink-0">{t.description}:</span>
+                        <span className="truncate overflow-hidden text-ellipsis flex-1">{department.description}</span>
                       </div>
                     )}
-                    {/* إخفاء الـ status هنا */}
+                    {/* شيلت الـ status */}
                   </div>
                   {user?.role === 'admin' && (
-                    <div className="mt-3 flex items-center justify-end gap-2">
+                    <div className="mt-4 flex items-center justify-end gap-2"> {/* زد mt-4 و gap-2 */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           openEditModal(department);
                         }}
-                        className="p-2 w-9 h-9 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
+                        className="p-2 w-10 h-10 bg-blue-500 hover:bg-blue-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md" {/* زد حجم button */}
                         title={t.edit}
                       >
-                        <Edit2 className="w-4 h-4" />
+                        <Edit2 className="w-5 h-5" />
                       </button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           openDeleteModal(department);
                         }}
-                        className="p-2 w-9 h-9 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
+                        className="p-2 w-10 h-10 bg-red-500 hover:bg-red-600 text-white rounded-full transition-colors flex items-center justify-center shadow-sm hover:shadow-md"
                         title={t.delete}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-5 h-5" />
                       </button>
                     </div>
                   )}
@@ -456,7 +456,7 @@ export function Departments() {
             <ChevronLeft className="w-4 h-4" />
             {t.previous}
           </button>
-          <span className="text-xs text-gray-600">
+          <span className="text-sm text-gray-600"> {/* زد text-sm */}
             {t.page} {currentPage} / {totalPages}
           </span>
           <button
@@ -476,42 +476,45 @@ export function Departments() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6"
+            className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6" {/* rounded-2xl */}
           >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{isEditMode ? t.edit : t.add}</h3>
             <form onSubmit={handleSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">{t.name}</label>
-                  <CustomInput
+                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">{t.name}</label> {/* text-sm */}
+                  <input
+                    id="name"
                     value={formData.name}
-                    onChange={(value) => setFormData({ ...formData, name: value })}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder={t.namePlaceholder}
-                    ariaLabel={t.name}
+                    className={`w-full px-3 py-3 border ${formErrors.name ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`} {/* py-3, text-sm */}
                   />
-                  {formErrors.name && <p className="text-xs text-red-600 mt-1">{formErrors.name}</p>}
+                  {formErrors.name && <p className="text-sm text-red-600 mt-1">{formErrors.name}</p>}
                 </div>
                 <div>
-                  <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">{t.nameEn}</label>
-                  <CustomInput
+                  <label htmlFor="nameEn" className="block text-sm font-medium text-gray-700 mb-1">{t.nameEn}</label>
+                  <input
+                    id="nameEn"
                     value={formData.nameEn}
-                    onChange={(value) => setFormData({ ...formData, nameEn: value })}
+                    onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
                     placeholder={t.nameEnPlaceholder}
-                    ariaLabel={t.nameEn}
+                    className={`w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                   />
                 </div>
                 <div>
-                  <label htmlFor="code" className="block text-xs font-medium text-gray-700 mb-1">{t.code}</label>
-                  <CustomInput
+                  <label htmlFor="code" className="block text-sm font-medium text-gray-700 mb-1">{t.code}</label>
+                  <input
+                    id="code"
                     value={formData.code}
-                    onChange={(value) => setFormData({ ...formData, code: value })}
+                    onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                     placeholder={t.codePlaceholder}
-                    ariaLabel={t.code}
+                    className={`w-full px-3 py-3 border ${formErrors.code ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                   />
-                  {formErrors.code && <p className="text-xs text-red-600 mt-1">{formErrors.code}</p>}
+                  {formErrors.code && <p className="text-sm text-red-600 mt-1">{formErrors.code}</p>}
                 </div>
                 <div>
-                  <label htmlFor="status" className="block text-xs font-medium text-gray-700 mb-1">{t.status}</label>
+                  <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">{t.status}</label>
                   <CustomDropdown
                     value={formData.isActive}
                     onChange={(value) => setFormData({ ...formData, isActive: value === 'true' })}
@@ -523,7 +526,7 @@ export function Departments() {
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <label htmlFor="description" className="block text-xs font-medium text-gray-700 mb-1">{t.description}</label>
+                  <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">{t.description}</label>
                   <textarea
                     id="description"
                     value={formData.description}
@@ -537,7 +540,7 @@ export function Departments() {
               {error && (
                 <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 text-red-600" />
-                  <span className="text-red-600 text-xs">{error}</span>
+                  <span className="text-red-600 text-sm">{error}</span>
                 </div>
               )}
               <div className="flex justify-end gap-2">
@@ -566,14 +569,14 @@ export function Departments() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
-            className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6"
+            className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6"
           >
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.confirmDelete}</h3>
-            <p className="text-xs text-gray-600 mb-4">{t.deleteWarning}</p>
+            <p className="text-sm text-gray-600 mb-4">{t.deleteWarning}</p> {/* زد text-sm */}
             {error && (
               <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 mb-4">
                 <AlertCircle className="w-4 h-4 text-red-600" />
-                <span className="text-red-600 text-xs">{error}</span>
+                <span className="text-red-600 text-sm">{error}</span>
               </div>
             )}
             <div className="flex justify-end gap-2">

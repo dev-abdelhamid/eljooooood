@@ -520,7 +520,7 @@ export function Chefs() {
         {loggedInUser?.role === 'admin' && (
           <button
             onClick={openAddModal}
-            className="w-full sm:w-auto px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5 shadow-sm hover:shadow-md" {/* زد حجم button */}
+            className="w-full sm:w-auto px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5 shadow-sm hover:shadow-md"
             aria-label={t.add}
           >
             <Plus className="w-4 h-4" />
