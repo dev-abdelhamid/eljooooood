@@ -1,4 +1,4 @@
-import React, { useReducer, useEffect, useMemo, useCallback, useRef, lazy, Suspense , useState } from 'react';
+import React, { useReducer, useEffect, useMemo, useCallback, useRef, lazy, Suspense, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
@@ -19,11 +19,19 @@ import { OrderCardSkeleton } from '../components/Shared/OrderSkeletons';
 import { OrderTableSkeleton } from '../components/Shared/OrderSkeletons';
 import Pagination from '../components/Shared/Pagination';
 
-const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
-const OrderTable = lazy(() => import('../components/Shared/OrderTable'));
-const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
+// Function to normalize text for search (handles Arabic diacritics and variations)
+const normalizeText = (text: string) => {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E8\u06EA-\u06ED]/g, '') // Remove Arabic diacritics
+    .replace(/أ|إ|آ|ٱ/g, 'ا') // Normalize Alef variants
+    .replace(/ى/g, 'ي') // Normalize Ya
+    .replace(/ة/g, 'ه') // Normalize Ta Marbuta
+    .toLowerCase()
+    .trim();
+};
 
-// CustomInput component (similar to Departments)
+// CustomInput component (optimized for Arabic input and RTL support)
 const CustomInput = ({
   value,
   onChange,
@@ -31,12 +39,29 @@ const CustomInput = ({
   ariaLabel,
 }: {
   value: string;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onChange: (value: string) => void;
   placeholder: string;
   ariaLabel: string;
 }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Handle composition events to prevent partial input issues in Arabic
+  const [isComposing, setIsComposing] = useState(false);
+
+  const handleCompositionStart = () => setIsComposing(true);
+  const handleCompositionEnd = (e: React.CompositionEvent<HTMLInputElement>) => {
+    setIsComposing(false);
+    onChange(e.currentTarget.value);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isComposing) {
+      onChange(e.target.value);
+    }
+  };
+
   return (
     <div className="relative group">
       <motion.div
@@ -48,12 +73,18 @@ const CustomInput = ({
         <Search className="w-4 h-4" />
       </motion.div>
       <input
+        ref={inputRef}
         type="text"
         value={value}
-        onChange={onChange}
+        onChange={handleInputChange}
+        onCompositionStart={handleCompositionStart}
+        onCompositionEnd={handleCompositionEnd}
         placeholder={placeholder}
         className={`w-full ${isRtl ? 'pl-10 pr-2' : 'pr-10 pl-2'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
+        dir="auto"
+        lang={isRtl ? 'ar' : 'en'}
+        inputMode="text"
       />
       <motion.div
         initial={{ opacity: value ? 1 : 0 }}
@@ -62,7 +93,10 @@ const CustomInput = ({
         className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 flex items-center justify-center transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
       >
         <button
-          onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
+          onClick={() => {
+            onChange('');
+            inputRef.current?.focus();
+          }}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
           className="flex items-center justify-center"
         >
@@ -73,7 +107,7 @@ const CustomInput = ({
   );
 };
 
-// CustomDropdown component (enhanced, removed scale)
+// CustomDropdown component (with RTL and dir="auto" support)
 const CustomDropdown = ({
   value,
   onChange,
@@ -152,6 +186,7 @@ const CustomDropdown = ({
         aria-label={ariaLabel}
         aria-expanded={isOpen}
         role="combobox"
+        dir="auto"
       >
         <span className="truncate font-medium">{selectedOption.label}</span>
         <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
@@ -166,6 +201,7 @@ const CustomDropdown = ({
             animate="visible"
             exit="exit"
             className="absolute w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-20 max-h-48 overflow-y-auto"
+            dir="auto"
           >
             {options.map((option, index) => (
               <motion.div
@@ -313,7 +349,7 @@ const reducer = (state: State, action: Action): State => {
                       assignedTo: assignment.assignedTo
                         ? { 
                             ...assignment.assignedTo, 
-                            displayName: assignment.assignedTo.nameEn || assignment.assignedTo.name 
+                            displayName: isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name 
                           }
                         : undefined,
                       status: assignment.status || i.status,
@@ -335,7 +371,7 @@ const reducer = (state: State, action: Action): State => {
                     assignedTo: assignment.assignedTo
                       ? { 
                           ...assignment.assignedTo, 
-                          displayName: assignment.assignedTo.nameEn || assignment.assignedTo.name 
+                          displayName: isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name 
                         }
                       : undefined,
                     status: assignment.status || i.status,
@@ -854,26 +890,28 @@ export const Orders: React.FC = () => {
   const handleSearchChange = useMemo(
     () =>
       debounce((value: string) => {
-        dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
-      }, 300),
+        dispatch({ type: 'SET_SEARCH_QUERY', payload: normalizeText(value) });
+      }, 200), // Reduced debounce delay for faster response
     []
   );
 
   const filteredOrders = useMemo(
-    () =>
-      state.orders
+    () => {
+      const normalizedQuery = normalizeText(state.searchQuery);
+      return state.orders
+        .filter(order => order)
         .filter(
           order =>
-            (order.orderNumber || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            (order.branch.displayName || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            (order.branch.name || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            (order.branch.nameEn || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            (order.notes || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            (order.createdBy || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-            order.items.some(item => 
-              (item.displayProductName || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-              (item.productName || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-              (item.productNameEn || '').toLowerCase().includes(state.searchQuery.toLowerCase())
+            normalizeText(order.orderNumber || '').includes(normalizedQuery) ||
+            normalizeText(order.branch.displayName || '').includes(normalizedQuery) ||
+            normalizeText(order.branch.name || '').includes(normalizedQuery) ||
+            normalizeText(order.branch.nameEn || '').includes(normalizedQuery) ||
+            normalizeText(order.notes || '').includes(normalizedQuery) ||
+            normalizeText(order.createdBy || '').includes(normalizedQuery) ||
+            order.items.some(item =>
+              normalizeText(item.displayProductName || '').includes(normalizedQuery) ||
+              normalizeText(item.productName || '').includes(normalizedQuery) ||
+              normalizeText(item.productNameEn || '').includes(normalizedQuery)
             )
         )
         .filter(
@@ -883,7 +921,8 @@ export const Orders: React.FC = () => {
             (user?.role === 'production' && user?.department
               ? order.items.some(item => item.department._id === user.department._id)
               : true)
-        ),
+        );
+    },
     [state.orders, state.searchQuery, state.filterStatus, state.filterBranch, user]
   );
 
@@ -1100,7 +1139,7 @@ export const Orders: React.FC = () => {
   };
 
   return (
-    <div className="px-2 py-4">
+    <div className="px-2 py-4" dir={isRtl ? 'rtl' : 'ltr'}>
       <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: 'easeOut' }} className="mb-6">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
@@ -1147,7 +1186,7 @@ export const Orders: React.FC = () => {
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
                 <CustomInput
                   value={state.searchQuery}
-                  onChange={(e) => handleSearchChange(e.target.value)}
+                  onChange={handleSearchChange}
                   placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
                   ariaLabel={isRtl ? 'بحث' : 'Search'}
                 />
