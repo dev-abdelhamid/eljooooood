@@ -1,10 +1,12 @@
-import React, { useReducer, useEffect, useMemo, useCallback, useRef, lazy, Suspense  , useState} from 'react';
+import React, { useReducer, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
-import { ShoppingCart, AlertCircle, Search, Table2, Grid, Download, X, ChevronDown } from 'lucide-react';
+import { Select } from '../components/UI/Select';
+import { Input } from '../components/UI/Input';
+import { ShoppingCart, AlertCircle, Search, Table2, Grid, Download } from 'lucide-react';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -22,206 +24,6 @@ import Pagination from '../components/Shared/Pagination';
 const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
 const OrderTable = lazy(() => import('../components/Shared/OrderTable'));
 const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
-
-// Function to normalize text for search (handles Arabic diacritics and variations)
-const normalizeText = (text: string) => {
-  return text
-    .normalize('NFD')
-    .replace(/[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E8\u06EA-\u06ED]/g, '') // Remove Arabic diacritics
-    .replace(/أ|إ|آ|ٱ/g, 'ا') // Normalize Alef variants
-    .replace(/ى/g, 'ي') // Normalize Ya
-    .replace(/ة/g, 'ه') // Normalize Ta Marbuta
-    .toLowerCase()
-    .trim();
-};
-
-// CustomInput component (optimized for instant display and debounced search)
-const CustomInput = ({
-  onChange,
-  placeholder,
-  ariaLabel,
-}: {
-  onChange: (value: string) => void;
-  placeholder: string;
-  ariaLabel: string;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  const [localValue, setLocalValue] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setLocalValue(value);
-    onChange(normalizeText(value));
-  };
-
-  return (
-    <div className="relative group">
-      <motion.div
-        initial={{ opacity: localValue ? 0 : 1 }}
-        animate={{ opacity: localValue ? 0 : 1 }}
-        transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} flex items-center justify-center top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-amber-500`}
-      >
-        <Search className="w-4 h-4" />
-      </motion.div>
-      <input
-        ref={inputRef}
-        type="text"
-        value={localValue}
-        onChange={handleChange}
-        placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-10 pr-2' : 'pr-10 pl-2'} py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
-        aria-label={ariaLabel}
-        dir="auto"
-        lang={isRtl ? 'ar' : 'en'}
-        inputMode="text"
-      />
-      <motion.div
-        initial={{ opacity: localValue ? 1 : 0 }}
-        animate={{ opacity: localValue ? 1 : 0 }}
-        transition={{ duration: 0.15 }}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 flex items-center justify-center transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
-      >
-        <button
-          onClick={() => {
-            setLocalValue('');
-            onChange('');
-            inputRef.current?.focus();
-          }}
-          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
-          className="flex items-center justify-center"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </motion.div>
-    </div>
-  );
-};
-
-// CustomDropdown component (enhanced, removed scale, added dir)
-const CustomDropdown = ({
-  value,
-  onChange,
-  options,
-  ariaLabel,
-  className = '',
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-  ariaLabel: string;
-  className?: string;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const selectedOption =
-    options.find((opt) => opt.value === value) || { value: '', label: isRtl ? 'اختر' : 'Select' };
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isOpen]);
-
-  const handleKeyDown = (e: React.KeyboardEvent, optionValue?: string) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      if (optionValue !== undefined) {
-        onChange(optionValue);
-        setIsOpen(false);
-        buttonRef.current?.focus();
-      } else {
-        setIsOpen(!isOpen);
-      }
-    } else if (e.key === 'Escape') {
-      setIsOpen(false);
-      buttonRef.current?.focus();
-    } else if (e.key === 'ArrowDown' && isOpen) {
-      e.preventDefault();
-      const currentIndex = options.findIndex((opt) => opt.value === value);
-      const nextIndex = (currentIndex + 1) % options.length;
-      onChange(options[nextIndex].value);
-      (dropdownRef.current?.querySelectorAll('[role="option"]')[nextIndex] as HTMLElement)?.focus();
-    } else if (e.key === 'ArrowUp' && isOpen) {
-      e.preventDefault();
-      const currentIndex = options.findIndex((opt) => opt.value === value);
-      const prevIndex = (currentIndex - 1 + options.length) % options.length;
-      onChange(options[prevIndex].value);
-      (dropdownRef.current?.querySelectorAll('[role="option"]')[prevIndex] as HTMLElement)?.focus();
-    }
-  };
-
-  const dropdownVariants = {
-    hidden: { opacity: 0, y: -10 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.2, ease: [0.25, 0.1, 0.25, 1] } },
-    exit: { opacity: 0, y: -10, transition: { duration: 0.15, ease: [0.25, 0.1, 0.25, 1] } },
-  };
-
-  return (
-    <div className={`relative ${className}`} ref={dropdownRef}>
-      <motion.button
-        type="button"
-        ref={buttonRef}
-        onClick={() => setIsOpen(!isOpen)}
-        onKeyDown={handleKeyDown}
-        className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm hover:shadow-md text-xs text-gray-800 transition-all duration-300 flex justify-between items-center ${isRtl ? 'text-right' : 'text-left'}`}
-        aria-label={ariaLabel}
-        aria-expanded={isOpen}
-        role="combobox"
-        dir={isRtl ? 'rtl' : 'ltr'}
-      >
-        <span className="truncate font-medium">{selectedOption.label}</span>
-        <motion.div animate={{ rotate: isOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
-          <ChevronDown className="w-4 h-4 text-gray-500" />
-        </motion.div>
-      </motion.button>
-      <AnimatePresence mode="wait">
-        {isOpen && (
-          <motion.div
-            variants={dropdownVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-            className="absolute w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 z-20 max-h-48 overflow-y-auto"
-            dir={isRtl ? 'rtl' : 'ltr'}
-          >
-            {options.map((option, index) => (
-              <motion.div
-                key={option.value}
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0, transition: { delay: index * 0.05, duration: 0.2 } }}
-                exit={{ opacity: 0, y: -5 }}
-                onClick={() => {
-                  onChange(option.value);
-                  setIsOpen(false);
-                  buttonRef.current?.focus();
-                }}
-                onKeyDown={(e) => handleKeyDown(e, option.value)}
-                className={`px-3 py-2 text-xs text-gray-800 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-all duration-200 focus:outline-none focus:bg-amber-50 focus:text-amber-600 ${isRtl ? 'text-right' : 'text-left'}`}
-                role="option"
-                aria-selected={option.value === value}
-                tabIndex={0}
-              >
-                {option.label}
-              </motion.div>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-};
 
 interface State {
   orders: Order[];
@@ -342,7 +144,7 @@ const reducer = (state: State, action: Action): State => {
                       assignedTo: assignment.assignedTo
                         ? { 
                             ...assignment.assignedTo, 
-                            displayName: isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name 
+                            displayName: state.isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name 
                           }
                         : undefined,
                       status: assignment.status || i.status,
@@ -364,7 +166,7 @@ const reducer = (state: State, action: Action): State => {
                     assignedTo: assignment.assignedTo
                       ? { 
                           ...assignment.assignedTo, 
-                          displayName: isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name 
+                          displayName: state.isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name 
                         }
                       : undefined,
                     status: assignment.status || i.status,
@@ -574,41 +376,40 @@ export const Orders: React.FC = () => {
         console.warn('Invalid new order data:', order);
         return;
       }
-      const unknown = isRtl ? 'غير معروف' : 'Unknown';
       const mappedOrder: Order = {
         id: order._id,
         orderNumber: order.orderNumber,
         branchId: order.branch?._id || 'unknown',
         branch: {
           _id: order.branch?._id || 'unknown',
-          name: order.branch?.name || unknown,
-          nameEn: order.branch?.nameEn || '',
-          displayName: isRtl ? (order.branch?.name || unknown) : (order.branch?.nameEn || order.branch?.name || unknown),
+          name: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+          nameEn: order.branch?.nameEn,
+          displayName: isRtl ? order.branch?.name : order.branch?.nameEn || order.branch?.name,
         },
         items: Array.isArray(order.items)
           ? order.items.map((item: any) => ({
               _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
               productId: item.product?._id || 'unknown',
-              productName: item.product?.name || unknown,
-              productNameEn: item.product?.nameEn || '',
-              displayProductName: isRtl ? (item.product?.name || unknown) : (item.product?.nameEn || item.product?.name || unknown),
+              productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+              productNameEn: item.product?.nameEn,
+              displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
               quantity: Number(item.quantity) || 1,
               price: Number(item.price) || 0,
               unit: item.product?.unit || 'unit',
-              unitEn: item.product?.unitEn || '',
-              displayUnit: isRtl ? (item.product?.unit || 'وحدة') : (item.product?.unitEn || item.product?.unit || 'unit'),
+              unitEn: item.product?.unitEn,
+              displayUnit: isRtl ? item.product?.unit : item.product?.unitEn || item.product?.unit,
               department: {
                 _id: item.product?.department?._id || 'unknown',
-                name: item.product?.department?.name || unknown,
-                nameEn: item.product?.department?.nameEn || '',
-                displayName: isRtl ? (item.product?.department?.name || unknown) : (item.product?.department?.nameEn || item.product?.department?.name || unknown),
+                name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                nameEn: item.product?.department?.nameEn,
+                displayName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name,
               },
               assignedTo: item.assignedTo ? { 
                 _id: item.assignedTo._id, 
                 username: item.assignedTo.username, 
-                name: item.assignedTo.name || item.assignedTo.username || unknown, 
-                nameEn: item.assignedTo.nameEn || '',
-                displayName: isRtl ? (item.assignedTo.name || unknown) : (item.assignedTo.nameEn || item.assignedTo.name || unknown),
+                name: item.assignedTo.name || item.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), 
+                nameEn: item.assignedTo.nameEn,
+                displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
                 department: item.assignedTo.department 
               } : undefined,
               status: item.status || 'pending',
@@ -619,17 +420,17 @@ export const Orders: React.FC = () => {
         returns: Array.isArray(order.returns)
           ? order.returns.map((ret: any) => ({
               returnId: ret._id || `temp-${Math.random().toString(36).substring(2)}`,
-              returnNumber: ret.returnNumber || unknown,
+              returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
               items: Array.isArray(ret.items)
                 ? ret.items.map((item: any) => ({
                     productId: item.product?._id || 'unknown',
-                    productName: item.product?.name || unknown,
-                    productNameEn: item.product?.nameEn || '',
+                    productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                    productNameEn: item.product?.nameEn,
                     quantity: Number(item.quantity) || 0,
                     reason: item.reason || (isRtl ? 'غير محدد' : 'Unspecified'),
                     unit: item.product?.unit || 'unit',
-                    unitEn: item.product?.unitEn || '',
-                    displayUnit: isRtl ? (item.product?.unit || 'وحدة') : (item.product?.unitEn || item.product?.unit || 'unit'),
+                    unitEn: item.product?.unitEn,
+                    displayUnit: isRtl ? item.product?.unit : item.product?.unitEn || item.product?.unit,
                   }))
                 : [],
               status: ret.status || 'pending',
@@ -638,9 +439,9 @@ export const Orders: React.FC = () => {
               createdBy: {
                 _id: ret.createdBy?._id,
                 username: ret.createdBy?.username,
-                name: ret.createdBy?.name || unknown,
-                nameEn: ret.createdBy?.nameEn || '',
-                displayName: isRtl ? (ret.createdBy?.name || unknown) : (ret.createdBy?.nameEn || ret.createdBy?.name || unknown),
+                name: ret.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                nameEn: ret.createdBy?.nameEn,
+                displayName: isRtl ? ret.createdBy?.name : ret.createdBy?.nameEn || ret.createdBy?.name,
               },
             }))
           : [],
@@ -651,8 +452,8 @@ export const Orders: React.FC = () => {
         requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : undefined,
         notes: order.notes || '',
         priority: order.priority || 'medium',
-        createdBy: order.createdBy?.name || unknown,
-        approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || unknown } : undefined,
+        createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+        approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
         approvedAt: order.approvedAt ? new Date(order.approvedAt) : undefined,
         deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : undefined,
         transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : undefined,
@@ -707,8 +508,6 @@ export const Orders: React.FC = () => {
     return () => {
       socket.off('connect');
       socket.off('connect_error');
-      socket.off('reconnect');
-      socket.off('disconnect');
       socket.off('newOrder');
       socket.off('orderStatusUpdated');
       socket.off('itemStatusUpdated');
@@ -736,7 +535,6 @@ export const Orders: React.FC = () => {
           chefsAPI.getAll(),
           branchesAPI.getAll(),
         ]);
-        const unknown = isRtl ? 'غير معروف' : 'Unknown';
         const mappedOrders: Order[] = ordersResponse
           .filter((order: any) => order && order._id && order.orderNumber)
           .map((order: any) => ({
@@ -745,34 +543,34 @@ export const Orders: React.FC = () => {
             branchId: order.branch?._id || 'unknown',
             branch: {
               _id: order.branch?._id || 'unknown',
-              name: order.branch?.name || unknown,
-              nameEn: order.branch?.nameEn || '',
-              displayName: isRtl ? (order.branch?.name || unknown) : (order.branch?.nameEn || order.branch?.name || unknown),
+              name: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+              nameEn: order.branch?.nameEn,
+              displayName: isRtl ? order.branch?.name : order.branch?.nameEn || order.branch?.name,
             },
             items: Array.isArray(order.items)
               ? order.items.map((item: any) => ({
                   _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
                   productId: item.product?._id || 'unknown',
-                  productName: item.product?.name || unknown,
-                  productNameEn: item.product?.nameEn || '',
-                  displayProductName: isRtl ? (item.product?.name || unknown) : (item.product?.nameEn || item.product?.name || unknown),
+                  productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                  productNameEn: item.product?.nameEn,
+                  displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
                   quantity: Number(item.quantity) || 1,
                   price: Number(item.price) || 0,
                   unit: item.product?.unit || 'unit',
-                  unitEn: item.product?.unitEn || '',
-                  displayUnit: isRtl ? (item.product?.unit || 'وحدة') : (item.product?.unitEn || item.product?.unit || 'unit'),
+                  unitEn: item.product?.unitEn,
+                  displayUnit: isRtl ? item.product?.unit : item.product?.unitEn || item.product?.unit,
                   department: {
                     _id: item.product?.department?._id || 'unknown',
-                    name: item.product?.department?.name || unknown,
-                    nameEn: item.product?.department?.nameEn || '',
-                    displayName: isRtl ? (item.product?.department?.name || unknown) : (item.product?.department?.nameEn || item.product?.department?.name || unknown),
+                    name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                    nameEn: item.product?.department?.nameEn,
+                    displayName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name,
                   },
                   assignedTo: item.assignedTo ? { 
                     _id: item.assignedTo._id, 
                     username: item.assignedTo.username, 
-                    name: item.assignedTo.name || item.assignedTo.username || unknown, 
-                    nameEn: item.assignedTo.nameEn || '',
-                    displayName: isRtl ? (item.assignedTo.name || unknown) : (item.assignedTo.nameEn || item.assignedTo.name || unknown),
+                    name: item.assignedTo.name || item.assignedTo.username || (isRtl ? 'غير معروف' : 'Unknown'), 
+                    nameEn: item.assignedTo.nameEn,
+                    displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
                     department: item.assignedTo.department 
                   } : undefined,
                   status: item.status || 'pending',
@@ -783,17 +581,17 @@ export const Orders: React.FC = () => {
             returns: Array.isArray(order.returns)
               ? order.returns.map((ret: any) => ({
                   returnId: ret._id || `temp-${Math.random().toString(36).substring(2)}`,
-                  returnNumber: ret.returnNumber || unknown,
+                  returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
                   items: Array.isArray(ret.items)
                     ? ret.items.map((item: any) => ({
                         productId: item.product?._id || 'unknown',
-                        productName: item.product?.name || unknown,
-                        productNameEn: item.product?.nameEn || '',
+                        productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                        productNameEn: item.product?.nameEn,
                         quantity: Number(item.quantity) || 0,
                         reason: item.reason || (isRtl ? 'غير محدد' : 'Unspecified'),
                         unit: item.product?.unit || 'unit',
-                        unitEn: item.product?.unitEn || '',
-                        displayUnit: isRtl ? (item.product?.unit || 'وحدة') : (item.product?.unitEn || item.product?.unit || 'unit'),
+                        unitEn: item.product?.unitEn,
+                        displayUnit: isRtl ? item.product?.unit : item.product?.unitEn || item.product?.unit,
                       }))
                     : [],
                   status: ret.status || 'pending',
@@ -802,9 +600,9 @@ export const Orders: React.FC = () => {
                   createdBy: {
                     _id: ret.createdBy?._id,
                     username: ret.createdBy?.username,
-                    name: ret.createdBy?.name || unknown,
-                    nameEn: ret.createdBy?.nameEn || '',
-                    displayName: isRtl ? (ret.createdBy?.name || unknown) : (ret.createdBy?.nameEn || ret.createdBy?.name || unknown),
+                    name: ret.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                    nameEn: ret.createdBy?.nameEn,
+                    displayName: isRtl ? ret.createdBy?.name : ret.createdBy?.nameEn || ret.createdBy?.name,
                   },
                 }))
               : [],
@@ -815,8 +613,8 @@ export const Orders: React.FC = () => {
             requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : undefined,
             notes: order.notes || '',
             priority: order.priority || 'medium',
-            createdBy: order.createdBy?.name || unknown,
-            approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || unknown } : undefined,
+            createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+            approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
             approvedAt: order.approvedAt ? new Date(order.approvedAt) : undefined,
             deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : undefined,
             transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : undefined,
@@ -837,14 +635,14 @@ export const Orders: React.FC = () => {
             .map((chef: any) => ({
               _id: chef._id,
               userId: chef.user._id,
-              name: chef.user?.name || chef.name || unknown,
-              nameEn: chef.user?.nameEn || chef.nameEn || '',
-              displayName: isRtl ? (chef.user?.name || chef.name || unknown) : (chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name || unknown),
+              name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
+              nameEn: chef.user?.nameEn || chef.nameEn,
+              displayName: isRtl ? (chef.user?.name || chef.name) : (chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name),
               department: chef.department ? { 
                 _id: chef.department._id, 
-                name: chef.department.name || unknown,
-                nameEn: chef.department.nameEn || '',
-                displayName: isRtl ? (chef.department.name || unknown) : (chef.department.nameEn || chef.department.name || unknown) 
+                name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                nameEn: chef.department.nameEn,
+                displayName: isRtl ? chef.department.name : chef.department.nameEn || chef.department.name 
               } : null,
               status: chef.status || 'active',
             })),
@@ -855,11 +653,11 @@ export const Orders: React.FC = () => {
             .filter((branch: any) => branch && branch._id)
             .map((branch: any) => ({
               _id: branch._id,
-              name: branch.name || unknown,
-              nameEn: branch.nameEn || '',
-              displayName: isRtl ? (branch.name || unknown) : (branch.nameEn || branch.name || unknown),
+              name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
+              nameEn: branch.nameEn,
+              displayName: isRtl ? branch.name : branch.nameEn || branch.name,
             }))
-            .sort((a: Branch, b: Branch) => (a.displayName || '').localeCompare(b.displayName || '', language)),
+            .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language)),
         });
         dispatch({ type: 'SET_ERROR', payload: '' });
       } catch (err: any) {
@@ -880,28 +678,24 @@ export const Orders: React.FC = () => {
     [user, state.sortBy, state.sortOrder, isRtl, language]
   );
 
-  const handleSearchChange = (value: string) => {
-    dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
-  };
+  const handleSearchChange = useMemo(
+    () =>
+      debounce((value: string) => {
+        dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
+      }, 300),
+    []
+  );
 
   const filteredOrders = useMemo(
-    () => {
-      const normalizedQuery = normalizeText(state.searchQuery);
-      return state.orders
-        .filter(order => order)
+    () =>
+      state.orders
         .filter(
           order =>
-            normalizeText(order.orderNumber || '').includes(normalizedQuery) ||
-            normalizeText(order.branch.displayName || '').includes(normalizedQuery) ||
-            normalizeText(order.branch.name || '').includes(normalizedQuery) ||
-            normalizeText(order.branch.nameEn || '').includes(normalizedQuery) ||
-            normalizeText(order.notes || '').includes(normalizedQuery) ||
-            normalizeText(order.createdBy || '').includes(normalizedQuery) ||
-            order.items.some(item =>
-              normalizeText(item.displayProductName || '').includes(normalizedQuery) ||
-              normalizeText(item.productName || '').includes(normalizedQuery) ||
-              normalizeText(item.productNameEn || '').includes(normalizedQuery)
-            )
+            order.orderNumber.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            order.branch.displayName.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            (order.notes || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            order.createdBy.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+            order.items.some(item => item.displayProductName.toLowerCase().includes(state.searchQuery.toLowerCase()))
         )
         .filter(
           order =>
@@ -910,8 +704,7 @@ export const Orders: React.FC = () => {
             (user?.role === 'production' && user?.department
               ? order.items.some(item => item.department._id === user.department._id)
               : true)
-        );
-    },
+        ),
     [state.orders, state.searchQuery, state.filterStatus, state.filterBranch, user]
   );
 
@@ -1089,46 +882,8 @@ export const Orders: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
-  const getStatusLabel = (status: string) => {
-    const labelsAr = {
-      '': 'كل الحالات',
-      pending: 'قيد الانتظار',
-      approved: 'تم الموافقة',
-      in_production: 'في الإنتاج',
-      completed: 'مكتمل',
-      in_transit: 'في النقل',
-      delivered: 'تم التسليم',
-      cancelled: 'ملغى',
-    };
-    const labelsEn = {
-      '': 'All Statuses',
-      pending: 'Pending',
-      approved: 'Approved',
-      in_production: 'In Production',
-      completed: 'Completed',
-      in_transit: 'In Transit',
-      delivered: 'Delivered',
-      cancelled: 'Cancelled',
-    };
-    return isRtl ? (labelsAr[status] || status) : (labelsEn[status] || status);
-  };
-
-  const getSortLabel = (value: string) => {
-    const labelsAr = {
-      date: 'التاريخ',
-      totalAmount: 'إجمالي المبلغ',
-      priority: 'الأولوية',
-    };
-    const labelsEn = {
-      date: 'Date',
-      totalAmount: 'Total Amount',
-      priority: 'Priority',
-    };
-    return isRtl ? (labelsAr[value] || value) : (labelsEn[value] || value);
-  };
-
   return (
-    <div className="px-2 py-4" dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="px-2 py-4">
       <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: 'easeOut' }} className="mb-6">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
@@ -1169,47 +924,51 @@ export const Orders: React.FC = () => {
               </Button>
             </div>
           </div>
-          <Card className="p-3 mt-6 bg-white shadow-md rounded-xl border border-gray-200">
+          <Card className="p-3 mt-6 bg-white shadow-md  border border-gray-200">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
-                <CustomInput
-                  onChange={handleSearchChange}
-                  placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
-                  ariaLabel={isRtl ? 'بحث' : 'Search'}
-                />
+                <div className="relative ">
+                  <Search className={`w-4 h-4 text-gray-500 absolute top-2 ${isRtl ? 'left-2' : 'right-2'}`} />
+                  <Input
+                    value={state.searchQuery}
+                    onChange={(e) => handleSearchChange(e?.target?.value || '')}
+                    placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
+                    className={`w-full ${isRtl ? 'pl-8 ' : 'pr-8'} rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200`}
+                  />
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
-                <CustomDropdown
+                <Select
                   options={statusOptions.map(opt => ({
                     value: opt.value,
-                    label: getStatusLabel(opt.value),
+                    label: isRtl ? { '': 'كل الحالات', pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[opt.value] : { '': 'All Statuses', pending: 'Pending', approved: 'Approved', in_production: 'In Production', completed: 'Completed', in_transit: 'In Transit', delivered: 'Delivered', cancelled: 'Cancelled' }[opt.value],
                   }))}
                   value={state.filterStatus}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
-                  ariaLabel={isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}
+                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
                 />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الفرع' : 'Filter by Branch'}</label>
-                <CustomDropdown
+                <Select
                   options={[{ value: '', label: isRtl ? 'جميع الفروع' : 'All Branches' }, ...state.branches.map(b => ({ value: b._id, label: b.displayName }))]}
                   value={state.filterBranch}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_BRANCH', payload: value })}
-                  ariaLabel={isRtl ? 'تصفية حسب الفرع' : 'Filter by Branch'}
+                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
                 />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
-                <CustomDropdown
+                <Select
                   options={sortOptions.map(opt => ({
                     value: opt.value,
-                    label: getSortLabel(opt.value),
+                    label: isRtl ? { date: 'التاريخ', totalAmount: 'إجمالي المبلغ', priority: 'الأولوية' }[opt.value] : { date: 'Date', totalAmount: 'Total Amount', priority: 'Priority' }[opt.value],
                   }))}
                   value={state.sortBy}
                   onChange={(value) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
-                  ariaLabel={isRtl ? 'ترتيب حسب' : 'Sort By'}
+                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
                 />
               </div>
             </div>
@@ -1233,7 +992,7 @@ export const Orders: React.FC = () => {
               {state.loading ? (
                 <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }} className="space-y-1">
                   {state.viewMode === 'card' ? (
-                    <div className="grid grid-cols-1 gap-1">
+                    <div className="grid grid-cols-1  gap-1">
                       {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)}
                     </div>
                   ) : (

@@ -11,14 +11,12 @@ import { Chart as ChartJS, ArcElement, BarElement, LineElement, CategoryScale, L
 import { debounce } from 'lodash';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 
-// Lazy-loaded components
 const Bar = lazy(() => import('react-chartjs-2').then(module => ({ default: module.Bar })));
 const Line = lazy(() => import('react-chartjs-2').then(module => ({ default: module.Line })));
 const Pie = lazy(() => import('react-chartjs-2').then(module => ({ default: module.Pie })));
 
 ChartJS.register(ArcElement, BarElement, LineElement, CategoryScale, LinearScale, PointElement, Tooltip, Legend);
 
-// Interfaces
 interface Branch {
   id: string;
   name: string;
@@ -51,6 +49,8 @@ interface Branch {
 interface Product {
   id: string;
   name: string;
+  nameEn?: string;
+  displayName: string;
 }
 
 interface Order {
@@ -129,7 +129,6 @@ interface Action {
   payload?: any;
 }
 
-// Initial state
 const initialState: State = {
   branch: null,
   orders: [],
@@ -165,7 +164,6 @@ const initialState: State = {
   showConfirmPassword: false,
 };
 
-// Reducer function
 const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case 'SET_BRANCH':
@@ -207,7 +205,6 @@ const reducer = (state: State, action: Action): State => {
   }
 };
 
-// Translations
 const translations = {
   ar: {
     branchDetails: 'تفاصيل الفرع',
@@ -267,6 +264,7 @@ const translations = {
     avgDailyOrders: 'متوسط الطلبات اليومي',
     topProducts: 'المنتجات الأكثر طلبًا',
     ordersVsReturns: 'حركة الطلبات والمرتجعات',
+    ordersByStatus: 'الطلبات حسب الحالة',
     status_mukammal: 'مكتمل',
     status_qaid_al_tanfeez: 'قيد التنفيذ',
     status_malgha: 'ملغى',
@@ -332,6 +330,7 @@ const translations = {
     avgDailyOrders: 'Average Daily Orders',
     topProducts: 'Top Ordered Products',
     ordersVsReturns: 'Orders vs Returns Activity',
+    ordersByStatus: 'Orders by Status',
     status_mukammal: 'Completed',
     status_qaid_al_tanfeez: 'In Progress',
     status_malgha: 'Cancelled',
@@ -341,7 +340,6 @@ const translations = {
   },
 };
 
-// Main component
 const BranchProfile: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -351,15 +349,13 @@ const BranchProfile: React.FC = () => {
   const t = translations[isRtl ? 'ar' : 'en'];
   const [state, dispatch] = useReducer(reducer, initialState);
 
-  // Calculate date range for recent data (last 7 days)
   const getRecentDateRange = useCallback(() => {
     const endDate = new Date();
     const startDate = new Date();
-    startDate.setDate(endDate.getDate() - 7);
+    startDate.setDate(endDate.getDate() - 30);
     return { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
   }, []);
 
-  // Fetch branch data
   const fetchBranch = useCallback(
     async (retryCount = 0) => {
       if (!id || !user || user.role !== 'admin') {
@@ -435,7 +431,6 @@ const BranchProfile: React.FC = () => {
     [id, user, t, isRtl]
   );
 
-  // Fetch recent orders
   const fetchOrders = useCallback(
     async (retryCount = 0) => {
       if (!id) return;
@@ -446,7 +441,8 @@ const BranchProfile: React.FC = () => {
           branch: id,
           startDate,
           endDate,
-          limit: 10, // Limit to 10 recent orders
+          limit: 50,
+          sort: '-createdAt',
         });
         const mappedOrders: Order[] = response.map((order: any) => ({
           id: order._id,
@@ -475,7 +471,6 @@ const BranchProfile: React.FC = () => {
     [id, t, isRtl, getRecentDateRange]
   );
 
-  // Fetch recent returns
   const fetchReturns = useCallback(
     async (retryCount = 0) => {
       if (!id) return;
@@ -486,7 +481,8 @@ const BranchProfile: React.FC = () => {
           branchId: id,
           startDate,
           endDate,
-          limit: 10, // Limit to 10 recent returns
+          limit: 50,
+          sort: '-createdAt',
         });
         const mappedReturns: Return[] = response.map((returnItem: any) => ({
           id: returnItem._id,
@@ -514,7 +510,6 @@ const BranchProfile: React.FC = () => {
     [id, t, isRtl, getRecentDateRange]
   );
 
-  // Fetch recent sales
   const fetchSales = useCallback(
     async (retryCount = 0) => {
       if (!id) return;
@@ -525,7 +520,8 @@ const BranchProfile: React.FC = () => {
           branchId: id,
           startDate,
           endDate,
-          limit: 10, // Limit to 10 recent sales
+          limit: 50,
+          sort: '-createdAt',
         });
         const mappedSales: Sale[] = response.map((sale: any) => ({
           id: sale._id,
@@ -547,15 +543,16 @@ const BranchProfile: React.FC = () => {
     [id, t, isRtl, getRecentDateRange]
   );
 
-  // Fetch products
   const fetchProducts = useCallback(
     async (retryCount = 0) => {
       dispatch({ type: 'SET_PRODUCTS_LOADING', payload: true });
       try {
-        const response = await productsAPI.getAll();
+        const response = await productsAPI.getAll({ limit: 0 });
         const mappedProducts: Product[] = response.data.map((product: any) => ({
           id: product._id,
           name: product.name,
+          nameEn: product.nameEn,
+          displayName: isRtl ? product.name : (product.nameEn || product.name),
         }));
         dispatch({ type: 'SET_PRODUCTS', payload: mappedProducts });
       } catch (err: any) {
@@ -571,7 +568,6 @@ const BranchProfile: React.FC = () => {
     [t, isRtl]
   );
 
-  // Validate form
   const validateForm = useCallback(
     async () => {
       const errors: Record<string, string> = {};
@@ -597,7 +593,6 @@ const BranchProfile: React.FC = () => {
     [state.formData, state.branch, t]
   );
 
-  // Handle submit
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -652,7 +647,6 @@ const BranchProfile: React.FC = () => {
     [id, state.formData, t, isRtl, validateForm]
   );
 
-  // Handle reset password
   const handleResetPassword = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -687,7 +681,6 @@ const BranchProfile: React.FC = () => {
     [id, state.passwordData, t, isRtl]
   );
 
-  // Handle delete
   const handleDelete = useCallback(
     async () => {
       try {
@@ -706,7 +699,6 @@ const BranchProfile: React.FC = () => {
     [id, t, isRtl, navigate]
   );
 
-  // Stats and chart data
   const statsData = useMemo(() => {
     const totalOrders = state.orders.length;
     const totalReturns = state.returns.length;
@@ -714,7 +706,6 @@ const BranchProfile: React.FC = () => {
     const days = [...new Set(state.orders.map(item => new Date(item.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')))].length;
     const avgDailyOrders = days > 0 ? (totalOrders / days).toFixed(2) : '0';
 
-    // Top products by order quantity
     const productQuantities = state.orders.reduce((acc, order) => {
       order.items.forEach(item => {
         acc[item.product] = (acc[item.product] || 0) + item.quantity;
@@ -726,7 +717,7 @@ const BranchProfile: React.FC = () => {
       .map(([productId, quantity]) => ({
         productId,
         quantity,
-        name: state.products.find(p => p.id === productId)?.name || `منتج ${productId}`,
+        name: state.products.find(p => p.id === productId)?.displayName || `منتج ${productId}`,
       }))
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 5);
@@ -736,13 +727,32 @@ const BranchProfile: React.FC = () => {
       datasets: [{
         label: t.topProducts,
         data: topProducts.map(p => p.quantity),
-        backgroundColor: 'rgba(245, 158, 11, 0.6)',
-        borderColor: 'rgba(245, 158, 11, 1)',
+        backgroundColor: [
+          'rgba(245, 158, 11, 0.8)',
+          'rgba(59, 130, 246, 0.8)',
+          'rgba(16, 185, 129, 0.8)',
+          'rgba(239, 68, 68, 0.8)',
+          'rgba(147, 51, 234, 0.8)',
+        ],
+        borderColor: [
+          'rgba(245, 158, 11, 1)',
+          'rgba(59, 130, 246, 1)',
+          'rgba(16, 185, 129, 1)',
+          'rgba(239, 68, 68, 1)',
+          'rgba(147, 51, 234, 1)',
+        ],
         borderWidth: 1,
+        hoverBackgroundColor: [
+          'rgba(245, 158, 11, 1)',
+          'rgba(59, 130, 246, 1)',
+          'rgba(16, 185, 129, 1)',
+          'rgba(239, 68, 68, 1)',
+          'rgba(147, 51, 234, 1)',
+        ],
+        hoverBorderWidth: 2,
       }],
     };
 
-    // Orders vs Returns activity
     const activityDates = [...new Set([
       ...state.orders.map(o => new Date(o.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')),
       ...state.returns.map(r => new Date(r.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')),
@@ -767,6 +777,7 @@ const BranchProfile: React.FC = () => {
           borderColor: 'rgba(245, 158, 11, 1)',
           backgroundColor: 'rgba(245, 158, 11, 0.2)',
           fill: true,
+          tension: 0.4,
         },
         {
           label: t.returnsTab,
@@ -774,6 +785,7 @@ const BranchProfile: React.FC = () => {
           borderColor: 'rgba(239, 68, 68, 1)',
           backgroundColor: 'rgba(239, 68, 68, 0.2)',
           fill: true,
+          tension: 0.4,
         },
       ],
     };
@@ -787,16 +799,26 @@ const BranchProfile: React.FC = () => {
       labels: Object.keys(statusCounts).map(status => t[`status_${status}`] || status),
       datasets: [{
         data: Object.values(statusCounts),
-        backgroundColor: ['rgba(245, 158, 11, 0.6)', 'rgba(59, 130, 246, 0.6)', 'rgba(239, 68, 68, 0.6)', 'rgba(16, 185, 129, 0.6)'],
-        borderColor: ['rgba(245, 158, 11, 1)', 'rgba(59, 130, 246, 1)', 'rgba(239, 68, 68, 1)', 'rgba(16, 185, 129, 1)'],
+        backgroundColor: [
+          'rgba(245, 158, 11, 0.8)',
+          'rgba(59, 130, 246, 0.8)',
+          'rgba(239, 68, 68, 0.8)',
+          'rgba(16, 185, 129, 0.8)',
+        ],
+        borderColor: [
+          'rgba(245, 158, 11, 1)',
+          'rgba(59, 130, 246, 1)',
+          'rgba(239, 68, 68, 1)',
+          'rgba(16, 185, 129, 1)',
+        ],
         borderWidth: 1,
+        hoverOffset: 20,
       }],
     };
 
     return { totalOrders, totalReturns, totalSales, avgDailyOrders, topProductsData, ordersVsReturnsData, pieData };
   }, [state.orders, state.returns, state.sales, state.products, t, isRtl]);
 
-  // Initial data fetch with parallel loading
   useEffect(() => {
     const loadData = async () => {
       dispatch({ type: 'SET_LOADING', payload: true });
@@ -822,7 +844,6 @@ const BranchProfile: React.FC = () => {
     loadData();
   }, [fetchBranch, fetchOrders, fetchReturns, fetchSales, fetchProducts, t, isRtl]);
 
-  // Render
   return (
     <div className="mx-auto px-4 py-6 min-h-screen bg-white" dir={isRtl ? 'rtl' : 'ltr'}>
       <Suspense fallback={<LoadingSpinner size="lg" />}>
@@ -1041,7 +1062,12 @@ const BranchProfile: React.FC = () => {
                         </div>
                       </div>
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                        <motion.div
+                          className="p-4 bg-white rounded-lg shadow-sm border border-gray-100"
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.3 }}
+                        >
                           <h3 className="text-sm font-medium text-gray-900 mb-3">{t.topProducts}</h3>
                           <div className="h-64">
                             <Suspense fallback={<LoadingSpinner size="sm" />}>
@@ -1050,14 +1076,53 @@ const BranchProfile: React.FC = () => {
                                 options={{
                                   responsive: true,
                                   maintainAspectRatio: false,
-                                  plugins: { legend: { display: false } },
-                                  scales: { y: { beginAtZero: true } },
+                                  plugins: {
+                                    legend: { display: false },
+                                    tooltip: {
+                                      backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                      titleFont: { size: 12 },
+                                      bodyFont: { size: 12 },
+                                      padding: 10,
+                                    },
+                                  },
+                                  scales: {
+                                    y: {
+                                      beginAtZero: true,
+                                      title: {
+                                        display: true,
+                                        text: isRtl ? 'الكمية' : 'Quantity',
+                                        font: { size: 12 },
+                                      },
+                                      ticks: { font: { size: 10 } },
+                                    },
+                                    x: {
+                                      title: {
+                                        display: true,
+                                        text: isRtl ? 'المنتجات' : 'Products',
+                                        font: { size: 12 },
+                                      },
+                                      ticks: {
+                                        font: { size: 10 },
+                                        maxRotation: 45,
+                                        minRotation: 45,
+                                      },
+                                    },
+                                  },
+                                  animation: {
+                                    duration: 1000,
+                                    easing: 'easeOutQuart',
+                                  },
                                 }}
                               />
                             </Suspense>
                           </div>
-                        </div>
-                        <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                        </motion.div>
+                        <motion.div
+                          className="p-4 bg-white rounded-lg shadow-sm border border-gray-100"
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.3, delay: 0.1 }}
+                        >
                           <h3 className="text-sm font-medium text-gray-900 mb-3">{t.ordersVsReturns}</h3>
                           <div className="h-64">
                             <Suspense fallback={<LoadingSpinner size="sm" />}>
@@ -1066,14 +1131,49 @@ const BranchProfile: React.FC = () => {
                                 options={{
                                   responsive: true,
                                   maintainAspectRatio: false,
-                                  plugins: { legend: { position: 'bottom', labels: { font: { size: 12 } } } },
-                                  scales: { y: { beginAtZero: true } },
+                                  plugins: {
+                                    legend: { position: 'bottom', labels: { font: { size: 12 } } },
+                                    tooltip: {
+                                      backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                      titleFont: { size: 12 },
+                                      bodyFont: { size: 12 },
+                                      padding: 10,
+                                    },
+                                  },
+                                  scales: {
+                                    y: {
+                                      beginAtZero: true,
+                                      title: {
+                                        display: true,
+                                        text: isRtl ? 'العدد' : 'Count',
+                                        font: { size: 12 },
+                                      },
+                                      ticks: { font: { size: 10 } },
+                                    },
+                                    x: {
+                                      title: {
+                                        display: true,
+                                        text: isRtl ? 'التاريخ' : 'Date',
+                                        font: { size: 12 },
+                                      },
+                                      ticks: { font: { size: 10 } },
+                                    },
+                                  },
+                                  animation: {
+                                    duration: 1000,
+                                    easing: 'easeOutQuart',
+                                  },
                                 }}
                               />
                             </Suspense>
                           </div>
-                        </div>
-                        <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                        </motion.div>
+                        <motion.div
+                          className="p-4 bg-white rounded-lg shadow-sm border border-gray-100"
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.3, delay: 0.2 }}
+                        >
                           <h3 className="text-sm font-medium text-gray-900 mb-3">{t.ordersByStatus}</h3>
                           <div className="h-64">
                             <Suspense fallback={<LoadingSpinner size="sm" />}>
@@ -1082,12 +1182,24 @@ const BranchProfile: React.FC = () => {
                                 options={{
                                   responsive: true,
                                   maintainAspectRatio: false,
-                                  plugins: { legend: { position: 'bottom', labels: { font: { size: 12 } } } },
+                                  plugins: {
+                                    legend: { position: 'bottom', labels: { font: { size: 12 } } },
+                                    tooltip: {
+                                      backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                      titleFont: { size: 12 },
+                                      bodyFont: { size: 12 },
+                                      padding: 10,
+                                    },
+                                  },
+                                  animation: {
+                                    duration: 1000,
+                                    easing: 'easeOutQuart',
+                                  },
                                 }}
                               />
                             </Suspense>
                           </div>
-                        </div>
+                        </motion.div>
                       </div>
                     </div>
                   )}
@@ -1421,7 +1533,7 @@ const BranchProfile: React.FC = () => {
                       <span className="text-red-600 text-xs">{state.error}</span>
                     </div>
                   )}
-                  <div className="flex justify-end gap-2">
+                  <div className="flex justify-end gap-2 mt-4">
                     <button
                       type="button"
                       onClick={() => dispatch({ type: 'SET_MODAL', payload: { modal: 'isResetPasswordModalOpen', isOpen: false } })}
@@ -1442,55 +1554,11 @@ const BranchProfile: React.FC = () => {
               </motion.div>
             </motion.div>
           )}
-
-          {state.isDeleteModalOpen && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.15, ease: 'easeInOut' }}
-              className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50"
-              onClick={() => dispatch({ type: 'SET_MODAL', payload: { modal: 'isDeleteModalOpen', isOpen: false } })}
-            >
-              <motion.div
-                initial={{ opacity: 0, y: 50 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 50 }}
-                transition={{ duration: 0.15, ease: 'easeInOut' }}
-                className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-5"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.confirmDelete}</h3>
-                <p className="text-xs text-gray-600 mb-4">{t.deleteWarning}</p>
-                {state.error && (
-                  <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 mb-4">
-                    <AlertCircle className="w-4 h-4 text-red-600" />
-                    <span className="text-red-600 text-xs">{state.error}</span>
-                  </div>
-                )}
-                <div className="flex justify-end gap-2">
-                  <button
-                    onClick={() => dispatch({ type: 'SET_MODAL', payload: { modal: 'isDeleteModalOpen', isOpen: false } })}
-                    className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
-                    aria-label={t.cancel}
-                  >
-                    {t.cancel}
-                  </button>
-                  <button
-                    onClick={handleDelete}
-                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
-                    aria-label={t.deleteBranch}
-                  >
-                    {t.deleteBranch}
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
         </AnimatePresence>
       </Suspense>
     </div>
   );
-};
+}
+
 
 export default BranchProfile;
