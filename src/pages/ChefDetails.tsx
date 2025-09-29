@@ -1,19 +1,23 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { chefsAPI, departmentAPI } from '../services/api';
-import { ChefHat, AlertCircle, Edit2, Trash2, Key, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { ChefHat, AlertCircle, Edit2, Trash2, Key, ArrowLeft, Eye, EyeOff, TrendingUp, Box, Calendar } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CustomDropdown } from '../components/UI/CustomDropdown';
+import { Bar, Pie } from 'react-chartjs-2';
+import { Chart as ChartJS, ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
 
-// افترض إن في interface للـ Production (مثل منتجات الشيف)
+ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
+
 interface ProductionItem {
   id: string;
   name: string;
   date: string;
   quantity: number;
+  departmentId?: string;
 }
 
 interface Department {
@@ -34,7 +38,6 @@ interface Chef {
     username: string;
     email?: string;
     phone?: string;
-    isActive: boolean;
     createdAt: string;
     updatedAt: string;
   } | null;
@@ -48,16 +51,13 @@ const translations = {
     chefDetails: 'تفاصيل الشيف',
     infoTab: 'معلومات الشيف',
     productionTab: 'إنتاج الشيف',
+    statsTab: 'إحصائيات الشيف',
     back: 'رجوع',
-    name: 'اسم الشيف (عربي)',
-    nameEn: 'اسم الشيف (إنجليزي)',
+    name: 'اسم الشيف',
     username: 'اسم المستخدم',
     email: 'الإيميل',
     phone: 'الهاتف',
     department: 'القسم',
-    status: 'الحالة',
-    active: 'نشط',
-    inactive: 'غير نشط',
     createdAt: 'تاريخ الإنشاء',
     updatedAt: 'تاريخ التحديث',
     edit: 'تعديل',
@@ -101,21 +101,23 @@ const translations = {
     productionName: 'اسم المنتج',
     productionDate: 'تاريخ الإنتاج',
     productionQuantity: 'الكمية',
+    totalProducts: 'إجمالي المنتجات',
+    totalQuantity: 'إجمالي الكمية',
+    avgDailyProduction: 'متوسط الإنتاج اليومي',
+    productionByDepartment: 'الإنتاج حسب القسم',
+    productionOverTime: 'الإنتاج عبر الزمن',
   },
   en: {
     chefDetails: 'Chef Details',
     infoTab: 'Chef Information',
     productionTab: 'Chef Production',
+    statsTab: 'Chef Statistics',
     back: 'Back',
-    name: 'Chef Name (Arabic)',
-    nameEn: 'Chef Name (English)',
+    name: 'Chef Name',
     username: 'Username',
     email: 'Email',
     phone: 'Phone',
     department: 'Department',
-    status: 'Status',
-    active: 'Active',
-    inactive: 'Inactive',
     createdAt: 'Created At',
     updatedAt: 'Updated At',
     edit: 'Edit',
@@ -159,7 +161,59 @@ const translations = {
     productionName: 'Product Name',
     productionDate: 'Production Date',
     productionQuantity: 'Quantity',
+    totalProducts: 'Total Products',
+    totalQuantity: 'Total Quantity',
+    avgDailyProduction: 'Average Daily Production',
+    productionByDepartment: 'Production by Department',
+    productionOverTime: 'Production Over Time',
   },
+};
+
+const FormInput = ({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+  type = 'text',
+  showPasswordToggle = false,
+  showPassword = false,
+  togglePasswordVisibility,
+  error,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  ariaLabel: string;
+  type?: string;
+  showPasswordToggle?: boolean;
+  showPassword?: boolean;
+  togglePasswordVisibility?: () => void;
+  error?: string;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="relative">
+      <input
+        type={showPassword ? 'text' : type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className={`w-full px-3 py-2.5 border ${error ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm hover:shadow-md text-xs placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={ariaLabel}
+      />
+      {showPasswordToggle && (
+        <button
+          type="button"
+          onClick={togglePasswordVisibility}
+          className={`absolute top-1/2 transform -translate-y-1/2 ${isRtl ? 'left-3' : 'right-3'} text-gray-400 hover:text-amber-500 transition-colors`}
+          aria-label={showPassword ? (isRtl ? 'إخفاء كلمة المرور' : 'Hide password') : (isRtl ? 'إظهار كلمة المرور' : 'Show password')}
+        >
+          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+        </button>
+      )}
+    </div>
+  );
 };
 
 export function ChefDetails() {
@@ -171,11 +225,11 @@ export function ChefDetails() {
   const t = translations[isRtl ? 'ar' : 'en'];
   const [chef, setChef] = useState<Chef | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [production, setProduction] = useState<ProductionItem[]>([]); // state للـ production
+  const [production, setProduction] = useState<ProductionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [productionLoading, setProductionLoading] = useState(true);
   const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState('info'); // state للـ tabs
+  const [activeTab, setActiveTab] = useState('info');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -186,13 +240,11 @@ export function ChefDetails() {
     email: '',
     phone: '',
     department: '',
-    isActive: true,
   });
   const [resetPasswordData, setResetPasswordData] = useState({ password: '', confirmPassword: '' });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [showEditPassword, setShowEditPassword] = useState(false); // لو كان في password في edit (مش موجود)
-  const [showResetPassword, setShowResetPassword] = useState(false); // للـ reset modal
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false); // للـ confirm in reset
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const fetchChefData = useCallback(async () => {
     if (!id) {
@@ -213,7 +265,6 @@ export function ChefDetails() {
         chefsAPI.getById(id),
         departmentAPI.getAll({ isRtl }),
       ]);
-
       const chefData = chefResponse;
       if (!chefData || !chefData.user || !chefData.department) {
         setError(t.notFound);
@@ -221,7 +272,6 @@ export function ChefDetails() {
         setLoading(false);
         return;
       }
-
       setChef({
         id: chefData._id,
         user: {
@@ -231,7 +281,6 @@ export function ChefDetails() {
           username: chefData.user.username,
           email: chefData.user.email,
           phone: chefData.user.phone,
-          isActive: chefData.user.isActive,
           createdAt: chefData.user.createdAt,
           updatedAt: chefData.user.updatedAt,
         },
@@ -241,24 +290,21 @@ export function ChefDetails() {
           nameEn: chefData.department.nameEn,
           code: chefData.department.code,
           description: chefData.department.description,
-          displayName: isRtl ? chefData.department.name : chefData.department.nameEn || chefData.department.name,
+          displayName: isRtl ? chefData.department.name : (chefData.department.nameEn || chefData.department.name),
         },
         createdAt: chefData.createdAt,
         updatedAt: chefData.updatedAt,
       });
-
-      const departmentsData = Array.isArray(departmentsResponse.data) ? departmentsResponse.data : [];
       setDepartments(
-        departmentsData.map((dept: any) => ({
+        Array.isArray(departmentsResponse.data) ? departmentsResponse.data.map((dept: any) => ({
           id: dept._id,
           name: dept.name,
           nameEn: dept.nameEn,
           code: dept.code,
           description: dept.description,
-          displayName: isRtl ? dept.name : dept.nameEn || dept.name,
-        }))
+          displayName: isRtl ? dept.name : (dept.nameEn || dept.name),
+        })) : []
       );
-
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Fetch error:`, err);
@@ -273,20 +319,19 @@ export function ChefDetails() {
     if (!id) return;
     setProductionLoading(true);
     try {
-      // افترض API لجلب الـ production (عدلها لو في endpoint حقيقي)
-      // const response = await chefsAPI.getProduction(id);
-      // setProduction(response.data);
-      // هنا placeholder بيانات وهمية
+      // بيانات وهمية للإنتاج (استبدلها بالـ API الحقيقي)
       setProduction([
-        { id: '1', name: 'منتج 1', date: '2023-01-01', quantity: 100 },
-        { id: '2', name: 'منتج 2', date: '2023-02-01', quantity: 150 },
+        { id: '1', name: 'منتج 1', date: '2025-01-01', quantity: 100, departmentId: 'dept1' },
+        { id: '2', name: 'منتج 2', date: '2025-02-01', quantity: 150, departmentId: 'dept1' },
+        { id: '3', name: 'منتج 3', date: '2025-03-01', quantity: 200, departmentId: 'dept2' },
+        { id: '4', name: 'منتج 4', date: '2025-04-01', quantity: 80, departmentId: 'dept2' },
       ]);
     } catch (err: any) {
-      toast.error('خطأ في جلب الإنتاج', { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(t.fetchError, { position: isRtl ? 'top-right' : 'top-left' });
     } finally {
       setProductionLoading(false);
     }
-  }, [id, isRtl]);
+  }, [id, t, isRtl]);
 
   useEffect(() => {
     fetchChefData();
@@ -316,7 +361,6 @@ export function ChefDetails() {
       email: chef?.user?.email || '',
       phone: chef?.user?.phone || '',
       department: chef?.department?.id || departments[0].id,
-      isActive: chef?.user?.isActive ?? true,
     });
     setIsEditModalOpen(true);
     setFormErrors({});
@@ -349,7 +393,6 @@ export function ChefDetails() {
           email: formData.email.trim() || undefined,
           phone: formData.phone.trim() || undefined,
           role: 'chef',
-          isActive: formData.isActive,
         },
         department: formData.department,
       };
@@ -364,7 +407,6 @@ export function ChefDetails() {
           username: updatedChef.user.username,
           email: updatedChef.user.email,
           phone: updatedChef.user.phone,
-          isActive: updatedChef.user.isActive,
           updatedAt: updatedChef.user.updatedAt,
         },
         department: {
@@ -373,14 +415,14 @@ export function ChefDetails() {
           nameEn: updatedChef.department.nameEn,
           code: updatedChef.department.code,
           description: updatedChef.department.description,
-          displayName: isRtl ? updatedChef.department.name : updatedChef.department.nameEn || updatedChef.department.name,
+          displayName: isRtl ? updatedChef.department.name : (updatedChef.department.nameEn || updatedChef.department.name),
         },
         updatedAt: updatedChef.updatedAt,
       });
       toast.success(t.updated, { position: isRtl ? 'top-right' : 'top-left' });
       setIsEditModalOpen(false);
     } catch (err: any) {
-      const errorMessage = err.message || t.updateError;
+      const errorMessage = err.message.includes('Username') ? t.usernameExists : err.message.includes('email') ? t.emailExists : t.updateError;
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
     }
@@ -428,11 +470,50 @@ export function ChefDetails() {
     }
   };
 
+  const statsData = useMemo(() => {
+    const totalProducts = production.length;
+    const totalQuantity = production.reduce((sum, item) => sum + item.quantity, 0);
+    const days = [...new Set(production.map(item => item.date))].length;
+    const avgDailyProduction = days > 0 ? (totalQuantity / days).toFixed(2) : '0';
+
+    const departmentCounts = production.reduce((acc, item) => {
+      const deptId = item.departmentId || 'unknown';
+      acc[deptId] = (acc[deptId] || 0) + item.quantity;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const barData = {
+      labels: production.map(item => item.name),
+      datasets: [{
+        label: t.productionQuantity,
+        data: production.map(item => item.quantity),
+        backgroundColor: 'rgba(245, 158, 11, 0.6)',
+        borderColor: 'rgba(245, 158, 11, 1)',
+        borderWidth: 1,
+      }],
+    };
+
+    const pieData = {
+      labels: Object.keys(departmentCounts).map(deptId => {
+        const dept = departments.find(d => d.id === deptId);
+        return dept ? dept.displayName : t.noDepartments;
+      }),
+      datasets: [{
+        data: Object.values(departmentCounts),
+        backgroundColor: ['rgba(245, 158, 11, 0.6)', 'rgba(59, 130, 246, 0.6)', 'rgba(239, 68, 68, 0.6)', 'rgba(34, 197, 94, 0.6)'],
+        borderColor: ['rgba(245, 158, 11, 1)', 'rgba(59, 130, 246, 1)', 'rgba(239, 68, 68, 1)', 'rgba(34, 197, 94, 1)'],
+        borderWidth: 1,
+      }],
+    };
+
+    return { totalProducts, totalQuantity, avgDailyProduction, barData, pieData };
+  }, [production, departments, t]);
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="p-6 bg-white rounded-xl shadow-sm max-w-md w-full">
-          <div className="space-y-4 animate-pulse">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50" dir={isRtl ? 'rtl' : 'ltr'}>
+        <div className="p-5 bg-white rounded-xl shadow-sm max-w-md w-full">
+          <div className="space-y-3 animate-pulse">
             <div className="h-6 bg-gray-200 rounded w-3/4"></div>
             <div className="h-4 bg-gray-200 rounded w-1/2"></div>
             <div className="h-4 bg-gray-200 rounded w-2/3"></div>
@@ -445,8 +526,8 @@ export function ChefDetails() {
 
   if (!chef) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50">
-        <div className="p-6 bg-white rounded-xl shadow-sm max-w-md w-full text-center">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50" dir={isRtl ? 'rtl' : 'ltr'}>
+        <div className="p-5 bg-white rounded-xl shadow-sm max-w-md w-full text-center">
           <AlertCircle className="w-10 h-10 text-red-600 mx-auto mb-3" />
           <p className="text-gray-600 text-sm">{t.notFound}</p>
         </div>
@@ -455,15 +536,12 @@ export function ChefDetails() {
   }
 
   return (
-    <div
-      className={`mx-auto  px-4 py-6 min-h-screen overflow-y-auto scrollbar-thin scrollbar-thumb-amber-600 scrollbar-track-gray-100 `}
-      dir={isRtl ? 'rtl' : 'ltr'}
-    >
+    <div className="mx-auto px-4 py-6 min-h-screen bg-white" dir={isRtl ? 'rtl' : 'ltr'}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="flex items-center justify-between mb-6 shadow-sm bg-white p-4 rounded-xl"
+        transition={{ duration: 0.3, ease: 'easeInOut' }}
+        className="flex items-center justify-between mb-4 shadow-sm bg-white p-4 rounded-xl"
       >
         <div className="flex items-center gap-2">
           <ChefHat className="w-6 h-6 text-amber-600" />
@@ -471,9 +549,10 @@ export function ChefDetails() {
         </div>
         <button
           onClick={() => navigate('/chefs')}
-          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors flex items-center gap-2 shadow-sm hover:shadow-md"
+          className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm hover:shadow-md"
+          aria-label={t.back}
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-3.5 h-3.5" />
           {t.back}
         </button>
       </motion.div>
@@ -488,7 +567,7 @@ export function ChefDetails() {
             className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
           >
             <AlertCircle className="w-4 h-4 text-red-600" />
-            <span className="text-red-600 text-sm">{error}</span>
+            <span className="text-red-600 text-xs">{error}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -496,22 +575,30 @@ export function ChefDetails() {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 0.5 }}
-        className="bg-white rounded-xl shadow-md p-6" // زدت shadow-md عشان أجمل
+        transition={{ duration: 0.3 }}
+        className="bg-white rounded-xl shadow-sm p-5"
       >
-        {/* Tabs */}
-        <div className="flex border-b border-gray-200 mb-6">
+        <div className="flex border-b border-gray-200 mb-4">
           <button
             onClick={() => setActiveTab('info')}
-            className={`px-4 py-2 text-sm font-medium ${activeTab === 'info' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600'} transition-colors`}
+            className={`px-4 py-2 text-xs font-medium ${activeTab === 'info' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600 hover:text-amber-600'} transition-colors`}
+            aria-label={t.infoTab}
           >
             {t.infoTab}
           </button>
           <button
             onClick={() => setActiveTab('production')}
-            className={`px-4 py-2 text-sm font-medium ${activeTab === 'production' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600'} transition-colors`}
+            className={`px-4 py-2 text-xs font-medium ${activeTab === 'production' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600 hover:text-amber-600'} transition-colors`}
+            aria-label={t.productionTab}
           >
             {t.productionTab}
+          </button>
+          <button
+            onClick={() => setActiveTab('stats')}
+            className={`px-4 py-2 text-xs font-medium ${activeTab === 'stats' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-600 hover:text-amber-600'} transition-colors`}
+            aria-label={t.statsTab}
+          >
+            {t.statsTab}
           </button>
         </div>
 
@@ -519,93 +606,86 @@ export function ChefDetails() {
           {activeTab === 'info' ? (
             <motion.div
               key="info"
-              initial={{ opacity: 0, x: -20 }}
+              initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.3 }}
-              className="space-y-4"
+              exit={{ opacity: 0, x: isRtl ? -20 : 20 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="space-y-3"
             >
               <div className="flex items-center gap-3">
                 <h2 className="text-lg font-semibold text-gray-900">
-                  {isRtl ? chef.user?.name : chef.user?.nameEn || chef.user?.name}
+                  {isRtl ? chef.user?.name : (chef.user?.nameEn || chef.user?.name)}
                 </h2>
-                <ChefHat className="w-6 h-6 text-amber-600" />
+                <ChefHat className="w-5 h-5 text-amber-600" />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <span className="block text-sm font-medium text-gray-700">{t.name}</span>
-                  <span className="text-sm text-gray-600">{chef.user?.name || '-'}</span>
+                  <span className="block text-xs font-medium text-gray-700">{t.name}</span>
+                  <span className="text-xs text-gray-600">{isRtl ? chef.user?.name : (chef.user?.nameEn || chef.user?.name) || '-'}</span>
                 </div>
                 <div>
-                  <span className="block text-sm font-medium text-gray-700">{t.nameEn}</span>
-                  <span className="text-sm text-gray-600">{chef.user?.nameEn || '-'}</span>
+                  <span className="block text-xs font-medium text-gray-700">{t.username}</span>
+                  <span className="text-xs text-gray-600">{chef.user?.username || '-'}</span>
                 </div>
                 <div>
-                  <span className="block text-sm font-medium text-gray-700">{t.username}</span>
-                  <span className="text-sm text-gray-600">{chef.user?.username || '-'}</span>
+                  <span className="block text-xs font-medium text-gray-700">{t.email}</span>
+                  <span className="text-xs text-gray-600">{chef.user?.email || '-'}</span>
                 </div>
                 <div>
-                  <span className="block text-sm font-medium text-gray-700">{t.email}</span>
-                  <span className="text-sm text-gray-600">{chef.user?.email || '-'}</span>
+                  <span className="block text-xs font-medium text-gray-700">{t.phone}</span>
+                  <span className="text-xs text-gray-600">{chef.user?.phone || '-'}</span>
                 </div>
                 <div>
-                  <span className="block text-sm font-medium text-gray-700">{t.phone}</span>
-                  <span className="text-sm text-gray-600">{chef.user?.phone || '-'}</span>
+                  <span className="block text-xs font-medium text-gray-700">{t.department}</span>
+                  <span className="text-xs text-gray-600">{chef.department?.displayName || '-'}</span>
                 </div>
                 <div>
-                  <span className="block text-sm font-medium text-gray-700">{t.department}</span>
-                  <span className="text-sm text-gray-600">{chef.department?.displayName || '-'}</span>
+                  <span className="block text-xs font-medium text-gray-700">{t.createdAt}</span>
+                  <span className="text-xs text-gray-600">{new Date(chef.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</span>
                 </div>
                 <div>
-                  <span className="block text-sm font-medium text-gray-700">{t.status}</span>
-                  <span className={`text-sm ${chef.user?.isActive ? 'text-green-600' : 'text-red-600'}`}>
-                    {chef.user?.isActive ? t.active : t.inactive}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-sm font-medium text-gray-700">{t.createdAt}</span>
-                  <span className="text-sm text-gray-600">
-                    {new Date(chef.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
-                  </span>
-                </div>
-                <div>
-                  <span className="block text-sm font-medium text-gray-700">{t.updatedAt}</span>
-                  <span className="text-sm text-gray-600">
-                    {new Date(chef.updatedAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
-                  </span>
+                  <span className="block text-xs font-medium text-gray-700">{t.updatedAt}</span>
+                  <span className="text-xs text-xs text-gray-600">{new Date(chef.updatedAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</span>
                 </div>
               </div>
             </motion.div>
-          ) : (
+          ) : activeTab === 'production' ? (
             <motion.div
               key="production"
-              initial={{ opacity: 0, x: 20 }}
+              initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.3 }}
-              className="space-y-4"
+              exit={{ opacity: 0, x: isRtl ? -20 : 20 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="space-y-3"
             >
               <h2 className="text-lg font-semibold text-gray-900">{t.productionTab}</h2>
               {productionLoading ? (
-                <div className="text-center text-sm text-gray-600">جاري التحميل...</div>
+                <div className="space-y-3">
+                  {[...Array(3)].map((_, index) => (
+                    <div key={index} className="p-3 bg-gray-50 rounded-lg animate-pulse">
+                      <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                    </div>
+                  ))}
+                </div>
               ) : production.length === 0 ? (
-                <div className="text-center text-sm text-gray-600">{t.noProduction}</div>
+                <div className="text-center text-xs text-gray-600">{t.noProduction}</div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.productionName}</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.productionDate}</th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.productionQuantity}</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.productionName}</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.productionDate}</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t.productionQuantity}</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {production.map((item) => (
                         <tr key={item.id}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{item.name}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{item.date}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{item.quantity}</td>
+                          <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-900">{item.name}</td>
+                          <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{new Date(item.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
+                          <td className="px-4 py-2 whitespace-nowrap text-xs text-gray-600">{item.quantity}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -613,280 +693,354 @@ export function ChefDetails() {
                 </div>
               )}
             </motion.div>
+          ) : (
+            <motion.div
+              key="stats"
+              initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: isRtl ? -20 : 20 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+              className="space-y-4"
+            >
+              <h2 className="text-lg font-semibold text-gray-900">{t.statsTab}</h2>
+              {productionLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {[...Array(3)].map((_, index) => (
+                    <div key={index} className="p-3 bg-gray-50 rounded-lg animate-pulse">
+                      <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
+                      <div className="h-6 bg-gray-200 rounded w-3/4"></div>
+                    </div>
+                  ))}
+                </div>
+              ) : production.length === 0 ? (
+                <div className="text-center text-xs text-gray-600">{t.noProduction}</div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2">
+                      <Box className="w-5 h-5 text-amber-600" />
+                      <div>
+                        <p className="text-xs text-gray-600">{t.totalProducts}</p>
+                        <p className="text-lg font-semibold text-gray-900">{statsData.totalProducts}</p>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-amber-600" />
+                      <div>
+                        <p className="text-xs text-gray-600">{t.totalQuantity}</p>
+                        <p className="text-lg font-semibold text-gray-900">{statsData.totalQuantity}</p>
+                      </div>
+                    </div>
+                    <div className="p-3 bg-white rounded-lg shadow-sm border border-gray-100 flex items-center gap-2">
+                      <Calendar className="w-5 h-5 text-amber-600" />
+                      <div>
+                        <p className="text-xs text-gray-600">{t.avgDailyProduction}</p>
+                        <p className="text-lg font-semibold text-gray-900">{statsData.avgDailyProduction}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                      <h3 className="text-sm font-medium text-gray-900 mb-3">{t.productionOverTime}</h3>
+                      <div className="h-64">
+                        <Bar
+                          data={statsData.barData}
+                          options={{
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { display: false } },
+                            scales: { y: { beginAtZero: true } },
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+                      <h3 className="text-sm font-medium text-gray-900 mb-3">{t.productionByDepartment}</h3>
+                      <div className="h-64">
+                        <Pie
+                          data={statsData.pieData}
+                          options={{
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: { legend: { position: 'bottom' } },
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </motion.div>
           )}
         </AnimatePresence>
 
         {user?.role === 'admin' && (
-          <div className="flex justify-end gap-2 mt-6"> {/* نقل الأزرار تحت */}
+          <div className="flex justify-end gap-2 mt-4">
             <button
               onClick={openEditModal}
-              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm transition-colors flex items-center gap-2 shadow-sm hover:shadow-md"
+              className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm hover:shadow-md"
+              aria-label={t.edit}
             >
-              <Edit2 className="w-4 h-4" />
+              <Edit2 className="w-3.5 h-3.5" />
               {t.edit}
             </button>
             <button
               onClick={openResetPasswordModal}
-              className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm transition-colors flex items-center gap-2 shadow-sm hover:shadow-md"
+              className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm hover:shadow-md"
+              aria-label={t.resetPassword}
             >
-              <Key className="w-4 h-4" />
+              <Key className="w-3.5 h-3.5" />
               {t.resetPassword}
             </button>
             <button
               onClick={openDeleteModal}
-              className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm transition-colors flex items-center gap-2 shadow-sm hover:shadow-md"
+              className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs transition-colors flex items-center gap-1.5 shadow-sm hover:shadow-md"
+              aria-label={t.delete}
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-3.5 h-3.5" />
               {t.delete}
             </button>
           </div>
         )}
       </motion.div>
 
-      {isEditModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <AnimatePresence>
+        {isEditModalOpen && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.2 }}
-            className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-lg p-6" 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeInOut' }}
+            className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setIsEditModalOpen(false)}
           >
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.edit}</h3>
-            <form onSubmit={handleSubmit} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              transition={{ duration: 0.15, ease: 'easeInOut' }}
+              className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-md p-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.edit}</h3>
+              <form onSubmit={handleSubmit} className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="name" className="block text-xs font-medium text-gray-700 mb-1">{t.name}</label>
+                    <FormInput
+                      value={formData.name}
+                      onChange={(value) => setFormData({ ...formData, name: value })}
+                      placeholder={t.namePlaceholder}
+                      ariaLabel={t.name}
+                      error={formErrors.name}
+                    />
+                    {formErrors.name && <p className="text-xs text-red-600 mt-1">{formErrors.name}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="nameEn" className="block text-xs font-medium text-gray-700 mb-1">{t.nameEn}</label>
+                    <FormInput
+                      value={formData.nameEn}
+                      onChange={(value) => setFormData({ ...formData, nameEn: value })}
+                      placeholder={t.nameEnPlaceholder}
+                      ariaLabel={t.nameEn}
+                      error={formErrors.nameEn}
+                    />
+                    {formErrors.nameEn && <p className="text-xs text-red-600 mt-1">{formErrors.nameEn}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="username" className="block text-xs font-medium text-gray-700 mb-1">{t.username}</label>
+                    <FormInput
+                      value={formData.username}
+                      onChange={(value) => setFormData({ ...formData, username: value })}
+                      placeholder={t.usernamePlaceholder}
+                      ariaLabel={t.username}
+                      error={formErrors.username}
+                    />
+                    {formErrors.username && <p className="text-xs text-red-600 mt-1">{formErrors.username}</p>}
+                  </div>
+                  <div>
+                    <label htmlFor="email" className="block text-xs font-medium text-gray-700 mb-1">{t.email}</label>
+                    <FormInput
+                      value={formData.email}
+                      onChange={(value) => setFormData({ ...formData, email: value })}
+                      placeholder={t.emailPlaceholder}
+                      ariaLabel={t.email}
+                      type="email"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="phone" className="block text-xs font-medium text-gray-700 mb-1">{t.phone}</label>
+                    <FormInput
+                      value={formData.phone}
+                      onChange={(value) => setFormData({ ...formData, phone: value })}
+                      placeholder={t.phonePlaceholder}
+                      ariaLabel={t.phone}
+                      type="tel"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="department" className="block text-xs font-medium text-gray-700 mb-1">{t.department}</label>
+                    <CustomDropdown
+                      value={formData.department}
+                      onChange={(value) => setFormData({ ...formData, department: value })}
+                      options={[
+                        { value: '', label: t.departmentPlaceholder },
+                        ...departments.map((dept) => ({
+                          value: dept.id,
+                          label: dept.displayName,
+                        })),
+                      ]}
+                      ariaLabel={t.department}
+                    />
+                    {formErrors.department && <p className="text-xs text-red-600 mt-1">{formErrors.department}</p>}
+                  </div>
+                </div>
+                {error && (
+                  <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-600" />
+                    <span className="text-red-600 text-xs">{error}</span>
+                  </div>
+                )}
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(false)}
+                    className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                    aria-label={t.cancel}
+                  >
+                    {t.cancel}
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                    aria-label={t.update}
+                  >
+                    {t.update}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {isResetPasswordModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeInOut' }}
+            className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setIsResetPasswordModalOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              transition={{ duration: 0.15, ease: 'easeInOut' }}
+              className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.resetPassword}</h3>
+              <form onSubmit={handleResetPassword} className="space-y-3" dir={isRtl ? 'rtl' : 'ltr'}>
                 <div>
-                  <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-                    {t.name}
-                  </label>
-                  <input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder={t.namePlaceholder}
-                    className={`w-full px-3 py-3 border ${formErrors.name ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                  <label htmlFor="newPassword" className="block text-xs font-medium text-gray-700 mb-1">{t.newPassword}</label>
+                  <FormInput
+                    value={resetPasswordData.password}
+                    onChange={(value) => setResetPasswordData({ ...resetPasswordData, password: value })}
+                    placeholder={t.newPasswordPlaceholder}
+                    ariaLabel={t.newPassword}
+                    type="password"
+                    showPasswordToggle
+                    showPassword={showResetPassword}
+                    togglePasswordVisibility={() => setShowResetPassword(!showResetPassword)}
                   />
-                  {formErrors.name && <p className="text-sm text-red-600 mt-1">{formErrors.name}</p>}
                 </div>
                 <div>
-                  <label htmlFor="nameEn" className="block text-sm font-medium text-gray-700 mb-1">
-                    {t.nameEn}
-                  </label>
-                  <input
-                    id="nameEn"
-                    value={formData.nameEn}
-                    onChange={(e) => setFormData({ ...formData, nameEn: e.target.value })}
-                    placeholder={t.nameEnPlaceholder}
-                    className={`w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-                  />
-                  {formErrors.nameEn && <p className="text-sm text-red-600 mt-1">{formErrors.nameEn}</p>}
-                </div>
-                <div>
-                  <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
-                    {t.username}
-                  </label>
-                  <input
-                    id="username"
-                    value={formData.username}
-                    onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                    placeholder={t.usernamePlaceholder}
-                    className={`w-full px-3 py-3 border ${formErrors.username ? 'border-red-300' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-                  />
-                  {formErrors.username && <p className="text-sm text-red-600 mt-1">{formErrors.username}</p>}
-                </div>
-                <div>
-                  <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
-                    {t.email}
-                  </label>
-                  <input
-                    id="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    placeholder={t.emailPlaceholder}
-                    type="email"
-                    className={`w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                  <label htmlFor="confirmPassword" className="block text-xs font-medium text-gray-700 mb-1">{t.confirmPassword}</label>
+                  <FormInput
+                    value={resetPasswordData.confirmPassword}
+                    onChange={(value) => setResetPasswordData({ ...resetPasswordData, confirmPassword: value })}
+                    placeholder={t.confirmPasswordPlaceholder}
+                    ariaLabel={t.confirmPassword}
+                    type="password"
+                    showPasswordToggle
+                    showPassword={showConfirmPassword}
+                    togglePasswordVisibility={() => setShowConfirmPassword(!showConfirmPassword)}
                   />
                 </div>
-                <div>
-                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-                    {t.phone}
-                  </label>
-                  <input
-                    id="phone"
-                    value={formData.phone}
-                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder={t.phonePlaceholder}
-                    type="tel"
-                    className={`w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-                  />
+                {error && (
+                  <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-red-600" />
+                    <span className="text-red-600 text-xs">{error}</span>
+                  </div>
+                )}
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsResetPasswordModalOpen(false)}
+                    className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                    aria-label={t.cancel}
+                  >
+                    {t.cancel}
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                    aria-label={t.reset}
+                  >
+                    {t.reset}
+                  </button>
                 </div>
-                <div>
-                  <label htmlFor="department" className="block text-sm font-medium text-gray-700 mb-1">
-                    {t.department}
-                  </label>
-                  <CustomDropdown
-                    value={formData.department}
-                    onChange={(value) => setFormData({ ...formData, department: value })}
-                    options={[
-                      { value: '', label: t.departmentPlaceholder },
-                      ...departments.map((dept) => ({
-                        value: dept.id,
-                        label: dept.displayName,
-                      })),
-                    ]}
-                    ariaLabel={t.department}
-                  />
-                  {formErrors.department && <p className="text-sm text-red-600 mt-1">{formErrors.department}</p>}
-                </div>
-                <div>
-                  <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
-                    {t.status}
-                  </label>
-                  <CustomDropdown
-                    value={formData.isActive}
-                    onChange={(value) => setFormData({ ...formData, isActive: value === 'true' })}
-                    options={[
-                      { value: 'true', label: t.active },
-                      { value: 'false', label: t.inactive },
-                    ]}
-                    ariaLabel={t.status}
-                  />
-                </div>
-              </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {isDeleteModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeInOut' }}
+            className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center z-50"
+            onClick={() => setIsDeleteModalOpen(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              transition={{ duration: 0.15, ease: 'easeInOut' }}
+              className="bg-white rounded-xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-5"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">{t.confirmDelete}</h3>
+              <p className="text-xs text-gray-600 mb-4">{t.deleteWarning}</p>
               {error && (
-                <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 mb-4">
                   <AlertCircle className="w-4 h-4 text-red-600" />
-                  <span className="text-red-600 text-sm">{error}</span>
+                  <span className="text-red-600 text-xs">{error}</span>
                 </div>
               )}
               <div className="flex justify-end gap-2">
                 <button
-                  type="button"
-                  onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
+                  onClick={() => setIsDeleteModalOpen(false)}
+                  className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  aria-label={t.cancel}
                 >
                   {t.cancel}
                 </button>
                 <button
-                  type="submit"
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
+                  onClick={handleDelete}
+                  className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs transition-colors shadow-sm hover:shadow-md"
+                  aria-label={t.delete}
                 >
-                  {t.update}
+                  {t.delete}
                 </button>
               </div>
-            </form>
+            </motion.div>
           </motion.div>
-        </div>
-      )}
-
-      {isResetPasswordModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.2 }}
-            className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6"
-          >
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.resetPassword}</h3>
-            <form onSubmit={handleResetPassword} className="space-y-4" dir={isRtl ? 'rtl' : 'ltr'}>
-              <div className="relative">
-                <label htmlFor="newPassword" className="block text-sm font-medium text-gray-700 mb-1">
-                  {t.newPassword}
-                </label>
-                <input
-                  id="newPassword"
-                  type={showResetPassword ? 'text' : 'password'}
-                  value={resetPasswordData.password}
-                  onChange={(e) => setResetPasswordData({ ...resetPasswordData, password: e.target.value })}
-                  placeholder={t.newPasswordPlaceholder}
-                  className={`w-full px-3 py-3  border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowResetPassword(!showResetPassword)}
-                  className={`absolute inset-y-0 ${isRtl ? 'left-0 pl-3' : 'right-0 pr-3'} flex items-center mt-7 text-gray-400 hover:text-amber-600 transition-colors`}
-                >
-                  {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              <div className="relative">
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
-                  {t.confirmPassword}
-                </label>
-                <input
-                  id="confirmPassword"
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  value={resetPasswordData.confirmPassword}
-                  onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
-                  placeholder={t.confirmPasswordPlaceholder}
-                  className={`w-full px-3 py-3 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className={`absolute inset-y-0 ${isRtl ? 'left-0 pl-3' : 'right-0 pr-3'} flex items-center mt-7 text-gray-400 hover:text-amber-600 transition-colors`}
-                >
-                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              {error && (
-                <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-red-600" />
-                  <span className="text-red-600 text-sm">{error}</span>
-                </div>
-              )}
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsResetPasswordModalOpen(false)}
-                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
-                >
-                  {t.cancel}
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
-                >
-                  {t.reset}
-                </button>
-              </div>
-            </form>
-          </motion.div>
-        </div>
-      )}
-
-      {isDeleteModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.2 }}
-            className="bg-white rounded-2xl shadow-xl max-w-full w-[90vw] sm:max-w-sm p-6"
-          >
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.confirmDelete}</h3>
-            <p className="text-sm text-gray-600 mb-4">{t.deleteWarning}</p>
-            {error && (
-              <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 mb-4">
-                <AlertCircle className="w-4 h-4 text-red-600" />
-                <span className="text-red-600 text-sm">{error}</span>
-              </div>
-            )}
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setIsDeleteModalOpen(false)}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
-              >
-                {t.cancel}
-              </button>
-              <button
-                onClick={handleDelete}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm transition-colors shadow-sm hover:shadow-md"
-              >
-                {t.delete}
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
     </div>
   );
 }
