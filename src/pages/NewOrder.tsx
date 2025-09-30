@@ -2,44 +2,20 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNotifications } from '../contexts/NotificationProvider';
+import { useDispatch } from 'react-redux';
 import { productsAPI, ordersAPI, branchesAPI, departmentAPI } from '../services/api';
 import { ShoppingCart, Plus, Minus, Trash2, Package, AlertCircle, Search, X, ChevronDown } from 'lucide-react';
-import { io } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
+import { Notification, NotificationType, Product, OrderItem, Branch, Department, Order } from '../types/types';
+import { addOrder } from '../store/ordersSlice';
+import { formatDate } from '../utils/formatDate';
 
-interface Product {
-  _id: string;
-  name: string;
-  nameEn?: string;
-  code: string;
-  price: number;
-  unit?: string;
-  unitEn?: string;
-  department: { _id: string; name: string; nameEn?: string; displayName: string };
-  displayName: string;
-  displayUnit: string;
-}
-
-interface OrderItem {
+interface LocalOrderItem {
   productId: string;
   product: Product;
   quantity: number;
   price: number;
-}
-
-interface Branch {
-  _id: string;
-  name: string;
-  nameEn?: string;
-  displayName: string;
-}
-
-interface Department {
-  _id: string;
-  name: string;
-  nameEn?: string;
-  displayName: string;
 }
 
 const translations = {
@@ -244,7 +220,7 @@ const QuantityInput = ({
 
 const ProductCard = ({ product, cartItem, onAdd, onUpdate, onRemove }: {
   product: Product;
-  cartItem?: OrderItem;
+  cartItem?: LocalOrderItem;
   onAdd: () => void;
   onUpdate: (quantity: number) => void;
   onRemove: () => void;
@@ -347,7 +323,8 @@ const OrderConfirmModal = ({
 export function NewOrder() {
   const { user } = useAuth();
   const { language, t: languageT } = useLanguage();
-  const { addNotification } = useNotifications();
+  const { socket, addNotification, isConnected } = useNotifications();
+  const dispatch = useDispatch();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   const summaryRef = useRef<HTMLDivElement>(null);
@@ -355,8 +332,8 @@ export function NewOrder() {
   const [products, setProducts] = useState<Product[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
-  const [branch, setBranch] = useState<string>(user?.branchId?.toString() || '');
+  const [orderItems, setOrderItems] = useState<LocalOrderItem[]>([]);
+  const [branch, setBranch] = useState<string>(user?.branchId || '');
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -364,8 +341,6 @@ export function NewOrder() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-
-  const socket = useMemo(() => io('https://eljoodia-server-production.up.railway.app'), []);
 
   const debouncedSearch = useCallback(
     debounce((value: string) => {
@@ -456,7 +431,7 @@ export function NewOrder() {
             : []
         );
         if (user?.role === 'branch' && user?.branchId) {
-          setBranch(user.branchId.toString());
+          setBranch(user.branchId);
         }
         setError('');
       } catch (err: any) {
@@ -470,9 +445,7 @@ export function NewOrder() {
     loadData();
   }, [user, t, isRtl, filterDepartment, searchTerm]);
 
-  // تحديث displayName و displayUnit للمنتجات و orderItems عند تغيير اللغة
   useEffect(() => {
-    // تحديث المنتجات
     setProducts((prev) =>
       prev.map((product) => ({
         ...product,
@@ -484,7 +457,6 @@ export function NewOrder() {
         },
       }))
     );
-    // تحديث orderItems
     setOrderItems((prev) =>
       prev.map((item) => ({
         ...item,
@@ -502,14 +474,14 @@ export function NewOrder() {
   }, [isRtl]);
 
   useEffect(() => {
-    if (!user || !socket) return;
+    if (!user || !socket || !isConnected) return;
 
     socket.on('connect', () => {
       console.log(`[${new Date().toISOString()}] Connected to Socket.IO server`);
       if (user?.role === 'branch' && user?.branchId) {
-        socket.emit('joinRoom', `branch-${user.branchId}`);
+        socket.emit('joinRoom', { role: 'branch', branchId: user.branchId });
       } else if (user?.role === 'admin') {
-        socket.emit('joinRoom', 'admin');
+        socket.emit('joinRoom', { role: 'admin' });
       }
     });
 
@@ -519,31 +491,41 @@ export function NewOrder() {
         return;
       }
       const eventId = orderData.eventId || crypto.randomUUID();
-      // تخصيص الرسالة بناءً على الدور
-      let message = languageT('notifications.order_created', {
+      const branchName = isRtl ? orderData.branch.name : (orderData.branch.nameEn || orderData.branch.name);
+      const message = languageT('notifications.order_created', {
         orderNumber: orderData.orderNumber,
-        branchName: isRtl ? orderData.branch.name : (orderData.branch.nameEn || orderData.branch.name),
+        branchName,
       });
-      if (user.role === 'branch') {
-        message = t.orderCreated; // "تم إنشاء الطلب بنجاح"
-      }
+
       addNotification({
         _id: eventId,
-        type: 'success',
+        type: NotificationType.OrderCreated,
+        displayType: 'success',
         message,
-        data: { orderId: orderData._id, eventId },
+        messageEn: languageT('notifications.order_created', {
+          orderNumber: orderData.orderNumber,
+          branchName: orderData.branch.nameEn || orderData.branch.name,
+        }, 'en'),
+        displayMessage: message,
+        data: {
+          orderId: orderData._id,
+          orderNumber: orderData.orderNumber,
+          branchId: orderData.branch._id,
+          eventId,
+          priority: orderData.priority || 'medium',
+        },
         read: false,
-        createdAt: new Date().toISOString(),
+        createdAt: orderData.createdAt || new Date().toISOString(),
         sound: '/sounds/notification.mp3',
         vibrate: [200, 100, 200],
       });
-      // هنا يمكن تحديث state صفحة المتابعة إذا كانت موجودة، عبر dispatch أو setState
     });
 
     return () => {
-      socket.disconnect();
+      socket.off('connect');
+      socket.off('orderCreated');
     };
-  }, [socket, languageT, isRtl, user, addNotification, t]);
+  }, [socket, user, isConnected, addNotification, languageT, isRtl]);
 
   const addToOrder = useCallback((product: Product) => {
     setOrderItems((prev) => {
@@ -557,21 +539,13 @@ export function NewOrder() {
         ...prev,
         {
           productId: product._id,
-          product: {
-            ...product,
-            displayName: isRtl ? product.name : (product.nameEn || product.name),
-            displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
-            department: {
-              ...product.department,
-              displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name),
-            },
-          },
+          product,
           quantity: 1,
           price: product.price,
         },
       ];
     });
-  }, [isRtl]);
+  }, []);
 
   const updateQuantity = useCallback((productId: string, quantity: number) => {
     if (quantity <= 0) {
@@ -637,15 +611,16 @@ export function NewOrder() {
       const eventId = crypto.randomUUID();
       const orderData = {
         orderNumber: `ORD-${Date.now()}`,
-        branchId: user?.role === 'branch' ? user?.branchId?.toString() : branch,
+        branchId: user?.role === 'branch' ? user?.branchId : branch,
         items: orderItems.map((item) => ({
-          product: item.productId,
+          productId: item.productId,
           quantity: item.quantity,
           price: item.price,
           productName: item.product.name,
           productNameEn: item.product.nameEn,
           unit: item.product.unit,
           unitEn: item.product.unitEn,
+          displayUnit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
           department: item.product.department,
         })),
         status: 'pending',
@@ -653,28 +628,88 @@ export function NewOrder() {
         createdBy: user?.id || user?._id,
         isRtl,
         eventId,
+        totalAmount: parseFloat(getTotalAmount),
+        adjustedTotal: parseFloat(getTotalAmount),
+        date: new Date().toISOString(),
+        requestedDeliveryDate: new Date().toISOString(),
+        createdByName: isRtl ? user?.name : (user?.nameEn || user?.name),
+        statusHistory: [],
+        returns: [],
       };
-      const response = await ordersAPI.create(orderData, isRtl);
+
+      const response = await ordersAPI.create(orderData);
       const branchData = branches.find((b) => b._id === orderData.branchId);
+
+      const newOrder: Order = {
+        id: response.data.id,
+        orderNumber: response.data.orderNumber,
+        branchId: orderData.branchId,
+        branchName: branchData?.name || t.branches?.unknown || 'Unknown',
+        branchNameEn: branchData?.nameEn,
+        branch: branchData || { _id: orderData.branchId, name: t.branches?.unknown || 'Unknown', displayName: t.branches?.unknown || 'Unknown' },
+        items: response.data.items.map((item: any) => ({
+          _id: item._id || crypto.randomUUID(),
+          itemId: item._id || crypto.randomUUID(),
+          productId: item.productId,
+          productName: item.productName,
+          productNameEn: item.productNameEn,
+          quantity: item.quantity,
+          price: item.price,
+          unit: item.unit,
+          unitEn: item.unitEn,
+          displayUnit: isRtl ? (item.unit || 'غير محدد') : (item.unitEn || item.unit || 'N/A'),
+          department: item.department,
+          status: item.status || 'pending',
+        })),
+        status: response.data.status,
+        totalAmount: response.data.totalAmount,
+        adjustedTotal: response.data.adjustedTotal,
+        date: formatDate(response.data.createdAt || new Date(), language),
+        requestedDeliveryDate: formatDate(response.data.requestedDeliveryDate || new Date(), language),
+        notes: response.data.notes || '',
+        notesEn: response.data.notesEn,
+        displayNotes: isRtl ? response.data.notes : (response.data.notesEn || response.data.notes),
+        priority: response.data.priority,
+        createdBy: response.data.createdBy,
+        createdByName: isRtl ? response.data.createdByName : (response.data.createdByNameEn || response.data.createdByName),
+        statusHistory: response.data.statusHistory || [],
+        returns: response.data.returns || [],
+        isRtl,
+      };
+
+      dispatch(addOrder(newOrder));
+
       socket.emit('orderCreated', {
         _id: response.data.id,
         orderNumber: response.data.orderNumber,
-        branch: branchData || { _id: orderData.branchId, name: t.branches?.unknown || 'Unknown', nameEn: t.branches?.unknown || 'Unknown' },
+        branch: branchData || { _id: orderData.branchId, name: t.branches?.unknown || 'Unknown', nameEn: t.branches?.unknown || 'Unknown', displayName: t.branches?.unknown || 'Unknown' },
         items: response.data.items,
+        createdAt: response.data.createdAt || new Date().toISOString(),
+        priority: response.data.priority,
         eventId,
         isRtl,
       });
-      // الإشعار المحلي للفرع
+
       addNotification({
         _id: eventId,
-        type: 'success',
+        type: NotificationType.OrderCreated,
+        displayType: 'success',
         message: t.orderCreated,
-        data: { orderId: response.data.id, eventId },
+        messageEn: t.orderCreated,
+        displayMessage: t.orderCreated,
+        data: {
+          orderId: response.data.id,
+          orderNumber: response.data.orderNumber,
+          branchId: orderData.branchId,
+          eventId,
+          priority: orderData.priority,
+        },
         read: false,
         createdAt: new Date().toISOString(),
         sound: '/sounds/notification.mp3',
         vibrate: [200, 100, 200],
       });
+
       setOrderItems([]);
       if (user?.role === 'admin') setBranch('');
       setSearchInput('');
