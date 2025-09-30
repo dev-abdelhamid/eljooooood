@@ -5,25 +5,6 @@ import { Order } from '../types/types';
 import { formatDate } from '../utils/formatDate';
 import { ordersAPI } from '../services/api';
 
-interface SocketEventData {
-  orderId: string;
-  orderNumber: string;
-  branchName?: string;
-  branchId?: string;
-  items?: Array<{
-    itemId: string;
-    productId?: string;
-    productName?: string;
-    quantity?: number;
-    unit?: string;
-    status?: string;
-    assignedTo?: { _id: string; username?: string; name?: string };
-    department?: { _id: string; name: string };
-  }>;
-  eventId?: string;
-  status?: string;
-}
-
 interface SocketEventConfig {
   type: string;
   roles: string[];
@@ -32,27 +13,10 @@ interface SocketEventConfig {
 export const useOrderNotifications = (
   dispatch: React.Dispatch<any>,
   stateRef: React.MutableRefObject<any>,
-  user: any,
-  addNotification: (notification: any) => void
+  user: any
 ) => {
   const { socket } = useSocket();
-  const { t, language } = useLanguage();
-  const isRtl = language === 'ar';
-
-  // دالة ترجمة الوحدات
-  const translateUnit = (unit: string | undefined) => {
-    const translations: Record<string, { ar: string; en: string }> = {
-      'كيلو': { ar: 'كيلو', en: 'kg' },
-      'قطعة': { ar: 'قطعة', en: 'piece' },
-      'علبة': { ar: 'علبة', en: 'pack' },
-      'صينية': { ar: 'صينية', en: 'tray' },
-      'kg': { ar: 'كجم', en: 'kg' },
-      'piece': { ar: 'قطعة', en: 'piece' },
-      'pack': { ar: 'علبة', en: 'pack' },
-      'tray': { ar: 'صينية', en: 'tray' },
-    };
-    return unit && translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
-  };
+  const { t } = useLanguage();
 
   useEffect(() => {
     if (!socket || !user) {
@@ -96,16 +60,14 @@ export const useOrderNotifications = (
               productName: item.product?.name || t('products.unknown'),
               quantity: Number(item.quantity) || 1,
               price: Number(item.price) || 0,
-              unit: translateUnit(item.unit || item.product?.unit),
               department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
               status: item.status || 'pending',
-              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username, name: item.assignedTo.name } : undefined,
+              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown') } : undefined,
               returnedQuantity: Number(item.returnedQuantity) || 0,
               returnReason: item.returnReason || '',
             })),
             status: newOrder.status || 'pending',
             totalAmount: Number(newOrder.totalAmount) || 0,
-            adjustedTotal: typeof newOrder.adjustedTotal === 'number' ? newOrder.adjustedTotal : Number(newOrder.totalAmount) || 0,
             date: formatDate(newOrder.createdAt || new Date(), t('language')),
             notes: newOrder.notes || '',
             priority: newOrder.priority || 'medium',
@@ -136,19 +98,6 @@ export const useOrderNotifications = (
           };
 
           dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
-          addNotification({
-            _id: newOrder.eventId || crypto.randomUUID(),
-            type: 'success',
-            message: t('notifications.order_created', {
-              orderNumber: newOrder.orderNumber,
-              branchName: newOrder.branch?.name || t('branches.unknown'),
-            }),
-            data: { orderId: newOrder._id, eventId: newOrder.eventId },
-            read: false,
-            createdAt: new Date().toISOString(),
-            sound: '/sounds/notification.mp3',
-            vibrate: [200, 100, 200],
-          });
         },
         config: {
           type: 'ADD_ORDER',
@@ -157,7 +106,7 @@ export const useOrderNotifications = (
       },
       {
         name: 'orderConfirmed',
-        handler: (data: SocketEventData) => {
+        handler: (data: any) => {
           if (!['admin', 'branch'].includes(user.role)) return;
           if (!data.orderId || !data.orderNumber || !data.branchName) {
             console.warn(`[${new Date().toISOString()}] Invalid order confirmed data:`, data);
@@ -166,19 +115,6 @@ export const useOrderNotifications = (
           if (user.role === 'branch' && data.branchId !== user.branchId) return;
 
           dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'confirmed' });
-          addNotification({
-            _id: data.eventId || crypto.randomUUID(),
-            type: 'success',
-            message: t('notifications.order_confirmed', {
-              orderNumber: data.orderNumber,
-              branchName: data.branchName || t('branches.unknown'),
-            }),
-            data: { orderId: data.orderId, eventId: data.eventId },
-            read: false,
-            createdAt: new Date().toISOString(),
-            sound: '/sounds/notification.mp3',
-            vibrate: [200, 100, 200],
-          });
         },
         config: {
           type: 'UPDATE_ORDER_STATUS',
@@ -186,68 +122,38 @@ export const useOrderNotifications = (
         },
       },
       {
-     name: 'taskAssigned',
-  handler: (notification: any) => {
-    console.log(`[${new Date().toISOString()}] taskAssigned - Received data:`, JSON.stringify(notification, null, 2));
-    const data: SocketEventData = notification.data || notification;
+        name: 'taskAssigned',
+        handler: (data: any) => {
+          if (!['admin', 'production', 'chef'].includes(user.role)) return;
+          if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName) {
+            console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, data);
+            return;
+          }
+          if (user.role === 'chef' && !data.items.some((item: any) => item.assignedTo?._id === user._id)) return;
 
-    if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName) {
-      console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, data);
-      return;
-    }
-    if (!['admin', 'production', 'chef'].includes(user.role)) return;
-    if (user.role === 'chef' && !data.items.some((item: any) => item.assignedTo?._id === user._id)) return;
+          const mappedItems = data.items.map((item: any) => ({
+            _id: item.itemId || crypto.randomUUID(),
+            itemId: item.itemId || crypto.randomUUID(),
+            productId: item.productId || 'unknown',
+            productName: item.productName || t('products.unknown'),
+            quantity: Number(item.quantity) || 1,
+            department: item.department || { _id: 'unknown', name: t('departments.unknown') },
+            status: item.status || 'assigned',
+            assignedTo: item.assignedTo
+              ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown') }
+              : undefined,
+          }));
 
-    const mappedItems = data.items
-      .filter((item: any) => item._id && item.product?.name && item.assignedTo?._id) // فحص صارم
-      .map((item: any) => ({
-        _id: item._id || item.itemId || crypto.randomUUID(),
-        itemId: item._id || item.itemId || crypto.randomUUID(),
-        productId: item.product?._id || item.productId || 'unknown',
-        productName: item.product?.name || item.productName || t('products.unknown'),
-        quantity: Number(item.quantity) || 1,
-        unit: translateUnit(item.unit || item.product?.unit),
-        department: item.department || item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
-        status: item.status || 'pending', // تغيير من 'assigned' إلى 'pending' لتتماشى مع حالة المهمة الأولية
-        assignedTo: item.assignedTo
-          ? { _id: item.assignedTo._id, username: item.assignedTo.username || item.assignedTo.name || t('chefs.unknown'), name: item.assignedTo.name }
-          : undefined,
-      }));
-
-    if (mappedItems.length === 0) {
-      console.warn(`[${new Date().toISOString()}] No valid items for taskAssigned:`, data);
-      return;
-    }
-
-    dispatch({ type: 'TASK_ASSIGNED', payload: { orderId: data.orderId, items: mappedItems, orderNumber: data.orderNumber, branchName: data.branchName } });
-    mappedItems.forEach((item: any) => {
-      addNotification({
-        _id: `${data.eventId || crypto.randomUUID()}-${item.itemId}`,
-        type: 'info',
-        message: t('notifications.task_assigned_to_chef', {
-          chefName: item.assignedTo?.name || item.assignedTo?.username || t('chefs.unknown'),
-          productName: item.productName || t('products.unknown'),
-          quantity: item.quantity,
-          unit: item.unit,
-          orderNumber: data.orderNumber,
-          branchName: data.branchName || t('branches.unknown'),
-        }),
-        data: { orderId: data.orderId, itemId: item.itemId, eventId: data.eventId },
-        read: false,
-        createdAt: new Date().toISOString(),
-        sound: '/sounds/notification.mp3',
-        vibrate: [400, 100, 400],
-      });
-    });
-  },
-  config: {
-    type: 'TASK_ASSIGNED',
-    roles: ['admin', 'production', 'chef'],
-  },
-},
+          dispatch({ type: 'TASK_ASSIGNED', orderId: data.orderId, items: mappedItems });
+        },
+        config: {
+          type: 'TASK_ASSIGNED',
+          roles: ['admin', 'production', 'chef'],
+        },
+      },
       {
         name: 'itemStatusUpdated',
-        handler: async (data: SocketEventData) => {
+        handler: async (data: any) => {
           if (!['admin', 'production', 'chef'].includes(user.role)) return;
           if (!data.orderId || !data.itemId || !data.status || !data.orderNumber || !data.branchName) {
             console.warn(`[${new Date().toISOString()}] Invalid item status update data:`, data);
@@ -269,19 +175,6 @@ export const useOrderNotifications = (
             const allItemsCompleted = updatedOrder.items.every((item: any) => item.status === 'completed');
             if (allItemsCompleted && updatedOrder.status !== 'completed') {
               dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'completed' });
-              addNotification({
-                _id: data.eventId || crypto.randomUUID(),
-                type: 'success',
-                message: t('notifications.order_completed', {
-                  orderNumber: data.orderNumber,
-                  branchName: data.branchName || t('branches.unknown'),
-                }),
-                data: { orderId: data.orderId, eventId: data.eventId },
-                read: false,
-                createdAt: new Date().toISOString(),
-                sound: '/sounds/notification.mp3',
-                vibrate: [400, 100, 400],
-              });
             }
           } catch (err) {
             console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
@@ -294,27 +187,13 @@ export const useOrderNotifications = (
       },
       {
         name: 'orderStatusUpdated',
-        handler: (data: SocketEventData) => {
+        handler: (data: any) => {
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
           if (!data.orderId || !data.status || !data.orderNumber || !data.branchName) {
             console.warn(`[${new Date().toISOString()}] Invalid order status update data:`, data);
             return;
           }
           dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: data.status });
-          addNotification({
-            _id: data.eventId || crypto.randomUUID(),
-            type: 'info',
-            message: t('notifications.order_status_updated', {
-              orderNumber: data.orderNumber,
-              status: t(`order_status.${data.status}`),
-              branchName: data.branchName || t('branches.unknown'),
-            }),
-            data: { orderId: data.orderId, eventId: data.eventId },
-            read: false,
-            createdAt: new Date().toISOString(),
-            sound: '/sounds/notification.mp3',
-            vibrate: [200, 100, 200],
-          });
         },
         config: {
           type: 'UPDATE_ORDER_STATUS',
@@ -323,7 +202,7 @@ export const useOrderNotifications = (
       },
       {
         name: 'orderCompleted',
-        handler: async (data: SocketEventData) => {
+        handler: async (data: any) => {
           if (!['admin', 'branch', 'production', 'chef'].includes(user.role)) return;
           if (!data.orderId || !data.orderNumber || !data.branchName) {
             console.warn(`[${new Date().toISOString()}] Invalid order completed data:`, data);
@@ -348,10 +227,9 @@ export const useOrderNotifications = (
                 productName: item.product?.name || t('products.unknown'),
                 quantity: Number(item.quantity) || 1,
                 price: Number(item.price) || 0,
-                unit: translateUnit(item.unit || item.product?.unit),
                 department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
                 status: item.status || 'completed',
-                assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username, name: item.assignedTo.name } : undefined,
+                assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown') } : undefined,
                 returnedQuantity: Number(item.returnedQuantity) || 0,
                 returnReason: item.returnReason || '',
               })),
@@ -386,31 +264,18 @@ export const useOrderNotifications = (
                 : [],
             };
             dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'completed', payload: mappedOrder });
-            addNotification({
-              _id: data.eventId || crypto.randomUUID(),
-              type: 'success',
-              message: t('notifications.order_completed', {
-                orderNumber: data.orderNumber,
-                branchName: data.branchName || t('branches.unknown'),
-              }),
-              data: { orderId: data.orderId, eventId: data.eventId },
-              read: false,
-              createdAt: new Date().toISOString(),
-              sound: '/sounds/notification.mp3',
-              vibrate: [400, 100, 400],
-            });
           } catch (err) {
             console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
           }
         },
         config: {
           type: 'UPDATE_ORDER_STATUS',
-          roles: ['admin', 'branch', 'production', 'chef'],
+          roles: ['admin', 'branch', 'production'],
         },
       },
       {
         name: 'orderShipped',
-        handler: async (data: SocketEventData) => {
+        handler: async (data: any) => {
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
           if (!data.orderId || !data.orderNumber || !data.branchName || !data.branchId) {
             console.warn(`[${new Date().toISOString()}] Invalid order shipped data:`, data);
@@ -436,10 +301,9 @@ export const useOrderNotifications = (
                 productName: item.product?.name || t('products.unknown'),
                 quantity: Number(item.quantity) || 1,
                 price: Number(item.price) || 0,
-                unit: translateUnit(item.unit || item.product?.unit),
                 department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
                 status: item.status || 'completed',
-                assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown'), name: item.assignedTo.name } : undefined,
+                assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown') } : undefined,
                 returnedQuantity: Number(item.returnedQuantity) || 0,
                 returnReason: item.returnReason || '',
               })),
@@ -474,19 +338,6 @@ export const useOrderNotifications = (
                 : [],
             };
             dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'in_transit', payload: mappedOrder });
-            addNotification({
-              _id: data.eventId || crypto.randomUUID(),
-              type: 'success',
-              message: t('notifications.order_shipped', {
-                orderNumber: data.orderNumber,
-                branchName: data.branchName || t('branches.unknown'),
-              }),
-              data: { orderId: data.orderId, eventId: data.eventId },
-              read: false,
-              createdAt: new Date().toISOString(),
-              sound: '/sounds/notification.mp3',
-              vibrate: [400, 100, 400],
-            });
           } catch (err) {
             console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
           }
@@ -498,7 +349,7 @@ export const useOrderNotifications = (
       },
       {
         name: 'orderDelivered',
-        handler: async (data: SocketEventData) => {
+        handler: async (data: any) => {
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
           if (!data.orderId || !data.orderNumber || !data.branchName) {
             console.warn(`[${new Date().toISOString()}] Invalid order delivered data:`, data);
@@ -524,10 +375,9 @@ export const useOrderNotifications = (
                 productName: item.product?.name || t('products.unknown'),
                 quantity: Number(item.quantity) || 1,
                 price: Number(item.price) || 0,
-                unit: translateUnit(item.unit || item.product?.unit),
                 department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
                 status: item.status || 'completed',
-                assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown'), name: item.assignedTo.name } : undefined,
+                assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown') } : undefined,
                 returnedQuantity: Number(item.returnedQuantity) || 0,
                 returnReason: item.returnReason || '',
               })),
@@ -562,19 +412,6 @@ export const useOrderNotifications = (
                 : [],
             };
             dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'delivered', payload: mappedOrder });
-            addNotification({
-              _id: data.eventId || crypto.randomUUID(),
-              type: 'success',
-              message: t('notifications.order_delivered', {
-                orderNumber: data.orderNumber,
-                branchName: data.branchName || t('branches.unknown'),
-              }),
-              data: { orderId: data.orderId, eventId: data.eventId },
-              read: false,
-              createdAt: new Date().toISOString(),
-              sound: '/sounds/notification.mp3',
-              vibrate: [400, 100, 400],
-            });
           } catch (err) {
             console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
           }
@@ -586,27 +423,13 @@ export const useOrderNotifications = (
       },
       {
         name: 'returnStatusUpdated',
-        handler: (data: SocketEventData) => {
+        handler: (data: any) => {
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
           if (!data.orderId || !data.returnId || !data.status || !data.orderNumber) {
             console.warn(`[${new Date().toISOString()}] Invalid return status update data:`, data);
             return;
           }
           dispatch({ type: 'RETURN_STATUS_UPDATED', orderId: data.orderId, returnId: data.returnId, status: data.status });
-          addNotification({
-            _id: data.eventId || crypto.randomUUID(),
-            type: 'info',
-            message: t('notifications.return_status_updated', {
-              orderNumber: data.orderNumber,
-              status: t(`returns.${data.status}`),
-              branchName: data.branchName || t('branches.unknown'),
-            }),
-            data: { orderId: data.orderId, returnId: data.returnId, eventId: data.eventId },
-            read: false,
-            createdAt: new Date().toISOString(),
-            sound: '/sounds/notification.mp3',
-            vibrate: [200, 100, 200],
-          });
         },
         config: {
           type: 'RETURN_STATUS_UPDATED',
@@ -615,27 +438,13 @@ export const useOrderNotifications = (
       },
       {
         name: 'missingAssignments',
-        handler: (data: SocketEventData) => {
+        handler: (data: any) => {
           if (!['admin', 'production'].includes(user.role)) return;
           if (!data.orderId || !data.itemId || !data.orderNumber || !data.productName) {
             console.warn(`[${new Date().toISOString()}] Invalid missing assignments data:`, data);
             return;
           }
           dispatch({ type: 'MISSING_ASSIGNMENTS', orderId: data.orderId, itemId: data.itemId, productName: data.productName });
-          addNotification({
-            _id: data.eventId || crypto.randomUUID(),
-            type: 'warning',
-            message: t('notifications.missing_assignments', {
-              orderNumber: data.orderNumber,
-              productName: data.productName || t('products.unknown'),
-              branchName: data.branchName || t('branches.unknown'),
-            }),
-            data: { orderId: data.orderId, itemId: data.itemId, eventId: data.eventId },
-            read: false,
-            createdAt: new Date().toISOString(),
-            sound: '/sounds/notification.mp3',
-            vibrate: [300, 100, 300],
-          });
         },
         config: {
           type: 'MISSING_ASSIGNMENTS',
@@ -683,7 +492,7 @@ export const useOrderNotifications = (
     return () => {
       events.forEach(({ name, handler }) => socket.off(name, handler));
     };
-  }, [socket, user, dispatch, stateRef, t, language, addNotification]);
+  }, [socket, user, dispatch, stateRef, t]);
 
   return {};
 };
