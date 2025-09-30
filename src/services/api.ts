@@ -538,7 +538,7 @@ export const ordersAPI = {
       console.log(`[${new Date().toISOString()}] ordersAPI.updateStatus - Response:`, response);
       return response;
     } catch (error: any) {
-      console.error(`[${new Date().ئtoISOString()}] ordersAPI.updateStatus - Error:`, error.message);
+      console.error(`[${new Date().toISOString()}] ordersAPI.updateStatus - Error:`, error.message);
       throw new Error(isRtl ? `فشل في تحديث حالة الطلب: ${error.message}` : `Failed to update order status: ${error.message}`);
     }
   },

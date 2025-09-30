@@ -90,7 +90,7 @@ export function Sidebar({
       { path: '/orders', icon: ShoppingBag, label: t('orders') },
       { path: '/returns', icon: RefreshCcw, label: t('returns') },
       { path: '/reports', icon: BarChart2, label: t('reports') },
-            { path: '/profile', icon: Settings2, label: t('settings') },ئ
+            { path: '/profile', icon: Settings2, label: t('settings') },
 
     ];
 
