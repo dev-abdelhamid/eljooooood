@@ -9,16 +9,22 @@ import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { Order, Chef, Branch, AssignChefsForm, OrderStatus } from '../types/types';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+
 import { exportToPDF } from '../components/Shared/PDFExporter';
 import OrdersPagination from '../components/Shared/OrdersPagination';
 import OrdersFilters from '../components/Shared/OrdersFilters';
 import OrdersList from '../components/Shared/OrdersList';
 import OrdersHeader from '../components/Shared/OrdersHeader';
 import ViewModeSwitch from '../components/Shared/ViewModeSwitch';
+import { LoadingSpinner } from '../components/UI/LoadingSpinner';
+
+
 
 
 
 const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
+
 
 // Normalize text for search
 const normalizeText = (text: string) => {
@@ -874,7 +880,7 @@ const Orders: React.FC = () => {
 
   return (
     <div className="px-2 py-4">
-      <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} rows={10} />}>
+      <Suspense fallback={<LoadingSpinner />}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: 'easeOut' }} className="space-y-6">
           <OrdersHeader
             isRtl={isRtl}
