@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import React, { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
-import { useNotifications } from '../contexts/NotificationContext';
+import { useNotifications } from '../contexts/NotificationProvider';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, CheckCircle, AlertCircle, Info, XCircle } from 'lucide-react';
 import { formatDate } from '../utils/formatDate';
