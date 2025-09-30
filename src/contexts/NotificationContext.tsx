@@ -310,7 +310,19 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           const eventId = newOrder.eventId || crypto.randomUUID();
           if (notificationIds.current.has(eventId)) return;
           notificationIds.current.add(eventId);
-          
+          addNotification({
+            _id: eventId,
+            type: 'success',
+            message: t('notifications.order_created', {
+              orderNumber: newOrder.orderNumber,
+              branchName: newOrder.branch?.name || t('branches.unknown'),
+            }),
+            data: { orderId: newOrder._id, eventId },
+            read: false,
+            createdAt: new Date().toISOString(),
+            sound: '/sounds/notification.mp3',
+            vibrate: [200, 100, 200],
+          });
         },
         config: {
           type: 'ADD_ORDER',
@@ -461,7 +473,20 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           const eventId = data.eventId || crypto.randomUUID();
           if (notificationIds.current.has(eventId)) return;
           notificationIds.current.add(eventId);
-          
+          addNotification({
+            _id: eventId,
+            type: 'info',
+            message: t('notifications.order_status_updated', {
+              orderNumber: data.orderNumber,
+              status: t(`order_status.${data.status}`),
+              branchName: data.branchName || t('branches.unknown'),
+            }),
+            data: { orderId: data.orderId, eventId },
+            read: false,
+            createdAt: new Date().toISOString(),
+            sound: '/sounds/notification.mp3',
+            vibrate: [200, 100, 200],
+          });
         },
         config: {
           type: 'UPDATE_ORDER_STATUS',
