@@ -2,6 +2,12 @@ import React, { useReducer, useEffect, useMemo, useCallback, useRef, lazy, Suspe
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
+import { Card } from '../components/UI/Card';
+import { Button } from '../components/UI/Button';
+import { Select } from '../components/UI/Select';
+import { Input } from '../components/UI/Input';
+import { ShoppingCart, AlertCircle, Search, Table2, Grid, Download } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
 import { ordersAPI, chefsAPI, branchesAPI } from '../services/api';
@@ -9,21 +15,12 @@ import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { Order, Chef, Branch, AssignChefsForm, OrderStatus } from '../types/types';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-
 import { exportToPDF } from '../components/Shared/PDFExporter';
-import OrdersPagination from '../components/Shared/OrdersPagination';
-import OrdersFilters from '../components/Shared/OrdersFilters';
-import OrdersList from '../components/Shared/OrdersList';
-import OrdersHeader from '../components/Shared/OrdersHeader';
-import ViewModeSwitch from '../components/Shared/ViewModeSwitch';
-import { LoadingSpinner } from '../components/UI/LoadingSpinner';
-
-
-
-
-
+import { OrderCardSkeleton, OrderTableSkeleton } from '../components/Shared/OrderSkeletons';
+import Pagination from '../components/Shared/Pagination';
 const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
+const OrderTable = lazy(() => import('../components/Shared/OrderTable'));
+const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
 
 
 // Normalize text for search
@@ -228,7 +225,6 @@ const reducer = (state: State, action: Action): State => {
 };
 
 const ORDERS_PER_PAGE = { card: 12, table: 50 };
-
 const validTransitions: Record<OrderStatus, OrderStatus[]> = {
   pending: ['approved', 'cancelled'],
   approved: ['in_production', 'cancelled'],
@@ -238,6 +234,21 @@ const validTransitions: Record<OrderStatus, OrderStatus[]> = {
   delivered: [],
   cancelled: [],
 };
+const statusOptions = [
+  { value: '', label: 'all_statuses' },
+  { value: 'pending', label: 'pending' },
+  { value: 'approved', label: 'approved' },
+  { value: 'in_production', label: 'in_production' },
+  { value: 'completed', label: 'completed' },
+  { value: 'in_transit', label: 'in_transit' },
+  { value: 'delivered', label: 'delivered' },
+  { value: 'cancelled', label: 'cancelled' },
+];
+const sortOptions = [
+  { value: 'date', label: 'sort_date' },
+  { value: 'totalAmount', label: 'sort_total_amount' },
+  { value: 'priority', label: 'sort_priority' },
+];
 
 const translateUnit = (unit: string, isRtl: boolean) => {
   const translations: Record<string, { ar: string; en: string }> = {
@@ -330,8 +341,9 @@ export const Orders: React.FC = () => {
     window.scrollTo(0, 0);
   }, [navigate]);
 
+  // Enhanced WebSocket handling with reconnection logic
   useEffect(() => {
-    if (!user || !['admin', 'production'].includes(user.role)) {
+    if (!user || !['admin', 'production'].includes(user.role) || !socket) {
       dispatch({ type: 'SET_ERROR', payload: isRtl ? 'غير مصرح للوصول' : 'Unauthorized access' });
       dispatch({ type: 'SET_LOADING', payload: false });
       return;
@@ -345,8 +357,6 @@ export const Orders: React.FC = () => {
     }, 5000);
 
     socket.on('connect', () => {
-      console.log('WebSocket connected');
-      socket.emit('joinRoom', user.role === 'production' ? ['production', `department-${user.department?._id}`] : user.role);
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
       dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
     });
@@ -358,7 +368,6 @@ export const Orders: React.FC = () => {
     });
 
     socket.on('newOrder', (order: any) => {
-      console.log('New order received:', order);
       if (!order || !order._id || !order.orderNumber) {
         console.warn('Invalid new order data:', order);
         return;
@@ -460,18 +469,6 @@ export const Orders: React.FC = () => {
       });
     });
 
-    socket.on('orderCreated', (notification: any) => {
-      console.log('Order created notification:', notification);
-      toast.success(notification.message, {
-        position: isRtl ? 'top-left' : 'top-right',
-        autoClose: 5000,
-        hideProgressBar: false,
-        closeOnClick: true,
-        pauseOnHover: true,
-        draggable: true,
-      });
-    });
-
     socket.on('orderStatusUpdated', ({ orderId, status }: { orderId: string; status: OrderStatus }) => {
       if (!orderId || !status) {
         console.warn('Invalid order status update data:', { orderId, status });
@@ -519,7 +516,6 @@ export const Orders: React.FC = () => {
       socket.off('connect');
       socket.off('connect_error');
       socket.off('newOrder');
-      socket.off('orderCreated');
       socket.off('orderStatusUpdated');
       socket.off('itemStatusUpdated');
       socket.off('returnStatusUpdated');
@@ -626,7 +622,7 @@ export const Orders: React.FC = () => {
             priority: order.priority || 'medium',
             createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
             approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
-            approvedAt: order.approvedAt ? new Date(order.appliedAt) : null,
+            approvedAt: order.approvedAt ? new Date(order.approvedAt) : null,
             deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : null,
             transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : null,
             statusHistory: Array.isArray(order.statusHistory)
@@ -689,6 +685,10 @@ export const Orders: React.FC = () => {
     [user, state.sortBy, state.sortOrder, isRtl, language]
   );
 
+  const handleSearchChange = useCallback((value: string) => {
+    dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
+  }, []);
+
   const filteredOrders = useMemo(
     () => {
       const normalizedQuery = normalizeText(state.searchQuery);
@@ -745,7 +745,7 @@ export const Orders: React.FC = () => {
 
   const updateOrderStatus = useCallback(
     async (orderId: string, newStatus: OrderStatus) => {
-      const order = state.orders.find(o => o.id === action.orderId);
+      const order = state.orders.find(o => o.id === orderId);
       if (!order || !validTransitions[order.status].includes(newStatus)) {
         toast.error(isRtl ? 'انتقال غير صالح' : 'Invalid transition', { position: isRtl ? 'top-left' : 'top-right' });
         return;
@@ -880,73 +880,241 @@ export const Orders: React.FC = () => {
 
   return (
     <div className="px-2 py-4">
-      <Suspense fallback={<LoadingSpinner />}>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: 'easeOut' }} className="space-y-6">
-          <OrdersHeader
-            isRtl={isRtl}
-            ordersLength={filteredOrders.length}
-            exportToExcel={() => exportToExcel(filteredOrders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit)}
-            exportToPDF={() => exportToPDF(filteredOrders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, state.filterStatus, state.branches.find(b => b._id === state.filterBranch)?.displayName || '')}
-          />
-          <OrdersFilters
-            isRtl={isRtl}
-            searchQuery={state.searchQuery}
-            filterStatus={state.filterStatus}
-            filterBranch={state.filterBranch}
-            sortBy={state.sortBy}
-            sortOrder={state.sortOrder}
-            branches={state.branches}
-            dispatch={dispatch}
-          />
-          <div className={`flex justify-between items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <div className="text-xs text-gray-600">
-              {isRtl ? `عدد الطلبات: ${filteredOrders.length}` : `Orders count: ${filteredOrders.length}`}
+      <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: 'easeOut' }} className="mb-6">
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <div className="w-full sm:w-auto text-center sm:text-start">
+              <h1 className="text-xl font-bold text-gray-900 flex items-center justify-center sm:justify-start gap-2">
+                <ShoppingCart className="w-5 h-5 text-amber-700" />
+                {isRtl ? 'الطلبات' : 'Orders'}
+              </h1>
+              <p className="text-xs text-gray-600 mt-1">{isRtl ? 'إدارة طلبات الإنتاج' : 'Manage production orders'}</p>
             </div>
-            <ViewModeSwitch isRtl={isRtl} viewMode={state.viewMode} dispatch={dispatch} />
+            <div className="flex gap-2 flex-wrap justify-center sm:justify-end w-full sm:w-auto">
+              <Button
+                variant={state.orders.length > 0 ? 'primary' : 'secondary'}
+                onClick={state.orders.length > 0 ? () => exportToExcel(filteredOrders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit) : undefined}
+                className={`flex items-center gap-1 ${state.orders.length > 0 ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'} rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300`}
+                disabled={state.orders.length === 0}
+              >
+                <Download className="w-4 h-4" />
+                {isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
+              </Button>
+              <Button
+                variant={state.orders.length > 0 ? 'primary' : 'secondary'}
+                onClick={state.orders.length > 0 ? () => exportToPDF(filteredOrders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, state.filterStatus, state.branches.find(b => b._id === state.filterBranch)?.displayName || '') : undefined}
+                className={`flex items-center gap-1 ${state.orders.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'} rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300`}
+                disabled={state.orders.length === 0}
+              >
+                <Download className="w-4 h-4" />
+                {isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
+              </Button>
+            </div>
           </div>
-          <div ref={listRef}>
-            <OrdersList
-              loading={state.loading}
-              error={state.error}
-              paginatedOrders={paginatedOrders}
-              viewMode={state.viewMode}
-              calculateAdjustedTotal={calculateAdjustedTotal}
-              calculateTotalQuantity={calculateTotalQuantity}
-              translateUnit={translateUnit}
-              updateOrderStatus={updateOrderStatus}
-              openAssignModal={openAssignModal}
-              submitting={state.submitting}
-              isRtl={isRtl}
-              startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
-              filterStatus={state.filterStatus}
-              filterBranch={state.filterBranch}
-              searchQuery={state.searchQuery}
-            />
+          <Card className="p-3 mt-6 bg-white shadow-md rounded-xl border border-gray-200">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
+                <div className="relative">
+                  <Search className={`w-4 h-4 text-gray-500 absolute top-2 ${isRtl ? 'left-2' : 'right-2'}`} />
+                  <Input
+                    value={state.searchQuery}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleSearchChange(e.target.value)}
+                    placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
+                    className={`w-full ${isRtl ? 'pl-8' : 'pr-8'} rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200`}
+                    dir={isRtl ? 'rtl' : 'ltr'}
+                    lang={isRtl ? 'ar' : 'en'}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
+                <Select
+                  options={statusOptions.map(opt => ({
+                    value: opt.value,
+                    label: isRtl ? { '': 'كل الحالات', pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[opt.value] : opt.label,
+                  }))}
+                  value={state.filterStatus}
+                  onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
+                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الفرع' : 'Filter by Branch'}</label>
+                <Select
+                  options={[{ value: '', label: isRtl ? 'جميع الفروع' : 'All Branches' }, ...state.branches.map(b => ({ value: b._id, label: b.displayName }))]}
+                  value={state.filterBranch}
+                  onChange={(value) => dispatch({ type: 'SET_FILTER_BRANCH', payload: value })}
+                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
+                <Select
+                  options={sortOptions.map(opt => ({
+                    value: opt.value,
+                    label: isRtl ? { date: 'التاريخ', totalAmount: 'إجمالي المبلغ', priority: 'الأولوية' }[opt.value] : opt.label,
+                  }))}
+                  value={state.sortBy}
+                  onChange={(value) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
+                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
+                />
+              </div>
+            </div>
+            <div className={`flex flex-col sm:flex-row justify-between items-center gap-3 mt-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <div className="text-xs text-center text-gray-600">
+                {isRtl ? `عدد الطلبات: ${filteredOrders.length}` : `Orders count: ${filteredOrders.length}`}
+              </div>
+              <Button
+                variant="secondary"
+                onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' })}
+                className="flex items-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300"
+              >
+                {state.viewMode === 'card' ? <Table2 className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
+                {state.viewMode === 'card' ? (isRtl ? 'عرض كجدول' : 'View as Table') : (isRtl ? 'عرض كبطاقات' : 'View as Cards')}
+              </Button>
+            </div>
+          </Card>
+          <div ref={listRef} className="mt-6 min-h-[300px]">
+            <AnimatePresence>
+              {state.loading ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-1"
+                >
+                  {state.viewMode === 'card' ? (
+                    <div className="grid grid-cols-1 gap-1">
+                      {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => (
+                        <motion.div
+                          key={i}
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.3, delay: i * 0.05 }}
+                        >
+                          <OrderCardSkeleton isRtl={isRtl} />
+                        </motion.div>
+                      ))}
+                    </div>
+                  ) : (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <OrderTableSkeleton isRtl={isRtl} rows={ORDERS_PER_PAGE.table} />
+                    </motion.div>
+                  )}
+                </motion.div>
+              ) : state.error ? (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.4 }}
+                  className="mt-6"
+                >
+                  <Card className="p-5 max-w-md mx-auto text-center bg-red-50 shadow-md rounded-xl border border-red-100">
+                    <div className={`flex items-center justify-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                      <AlertCircle className="w-5 h-5 text-red-600" />
+                      <p className="text-xs font-medium text-red-600">{state.error}</p>
+                    </div>
+                    <Button
+                      variant="primary"
+                      onClick={() => fetchData()}
+                      className="mt-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300"
+                    >
+                      {isRtl ? 'إعادة المحاولة' : 'Retry'}
+                    </Button>
+                  </Card>
+                </motion.div>
+              ) : (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.4 }}
+                  className="space-y-3"
+                >
+                  {paginatedOrders.length === 0 ? (
+                    <Card className="p-6 text-center bg-white shadow-md rounded-xl border border-gray-100">
+                      <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+                      <h3 className="text-base font-medium text-gray-800 mb-1">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
+                      <p className="text-xs text-gray-500">
+                        {state.filterStatus || state.filterBranch || state.searchQuery
+                          ? isRtl ? 'لا توجد طلبات مطابقة' : 'No matching orders'
+                          : isRtl ? 'لا توجد طلبات بعد' : 'No orders yet'}
+                      </p>
+                    </Card>
+                  ) : (
+                    <>
+                      {state.viewMode === 'table' ? (
+                        <OrderTable
+                          orders={paginatedOrders}
+                          calculateAdjustedTotal={calculateAdjustedTotal}
+                          calculateTotalQuantity={calculateTotalQuantity}
+                          translateUnit={translateUnit}
+                          updateOrderStatus={updateOrderStatus}
+                          openAssignModal={openAssignModal}
+                          submitting={state.submitting}
+                          isRtl={isRtl}
+                          startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
+                        />
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {paginatedOrders.map(order => (
+                            <motion.div
+                              key={order.id}
+                              initial={{ opacity: 0, scale: 0.95 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ duration: 0.3 }}
+                            >
+                              <OrderCard
+                                order={order}
+                                calculateAdjustedTotal={calculateAdjustedTotal}
+                                calculateTotalQuantity={calculateTotalQuantity}
+                                translateUnit={translateUnit}
+                                updateOrderStatus={updateOrderStatus}
+                                openAssignModal={openAssignModal}
+                                submitting={state.submitting}
+                                isRtl={isRtl}
+                              />
+                            </motion.div>
+                          ))}
+                        </div>
+                      )}
+                      {totalPages > 1 && (
+                        <Pagination
+                          currentPage={state.currentPage}
+                          totalPages={totalPages}
+                          isRtl={isRtl}
+                          handlePageChange={handlePageChange}
+                        />
+                      )}
+                    </>
+                  )}
+                  <AssignChefsModal
+                    isOpen={state.isAssignModalOpen}
+                    onClose={() => {
+                      dispatch({ type: 'SET_MODAL', isOpen: false });
+                      dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
+                      dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
+                    }}
+                    selectedOrder={state.selectedOrder}
+                    chefs={state.chefs}
+                    assignFormData={state.assignFormData}
+                    setAssignForm={(data) => dispatch({ type: 'SET_ASSIGN_FORM', payload: data })}
+                    assignChefs={assignChefs}
+                    error={state.error}
+                    submitting={state.submitting}
+                    isRtl={isRtl}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-          {totalPages > 1 && (
-            <OrdersPagination
-              isRtl={isRtl}
-              currentPage={state.currentPage}
-              totalPages={totalPages}
-              handlePageChange={handlePageChange}
-            />
-          )}
-          <AssignChefsModal
-            isOpen={state.isAssignModalOpen}
-            onClose={() => {
-              dispatch({ type: 'SET_MODAL', isOpen: false });
-              dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
-              dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
-            }}
-            selectedOrder={state.selectedOrder}
-            chefs={state.chefs}
-            assignFormData={state.assignFormData}
-            setAssignForm={(data) => dispatch({ type: 'SET_ASSIGN_FORM', payload: data })}
-            assignChefs={assignChefs}
-            error={state.error}
-            submitting={state.submitting}
-            isRtl={isRtl}
-          />
         </motion.div>
       </Suspense>
     </div>
