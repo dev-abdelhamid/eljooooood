@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -98,15 +98,7 @@ interface Order {
   priority: 'low' | 'medium' | 'high' | 'urgent';
   createdBy: string;
   createdAt: string;
-}
-
-interface Chef {
-  _id: string;
-  userId: string;
-  username: string;
-  name: string;
-  nameEn?: string;
-  department: { _id: string; name: string; nameEn?: string } | null;
+  reason?: string;
 }
 
 interface FilterState {
@@ -129,7 +121,7 @@ const Loader: React.FC = () => (
 );
 
 // مكون بطاقة الإحصائيات
-const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color: string; ariaLabel: string }> = React.memo(
+const StatsCard: React.FC<{ title: string; value: string; icon: React.FC<any>; color: string; ariaLabel: string }> = React.memo(
   ({ title, value, icon: Icon, color, ariaLabel }) => (
     <div className={`p-4 bg-${color}-50 rounded-lg border border-${color}-100 cursor-pointer hover:bg-${color}-100 transition-colors duration-200`} aria-label={ariaLabel}>
       <div className="flex items-center gap-3">
@@ -242,7 +234,7 @@ const ChefDashboard: React.FC<{
                   className="border border-amber-100 rounded-lg p-3 bg-amber-50 shadow-sm"
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-semibold text-sm text-gray-800 truncate">
+                    <h4 className="font-semibold text-sm text-gray-800 mb-2 truncate">
                       {isRtl ? `طلب رقم ${task.orderNumber}` : `Order #${task.orderNumber}`}
                     </h4>
                     <span
@@ -346,7 +338,6 @@ export const Dashboard: React.FC = () => {
           message: errorMessage,
           read: false,
           createdAt: new Date().toLocaleString(language),
-          path: '/dashboard',
         });
         return;
       }
@@ -434,12 +425,6 @@ export const Dashboard: React.FC = () => {
             returnReason: item.returnReason || '',
             returnReasonEn: item.returnReasonEn || item.returnReason || '',
           })),
-          status: order.status || 'pending',
-          totalAmount: Number(order.totalAmount || order.totalPrice) || 0,
-          date: formatDate(order.createdAt || new Date(), language),
-          priority: order.priority || 'medium',
-          createdBy: order.createdBy?.username || (isRtl ? 'غير معروف' : 'Unknown'),
-          createdAt: order.createdAt || new Date().toISOString(),
           returns: (order.returns || []).map((ret: any) => ({
             returnId: ret._id || crypto.randomUUID(),
             items: (ret.items || []).map((item: any) => ({
@@ -453,6 +438,13 @@ export const Dashboard: React.FC = () => {
             reviewNotesEn: ret.reviewNotesEn || ret.reviewNotes || '',
             createdAt: formatDate(ret.createdAt || new Date(), language),
           })),
+          status: order.status || 'pending',
+          totalAmount: Number(order.totalAmount || order.totalPrice) || 0,
+          date: formatDate(order.createdAt || new Date(), language),
+          priority: order.priority || 'medium',
+          createdBy: order.createdBy?.username || (isRtl ? 'غير معروف' : 'Unknown'),
+          createdAt: order.createdAt || new Date().toISOString(),
+          reason: order.reason || '',
         }));
 
         const mappedTasks = tasksResponse.map((task: any) => ({
@@ -559,248 +551,152 @@ export const Dashboard: React.FC = () => {
           message: errorMessage,
           read: false,
           createdAt: new Date().toLocaleString(language),
-          path: '/dashboard',
         });
       } finally {
         setLoading(false);
       }
-    }, 100),
-    [user, isRtl, language, cacheKey, addNotification]
+    }, 1000),
+    [user, isRtl, language]
   );
 
   useEffect(() => {
     fetchDashboardData();
-    return () => fetchDashboardData.cancel();
   }, [fetchDashboardData, timeFilter]);
 
   useEffect(() => {
     if (!socket || !user || !isConnected) return;
 
-    socket.on('connect_error', () => {
-      const errorMessage = isRtl ? 'خطأ في الاتصال بالسوكت' : 'Socket connection error';
-      addNotification({
-        _id: `socket-error-${Date.now()}`,
-        type: 'error',
-        message: errorMessage,
-        read: false,
-        createdAt: new Date().toLocaleString(language),
-        path: '/dashboard',
-      });
-    });
+    const events = [
+      {
+        name: 'orderCreated',
+        handler: (data: any) => {
+          if (!data.orderId || !data.orderNumber || !data.branchName || !data.eventId) return;
+          fetchDashboardData(true);
+          addNotification({
+            _id: data.eventId,
+            type: 'success',
+            message: isRtl ? `تم إنشاء طلب جديد رقم ${data.orderNumber} من ${data.branchName}` : `New order ${data.orderNumber} created by ${data.branchName}`,
+            data: { orderId: data.orderId, eventId: data.eventId },
+            read: false,
+            createdAt: new Date().toISOString(),
+            sound: '/sounds/notification.mp3',
+            vibrate: [200, 100, 200],
+          });
+        },
+      },
+      {
+        name: 'orderStatusUpdated',
+        handler: (data: any) => {
+          if (!data.orderId || !data.status || !data.eventId) return;
+          fetchDashboardData(true);
+          addNotification({
+            _id: data.eventId,
+            type: 'info',
+            message: isRtl ? `تم تحديث حالة الطلب ${data.orderNumber} إلى ${data.status}` : `Order ${data.orderNumber} status updated to ${data.status}`,
+            data: { orderId: data.orderId, eventId: data.eventId },
+            read: false,
+            createdAt: new Date().toISOString(),
+            sound: '/sounds/notification.mp3',
+            vibrate: [200, 100, 200],
+          });
+        },
+      },
+      {
+        name: 'taskAssigned',
+        handler: (data: any) => {
+          if (!data.taskId || !data.orderId || !data.productName || !data.quantity || !data.eventId) return;
+          fetchDashboardData(true);
+          addNotification({
+            _id: data.eventId,
+            type: 'info',
+            message: isRtl ? `تم تعيين مهمة: ${data.productName} (${data.quantity} ${data.unit}) للطلب ${data.orderNumber}` : `Task assigned: ${data.productName} (${data.quantity} ${data.unit}) for order ${data.orderNumber}`,
+            data: { taskId: data.taskId, orderId: data.orderId, eventId: data.eventId },
+            read: false,
+            createdAt: new Date().toISOString(),
+            sound: '/sounds/notification.mp3',
+            vibrate: [400, 100, 400],
+          });
+        },
+      },
+      {
+        name: 'taskStatusUpdated',
+        handler: (data: any) => {
+          if (!data.taskId || !data.status || !data.eventId) return;
+          fetchDashboardData(true);
+          addNotification({
+            _id: data.eventId,
+            type: 'info',
+            message: isRtl ? `تم تحديث حالة المهمة: ${data.productName} إلى ${data.status}` : `Task status updated: ${data.productName} to ${data.status}`,
+            data: { taskId: data.taskId, orderId: data.orderId, eventId: data.eventId },
+            read: false,
+            createdAt: new Date().toISOString(),
+            sound: '/sounds/notification.mp3',
+            vibrate: [200, 100, 200],
+          });
+        },
+      },
+      {
+        name: 'orderCancelled',
+        handler: (data: any) => {
+          if (!data.orderId || !data.eventId) return;
+          fetchDashboardData(true);
+          addNotification({
+            _id: data.eventId,
+            type: 'error',
+            message: isRtl ? `تم إلغاء الطلب ${data.orderNumber} من ${data.branchName}${data.reason ? ` بسبب: ${data.reason}` : ''}` : `Order ${data.orderNumber} cancelled by ${data.branchName}${data.reason ? ` due to: ${data.reason}` : ''}`,
+            data: { orderId: data.orderId, eventId: data.eventId },
+            read: false,
+            createdAt: new Date().toISOString(),
+            sound: '/sounds/notification.mp3',
+            vibrate: [200, 100, 200],
+          });
+        },
+      },
+    ];
 
-    socket.on('taskAssigned', (data: any) => {
-      if (!data.taskId || !data.orderId || !data.productName || !data.orderNumber || !data.branchName || !data.quantity || !data.eventId) return;
-
-      if (data.chefId === (user?.id || user?._id) || ['admin', 'production'].includes(user.role)) {
-        fetchDashboardData(true);
-        const notification = {
-          _id: data.taskId,
-          type: 'info' as const,
-          message: isRtl
-            ? `تم تعيين مهمة: ${data.productName} (${data.quantity} ${data.unit}) للطلب ${data.orderNumber} - ${data.branchName}`
-            : `Task assigned: ${data.productName} (${data.quantity} ${data.unit}) for order ${data.orderNumber} - ${data.branchName}`,
-          data: {
-            orderId: data.orderId,
-            taskId: data.taskId,
-            chefId: data.chefId,
-            eventId: data.eventId,
-          },
-          read: false,
-          createdAt: formatDate(new Date(), language),
-          sound: '/sounds/task-assigned.mp3',
-          vibrate: [400, 100, 400],
-          path: '/dashboard',
-        };
-        addNotification(notification);
-        if (user.role === 'chef') {
-          setTasks((prev) => [
-            {
-              id: data.taskId,
-              orderId: data.orderId,
-              orderNumber: data.orderNumber,
-              productName: data.productName,
-              quantity: Number(data.quantity) || 0,
-              unit: data.unit || 'unit',
-              status: data.status || 'assigned',
-              branchName: data.branchName,
-              createdAt: formatDate(new Date(), language),
-            },
-            ...prev.filter((t) => t.id !== data.taskId),
-          ]);
-        }
-      }
-    });
-
-    socket.on('orderCompleted', (data: any) => {
-      if (!data.orderId || !data.orderNumber || !data.branchName || !data.eventId) return;
-
-      if (['admin', 'branch', 'production'].includes(user.role)) {
-        fetchDashboardData(true);
-        addNotification({
-          _id: data._id || crypto.randomUUID(),
-          type: 'success' as const,
-          message: isRtl ? `تم إكمال الطلب ${data.orderNumber} - ${data.branchName}` : `Order completed: ${data.orderNumber} - ${data.branchName}`,
-          data: {
-            orderId: data.orderId,
-            eventId: data.eventId,
-          },
-          read: false,
-          createdAt: formatDate(new Date(), language),
-          sound: '/sounds/order-completed.mp3',
-          vibrate: [400, 100, 400],
-          path: '/dashboard',
-        });
-      }
-    });
-
-    socket.on('itemStatusUpdated', (data: any) => {
-      if (!data.orderId || !data.itemId || !data.status || !data.eventId) return;
-
-      setTasks((prev) =>
-        prev.map((task) =>
-          task.id === data.itemId && task.orderId === data.orderId ? { ...task, status: data.status } : task
-        )
-      );
-      addNotification({
-        _id: data.eventId,
-        type: 'info',
-        message: isRtl
-          ? `تم تحديث حالة المهمة: ${data.productName} للطلب ${data.orderNumber} إلى ${data.status === 'in_progress' ? 'قيد التنفيذ' : 'مكتمل'}`
-          : `Task status updated: ${data.productName} for order ${data.orderNumber} to ${data.status}`,
-        read: false,
-        createdAt: formatDate(new Date(), language),
-        path: '/dashboard',
-      });
-    });
-
+    events.forEach(({ name, handler }) => socket.on(name, handler));
     return () => {
-      socket.off('connect_error');
-      socket.off('taskAssigned');
-      socket.off('orderCompleted');
-      socket.off('itemStatusUpdated');
+      events.forEach(({ name, handler }) => socket.off(name, handler));
     };
-  }, [socket, user, isRtl, language, addNotification, fetchDashboardData, isConnected]);
+  }, [socket, user, isConnected, isRtl, language, addNotification, fetchDashboardData]);
 
   const handleStartTask = useCallback(
     async (taskId: string, orderId: string) => {
-      if (!isConnected) {
-        addNotification({
-          _id: `warn-socket-${Date.now()}`,
-          type: 'warning',
-          message: isRtl ? 'الاتصال بالسوكت غير متاح' : 'Socket disconnected',
-          read: false,
-          createdAt: new Date().toLocaleString(language),
-          path: '/dashboard',
-        });
-        return;
-      }
-
       try {
         await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'in_progress' });
         setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, status: 'in_progress' } : task)));
-        const task = tasks.find((t) => t.id === taskId);
-        const eventId = crypto.randomUUID();
-        socket.emit('itemStatusUpdated', {
+        socket.emit('taskStatusUpdated', {
+          taskId,
           orderId,
-          itemId: taskId,
           status: 'in_progress',
-          chefId: user?.id || user?._id,
-          eventId,
-          orderNumber: task?.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
-          branchName: task?.branchName || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
-          productName: task?.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
-          quantity: task?.quantity || 0,
-          unit: task?.unit || 'unit',
+          eventId: crypto.randomUUID(),
         });
-        addNotification({
-          _id: `success-task-${taskId}-${Date.now()}`,
-          type: 'success',
-          message: isRtl ? 'تم بدء المهمة' : 'Task started',
-          read: false,
-          createdAt: new Date().toLocaleString(language),
-          path: '/dashboard',
-          sound: '/sounds/task-status-updated.mp3',
-          vibrate: [200, 100, 200],
-        });
+        toast.success(isRtl ? 'تم بدء المهمة' : 'Task started', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       } catch (err: any) {
-        const errorMessage = err.message || (isRtl ? 'فشل تحديث المهمة' : 'Failed to update task');
-        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
-        addNotification({
-          _id: `error-task-${taskId}-${Date.now()}`,
-          type: 'error',
-          message: errorMessage,
-          read: false,
-          createdAt: new Date().toLocaleString(language),
-          path: '/dashboard',
-        });
+        toast.error(isRtl ? 'فشل بدء المهمة' : 'Failed to start task', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       }
     },
-    [socket, user, isRtl, isConnected, tasks, language, addNotification]
+    [socket, isRtl]
   );
 
   const handleCompleteTask = useCallback(
     async (taskId: string, orderId: string) => {
-      if (!isConnected) {
-        addNotification({
-          _id: `warn-socket-${Date.now()}`,
-          type: 'warning',
-          message: isRtl ? 'الاتصال بالسوكت غير متاح' : 'Socket disconnected',
-          read: false,
-          createdAt: new Date().toLocaleString(language),
-          path: '/dashboard',
-        });
-        return;
-      }
-
       try {
         await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'completed' });
         setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, status: 'completed' } : task)));
-        const task = tasks.find((t) => t.id === taskId);
-        const eventId = crypto.randomUUID();
-        socket.emit('itemStatusUpdated', {
+        socket.emit('taskStatusUpdated', {
+          taskId,
           orderId,
-          itemId: taskId,
           status: 'completed',
-          chefId: user?.id || user?._id,
-          eventId,
-          orderNumber: task?.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
-          branchName: task?.branchName || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
-          productName: task?.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
-          quantity: task?.quantity || 0,
-          unit: task?.unit || 'unit',
+          eventId: crypto.randomUUID(),
         });
-        addNotification({
-          _id: `success-complete-${taskId}-${Date.now()}`,
-          type: 'success',
-          message: isRtl ? 'تم إكمال المهمة' : 'Task completed',
-          read: false,
-          createdAt: new Date().toLocaleString(language),
-          path: '/dashboard',
-          sound: '/sounds/task-completed.mp3',
-          vibrate: [400, 100, 400],
-        });
+        toast.success(isRtl ? 'تم إكمال المهمة' : 'Task completed', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       } catch (err: any) {
-        const errorMessage = err.message || (isRtl ? 'فشل تحديث المهمة' : 'Failed to update task');
-        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
-        addNotification({
-          _id: `error-complete-${taskId}-${Date.now()}`,
-          type: 'error',
-          message: errorMessage,
-          read: false,
-          createdAt: new Date().toLocaleString(language),
-          path: '/dashboard',
-        });
+        toast.error(isRtl ? 'فشل إكمال المهمة' : 'Failed to complete task', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       }
     },
-    [socket, user, isRtl, isConnected, tasks, language, addNotification]
+    [socket, isRtl]
   );
-
-  const sortedPendingOrders = useMemo(() => {
-    return [...orders]
-      .filter((order) => ['pending', 'approved', 'in_production'].includes(order.status))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 8);
-  }, [orders]);
 
   const renderStats = () => (
     <motion.div
@@ -840,7 +736,7 @@ export const Dashboard: React.FC = () => {
       <StatsCard
         title={isRtl ? 'الطلبات المسلمة' : 'Delivered Orders'}
         value={stats.deliveredOrders.toString()}
-        icon={ShoppingCart}
+        icon={CheckCircle}
         color="green"
         ariaLabel={isRtl ? 'الطلبات المسلمة' : 'Delivered Orders'}
       />
@@ -1007,20 +903,6 @@ export const Dashboard: React.FC = () => {
       case 'chef':
         return (
           <div className="space-y-4">
-            <div className="flex justify-end mb-4">
-              <select
-                className="w-full sm:w-36 p-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-amber-500 bg-white"
-                value={timeFilter}
-                onChange={(e) => setTimeFilter(e.target.value)}
-                aria-label={isRtl ? 'الفترة الزمنية' : 'Time Period'}
-              >
-                {timeFilterOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {isRtl ? opt.label : opt.enLabel}
-                  </option>
-                ))}
-              </select>
-            </div>
             <ChefDashboard
               stats={stats}
               tasks={tasks}
@@ -1034,20 +916,6 @@ export const Dashboard: React.FC = () => {
       case 'branch':
         return (
           <div className="space-y-4">
-            <div className="flex justify-end mb-4">
-              <select
-                className="w-full sm:w-36 p-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-amber-500 bg-white"
-                value={timeFilter}
-                onChange={(e) => setTimeFilter(e.target.value)}
-                aria-label={isRtl ? 'الفترة الزمنية' : 'Time Period'}
-              >
-                {timeFilterOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {isRtl ? opt.label : opt.enLabel}
-                  </option>
-                ))}
-              </select>
-            </div>
             {renderStats()}
             {renderPendingItems()}
           </div>
@@ -1055,20 +923,6 @@ export const Dashboard: React.FC = () => {
       default:
         return (
           <div className="space-y-4">
-            <div className="flex justify-end mb-4">
-              <select
-                className="w-full sm:w-36 p-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-amber-500 bg-white"
-                value={timeFilter}
-                onChange={(e) => setTimeFilter(e.target.value)}
-                aria-label={isRtl ? 'الفترة الزمنية' : 'Time Period'}
-              >
-                {timeFilterOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {isRtl ? opt.label : opt.enLabel}
-                  </option>
-                ))}
-              </select>
-            </div>
             {renderStats()}
             {renderPendingItems()}
             {['admin'].includes(user?.role) && renderBranchPerformance()}
