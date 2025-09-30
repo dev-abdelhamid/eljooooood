@@ -99,16 +99,15 @@ interface NotificationData {
   message: string;
   data?: {
     orderId?: string;
-    orderNumber?: string;
     branchId?: string;
+    chefId?: string;
     taskId?: string;
-    productId?: string;
-    productName?: string;
-    quantity?: number;
-    unit?: string;
-    status?: string;
-    reason?: string;
+    returnId?: string;
     eventId?: string;
+    priority?: 'urgent' | 'high' | 'medium' | 'low';
+    sound?: string;
+    vibrate?: number[];
+    timestamp?: string;
   };
 }
 
@@ -126,9 +125,17 @@ export const notificationsAPI = {
       console.error(`[${new Date().toISOString()}] Invalid branch ID:`, notificationData.data.branchId);
       throw new Error('معرف الفرع غير صالح');
     }
+    if (notificationData.data?.chefId && !/^[0-9a-fA-F]{24}$/.test(notificationData.data.chefId)) {
+      console.error(`[${new Date().toISOString()}] Invalid chef ID:`, notificationData.data.chefId);
+      throw new Error('معرف الشيف غير صالح');
+    }
     if (notificationData.data?.taskId && !/^[0-9a-fA-F]{24}$/.test(notificationData.data.taskId)) {
       console.error(`[${new Date().toISOString()}] Invalid task ID:`, notificationData.data.taskId);
       throw new Error('معرف المهمة غير صالح');
+    }
+    if (notificationData.data?.returnId && !/^[0-9a-fA-F]{24}$/.test(notificationData.data.returnId)) {
+      console.error(`[${new Date().toISOString()}] Invalid return ID:`, notificationData.data.returnId);
+      throw new Error('معرف الإرجاع غير صالح');
     }
     console.log(`[${new Date().toISOString()}] notificationsAPI.create - Sending:`, notificationData);
     try {
@@ -139,6 +146,9 @@ export const notificationsAPI = {
         data: {
           ...notificationData.data,
           eventId: notificationData.data?.eventId || crypto.randomUUID(),
+          sound: notificationData.data?.sound || '/sounds/notification.mp3',
+          vibrate: notificationData.data?.vibrate || [200, 100, 200],
+          timestamp: new Date().toISOString(),
         },
       });
       console.log(`[${new Date().toISOString()}] notificationsAPI.create - Response:`, response);
