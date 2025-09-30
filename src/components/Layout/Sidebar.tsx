@@ -3,7 +3,7 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../contexts/LanguageContext';
-import { useNotifications } from '../../contexts/NotificationContext';
+import { useNotifications } from '../../contexts/NotificationProvider';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Home,

@@ -2,7 +2,7 @@ import React, { useReducer, useEffect, useMemo, useCallback, useState, useRef } 
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
-import { useNotifications } from '../contexts/NotificationContext';
+import { useNotifications } from '../contexts/NotificationProvider';
 import { returnsAPI, notificationsAPI, branchesAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';

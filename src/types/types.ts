@@ -196,14 +196,21 @@ export interface Notification {
   message: string;
   messageEn?: string;
   displayMessage: string; // Derived: message (isRtl=true) or messageEn (isRtl=false)
-  data?: {
+  data: {
     orderId?: string;
+    orderNumber?: string;
     branchId?: string;
     chefId?: string;
     taskId?: string;
     returnId?: string;
     eventId: string;
     priority?: Priority;
+    productId?: string;
+    productName?: string;
+    quantity?: number;
+    unit?: string;
+    status?: string;
+    reason?: string;
   };
   read: boolean;
   createdAt: string;

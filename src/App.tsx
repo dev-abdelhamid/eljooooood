@@ -2,8 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LanguageProvider } from './contexts/LanguageContext';
-import { SocketProvider } from './contexts/SocketContext';
-import { NotificationProvider } from './contexts/NotificationContext';
+import { NotificationProvider } from './contexts/NotificationProvider';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { Layout } from './components/Layout/Layout';
@@ -29,7 +28,6 @@ import Chefstatics from './pages/Chefstatics';
 import BranchProfile from './pages/BranchProfile';
 import { ChefDetails } from './pages/ChefDetails';
 
-// إعداد QueryClient لإدارة الاستعلامات
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -42,7 +40,6 @@ const queryClient = new QueryClient({
   },
 });
 
-// مكون لحماية المسارات المقيدة
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
 
@@ -53,7 +50,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// مكون محتوى التطبيق مع التوجيه
 function AppContent() {
   return (
     <Router>
@@ -102,28 +98,25 @@ function AppContent() {
   );
 }
 
-// مكون التطبيق الرئيسي
 function App() {
   return (
     <LanguageProvider>
       <AuthProvider>
         <QueryClientProvider client={queryClient}>
-         <SocketProvider>
-            <NotificationProvider>
-              <AppContent />
-              <ToastContainer
-                position="top-left"
-                autoClose={4000}
-                newestOnTop
-                rtl={true}
-                pauseOnFocusLoss
-                draggable
-                pauseOnHover
-                theme="light"
-                className="font-arabic"
-              />
-            </NotificationProvider>
-          </SocketProvider>
+          <NotificationProvider>
+            <AppContent />
+            <ToastContainer
+              position="top-left"
+              autoClose={4000}
+              newestOnTop
+              rtl={true}
+              pauseOnFocusLoss
+              draggable
+              pauseOnHover
+              theme="light"
+              className="font-arabic"
+            />
+          </NotificationProvider>
         </QueryClientProvider>
       </AuthProvider>
     </LanguageProvider>

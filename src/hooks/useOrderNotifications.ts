@@ -1,9 +1,10 @@
 import { useCallback, useEffect } from 'react';
-import { useSocket } from '../contexts/SocketContext';
+import { useNotifications } from '../contexts/NotificationProvider';
 import { useLanguage } from '../contexts/LanguageContext';
-import { Order } from '../types/types';
+import { Order, NotificationType } from '../types/types';
 import { formatDate } from '../utils/formatDate';
 import { ordersAPI } from '../services/api';
+import { addOrder, updateOrderStatus, taskAssigned, updateItemStatus, returnStatusUpdated, missingAssignments, setSocketConnected, setSocketError } from '../store/ordersSlice';
 
 interface SocketEventConfig {
   type: string;
@@ -15,12 +16,13 @@ export const useOrderNotifications = (
   stateRef: React.MutableRefObject<any>,
   user: any
 ) => {
-  const { socket } = useSocket();
+  const { socket, isConnected, addNotification } = useNotifications();
   const { t } = useLanguage();
+  const isRtl = t('language') === 'ar';
 
   useEffect(() => {
-    if (!socket || !user) {
-      console.warn(`[${new Date().toISOString()}] Socket or user not available`);
+    if (!socket || !user || !isConnected) {
+      console.warn(`[${new Date().toISOString()}] Socket, user, or connection not available`);
       return;
     }
 
@@ -37,7 +39,7 @@ export const useOrderNotifications = (
         name: 'orderCreated',
         handler: (newOrder: any) => {
           if (!newOrder?._id || !Array.isArray(newOrder.items) || !newOrder.orderNumber || !newOrder.branch?.name) {
-            console.warn(`[${new Date().toISOString()}] Invalid order data:`, newOrder);
+            console.warn(`[${new Date().toISOString()}] Invalid orderCreated data:`, newOrder);
             return;
           }
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
@@ -51,53 +53,121 @@ export const useOrderNotifications = (
             id: newOrder._id,
             orderNumber: newOrder.orderNumber || t('orders.unknown'),
             branchName: newOrder.branch?.name || t('branches.unknown'),
+            branchNameEn: newOrder.branch?.nameEn,
             branchId: newOrder.branch?._id || 'unknown',
-            branch: newOrder.branch || { _id: 'unknown', name: t('branches.unknown') },
+            branch: newOrder.branch || { _id: 'unknown', name: t('branches.unknown'), displayName: t('branches.unknown') },
             items: newOrder.items.map((item: any) => ({
               _id: item._id || crypto.randomUUID(),
               itemId: item._id || crypto.randomUUID(),
               productId: item.product?._id || 'unknown',
               productName: item.product?.name || t('products.unknown'),
+              productNameEn: item.product?.nameEn,
               quantity: Number(item.quantity) || 1,
               price: Number(item.price) || 0,
-              department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
-              status: item.status || 'pending',
-              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown') } : undefined,
+              unit: item.unit || 'unit',
+              unitEn: item.unitEn,
+              displayUnit: isRtl ? item.unit : (item.unitEn || item.unit),
+              department: item.product?.department || { _id: 'unknown', name: t('departments.unknown'), displayName: t('departments.unknown') },
+              status: item.status || ItemStatus.Pending,
+              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown'), name: item.assignedTo.name, displayName: isRtl ? item.assignedTo.name : (item.assignedTo.nameEn || item.assignedTo.name), department: item.assignedTo.department } : undefined,
               returnedQuantity: Number(item.returnedQuantity) || 0,
               returnReason: item.returnReason || '',
+              returnReasonEn: item.returnReasonEn,
+              displayReturnReason: isRtl ? item.returnReason : (item.returnReasonEn || item.returnReason),
             })),
-            status: newOrder.status || 'pending',
+            status: newOrder.status || OrderStatus.Pending,
             totalAmount: Number(newOrder.totalAmount) || 0,
+            adjustedTotal: Number(newOrder.adjustedTotal) || 0,
             date: formatDate(newOrder.createdAt || new Date(), t('language')),
+            requestedDeliveryDate: formatDate(newOrder.requestedDeliveryDate || new Date(), t('language')),
             notes: newOrder.notes || '',
-            priority: newOrder.priority || 'medium',
+            notesEn: newOrder.notesEn,
+            displayNotes: isRtl ? newOrder.notes : (newOrder.notesEn || newOrder.notes),
+            priority: newOrder.priority || Priority.Medium,
             createdBy: newOrder.createdBy?.username || t('orders.unknown'),
+            createdByName: isRtl ? newOrder.createdBy?.name : (newOrder.createdBy?.nameEn || newOrder.createdBy?.name || t('orders.unknown')),
             statusHistory: Array.isArray(newOrder.statusHistory)
               ? newOrder.statusHistory.map((history: any) => ({
-                  status: history.status || 'pending',
+                  status: history.status || OrderStatus.Pending,
                   changedBy: history.changedBy || t('orders.unknown'),
+                  changedByName: isRtl ? history.changedByName : (history.changedByNameEn || history.changedByName || t('orders.unknown')),
                   changedAt: formatDate(history.changedAt || new Date(), t('language')),
                   notes: history.notes || '',
+                  notesEn: history.notesEn,
+                  displayNotes: isRtl ? history.notes : (history.notesEn || history.notes),
                 }))
               : [],
             returns: Array.isArray(newOrder.returns)
               ? newOrder.returns.map((ret: any) => ({
                   returnId: ret._id || crypto.randomUUID(),
+                  returnNumber: ret.returnNumber || 'unknown',
                   items: Array.isArray(ret.items)
                     ? ret.items.map((item: any) => ({
-                        productId: item.product?._id || 'unknown',
+                        productId: item.product?._id || item.productId || 'unknown',
+                        productName: item.product?.name || item.productName || t('products.unknown'),
+                        productNameEn: item.product?.nameEn || item.productNameEn,
                         quantity: Number(item.quantity) || 0,
+                        unit: item.unit || 'unit',
+                        unitEn: item.unitEn,
+                        displayUnit: isRtl ? item.unit : (item.unitEn || item.unit),
                         reason: item.reason || '',
+                        reasonEn: item.reasonEn,
+                        displayReason: isRtl ? item.reason : (item.reasonEn || item.reason),
+                        status: item.status || ReturnStatus.PendingApproval,
+                        reviewNotes: item.reviewNotes || '',
+                        reviewNotesEn: item.reviewNotesEn,
+                        displayReviewNotes: isRtl ? item.reviewNotes : (item.reviewNotesEn || item.reviewNotes),
                       }))
                     : [],
-                  status: ret.status || 'pending_approval',
+                  status: ret.status || ReturnStatus.PendingApproval,
                   reviewNotes: ret.reviewNotes || '',
+                  reviewNotesEn: ret.reviewNotesEn,
+                  displayReviewNotes: isRtl ? ret.reviewNotes : (ret.reviewNotesEn || ret.reviewNotes),
                   createdAt: formatDate(ret.createdAt || new Date(), t('language')),
+                  createdBy: ret.createdBy ? { _id: ret.createdBy._id, username: ret.createdBy.username, name: ret.createdBy.name, nameEn: ret.createdBy.nameEn, displayName: isRtl ? ret.createdBy.name : (ret.createdBy.nameEn || ret.createdBy.name) } : { _id: 'unknown', username: t('orders.unknown'), name: t('orders.unknown'), displayName: t('orders.unknown') },
+                  reviewedBy: ret.reviewedBy ? { _id: ret.reviewedBy._id, username: ret.reviewedBy.username, name: ret.reviewedBy.name, nameEn: ret.reviewedBy.nameEn, displayName: isRtl ? ret.reviewedBy.name : (ret.reviewedBy.nameEn || ret.reviewedBy.name) } : undefined,
                 }))
               : [],
+            approvedBy: newOrder.approvedBy ? { _id: newOrder.approvedBy._id, name: newOrder.approvedBy.name, nameEn: newOrder.approvedBy.nameEn, displayName: isRtl ? newOrder.approvedBy.name : (newOrder.approvedBy.nameEn || newOrder.approvedBy.name) } : undefined,
+            approvedAt: newOrder.approvedAt,
+            deliveredAt: newOrder.deliveredAt,
+            transitStartedAt: newOrder.transitStartedAt,
+            isRtl,
           };
 
-          dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
+          dispatch(addOrder(mappedOrder));
+
+          addNotification({
+            _id: newOrder.eventId || crypto.randomUUID(),
+            type: NotificationType.OrderCreated,
+            displayType: 'success',
+            message: t('notifications.order_created', {
+              orderNumber: newOrder.orderNumber,
+              branchName: isRtl ? newOrder.branch?.name : (newOrder.branch?.nameEn || newOrder.branch?.name),
+            }),
+            messageEn: t('notifications.order_created', {
+              orderNumber: newOrder.orderNumber,
+              branchName: newOrder.branch?.nameEn || newOrder.branch?.name,
+            }, 'en'),
+            displayMessage: isRtl ? t('notifications.order_created', {
+              orderNumber: newOrder.orderNumber,
+              branchName: newOrder.branch?.name,
+            }) : t('notifications.order_created', {
+              orderNumber: newOrder.orderNumber,
+              branchName: newOrder.branch?.nameEn || newOrder.branch?.name,
+            }, 'en'),
+            data: {
+              orderId: newOrder._id,
+              orderNumber: newOrder.orderNumber,
+              branchId: newOrder.branch?._id,
+              eventId: newOrder.eventId || crypto.randomUUID(),
+              priority: newOrder.priority,
+            },
+            read: false,
+            createdAt: newOrder.createdAt || new Date().toISOString(),
+            sound: '/sounds/notification.mp3',
+            vibrate: [200, 100, 200],
+          });
         },
         config: {
           type: 'ADD_ORDER',
@@ -105,16 +175,48 @@ export const useOrderNotifications = (
         },
       },
       {
-        name: 'orderConfirmed',
+        name: 'orderApprovedForBranch',
         handler: (data: any) => {
           if (!['admin', 'branch'].includes(user.role)) return;
           if (!data.orderId || !data.orderNumber || !data.branchName) {
-            console.warn(`[${new Date().toISOString()}] Invalid order confirmed data:`, data);
+            console.warn(`[${new Date().toISOString()}] Invalid orderApprovedForBranch data:`, data);
             return;
           }
           if (user.role === 'branch' && data.branchId !== user.branchId) return;
 
-          dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'confirmed' });
+          dispatch(updateOrderStatus({ orderId: data.orderId, status: OrderStatus.Approved }));
+
+          addNotification({
+            _id: data.eventId || crypto.randomUUID(),
+            type: NotificationType.OrderStatusUpdated,
+            displayType: 'success',
+            message: t('notifications.order_approved', {
+              orderNumber: data.orderNumber,
+              branchName: isRtl ? data.branchName : (data.branchNameEn || data.branchName),
+            }),
+            messageEn: t('notifications.order_approved', {
+              orderNumber: data.orderNumber,
+              branchName: data.branchNameEn || data.branchName,
+            }, 'en'),
+            displayMessage: isRtl ? t('notifications.order_approved', {
+              orderNumber: data.orderNumber,
+              branchName: data.branchName,
+            }) : t('notifications.order_approved', {
+              orderNumber: data.orderNumber,
+              branchName: data.branchNameEn || data.branchName,
+            }, 'en'),
+            data: {
+              orderId: data.orderId,
+              orderNumber: data.orderNumber,
+              branchId: data.branchId,
+              eventId: data.eventId || crypto.randomUUID(),
+              status: OrderStatus.Approved,
+            },
+            read: false,
+            createdAt: data.createdAt || new Date().toISOString(),
+            sound: '/sounds/notification.mp3',
+            vibrate: [200, 100, 200],
+          });
         },
         config: {
           type: 'UPDATE_ORDER_STATUS',
@@ -126,7 +228,7 @@ export const useOrderNotifications = (
         handler: (data: any) => {
           if (!['admin', 'production', 'chef'].includes(user.role)) return;
           if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName) {
-            console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, data);
+            console.warn(`[${new Date().toISOString()}] Invalid taskAssigned data:`, data);
             return;
           }
           if (user.role === 'chef' && !data.items.some((item: any) => item.assignedTo?._id === user._id)) return;
@@ -136,15 +238,50 @@ export const useOrderNotifications = (
             itemId: item.itemId || crypto.randomUUID(),
             productId: item.productId || 'unknown',
             productName: item.productName || t('products.unknown'),
+            productNameEn: item.productNameEn,
             quantity: Number(item.quantity) || 1,
-            department: item.department || { _id: 'unknown', name: t('departments.unknown') },
-            status: item.status || 'assigned',
+            unit: item.unit || 'unit',
+            unitEn: item.unitEn,
+            displayUnit: isRtl ? item.unit : (item.unitEn || item.unit),
+            department: item.department || { _id: 'unknown', name: t('departments.unknown'), displayName: t('departments.unknown') },
+            status: item.status || ItemStatus.Assigned,
             assignedTo: item.assignedTo
-              ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown') }
+              ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown'), name: item.assignedTo.name, nameEn: item.assignedTo.nameEn, displayName: isRtl ? item.assignedTo.name : (item.assignedTo.nameEn || item.assignedTo.name), department: item.assignedTo.department }
               : undefined,
           }));
 
-          dispatch({ type: 'TASK_ASSIGNED', orderId: data.orderId, items: mappedItems });
+          dispatch(taskAssigned({ orderId: data.orderId, items: mappedItems }));
+
+          addNotification({
+            _id: data.eventId || crypto.randomUUID(),
+            type: NotificationType.TaskAssigned,
+            displayType: 'info',
+            message: t('notifications.task_assigned', {
+              orderNumber: data.orderNumber,
+              taskId: data.taskId || data.items[0]?.itemId || 'unknown',
+            }),
+            messageEn: t('notifications.task_assigned', {
+              orderNumber: data.orderNumber,
+              taskId: data.taskId || data.items[0]?.itemId || 'unknown',
+            }, 'en'),
+            displayMessage: isRtl ? t('notifications.task_assigned', {
+              orderNumber: data.orderNumber,
+              taskId: data.taskId || data.items[0]?.itemId || 'unknown',
+            }) : t('notifications.task_assigned', {
+              orderNumber: data.orderNumber,
+              taskId: data.taskId || data.items[0]?.itemId || 'unknown',
+            }, 'en'),
+            data: {
+              orderId: data.orderId,
+              orderNumber: data.orderNumber,
+              taskId: data.taskId || data.items[0]?.itemId,
+              eventId: data.eventId || crypto.randomUUID(),
+            },
+            read: false,
+            createdAt: data.createdAt || new Date().toISOString(),
+            sound: '/sounds/notification.mp3',
+            vibrate: [200, 100, 200],
+          });
         },
         config: {
           type: 'TASK_ASSIGNED',
@@ -156,28 +293,90 @@ export const useOrderNotifications = (
         handler: async (data: any) => {
           if (!['admin', 'production', 'chef'].includes(user.role)) return;
           if (!data.orderId || !data.itemId || !data.status || !data.orderNumber || !data.branchName) {
-            console.warn(`[${new Date().toISOString()}] Invalid item status update data:`, data);
+            console.warn(`[${new Date().toISOString()}] Invalid itemStatusUpdated data:`, data);
             return;
           }
           if (user.role === 'chef' && data.chefId !== user._id) return;
 
-          dispatch({
-            type: 'UPDATE_ITEM_STATUS',
-            payload: { orderId: data.orderId, itemId: data.itemId, status: data.status },
+          dispatch(updateItemStatus({ orderId: data.orderId, payload: { itemId: data.itemId, status: data.status } }));
+
+          addNotification({
+            _id: data.eventId || crypto.randomUUID(),
+            type: NotificationType.ItemStatusUpdated,
+            displayType: 'info',
+            message: t('notifications.item_status_updated', {
+              orderNumber: data.orderNumber,
+              status: isRtl ? t(`status.${data.status}`) : data.status,
+            }),
+            messageEn: t('notifications.item_status_updated', {
+              orderNumber: data.orderNumber,
+              status: data.status,
+            }, 'en'),
+            displayMessage: isRtl ? t('notifications.item_status_updated', {
+              orderNumber: data.orderNumber,
+              status: t(`status.${data.status}`),
+            }) : t('notifications.item_status_updated', {
+              orderNumber: data.orderNumber,
+              status: data.status,
+            }, 'en'),
+            data: {
+              orderId: data.orderId,
+              orderNumber: data.orderNumber,
+              taskId: data.itemId,
+              status: data.status,
+              eventId: data.eventId || crypto.randomUUID(),
+            },
+            read: false,
+            createdAt: data.createdAt || new Date().toISOString(),
+            sound: '/sounds/notification.mp3',
+            vibrate: [200, 100, 200],
           });
 
-          try {
-            const updatedOrder = await ordersAPI.getById(data.orderId);
-            if (!updatedOrder || !updatedOrder._id || !Array.isArray(updatedOrder.items)) {
-              console.warn(`[${new Date().toISOString()}] Failed to fetch updated order:`, data.orderId);
-              return;
+          if (data.status === ItemStatus.Completed) {
+            try {
+              const updatedOrder = await ordersAPI.getById(data.orderId);
+              if (!updatedOrder || !updatedOrder._id || !Array.isArray(updatedOrder.items)) {
+                console.warn(`[${new Date().toISOString()}] Failed to fetch updated order:`, data.orderId);
+                return;
+              }
+              const allItemsCompleted = updatedOrder.items.every((item: any) => item.status === ItemStatus.Completed);
+              if (allItemsCompleted && updatedOrder.status !== OrderStatus.Completed) {
+                dispatch(updateOrderStatus({ orderId: data.orderId, status: OrderStatus.Completed }));
+                addNotification({
+                  _id: crypto.randomUUID(),
+                  type: NotificationType.OrderCompleted,
+                  displayType: 'success',
+                  message: t('notifications.order_completed', {
+                    orderNumber: data.orderNumber,
+                    branchName: isRtl ? data.branchName : (data.branchNameEn || data.branchName),
+                  }),
+                  messageEn: t('notifications.order_completed', {
+                    orderNumber: data.orderNumber,
+                    branchName: data.branchNameEn || data.branchName,
+                  }, 'en'),
+                  displayMessage: isRtl ? t('notifications.order_completed', {
+                    orderNumber: data.orderNumber,
+                    branchName: data.branchName,
+                  }) : t('notifications.order_completed', {
+                    orderNumber: data.orderNumber,
+                    branchName: data.branchNameEn || data.branchName,
+                  }, 'en'),
+                  data: {
+                    orderId: data.orderId,
+                    orderNumber: data.orderNumber,
+                    branchId: data.branchId,
+                    eventId: crypto.randomUUID(),
+                    status: OrderStatus.Completed,
+                  },
+                  read: false,
+                  createdAt: new Date().toISOString(),
+                  sound: '/sounds/notification.mp3',
+                  vibrate: [200, 100, 200],
+                });
+              }
+            } catch (err) {
+              console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
             }
-            const allItemsCompleted = updatedOrder.items.every((item: any) => item.status === 'completed');
-            if (allItemsCompleted && updatedOrder.status !== 'completed') {
-              dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'completed' });
-            }
-          } catch (err) {
-            console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
           }
         },
         config: {
@@ -190,10 +389,42 @@ export const useOrderNotifications = (
         handler: (data: any) => {
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
           if (!data.orderId || !data.status || !data.orderNumber || !data.branchName) {
-            console.warn(`[${new Date().toISOString()}] Invalid order status update data:`, data);
+            console.warn(`[${new Date().toISOString()}] Invalid orderStatusUpdated data:`, data);
             return;
           }
-          dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: data.status });
+          dispatch(updateOrderStatus({ orderId: data.orderId, status: data.status }));
+
+          addNotification({
+            _id: data.eventId || crypto.randomUUID(),
+            type: NotificationType.OrderStatusUpdated,
+            displayType: 'info',
+            message: t('notifications.order_status_updated', {
+              orderNumber: data.orderNumber,
+              status: isRtl ? t(`status.${data.status}`) : data.status,
+            }),
+            messageEn: t('notifications.order_status_updated', {
+              orderNumber: data.orderNumber,
+              status: data.status,
+            }, 'en'),
+            displayMessage: isRtl ? t('notifications.order_status_updated', {
+              orderNumber: data.orderNumber,
+              status: t(`status.${data.status}`),
+            }) : t('notifications.order_status_updated', {
+              orderNumber: data.orderNumber,
+              status: data.status,
+            }, 'en'),
+            data: {
+              orderId: data.orderId,
+              orderNumber: data.orderNumber,
+              branchId: data.branchId,
+              status: data.status,
+              eventId: data.eventId || crypto.randomUUID(),
+            },
+            read: false,
+            createdAt: data.createdAt || new Date().toISOString(),
+            sound: '/sounds/notification.mp3',
+            vibrate: [200, 100, 200],
+          });
         },
         config: {
           type: 'UPDATE_ORDER_STATUS',
@@ -201,146 +432,274 @@ export const useOrderNotifications = (
         },
       },
       {
-        name: 'orderCompleted',
+        name: 'orderCompletedByChefs',
         handler: async (data: any) => {
           if (!['admin', 'branch', 'production', 'chef'].includes(user.role)) return;
           if (!data.orderId || !data.orderNumber || !data.branchName) {
-            console.warn(`[${new Date().toISOString()}] Invalid order completed data:`, data);
+            console.warn(`[${new Date().toISOString()}] Invalid orderCompletedByChefs data:`, data);
             return;
           }
-          try {
-            const updatedOrder = await ordersAPI.getById(data.orderId);
-            if (!updatedOrder || !updatedOrder._id) {
-              console.warn(`[${new Date().toISOString()}] Failed to fetch updated order:`, data.orderId);
-              return;
-            }
-            const mappedOrder: Order = {
-              id: updatedOrder._id,
-              orderNumber: updatedOrder.orderNumber || t('orders.unknown'),
-              branchName: updatedOrder.branch?.name || t('branches.unknown'),
-              branchId: updatedOrder.branch?._id || 'unknown',
-              branch: updatedOrder.branch || { _id: 'unknown', name: t('branches.unknown') },
-              items: updatedOrder.items.map((item: any) => ({
-                _id: item._id || crypto.randomUUID(),
-                itemId: item._id || crypto.randomUUID(),
-                productId: item.product?._id || 'unknown',
-                productName: item.product?.name || t('products.unknown'),
-                quantity: Number(item.quantity) || 1,
-                price: Number(item.price) || 0,
-                department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
-                status: item.status || 'completed',
-                assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown') } : undefined,
-                returnedQuantity: Number(item.returnedQuantity) || 0,
-                returnReason: item.returnReason || '',
-              })),
-              status: 'completed',
-              totalAmount: Number(updatedOrder.totalAmount) || 0,
-              date: formatDate(updatedOrder.createdAt || new Date(), t('language')),
-              notes: updatedOrder.notes || '',
-              priority: updatedOrder.priority || 'medium',
-              createdBy: updatedOrder.createdBy?.username || t('orders.unknown'),
-              statusHistory: Array.isArray(updatedOrder.statusHistory)
-                ? updatedOrder.statusHistory.map((history: any) => ({
-                    status: history.status || 'pending',
-                    changedBy: history.changedBy || t('orders.unknown'),
-                    changedAt: formatDate(history.changedAt || new Date(), t('language')),
-                    notes: history.notes || '',
-                  }))
-                : [],
-              returns: Array.isArray(updatedOrder.returns)
-                ? updatedOrder.returns.map((ret: any) => ({
-                    returnId: ret._id || crypto.randomUUID(),
-                    items: Array.isArray(ret.items)
-                      ? ret.items.map((item: any) => ({
-                          productId: item.product?._id || 'unknown',
-                          quantity: Number(item.quantity) || 0,
-                          reason: item.reason || '',
-                        }))
-                      : [],
-                    status: ret.status || 'pending_approval',
-                    reviewNotes: ret.reviewNotes || '',
-                    createdAt: formatDate(ret.createdAt || new Date(), t('language')),
-                  }))
-                : [],
-            };
-            dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'completed', payload: mappedOrder });
-          } catch (err) {
-            console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
+          const updatedOrder = await ordersAPI.getById(data.orderId);
+          if (!updatedOrder || !updatedOrder._id) {
+            console.warn(`[${new Date().toISOString()}] Failed to fetch updated order:`, data.orderId);
+            return;
           }
+          const mappedOrder: Order = {
+            id: updatedOrder._id,
+            orderNumber: updatedOrder.orderNumber || t('orders.unknown'),
+            branchName: updatedOrder.branch?.name || t('branches.unknown'),
+            branchNameEn: updatedOrder.branch?.nameEn,
+            branchId: updatedOrder.branch?._id || 'unknown',
+            branch: updatedOrder.branch || { _id: 'unknown', name: t('branches.unknown'), displayName: t('branches.unknown') },
+            items: updatedOrder.items.map((item: any) => ({
+              _id: item._id || crypto.randomUUID(),
+              itemId: item._id || crypto.randomUUID(),
+              productId: item.product?._id || 'unknown',
+              productName: item.product?.name || t('products.unknown'),
+              productNameEn: item.product?.nameEn,
+              quantity: Number(item.quantity) || 1,
+              price: Number(item.price) || 0,
+              unit: item.unit || 'unit',
+              unitEn: item.unitEn,
+              displayUnit: isRtl ? item.unit : (item.unitEn || item.unit),
+              department: item.product?.department || { _id: 'unknown', name: t('departments.unknown'), displayName: t('departments.unknown') },
+              status: item.status || ItemStatus.Completed,
+              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown'), name: item.assignedTo.name, nameEn: item.assignedTo.nameEn, displayName: isRtl ? item.assignedTo.name : (item.assignedTo.nameEn || item.assignedTo.name), department: item.assignedTo.department } : undefined,
+              returnedQuantity: Number(item.returnedQuantity) || 0,
+              returnReason: item.returnReason || '',
+              returnReasonEn: item.returnReasonEn,
+              displayReturnReason: isRtl ? item.returnReason : (item.returnReasonEn || item.returnReason),
+            })),
+            status: OrderStatus.Completed,
+            totalAmount: Number(updatedOrder.totalAmount) || 0,
+            adjustedTotal: Number(updatedOrder.adjustedTotal) || 0,
+            date: formatDate(updatedOrder.createdAt || new Date(), t('language')),
+            requestedDeliveryDate: formatDate(updatedOrder.requestedDeliveryDate || new Date(), t('language')),
+            notes: updatedOrder.notes || '',
+            notesEn: updatedOrder.notesEn,
+            displayNotes: isRtl ? updatedOrder.notes : (updatedOrder.notesEn || updatedOrder.notes),
+            priority: updatedOrder.priority || Priority.Medium,
+            createdBy: updatedOrder.createdBy?.username || t('orders.unknown'),
+            createdByName: isRtl ? updatedOrder.createdBy?.name : (updatedOrder.createdBy?.nameEn || updatedOrder.createdBy?.name || t('orders.unknown')),
+            statusHistory: Array.isArray(updatedOrder.statusHistory)
+              ? updatedOrder.statusHistory.map((history: any) => ({
+                  status: history.status || OrderStatus.Pending,
+                  changedBy: history.changedBy || t('orders.unknown'),
+                  changedByName: isRtl ? history.changedByName : (history.changedByNameEn || history.changedByName || t('orders.unknown')),
+                  changedAt: formatDate(history.changedAt || new Date(), t('language')),
+                  notes: history.notes || '',
+                  notesEn: history.notesEn,
+                  displayNotes: isRtl ? history.notes : (history.notesEn || history.notes),
+                }))
+              : [],
+            returns: Array.isArray(updatedOrder.returns)
+              ? updatedOrder.returns.map((ret: any) => ({
+                  returnId: ret._id || crypto.randomUUID(),
+                  returnNumber: ret.returnNumber || 'unknown',
+                  items: Array.isArray(ret.items)
+                    ? ret.items.map((item: any) => ({
+                        productId: item.product?._id || item.productId || 'unknown',
+                        productName: item.product?.name || item.productName || t('products.unknown'),
+                        productNameEn: item.product?.nameEn || item.productNameEn,
+                        quantity: Number(item.quantity) || 0,
+                        unit: item.unit || 'unit',
+                        unitEn: item.unitEn,
+                        displayUnit: isRtl ? item.unit : (item.unitEn || item.unit),
+                        reason: item.reason || '',
+                        reasonEn: item.reasonEn,
+                        displayReason: isRtl ? item.reason : (item.reasonEn || item.reason),
+                        status: item.status || ReturnStatus.PendingApproval,
+                        reviewNotes: item.reviewNotes || '',
+                        reviewNotesEn: item.reviewNotesEn,
+                        displayReviewNotes: isRtl ? item.reviewNotes : (item.reviewNotesEn || item.reviewNotes),
+                      }))
+                    : [],
+                  status: ret.status || ReturnStatus.PendingApproval,
+                  reviewNotes: ret.reviewNotes || '',
+                  reviewNotesEn: ret.reviewNotesEn,
+                  displayReviewNotes: isRtl ? ret.reviewNotes : (ret.reviewNotesEn || ret.reviewNotes),
+                  createdAt: formatDate(ret.createdAt || new Date(), t('language')),
+                  createdBy: ret.createdBy ? { _id: ret.createdBy._id, username: ret.createdBy.username, name: ret.createdBy.name, nameEn: ret.createdBy.nameEn, displayName: isRtl ? ret.createdBy.name : (ret.createdBy.nameEn || ret.createdBy.name) } : { _id: 'unknown', username: t('orders.unknown'), name: t('orders.unknown'), displayName: t('orders.unknown') },
+                  reviewedBy: ret.reviewedBy ? { _id: ret.reviewedBy._id, username: ret.reviewedBy.username, name: ret.reviewedBy.name, nameEn: ret.reviewedBy.nameEn, displayName: isRtl ? ret.reviewedBy.name : (ret.reviewedBy.nameEn || ret.reviewedBy.name) } : undefined,
+                }))
+              : [],
+            approvedBy: updatedOrder.approvedBy ? { _id: updatedOrder.approvedBy._id, name: updatedOrder.approvedBy.name, nameEn: updatedOrder.approvedBy.nameEn, displayName: isRtl ? updatedOrder.approvedBy.name : (updatedOrder.approvedBy.nameEn || updatedOrder.approvedBy.name) } : undefined,
+            approvedAt: updatedOrder.approvedAt,
+            deliveredAt: updatedOrder.deliveredAt,
+            transitStartedAt: updatedOrder.transitStartedAt,
+            isRtl,
+          };
+          dispatch(updateOrderStatus({ orderId: data.orderId, status: OrderStatus.Completed, payload: mappedOrder }));
+
+          addNotification({
+            _id: data.eventId || crypto.randomUUID(),
+            type: NotificationType.OrderCompleted,
+            displayType: 'success',
+            message: t('notifications.order_completed', {
+              orderNumber: data.orderNumber,
+              branchName: isRtl ? data.branchName : (data.branchNameEn || data.branchName),
+            }),
+            messageEn: t('notifications.order_completed', {
+              orderNumber: data.orderNumber,
+              branchName: data.branchNameEn || data.branchName,
+            }, 'en'),
+            displayMessage: isRtl ? t('notifications.order_completed', {
+              orderNumber: data.orderNumber,
+              branchName: data.branchName,
+            }) : t('notifications.order_completed', {
+              orderNumber: data.orderNumber,
+              branchName: data.branchNameEn || data.branchName,
+            }, 'en'),
+            data: {
+              orderId: data.orderId,
+              orderNumber: data.orderNumber,
+              branchId: data.branchId,
+              eventId: data.eventId || crypto.randomUUID(),
+              status: OrderStatus.Completed,
+            },
+            read: false,
+            createdAt: data.createdAt || new Date().toISOString(),
+            sound: '/sounds/notification.mp3',
+            vibrate: [200, 100, 200],
+          });
         },
         config: {
           type: 'UPDATE_ORDER_STATUS',
-          roles: ['admin', 'branch', 'production'],
+          roles: ['admin', 'branch', 'production', 'chef'],
         },
       },
       {
-        name: 'orderShipped',
+        name: 'orderInTransitToBranch',
         handler: async (data: any) => {
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
           if (!data.orderId || !data.orderNumber || !data.branchName || !data.branchId) {
-            console.warn(`[${new Date().toISOString()}] Invalid order shipped data:`, data);
+            console.warn(`[${new Date().toISOString()}] Invalid orderInTransitToBranch data:`, data);
             return;
           }
           if (user.role === 'branch' && data.branchId !== user.branchId) return;
-          try {
-            const updatedOrder = await ordersAPI.getById(data.orderId);
-            if (!updatedOrder || !updatedOrder._id) {
-              console.warn(`[${new Date().toISOString()}] Failed to fetch updated order:`, data.orderId);
-              return;
-            }
-            const mappedOrder: Order = {
-              id: updatedOrder._id,
-              orderNumber: updatedOrder.orderNumber || t('orders.unknown'),
-              branchName: updatedOrder.branch?.name || t('branches.unknown'),
-              branchId: updatedOrder.branch?._id || 'unknown',
-              branch: updatedOrder.branch || { _id: 'unknown', name: t('branches.unknown') },
-              items: updatedOrder.items.map((item: any) => ({
-                _id: item._id || crypto.randomUUID(),
-                itemId: item._id || crypto.randomUUID(),
-                productId: item.product?._id || 'unknown',
-                productName: item.product?.name || t('products.unknown'),
-                quantity: Number(item.quantity) || 1,
-                price: Number(item.price) || 0,
-                department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
-                status: item.status || 'completed',
-                assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown') } : undefined,
-                returnedQuantity: Number(item.returnedQuantity) || 0,
-                returnReason: item.returnReason || '',
-              })),
-              status: 'in_transit',
-              totalAmount: Number(updatedOrder.totalAmount) || 0,
-              date: formatDate(updatedOrder.createdAt || new Date(), t('language')),
-              notes: updatedOrder.notes || '',
-              priority: updatedOrder.priority || 'medium',
-              createdBy: updatedOrder.createdBy?.username || t('orders.unknown'),
-              statusHistory: Array.isArray(updatedOrder.statusHistory)
-                ? updatedOrder.statusHistory.map((history: any) => ({
-                    status: history.status || 'pending',
-                    changedBy: history.changedBy || t('orders.unknown'),
-                    changedAt: formatDate(history.changedAt || new Date(), t('language')),
-                    notes: history.notes || '',
-                  }))
-                : [],
-              returns: Array.isArray(updatedOrder.returns)
-                ? updatedOrder.returns.map((ret: any) => ({
-                    returnId: ret._id || crypto.randomUUID(),
-                    items: Array.isArray(ret.items)
-                      ? ret.items.map((item: any) => ({
-                          productId: item.product?._id || 'unknown',
-                          quantity: Number(item.quantity) || 0,
-                          reason: item.reason || '',
-                        }))
-                      : [],
-                    status: ret.status || 'pending_approval',
-                    reviewNotes: ret.reviewNotes || '',
-                    createdAt: formatDate(ret.createdAt || new Date(), t('language')),
-                  }))
-                : [],
-            };
-            dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'in_transit', payload: mappedOrder });
-          } catch (err) {
-            console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
+          const updatedOrder = await ordersAPI.getById(data.orderId);
+          if (!updatedOrder || !updatedOrder._id) {
+            console.warn(`[${new Date().toISOString()}] Failed to fetch updated order:`, data.orderId);
+            return;
           }
+          const mappedOrder: Order = {
+            id: updatedOrder._id,
+            orderNumber: updatedOrder.orderNumber || t('orders.unknown'),
+            branchName: updatedOrder.branch?.name || t('branches.unknown'),
+            branchNameEn: updatedOrder.branch?.nameEn,
+            branchId: updatedOrder.branch?._id || 'unknown',
+            branch: updatedOrder.branch || { _id: 'unknown', name: t('branches.unknown'), displayName: t('branches.unknown') },
+            items: updatedOrder.items.map((item: any) => ({
+              _id: item._id || crypto.randomUUID(),
+              itemId: item._id || crypto.randomUUID(),
+              productId: item.product?._id || 'unknown',
+              productName: item.product?.name || t('products.unknown'),
+              productNameEn: item.product?.nameEn,
+              quantity: Number(item.quantity) || 1,
+              price: Number(item.price) || 0,
+              unit: item.unit || 'unit',
+              unitEn: item.unitEn,
+              displayUnit: isRtl ? item.unit : (item.unitEn || item.unit),
+              department: item.product?.department || { _id: 'unknown', name: t('departments.unknown'), displayName: t('departments.unknown') },
+              status: item.status || ItemStatus.Completed,
+              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown'), name: item.assignedTo.name, nameEn: item.assignedTo.nameEn, displayName: isRtl ? item.assignedTo.name : (item.assignedTo.nameEn || item.assignedTo.name), department: item.assignedTo.department } : undefined,
+              returnedQuantity: Number(item.returnedQuantity) || 0,
+              returnReason: item.returnReason || '',
+              returnReasonEn: item.returnReasonEn,
+              displayReturnReason: isRtl ? item.returnReason : (item.returnReasonEn || item.returnReason),
+            })),
+            status: OrderStatus.InTransit,
+            totalAmount: Number(updatedOrder.totalAmount) || 0,
+            adjustedTotal: Number(updatedOrder.adjustedTotal) || 0,
+            date: formatDate(updatedOrder.createdAt || new Date(), t('language')),
+            requestedDeliveryDate: formatDate(updatedOrder.requestedDeliveryDate || new Date(), t('language')),
+            notes: updatedOrder.notes || '',
+            notesEn: updatedOrder.notesEn,
+            displayNotes: isRtl ? updatedOrder.notes : (updatedOrder.notesEn || updatedOrder.notes),
+            priority: updatedOrder.priority || Priority.Medium,
+            createdBy: updatedOrder.createdBy?.username || t('orders.unknown'),
+            createdByName: isRtl ? updatedOrder.createdBy?.name : (updatedOrder.createdBy?.nameEn || updatedOrder.createdBy?.name || t('orders.unknown')),
+            statusHistory: Array.isArray(updatedOrder.statusHistory)
+              ? updatedOrder.statusHistory.map((history: any) => ({
+                  status: history.status || OrderStatus.Pending,
+                  changedBy: history.changedBy || t('orders.unknown'),
+                  changedByName: isRtl ? history.changedByName : (history.changedByNameEn || history.changedByName || t('orders.unknown')),
+                  changedAt: formatDate(history.changedAt || new Date(), t('language')),
+                  notes: history.notes || '',
+                  notesEn: history.notesEn,
+                  displayNotes: isRtl ? history.notes : (history.notesEn || history.notes),
+                }))
+              : [],
+            returns: Array.isArray(updatedOrder.returns)
+              ? updatedOrder.returns.map((ret: any) => ({
+                  returnId: ret._id || crypto.randomUUID(),
+                  returnNumber: ret.returnNumber || 'unknown',
+                  items: Array.isArray(ret.items)
+                    ? ret.items.map((item: any) => ({
+                        productId: item.product?._id || item.productId || 'unknown',
+                        productName: item.product?.name || item.productName || t('products.unknown'),
+                        productNameEn: item.product?.nameEn || item.productNameEn,
+                        quantity: Number(item.quantity) || 0,
+                        unit: item.unit || 'unit',
+                        unitEn: item.unitEn,
+                        displayUnit: isRtl ? item.unit : (item.unitEn || item.unit),
+                        reason: item.reason || '',
+                        reasonEn: item.reasonEn,
+                        displayReason: isRtl ? item.reason : (item.reasonEn || item.reason),
+                        status: item.status || ReturnStatus.PendingApproval,
+                        reviewNotes: item.reviewNotes || '',
+                        reviewNotesEn: item.reviewNotesEn,
+                        displayReviewNotes: isRtl ? item.reviewNotes : (item.reviewNotesEn || item.reviewNotes),
+                      }))
+                    : [],
+                  status: ret.status || ReturnStatus.PendingApproval,
+                  reviewNotes: ret.reviewNotes || '',
+                  reviewNotesEn: ret.reviewNotesEn,
+                  displayReviewNotes: isRtl ? ret.reviewNotes : (ret.reviewNotesEn || ret.reviewNotes),
+                  createdAt: formatDate(ret.createdAt || new Date(), t('language')),
+                  createdBy: ret.createdBy ? { _id: ret.createdBy._id, username: ret.createdBy.username, name: ret.createdBy.name, nameEn: ret.createdBy.nameEn, displayName: isRtl ? ret.createdBy.name : (ret.createdBy.nameEn || ret.createdBy.name) } : { _id: 'unknown', username: t('orders.unknown'), name: t('orders.unknown'), displayName: t('orders.unknown') },
+                  reviewedBy: ret.reviewedBy ? { _id: ret.reviewedBy._id, username: ret.reviewedBy.username, name: ret.reviewedBy.name, nameEn: ret.reviewedBy.nameEn, displayName: isRtl ? ret.reviewedBy.name : (ret.reviewedBy.nameEn || ret.reviewedBy.name) } : undefined,
+                }))
+              : [],
+            approvedBy: updatedOrder.approvedBy ? { _id: updatedOrder.approvedBy._id, name: updatedOrder.approvedBy.name, nameEn: updatedOrder.approvedBy.nameEn, displayName: isRtl ? updatedOrder.approvedBy.name : (updatedOrder.approvedBy.nameEn || updatedOrder.approvedBy.name) } : undefined,
+            approvedAt: updatedOrder.approvedAt,
+            deliveredAt: updatedOrder.deliveredAt,
+            transitStartedAt: updatedOrder.transitStartedAt,
+            isRtl,
+          };
+          dispatch(updateOrderStatus({ orderId: data.orderId, status: OrderStatus.InTransit, payload: mappedOrder }));
+
+          addNotification({
+            _id: data.eventId || crypto.randomUUID(),
+            type: NotificationType.OrderStatusUpdated,
+            displayType: 'info',
+            message: t('notifications.order_shipped', {
+              orderNumber: data.orderNumber,
+              branchName: isRtl ? data.branchName : (data.branchNameEn || data.branchName),
+            }),
+            messageEn: t('notifications.order_shipped', {
+              orderNumber: data.orderNumber,
+              branchName: data.branchNameEn || data.branchName,
+            }, 'en'),
+            displayMessage: isRtl ? t('notifications.order_shipped', {
+              orderNumber: data.orderNumber,
+              branchName: data.branchName,
+            }) : t('notifications.order_shipped', {
+              orderNumber: data.orderNumber,
+              branchName: data.branchNameEn || data.branchName,
+            }, 'en'),
+            data: {
+              orderId: data.orderId,
+              orderNumber: data.orderNumber,
+              branchId: data.branchId,
+              eventId: data.eventId || crypto.randomUUID(),
+              status: OrderStatus.InTransit,
+            },
+            read: false,
+            createdAt: data.createdAt || new Date().toISOString(),
+            sound: '/sounds/notification.mp3',
+            vibrate: [200, 100, 200],
+          });
         },
         config: {
           type: 'UPDATE_ORDER_STATUS',
@@ -348,73 +707,137 @@ export const useOrderNotifications = (
         },
       },
       {
-        name: 'orderDelivered',
+        name: 'branchConfirmedReceipt',
         handler: async (data: any) => {
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
           if (!data.orderId || !data.orderNumber || !data.branchName) {
-            console.warn(`[${new Date().toISOString()}] Invalid order delivered data:`, data);
+            console.warn(`[${new Date().toISOString()}] Invalid branchConfirmedReceipt data:`, data);
             return;
           }
           if (user.role === 'branch' && data.branchId !== user.branchId) return;
-          try {
-            const updatedOrder = await ordersAPI.getById(data.orderId);
-            if (!updatedOrder || !updatedOrder._id) {
-              console.warn(`[${new Date().toISOString()}] Failed to fetch updated order:`, data.orderId);
-              return;
-            }
-            const mappedOrder: Order = {
-              id: updatedOrder._id,
-              orderNumber: updatedOrder.orderNumber || t('orders.unknown'),
-              branchName: updatedOrder.branch?.name || t('branches.unknown'),
-              branchId: updatedOrder.branch?._id || 'unknown',
-              branch: updatedOrder.branch || { _id: 'unknown', name: t('branches.unknown') },
-              items: updatedOrder.items.map((item: any) => ({
-                _id: item._id || crypto.randomUUID(),
-                itemId: item._id || crypto.randomUUID(),
-                productId: item.product?._id || 'unknown',
-                productName: item.product?.name || t('products.unknown'),
-                quantity: Number(item.quantity) || 1,
-                price: Number(item.price) || 0,
-                department: item.product?.department || { _id: 'unknown', name: t('departments.unknown') },
-                status: item.status || 'completed',
-                assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown') } : undefined,
-                returnedQuantity: Number(item.returnedQuantity) || 0,
-                returnReason: item.returnReason || '',
-              })),
-              status: 'delivered',
-              totalAmount: Number(updatedOrder.totalAmount) || 0,
-              date: formatDate(updatedOrder.createdAt || new Date(), t('language')),
-              notes: updatedOrder.notes || '',
-              priority: updatedOrder.priority || 'medium',
-              createdBy: updatedOrder.createdBy?.username || t('orders.unknown'),
-              statusHistory: Array.isArray(updatedOrder.statusHistory)
-                ? updatedOrder.statusHistory.map((history: any) => ({
-                    status: history.status || 'pending',
-                    changedBy: history.changedBy || t('orders.unknown'),
-                    changedAt: formatDate(history.changedAt || new Date(), t('language')),
-                    notes: history.notes || '',
-                  }))
-                : [],
-              returns: Array.isArray(updatedOrder.returns)
-                ? updatedOrder.returns.map((ret: any) => ({
-                    returnId: ret._id || crypto.randomUUID(),
-                    items: Array.isArray(ret.items)
-                      ? ret.items.map((item: any) => ({
-                          productId: item.product?._id || 'unknown',
-                          quantity: Number(item.quantity) || 0,
-                          reason: item.reason || '',
-                        }))
-                      : [],
-                    status: ret.status || 'pending_approval',
-                    reviewNotes: ret.reviewNotes || '',
-                    createdAt: formatDate(ret.createdAt || new Date(), t('language')),
-                  }))
-                : [],
-            };
-            dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'delivered', payload: mappedOrder });
-          } catch (err) {
-            console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
+          const updatedOrder = await ordersAPI.getById(data.orderId);
+          if (!updatedOrder || !updatedOrder._id) {
+            console.warn(`[${new Date().toISOString()}] Failed to fetch updated order:`, data.orderId);
+            return;
           }
+          const mappedOrder: Order = {
+            id: updatedOrder._id,
+            orderNumber: updatedOrder.orderNumber || t('orders.unknown'),
+            branchName: updatedOrder.branch?.name || t('branches.unknown'),
+            branchNameEn: updatedOrder.branch?.nameEn,
+            branchId: updatedOrder.branch?._id || 'unknown',
+            branch: updatedOrder.branch || { _id: 'unknown', name: t('branches.unknown'), displayName: t('branches.unknown') },
+            items: updatedOrder.items.map((item: any) => ({
+              _id: item._id || crypto.randomUUID(),
+              itemId: item._id || crypto.randomUUID(),
+              productId: item.product?._id || 'unknown',
+              productName: item.product?.name || t('products.unknown'),
+              productNameEn: item.product?.nameEn,
+              quantity: Number(item.quantity) || 1,
+              price: Number(item.price) || 0,
+              unit: item.unit || 'unit',
+              unitEn: item.unitEn,
+              displayUnit: isRtl ? item.unit : (item.unitEn || item.unit),
+              department: item.product?.department || { _id: 'unknown', name: t('departments.unknown'), displayName: t('departments.unknown') },
+              status: item.status || ItemStatus.Completed,
+              assignedTo: item.assignedTo ? { _id: item.assignedTo._id, username: item.assignedTo.username || t('chefs.unknown'), name: item.assignedTo.name, nameEn: item.assignedTo.nameEn, displayName: isRtl ? item.assignedTo.name : (item.assignedTo.nameEn || item.assignedTo.name), department: item.assignedTo.department } : undefined,
+              returnedQuantity: Number(item.returnedQuantity) || 0,
+              returnReason: item.returnReason || '',
+              returnReasonEn: item.returnReasonEn,
+              displayReturnReason: isRtl ? item.returnReason : (item.returnReasonEn || item.returnReason),
+            })),
+            status: OrderStatus.Delivered,
+            totalAmount: Number(updatedOrder.totalAmount) || 0,
+            adjustedTotal: Number(updatedOrder.adjustedTotal) || 0,
+            date: formatDate(updatedOrder.createdAt || new Date(), t('language')),
+            requestedDeliveryDate: formatDate(updatedOrder.requestedDeliveryDate || new Date(), t('language')),
+            notes: updatedOrder.notes || '',
+            notesEn: updatedOrder.notesEn,
+            displayNotes: isRtl ? updatedOrder.notes : (updatedOrder.notesEn || updatedOrder.notes),
+            priority: updatedOrder.priority || Priority.Medium,
+            createdBy: updatedOrder.createdBy?.username || t('orders.unknown'),
+            createdByName: isRtl ? updatedOrder.createdBy?.name : (updatedOrder.createdBy?.nameEn || updatedOrder.createdBy?.name || t('orders.unknown')),
+            statusHistory: Array.isArray(updatedOrder.statusHistory)
+              ? updatedOrder.statusHistory.map((history: any) => ({
+                  status: history.status || OrderStatus.Pending,
+                  changedBy: history.changedBy || t('orders.unknown'),
+                  changedByName: isRtl ? history.changedByName : (history.changedByNameEn || history.changedByName || t('orders.unknown')),
+                  changedAt: formatDate(history.changedAt || new Date(), t('language')),
+                  notes: history.notes || '',
+                  notesEn: history.notesEn,
+                  displayNotes: isRtl ? history.notes : (history.notesEn || history.notes),
+                }))
+              : [],
+            returns: Array.isArray(updatedOrder.returns)
+              ? updatedOrder.returns.map((ret: any) => ({
+                  returnId: ret._id || crypto.randomUUID(),
+                  returnNumber: ret.returnNumber || 'unknown',
+                  items: Array.isArray(ret.items)
+                    ? ret.items.map((item: any) => ({
+                        productId: item.product?._id || item.productId || 'unknown',
+                        productName: item.product?.name || item.productName || t('products.unknown'),
+                        productNameEn: item.product?.nameEn || item.productNameEn,
+                        quantity: Number(item.quantity) || 0,
+                        unit: item.unit || 'unit',
+                        unitEn: item.unitEn,
+                        displayUnit: isRtl ? item.unit : (item.unitEn || item.unit),
+                        reason: item.reason || '',
+                        reasonEn: item.reasonEn,
+                        displayReason: isRtl ? item.reason : (item.reasonEn || item.reason),
+                        status: item.status || ReturnStatus.PendingApproval,
+                        reviewNotes: item.reviewNotes || '',
+                        reviewNotesEn: item.reviewNotesEn,
+                        displayReviewNotes: isRtl ? item.reviewNotes : (item.reviewNotesEn || item.reviewNotes),
+                      }))
+                    : [],
+                  status: ret.status || ReturnStatus.PendingApproval,
+                  reviewNotes: ret.reviewNotes || '',
+                  reviewNotesEn: ret.reviewNotesEn,
+                  displayReviewNotes: isRtl ? ret.reviewNotes : (ret.reviewNotesEn || ret.reviewNotes),
+                  createdAt: formatDate(ret.createdAt || new Date(), t('language')),
+                  createdBy: ret.createdBy ? { _id: ret.createdBy._id, username: ret.createdBy.username, name: ret.createdBy.name, nameEn: ret.createdBy.nameEn, displayName: isRtl ? ret.createdBy.name : (ret.createdBy.nameEn || ret.createdBy.name) } : { _id: 'unknown', username: t('orders.unknown'), name: t('orders.unknown'), displayName: t('orders.unknown') },
+                  reviewedBy: ret.reviewedBy ? { _id: ret.reviewedBy._id, username: ret.reviewedBy.username, name: ret.reviewedBy.name, nameEn: ret.reviewedBy.nameEn, displayName: isRtl ? ret.reviewedBy.name : (ret.reviewedBy.nameEn || ret.reviewedBy.name) } : undefined,
+                }))
+              : [],
+            approvedBy: updatedOrder.approvedBy ? { _id: updatedOrder.approvedBy._id, name: updatedOrder.approvedBy.name, nameEn: updatedOrder.approvedBy.nameEn, displayName: isRtl ? updatedOrder.approvedBy.name : (updatedOrder.approvedBy.nameEn || updatedOrder.approvedBy.name) } : undefined,
+            approvedAt: updatedOrder.approvedAt,
+            deliveredAt: updatedOrder.deliveredAt,
+            transitStartedAt: updatedOrder.transitStartedAt,
+            isRtl,
+          };
+          dispatch(updateOrderStatus({ orderId: data.orderId, status: OrderStatus.Delivered, payload: mappedOrder }));
+
+          addNotification({
+            _id: data.eventId || crypto.randomUUID(),
+            type: NotificationType.OrderDelivered,
+            displayType: 'success',
+            message: t('notifications.order_delivered', {
+              orderNumber: data.orderNumber,
+              branchName: isRtl ? data.branchName : (data.branchNameEn || data.branchName),
+            }),
+            messageEn: t('notifications.order_delivered', {
+              orderNumber: data.orderNumber,
+              branchName: data.branchNameEn || data.branchName,
+            }, 'en'),
+            displayMessage: isRtl ? t('notifications.order_delivered', {
+              orderNumber: data.orderNumber,
+              branchName: data.branchName,
+            }) : t('notifications.order_delivered', {
+              orderNumber: data.orderNumber,
+              branchName: data.branchNameEn || data.branchName,
+            }, 'en'),
+            data: {
+              orderId: data.orderId,
+              orderNumber: data.orderNumber,
+              branchId: data.branchId,
+              eventId: data.eventId || crypto.randomUUID(),
+              status: OrderStatus.Delivered,
+            },
+            read: false,
+            createdAt: data.createdAt || new Date().toISOString(),
+            sound: '/sounds/notification.mp3',
+            vibrate: [200, 100, 200],
+          });
         },
         config: {
           type: 'UPDATE_ORDER_STATUS',
@@ -426,10 +849,42 @@ export const useOrderNotifications = (
         handler: (data: any) => {
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
           if (!data.orderId || !data.returnId || !data.status || !data.orderNumber) {
-            console.warn(`[${new Date().toISOString()}] Invalid return status update data:`, data);
+            console.warn(`[${new Date().toISOString()}] Invalid returnStatusUpdated data:`, data);
             return;
           }
-          dispatch({ type: 'RETURN_STATUS_UPDATED', orderId: data.orderId, returnId: data.returnId, status: data.status });
+          dispatch(returnStatusUpdated({ orderId: data.orderId, returnId: data.returnId, status: data.status }));
+
+          addNotification({
+            _id: data.eventId || crypto.randomUUID(),
+            type: NotificationType.ReturnStatusUpdated,
+            displayType: 'info',
+            message: t('notifications.return_status_updated', {
+              orderNumber: data.orderNumber,
+              status: isRtl ? t(`status.${data.status}`) : data.status,
+            }),
+            messageEn: t('notifications.return_status_updated', {
+              orderNumber: data.orderNumber,
+              status: data.status,
+            }, 'en'),
+            displayMessage: isRtl ? t('notifications.return_status_updated', {
+              orderNumber: data.orderNumber,
+              status: t(`status.${data.status}`),
+            }) : t('notifications.return_status_updated', {
+              orderNumber: data.orderNumber,
+              status: data.status,
+            }, 'en'),
+            data: {
+              orderId: data.orderId,
+              returnId: data.returnId,
+              orderNumber: data.orderNumber,
+              status: data.status,
+              eventId: data.eventId || crypto.randomUUID(),
+            },
+            read: false,
+            createdAt: data.createdAt || new Date().toISOString(),
+            sound: '/sounds/notification.mp3',
+            vibrate: [200, 100, 200],
+          });
         },
         config: {
           type: 'RETURN_STATUS_UPDATED',
@@ -441,10 +896,42 @@ export const useOrderNotifications = (
         handler: (data: any) => {
           if (!['admin', 'production'].includes(user.role)) return;
           if (!data.orderId || !data.itemId || !data.orderNumber || !data.productName) {
-            console.warn(`[${new Date().toISOString()}] Invalid missing assignments data:`, data);
+            console.warn(`[${new Date().toISOString()}] Invalid missingAssignments data:`, data);
             return;
           }
-          dispatch({ type: 'MISSING_ASSIGNMENTS', orderId: data.orderId, itemId: data.itemId, productName: data.productName });
+          dispatch(missingAssignments({ orderId: data.orderId, itemId: data.itemId, productName: data.productName }));
+
+          addNotification({
+            _id: data.eventId || crypto.randomUUID(),
+            type: NotificationType.MissingAssignments,
+            displayType: 'warning',
+            message: t('notifications.missing_assignments', {
+              orderNumber: data.orderNumber,
+              productName: data.productName,
+            }),
+            messageEn: t('notifications.missing_assignments', {
+              orderNumber: data.orderNumber,
+              productName: data.productNameEn || data.productName,
+            }, 'en'),
+            displayMessage: isRtl ? t('notifications.missing_assignments', {
+              orderNumber: data.orderNumber,
+              productName: data.productName,
+            }) : t('notifications.missing_assignments', {
+              orderNumber: data.orderNumber,
+              productName: data.productNameEn || data.productName,
+            }, 'en'),
+            data: {
+              orderId: data.orderId,
+              orderNumber: data.orderNumber,
+              productId: data.productId,
+              productName: data.productName,
+              eventId: data.eventId || crypto.randomUUID(),
+            },
+            read: false,
+            createdAt: data.createdAt || new Date().toISOString(),
+            sound: '/sounds/notification.mp3',
+            vibrate: [200, 100, 200],
+          });
         },
         config: {
           type: 'MISSING_ASSIGNMENTS',
@@ -454,8 +941,8 @@ export const useOrderNotifications = (
       {
         name: 'connect',
         handler: () => {
-          dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
-          dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
+          dispatch(setSocketConnected(true));
+          dispatch(setSocketError(null));
           console.log(`[${new Date().toISOString()}] Socket connected`);
         },
         config: {
@@ -466,8 +953,8 @@ export const useOrderNotifications = (
       {
         name: 'disconnect',
         handler: () => {
-          dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
-          dispatch({ type: 'SET_SOCKET_ERROR', payload: t('socket.disconnected') });
+          dispatch(setSocketConnected(false));
+          dispatch(setSocketError(t('socket.disconnected')));
           console.warn(`[${new Date().toISOString()}] Socket disconnected`);
         },
         config: {
@@ -478,7 +965,7 @@ export const useOrderNotifications = (
       {
         name: 'connect_error',
         handler: (error: Error) => {
-          dispatch({ type: 'SET_SOCKET_ERROR', payload: `${t('socket.error')}: ${error.message}` });
+          dispatch(setSocketError(`${t('socket.error')}: ${error.message}`));
           console.error(`[${new Date().toISOString()}] Socket connection error:`, error);
         },
         config: {
@@ -492,7 +979,5 @@ export const useOrderNotifications = (
     return () => {
       events.forEach(({ name, handler }) => socket.off(name, handler));
     };
-  }, [socket, user, dispatch, stateRef, t]);
-
-  return {};
+  }, [socket, user, dispatch, stateRef, t, isRtl, isConnected, addNotification ]);
 };

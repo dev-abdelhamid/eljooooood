@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { useNotifications } from '../contexts/NotificationContext';
+import { useNotifications } from '../contexts/NotificationProvider';
 import { productsAPI, ordersAPI, branchesAPI, departmentAPI } from '../services/api';
 import { ShoppingCart, Plus, Minus, Trash2, Package, AlertCircle, Search, X, ChevronDown } from 'lucide-react';
 import { io } from 'socket.io-client';
