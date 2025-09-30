@@ -6,7 +6,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { useSocket } from '../contexts/SocketContext';
-import { useNotifications } from '../contexts/NotificationProvider';
+import { useNotifications } from '../contexts/NotificationContext';
 import { productionAssignmentsAPI, chefsAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
