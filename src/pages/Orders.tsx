@@ -1063,7 +1063,7 @@ export const Orders: React.FC = () => {
                           startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
                         />
                       ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 gap-4">
                           {paginatedOrders.map(order => (
                             <motion.div
                               key={order.id}
