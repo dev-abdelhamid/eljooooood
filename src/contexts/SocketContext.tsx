@@ -21,8 +21,11 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isConnected, setIsConnected] = useState(false);
 
   const socket = useMemo(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return null;
+
     const newSocket = io(process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app', {
-      auth: { token: localStorage.getItem('token') },
+      auth: { token },
       autoConnect: false,
       transports: ['websocket', 'polling'],
       path: '/socket.io',
@@ -66,8 +69,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   useEffect(() => {
-    if (!user) {
-      socket.disconnect();
+    if (!user || !socket) {
+      socket?.disconnect();
       setIsConnected(false);
       return;
     }
@@ -81,8 +84,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         emit('joinRoom', {
           role: user.role,
           branchId: user.branchId,
-          chefId: user.role === 'chef' ? user._id || user.id : null,
-          departmentId: user.role === 'production' ? user._id || user.departmentId : null,
+          chefId: user.role === 'chef' ? user._id || user.id : undefined,
+          departmentId: user.role === 'production' ? user.departmentId || user._id : undefined,
           userId: user._id || user.id,
         });
       }

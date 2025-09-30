@@ -1,9 +1,9 @@
-import { notificationsAPI } from '../services/api';
+import { notificationsAPI } from '../services/notifications';
 import { toast } from 'react-toastify';
 
 interface Notification {
   _id: string;
-  type: 'orderCreated' | 'orderStatusUpdated' | 'taskAssigned' | 'taskStatusUpdated' | 'orderCancelled';
+  type: 'orderCreated' | 'orderConfirmed' | 'taskAssigned' | 'itemStatusUpdated' | 'orderStatusUpdated' | 'orderCompleted' | 'orderShipped' | 'orderDelivered' | 'returnStatusUpdated' | 'missingAssignments';
   message: string;
   data: {
     orderId?: string;

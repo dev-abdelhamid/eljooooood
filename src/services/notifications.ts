@@ -93,26 +93,8 @@ notificationsAxios.interceptors.response.use(
   }
 );
 
-interface NotificationData {
-  user: string;
-  type: string;
-  message: string;
-  data?: {
-    orderId?: string;
-    branchId?: string;
-    chefId?: string;
-    taskId?: string;
-    returnId?: string;
-    eventId?: string;
-    priority?: 'urgent' | 'high' | 'medium' | 'low';
-    sound?: string;
-    vibrate?: number[];
-    timestamp?: string;
-  };
-}
-
 export const notificationsAPI = {
-  create: async <T extends NotificationData>(notificationData: T) => {
+  create: async <T extends { user: string; type: string; message: string; data?: any }>(notificationData: T) => {
     if (!/^[0-9a-fA-F]{24}$/.test(notificationData.user)) {
       console.error(`[${new Date().toISOString()}] Invalid user ID:`, notificationData.user);
       throw new Error('معرف المستخدم غير صالح');
@@ -121,23 +103,6 @@ export const notificationsAPI = {
       console.error(`[${new Date().toISOString()}] Invalid order ID:`, notificationData.data.orderId);
       throw new Error('معرف الطلب غير صالح');
     }
-    if (notificationData.data?.branchId && !/^[0-9a-fA-F]{24}$/.test(notificationData.data.branchId)) {
-      console.error(`[${new Date().toISOString()}] Invalid branch ID:`, notificationData.data.branchId);
-      throw new Error('معرف الفرع غير صالح');
-    }
-    if (notificationData.data?.chefId && !/^[0-9a-fA-F]{24}$/.test(notificationData.data.chefId)) {
-      console.error(`[${new Date().toISOString()}] Invalid chef ID:`, notificationData.data.chefId);
-      throw new Error('معرف الشيف غير صالح');
-    }
-    if (notificationData.data?.taskId && !/^[0-9a-fA-F]{24}$/.test(notificationData.data.taskId)) {
-      console.error(`[${new Date().toISOString()}] Invalid task ID:`, notificationData.data.taskId);
-      throw new Error('معرف المهمة غير صالح');
-    }
-    if (notificationData.data?.returnId && !/^[0-9a-fA-F]{24}$/.test(notificationData.data.returnId)) {
-      console.error(`[${new Date().toISOString()}] Invalid return ID:`, notificationData.data.returnId);
-      throw new Error('معرف الإرجاع غير صالح');
-    }
-    console.log(`[${new Date().toISOString()}] notificationsAPI.create - Sending:`, notificationData);
     try {
       const response = await notificationsAxios.post('/notifications', {
         user: notificationData.user,
@@ -146,8 +111,6 @@ export const notificationsAPI = {
         data: {
           ...notificationData.data,
           eventId: notificationData.data?.eventId || crypto.randomUUID(),
-          sound: notificationData.data?.sound || '/sounds/notification.mp3',
-          vibrate: notificationData.data?.vibrate || [200, 100, 200],
           timestamp: new Date().toISOString(),
         },
       });
@@ -155,7 +118,6 @@ export const notificationsAPI = {
       return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] notificationsAPI.create - Error:`, err);
-      toast.error('فشل إنشاء الإشعار', { position: 'top-right', autoClose: 3000, pauseOnFocusLoss: true });
       throw err;
     }
   },
@@ -165,26 +127,12 @@ export const notificationsAPI = {
       console.error(`[${new Date().toISOString()}] Invalid user ID:`, params.userId);
       throw new Error('معرف المستخدم غير صالح');
     }
-    if (params.departmentId && !/^[0-9a-fA-F]{24}$/.test(params.departmentId)) {
-      console.error(`[${new Date().toISOString()}] Invalid department ID:`, params.departmentId);
-      throw new Error('معرف القسم غير صالح');
-    }
-    if (params.branchId && !/^[0-9a-fA-F]{24}$/.test(params.branchId)) {
-      console.error(`[${new Date().toISOString()}] Invalid branch ID:`, params.branchId);
-      throw new Error('معرف الفرع غير صالح');
-    }
-    if (params.chefId && !/^[0-9a-fA-F]{24}$/.test(params.chefId)) {
-      console.error(`[${new Date().toISOString()}] Invalid chef ID:`, params.chefId);
-      throw new Error('معرف الشيف غير صالح');
-    }
-    console.log(`[${new Date().toISOString()}] notificationsAPI.getAll - Params:`, params);
     try {
       const response = await notificationsAxios.get('/notifications', { params });
       console.log(`[${new Date().toISOString()}] notificationsAPI.getAll - Response:`, response);
       return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] notificationsAPI.getAll - Error:`, err);
-      toast.error('فشل جلب الإشعارات', { position: 'top-right', autoClose: 3000, pauseOnFocusLoss: true });
       throw err;
     }
   },
@@ -200,7 +148,6 @@ export const notificationsAPI = {
       return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] notificationsAPI.getById - Error:`, err);
-      toast.error('فشل جلب الإشعار', { position: 'top-right', autoClose: 3000, pauseOnFocusLoss: true });
       throw err;
     }
   },
@@ -216,7 +163,6 @@ export const notificationsAPI = {
       return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] notificationsAPI.markAsRead - Error:`, err);
-      toast.error('فشل تحديث حالة الإشعار', { position: 'top-right', autoClose: 3000, pauseOnFocusLoss: true });
       throw err;
     }
   },
@@ -232,7 +178,6 @@ export const notificationsAPI = {
       return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] notificationsAPI.markAllAsRead - Error:`, err);
-      toast.error('فشل تحديث حالة جميع الإشعارات', { position: 'top-right', autoClose: 3000, pauseOnFocusLoss: true });
       throw err;
     }
   },
@@ -244,7 +189,6 @@ export const notificationsAPI = {
       return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] notificationsAPI.clear - Error:`, err);
-      toast.error('فشل مسح الإشعارات', { position: 'top-right', autoClose: 3000, pauseOnFocusLoss: true });
       throw err;
     }
   },
