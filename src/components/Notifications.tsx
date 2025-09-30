@@ -1,5 +1,5 @@
-import { useNavigate } from 'react-router-dom';
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -8,11 +8,23 @@ import { formatDate } from '../utils/formatDate';
 
 interface Notification {
   _id: string;
-  type: 'success' | 'error' | 'info' | 'warning';
+  type: 'orderCreated' | 'orderStatusUpdated' | 'taskAssigned' | 'taskStatusUpdated' | 'orderCancelled';
   message: string;
-  data?: { orderId?: string; taskId?: string; branchId?: string; chefId?: string };
+  data: {
+    orderId?: string;
+    orderNumber?: string;
+    branchId?: string;
+    taskId?: string;
+    productId?: string;
+    productName?: string;
+    quantity?: number;
+    unit?: string;
+    status?: string;
+    reason?: string;
+  };
   read: boolean;
   createdAt: string;
+  isRtl: boolean;
 }
 
 const NotificationItem: React.FC<{
@@ -21,24 +33,25 @@ const NotificationItem: React.FC<{
   onMarkAsRead: (id: string) => void;
 }> = ({ notification, isRtl, onMarkAsRead }) => {
   const navigate = useNavigate();
+
   const handleClick = () => {
     if (!notification.read) {
       onMarkAsRead(notification._id);
       console.log(`[${new Date().toISOString()}] Notification clicked and marked as read: ${notification._id}`);
     }
-    if (notification.data?.orderId) navigate(`/orders/${notification.data.orderId}`);
-    else if (notification.data?.taskId) navigate(`/production-tasks/${notification.data.taskId}`);
+    if (notification.data.orderId) navigate(`/orders/${notification.data.orderId}`);
+    else if (notification.data.taskId) navigate(`/production-tasks/${notification.data.taskId}`);
   };
 
   const typeStyles = {
-    success: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50' },
-    error: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-50' },
-    info: { icon: Info, color: 'text-blue-600', bg: 'bg-blue-50' },
-    warning: { icon: AlertCircle, color: 'text-yellow-600', bg: 'bg-yellow-50' },
+    orderCreated: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50' },
+    orderStatusUpdated: { icon: Info, color: 'text-blue-600', bg: 'bg-blue-50' },
+    taskAssigned: { icon: Info, color: 'text-blue-600', bg: 'bg-blue-50' },
+    taskStatusUpdated: { icon: CheckCircle, color: 'text-green-600', bg: 'bg-green-50' },
+    orderCancelled: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-50' },
   };
 
-  const notificationType = notification.type in typeStyles ? notification.type : 'info';
-  const { icon: Icon, color, bg } = typeStyles[notificationType];
+  const { icon: Icon, color, bg } = typeStyles[notification.type] || typeStyles.orderStatusUpdated;
 
   return (
     <motion.div
@@ -48,13 +61,33 @@ const NotificationItem: React.FC<{
       transition={{ duration: 0.2, ease: 'easeOut' }}
       onClick={handleClick}
       className={`flex items-start p-2 border-b border-amber-100 hover:${bg} transition-colors cursor-pointer ${
-        isRtl ? 'text-right flex-row-reverse' : 'text-left'
+        isRtl ? 'text-right flex-row-reverse font-arabic' : 'text-left font-sans'
       } ${notification.read ? 'opacity-70' : ''} rounded-md mx-1 my-0.5 shadow-sm hover:shadow-md`}
     >
       <Icon className={`w-4 h-4 ${color} flex-shrink-0 ${isRtl ? 'ml-2' : 'mr-2'} mt-0.5`} />
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium text-amber-900 truncate">{notification.message}</p>
-        <p className="text-[10px] text-amber-600 mt-0.5">{formatDate(notification.createdAt)}</p>
+        <p className="text-[10px] text-amber-600 mt-0.5">{formatDate(notification.createdAt, isRtl ? 'ar-EG' : 'en-US')}</p>
+        {notification.data.orderNumber && (
+          <p className="text-[10px] text-blue-600">
+            {isRtl ? 'رقم الطلب' : 'Order'}: {notification.data.orderNumber}
+          </p>
+        )}
+        {notification.data.status && (
+          <p className="text-[10px] text-gray-500">
+            {isRtl ? 'الحالة' : 'Status'}: {notification.data.status}
+          </p>
+        )}
+        {notification.data.quantity && (
+          <p className="text-[10px] text-gray-500">
+            {isRtl ? 'الكمية' : 'Quantity'}: {notification.data.quantity} {notification.data.unit}
+          </p>
+        )}
+        {notification.data.reason && (
+          <p className="text-[10px] text-red-600">
+            {isRtl ? 'السبب' : 'Reason'}: {notification.data.reason}
+          </p>
+        )}
       </div>
       {!notification.read && (
         <span className={`w-1.5 h-1.5 bg-red-500 rounded-full mt-1.5 ${isRtl ? 'mr-2' : 'ml-2'} flex-shrink-0`} />

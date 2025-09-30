@@ -29,11 +29,10 @@ import Chefstatics from './pages/Chefstatics';
 import BranchProfile from './pages/BranchProfile';
 import { ChefDetails } from './pages/ChefDetails';
 
-// إعداد QueryClient لإدارة الاستعلامات
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000, // 5 دقائق
+      staleTime: 5 * 60 * 1000,
       retry: 2,
     },
     mutations: {
@@ -42,7 +41,6 @@ const queryClient = new QueryClient({
   },
 });
 
-// مكون لحماية المسارات المقيدة
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
 
@@ -53,7 +51,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// مكون محتوى التطبيق مع التوجيه
 function AppContent() {
   return (
     <Router>
@@ -102,17 +99,16 @@ function AppContent() {
   );
 }
 
-// مكون التطبيق الرئيسي
 function App() {
   return (
     <LanguageProvider>
       <AuthProvider>
         <QueryClientProvider client={queryClient}>
-         <SocketProvider>
+          <SocketProvider>
             <NotificationProvider>
               <AppContent />
               <ToastContainer
-                position="top-left"
+                position="top-right"
                 autoClose={4000}
                 newestOnTop
                 rtl={true}
