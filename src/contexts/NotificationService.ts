@@ -3,19 +3,14 @@ import { toast } from 'react-toastify';
 
 interface Notification {
   _id: string;
-  type: 'orderCreated' | 'orderStatusUpdated' | 'taskAssigned' | 'taskStatusUpdated' | 'orderCancelled';
+  type: 'orderCreated' | 'taskAssigned' | 'itemStatusUpdated' | 'orderStatusUpdated' | 'orderDelivered' | 'returnStatusUpdated' | 'missingAssignments';
   message: string;
-  data: {
+  data?: {
     orderId?: string;
-    orderNumber?: string;
     branchId?: string;
+    chefId?: string;
     taskId?: string;
-    productId?: string;
-    productName?: string;
-    quantity?: number;
-    unit?: string;
-    status?: string;
-    reason?: string;
+    returnId?: string;
     eventId?: string;
   };
   read: boolean;
@@ -23,15 +18,7 @@ interface Notification {
 }
 
 class NotificationService {
-  async fetchNotifications(params: {
-    userId?: string;
-    read?: boolean;
-    page?: number;
-    limit?: number;
-    departmentId?: string;
-    branchId?: string;
-    chefId?: string;
-  }): Promise<Notification[]> {
+  async fetchNotifications(params: { userId?: string; read?: boolean; page?: number; limit?: number; departmentId?: string; branchId?: string; chefId?: string }): Promise<Notification[]> {
     if (params.userId && !/^[0-9a-fA-F]{24}$/.test(params.userId)) {
       toast.error('معرف المستخدم غير صالح', { position: 'top-left', toastId: 'invalid_user_id' });
       throw new Error('معرف المستخدم غير صالح');
@@ -44,15 +31,10 @@ class NotificationService {
         message: n.message.substring(0, 100),
         data: {
           orderId: n.data?.orderId,
-          orderNumber: n.data?.orderNumber,
           branchId: n.data?.branchId,
+          chefId: n.data?.chefId,
           taskId: n.data?.taskId,
-          productId: n.data?.productId,
-          productName: n.data?.productName,
-          quantity: n.data?.quantity,
-          unit: n.data?.unit,
-          status: n.data?.status,
-          reason: n.data?.reason,
+          returnId: n.data?.returnId,
           eventId: n.data?.eventId,
         },
         read: n.read,
@@ -67,19 +49,7 @@ class NotificationService {
     user: string;
     type: string;
     message: string;
-    data?: {
-      orderId?: string;
-      orderNumber?: string;
-      branchId?: string;
-      taskId?: string;
-      productId?: string;
-      productName?: string;
-      quantity?: number;
-      unit?: string;
-      status?: string;
-      reason?: string;
-      eventId?: string;
-    };
+    data?: { orderId?: string; branchId?: string; chefId?: string; taskId?: string; returnId?: string; eventId?: string };
   }): Promise<any> {
     return notificationsAPI.create(notificationData);
   }
