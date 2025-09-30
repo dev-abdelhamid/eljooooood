@@ -310,7 +310,7 @@ const exportToExcel = (orders: Order[], isRtl: boolean, calculateAdjustedTotal: 
 };
 
 // المكون الرئيسي
-const Orders: React.FC = () => {
+export const Orders: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
