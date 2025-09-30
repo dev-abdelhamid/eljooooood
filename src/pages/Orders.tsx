@@ -359,7 +359,6 @@ export const Orders: React.FC = () => {
     socket.on('connect', () => {
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
       dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
-      toast.info(isRtl ? 'تم الاتصال بنجاح' : 'Connected successfully', { position: isRtl ? 'top-left' : 'top-right' });
     });
 
     socket.on('connect_error', (err) => {
@@ -464,7 +463,7 @@ export const Orders: React.FC = () => {
           : [],
       };
       dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
-      playNotificationSound('/sounds/new-order.mp3', [200, 100, 200]);
+      playNotificationSound('/sounds/notification.mp3', [200, 100, 200]);
       toast.success(isRtl ? `طلب جديد: ${order.orderNumber}` : `New order: ${order.orderNumber}`, {
         position: isRtl ? 'top-left' : 'top-right',
       });
