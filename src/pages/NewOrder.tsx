@@ -109,26 +109,19 @@ const translations = {
   },
 };
 
-const ProductSearchInput = ({
-  value,
-  onChange,
-  placeholder,
-  ariaLabel,
-}: {
+const ProductSearchInput: React.FC<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder: string;
   ariaLabel: string;
-}) => {
+}> = ({ value, onChange, placeholder, ariaLabel }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
     <div className="relative group">
-      <div
+      <Search
         className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
-      >
-        <Search />
-      </div>
+      />
       <input
         type="text"
         value={value}
@@ -137,33 +130,26 @@ const ProductSearchInput = ({
         className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       />
-      <div
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors ${value ? 'opacity-100' : 'opacity-0'}`}
-      >
+      {value && (
         <button
           onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
+          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
           <X className="w-5 h-5" />
         </button>
-      </div>
+      )}
     </div>
   );
 };
 
-const ProductDropdown = ({
-  value,
-  onChange,
-  options,
-  ariaLabel,
-  disabled = false,
-}: {
+const ProductDropdown: React.FC<{
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
   ariaLabel: string;
   disabled?: boolean;
-}) => {
+}> = ({ value, onChange, options, ariaLabel, disabled = false }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
@@ -177,9 +163,7 @@ const ProductDropdown = ({
         aria-label={ariaLabel}
       >
         <span className="truncate">{selectedOption.label}</span>
-        <div className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200`}>
-          <ChevronDown className="w-5 h-5 text-gray-400 group-focus-within:text-amber-500 transition-colors" />
-        </div>
+        <ChevronDown className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200 w-5 h-5 text-gray-400 group-focus-within:text-amber-500`} />
       </button>
       {isOpen && !disabled && (
         <div className="absolute w-full mt-2 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none">
@@ -201,17 +185,12 @@ const ProductDropdown = ({
   );
 };
 
-const QuantityInput = ({
-  value,
-  onChange,
-  onIncrement,
-  onDecrement,
-}: {
+const QuantityInput: React.FC<{
   value: number;
   onChange: (val: string) => void;
   onIncrement: () => void;
   onDecrement: () => void;
-}) => {
+}> = ({ value, onChange, onIncrement, onDecrement }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
@@ -227,7 +206,7 @@ const QuantityInput = ({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm min-w-[2.75rem] transition-all duration-200"
+        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
         style={{ appearance: 'none' }}
         aria-label={isRtl ? 'الكمية' : 'Quantity'}
       />
@@ -242,18 +221,18 @@ const QuantityInput = ({
   );
 };
 
-const ProductCard = ({ product, cartItem, onAdd, onUpdate, onRemove }: {
+const ProductCard: React.FC<{
   product: Product;
   cartItem?: OrderItem;
   onAdd: () => void;
   onUpdate: (quantity: number) => void;
   onRemove: () => void;
-}) => {
+}> = ({ product, cartItem, onAdd, onUpdate, onRemove }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   return (
-    <div className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col justify-between border border-gray-100 hover:border-amber-200">
+    <div className="h-[200px] p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col justify-between border border-gray-100 hover:border-amber-200">
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-3">
           <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>{product.displayName}</h3>
@@ -285,8 +264,8 @@ const ProductCard = ({ product, cartItem, onAdd, onUpdate, onRemove }: {
   );
 };
 
-const ProductSkeletonCard = () => (
-  <div className="p-5 bg-white rounded-xl shadow-sm border border-gray-100">
+const ProductSkeletonCard: React.FC = () => (
+  <div className="h-[200px] p-5 bg-white rounded-xl shadow-sm border border-gray-100">
     <div className="space-y-3 animate-pulse">
       <div className="flex items-center justify-between">
         <div className="h-4 bg-gray-200 rounded w-3/4"></div>
@@ -301,21 +280,14 @@ const ProductSkeletonCard = () => (
   </div>
 );
 
-const OrderConfirmModal = ({
-  isOpen,
-  onClose,
-  onConfirm,
-  submitting,
-  t,
-  isRtl,
-}: {
+const OrderConfirmModal: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
   submitting: boolean;
   t: typeof translations['ar' | 'en'];
   isRtl: boolean;
-}) => {
+}> = ({ isOpen, onClose, onConfirm, submitting, t, isRtl }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
@@ -344,7 +316,7 @@ const OrderConfirmModal = ({
   );
 };
 
-export function NewOrder() {
+const NewOrder: React.FC = () => {
   const { user } = useAuth();
   const { language, t: languageT } = useLanguage();
   const { addNotification } = useNotifications();
@@ -368,9 +340,7 @@ export function NewOrder() {
   const socket = useMemo(() => io('https://eljoodia-server-production.up.railway.app'), []);
 
   const debouncedSearch = useCallback(
-    debounce((value: string) => {
-      setSearchTerm(value.trim());
-    }, 500),
+    debounce((value: string) => setSearchTerm(value.trim()), 500),
     []
   );
 
@@ -429,16 +399,17 @@ export function NewOrder() {
           departmentAPI.getAll({ limit: 100 }),
         ]);
 
-        const productsWithDisplay = productsResponse.data.map((product: Product) => ({
-          ...product,
-          displayName: isRtl ? product.name : (product.nameEn || product.name),
-          displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
-          department: {
-            ...product.department,
-            displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name),
-          },
-        }));
-        setProducts(productsWithDisplay);
+        setProducts(
+          productsResponse.data.map((product: Product) => ({
+            ...product,
+            displayName: isRtl ? product.name : (product.nameEn || product.name),
+            displayUnit: isRtl ? (product.unit || 'غير محدد') : (product.unitEn || product.unit || 'N/A'),
+            department: {
+              ...product.department,
+              displayName: isRtl ? product.department.name : (product.department.nameEn || product.department.name),
+            },
+          }))
+        );
         setBranches(
           Array.isArray(branchesResponse)
             ? branchesResponse.map((b: Branch) => ({
@@ -470,9 +441,7 @@ export function NewOrder() {
     loadData();
   }, [user, t, isRtl, filterDepartment, searchTerm]);
 
-  // تحديث displayName و displayUnit للمنتجات و orderItems عند تغيير اللغة
   useEffect(() => {
-    // تحديث المنتجات
     setProducts((prev) =>
       prev.map((product) => ({
         ...product,
@@ -484,7 +453,6 @@ export function NewOrder() {
         },
       }))
     );
-    // تحديث orderItems
     setOrderItems((prev) =>
       prev.map((item) => ({
         ...item,
@@ -519,13 +487,12 @@ export function NewOrder() {
         return;
       }
       const eventId = orderData.eventId || crypto.randomUUID();
-      // تخصيص الرسالة بناءً على الدور
       let message = languageT('notifications.order_created', {
         orderNumber: orderData.orderNumber,
         branchName: isRtl ? orderData.branch.name : (orderData.branch.nameEn || orderData.branch.name),
       });
       if (user.role === 'branch') {
-        message = t.orderCreated; // "تم إنشاء الطلب بنجاح"
+        message = t.orderCreated;
       }
       addNotification({
         _id: eventId,
@@ -537,7 +504,6 @@ export function NewOrder() {
         sound: '/sounds/notification.mp3',
         vibrate: [200, 100, 200],
       });
-      // هنا يمكن تحديث state صفحة المتابعة إذا كانت موجودة، عبر dispatch أو setState
     });
 
     return () => {
@@ -575,7 +541,7 @@ export function NewOrder() {
 
   const updateQuantity = useCallback((productId: string, quantity: number) => {
     if (quantity <= 0) {
-      removeFromOrder(productId);
+      setOrderItems((prev) => prev.filter((item) => item.productId !== productId));
       return;
     }
     setOrderItems((prev) =>
@@ -586,18 +552,10 @@ export function NewOrder() {
   const handleQuantityInput = useCallback(
     (productId: string, value: string) => {
       const quantity = parseInt(value) || 0;
-      if (value === '' || quantity <= 0) {
-        updateQuantity(productId, 0);
-        return;
-      }
       updateQuantity(productId, quantity);
     },
     [updateQuantity]
   );
-
-  const removeFromOrder = useCallback((productId: string) => {
-    setOrderItems((prev) => prev.filter((item) => item.productId !== productId));
-  }, []);
 
   const clearOrder = useCallback(() => {
     setOrderItems([]);
@@ -664,7 +622,6 @@ export function NewOrder() {
         eventId,
         isRtl,
       });
-      // الإشعار المحلي للفرع
       addNotification({
         _id: eventId,
         type: 'success',
@@ -697,8 +654,8 @@ export function NewOrder() {
   };
 
   return (
-    <div className={`mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
-      <div className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
+    <div className={`mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+      <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <ShoppingCart className="w-7 h-7 text-amber-600" />
           <div>
@@ -706,7 +663,7 @@ export function NewOrder() {
             <p className="text-gray-600 text-sm">{t.addProducts}</p>
           </div>
         </div>
-      </div>
+      </header>
 
       {error && (
         <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
@@ -727,8 +684,8 @@ export function NewOrder() {
         </div>
       )}
 
-      <div className={`space-y-8 ${orderItems.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-6 lg:space-y-0' : ''}`}>
-        <div className={`${orderItems.length > 0 ? 'lg:col-span-2 lg:overflow-y-auto lg:max-h-[calc(100vh-10rem)] scrollbar-none' : ''}`}>
+      <div className={`space-y-8 ${orderItems.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-8 lg:space-y-0' : ''}`}>
+        <section className={`${orderItems.length > 0 ? 'lg:col-span-2 lg:overflow-y-auto lg:max-h-[calc(100vh-12rem)] scrollbar-none' : ''}`}>
           <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <ProductSearchInput
@@ -757,9 +714,7 @@ export function NewOrder() {
           {loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
               {[...Array(skeletonCount)].map((_, index) => (
-                <div key={index}>
-                  <ProductSkeletonCard />
-                </div>
+                <ProductSkeletonCard key={index} />
               ))}
             </div>
           ) : filteredProducts.length === 0 ? (
@@ -769,26 +724,22 @@ export function NewOrder() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-              {filteredProducts.map((product) => {
-                const cartItem = orderItems.find((item) => item.productId === product._id);
-                return (
-                  <div key={product._id}>
-                    <ProductCard
-                      product={product}
-                      cartItem={cartItem}
-                      onAdd={() => addToOrder(product)}
-                      onUpdate={(quantity) => updateQuantity(product._id, quantity)}
-                      onRemove={() => removeFromOrder(product._id)}
-                    />
-                  </div>
-                );
-              })}
+              {filteredProducts.map((product) => (
+                <ProductCard
+                  key={product._id}
+                  product={product}
+                  cartItem={orderItems.find((item) => item.productId === product._id)}
+                  onAdd={() => addToOrder(product)}
+                  onUpdate={(quantity) => updateQuantity(product._id, quantity)}
+                  onRemove={() => updateQuantity(product._id, 0)}
+                />
+              ))}
             </div>
           )}
-        </div>
+        </section>
 
         {orderItems.length > 0 && (
-          <div className="lg:col-span-1 lg:sticky lg:top-8 space-y-6 max-h-[calc(100vh-10rem)] overflow-y-auto scrollbar-none" ref={summaryRef}>
+          <aside className="lg:col-span-1 lg:sticky lg:top-8 space-y-6 max-h-[calc(100vh-12rem)] overflow-y-auto scrollbar-none" ref={summaryRef}>
             <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
               <h3 className="text-xl font-bold text-gray-900 mb-6">{t.orderSummary}</h3>
               <div className="space-y-4">
@@ -808,7 +759,7 @@ export function NewOrder() {
                         onDecrement={() => updateQuantity(item.productId, item.quantity - 1)}
                       />
                       <button
-                        onClick={() => removeFromOrder(item.productId)}
+                        onClick={() => updateQuantity(item.productId, 0)}
                         className="w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
                         aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
                       >
@@ -851,7 +802,7 @@ export function NewOrder() {
                 <div className="flex gap-3">
                   <button
                     onClick={clearOrder}
-                    className="flex-1 px-4 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm"
+                    className="flex-1 px-4 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm disabled:opacity-50"
                     disabled={submitting || orderItems.length === 0}
                     aria-label={t.clearOrder}
                   >
@@ -859,7 +810,7 @@ export function NewOrder() {
                   </button>
                   <button
                     type="submit"
-                    className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm"
+                    className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm disabled:opacity-50"
                     disabled={orderItems.length === 0 || submitting}
                     aria-label={submitting ? t.submitting : t.submitOrder}
                   >
@@ -868,7 +819,7 @@ export function NewOrder() {
                 </div>
               </form>
             </div>
-          </div>
+          </aside>
         )}
       </div>
 
@@ -882,4 +833,6 @@ export function NewOrder() {
       />
     </div>
   );
-}
+};
+
+export default NewOrder;
