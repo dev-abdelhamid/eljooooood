@@ -20,11 +20,12 @@ import Pagination from '../components/Returns/Pagination';
 import ReturnModal from '../components/Returns/ReturnModal';
 import ActionModal from '../components/Returns/ActionModal';
 import { formatDate } from '../utils/formatDate';
+import { Return, Branch, ReturnStatus, State, Action } from '../types/types';
 
-const reducer = (state, action) => {
+const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case 'SET_RETURNS':
-      return { ...state, returns: action.payload.returns, totalCount: action.payload.total };
+      return { ...state, returns: action.payload.returns, totalCount: action.payload.totalCount };
     case 'ADD_RETURN':
       return { ...state, returns: [action.payload, ...state.returns], totalCount: state.totalCount + 1 };
     case 'SET_BRANCHES':
@@ -32,9 +33,9 @@ const reducer = (state, action) => {
     case 'SET_SELECTED_RETURN':
       return { ...state, selectedReturn: action.payload };
     case 'SET_VIEW_MODAL':
-      return { ...state, isViewModalOpen: action.isOpen };
+      return { ...state, isViewModalOpen: action.isOpen ?? false };
     case 'SET_ACTION_MODAL':
-      return { ...state, isActionModalOpen: action.isOpen };
+      return { ...state, isActionModalOpen: action.isOpen ?? false };
     case 'SET_ACTION_TYPE':
       return { ...state, actionType: action.payload };
     case 'SET_ACTION_NOTES':
@@ -46,7 +47,7 @@ const reducer = (state, action) => {
     case 'SET_SEARCH_QUERY':
       return { ...state, searchQuery: action.payload, currentPage: 1 };
     case 'SET_SORT':
-      return { ...state, sortBy: action.by, sortOrder: action.order, currentPage: 1 };
+      return { ...state, sortBy: action.by ?? 'date', sortOrder: action.order ?? 'desc', currentPage: 1 };
     case 'SET_PAGE':
       return { ...state, currentPage: action.payload };
     case 'SET_LOADING':
@@ -66,9 +67,9 @@ const reducer = (state, action) => {
           r.id === action.returnId
             ? {
                 ...r,
-                status: action.status,
-                reviewNotes: action.reviewNotes || r.reviewNotes || '',
-                order: { ...r.order, adjustedTotal: action.adjustedTotal || r.order.adjustedTotal },
+                status: action.status ?? r.status,
+                reviewNotes: action.reviewNotes ?? r.reviewNotes ?? '',
+                order: { ...r.order, totalAmount: action.adjustedTotal ?? r.order.totalAmount },
               }
             : r
         ),
@@ -76,11 +77,11 @@ const reducer = (state, action) => {
           state.selectedReturn?.id === action.returnId
             ? {
                 ...state.selectedReturn,
-                status: action.status,
-                reviewNotes: action.reviewNotes || state.selectedReturn.reviewNotes || '',
+                status: action.status ?? state.selectedReturn.status,
+                reviewNotes: action.reviewNotes ?? state.selectedReturn.reviewNotes ?? '',
                 order: {
                   ...state.selectedReturn.order,
-                  adjustedTotal: action.adjustedTotal || state.selectedReturn.order.adjustedTotal,
+                  totalAmount: action.adjustedTotal ?? state.selectedReturn.order.totalAmount,
                 },
               }
             : state.selectedReturn,
@@ -92,7 +93,7 @@ const reducer = (state, action) => {
   }
 };
 
-const initialState = {
+const initialState: State = {
   returns: [],
   selectedReturn: null,
   branches: [],
@@ -103,7 +104,7 @@ const initialState = {
   filterStatus: '',
   filterBranch: '',
   searchQuery: '',
-  sortBy: 'createdAt',
+  sortBy: 'date',
   sortOrder: 'desc',
   currentPage: 1,
   totalCount: 0,
@@ -173,7 +174,7 @@ const AdminReturns = () => {
   const arrayBufferToBase64 = (buffer) => {
     let binary = '';
     const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < bytes.byteLength; i++) {
+    for (let i = 0; i < bytes.length; i++) {
       binary += String.fromCharCode(bytes[i]);
     }
     return window.btoa(binary);
@@ -186,7 +187,7 @@ const AdminReturns = () => {
       [isRtl ? 'الحالة' : 'Status']: getStatusInfo(ret.status).label,
       [isRtl ? 'التاريخ' : 'Date']: formatDate(ret.createdAt, language),
       [isRtl ? 'عدد العناصر' : 'Items Count']: ret.items.length,
-      [isRtl ? 'المنتجات' : 'Products']: ret.items.map((item) => `${item.product.name} (${item.quantity})`).join(', '),
+      [isRtl ? 'المنتجات' : 'Products']: ret.items.map((item) => `${item.productName} (${item.quantity})`).join(', '),
       [isRtl ? 'الكمية الإجمالية' : 'Total Quantity']: ret.items.reduce((sum, item) => sum + item.quantity, 0),
       [isRtl ? 'الفرع' : 'Branch']: ret.branch.name,
       [isRtl ? 'الإجمالي' : 'Total Amount']: `${ret.order.adjustedTotal.toFixed(2)} ${isRtl ? 'ريال' : 'SAR'}`,
@@ -271,7 +272,7 @@ const AdminReturns = () => {
     try {
       const response = await branchesAPI.getAll();
       const branches = Array.isArray(response)
-        ? response.map((branch) => ({
+        ? response.map((branch: any) => ({
             _id: branch._id || 'unknown',
             name: branch.name || (isRtl ? 'فرع غير معروف' : 'Unknown branch'),
           }))
@@ -304,7 +305,6 @@ const AdminReturns = () => {
         sortOrder: state.sortOrder,
         page: state.currentPage,
         limit: state.viewMode === 'table' ? RETURNS_PER_PAGE_TABLE : RETURNS_PER_PAGE_CARD,
-        isRtl: isRtl.toString(),
       };
       const { returns: returnsData, total } = await returnsAPI.getAll(query);
       if (!Array.isArray(returnsData)) {
@@ -599,7 +599,7 @@ const AdminReturns = () => {
   }, [state.viewMode]);
 
   return (
-    <div className="container mx-auto px-4 py-8 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="container mx-auto px-4 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100" dir={isRtl ? 'rtl' : 'ltr'}>
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -607,7 +607,7 @@ const AdminReturns = () => {
         className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
       >
         <div className="flex items-center gap-3">
-          <Package className="w-8 h-8 text-teal-600" />
+          <Package className="w-8 h-8 text-amber-600" />
           <div>
             <h1 className="text-2xl font-bold text-gray-800">{isRtl ? 'إدارة المرتجعات' : 'Returns Management'}</h1>
             <p className="text-sm text-gray-600">{isRtl ? 'إدارة ومراجعة طلبات المرتجعات بكفاءة' : 'Manage and review return requests efficiently'}</p>
@@ -616,7 +616,7 @@ const AdminReturns = () => {
         <div className={`flex ${isRtl ? 'flex-row-reverse' : 'flex-row'} gap-2 flex-wrap`}>
           <button
             onClick={handleViewModeToggle}
-            className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 text-white rounded-full text-sm hover:bg-teal-700 transition-colors"
+            className="flex items-center gap-2 px-3 py-1.5 bg-amber-600 text-white rounded-full text-sm hover:bg-amber-700 transition-colors"
             aria-label={isRtl ? (state.viewMode === 'card' ? 'عرض الجدول' : 'عرض البطاقات') : (state.viewMode === 'card' ? 'Table View' : 'Card View')}
           >
             {state.viewMode === 'card' ? <Table2 className="w-4 h-4" /> : <Grid className="w-4 h-4" />}

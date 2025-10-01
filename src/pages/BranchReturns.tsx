@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useSocket } from '../contexts/SocketContext';
 import { returnsAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
@@ -8,7 +9,6 @@ import { Select } from '../components/UI/Select';
 import { Input } from '../components/UI/Input';
 import { Modal } from '../components/UI/Modal';
 import { Package, Eye, Clock, Check, AlertCircle, Search, Download } from 'lucide-react';
-import { io, Socket } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -43,6 +43,7 @@ const BranchReturns: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
+  const { socket } = useSocket();
   const [returns, setReturns] = useState<Return[]>([]);
   const [selectedReturn, setSelectedReturn] = useState<Return | null>(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -389,9 +390,7 @@ const BranchReturns: React.FC = () => {
                   <p className="text-base font-medium text-gray-900">{item.productName}</p>
                   <p className="text-sm text-gray-600">{t('returns.quantity', { quantity: item.quantity })}</p>
                   <p className="text-sm text-gray-600">{t('returns.reason', { reason: t(`orders.return_reasons.${item.reason}`) || item.reason })}</p>
-                  {item.price && (
-                    <p className="text-sm text-gray-600">{t('returns.price', { price: item.price })} {isRtl ? 'ريال' : 'SAR'}</p>
-                  )}
+                  <p className="text-sm text-gray-600">{t('returns.item_total', { total: item.price ? item.quantity * item.price : 0 })} {isRtl ? 'ريال' : 'SAR'}</p>
                 </div>
               ))}
             </div>
@@ -424,7 +423,7 @@ const BranchReturns: React.FC = () => {
   };
 
   const Pagination: React.FC = () => (
-    sortedReturns.length > RETURNS_PER_PAGE && (
+    totalPages > 1 && (
       <div className={`flex items-center justify-center gap-3 mt-6 ${isRtl ? 'flex-row' : ''}`}>
         <Button
           variant="secondary"
@@ -483,7 +482,7 @@ const BranchReturns: React.FC = () => {
             <Card className="p-6 max-w-md text-center bg-red-50 shadow-lg rounded-lg border border-red-200">
               <div className={`flex items-center justify-center gap-3 mb-4 ${isRtl ? 'flex-row' : ''}`}>
                 <AlertCircle className="w-8 h-8 text-red-600" />
-                <p className="text-lg font-semibold text-red-600">{error}</p>
+                <p className="text-lg font-medium text-red-600">{error}</p>
               </div>
               <Button
                 variant="primary"
@@ -503,7 +502,7 @@ const BranchReturns: React.FC = () => {
               transition={{ duration: 0.4 }}
               className="sticky top-0 z-10 bg-gray-50 py-4 border-b border-gray-100"
             >
-              <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 ${isRtl ? 'sm:flex-row' : ''}`}>
+              <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'sm:flex-row' : ''}`}>
                 <div>
                   <h1 className="text-3xl font-bold text-gray-900">{t('returns.title')}</h1>
                   <p className="text-base text-gray-600 mt-1">{t('returns.subtitle')}</p>
@@ -542,8 +541,8 @@ const BranchReturns: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('returns.filter_by_status')}</label>
                     <Select
-                      label={t('returns.filter_by_status')}
                       options={statusOptions}
                       value={filterStatus}
                       onChange={setFilterStatus}
@@ -636,13 +635,7 @@ const BranchReturns: React.FC = () => {
                         <p className="text-sm text-blue-800"><strong>{t('returns.review_notes')}:</strong> {selectedReturn.reviewNotes}</p>
                       </div>
                     )}
-                    <div className="border-t pt-3 border-gray-200">
-                      <div className={`flex items-center justify-between text-base font-semibold text-gray-900 ${isRtl ? 'flex-row' : ''}`}>
-                        <span>{t('returns.final_total')}</span>
-                        <span className="text-teal-600">{selectedReturn.items.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0)} {isRtl ? 'ريال' : 'SAR'}</span>
-                      </div>
-                    </div>
-                    <div className={`flex justify-end gap-3 ${isRtl ? 'flex-row' : ''}`}>
+                    <div className="flex justify-end gap-3">
                       <Button
                         variant="secondary"
                         onClick={() => setIsViewModalOpen(false)}
