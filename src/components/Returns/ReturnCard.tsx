@@ -3,7 +3,7 @@ import { Card } from '../../components/UI/Card';
 import { Button } from '../../components/UI/Button';
 import { Eye, Check, AlertCircle } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { Return, ReturnStatus, User } from '../../types/types';
+import { Return, ReturnStatus } from '../../types/types';
 import { formatDate } from '../../utils/formatDate';
 
 interface ReturnCardProps {
@@ -13,7 +13,7 @@ interface ReturnCardProps {
   viewReturn: (ret: Return) => void;
   openActionModal: (ret: Return, type: 'approve' | 'reject') => void;
   submitting: string | null;
-  user: User | null;
+  user: any;
 }
 
 const ReturnCard: React.FC<ReturnCardProps> = memo(({ ret, isRtl, getStatusInfo, viewReturn, openActionModal, submitting, user }) => {
@@ -55,7 +55,7 @@ const ReturnCard: React.FC<ReturnCardProps> = memo(({ ret, isRtl, getStatusInfo,
             </div>
             <div>
               <p className="text-sm text-gray-500">{isRtl ? 'الفرع' : 'Branch'}</p>
-              <p className="text-base font-medium text-gray-900">{ret.branch.name}</p>
+              <p className="text-base font-medium text-gray-900">{ret.branch.name}</p> {/* displayName from backend */}
             </div>
             <div>
               <p className="text-sm text-gray-500">{isRtl ? 'الإجمالي' : 'Total Amount'}</p>
@@ -65,18 +65,32 @@ const ReturnCard: React.FC<ReturnCardProps> = memo(({ ret, isRtl, getStatusInfo,
             </div>
             <div>
               <p className="text-sm text-gray-500">{isRtl ? 'تم الإنشاء بواسطة' : 'Created By'}</p>
-              <p className="text-base font-medium text-gray-900">{ret.createdBy.name}</p>
+              <p className="text-base font-medium text-gray-900">{ret.createdBy?.username || ret.branch.name}</p>
             </div>
           </div>
           <div className="flex flex-col gap-3">
             {ret.items.length > 0 ? (
               ret.items.map((item, index) => (
                 <div key={index} className="p-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors">
-                  <p className="text-base font-medium text-gray-900">{item.product.name}</p>
+                  <p className="text-base font-medium text-gray-900">{item.product.name}</p> {/* displayName from backend */}
                   <p className="text-sm text-gray-600">{isRtl ? `الكمية: ${item.quantity}` : `Quantity: ${item.quantity}`}</p>
                   <p className="text-sm text-gray-600">{isRtl ? `السبب: ${item.displayReason}` : `Reason: ${item.displayReason}`}</p>
-                  <p className="text-sm text-gray-600">{isRtl ? `السعر: ${item.price.toFixed(2)} ريال` : `Price: ${item.price.toFixed(2)} SAR`}</p>
-                  <p className="text-sm text-gray-600">{isRtl ? `القسم: ${item.product.department.name}` : `Department: ${item.product.department.name}`}</p>
+                  {item.price && (
+                    <p className="text-sm text-gray-600">{isRtl ? `السعر: ${item.price.toFixed(2)} ريال` : `Price: ${item.price.toFixed(2)} SAR`}</p>
+                  )}
+                  {item.status && (
+                    <p className={`text-sm ${item.status === 'approved' ? 'text-green-600' : item.status === 'rejected' ? 'text-red-600' : 'text-gray-600'}`}>
+                      {isRtl
+                        ? `حالة العنصر: ${
+                            item.status === 'approved'
+                              ? 'تمت الموافقة'
+                              : item.status === 'rejected'
+                              ? 'مرفوض'
+                              : 'في انتظار الموافقة'
+                          }`
+                        : `Item Status: ${item.status}`}
+                    </p>
+                  )}
                   {item.reviewNotes && (
                     <p className="text-sm text-gray-600">{isRtl ? `ملاحظات المراجعة: ${item.reviewNotes}` : `Review Notes: ${item.reviewNotes}`}</p>
                   )}
@@ -86,10 +100,10 @@ const ReturnCard: React.FC<ReturnCardProps> = memo(({ ret, isRtl, getStatusInfo,
               <p className="text-sm text-gray-500">{isRtl ? 'لا توجد عناصر' : 'No items'}</p>
             )}
           </div>
-          {ret.displayNotes && (
+          {ret.notes && (
             <div className="p-3 bg-amber-50 rounded-lg border border-amber-100">
               <p className="text-sm text-amber-800">
-                <strong>{isRtl ? 'ملاحظات:' : 'Notes:'}</strong> {ret.displayNotes}
+                <strong>{isRtl ? 'ملاحظات:' : 'Notes:'}</strong> {ret.notes}
               </p>
             </div>
           )}
@@ -106,8 +120,12 @@ const ReturnCard: React.FC<ReturnCardProps> = memo(({ ret, isRtl, getStatusInfo,
               {ret.statusHistory.map((history, index) => (
                 <p key={index} className="text-sm text-gray-600">
                   {isRtl
-                    ? `تم تغيير الحالة إلى ${getStatusInfo(history.status).label} بواسطة ${history.changedBy.name} في ${formatDate(history.changedAt, 'ar-SA')} ${history.displayNotes}`
-                    : `Status changed to ${getStatusInfo(history.status).label} by ${history.changedBy.name} on ${formatDate(history.changedAt, 'en-US')} ${history.displayNotes}`}
+                    ? `تم تغيير الحالة إلى ${history.status} بواسطة ${history.changedBy} في ${formatDate(history.changedAt, 'ar-SA')} ${
+                        history.notes ? `ملاحظات: ${history.notes}` : 'لا توجد ملاحظات'
+                      }`
+                    : `Status changed to ${history.status} by ${history.changedBy} on ${formatDate(history.changedAt, 'en-US')} ${
+                        history.notes ? `Notes: ${history.notes}` : 'No notes'
+                      }`}
                 </p>
               ))}
             </div>
@@ -152,8 +170,8 @@ const ReturnCard: React.FC<ReturnCardProps> = memo(({ ret, isRtl, getStatusInfo,
               <p className="text-sm text-gray-500">
                 {ret.status !== 'pending'
                   ? isRtl
-                    ? `الإجراءات غير متاحة لحالة ${getStatusInfo(ret.status).label}`
-                    : `Actions unavailable for status ${getStatusInfo(ret.status).label}`
+                    ? `الإجراءات غير متاحة لحالة ${ret.status === 'approved' ? 'تمت الموافقة' : ret.status === 'rejected' ? 'مرفوض' : 'تمت المعالجة' }`
+                    : `Actions unavailable for status ${ret.status}`
                   : isRtl
                   ? 'إجراءات غير مصرح بها'
                   : 'Actions unauthorized'}

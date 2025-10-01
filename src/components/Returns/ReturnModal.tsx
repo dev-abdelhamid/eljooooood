@@ -32,7 +32,7 @@ const ReturnModal: React.FC<ReturnModalProps> = ({ isOpen, onClose, selectedRetu
           </div>
           <div>
             <p className="text-sm text-gray-500">{isRtl ? 'الفرع' : 'Branch'}</p>
-            <p className="text-base font-medium text-gray-900">{isRtl ? selectedReturn.branch.name : selectedReturn.branch.nameEn || selectedReturn.branch.name}</p>
+            <p className="text-base font-medium text-gray-900">{selectedReturn.branch.name}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">{isRtl ? 'الإجمالي' : 'Total Amount'}</p>
@@ -57,9 +57,9 @@ const ReturnModal: React.FC<ReturnModalProps> = ({ isOpen, onClose, selectedRetu
             {selectedReturn.items.length > 0 ? (
               selectedReturn.items.map((item, index) => (
                 <div key={index} className="p-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors">
-                  <p className="text-base font-medium text-gray-900">{isRtl ? item.product.name : item.product.nameEn || item.product.name}</p>
+                  <p className="text-base font-medium text-gray-900">{item.productName}</p>
                   <p className="text-sm text-gray-600">{isRtl ? `الكمية: ${item.quantity}` : `Quantity: ${item.quantity}`}</p>
-                  <p className="text-sm text-gray-600">{isRtl ? `السبب: ${item.displayReason}` : `Reason: ${item.displayReason}`}</p>
+                  <p className="text-sm text-gray-600">{isRtl ? `السبب: ${item.reason || 'غير محدد'}` : `Reason: ${item.reason || 'Not specified'}`}</p>
                   {item.price && (
                     <p className="text-sm text-gray-600">{isRtl ? `السعر: ${item.price.toFixed(2)} ريال` : `Price: ${item.price.toFixed(2)} SAR`}</p>
                   )}
