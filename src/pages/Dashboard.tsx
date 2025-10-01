@@ -15,8 +15,7 @@ import { useOrderNotifications } from '../hooks/useOrderNotifications';
 
 // In-memory cache
 const cache = new Map<string, any>();
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
+
 // تعريف الأنواع
 interface Stats {
   totalOrders: number;
@@ -154,8 +153,7 @@ const ChefDashboard: React.FC<{
   language: string;
   handleStartTask: (taskId: string, orderId: string) => void;
   handleCompleteTask: (taskId: string, orderId: string) => void;
-  
-}> = React.memo(({ stats, tasks, isRtl, language, handleStartTask, handleCompleteTask }) => {
+}> = React.memo(({ stats, tasks, isRtl, handleStartTask, handleCompleteTask }) => {
   const [filter, setFilter] = useState<FilterState>({ status: 'all', search: '' });
 
   const filteredTasks = useMemo(() => {
@@ -429,7 +427,7 @@ const StatsGrid: React.FC<{ stats: Stats; isRtl: boolean }> = React.memo(({ stat
     />
     <StatsCard
       title={isRtl ? 'إجمالي المبيعات' : 'Total Sales'}
-      value={stats.totalSales.toLocaleString(language, { style: 'currency', currency: 'SAR' })}
+      value={stats.totalSales.toLocaleString( { style: 'currency', currency: 'SAR' })}
       icon={DollarSign}
       color="purple"
       ariaLabel={isRtl ? 'إجمالي المبيعات' : 'Total Sales'}
@@ -443,7 +441,7 @@ const StatsGrid: React.FC<{ stats: Stats; isRtl: boolean }> = React.memo(({ stat
     />
     <StatsCard
       title={isRtl ? 'متوسط قيمة الطلب' : 'Avg Order Value'}
-      value={stats.averageOrderValue.toLocaleString(language, { style: 'currency', currency: 'SAR' })}
+      value={stats.averageOrderValue.toLocaleString( { style: 'currency', currency: 'SAR' })}
       icon={DollarSign}
       color="amber"
       ariaLabel={isRtl ? 'متوسط قيمة الطلب' : 'Avg Order Value'}
