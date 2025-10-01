@@ -806,7 +806,6 @@ const BranchReturns = () => {
                 <span
                   className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${getStatusInfo(selectedReturn.status).color}`}
                 >
-                  <getStatusInfo(selectedReturn.status).icon className="w-5 h-5" />
                   {getStatusInfo(selectedReturn.status).label}
                 </span>
               </div>
