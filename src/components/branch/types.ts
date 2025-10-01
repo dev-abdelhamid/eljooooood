@@ -130,7 +130,7 @@ export interface State {
   isViewModalOpen: boolean;
   isConfirmDeliveryModalOpen: boolean;
   isReturnModalOpen: boolean;
-  returnFormData: ReturnForm;
+  returnFormData: ReturnFormItem[]; // Changed from ReturnForm to ReturnFormItem[]
   searchQuery: string;
   filterStatus: string;
   sortBy: 'date' | 'totalAmount';
