@@ -19,17 +19,17 @@ interface Props {
 }
 
 const returnReasonOptions = [
-  { value: 'defective', label: 'defective' },
-  { value: 'wrong_item', label: 'wrong_item' },
-  { value: 'not_needed', label: 'not_needed' },
-  { value: 'other', label: 'other' },
+  { value: 'تالف', label: 'تالف', labelEn: 'Damaged' },
+  { value: 'منتج خاطئ', label: 'منتج خاطئ', labelEn: 'Wrong Item' },
+  { value: 'كمية زائدة', label: 'كمية زائدة', labelEn: 'Excess Quantity' },
+  { value: 'أخرى', label: 'أخرى', labelEn: 'Other' },
 ];
 
 const ReturnModal: React.FC<Props> = memo(
   ({ isOpen, onClose, order, returnFormData, setReturnFormData, t, isRtl, onSubmit, submitting }) => {
     if (!order) return null;
 
-    const selectedItem = order.items.find(item => item.itemId === returnFormData.itemId);
+    const selectedItem = order.items.find((item) => item.itemId === returnFormData.itemId);
 
     return (
       <Modal
@@ -40,25 +40,33 @@ const ReturnModal: React.FC<Props> = memo(
         className="max-w-lg w-full p-6 bg-white rounded-lg shadow-xl"
         dir={isRtl ? 'rtl' : 'ltr'}
       >
-        <form onSubmit={e => onSubmit(e, order, returnFormData)} className="space-y-6">
+        <form onSubmit={(e) => onSubmit(e, order, returnFormData)} className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'المنتج' : 'Product'}</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {isRtl ? 'المنتج' : 'Product'}
+            </label>
             <Select
-              options={order.items.map(item => ({
+              options={order.items.map((item) => ({
                 value: item.itemId,
-                label: isRtl ? `${item.productName} (${item.quantity} ${t(`units.${item.unit || 'unit'}`)})` : `${item.productName} (${item.quantity} ${t(`units.${item.unit || 'unit'}`)})`,
+                label: isRtl
+                  ? `${item.productName} (${item.quantity} ${t(`units.${item.unit || 'unit'}`)})`
+                  : `${item.productNameEn || item.productName} (${item.quantity} ${t(`units.${item.unitEn || item.unit || 'unit'}`)})`,
               }))}
               value={returnFormData.itemId}
-              onChange={value => setReturnFormData({ ...returnFormData, itemId: value })}
+              onChange={(value) => setReturnFormData({ ...returnFormData, itemId: value })}
               className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'الكمية' : 'Quantity'}</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {isRtl ? 'الكمية' : 'Quantity'}
+            </label>
             <Input
               type="number"
               value={returnFormData.quantity}
-              onChange={e => setReturnFormData({ ...returnFormData, quantity: Number(e.target.value) })}
+              onChange={(e) =>
+                setReturnFormData({ ...returnFormData, quantity: Number(e.target.value) })
+              }
               min={1}
               max={selectedItem?.quantity || 1}
               className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm"
@@ -66,23 +74,39 @@ const ReturnModal: React.FC<Props> = memo(
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'سبب الإرجاع' : 'Return Reason'}</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {isRtl ? 'سبب الإرجاع' : 'Return Reason'}
+            </label>
             <Select
-              options={returnReasonOptions.map(opt => ({
+              options={returnReasonOptions.map((opt) => ({
                 value: opt.value,
-                label: t(`orders.return_reasons_${opt.label}`),
+                label: isRtl ? opt.label : opt.labelEn,
               }))}
               value={returnFormData.reason}
-              onChange={value => setReturnFormData({ ...returnFormData, reason: value })}
+              onChange={(value) =>
+                setReturnFormData({
+                  ...returnFormData,
+                  reason: value,
+                  reasonEn: returnReasonOptions.find((opt) => opt.value === value)?.labelEn || value,
+                })
+              }
               className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'ملاحظات' : 'Notes'}</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {isRtl ? 'ملاحظات' : 'Notes'}
+            </label>
             <Input
               type="text"
               value={returnFormData.notes}
-              onChange={e => setReturnFormData({ ...returnFormData, notes: e.target.value })}
+              onChange={(e) =>
+                setReturnFormData({
+                  ...returnFormData,
+                  notes: e.target.value,
+                  notesEn: e.target.value,
+                })
+              }
               className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm"
               placeholder={isRtl ? 'أدخل ملاحظات إضافية (اختياري)' : 'Enter additional notes (optional)'}
             />
@@ -101,7 +125,9 @@ const ReturnModal: React.FC<Props> = memo(
               className="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-4 py-2 text-sm"
               disabled={submitting === order.id}
             >
-              {isRtl ? 'إرسال طلب الإرجاع' : 'Submit Return Request'}
+              {submitting === order.id
+                ? isRtl ? 'جاري الإرسال...' : 'Submitting...'
+                : isRtl ? 'إرسال طلب الإرجاع' : 'Submit Return Request'}
             </Button>
           </div>
         </form>

@@ -59,21 +59,16 @@ export interface User {
   department?: string;
 }
 
-export interface ReturnItem {
-  productId: string;
+  export interface ReturnFormItem {
+  itemId: string;
   quantity: number;
   reason: string;
-  reasonEn?: string;
-  displayReason: string; // Derived field: reason (isRtl=true) or reasonEn (isRtl=false)
-  status: string;
-  reviewNotes?: string;
-  reviewNotesEn?: string;
-  displayReviewNotes?: string; // Derived field: reviewNotes (isRtl=true) or reviewNotesEn (isRtl=false)
+  notes: string;
 }
 
 export interface OrderReturn {
   returnId: string;
-  items: ReturnItem[];
+  items: ReturnFormItem[];
   status: string;
   reviewNotes?: string;
   reviewNotesEn?: string;
@@ -175,3 +170,7 @@ export type Action =
   | { type: 'SET_VIEW_MODE'; payload: 'card' | 'table' }
   | { type: 'SET_INVENTORY'; payload: any[] }
   | { type: 'UPDATE_INVENTORY'; payload: { productId: string; quantity: number; type: string } };
+
+
+
+  
