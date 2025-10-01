@@ -43,12 +43,8 @@ const ReturnTable: React.FC<ReturnTableProps> = ({ returns, isRtl, getStatusInfo
                   </span>
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{formatDate(ret.createdAt, isRtl ? 'ar-SA' : 'en-US')}</td>
-                <td className="px-4 py-3 text-sm text-gray-900">
-                  {ret.items.length > 0 ? ret.items.map((item) => item.product.name).join(', ') : isRtl ? 'لا توجد منتجات' : 'No products'}
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-900">
-                  {ret.items.length > 0 ? ret.items.map((item) => item.quantity).join(', ') : '-'}
-                </td>
+                <td className="px-4 py-3 text-sm text-gray-900">{ret.items.length > 0 ? ret.items.map((item) => item.product.name).join(', ') : isRtl ? 'لا توجد منتجات' : 'No products'}</td>
+                <td className="px-4 py-3 text-sm text-gray-900">{ret.items.length > 0 ? ret.items.map((item) => item.quantity).join(', ') : '-'}</td>
                 <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{totalQuantity}</td>
                 <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{ret.branch.name}</td>
                 <td className="px-4 py-3 text-sm text-teal-600 whitespace-nowrap">
@@ -64,7 +60,7 @@ const ReturnTable: React.FC<ReturnTableProps> = ({ returns, isRtl, getStatusInfo
                     >
                       {isRtl ? 'عرض' : 'View'}
                     </button>
-                    {user?.role === 'admin' && ret.status === 'pending' && (
+                    {['production', 'admin'].includes(user?.role || '') && ret.status === 'pending' && (
                       <>
                         <button
                           onClick={() => openActionModal(ret, 'approve')}
