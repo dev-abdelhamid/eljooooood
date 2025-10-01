@@ -16,11 +16,12 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
-import { Order, ReturnFormItem, OrderStatus, ItemStatus } from '../components/branch/types';
+import { Order, ReturnForm, OrderStatus, ItemStatus } from '../components/branch/types';
 import { formatDate } from '../utils/formatDate';
 import OrderCardSkeleton from '../components/branch/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/branch/OrderTableSkeleton';
 
+// Lazy-loaded components
 const OrderTable = lazy(() => import('../components/branch/OrderTable'));
 const OrderCard = lazy(() => import('../components/branch/OrderCard'));
 const Pagination = lazy(() => import('../components/branch/Pagination'));
@@ -28,13 +29,14 @@ const ViewModal = lazy(() => import('../components/branch/ViewModal'));
 const ConfirmDeliveryModal = lazy(() => import('../components/branch/ConfirmDeliveryModal'));
 const ReturnModal = lazy(() => import('../components/branch/ReturnModal'));
 
+// State and Action interfaces
 interface State {
   orders: Order[];
   selectedOrder: Order | null;
   isViewModalOpen: boolean;
   isConfirmDeliveryModalOpen: boolean;
   isReturnModalOpen: boolean;
-  returnFormData: ReturnFormItem[];
+  returnFormData: ReturnForm;
   searchQuery: string;
   filterStatus: string;
   sortBy: 'date' | 'totalAmount';
@@ -64,13 +66,14 @@ interface Action {
   order?: 'asc' | 'desc';
 }
 
+// Initial state
 const initialState: State = {
   orders: [],
   selectedOrder: null,
   isViewModalOpen: false,
   isConfirmDeliveryModalOpen: false,
   isReturnModalOpen: false,
-  returnFormData: [{ itemId: '', quantity: 0, reason: '', notes: '' }],
+  returnFormData: { itemId: '', quantity: 0, reason: '', notes: '' },
   searchQuery: '',
   filterStatus: '',
   sortBy: 'date',
@@ -85,6 +88,7 @@ const initialState: State = {
   inventory: [],
 };
 
+// Reducer function
 const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case 'SET_ORDERS':
@@ -185,12 +189,6 @@ const reducer = (state: State, action: Action): State => {
                       return sum + (orderItem ? orderItem.price * item.quantity : 0);
                     }, 0) || 0)
                   : o.totalAmount,
-                items: action.status === 'approved'
-                  ? o.items.map(i => {
-                      const returnItem = o.returns?.find(r => r.returnId === action.returnId)?.items.find(ri => ri.productId === i.productId);
-                      return returnItem ? { ...i, returnedQuantity: (i.returnedQuantity || 0) + returnItem.quantity } : i;
-                    })
-                  : o.items,
               }
             : o
         ),
@@ -204,12 +202,6 @@ const reducer = (state: State, action: Action): State => {
                     return sum + (orderItem ? orderItem.price * item.quantity : 0);
                   }, 0) || 0)
                 : state.selectedOrder.totalAmount,
-              items: action.status === 'approved'
-                ? state.selectedOrder.items.map(i => {
-                    const returnItem = state.selectedOrder.returns?.find(r => r.returnId === action.returnId)?.items.find(ri => ri.productId === i.productId);
-                    return returnItem ? { ...i, returnedQuantity: (i.returnedQuantity || 0) + returnItem.quantity } : i;
-                  })
-                : state.selectedOrder.items,
             }
           : state.selectedOrder,
       };
@@ -241,6 +233,7 @@ const reducer = (state: State, action: Action): State => {
   }
 };
 
+// Constants
 const ORDERS_PER_PAGE = { card: 12, table: 50 };
 
 const statusOptions = [
@@ -259,6 +252,7 @@ const sortOptions = [
   { value: 'totalAmount', label: 'sort_total_amount' },
 ];
 
+// Utility functions
 const getDisplayName = (name: string | undefined | null, nameEn: string | undefined | null, isRtl: boolean): string => {
   if (isRtl) return name || 'غير معروف';
   return nameEn || name || 'Unknown';
@@ -273,6 +267,7 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   return window.btoa(binary);
 };
 
+// Main component
 const BranchOrders: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
@@ -283,10 +278,12 @@ const BranchOrders: React.FC = () => {
   const cacheRef = useRef<Map<string, Order[]>>(new Map());
   const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
 
+  // Update stateRef when state changes
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
+  // Initialize WebSocket listeners
   useEffect(() => {
     if (!user?.branchId || user.role !== 'branch') {
       dispatch({ type: 'SET_ERROR', payload: isRtl ? 'لا يوجد فرع مرتبط' : 'No branch associated' });
@@ -556,6 +553,7 @@ const BranchOrders: React.FC = () => {
     };
   }, [user, t, isRtl, language, socket, emit, playNotificationSound]);
 
+  // Fetch orders with caching
   const fetchData = useCallback(
     async (retryCount = 0) => {
       if (!user?.branchId || user.role !== 'branch') {
@@ -567,7 +565,7 @@ const BranchOrders: React.FC = () => {
       }
 
       dispatch({ type: 'SET_LOADING', payload: true });
-      const cacheKey = `${user.branchId}-${state.filterStatus}-${state.currentPage}-${state.viewMode}-${state.searchQuery}-${state.sortBy}-${state.sortOrder}`;
+      const cacheKey = `${user.branchId}-${state.filterStatus}-${state.currentPage}-${state.viewMode}`;
       if (cacheRef.current.has(cacheKey)) {
         dispatch({ type: 'SET_ORDERS', payload: cacheRef.current.get(cacheKey)! });
         dispatch({ type: 'SET_LOADING', payload: false });
@@ -671,6 +669,7 @@ const BranchOrders: React.FC = () => {
     [user, state.filterStatus, state.currentPage, state.viewMode, state.searchQuery, state.sortBy, state.sortOrder, isRtl, t, language]
   );
 
+  // Calculate adjusted total for an order
   const calculateAdjustedTotal = useCallback((order: Order) => {
     const approvedReturnsTotal = (order.returns || []).filter(ret => ret.status === 'approved').reduce((sum, ret) => {
       const returnTotal = ret.items.reduce((retSum, item) => {
@@ -687,10 +686,12 @@ const BranchOrders: React.FC = () => {
     });
   }, [isRtl]);
 
+  // Calculate total quantity for an order
   const calculateTotalQuantity = useCallback((order: Order) => {
     return order.items.reduce((sum, item) => sum + item.quantity, 0);
   }, []);
 
+  // Export to Excel
   const exportToExcel = useCallback(() => {
     const headers = [
       isRtl ? 'رقم الطلب' : 'Order Number',
@@ -715,14 +716,14 @@ const BranchOrders: React.FC = () => {
     const ws = XLSX.utils.json_to_sheet(isRtl ? data.map(row => Object.fromEntries(Object.entries(row).reverse())) : data, { header: headers });
     if (isRtl) ws['!views'] = [{ RTL: true }];
     ws['!cols'] = [
-      { wch: 15 },
-      { wch: 15 },
-      { wch: 40 },
-      { wch: 20 },
-      { wch: 15 },
-      { wch: 20 },
-      { wch: 15 },
-      { wch: 20 },
+      { wch: 15 }, // Order Number
+      { wch: 15 }, // Status
+      { wch: 40 }, // Products
+      { wch: 20 }, // Total Amount
+      { wch: 15 }, // Total Quantity
+      { wch: 20 }, // Date
+      { wch: 15 }, // Priority
+      { wch: 20 }, // Branch
     ];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, isRtl ? 'الطلبات' : 'Orders');
@@ -730,6 +731,7 @@ const BranchOrders: React.FC = () => {
     toast.success(isRtl ? 'تم تصدير الملف بنجاح' : 'Export successful', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
   }, [state.orders, t, isRtl, calculateAdjustedTotal, calculateTotalQuantity]);
 
+  // Export to PDF
   const exportToPDF = useCallback(async () => {
     try {
       const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
@@ -820,6 +822,7 @@ const BranchOrders: React.FC = () => {
     }
   }, [state.orders, t, isRtl, language, calculateAdjustedTotal, calculateTotalQuantity]);
 
+  // Search handling
   const handleSearchChange = useCallback(
     debounce((value: string) => {
       dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
@@ -827,6 +830,7 @@ const BranchOrders: React.FC = () => {
     []
   );
 
+  // Filtered, sorted, and paginated orders
   const filteredOrders = useMemo(
     () =>
       state.orders.filter(
@@ -860,6 +864,7 @@ const BranchOrders: React.FC = () => {
     [sortedOrders, state.currentPage, state.viewMode]
   );
 
+  // Order actions
   const viewOrder = useCallback((order: Order) => {
     dispatch({ type: 'SET_SELECTED_ORDER', payload: order });
     dispatch({ type: 'SET_MODAL', modal: 'view', isOpen: true });
@@ -873,71 +878,40 @@ const BranchOrders: React.FC = () => {
   const openReturnModal = useCallback((order: Order, itemId: string) => {
     const item = order.items.find(i => i.itemId === itemId);
     dispatch({ type: 'SET_SELECTED_ORDER', payload: order });
-    dispatch({ type: 'SET_RETURN_FORM', payload: [{ itemId, quantity: item?.quantity || 1, reason: '', notes: '' }] });
+    dispatch({ type: 'SET_RETURN_FORM', payload: { itemId, quantity: item?.quantity || 1, reason: '', notes: '' } });
     dispatch({ type: 'SET_MODAL', modal: 'return', isOpen: true });
   }, []);
 
   const handleReturnItem = useCallback(
-    async (e: React.FormEvent, order: Order | null, returnFormData: ReturnFormItem[]) => {
+    async (e: React.FormEvent, order: Order | null, returnFormData: ReturnForm) => {
       e.preventDefault();
-      if (!order || !user?.branchId || state.submitting) {
+      if (!order || !user?.branchId || !returnFormData.itemId || returnFormData.quantity < 1 || !returnFormData.reason || state.submitting) {
         toast.error(isRtl ? 'يرجى ملء جميع الحقول' : 'Please fill all fields', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
         return;
       }
-
-      // Validate return items
-      for (const item of returnFormData) {
-        if (!item.itemId || item.quantity < 1 || !item.reason) {
-          toast.error(isRtl ? 'يرجى ملء جميع الحقول للمنتج' : 'Please fill all fields for the item', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
-          return;
-        }
-        const orderItem = order.items.find(i => i.itemId === item.itemId);
-        if (!orderItem || !orderItem.productId) {
-          toast.error(isRtl ? 'معرف المنتج غير صالح' : 'Invalid product ID', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
-          return;
-        }
-        if (item.quantity > (orderItem.quantity - (orderItem.returnedQuantity || 0))) {
-          toast.error(
-            isRtl
-              ? `الكمية المطلوبة للإرجاع تتجاوز الكمية المتاحة للمنتج ${orderItem.productName}`
-              : `Requested return quantity exceeds available quantity for ${orderItem.productName}`,
-            { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
-          );
-          return;
-        }
-      }
-
       dispatch({ type: 'SET_SUBMITTING', payload: order.id });
       try {
+        const item = order.items.find(i => i.itemId === returnFormData.itemId);
+        if (!item || !item.productId) {
+          throw new Error(isRtl ? 'معرف المنتج غير صالح' : 'Invalid product ID');
+        }
         const response = await returnsAPI.createReturn({
           orderId: order.id,
           branchId: user.branchId,
-          reason: returnFormData[0].reason,
-          items: returnFormData.map(item => ({
-            product: order.items.find(i => i.itemId === item.itemId)!.productId,
-            quantity: item.quantity,
-            reason: item.reason,
-          })),
-          notes: returnFormData.map(item => item.notes).filter(note => note).join('; '),
+          reason: returnFormData.reason,
+          items: [{ product: item.productId, quantity: returnFormData.quantity, reason: returnFormData.reason }],
+          notes: returnFormData.notes,
         });
-
         const returnData = {
           returnId: response._id,
-          items: returnFormData.map(item => ({
-            productId: order.items.find(i => i.itemId === item.itemId)!.productId,
-            productName: order.items.find(i => i.itemId === item.itemId)!.productName,
-            quantity: item.quantity,
-            reason: item.reason,
-            status: 'pending_approval',
-          })),
+          items: [{ productId: item.productId, productName: item.productName, quantity: returnFormData.quantity, reason: returnFormData.reason, status: 'pending_approval' }],
           status: 'pending_approval',
-          reviewNotes: returnFormData.map(item => item.notes).filter(note => note).join('; '),
+          reviewNotes: returnFormData.notes,
           createdAt: formatDate(new Date(), language),
         };
-
         dispatch({ type: 'ADD_RETURN', orderId: order.id, returnData });
         dispatch({ type: 'SET_MODAL', modal: 'return', isOpen: false });
-        dispatch({ type: 'SET_RETURN_FORM', payload: [{ itemId: '', quantity: 0, reason: '', notes: '' }] });
+        dispatch({ type: 'SET_RETURN_FORM', payload: { itemId: '', quantity: 0, reason: '', notes: '' } });
         playNotificationSound('/sounds/return-created.mp3', [200, 100, 200]);
         toast.success(isRtl ? 'تم تقديم طلب الإرجاع' : 'Return submitted successfully', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       } catch (err: any) {
@@ -964,13 +938,16 @@ const BranchOrders: React.FC = () => {
           throw new Error(isRtl ? 'بيانات الطلب غير صالحة' : 'Invalid order data');
         }
 
+        // Validate product IDs
         const invalidItems = order.items.filter(item => !item.product?._id);
         if (invalidItems.length > 0) {
           throw new Error(isRtl ? 'بعض العناصر تحتوي على معرفات منتجات غير صالحة' : 'Some items have invalid product IDs');
         }
 
+        // Confirm delivery
         await ordersAPI.confirmDelivery(orderId, user.id);
 
+        // Update inventory using bulkCreate
         const inventoryItems = order.items.map(item => ({
           productId: item.product._id,
           currentStock: item.quantity,
@@ -1062,6 +1039,7 @@ const BranchOrders: React.FC = () => {
     [t, isRtl, playNotificationSound, user, socket, isConnected, emit]
   );
 
+  // Update order status
   const updateOrderStatus = useCallback(
     async (orderId: string, status: OrderStatus) => {
       if (!user?.branchId) {
@@ -1089,202 +1067,226 @@ const BranchOrders: React.FC = () => {
     [t, isRtl, user, socket, isConnected, emit]
   );
 
+  // Clear cache on user or branch change
   useEffect(() => {
     cacheRef.current.clear();
     fetchData();
   }, [user?.branchId, fetchData]);
 
+  // Render
   return (
     <div className="px-4 py-6 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
       <Suspense fallback={<LoadingSpinner size="lg" />}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-8">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-800">
-                {isRtl ? 'إدارة طلبات الفرع' : 'Branch Orders Management'}
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-800 flex items-center gap-3">
+                <ShoppingCart className="w-8 h-8 text-amber-600" />
+                {isRtl ? 'الطلبات' : 'Orders'}
               </h1>
-              <p className="text-sm text-gray-600 mt-1">
-                {isRtl ? 'عرض وإدارة الطلبات الخاصة بالفرع' : 'View and manage branch orders'}
-              </p>
+              <p className="text-sm text-gray-500 mt-1">{isRtl ? 'إدارة طلبات الفرع' : 'Manage branch orders'}</p>
             </div>
-            <div className={`flex gap-4 flex-wrap ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <div className="flex gap-3 flex-wrap">
               <Button
-                onClick={exportToExcel}
-                className="bg-green-500 hover:bg-green-600 text-white rounded-lg px-4 py-2 text-sm flex items-center gap-2"
+                variant={state.orders.length > 0 ? 'primary' : 'secondary'}
+                onClick={state.orders.length > 0 ? exportToExcel : undefined}
+                className={`flex items-center gap-2 ${
+                  state.orders.length > 0 ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                } rounded-lg px-4 py-2 text-sm shadow-sm`}
+                disabled={state.orders.length === 0}
               >
                 <Download className="w-5 h-5" />
                 {isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
               </Button>
               <Button
-                onClick={exportToPDF}
-                className="bg-blue-500 hover:bg-blue-600 text-white rounded-lg px-4 py-2 text-sm flex items-center gap-2"
+                variant={state.orders.length > 0 ? 'primary' : 'secondary'}
+                onClick={state.orders.length > 0 ? exportToPDF : undefined}
+                className={`flex items-center gap-2 ${
+                  state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                } rounded-lg px-4 py-2 text-sm shadow-sm`}
+                disabled={state.orders.length === 0}
               >
-                <Download className="w-5 h-5" />
+                <Upload className="w-5 h-5" />
                 {isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
               </Button>
               <Button
+                variant="secondary"
                 onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' })}
-                className="bg-gray-500 hover:bg-gray-600 text-white rounded-lg px-4 py-2 text-sm flex items-center gap-2"
+                className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-4 py-2 text-sm shadow-sm"
               >
                 {state.viewMode === 'card' ? <Table2 className="w-5 h-5" /> : <Grid className="w-5 h-5" />}
-                {isRtl ? (state.viewMode === 'card' ? 'عرض كجدول' : 'عرض كبطاقات') : (state.viewMode === 'card' ? 'Table View' : 'Card View')}
+                {isRtl ? (state.viewMode === 'card' ? 'عرض كجدول' : 'عرض كبطاقات') : state.viewMode === 'card' ? 'View as Table' : 'View as Cards'}
               </Button>
             </div>
           </div>
-
-          {/* Filters and Search */}
-          <div className="flex flex-col sm:flex-row gap-4 mb-6">
-            <SearchInput
-              placeholder={isRtl ? 'ابحث بالرقم أو الفرع أو الملاحظات...' : 'Search by number, branch, or notes...'}
-              onChange={handleSearchChange}
-              className="w-full sm:w-1/3 rounded-lg border-gray-200 focus:ring-amber-500 text-sm"
-            />
-            <Select
-              options={statusOptions.map(opt => ({
-                value: opt.value,
-                label: t(`orders.${opt.label}`),
-              }))}
-              value={state.filterStatus}
-              onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
-              className="w-full sm:w-1/4 rounded-lg border-gray-200 focus:ring-amber-500 text-sm"
-              placeholder={isRtl ? 'تصفية حسب الحالة' : 'Filter by status'}
-            />
-            <Select
-              options={sortOptions.map(opt => ({
-                value: opt.value,
-                label: t(`orders.${opt.label}`),
-              }))}
-              value={state.sortBy}
-              onChange={(value) => dispatch({ type: 'SET_SORT', by: value as 'date' | 'totalAmount', order: state.sortOrder })}
-              className="w-full sm:w-1/4 rounded-lg border-gray-200 focus:ring-amber-500 text-sm"
-              placeholder={isRtl ? 'فرز حسب' : 'Sort by'}
-            />
-            <Select
-              options={[
-                { value: 'asc', label: isRtl ? 'تصاعدي' : 'Ascending' },
-                { value: 'desc', label: isRtl ? 'تنازلي' : 'Descending' },
-              ]}
-              value={state.sortOrder}
-              onChange={(value) => dispatch({ type: 'SET_SORT', by: state.sortBy, order: value as 'asc' | 'desc' })}
-              className="w-full sm:w-1/4 rounded-lg border-gray-200 focus:ring-amber-500 text-sm"
-              placeholder={isRtl ? 'ترتيب الفرز' : 'Sort order'}
-            />
-          </div>
-
-          {/* Error and Loading States */}
-          {state.error && (
-            <div className="mb-6 p-4 bg-red-100 text-red-700 rounded-lg flex items-center gap-2">
-              <AlertCircle className="w-5 h-5" />
-              {state.error}
-            </div>
-          )}
-          {state.loading && (
+          <Card className="p-4 sm:p-6 mt-6 bg-white shadow-lg rounded-lg border border-gray-100">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
+                <SearchInput
+                  value={state.searchQuery}
+                  onChange={handleSearchChange}
+                  placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
+                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
+                <Select
+                  options={statusOptions.map(opt => ({
+                    value: opt.value,
+                    label: t(`orders.status_${opt.value}`) || (isRtl ? 'كل الحالات' : 'All Statuses'),
+                  }))}
+                  value={state.filterStatus || ''}
+                  onChange={(value: string) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
+                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
+                <Select
+                  options={sortOptions.map(opt => ({
+                    value: opt.value,
+                    label: t(`orders.${opt.label}`) || opt.label,
+                  }))}
+                  value={state.sortBy}
+                  onChange={(value: string) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
+                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                />
+              </div>
+            </div>
+            <div className="text-sm text-center text-gray-500 mt-4">
+              {isRtl ? `عدد الطلبات: ${filteredOrders.length}` : `Orders count: ${filteredOrders.length}`}
+            </div>
+          </Card>
+          {state.loading ? (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-4 mt-6">
               {state.viewMode === 'card' ? (
-                Array.from({ length: ORDERS_PER_PAGE.card }).map((_, i) => <OrderCardSkeleton key={i} />)
+                Array(6).fill(null).map((_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)
               ) : (
-                <OrderTableSkeleton />
+                <OrderTableSkeleton isRtl={isRtl} />
               )}
-            </div>
-          )}
-
-          {/* Orders Display */}
-          {!state.loading && !state.error && paginatedOrders.length === 0 && (
-            <div className="text-center py-10">
-              <ShoppingCart className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-              <p className="text-gray-600">{isRtl ? 'لا توجد طلبات' : 'No orders found'}</p>
-            </div>
-          )}
-          {!state.loading && !state.error && paginatedOrders.length > 0 && (
-            <div className={state.viewMode === 'card' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4' : ''}>
-              <AnimatePresence>
-                {state.viewMode === 'card' ? (
-                  paginatedOrders.map(order => (
-                    <motion.div
-                      key={order.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <OrderCard
-                        order={order}
-                        calculateAdjustedTotal={calculateAdjustedTotal}
-                        calculateTotalQuantity={calculateTotalQuantity}
-                        t={t}
-                        isRtl={isRtl}
-                        onView={() => viewOrder(order)}
-                        onConfirmDelivery={() => openConfirmDeliveryModal(order)}
-                        onReturn={openReturnModal}
-                        submitting={state.submitting}
-                        updateOrderStatus={updateOrderStatus}
-                      />
-                    </motion.div>
-                  ))
-                ) : (
+            </motion.div>
+          ) : state.error && state.orders.length === 0 ? (
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="mt-6">
+              <Card className="p-6 max-w-md mx-auto text-center bg-red-50 shadow-lg rounded-lg border border-red-100">
+                <div className={`flex items-center justify-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <AlertCircle className="w-6 h-6 text-red-600" />
+                  <p className="text-lg font-medium text-red-600">{state.error}</p>
+                </div>
+                <Button
+                  variant="primary"
+                  onClick={() => fetchData()}
+                  className="mt-4 bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-6 py-2 text-sm shadow-sm"
+                >
+                  {isRtl ? 'إعادة المحاولة' : 'Retry'}
+                </Button>
+              </Card>
+            </motion.div>
+          ) : (
+            <AnimatePresence>
+              {paginatedOrders.length === 0 ? (
+                <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-6">
+                  <Card className="p-8 sm:p-12 text-center bg-white shadow-lg rounded-lg border border-gray-100">
+                    <ShoppingCart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-800 mb-2">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
+                    <p className="text-sm text-gray-500">
+                      {state.filterStatus || state.searchQuery
+                        ? isRtl
+                          ? 'لا توجد طلبات مطابقة'
+                          : 'No matching orders'
+                        : isRtl
+                        ? 'لا توجد طلبات بعد'
+                        : 'No orders yet'}
+                    </p>
+                  </Card>
+                </motion.div>
+              ) : state.viewMode === 'table' ? (
+                <motion.div key="table-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-6">
                   <OrderTable
-                    orders={paginatedOrders}
-                    calculateAdjustedTotal={calculateAdjustedTotal}
-                    calculateTotalQuantity={calculateTotalQuantity}
+                    orders={paginatedOrders.filter(o => o && o.id && o.branch && o.branch._id)}
                     t={t}
                     isRtl={isRtl}
-                    onView={viewOrder}
-                    onConfirmDelivery={openConfirmDeliveryModal}
-                    onReturn={openReturnModal}
+                    calculateAdjustedTotal={calculateAdjustedTotal}
+                    calculateTotalQuantity={calculateTotalQuantity}
+                    startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
+                    viewOrder={viewOrder}
+                    openConfirmDeliveryModal={openConfirmDeliveryModal}
+                    openReturnModal={openReturnModal}
+                    user={user}
                     submitting={state.submitting}
-                    updateOrderStatus={updateOrderStatus}
                   />
-                )}
-              </AnimatePresence>
-            </div>
+                </motion.div>
+              ) : (
+                <motion.div key="card-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="space-y-4 mt-6">
+                  {paginatedOrders.filter(o => o && o.id && o.branch && o.branch._id).map(order => (
+                    <OrderCard
+                      key={order.id}
+                      order={order}
+                      t={t}
+                      isRtl={isRtl}
+                      calculateAdjustedTotal={calculateAdjustedTotal}
+                      calculateTotalQuantity={calculateTotalQuantity}
+                      viewOrder={viewOrder}
+                      openConfirmDeliveryModal={openConfirmDeliveryModal}
+                      openReturnModal={openReturnModal}
+                      user={user}
+                      submitting={state.submitting}
+                    />
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
           )}
-
-          {/* Pagination */}
-          {!state.loading && !state.error && sortedOrders.length > ORDERS_PER_PAGE[state.viewMode] && (
-            <div className="mt-6">
+          {paginatedOrders.length > 0 && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="mt-6">
               <Pagination
                 currentPage={state.currentPage}
-                totalItems={sortedOrders.length}
-                itemsPerPage={ORDERS_PER_PAGE[state.viewMode]}
-                onPageChange={(page) => dispatch({ type: 'SET_PAGE', payload: page })}
+                totalPages={Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode])}
+                t={t}
                 isRtl={isRtl}
+                handlePageChange={page => dispatch({ type: 'SET_PAGE', payload: page })}
               />
-            </div>
+            </motion.div>
           )}
-
-          {/* Modals */}
-          <Suspense fallback={<LoadingSpinner size="lg" />}>
-            <ViewModal
-              isOpen={state.isViewModalOpen}
-              onClose={() => dispatch({ type: 'SET_MODAL', modal: 'view', isOpen: false })}
-              order={state.selectedOrder}
-              t={t}
-              isRtl={isRtl}
-            />
-            <ConfirmDeliveryModal
-              isOpen={state.isConfirmDeliveryModalOpen}
-              onClose={() => dispatch({ type: 'SET_MODAL', modal: 'confirmDelivery', isOpen: false })}
-              order={state.selectedOrder}
-              t={t}
-              isRtl={isRtl}
-              onConfirm={() => state.selectedOrder && confirmDelivery(state.selectedOrder.id)}
-              submitting={state.submitting}
-            />
-            <ReturnModal
-              isOpen={state.isReturnModalOpen}
-              onClose={() => {
-                dispatch({ type: 'SET_MODAL', modal: 'return', isOpen: false });
-                dispatch({ type: 'SET_RETURN_FORM', payload: [{ itemId: '', quantity: 0, reason: '', notes: '' }] });
-              }}
-              order={state.selectedOrder}
-              returnFormData={state.returnFormData}
-              setReturnFormData={(data) => dispatch({ type: 'SET_RETURN_FORM', payload: data })}
-              t={t}
-              isRtl={isRtl}
-              onSubmit={handleReturnItem}
-              submitting={state.submitting}
-            />
-          </Suspense>
+          <ViewModal
+            isOpen={state.isViewModalOpen}
+            onClose={() => {
+              dispatch({ type: 'SET_MODAL', modal: 'view', isOpen: false });
+              dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
+            }}
+            order={state.selectedOrder}
+            t={t}
+            isRtl={isRtl}
+            calculateAdjustedTotal={calculateAdjustedTotal}
+          />
+          <ConfirmDeliveryModal
+            isOpen={state.isConfirmDeliveryModalOpen}
+            onClose={() => {
+              dispatch({ type: 'SET_MODAL', modal: 'confirmDelivery', isOpen: false });
+              dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
+            }}
+            order={state.selectedOrder}
+            t={t}
+            isRtl={isRtl}
+            confirmDelivery={confirmDelivery}
+            submitting={state.submitting}
+          />
+          <ReturnModal
+            isOpen={state.isReturnModalOpen}
+            onClose={() => {
+              dispatch({ type: 'SET_MODAL', modal: 'return', isOpen: false });
+              dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
+              dispatch({ type: 'SET_RETURN_FORM', payload: { itemId: '', quantity: 0, reason: '', notes: '' } });
+            }}
+            order={state.selectedOrder}
+            returnFormData={state.returnFormData}
+            setReturnFormData={(data) => dispatch({ type: 'SET_RETURN_FORM', payload: data })}
+            handleReturnItem={handleReturnItem}
+            t={t}
+            isRtl={isRtl}
+            submitting={state.submitting}
+          />
         </motion.div>
       </Suspense>
     </div>
