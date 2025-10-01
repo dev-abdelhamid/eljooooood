@@ -111,7 +111,14 @@ export const useOrderNotifications = (
           };
 
           dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
-        
+          addNotification({
+            _id: data.eventId || crypto.randomUUID(),
+            type: 'success',
+            message: t('notifications.order_created', { orderNumber: data.orderNumber, branchName: data.branch?.name }),
+            data: { orderId: data._id, eventId: data.eventId },
+            read: false,
+            createdAt: new Date().toISOString(),
+          });
         },
       },
       {
@@ -122,7 +129,14 @@ export const useOrderNotifications = (
           if (user.role === 'branch' && data.branchId !== user.branchId) return;
 
           dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'confirmed' });
-      
+          addNotification({
+            _id: data.eventId || crypto.randomUUID(),
+            type: 'success',
+            message: t('notifications.order_confirmed', { orderNumber: data.orderNumber, branchName: data.branchName }),
+            data: { orderId: data.orderId, eventId: data.eventId },
+            read: false,
+            createdAt: new Date().toISOString(),
+          });
         },
       },
       {
@@ -181,7 +195,14 @@ export const useOrderNotifications = (
             if (!updatedOrder || !Array.isArray(updatedOrder.items)) return;
             if (updatedOrder.items.every((item: any) => item.status === 'completed') && updatedOrder.status !== 'completed') {
               dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'completed' });
-             
+              addNotification({
+                _id: data.eventId || crypto.randomUUID(),
+                type: 'success',
+                message: t('notifications.order_completed', { orderNumber: data.orderNumber, branchName: data.branchName }),
+                data: { orderId: data.orderId, eventId: data.eventId },
+                read: false,
+                createdAt: new Date().toISOString(),
+              });
             }
           } catch {
             console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, data.orderId);
@@ -195,7 +216,18 @@ export const useOrderNotifications = (
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
 
           dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: data.status });
-         
+          addNotification({
+            _id: data.eventId || crypto.randomUUID(),
+            type: 'info',
+            message: t('notifications.order_status_updated', {
+              orderNumber: data.orderNumber,
+              status: t(`order_status.${data.status}`),
+              branchName: data.branchName,
+            }),
+            data: { orderId: data.orderId, eventId: data.eventId },
+            read: false,
+            createdAt: new Date().toISOString(),
+          });
         },
       },
       {

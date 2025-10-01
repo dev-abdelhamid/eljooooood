@@ -328,7 +328,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           type: 'ADD_ORDER',
           sound: '/sounds/notification.mp3',
           vibrate: [200, 100, 200],
-          roles: ['admin', 'production'],
+          roles: ['admin', 'branch', 'production'],
         },
       },
       {
@@ -362,7 +362,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           type: 'UPDATE_ORDER_STATUS',
           sound: '/sounds/notification.mp3',
           vibrate: [200, 100, 200],
-          roles: [ 'branch'],
+          roles: ['admin', 'branch'],
         },
       },
      {
@@ -411,7 +411,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     type: 'TASK_ASSIGNED',
     sound: '/sounds/notification.mp3',
     vibrate: [400, 100, 400],
-    roles: [ 'chef'],
+    roles: ['admin', 'production', 'chef'],
   },
 },
       {
@@ -459,7 +459,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           type: 'UPDATE_ITEM_STATUS',
           sound: '/sounds/notification.mp3',
           vibrate: [200, 100, 200],
-          roles: [ 'production', 'chef'],
+          roles: ['admin', 'production', 'chef'],
         },
       },
       {
@@ -526,7 +526,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           type: 'UPDATE_ORDER_STATUS',
           sound: '/sounds/notification.mp3',
           vibrate: [400, 100, 400],
-          roles: ['branch', 'production'],
+          roles: ['admin', 'branch', 'production'],
         },
       },
       {
