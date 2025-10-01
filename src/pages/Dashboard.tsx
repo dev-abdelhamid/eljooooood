@@ -10,6 +10,8 @@ import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
+import { useOrderNotifications } from '../hooks/useOrderNotifications';
+
 
 // In-memory cache
 const cache = new Map<string, any>();
@@ -199,7 +201,7 @@ const ChefDashboard: React.FC<{
         />
       </div>
       <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-        <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-4">
+        <div className="flex flex-col sm:flex-row justify-between mb-4 gap-4">
           <h3 className="text-lg font-semibold text-gray-800 flex items-center">
             <ChefHat className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
             {isRtl ? 'أحدث الطلبات قيد الإنتاج' : 'Latest In Production'}
@@ -351,7 +353,7 @@ export const Dashboard: React.FC = () => {
         return;
       }
 
-      if (!forceRefresh && cache.has(cacheKey)) {
+      if (!forceRefresh && cache.has(cacheKey) ) {
         const cachedData = cache.get(cacheKey);
         setOrders(cachedData.orders);
         setTasks(cachedData.tasks);
@@ -403,7 +405,6 @@ export const Dashboard: React.FC = () => {
           tasksResponse = await productionAssignmentsAPI.getChefTasks(chefId, { limit: 20 });
         } else {
           if (user.role === 'branch') query.branch = user.id || user._id;
-          if (user.role === 'production' && user.department) query.departmentId = user.department._id;
           [ordersResponse, tasksResponse, chefsResponse, branchesResponse] = await Promise.all([
             ordersAPI.getAll(query).catch(() => []),
             productionAssignmentsAPI.getAllTasks(query).catch(() => []),
@@ -803,178 +804,29 @@ export const Dashboard: React.FC = () => {
   }, [orders]);
 
   const renderStats = () => (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-4"
-    >
-      <StatsCard
-        title={isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
-        value={stats.totalOrders.toString()}
-        icon={ShoppingCart}
-        color="amber"
-        ariaLabel={isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
-      />
-      <StatsCard
-        title={isRtl ? 'الطلبات المعلقة' : 'Pending Orders'}
-        value={stats.pendingOrders.toString()}
-        icon={AlertCircle}
-        color="red"
-        ariaLabel={isRtl ? 'الطلبات المعلقة' : 'Pending Orders'}
-      />
-      <StatsCard
-        title={isRtl ? 'الطلبات قيد الإنتاج' : 'In Production'}
-        value={stats.inProductionOrders.toString()}
-        icon={BarChart3}
-        color="blue"
-        ariaLabel={isRtl ? 'الطلبات قيد الإنتاج' : 'In Production'}
-      />
-      <StatsCard
-        title={isRtl ? 'الطلبات قيد النقل' : 'In Transit'}
-        value={stats.inTransitOrders.toString()}
-        icon={Package}
-        color="teal"
-        ariaLabel={isRtl ? 'الطلبات قيد النقل' : 'In Transit'}
-      />
-      <StatsCard
-        title={isRtl ? 'الطلبات المسلمة' : 'Delivered Orders'}
-        value={stats.deliveredOrders.toString()}
-        icon={ShoppingCart}
-        color="green"
-        ariaLabel={isRtl ? 'الطلبات المسلمة' : 'Delivered Orders'}
-      />
-      <StatsCard
-        title={isRtl ? 'إجمالي المبيعات' : 'Total Sales'}
-        value={stats.totalSales.toLocaleString(language, { style: 'currency', currency: 'SAR' })}
-        icon={DollarSign}
-        color="purple"
-        ariaLabel={isRtl ? 'إجمالي المبيعات' : 'Total Sales'}
-      />
-      <StatsCard
-        title={isRtl ? 'المرتجعات' : 'Returns'}
-        value={stats.returns.toString()}
-        icon={AlertCircle}
-        color="pink"
-        ariaLabel={isRtl ? 'المرتجعات' : 'Returns'}
-      />
-      <StatsCard
-        title={isRtl ? 'متوسط قيمة الطلب' : 'Avg Order Value'}
-        value={stats.averageOrderValue.toLocaleString(language, { style: 'currency', currency: 'SAR' })}
-        icon={DollarSign}
-        color="amber"
-        ariaLabel={isRtl ? 'متوسط قيمة الطلب' : 'Avg Order Value'}
-      />
-    </motion.div>
+    <StatsGrid stats={stats} isRtl={isRtl} />
   );
 
   const renderPendingItems = () => (
-    <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-gray-100">
-      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 text-gray-800">
-        <Clock className="w-5 h-5 text-gray-600" />
-        {isRtl ? 'أحدث الطلبات المعلقة' : 'Latest Pending Orders'}
-      </h3>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {sortedPendingOrders.length === 0 && (
-          <p className="text-center text-gray-600 col-span-full text-sm">{isRtl ? 'لا توجد طلبات معلقة' : 'No pending orders'}</p>
-        )}
-        <AnimatePresence>
-          {sortedPendingOrders.map((order, index) => (
-            <motion.div
-              key={order.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ delay: index * 0.1 }}
-              onClick={() => navigate(`/orders/${order.id}`)}
-              className="p-3 bg-gray-50 rounded-lg border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors duration-200 shadow-sm"
-            >
-              <h4 className="font-semibold text-sm text-gray-800 mb-2 truncate">
-                {order.orderNumber} - {isRtl ? order.branchName : order.branchNameEn || order.branchName}
-              </h4>
-              <span
-                className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  order.status === 'pending'
-                    ? 'bg-amber-100 text-amber-800'
-                    : order.status === 'approved'
-                    ? 'bg-blue-100 text-blue-800'
-                    : 'bg-purple-100 text-purple-800'
-                }`}
-              >
-                {isRtl
-                  ? order.status === 'pending'
-                    ? 'معلق'
-                    : order.status === 'approved'
-                    ? 'معتمد'
-                    : 'قيد الإنتاج'
-                  : order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-              </span>
-              <p className="text-sm text-gray-600 mt-2">
-                {isRtl ? 'الإجمالي' : 'Total'}: {order.totalAmount.toLocaleString(language, { style: 'currency', currency: 'SAR' })}
-              </p>
-              <p className="text-sm text-gray-600">{isRtl ? 'المنتجات' : 'Products'}: {order.items.reduce((sum, item) => sum + item.quantity, 0)}</p>
-              <p className="text-xs text-gray-500 mt-2">{isRtl ? 'تاريخ الإنشاء' : 'Created At'}: {order.date}</p>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
-    </div>
+    <PendingOrders orders={sortedPendingOrders} isRtl={isRtl} language={language} navigate={navigate} />
   );
 
   const renderBranchPerformance = () => (
-    <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-gray-100">
-      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 text-gray-800">
-        <BarChart3 className="w-5 h-5 text-gray-600" />
-        {isRtl ? 'أداء الفروع' : 'Branch Performance'}
-      </h3>
-      <div className="space-y-3">
-        {branchPerformance.map((branch, index) => (
-          <div key={index} className="flex items-center gap-3">
-            <span className="w-28 text-sm font-medium text-gray-700 truncate">{isRtl ? branch.branchName : branch.branchNameEn}</span>
-            <div className="flex-1 bg-gray-200 rounded-full h-3">
-              <motion.div
-                className="bg-amber-600 h-3 rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: `${branch.performance}%` }}
-                transition={{ duration: 0.8, ease: 'easeOut' }}
-              />
-            </div>
-            <span className="w-20 text-right text-sm text-gray-600">
-              {branch.performance.toFixed(0)}% ({branch.completedOrders}/{branch.totalOrders})
-            </span>
-          </div>
-        ))}
-        {branchPerformance.length === 0 && <p className="text-center text-gray-600 text-sm">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>}
-      </div>
-    </div>
+    <PerformanceCard
+      title={isRtl ? 'أداء الفروع' : 'Branch Performance'}
+      items={branchPerformance}
+      isRtl={isRtl}
+      isBranch={true}
+    />
   );
 
   const renderChefPerformance = () => (
-    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 text-gray-800">
-        <BarChart3 className="w-5 h-5 text-gray-600" />
-        {isRtl ? 'أداء الطهاة' : 'Chef Performance'}
-      </h3>
-      <div className="space-y-3">
-        {chefPerformance.map((chef, index) => (
-          <div key={index} className="flex items-center gap-3">
-            <span className="w-28 text-sm font-medium text-gray-700 truncate">{isRtl ? chef.chefName : chef.chefNameEn}</span>
-            <div className="flex-1 bg-gray-200 rounded-full h-3">
-              <motion.div
-                className="bg-green-600 h-3 rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: `${chef.performance}%` }}
-                transition={{ duration: 0.8, ease: 'easeOut' }}
-              />
-            </div>
-            <span className="w-20 text-right text-sm text-gray-600">
-              {chef.performance.toFixed(0)}% ({chef.completedTasks}/{chef.totalTasks})
-            </span>
-          </div>
-        ))}
-        {chefPerformance.length === 0 && <p className="text-center text-gray-600 text-sm">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>}
-      </div>
-    </div>
+    <PerformanceCard
+      title={isRtl ? 'أداء الطهاة' : 'Chef Performance'}
+      items={chefPerformance}
+      isRtl={isRtl}
+      isBranch={false}
+    />
   );
 
   const renderContent = () => {

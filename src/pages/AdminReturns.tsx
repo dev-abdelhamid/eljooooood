@@ -3,7 +3,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { returnsAPI, notificationsAPI, branchesAPI } from '../services/api';
+import { returnsAPI, branchesAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 import * as XLSX from 'xlsx';
@@ -20,12 +20,11 @@ import Pagination from '../components/Returns/Pagination';
 import ReturnModal from '../components/Returns/ReturnModal';
 import ActionModal from '../components/Returns/ActionModal';
 import { formatDate } from '../utils/formatDate';
-import { Return, Branch, ReturnStatus, State, Action } from '../types/types';
 
-const reducer = (state: State, action: Action): State => {
+const reducer = (state, action) => {
   switch (action.type) {
     case 'SET_RETURNS':
-      return { ...state, returns: action.payload.returns, totalCount: action.payload.totalCount };
+      return { ...state, returns: action.payload.returns, totalCount: action.payload.total };
     case 'ADD_RETURN':
       return { ...state, returns: [action.payload, ...state.returns], totalCount: state.totalCount + 1 };
     case 'SET_BRANCHES':
@@ -33,9 +32,9 @@ const reducer = (state: State, action: Action): State => {
     case 'SET_SELECTED_RETURN':
       return { ...state, selectedReturn: action.payload };
     case 'SET_VIEW_MODAL':
-      return { ...state, isViewModalOpen: action.isOpen ?? false };
+      return { ...state, isViewModalOpen: action.isOpen };
     case 'SET_ACTION_MODAL':
-      return { ...state, isActionModalOpen: action.isOpen ?? false };
+      return { ...state, isActionModalOpen: action.isOpen };
     case 'SET_ACTION_TYPE':
       return { ...state, actionType: action.payload };
     case 'SET_ACTION_NOTES':
@@ -47,7 +46,7 @@ const reducer = (state: State, action: Action): State => {
     case 'SET_SEARCH_QUERY':
       return { ...state, searchQuery: action.payload, currentPage: 1 };
     case 'SET_SORT':
-      return { ...state, sortBy: action.by ?? 'date', sortOrder: action.order ?? 'desc', currentPage: 1 };
+      return { ...state, sortBy: action.by, sortOrder: action.order, currentPage: 1 };
     case 'SET_PAGE':
       return { ...state, currentPage: action.payload };
     case 'SET_LOADING':
@@ -67,9 +66,9 @@ const reducer = (state: State, action: Action): State => {
           r.id === action.returnId
             ? {
                 ...r,
-                status: action.status ?? r.status,
-                reviewNotes: action.reviewNotes ?? r.reviewNotes ?? '',
-                order: { ...r.order, totalAmount: action.adjustedTotal ?? r.order.totalAmount },
+                status: action.status,
+                reviewNotes: action.reviewNotes || r.reviewNotes || '',
+                order: { ...r.order, adjustedTotal: action.adjustedTotal || r.order.adjustedTotal },
               }
             : r
         ),
@@ -77,11 +76,11 @@ const reducer = (state: State, action: Action): State => {
           state.selectedReturn?.id === action.returnId
             ? {
                 ...state.selectedReturn,
-                status: action.status ?? state.selectedReturn.status,
-                reviewNotes: action.reviewNotes ?? state.selectedReturn.reviewNotes ?? '',
+                status: action.status,
+                reviewNotes: action.reviewNotes || state.selectedReturn.reviewNotes || '',
                 order: {
                   ...state.selectedReturn.order,
-                  totalAmount: action.adjustedTotal ?? state.selectedReturn.order.totalAmount,
+                  adjustedTotal: action.adjustedTotal || state.selectedReturn.order.adjustedTotal,
                 },
               }
             : state.selectedReturn,
@@ -93,31 +92,24 @@ const reducer = (state: State, action: Action): State => {
   }
 };
 
-const initialState: State = {
-  orders: [],
-  selectedOrder: null,
-  chefs: [],
-  branches: [],
+const initialState = {
   returns: [],
   selectedReturn: null,
-  isAssignModalOpen: false,
+  branches: [],
   isViewModalOpen: false,
-  isConfirmDeliveryModalOpen: false,
-  isReturnModalOpen: false,
   isActionModalOpen: false,
   actionType: null,
   actionNotes: '',
   filterStatus: '',
   filterBranch: '',
   searchQuery: '',
-  sortBy: 'date',
+  sortBy: 'createdAt',
   sortOrder: 'desc',
   currentPage: 1,
   totalCount: 0,
   loading: true,
   error: '',
   submitting: null,
-  toasts: [],
   socketConnected: false,
   socketError: null,
   viewMode: 'card',
@@ -126,7 +118,7 @@ const initialState: State = {
 const RETURNS_PER_PAGE_CARD = 10;
 const RETURNS_PER_PAGE_TABLE = 50;
 
-export const AdminReturns: React.FC = () => {
+const AdminReturns = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
@@ -166,24 +158,22 @@ export const AdminReturns: React.FC = () => {
 
   const STATUS_COLORS = useMemo(
     () => ({
-      pending_approval: { color: 'bg-amber-100 text-amber-800', icon: AlertCircle, label: isRtl ? 'في انتظار الموافقة' : 'Pending Approval' },
+      pending: { color: 'bg-amber-100 text-amber-800', icon: AlertCircle, label: isRtl ? 'في انتظار الموافقة' : 'Pending' },
       approved: { color: 'bg-green-100 text-green-800', icon: AlertCircle, label: isRtl ? 'تمت الموافقة' : 'Approved' },
       rejected: { color: 'bg-red-100 text-red-800', icon: AlertCircle, label: isRtl ? 'مرفوض' : 'Rejected' },
-      processed: { color: 'bg-blue-100 text-blue-800', icon: AlertCircle, label: isRtl ? 'تمت المعالجة' : 'Processed' },
     }),
     [isRtl]
   );
 
   const getStatusInfo = useCallback(
-    (status: ReturnStatus) => STATUS_COLORS[status] || { color: 'bg-gray-100 text-gray-800', icon: AlertCircle, label: isRtl ? 'غير معروف' : 'Unknown' },
+    (status) => STATUS_COLORS[status] || { color: 'bg-gray-100 text-gray-800', icon: AlertCircle, label: isRtl ? 'غير معروف' : 'Unknown' },
     [STATUS_COLORS, isRtl]
   );
 
-  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+  const arrayBufferToBase64 = (buffer) => {
     let binary = '';
     const bytes = new Uint8Array(buffer);
-    const len = bytes.byteLength;
-    for (let i = 0; i < len; i++) {
+    for (let i = 0; i < bytes.byteLength; i++) {
       binary += String.fromCharCode(bytes[i]);
     }
     return window.btoa(binary);
@@ -196,11 +186,11 @@ export const AdminReturns: React.FC = () => {
       [isRtl ? 'الحالة' : 'Status']: getStatusInfo(ret.status).label,
       [isRtl ? 'التاريخ' : 'Date']: formatDate(ret.createdAt, language),
       [isRtl ? 'عدد العناصر' : 'Items Count']: ret.items.length,
-      [isRtl ? 'المنتجات' : 'Products']: ret.items.map((item) => `${item.productName} (${item.quantity})`).join(', '),
+      [isRtl ? 'المنتجات' : 'Products']: ret.items.map((item) => `${item.product.name} (${item.quantity})`).join(', '),
       [isRtl ? 'الكمية الإجمالية' : 'Total Quantity']: ret.items.reduce((sum, item) => sum + item.quantity, 0),
       [isRtl ? 'الفرع' : 'Branch']: ret.branch.name,
-      [isRtl ? 'الإجمالي' : 'Total Amount']: `${ret.order.totalAmount.toFixed(2)} ${isRtl ? 'ريال' : 'SAR'}`,
-      [isRtl ? 'ملاحظات' : 'Notes']: ret.notes || (isRtl ? 'لا توجد ملاحظات' : 'No notes'),
+      [isRtl ? 'الإجمالي' : 'Total Amount']: `${ret.order.adjustedTotal.toFixed(2)} ${isRtl ? 'ريال' : 'SAR'}`,
+      [isRtl ? 'السبب' : 'Reason']: ret.displayReason,
       [isRtl ? 'ملاحظات المراجعة' : 'Review Notes']: ret.reviewNotes || (isRtl ? 'لا توجد ملاحظات' : 'No notes'),
     }));
     const ws = XLSX.utils.json_to_sheet(isRtl ? exportData.map((row) => Object.fromEntries(Object.entries(row).reverse())) : exportData);
@@ -235,7 +225,7 @@ export const AdminReturns: React.FC = () => {
         isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
         isRtl ? 'الفرع' : 'Branch',
         isRtl ? 'الإجمالي' : 'Total Amount',
-        isRtl ? 'ملاحظات' : 'Notes',
+        isRtl ? 'السبب' : 'Reason',
         isRtl ? 'ملاحظات المراجعة' : 'Review Notes',
       ];
       const data = state.returns.map((ret) => [
@@ -244,11 +234,11 @@ export const AdminReturns: React.FC = () => {
         getStatusInfo(ret.status).label,
         formatDate(ret.createdAt, language),
         ret.items.length.toString(),
-        ret.items.map((item) => `${item.productName} (${item.quantity})`).join(', '),
+        ret.items.map((item) => `${item.product.name} (${item.quantity})`).join(', '),
         ret.items.reduce((sum, item) => sum + item.quantity, 0).toString(),
         ret.branch.name,
-        `${ret.order.totalAmount.toFixed(2)} ${isRtl ? 'ريال' : 'SAR'}`,
-        ret.notes || (isRtl ? 'لا توجد ملاحظات' : 'No notes'),
+        `${ret.order.adjustedTotal.toFixed(2)} ${isRtl ? 'ريال' : 'SAR'}`,
+        ret.displayReason,
         ret.reviewNotes || (isRtl ? 'لا توجد ملاحظات' : 'No notes'),
       ]);
       const finalHeaders = isRtl ? headers.reverse() : headers;
@@ -281,7 +271,7 @@ export const AdminReturns: React.FC = () => {
     try {
       const response = await branchesAPI.getAll();
       const branches = Array.isArray(response)
-        ? response.map((branch: any) => ({
+        ? response.map((branch) => ({
             _id: branch._id || 'unknown',
             name: branch.name || (isRtl ? 'فرع غير معروف' : 'Unknown branch'),
           }))
@@ -290,7 +280,7 @@ export const AdminReturns: React.FC = () => {
       if (branches.length === 0) {
         toast.warn(isRtl ? 'لا توجد فروع متاحة' : 'No branches available', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error('Error fetching branches:', err);
       toast.error(isRtl ? 'خطأ في جلب الفروع' : 'Error fetching branches', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
     } finally {
@@ -314,36 +304,37 @@ export const AdminReturns: React.FC = () => {
         sortOrder: state.sortOrder,
         page: state.currentPage,
         limit: state.viewMode === 'table' ? RETURNS_PER_PAGE_TABLE : RETURNS_PER_PAGE_CARD,
+        isRtl: isRtl.toString(),
       };
       const { returns: returnsData, total } = await returnsAPI.getAll(query);
       if (!Array.isArray(returnsData)) {
         throw new Error('Invalid returns data format');
       }
-      const formattedReturns = returnsData.map((ret: any) => ({
+      const formattedReturns = returnsData.map((ret) => ({
         id: ret._id || 'unknown',
         returnNumber: ret.returnNumber || (isRtl ? 'رقم غير معروف' : 'Unknown number'),
         order: {
           id: ret.order?._id || 'unknown',
           orderNumber: ret.order?.orderNumber || (isRtl ? 'طلب غير معروف' : 'Unknown order'),
           totalAmount: Number(ret.order?.totalAmount) || 0,
-          createdAt: ret.order?.createdAt || new Date().toISOString(),
+          adjustedTotal: Number(ret.order?.adjustedTotal) || 0,
           branch: ret.order?.branch?._id || 'unknown',
           branchName: ret.order?.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown branch'),
         },
         items: Array.isArray(ret.items)
-          ? ret.items.map((item: any) => ({
-              itemId: item.itemId || item._id || 'unknown',
-              productId: item.product?._id || 'unknown',
-              productName: item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown product'),
+          ? ret.items.map((item) => ({
+              product: {
+                _id: item.product?._id || 'unknown',
+                name: item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown product'),
+                price: Number(item.product?.price) || 0,
+              },
               quantity: Number(item.quantity) || 0,
-              price: Number(item.product?.price) || 0,
               reason: item.reason || (isRtl ? 'سبب غير معروف' : 'Unknown reason'),
-              status: item.status || ReturnStatus.PendingApproval,
-              reviewNotes: item.reviewNotes || '',
+              reasonEn: item.reasonEn || (isRtl ? 'سبب غير معروف' : 'Unknown reason'),
+              displayReason: item.displayReason || (isRtl ? 'سبب غير معروف' : 'Unknown reason'),
             }))
           : [],
-        status: ret.status === 'pending' ? ReturnStatus.PendingApproval : ret.status || ReturnStatus.PendingApproval,
-        date: formatDate(ret.createdAt, language),
+        status: ret.status || 'pending',
         createdAt: ret.createdAt || new Date().toISOString(),
         notes: ret.notes || '',
         reviewNotes: ret.reviewNotes || '',
@@ -358,11 +349,19 @@ export const AdminReturns: React.FC = () => {
         reviewedBy: ret.reviewedBy
           ? { _id: ret.reviewedBy._id, username: ret.reviewedBy.username || (isRtl ? 'مستخدم غير معروف' : 'Unknown user') }
           : undefined,
-        statusHistory: Array.isArray(ret.statusHistory) ? ret.statusHistory : [],
+        displayReason: ret.displayReason || (isRtl ? 'سبب غير معروف' : 'Unknown reason'),
+        statusHistory: Array.isArray(ret.statusHistory)
+          ? ret.statusHistory.map((history) => ({
+              status: history.status,
+              changedBy: history.changedBy?.username || (isRtl ? 'مستخدم غير معروف' : 'Unknown user'),
+              notes: history.notes || '',
+              changedAt: history.changedAt || new Date().toISOString(),
+            }))
+          : [],
       }));
-      dispatch({ type: 'SET_RETURNS', payload: { returns: formattedReturns, totalCount: total } });
+      dispatch({ type: 'SET_RETURNS', payload: { returns: formattedReturns, total } });
       dispatch({ type: 'SET_ERROR', payload: '' });
-    } catch (err: any) {
+    } catch (err) {
       const errorMessage =
         err.status === 403
           ? isRtl ? 'الوصول غير مصرح به' : 'Unauthorized access'
@@ -378,13 +377,9 @@ export const AdminReturns: React.FC = () => {
 
   const debouncedFetchData = useCallback(debounce(fetchData, 300), [fetchData]);
 
-  const handleSearchChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const value = e.target.value || '';
-      dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
-    },
-    []
-  );
+  const handleSearchChange = useCallback((e) => {
+    dispatch({ type: 'SET_SEARCH_QUERY', payload: e.target.value || '' });
+  }, []);
 
   useEffect(() => {
     fetchBranches();
@@ -410,11 +405,11 @@ export const AdminReturns: React.FC = () => {
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
       dispatch({ type: 'SET_SOCKET_ERROR', payload: isRtl ? 'تم قطع الاتصال' : 'Disconnected' });
     };
-    const handleConnectError = (error: Error) => {
+    const handleConnectError = (error) => {
       dispatch({ type: 'SET_SOCKET_ERROR', payload: isRtl ? `خطأ في الاتصال: ${error.message}` : `Connection error: ${error.message}` });
       toast.error(isRtl ? `خطأ في الاتصال: ${error.message}` : `Connection error: ${error.message}`, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
     };
-    const handleReturnCreated = (newReturn: any) => {
+    const handleReturnCreated = (newReturn) => {
       const currentState = stateRef.current;
       if (currentState.filterStatus && newReturn.status !== currentState.filterStatus) return;
       if (currentState.filterBranch && newReturn.branch?._id !== currentState.filterBranch) return;
@@ -425,31 +420,31 @@ export const AdminReturns: React.FC = () => {
       ) {
         return;
       }
-      const mappedReturn: Return = {
+      const mappedReturn = {
         id: newReturn._id || 'unknown',
         returnNumber: newReturn.returnNumber || (isRtl ? 'رقم غير معروف' : 'Unknown number'),
         order: {
           id: newReturn.order?._id || 'unknown',
           orderNumber: newReturn.order?.orderNumber || (isRtl ? 'طلب غير معروف' : 'Unknown order'),
           totalAmount: Number(newReturn.order?.totalAmount) || 0,
-          createdAt: newReturn.order?.createdAt || new Date().toISOString(),
+          adjustedTotal: Number(newReturn.order?.adjustedTotal) || 0,
           branch: newReturn.order?.branch?._id || 'unknown',
           branchName: newReturn.order?.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown branch'),
         },
         items: Array.isArray(newReturn.items)
-          ? newReturn.items.map((item: any) => ({
-              itemId: item.itemId || item._id || 'unknown',
-              productId: item.product?._id || 'unknown',
-              productName: item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown product'),
+          ? newReturn.items.map((item) => ({
+              product: {
+                _id: item.product?._id || 'unknown',
+                name: item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown product'),
+                price: Number(item.product?.price) || 0,
+              },
               quantity: Number(item.quantity) || 0,
-              price: Number(item.product?.price) || 0,
               reason: item.reason || (isRtl ? 'سبب غير معروف' : 'Unknown reason'),
-              status: item.status || ReturnStatus.PendingApproval,
-              reviewNotes: item.reviewNotes || '',
+              reasonEn: item.reasonEn || (isRtl ? 'سبب غير معروف' : 'Unknown reason'),
+              displayReason: item.displayReason || (isRtl ? 'سبب غير معروف' : 'Unknown reason'),
             }))
           : [],
-        status: newReturn.status === 'pending' ? ReturnStatus.PendingApproval : newReturn.status || ReturnStatus.PendingApproval,
-        date: formatDate(newReturn.createdAt, language),
+        status: newReturn.status || 'pending',
         createdAt: newReturn.createdAt || new Date().toISOString(),
         notes: newReturn.notes || '',
         reviewNotes: newReturn.reviewNotes || '',
@@ -464,7 +459,15 @@ export const AdminReturns: React.FC = () => {
         reviewedBy: newReturn.reviewedBy
           ? { _id: newReturn.reviewedBy._id, username: newReturn.reviewedBy.username || (isRtl ? 'مستخدم غير معروف' : 'Unknown user') }
           : undefined,
-        statusHistory: Array.isArray(newReturn.statusHistory) ? newReturn.statusHistory : [],
+        displayReason: newReturn.displayReason || (isRtl ? 'سبب غير معروف' : 'Unknown reason'),
+        statusHistory: Array.isArray(newReturn.statusHistory)
+          ? newReturn.statusHistory.map((history) => ({
+              status: history.status,
+              changedBy: history.changedBy?.username || (isRtl ? 'مستخدم غير معروف' : 'Unknown user'),
+              notes: history.notes || '',
+              changedAt: history.changedAt || new Date().toISOString(),
+            }))
+          : [],
       };
       dispatch({ type: 'ADD_RETURN', payload: mappedReturn });
       if (document.hasFocus()) {
@@ -479,23 +482,11 @@ export const AdminReturns: React.FC = () => {
         playNotificationSound();
       }
     };
-    const handleReturnStatusUpdated = ({
-      returnId,
-      status,
-      reviewNotes,
-      branchId,
-      adjustedTotal,
-    }: {
-      returnId: string;
-      status: ReturnStatus;
-      reviewNotes?: string;
-      branchId: string;
-      adjustedTotal?: number;
-    }) => {
+    const handleReturnStatusUpdated = ({ returnId, status, reviewNotes, branchId, adjustedTotal }) => {
       dispatch({
         type: 'UPDATE_RETURN_STATUS',
         returnId,
-        status: status === 'pending' ? ReturnStatus.PendingApproval : status,
+        status,
         reviewNotes,
         adjustedTotal,
       });
@@ -534,16 +525,16 @@ export const AdminReturns: React.FC = () => {
     };
   }, [socket, user, isRtl, addNotification, playNotificationSound, state.returns, getStatusInfo, language]);
 
-  const handlePageChange = useCallback((page: number) => {
+  const handlePageChange = useCallback((page) => {
     dispatch({ type: 'SET_PAGE', payload: page });
   }, []);
 
-  const viewReturn = useCallback((ret: Return) => {
+  const viewReturn = useCallback((ret) => {
     dispatch({ type: 'SET_SELECTED_RETURN', payload: ret });
     dispatch({ type: 'SET_VIEW_MODAL', isOpen: true });
   }, []);
 
-  const openActionModal = useCallback((ret: Return, type: 'approve' | 'reject') => {
+  const openActionModal = useCallback((ret, type) => {
     dispatch({ type: 'SET_SELECTED_RETURN', payload: ret });
     dispatch({ type: 'SET_ACTION_TYPE', payload: type });
     dispatch({ type: 'SET_ACTION_MODAL', isOpen: true });
@@ -554,20 +545,14 @@ export const AdminReturns: React.FC = () => {
       if (!state.selectedReturn || !state.actionType || !user?._id) return;
       dispatch({ type: 'SET_SUBMITTING', payload: state.selectedReturn.id });
       try {
-        const data = {
-          items: state.selectedReturn.items.map((item) => ({
-            itemId: item.itemId,
-            productId: item.productId,
-            status: state.actionType,
-            reviewNotes: state.actionNotes || undefined,
-          })),
+        const response = await returnsAPI.updateReturnStatus(state.selectedReturn.id, {
+          status: state.actionType,
           reviewNotes: state.actionNotes || undefined,
-        };
-        const response = await returnsAPI.updateReturnStatus(state.selectedReturn.id, data);
+        });
         dispatch({
           type: 'UPDATE_RETURN_STATUS',
           returnId: state.selectedReturn.id,
-          status: state.actionType === 'approve' ? ReturnStatus.Approved : ReturnStatus.Rejected,
+          status: state.actionType,
           reviewNotes: state.actionNotes,
           adjustedTotal: response.adjustedTotal,
         });
@@ -582,11 +567,11 @@ export const AdminReturns: React.FC = () => {
           user: user._id,
           type: 'return_status_updated',
           message: isRtl
-            ? `تم تحديث حالة المرتجع إلى ${state.actionType === 'approve' ? 'تمت الموافقة' : 'مرفوض'}: ${state.selectedReturn.returnNumber}`
-            : `Return status updated to ${state.actionType === 'approve' ? 'approved' : 'rejected'}: ${state.selectedReturn.returnNumber}`,
+            ? `تم تحديث حالة المرتجع إلى ${state.actionType === 'approved' ? 'تمت الموافقة' : 'مرفوض'}: ${state.selectedReturn.returnNumber}`
+            : `Return status updated to ${state.actionType === 'approved' ? 'approved' : 'rejected'}: ${state.selectedReturn.returnNumber}`,
           data: { returnId: state.selectedReturn.id, orderId: state.selectedReturn.order.id },
         });
-        toast.success(isRtl ? `تم ${state.actionType === 'approve' ? 'الموافقة' : 'الرفض'} بنجاح` : `${state.actionType === 'approve' ? 'Approval' : 'Rejection'} successful`, {
+        toast.success(isRtl ? `تم ${state.actionType === 'approved' ? 'الموافقة' : 'الرفض'} بنجاح` : `${state.actionType === 'approved' ? 'Approval' : 'Rejection'} successful`, {
           position: isRtl ? 'top-left' : 'top-right',
           autoClose: 3000,
         });
@@ -594,8 +579,8 @@ export const AdminReturns: React.FC = () => {
         dispatch({ type: 'SET_ACTION_TYPE', payload: null });
         dispatch({ type: 'SET_ACTION_NOTES', payload: '' });
         dispatch({ type: 'SET_SELECTED_RETURN', payload: null });
-      } catch (err: any) {
-        const errorMessage = err.message || (isRtl ? `فشل ${state.actionType === 'approve' ? 'الموافقة' : 'الرفض'} على المرتجع` : `Failed to ${state.actionType === 'approve' ? 'approve' : 'reject'} return`);
+      } catch (err) {
+        const errorMessage = err.message || (isRtl ? `فشل ${state.actionType === 'approved' ? 'الموافقة' : 'الرفض'} على المرتجع` : `Failed to ${state.actionType === 'approved' ? 'approve' : 'reject'} return`);
         dispatch({ type: 'SET_ERROR', payload: errorMessage });
         toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       } finally {
@@ -614,8 +599,13 @@ export const AdminReturns: React.FC = () => {
   }, [state.viewMode]);
 
   return (
-    <div className=" mx-auto px-4 py-8 min-h-screen " dir={isRtl ? 'rtl' : 'ltr'}>
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="container mx-auto px-4 py-8 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+      >
         <div className="flex items-center gap-3">
           <Package className="w-8 h-8 text-teal-600" />
           <div>
@@ -672,6 +662,7 @@ export const AdminReturns: React.FC = () => {
       )}
       {branchesLoading ? (
         <div className="mb-6 p-4 bg-gray-100 rounded-lg text-center text-sm text-gray-600">
+          {isRtl ? 'جاري تحميل الفروع...' : 'Loading branches...'}
         </div>
       ) : (
         <div className="mb-6">
