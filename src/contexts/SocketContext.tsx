@@ -82,7 +82,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           role: user.role,
           branchId: user.branchId,
           chefId: user.role === 'chef' ? user._id || user.id : null,
-          departmentId: user.role === 'production' ? user._id || user.departmentId : null,
+          departmentId: user.role === 'chef' ? user.department?._id : null,
           userId: user._id || user.id,
         });
       }
@@ -96,7 +96,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       socket.off('reconnect', joinRoomOnConnect);
       socket.disconnect();
     };
-  }, [socket, user]);
+  }, [socket, user, emit]);
 
   return <SocketContext.Provider value={{ socket, emit, isConnected }}>{children}</SocketContext.Provider>;
 };

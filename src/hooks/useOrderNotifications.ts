@@ -52,7 +52,7 @@ export const useOrderNotifications = (
       role: user.role,
       branchId: user.branchId,
       chefId: user.role === 'chef' ? user.id : undefined,
-      departmentId: user.role === 'production' ? user.department?._id : undefined,
+      departmentId: user.role === 'chef' ? user.department?._id : undefined,
       userId: user.id,
     });
 
@@ -63,7 +63,6 @@ export const useOrderNotifications = (
           if (!data._id || !data.orderNumber || !data.branch?.name || !Array.isArray(data.items)) return;
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
           if (user.role === 'branch' && data.branch?._id !== user.branchId) return;
-          if (user.role === 'production' && !data.items.some((item: any) => item.product?.department?._id === user.department?._id)) return;
           if (stateRef.current.filterStatus && data.status !== stateRef.current.filterStatus) return;
           if (stateRef.current.filterBranch && data.branch?._id !== stateRef.current.filterBranch) return;
 
@@ -125,7 +124,7 @@ export const useOrderNotifications = (
         name: 'orderConfirmed',
         handler: (data: SocketEventData) => {
           if (!data.orderId || !data.orderNumber || !data.branchName) return;
-          if (!['admin', 'branch'].includes(user.role)) return;
+          if (!['admin', 'branch', 'production'].includes(user.role)) return;
           if (user.role === 'branch' && data.branchId !== user.branchId) return;
 
           dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'confirmed' });
@@ -214,6 +213,7 @@ export const useOrderNotifications = (
         handler: (data: SocketEventData) => {
           if (!data.orderId || !data.status || !data.orderNumber || !data.branchName) return;
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
+          if (user.role === 'branch' && data.branchId !== user.branchId) return;
 
           dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: data.status });
           addNotification({
@@ -289,6 +289,7 @@ export const useOrderNotifications = (
         handler: (data: SocketEventData) => {
           if (!data.orderId || !data.returnId || !data.status || !data.orderNumber) return;
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
+          if (user.role === 'branch' && data.branchId !== user.branchId) return;
 
           dispatch({ type: 'RETURN_STATUS_UPDATED', orderId: data.orderId, returnId: data.returnId, status: data.status });
           addNotification({
