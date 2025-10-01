@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { returnsAPI, inventoryAPI } from '../services/api';
+import { returnsAPI, inventoryAPI, ordersAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Select } from '../components/UI/Select';
@@ -25,6 +25,22 @@ interface InventoryItem {
   unitEn: string;
 }
 
+interface OrderItem {
+  itemId: string;
+  productId: string;
+  productName: string;
+  productNameEn: string;
+  quantity: number;
+  price: number;
+  availableQuantity: number;
+}
+
+interface Order {
+  id: string;
+  orderNumber: string;
+  items: OrderItem[];
+}
+
 interface ReturnItem {
   itemId: string;
   productId: string;
@@ -40,13 +56,13 @@ interface Return {
   returnNumber: string;
   order: { id: string; orderNumber: string; totalAmount: number; createdAt: string };
   items: ReturnItem[];
-  status: 'pending' | 'approved' | 'rejected' | 'processed';
+  status: 'pending_approval' | 'approved' | 'rejected';
   date: string;
   createdAt: string;
   notes?: string;
   reviewNotes?: string;
-  branch: { _id: string; name: string };
-  department?: { _id: string; name: string };
+  branch: { _id: string; name: string; nameEn?: string };
+  department?: { _id: string; name: string; nameEn?: string };
 }
 
 interface CreateReturnForm {
@@ -54,7 +70,7 @@ interface CreateReturnForm {
   branchId: string;
   reason: string;
   notes?: string;
-  items: { productId: string; quantity: number; reason: string }[];
+  items: { itemId: string; productId: string; quantity: number; reason: string }[];
 }
 
 const RETURNS_PER_PAGE = 10;
@@ -72,7 +88,7 @@ const BranchReturns: React.FC = () => {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [formData, setFormData] = useState<CreateReturnForm>({
     orderId: '',
-    branchId: user?.branchId || '',
+    branchId: user?.branch || '',
     reason: '',
     notes: '',
     items: [],
@@ -113,10 +129,9 @@ const BranchReturns: React.FC = () => {
   const statusOptions = useMemo(
     () => [
       { value: '', label: t('returns.status.all') },
-      { value: 'pending', label: t('returns.status.pending') },
+      { value: 'pending_approval', label: t('returns.status.pending_approval') },
       { value: 'approved', label: t('returns.status.approved') },
       { value: 'rejected', label: t('returns.status.rejected') },
-      { value: 'processed', label: t('returns.status.processed') },
     ],
     [t]
   );
@@ -133,10 +148,9 @@ const BranchReturns: React.FC = () => {
 
   const STATUS_COLORS = useMemo(
     () => ({
-      pending: { color: 'bg-amber-100 text-amber-800', icon: Clock, label: t('returns.status.pending') },
+      pending_approval: { color: 'bg-amber-100 text-amber-800', icon: Clock, label: t('returns.status.pending_approval') },
       approved: { color: 'bg-green-100 text-green-800', icon: Check, label: t('returns.status.approved') },
       rejected: { color: 'bg-red-100 text-red-800', icon: AlertCircle, label: t('returns.status.rejected') },
-      processed: { color: 'bg-blue-100 text-blue-800', icon: Check, label: t('returns.status.processed') },
     }),
     [t]
   );
@@ -161,10 +175,10 @@ const BranchReturns: React.FC = () => {
   );
 
   const { data: returnsData, isLoading, error } = useQuery({
-    queryKey: ['returns', filterStatus, currentPage, user?.branchId],
+    queryKey: ['returns', filterStatus, currentPage, user?.branch],
     queryFn: async () => {
-      if (!user?.branchId) throw new Error(t('errors.no_branch_associated'));
-      const query = { status: filterStatus, branch: user.branchId, page: currentPage, limit: RETURNS_PER_PAGE };
+      if (!user?.branch) throw new Error(t('errors.no_branch_associated'));
+      const query = { status: filterStatus, branch: user.branch, page: currentPage, limit: RETURNS_PER_PAGE };
       const { returns: returnsData, total } = await returnsAPI.getAll(query);
       if (!Array.isArray(returnsData)) throw new Error('Invalid returns data format');
       return {
@@ -179,21 +193,21 @@ const BranchReturns: React.FC = () => {
           },
           items: Array.isArray(ret.items)
             ? ret.items.map((item: any) => ({
-                itemId: item.itemId || item._id || 'unknown',
+                itemId: item.itemId || 'unknown',
                 productId: item.product?._id || 'unknown',
-                productName: isRtl ? item.product?.name : item.product?.nameEn || t('products.unknown'),
+                productName: isRtl ? item.product?.name : (item.product?.nameEn || item.product?.name || t('products.unknown')),
                 quantity: item.quantity || 0,
                 price: item.product?.price || 0,
-                reason: isRtl ? item.reason : item.reasonEn || 'unknown',
+                reason: isRtl ? item.reason : (item.reasonEn || item.reason || 'unknown'),
               }))
             : [],
-          status: ret.status || 'pending',
+          status: ret.status || 'pending_approval',
           date: formatDate(ret.createdAt || new Date().toISOString()),
           createdAt: ret.createdAt || new Date().toISOString(),
-          notes: isRtl ? ret.notes : ret.notesEn || ret.notes,
-          reviewNotes: isRtl ? ret.reviewNotes : ret.reviewNotesEn || ret.reviewNotes,
-          branch: { _id: ret.branch?._id || 'unknown', name: isRtl ? ret.branch?.name : ret.branch?.nameEn || t('branches.unknown') },
-          department: ret.order?.department || { _id: 'unknown', name: t('departments.unknown') },
+          notes: isRtl ? ret.notes : (ret.notesEn || ret.notes || ''),
+          reviewNotes: isRtl ? ret.reviewNotes : (ret.reviewNotesEn || ret.reviewNotes || ''),
+          branch: { _id: ret.branch?._id || 'unknown', name: isRtl ? ret.branch?.name : (ret.branch?.nameEn || ret.branch?.name || t('branches.unknown')) },
+          department: ret.order?.department || { _id: 'unknown', name: isRtl ? t('departments.unknown') : (ret.order?.department?.nameEn || t('departments.unknown')) },
         })),
         total,
       };
@@ -205,26 +219,62 @@ const BranchReturns: React.FC = () => {
   });
 
   const { data: inventoryData } = useQuery({
-    queryKey: ['inventory', user?.branchId],
+    queryKey: ['inventory', user?.branch],
     queryFn: async () => {
-      if (!user?.branchId) return [];
-      const response = await inventoryAPI.getByBranch(user.branchId);
+      if (!user?.branch) return [];
+      const response = await inventoryAPI.getByBranch(user.branch);
       return response.map((item: any) => ({
-        productId: item.product._id,
-        productName: isRtl ? item.product.name : item.product.nameEn,
+        productId: item.productId,
+        productName: isRtl ? item.productName : (item.productNameEn || item.productName),
+        productNameEn: item.productNameEn || item.productName,
         currentStock: item.currentStock,
-        unit: isRtl ? item.product.unit : item.product.unitEn,
+        unit: isRtl ? (item.unit || 'غير محدد') : (item.unitEn || item.unit || 'N/A'),
+        unitEn: item.unitEn || item.unit || 'N/A',
       }));
     },
-    enabled: !!user?.branchId,
+    enabled: !!user?.branch,
+  });
+
+  const { data: ordersData } = useQuery({
+    queryKey: ['orders', user?.branch],
+    queryFn: async () => {
+      if (!user?.branch) return [];
+      const response = await ordersAPI.getAll({ branch: user.branch, status: 'delivered' });
+      return response.orders.map((order: any) => ({
+        id: order._id,
+        orderNumber: order.orderNumber,
+        items: order.items.map((item: any) => ({
+          itemId: item._id,
+          productId: item.product._id,
+          productName: isRtl ? item.product.name : (item.product.nameEn || item.product.name),
+          productNameEn: item.product.nameEn || item.product.name,
+          quantity: item.quantity,
+          price: item.price,
+          availableQuantity: item.quantity - (item.returnedQuantity || 0),
+        })),
+      }));
+    },
+    enabled: !!user?.branch,
   });
 
   const createReturnMutation = useMutation({
-    mutationFn: (data: CreateReturnForm) => returnsAPI.createReturn(data),
+    mutationFn: (data: CreateReturnForm) => {
+      const invalidItems = data.items.some(
+        (item) =>
+          !item.itemId ||
+          !item.productId ||
+          item.quantity < 1 ||
+          !reasonOptions.some((reason) => reason.value === item.reason)
+      );
+      if (!data.orderId || !data.reason || data.items.length === 0 || invalidItems) {
+        throw new Error(t('errors.invalid_return_data'));
+      }
+      return returnsAPI.createReturn(data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries(['returns']);
       setIsCreateModalOpen(false);
-      setFormData({ orderId: '', branchId: user?.branchId || '', reason: '', notes: '', items: [] });
+      setFormData({ orderId: '', branchId: user?.branch || '', reason: '', notes: '', items: [] });
       toast.success(t('returns.create_success'), toastOptions);
     },
     onError: (err: any) => {
@@ -234,30 +284,25 @@ const BranchReturns: React.FC = () => {
 
   useEffect(() => {
     if (!socket) return;
-
     const handleConnect = () => {
-      socket.emit('joinRoom', { role: user?.role, branchId: user?.branchId, userId: user?._id });
+      socket.emit('joinRoom', { role: user?.role, branchId: user?.branch, userId: user?._id });
       toast.info(t('socket.connected'), toastOptions);
     };
-
     const handleReturnCreated = (data: any) => {
-      if (data.branchId === user?.branchId) {
+      if (data.branchId === user?.branch) {
         queryClient.invalidateQueries(['returns']);
         toast.success(t('returns.new_return_notification', { returnNumber: data.returnNumber }), toastOptions);
       }
     };
-
     const handleReturnStatusUpdated = (data: any) => {
-      if (data.branchId === user?.branchId) {
+      if (data.branchId === user?.branch) {
         queryClient.invalidateQueries(['returns']);
         toast.info(t('socket.return_status_updated', { status: t(`returns.status.${data.status}`) }), toastOptions);
       }
     };
-
     socket.on('connect', handleConnect);
     socket.on('returnCreated', handleReturnCreated);
     socket.on('returnStatusUpdated', handleReturnStatusUpdated);
-
     return () => {
       socket.off('connect', handleConnect);
       socket.off('returnCreated', handleReturnCreated);
@@ -297,7 +342,7 @@ const BranchReturns: React.FC = () => {
   const addItemToForm = () => {
     setFormData((prev) => ({
       ...prev,
-      items: [...prev.items, { productId: '', quantity: 1, reason: '' }],
+      items: [...prev.items, { itemId: '', productId: '', quantity: 1, reason: '' }],
     }));
   };
 
@@ -314,6 +359,10 @@ const BranchReturns: React.FC = () => {
       ...prev,
       items: prev.items.filter((_, i) => i !== index),
     }));
+  };
+
+  const handleOrderChange = (orderId: string) => {
+    setFormData((prev) => ({ ...prev, orderId, items: [] }));
   };
 
   const downloadJSON = useCallback(() => {
@@ -677,12 +726,16 @@ const BranchReturns: React.FC = () => {
                 >
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="flex flex-col gap-4">
                     <div>
-                      <Input
+                      <Select
                         label={t('returns.order_id')}
+                        options={(ordersData || []).map((order: Order) => ({
+                          value: order.id,
+                          label: order.orderNumber,
+                        }))}
                         value={formData.orderId}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, orderId: e.target.value }))}
-                        placeholder={t('returns.enter_order_id')}
+                        onChange={handleOrderChange}
                         className="w-full rounded-md border-gray-200 text-base focus:ring-amber-500 transition-colors duration-200"
+                        aria-label={t('returns.order_id')}
                       />
                     </div>
                     <div>
@@ -692,6 +745,7 @@ const BranchReturns: React.FC = () => {
                         value={formData.reason}
                         onChange={(value) => setFormData((prev) => ({ ...prev, reason: value }))}
                         className="w-full rounded-md border-gray-200 text-base focus:ring-amber-500 transition-colors duration-200"
+                        aria-label={t('returns.reason')}
                       />
                     </div>
                     <div>
@@ -701,51 +755,68 @@ const BranchReturns: React.FC = () => {
                         onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
                         placeholder={t('returns.enter_notes')}
                         className="w-full rounded-md border-gray-200 text-base focus:ring-amber-500 transition-colors duration-200"
+                        aria-label={t('returns.notes_label')}
                       />
                     </div>
                     <div>
                       <h4 className="text-lg font-semibold text-gray-900 mb-3">{t('returns.items')}</h4>
-                      {formData.items.map((item, index) => (
-                        <div key={index} className="flex flex-col gap-2 p-3 bg-gray-50 rounded-md border border-gray-100 mb-2">
-                          <Select
-                            label={t('returns.product')}
-                            options={(inventoryData || []).map((inv: InventoryItem) => ({
-                              value: inv.productId,
-                              label: inv.productName,
-                            }))}
-                            value={item.productId}
-                            onChange={(value) => updateItemInForm(index, 'productId', value)}
-                            className="w-full rounded-md border-gray-200 text-base focus:ring-amber-500 transition-colors duration-200"
-                          />
-                          <Input
-                            label={t('returns.quantity')}
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) => updateItemInForm(index, 'quantity', parseInt(e.target.value))}
-                            min={1}
-                            max={(inventoryData?.find((inv: InventoryItem) => inv.productId === item.productId)?.currentStock || 1)}
-                            className="w-full rounded-md border-gray-200 text-base focus:ring-amber-500 transition-colors duration-200"
-                          />
-                          <Select
-                            label={t('returns.reason')}
-                            options={reasonOptions}
-                            value={item.reason}
-                            onChange={(value) => updateItemInForm(index, 'reason', value)}
-                            className="w-full rounded-md border-gray-200 text-base focus:ring-amber-500 transition-colors duration-200"
-                          />
-                          <Button
-                            variant="danger"
-                            onClick={() => removeItemFromForm(index)}
-                            className="bg-red-600 hover:bg-red-700 text-white rounded-full px-4 py-2 transition-colors duration-200"
-                          >
-                            {t('common.remove')}
-                          </Button>
-                        </div>
-                      ))}
+                      {formData.items.map((item, index) => {
+                        const selectedOrder = ordersData?.find((order: Order) => order.id === formData.orderId);
+                        const availableItems = selectedOrder?.items.filter((i) => i.availableQuantity > 0) || [];
+                        return (
+                          <div key={index} className="flex flex-col gap-2 p-3 bg-gray-50 rounded-md border border-gray-100 mb-2">
+                            <Select
+                              label={t('returns.item')}
+                              options={availableItems.map((i: OrderItem) => ({
+                                value: i.itemId,
+                                label: `${i.productName} (${t('returns.available_quantity', { quantity: i.availableQuantity })})`,
+                              }))}
+                              value={item.itemId}
+                              onChange={(value) => {
+                                const selectedItem = availableItems.find((i) => i.itemId === value);
+                                updateItemInForm(index, 'itemId', value);
+                                updateItemInForm(index, 'productId', selectedItem?.productId || '');
+                              }}
+                              className="w-full rounded-md border-gray-200 text-base focus:ring-amber-500 transition-colors duration-200"
+                              disabled={!formData.orderId}
+                              aria-label={t('returns.item')}
+                            />
+                            <Input
+                              label={t('returns.quantity')}
+                              type="number"
+                              value={item.quantity}
+                              onChange={(e) => updateItemInForm(index, 'quantity', parseInt(e.target.value))}
+                              min={1}
+                              max={availableItems.find((i: OrderItem) => i.itemId === item.itemId)?.availableQuantity || 1}
+                              className="w-full rounded-md border-gray-200 text-base focus:ring-amber-500 transition-colors duration-200"
+                              disabled={!item.itemId}
+                              aria-label={t('returns.quantity')}
+                            />
+                            <Select
+                              label={t('returns.reason')}
+                              options={reasonOptions}
+                              value={item.reason}
+                              onChange={(value) => updateItemInForm(index, 'reason', value)}
+                              className="w-full rounded-md border-gray-200 text-base focus:ring-amber-500 transition-colors duration-200"
+                              aria-label={t('returns.reason')}
+                            />
+                            <Button
+                              variant="danger"
+                              onClick={() => removeItemFromForm(index)}
+                              className="bg-red-600 hover:bg-red-700 text-white rounded-full px-4 py-2 transition-colors duration-200"
+                              aria-label={t('common.remove')}
+                            >
+                              {t('common.remove')}
+                            </Button>
+                          </div>
+                        );
+                      })}
                       <Button
                         variant="secondary"
                         onClick={addItemToForm}
                         className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
+                        disabled={!formData.orderId}
+                        aria-label={t('returns.add_item')}
                       >
                         {t('returns.add_item')}
                       </Button>
@@ -755,6 +826,7 @@ const BranchReturns: React.FC = () => {
                         variant="secondary"
                         onClick={() => setIsCreateModalOpen(false)}
                         className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
+                        aria-label={t('common.cancel')}
                       >
                         {t('common.cancel')}
                       </Button>
@@ -763,6 +835,7 @@ const BranchReturns: React.FC = () => {
                         onClick={handleCreateReturn}
                         disabled={!formData.orderId || !formData.reason || formData.items.length === 0 || createReturnMutation.isLoading}
                         className="bg-green-600 hover:bg-green-700 text-white rounded-full px-4 py-2 transition-colors duration-200"
+                        aria-label={t('returns.create')}
                       >
                         {createReturnMutation.isLoading ? t('common.loading') : t('returns.create')}
                       </Button>
