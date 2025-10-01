@@ -16,7 +16,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
-import { Order, ReturnForm, OrderStatus, ItemStatus } from '../components/branch/types';
+import { Order, ReturnFormItem, OrderStatus, ItemStatus } from '../components/branch/types';
 import { formatDate } from '../utils/formatDate';
 import OrderCardSkeleton from '../components/branch/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/branch/OrderTableSkeleton';
@@ -36,7 +36,7 @@ interface State {
   isViewModalOpen: boolean;
   isConfirmDeliveryModalOpen: boolean;
   isReturnModalOpen: boolean;
-  returnFormData: ReturnForm;
+  returnFormData: ReturnFormItem[];
   searchQuery: string;
   filterStatus: string;
   sortBy: 'date' | 'totalAmount';
@@ -73,7 +73,7 @@ const initialState: State = {
   isViewModalOpen: false,
   isConfirmDeliveryModalOpen: false,
   isReturnModalOpen: false,
-  returnFormData: { itemId: '', quantity: 0, reason: '', notes: '' },
+  returnFormData: [{ itemId: '', quantity: 0, reason: '', notes: '' }],
   searchQuery: '',
   filterStatus: '',
   sortBy: 'date',
@@ -878,45 +878,70 @@ const BranchOrders: React.FC = () => {
   const openReturnModal = useCallback((order: Order, itemId: string) => {
     const item = order.items.find(i => i.itemId === itemId);
     dispatch({ type: 'SET_SELECTED_ORDER', payload: order });
-    dispatch({ type: 'SET_RETURN_FORM', payload: { itemId, quantity: item?.quantity || 1, reason: '', notes: '' } });
+    dispatch({
+      type: 'SET_RETURN_FORM',
+      payload: [{ itemId, quantity: item?.quantity || 1, reason: '', notes: '' }],
+    });
     dispatch({ type: 'SET_MODAL', modal: 'return', isOpen: true });
   }, []);
 
   const handleReturnItem = useCallback(
-    async (e: React.FormEvent, order: Order | null, returnFormData: ReturnForm) => {
+    async (e: React.FormEvent, order: Order | null, returnFormData: ReturnFormItem[]) => {
       e.preventDefault();
-      if (!order || !user?.branchId || !returnFormData.itemId || returnFormData.quantity < 1 || !returnFormData.reason || state.submitting) {
-        toast.error(isRtl ? 'يرجى ملء جميع الحقول' : 'Please fill all fields', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+      if (!order || !user?.branchId || returnFormData.some(item => !item.itemId || item.quantity < 1 || !item.reason) || state.submitting) {
+        toast.error(isRtl ? 'يرجى ملء جميع الحقول' : 'Please fill all fields', {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 3000,
+        });
         return;
       }
       dispatch({ type: 'SET_SUBMITTING', payload: order.id });
       try {
-        const item = order.items.find(i => i.itemId === returnFormData.itemId);
-        if (!item || !item.productId) {
-          throw new Error(isRtl ? 'معرف المنتج غير صالح' : 'Invalid product ID');
-        }
+        const items = returnFormData.map(item => {
+          const orderItem = order.items.find(i => i.itemId === item.itemId);
+          if (!orderItem || !orderItem.productId) {
+            throw new Error(isRtl ? 'معرف المنتج غير صالح' : 'Invalid product ID');
+          }
+          return {
+            product: orderItem.productId,
+            quantity: item.quantity,
+            reason: item.reason,
+            notes: item.notes,
+          };
+        });
         const response = await returnsAPI.createReturn({
           orderId: order.id,
           branchId: user.branchId,
-          reason: returnFormData.reason,
-          items: [{ product: item.productId, quantity: returnFormData.quantity, reason: returnFormData.reason }],
-          notes: returnFormData.notes,
+          items,
+          notes: items.map(item => item.notes).filter(Boolean).join('; '),
         });
         const returnData = {
           returnId: response._id,
-          items: [{ productId: item.productId, productName: item.productName, quantity: returnFormData.quantity, reason: returnFormData.reason, status: 'pending_approval' }],
+          items: items.map(item => ({
+            productId: item.product,
+            productName: order.items.find(i => i.productId === item.product)?.productName || '',
+            quantity: item.quantity,
+            reason: item.reason,
+            status: 'pending_approval',
+          })),
           status: 'pending_approval',
-          reviewNotes: returnFormData.notes,
+          reviewNotes: response.notes || '',
           createdAt: formatDate(new Date(), language),
         };
         dispatch({ type: 'ADD_RETURN', orderId: order.id, returnData });
         dispatch({ type: 'SET_MODAL', modal: 'return', isOpen: false });
-        dispatch({ type: 'SET_RETURN_FORM', payload: { itemId: '', quantity: 0, reason: '', notes: '' } });
+        dispatch({ type: 'SET_RETURN_FORM', payload: [{ itemId: '', quantity: 0, reason: '', notes: '' }] });
         playNotificationSound('/sounds/return-created.mp3', [200, 100, 200]);
-        toast.success(isRtl ? 'تم تقديم طلب الإرجاع' : 'Return submitted successfully', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+        toast.success(isRtl ? 'تم تقديم طلب الإرجاع' : 'Return submitted successfully', {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 3000,
+        });
       } catch (err: any) {
         console.error('Return item error:', err.message, err.response?.data);
-        toast.error(isRtl ? `فشل في تقديم طلب الإرجاع: ${err.message}` : `Failed to submit return: ${err.message}`, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+        toast.error(isRtl ? `فشل في تقديم طلب الإرجاع: ${err.message}` : `Failed to submit return: ${err.message}`, {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 3000,
+        });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
@@ -1277,14 +1302,14 @@ const BranchOrders: React.FC = () => {
             onClose={() => {
               dispatch({ type: 'SET_MODAL', modal: 'return', isOpen: false });
               dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
-              dispatch({ type: 'SET_RETURN_FORM', payload: { itemId: '', quantity: 0, reason: '', notes: '' } });
+              dispatch({ type: 'SET_RETURN_FORM', payload: [{ itemId: '', quantity: 0, reason: '', notes: '' }] });
             }}
             order={state.selectedOrder}
             returnFormData={state.returnFormData}
             setReturnFormData={(data) => dispatch({ type: 'SET_RETURN_FORM', payload: data })}
-            handleReturnItem={handleReturnItem}
             t={t}
             isRtl={isRtl}
+            onSubmit={handleReturnItem}
             submitting={state.submitting}
           />
         </motion.div>
