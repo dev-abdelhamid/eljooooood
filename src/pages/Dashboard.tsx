@@ -12,9 +12,11 @@ import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI } from '../s
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 
+
 // In-memory cache
 const cache = new Map<string, any>();
-
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
 // تعريف الأنواع
 interface Stats {
   totalOrders: number;
@@ -152,6 +154,7 @@ const ChefDashboard: React.FC<{
   language: string;
   handleStartTask: (taskId: string, orderId: string) => void;
   handleCompleteTask: (taskId: string, orderId: string) => void;
+  
 }> = React.memo(({ stats, tasks, isRtl, language, handleStartTask, handleCompleteTask }) => {
   const [filter, setFilter] = useState<FilterState>({ status: 'all', search: '' });
 
