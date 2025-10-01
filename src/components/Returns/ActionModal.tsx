@@ -39,14 +39,14 @@ const ActionModal: React.FC<ActionModalProps> = ({
         {isRtl ? `هل أنت متأكد من ${actionType === 'approve' ? 'الموافقة' : 'رفض'} هذا المرتجع؟` : `Are you sure you want to ${actionType === 'approve' ? 'approve' : 'reject'} this return?`}
       </p>
       <Input
-        label={isRtl ? 'ملاحظات المراجعة' : 'Review Notes'}
+        label={isRtl ? 'ملاحظات المراجعة (اختياري)' : 'Review Notes (Optional)'}
         value={actionNotes}
         onChange={(e) => setActionNotes(e.target.value)}
         placeholder={isRtl ? 'أدخل ملاحظات المراجعة (اختياري)' : 'Enter review notes (optional)'}
         className={`w-full rounded-lg border-gray-200 focus:ring-teal-500 focus:border-teal-500 py-2.5 ${isRtl ? 'text-right' : 'text-left'} transition-all duration-200`}
         aria-label={isRtl ? 'ملاحظات المراجعة' : 'Review Notes'}
       />
-      <div className={`flex gap-3 ${isRtl ? 'justify-end flex-row' : 'justify-end'}`}>
+      <div className={`flex gap-3 ${isRtl ? 'justify-end flex-row-reverse' : 'justify-end'}`}>
         <Button
           variant="secondary"
           size="sm"

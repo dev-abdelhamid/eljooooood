@@ -1,12 +1,12 @@
 import React, { useCallback } from 'react';
-import { Branch, State } from '../../types/types';
+import { State } from '../../types/types';
 import { Search, X } from 'lucide-react';
 
 interface FiltersProps {
   state: State;
   dispatch: React.Dispatch<any>;
   isRtl: boolean;
-  branches: Branch[];
+  branches: any[]; // Branches with displayName
   onSearchChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
@@ -37,7 +37,7 @@ const Filters: React.FC<FiltersProps> = ({ state, dispatch, isRtl, branches, onS
     dispatch({ type: 'SET_FILTER_STATUS', payload: '' });
     dispatch({ type: 'SET_FILTER_BRANCH', payload: '' });
     dispatch({ type: 'SET_SEARCH_QUERY', payload: '' });
-    dispatch({ type: 'SET_SORT', by: 'date', order: 'desc' });
+    dispatch({ type: 'SET_SORT', by: 'createdAt', order: 'desc' });
   }, [dispatch]);
 
   return (
@@ -72,10 +72,9 @@ const Filters: React.FC<FiltersProps> = ({ state, dispatch, isRtl, branches, onS
             } transition-all duration-200 ease-in-out`}
           >
             <option value="">{isRtl ? 'جميع الحالات' : 'All Statuses'}</option>
-            <option value="pending_approval">{isRtl ? 'في انتظار الموافقة' : 'Pending Approval'}</option>
+            <option value="pending">{isRtl ? 'في انتظار الموافقة' : 'Pending'}</option>
             <option value="approved">{isRtl ? 'تمت الموافقة' : 'Approved'}</option>
             <option value="rejected">{isRtl ? 'مرفوض' : 'Rejected'}</option>
-            <option value="processed">{isRtl ? 'تمت المعالجة' : 'Processed'}</option>
           </select>
         </div>
         <div>
@@ -93,7 +92,7 @@ const Filters: React.FC<FiltersProps> = ({ state, dispatch, isRtl, branches, onS
             {branches.length > 0 ? (
               branches.map((branch) => (
                 <option key={branch._id} value={branch._id}>
-                  {branch.name}
+                  {branch.name} {/* Backend returns displayName based on isRtl */}
                 </option>
               ))
             ) : (
@@ -112,12 +111,10 @@ const Filters: React.FC<FiltersProps> = ({ state, dispatch, isRtl, branches, onS
               isRtl ? 'text-right' : 'text-left'
             } transition-all duration-200 ease-in-out`}
           >
-            <option value="date:desc">{isRtl ? 'التاريخ (تنازلي)' : 'Date (Descending)'}</option>
-            <option value="date:asc">{isRtl ? 'التاريخ (تصاعدي)' : 'Date (Ascending)'}</option>
+            <option value="createdAt:desc">{isRtl ? 'التاريخ (تنازلي)' : 'Date (Descending)'}</option>
+            <option value="createdAt:asc">{isRtl ? 'التاريخ (تصاعدي)' : 'Date (Ascending)'}</option>
             <option value="totalAmount:desc">{isRtl ? 'الإجمالي (تنازلي)' : 'Total Amount (Descending)'}</option>
             <option value="totalAmount:asc">{isRtl ? 'الإجمالي (تصاعدي)' : 'Total Amount (Ascending)'}</option>
-            <option value="returnNumber:desc">{isRtl ? 'رقم المرتجع (تنازلي)' : 'Return Number (Descending)'}</option>
-            <option value="returnNumber:asc">{isRtl ? 'رقم المرتجع (تصاعدي)' : 'Return Number (Ascending)'}</option>
           </select>
         </div>
       </div>
