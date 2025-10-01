@@ -2,64 +2,27 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { returnsAPI, inventoryAPI } from '../services/api';
+import { returnsAPI, inventoryAPI, salesAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
-import { Select } from '../components/UI/Select';
 import { Input } from '../components/UI/Input';
+import { Select } from '../components/UI/Select';
 import { Modal } from '../components/UI/Modal';
 import { Package, Eye, Clock, Check, AlertCircle, Search, Download, Plus } from 'lucide-react';
-import { io, Socket } from 'socket.io-client';
+import { io } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { formatDate } from '../utils/formatDate';
 import 'react-toastify/dist/ReactToastify.css';
 import 'tailwindcss/tailwind.css';
 
-interface InventoryItem {
-  productId: string;
-  productName: string;
-  productNameEn: string;
-  currentStock: number;
-  unit: string;
-  unitEn: string;
-}
-
-interface ReturnItem {
-  itemId: string;
-  productId: string;
-  productName: string;
-  quantity: number;
-  price?: number;
-  reason: string;
-  reasonEn?: string;
-}
-
-interface Return {
-  id: string;
-  returnNumber: string;
-  order: { id: string; orderNumber: string; totalAmount: number; createdAt: string };
-  items: ReturnItem[];
-  status: 'pending' | 'approved' | 'rejected' | 'processed';
-  date: string;
-  createdAt: string;
-  notes?: string;
-  reviewNotes?: string;
-  branch: { _id: string; name: string };
-  department?: { _id: string; name: string };
-}
-
-interface CreateReturnForm {
-  orderId: string;
-  branchId: string;
-  reason: string;
-  notes?: string;
-  items: { productId: string; quantity: number; reason: string }[];
-}
-
 const RETURNS_PER_PAGE = 10;
 
-const BranchReturns: React.FC = () => {
+const BranchReturns = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
@@ -68,9 +31,9 @@ const BranchReturns: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedReturn, setSelectedReturn] = useState<Return | null>(null);
+  const [selectedReturn, setSelectedReturn] = useState(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [formData, setFormData] = useState<CreateReturnForm>({
+  const [formData, setFormData] = useState({
     orderId: '',
     branchId: user?.branchId || '',
     reason: '',
@@ -80,7 +43,7 @@ const BranchReturns: React.FC = () => {
 
   const toastOptions = useMemo(
     () => ({
-      position: isRtl ? ('top-left' as const) : ('top-right' as const),
+      position: isRtl ? 'top-left' : 'top-right',
       autoClose: 3000,
       hideProgressBar: false,
       closeOnClick: true,
@@ -92,8 +55,8 @@ const BranchReturns: React.FC = () => {
     [isRtl]
   );
 
-  const socket = useMemo<Socket | null>(() => {
-    const apiUrl = import.meta.env.VITE_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
+  const socket = useMemo(() => {
+    const apiUrl = import.meta.env.VITE_API_URL || 'https://api.example.com';
     try {
       return io(apiUrl, {
         auth: { token: localStorage.getItem('token') },
@@ -128,7 +91,7 @@ const BranchReturns: React.FC = () => {
       { value: 'كمية زائدة', label: isRtl ? 'كمية زائدة' : 'Excess Quantity' },
       { value: 'أخرى', label: isRtl ? 'أخرى' : 'Other' },
     ],
-    [isRtl, t]
+    [isRtl]
   );
 
   const STATUS_COLORS = useMemo(
@@ -142,22 +105,8 @@ const BranchReturns: React.FC = () => {
   );
 
   const getStatusInfo = useCallback(
-    (status: Return['status']) => STATUS_COLORS[status] || { color: 'bg-gray-100 text-gray-800', icon: Clock, label: t(`returns.status.${status}`) },
+    (status) => STATUS_COLORS[status] || { color: 'bg-gray-100 text-gray-800', icon: Clock, label: t(`returns.status.${status}`) },
     [STATUS_COLORS, t]
-  );
-
-  const formatDate = useCallback(
-    (dateString: string) => {
-      const date = new Date(dateString);
-      return isNaN(date.getTime())
-        ? t('errors.invalid_date')
-        : date.toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          });
-    },
-    [isRtl, t]
   );
 
   const { data: returnsData, isLoading, error } = useQuery({
@@ -168,39 +117,38 @@ const BranchReturns: React.FC = () => {
       const { returns: returnsData, total } = await returnsAPI.getAll(query);
       if (!Array.isArray(returnsData)) throw new Error('Invalid returns data format');
       return {
-        returns: returnsData.map((ret: any) => ({
-          id: ret._id,
-          returnNumber: ret.returnNumber,
+        returns: returnsData.map((ret) => ({
+          id: ret._id || 'unknown',
+          returnNumber: ret.returnNumber || t('returns.unknown'),
           order: {
-            id: ret.order._id || 'unknown',
-            orderNumber: ret.order.orderNumber || t('orders.unknown'),
-            totalAmount: ret.order.totalAmount || 0,
-            createdAt: ret.order.createdAt || new Date().toISOString(),
+            id: ret.order?._id || 'unknown',
+            orderNumber: ret.order?.orderNumber || t('orders.unknown'),
+            totalAmount: ret.order?.totalAmount || 0,
+            createdAt: ret.order?.createdAt || new Date().toISOString(),
           },
           items: Array.isArray(ret.items)
-            ? ret.items.map((item: any) => ({
+            ? ret.items.map((item) => ({
                 itemId: item.itemId || item._id || 'unknown',
                 productId: item.product?._id || 'unknown',
                 productName: isRtl ? item.product?.name : item.product?.nameEn || t('products.unknown'),
                 quantity: item.quantity || 0,
                 price: item.product?.price || 0,
-                reason: isRtl ? item.reason : item.reasonEn || 'unknown',
+                reason: isRtl ? item.reason : item.reasonEn || item.reason || 'unknown',
               }))
             : [],
           status: ret.status || 'pending',
-          date: formatDate(ret.createdAt || new Date().toISOString()),
+          date: formatDate(ret.createdAt || new Date().toISOString(), language),
           createdAt: ret.createdAt || new Date().toISOString(),
-          notes: isRtl ? ret.notes : ret.notesEn || ret.notes,
-          reviewNotes: isRtl ? ret.reviewNotes : ret.reviewNotesEn || ret.reviewNotes,
+          notes: isRtl ? ret.notes : ret.notesEn || ret.notes || '',
+          reviewNotes: isRtl ? ret.reviewNotes : ret.reviewNotesEn || ret.reviewNotes || '',
           branch: { _id: ret.branch?._id || 'unknown', name: isRtl ? ret.branch?.name : ret.branch?.nameEn || t('branches.unknown') },
           department: ret.order?.department || { _id: 'unknown', name: t('departments.unknown') },
         })),
         total,
       };
     },
-    onError: (err: any) => {
-      const errorMessage = err.status === 403 ? t('errors.unauthorized_access') : err.message || t('errors.fetch_returns');
-      toast.error(errorMessage, toastOptions);
+    onError: (err) => {
+      toast.error(err.message || t('errors.fetch_returns'), toastOptions);
     },
   });
 
@@ -209,7 +157,7 @@ const BranchReturns: React.FC = () => {
     queryFn: async () => {
       if (!user?.branchId) return [];
       const response = await inventoryAPI.getByBranch(user.branchId);
-      return response.map((item: any) => ({
+      return response.map((item) => ({
         productId: item.product._id,
         productName: isRtl ? item.product.name : item.product.nameEn,
         currentStock: item.currentStock,
@@ -219,58 +167,60 @@ const BranchReturns: React.FC = () => {
     enabled: !!user?.branchId,
   });
 
+  const { data: salesData } = useQuery({
+    queryKey: ['sales', user?.branchId],
+    queryFn: async () => {
+      if (!user?.branchId) return [];
+      const response = await salesAPI.getAll({ branch: user.branchId });
+      return response.sales || [];
+    },
+    enabled: !!user?.branchId,
+  });
+
   const createReturnMutation = useMutation({
-    mutationFn: (data: CreateReturnForm) => returnsAPI.createReturn(data),
+    mutationFn: (data) => returnsAPI.createReturn(data),
     onSuccess: () => {
       queryClient.invalidateQueries(['returns']);
       setIsCreateModalOpen(false);
       setFormData({ orderId: '', branchId: user?.branchId || '', reason: '', notes: '', items: [] });
       toast.success(t('returns.create_success'), toastOptions);
     },
-    onError: (err: any) => {
+    onError: (err) => {
       toast.error(err.message || t('errors.create_return'), toastOptions);
     },
   });
 
   useEffect(() => {
     if (!socket) return;
-
-    const handleConnect = () => {
+    socket.on('connect', () => {
       socket.emit('joinRoom', { role: user?.role, branchId: user?.branchId, userId: user?._id });
       toast.info(t('socket.connected'), toastOptions);
-    };
-
-    const handleReturnCreated = (data: any) => {
+    });
+    socket.on('returnCreated', (data) => {
       if (data.branchId === user?.branchId) {
         queryClient.invalidateQueries(['returns']);
         toast.success(t('returns.new_return_notification', { returnNumber: data.returnNumber }), toastOptions);
       }
-    };
-
-    const handleReturnStatusUpdated = (data: any) => {
+    });
+    socket.on('returnStatusUpdated', (data) => {
       if (data.branchId === user?.branchId) {
         queryClient.invalidateQueries(['returns']);
         toast.info(t('socket.return_status_updated', { status: t(`returns.status.${data.status}`) }), toastOptions);
       }
-    };
-
-    socket.on('connect', handleConnect);
-    socket.on('returnCreated', handleReturnCreated);
-    socket.on('returnStatusUpdated', handleReturnStatusUpdated);
-
+    });
     return () => {
-      socket.off('connect', handleConnect);
-      socket.off('returnCreated', handleReturnCreated);
-      socket.off('returnStatusUpdated', handleReturnStatusUpdated);
+      socket.off('connect');
+      socket.off('returnCreated');
+      socket.off('returnStatusUpdated');
     };
   }, [socket, user, queryClient, t, toastOptions]);
 
-  const debouncedSetSearchQuery = useMemo(() => debounce((value: string) => setSearchQuery(value), 300), []);
+  const debouncedSetSearchQuery = useMemo(() => debounce((value) => setSearchQuery(value), 300), []);
 
   const filteredReturns = useMemo(
     () =>
       (returnsData?.returns || []).filter(
-        (ret: Return) =>
+        (ret) =>
           ret.returnNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
           ret.order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
           (ret.notes || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -284,11 +234,12 @@ const BranchReturns: React.FC = () => {
     [filteredReturns]
   );
 
-  const totalPages = Math.ceil(sortedReturns.length / RETURNS_PER_PAGE);
   const paginatedReturns = useMemo(
     () => sortedReturns.slice((currentPage - 1) * RETURNS_PER_PAGE, currentPage * RETURNS_PER_PAGE),
     [sortedReturns, currentPage]
   );
+
+  const totalPages = Math.ceil(sortedReturns.length / RETURNS_PER_PAGE);
 
   const handleCreateReturn = () => {
     createReturnMutation.mutate(formData);
@@ -301,7 +252,7 @@ const BranchReturns: React.FC = () => {
     }));
   };
 
-  const updateItemInForm = (index: number, field: string, value: any) => {
+  const updateItemInForm = (index, field, value) => {
     setFormData((prev) => {
       const newItems = [...prev.items];
       newItems[index] = { ...newItems[index], [field]: value };
@@ -309,35 +260,92 @@ const BranchReturns: React.FC = () => {
     });
   };
 
-  const removeItemFromForm = (index: number) => {
+  const removeItemFromForm = (index) => {
     setFormData((prev) => ({
       ...prev,
       items: prev.items.filter((_, i) => i !== index),
     }));
   };
 
-  const downloadJSON = useCallback(() => {
-    const jsonData = (returnsData?.returns || []).map((ret: Return) => ({
+  const exportToExcel = useCallback(() => {
+    const exportData = sortedReturns.map((ret) => ({
       [t('returns.return_number')]: ret.returnNumber,
       [t('returns.order_number')]: ret.order.orderNumber,
       [t('returns.status_label')]: getStatusInfo(ret.status).label,
       [t('returns.date')]: ret.date,
       [t('returns.items_count')]: ret.items.length,
       [t('returns.branch')]: ret.branch.name,
-      [t('returns.department')]: ret.department?.name || t('departments.unknown'),
       [t('returns.notes_label')]: ret.notes || t('returns.no_notes'),
       [t('returns.review_notes')]: ret.reviewNotes || t('returns.no_notes'),
     }));
-    const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `returns-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [returnsData, getStatusInfo, t]);
+    const ws = XLSX.utils.json_to_sheet(isRtl ? exportData.map((row) => Object.fromEntries(Object.entries(row).reverse())) : exportData);
+    ws['!cols'] = Object.keys(exportData[0] || {}).map(() => ({ wpx: 120 }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Returns');
+    XLSX.writeFile(wb, `Returns_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success(t('returns.export_success'), toastOptions);
+  }, [sortedReturns, isRtl, t, getStatusInfo]);
 
-  const ReturnCard: React.FC<{ ret: Return }> = ({ ret }) => {
+  const exportToPDF = useCallback(async () => {
+    try {
+      const doc = new jsPDF({ orientation: 'landscape' });
+      doc.setLanguage(isRtl ? 'ar' : 'en');
+      const fontUrl = '/fonts/Amiri-Regular.ttf';
+      const fontName = 'Amiri';
+      const fontBytes = await fetch(fontUrl).then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch font');
+        return res.arrayBuffer();
+      });
+      const base64Font = btoa(String.fromCharCode(...new Uint8Array(fontBytes)));
+      doc.addFileToVFS(`${fontName}-Regular.ttf`, base64Font);
+      doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
+      doc.setFont(fontName);
+      const headers = [
+        t('returns.return_number'),
+        t('returns.order_number'),
+        t('returns.status_label'),
+        t('returns.date'),
+        t('returns.items_count'),
+        t('returns.branch'),
+        t('returns.notes_label'),
+        t('returns.review_notes'),
+      ];
+      const data = sortedReturns.map((ret) => [
+        ret.returnNumber,
+        ret.order.orderNumber,
+        getStatusInfo(ret.status).label,
+        ret.date,
+        ret.items.length.toString(),
+        ret.branch.name,
+        ret.notes || t('returns.no_notes'),
+        ret.reviewNotes || t('returns.no_notes'),
+      ]);
+      const finalHeaders = isRtl ? headers.reverse() : headers;
+      const finalData = isRtl ? data.map((row) => row.reverse()) : data;
+      autoTable(doc, {
+        head: [finalHeaders],
+        body: finalData,
+        theme: 'grid',
+        headStyles: { fillColor: [41, 128, 185], textColor: 255, fontSize: 10, halign: isRtl ? 'right' : 'left', font: fontName },
+        bodyStyles: { fontSize: 9, halign: isRtl ? 'right' : 'left', font: fontName, cellPadding: 4 },
+        columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 30 } },
+        margin: { top: 20 },
+        didDrawPage: (data) => {
+          doc.setFont(fontName);
+          doc.text(t('returns.title'), isRtl ? doc.internal.pageSize.width - data.settings.margin.right : data.settings.margin.left, 10, {
+            align: isRtl ? 'right' : 'left',
+          });
+        },
+      });
+      doc.save(`Returns_${new Date().toISOString().split('T')[0]}.pdf`);
+      toast.success(t('returns.pdf_export_success'), toastOptions);
+    } catch (err) {
+      console.error('PDF export error:', err);
+      toast.error(t('errors.pdf_export'), toastOptions);
+    }
+  }, [sortedReturns, isRtl, t, getStatusInfo, toastOptions]);
+
+  const ReturnCard = ({ ret }) => {
     const statusInfo = getStatusInfo(ret.status);
     const StatusIcon = statusInfo.icon;
     return (
@@ -347,11 +355,11 @@ const BranchReturns: React.FC = () => {
         transition={{ duration: 0.3 }}
         className="flex flex-col"
       >
-        <Card className="flex flex-col p-4 sm:p-5 bg-white shadow-md hover:shadow-xl transition-shadow duration-300 rounded-lg border border-gray-200">
+        <Card className="p-4 sm:p-5 bg-white shadow-md hover:shadow-xl transition-shadow duration-300 rounded-lg border border-gray-200">
           <div className="flex flex-col gap-4">
             <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${isRtl ? 'sm:flex-row-reverse' : ''}`}>
               <h3 className="text-lg font-semibold text-gray-900">
-                {isRtl ? `المرتجع #${ret.returnNumber}` : `Return #${ret.returnNumber}`}
+                {t('returns.return_number', { returnNumber: ret.returnNumber })}
               </h3>
               <span className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${statusInfo.color}`}>
                 <StatusIcon className="w-5 h-5" />
@@ -365,7 +373,7 @@ const BranchReturns: React.FC = () => {
               </div>
               <div>
                 <p className="text-sm text-gray-500">{t('returns.items_count')}</p>
-                <p className="text-base font-medium text-gray-900">{ret.items.length} {isRtl ? 'عنصر' : 'item'}</p>
+                <p className="text-base font-medium text-gray-900">{ret.items.length} {t('returns.item')}</p>
               </div>
               <div>
                 <p className="text-sm text-gray-500">{t('returns.date')}</p>
@@ -376,12 +384,8 @@ const BranchReturns: React.FC = () => {
                 <p className="text-base font-medium text-gray-900">{ret.branch.name}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">{t('returns.department')}</p>
-                <p className="text-base font-medium text-gray-900">{ret.department?.name || t('departments.unknown')}</p>
-              </div>
-              <div>
                 <p className="text-sm text-gray-500">{t('returns.total_amount')}</p>
-                <p className="text-base font-medium text-teal-600">{ret.items.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0)} {isRtl ? 'ريال' : 'SAR'}</p>
+                <p className="text-base font-medium text-teal-600">{ret.items.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0)} {t('currency')}</p>
               </div>
             </div>
             <div className="flex flex-col gap-2">
@@ -391,7 +395,7 @@ const BranchReturns: React.FC = () => {
                   <p className="text-sm text-gray-600">{t('returns.quantity', { quantity: item.quantity })}</p>
                   <p className="text-sm text-gray-600">{t('returns.reason', { reason: item.reason })}</p>
                   {item.price && (
-                    <p className="text-sm text-gray-600">{t('returns.price', { price: item.price })} {isRtl ? 'ريال' : 'SAR'}</p>
+                    <p className="text-sm text-gray-600">{t('returns.price', { price: item.price })} {t('currency')}</p>
                   )}
                 </div>
               ))}
@@ -411,7 +415,10 @@ const BranchReturns: React.FC = () => {
                 variant="primary"
                 size="md"
                 icon={Eye}
-                onClick={() => setSelectedReturn(ret) || setIsViewModalOpen(true)}
+                onClick={() => {
+                  setSelectedReturn(ret);
+                  setIsViewModalOpen(true);
+                }}
                 className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 py-2 transition-colors duration-200"
                 aria-label={t('returns.view_return', { returnNumber: ret.returnNumber })}
               >
@@ -424,7 +431,7 @@ const BranchReturns: React.FC = () => {
     );
   };
 
-  const Pagination: React.FC = () => (
+  const Pagination = () => (
     sortedReturns.length > RETURNS_PER_PAGE && (
       <div className={`flex items-center justify-center gap-3 mt-6 ${isRtl ? 'flex-row-reverse' : ''}`}>
         <Button
@@ -452,17 +459,6 @@ const BranchReturns: React.FC = () => {
     )
   );
 
-  const LoadingSpinner: React.FC = () => (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-      className="min-h-screen flex items-center justify-center"
-    >
-      <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-amber-600"></div>
-    </motion.div>
-  );
-
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -473,7 +469,14 @@ const BranchReturns: React.FC = () => {
     >
       <AnimatePresence>
         {isLoading ? (
-          <LoadingSpinner />
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5 }}
+            className="min-h-screen flex items-center justify-center"
+          >
+            <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-amber-600"></div>
+          </motion.div>
         ) : error ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -520,14 +523,22 @@ const BranchReturns: React.FC = () => {
                     <span>{t('returns.create_return')}</span>
                   </Button>
                   <Button
-                    variant={returnsData?.returns.length ? 'primary' : 'secondary'}
-                    onClick={returnsData?.returns.length ? downloadJSON : undefined}
-                    className={`flex items-center gap-2 ${returnsData?.returns.length ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'} rounded-full px-4 py-2 transition-colors duration-200`}
-                    disabled={!returnsData?.returns.length}
-                    aria-label={t('returns.download_json')}
+                    variant="primary"
+                    onClick={exportToExcel}
+                    className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full px-4 py-2 transition-colors duration-200"
+                    aria-label={t('returns.export_excel')}
                   >
                     <Download className="w-5 h-5" />
-                    <span>{t('returns.download_json')}</span>
+                    <span>{t('returns.export_excel')}</span>
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={exportToPDF}
+                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 py-2 transition-colors duration-200"
+                    aria-label={t('returns.export_pdf')}
+                  >
+                    <Download className="w-5 h-5" />
+                    <span>{t('returns.export_pdf')}</span>
                   </Button>
                 </div>
               </div>
@@ -617,12 +628,8 @@ const BranchReturns: React.FC = () => {
                         <p className="text-base font-medium text-gray-900">{selectedReturn.branch.name}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-500">{t('returns.department')}</p>
-                        <p className="text-base font-medium text-gray-900">{selectedReturn.department?.name || t('departments.unknown')}</p>
-                      </div>
-                      <div>
                         <p className="text-sm text-gray-500">{t('returns.total_amount')}</p>
-                        <p className="text-base font-medium text-teal-600">{selectedReturn.items.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0)} {isRtl ? 'ريال' : 'SAR'}</p>
+                        <p className="text-base font-medium text-teal-600">{selectedReturn.items.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0)} {t('currency')}</p>
                       </div>
                     </div>
                     <div>
@@ -633,7 +640,7 @@ const BranchReturns: React.FC = () => {
                             <p className="text-base font-medium text-gray-900">{item.productName}</p>
                             <p className="text-sm text-gray-600">{t('returns.quantity', { quantity: item.quantity })}</p>
                             <p className="text-sm text-gray-600">{t('returns.reason', { reason: item.reason })}</p>
-                            <p className="text-sm text-gray-600">{t('returns.item_total', { total: item.price ? item.quantity * item.price : 0 })} {isRtl ? 'ريال' : 'SAR'}</p>
+                            <p className="text-sm text-gray-600">{t('returns.item_total', { total: item.price ? item.quantity * item.price : 0 })} {t('currency')}</p>
                           </div>
                         ))}
                       </div>
@@ -651,7 +658,7 @@ const BranchReturns: React.FC = () => {
                     <div className="border-t pt-3 border-gray-200">
                       <div className={`flex items-center justify-between text-base font-semibold text-gray-900 ${isRtl ? 'flex-row-reverse' : ''}`}>
                         <span>{t('returns.final_total')}</span>
-                        <span className="text-teal-600">{selectedReturn.items.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0)} {isRtl ? 'ريال' : 'SAR'}</span>
+                        <span className="text-teal-600">{selectedReturn.items.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0)} {t('currency')}</span>
                       </div>
                     </div>
                     <div className={`flex justify-end gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
@@ -677,11 +684,14 @@ const BranchReturns: React.FC = () => {
                 >
                   <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="flex flex-col gap-4">
                     <div>
-                      <Input
+                      <Select
                         label={t('returns.order_id')}
+                        options={(salesData || []).map((sale) => ({
+                          value: sale._id,
+                          label: sale.orderNumber || sale._id,
+                        }))}
                         value={formData.orderId}
-                        onChange={(e) => setFormData((prev) => ({ ...prev, orderId: e.target.value }))}
-                        placeholder={t('returns.enter_order_id')}
+                        onChange={(value) => setFormData((prev) => ({ ...prev, orderId: value }))}
                         className="w-full rounded-md border-gray-200 text-base focus:ring-amber-500 transition-colors duration-200"
                       />
                     </div>
@@ -709,7 +719,7 @@ const BranchReturns: React.FC = () => {
                         <div key={index} className="flex flex-col gap-2 p-3 bg-gray-50 rounded-md border border-gray-100 mb-2">
                           <Select
                             label={t('returns.product')}
-                            options={(inventoryData || []).map((inv: InventoryItem) => ({
+                            options={(inventoryData || []).map((inv) => ({
                               value: inv.productId,
                               label: inv.productName,
                             }))}
@@ -723,7 +733,7 @@ const BranchReturns: React.FC = () => {
                             value={item.quantity}
                             onChange={(e) => updateItemInForm(index, 'quantity', parseInt(e.target.value))}
                             min={1}
-                            max={(inventoryData?.find((inv: InventoryItem) => inv.productId === item.productId)?.currentStock || 1)}
+                            max={(inventoryData?.find((inv) => inv.productId === item.productId)?.currentStock || 1)}
                             className="w-full rounded-md border-gray-200 text-base focus:ring-amber-500 transition-colors duration-200"
                           />
                           <Select
