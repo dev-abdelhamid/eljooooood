@@ -1,4 +1,102 @@
-import api from './api';
+import axios from 'axios';
+import axiosRetry from 'axios-retry';
+import { toast } from 'react-toastify';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
+const isRtl = localStorage.getItem('language') === 'ar';
+
+const returnsAxios = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 30000,
+  headers: { 'Content-Type': 'application/json' },
+  params: { isRtl: isRtl.toString() },
+});
+
+axiosRetry(returnsAxios, { retries: 3, retryDelay: (retryCount) => retryCount * 1000 });
+
+returnsAxios.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    console.log(`[${new Date().toISOString()}] Returns API request:`, {
+      url: config.url,
+      method: config.method,
+      headers: config.headers,
+      params: config.params,
+    });
+    return config;
+  },
+  (error) => {
+    console.error(`[${new Date().toISOString()}] Returns API request error:`, error);
+    return Promise.reject(error);
+  }
+);
+
+returnsAxios.interceptors.response.use(
+  (response) => response.data,
+  async (error) => {
+    const originalRequest = error.config;
+    console.error(`[${new Date().toISOString()}] Returns API response error:`, {
+      url: error.config?.url,
+      method: error.config?.method,
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message,
+    });
+
+    let message = error.response?.data?.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
+    if (error.response?.status === 400) message = error.response?.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
+    if (error.response?.status === 403) message = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
+    if (error.response?.status === 404) message = error.response?.data?.message || (isRtl ? 'الإرجاع غير موجود' : 'Return not found');
+    if (error.response?.status === 429) message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+      try {
+        const refreshToken = localStorage.getItem('refreshToken');
+        if (!refreshToken) {
+          console.error(`[${new Date().toISOString()}] No refresh token available`);
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          localStorage.removeItem('refreshToken');
+          window.location.href = '/login';
+          toast.error(isRtl ? 'التوكن منتهي الصلاحية، يرجى تسجيل الدخول مجددًا' : 'Token expired, please log in again', {
+            position: 'top-right',
+            autoClose: 3000,
+            pauseOnFocusLoss: true,
+          });
+          return Promise.reject({ message: isRtl ? 'التوكن منتهي الصلاحية ولا يوجد توكن منعش' : 'Token expired and no refresh token available', status: 401 });
+        }
+        const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
+        const { accessToken, refreshToken: newRefreshToken } = response.data;
+        localStorage.setItem('token', accessToken);
+        if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
+        console.log(`[${new Date().toISOString()}] Token refreshed successfully`);
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+        return returnsAxios(originalRequest);
+      } catch (refreshError) {
+        console.error(`[${new Date().toISOString()}] Refresh token failed:`, refreshError);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('refreshToken');
+        window.location.href = '/login';
+        toast.error(isRtl ? 'فشل تجديد التوكن، يرجى تسجيل الدخول مجددًا' : 'Failed to refresh token, please log in again', {
+          position: 'top-right',
+          autoClose: 3000,
+          pauseOnFocusLoss: true,
+        });
+        return Promise.reject({ message: isRtl ? 'فشل تجديد التوكن' : 'Failed to refresh token', status: 401 });
+      }
+    }
+
+    toast.error(message, { position: 'top-right', autoClose: 3000, pauseOnFocusLoss: true });
+    return Promise.reject({ message, status: error.response?.status });
+  }
+);
+
+const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 
 export const returnsAPI = {
   getAll: async (query: {
@@ -11,7 +109,11 @@ export const returnsAPI = {
   } = {}) => {
     console.log(`[${new Date().toISOString()}] returnsAPI.getAll - Sending:`, query);
     try {
-      const response = await api.get('/returns', { params: query });
+      if (query.branch && !isValidObjectId(query.branch)) {
+        console.error(`[${new Date().toISOString()}] returnsAPI.getAll - Invalid branch ID:`, query.branch);
+        throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
+      }
+      const response = await returnsAxios.get('/returns', { params: { ...query, lang: isRtl ? 'ar' : 'en' } });
       console.log(`[${new Date().toISOString()}] returnsAPI.getAll - Response:`, response);
       return response;
     } catch (error: any) {
@@ -23,7 +125,7 @@ export const returnsAPI = {
   getBranches: async () => {
     console.log(`[${new Date().toISOString()}] returnsAPI.getBranches - Sending`);
     try {
-      const response = await api.get('/branches');
+      const response = await returnsAxios.get('/branches', { params: { lang: isRtl ? 'ar' : 'en' } });
       console.log(`[${new Date().toISOString()}] returnsAPI.getBranches - Response:`, response);
       return response;
     } catch (error: any) {
@@ -40,23 +142,26 @@ export const returnsAPI = {
       product: string;
       quantity: number;
       reason: string;
+      itemId: string;
     }>;
     notes?: string;
   }) => {
     console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Sending:`, data);
     if (
-      !/^[0-9a-fA-F]{24}$/.test(data.orderId) ||
-      !/^[0-9a-fA-F]{24}$/.test(data.branchId) ||
+      !isValidObjectId(data.orderId) ||
+      !isValidObjectId(data.branchId) ||
       !data.reason ||
+      !Array.isArray(data.items) ||
+      data.items.length === 0 ||
       data.items.some(
-        (item) => !/^[0-9a-fA-F]{24}$/.test(item.product) || item.quantity < 1 || !item.reason
+        (item) => !isValidObjectId(item.product) || !isValidObjectId(item.itemId) || item.quantity < 1 || !item.reason
       )
     ) {
       console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Invalid data:`, data);
-      throw new Error('Invalid order ID, branch ID, reason, or item data');
+      throw new Error(isRtl ? 'معرف الطلب، الفرع، السبب، أو العناصر غير صالحة' : 'Invalid order ID, branch ID, reason, or item data');
     }
     try {
-      const response = await api.post('/returns', {
+      const response = await returnsAxios.post('/returns', {
         orderId: data.orderId,
         branchId: data.branchId,
         reason: data.reason.trim(),
@@ -64,8 +169,10 @@ export const returnsAPI = {
           product: item.product,
           quantity: item.quantity,
           reason: item.reason.trim(),
+          itemId: item.itemId,
         })),
         notes: data.notes?.trim(),
+        lang: isRtl ? 'ar' : 'en',
       });
       console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Response:`, response);
       return response;
@@ -79,53 +186,33 @@ export const returnsAPI = {
     returnId: string,
     data: {
       status: 'approved' | 'rejected';
-      items: Array<{
-        itemId: string;
-        productId: string;
-        status: 'approved' | 'rejected';
-        reviewNotes?: string | null;
-      }>;
       reviewNotes?: string;
     }
   ) => {
     console.log(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Sending:`, { returnId, data });
     if (
-      !/^[0-9a-fA-F]{24}$/.test(returnId) ||
-      !['approved', 'rejected'].includes(data.status) ||
-      data.items.some(
-        (item) =>
-          !/^[0-9a-fA-F]{24}$/.test(item.itemId) ||
-          !/^[0-9a-fA-F]{24}$/.test(item.productId) ||
-          !['approved', 'rejected'].includes(item.status)
-      )
+      !isValidObjectId(returnId) ||
+      !['approved', 'rejected'].includes(data.status)
     ) {
       console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Invalid data:`, { returnId, data });
-      throw new Error('Invalid return ID, item ID, product ID, or status');
+      throw new Error(isRtl ? 'معرف الإرجاع أو الحالة غير صالحة' : 'Invalid return ID or status');
     }
-    if (data.items.some((item) => item.status !== data.status)) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Item statuses do not match overall status:`, { returnId, data });
-      throw new Error('Item statuses must match the overall return status');
-    }
-    const correctedData = {
-      status: data.status,
-      reviewNotes: data.reviewNotes?.trim(),
-      items: data.items.map((item) => ({
-        itemId: item.itemId,
-        productId: item.productId,
-        status: item.status,
-        reviewNotes: item.reviewNotes?.trim(),
-      })),
-    };
     try {
-      const response = await api.put(`/returns/${returnId}`, correctedData);
+      const response = await returnsAxios.put(`/returns/${returnId}`, {
+        status: data.status,
+        reviewNotes: data.reviewNotes?.trim(),
+        lang: isRtl ? 'ar' : 'en',
+      });
       console.log(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Response:`, response);
       return response;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Error:`, error);
       if (error.status === 404) {
-        throw new Error('الإرجاع غير موجود أو المسار غير صحيح');
+        throw new Error(isRtl ? 'الإرجاع غير موجود أو المسار غير صحيح' : 'Return not found or invalid endpoint');
       }
       throw error;
     }
   },
 };
+
+export default returnsAPI;
