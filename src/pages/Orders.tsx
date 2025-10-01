@@ -142,18 +142,18 @@ const reducer = (state: State, action: Action): State => {
     case 'TASK_ASSIGNED': return {
       ...state,
       orders: state.orders.map(order =>
-        order.id === action.orderId
+        order.id === action.payload.orderId
           ? {
               ...order,
               items: order.items.map(i => {
-                const assignment = action.items?.find(a => a._id === i._id);
+                const assignment = action.payload.items?.find(a => a._id === i._id);
                 return assignment
                   ? {
                       ...i,
                       assignedTo: assignment.assignedTo
                         ? { 
                             ...assignment.assignedTo, 
-                            displayName: state.isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name 
+                            displayName: isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name 
                           }
                         : undefined,
                       status: assignment.status || i.status,
@@ -164,18 +164,18 @@ const reducer = (state: State, action: Action): State => {
             }
           : order
       ),
-      selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
+      selectedOrder: state.selectedOrder && state.selectedOrder.id === action.payload.orderId
         ? {
             ...state.selectedOrder,
             items: state.selectedOrder.items.map(i => {
-              const assignment = action.items?.find(a => a._id === i._id);
+              const assignment = action.payload.items?.find(a => a._id === i._id);
               return assignment
                 ? {
                     ...i,
                     assignedTo: assignment.assignedTo
                       ? { 
                           ...assignment.assignedTo, 
-                          displayName: state.isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name 
+                          displayName: isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name 
                         }
                       : undefined,
                     status: assignment.status || i.status,
@@ -302,12 +302,19 @@ export const Orders: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
-  const { socket, isConnected, emit } = useSocket();
+  const { isConnected, emit } = useSocket();
   const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
   const listRef = useRef<HTMLDivElement>(null);
-  const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
   const navigate = useNavigate();
+
+  useOrderNotifications(dispatch, stateRef, user, (notification: any) => {
+    toast[notification.type](notification.message, {
+      position: isRtl ? 'top-left' : 'top-right',
+      autoClose: 4000,
+      pauseOnFocusLoss: true,
+    });
+  });
 
   useEffect(() => {
     stateRef.current = state;
@@ -341,187 +348,22 @@ export const Orders: React.FC = () => {
     window.scrollTo(0, 0);
   }, [navigate]);
 
-  // Enhanced WebSocket handling with reconnection logic
   useEffect(() => {
-    if (!user || !['admin', 'production'].includes(user.role) || !socket) {
+    if (!user || !['admin', 'production'].includes(user.role)) {
       dispatch({ type: 'SET_ERROR', payload: isRtl ? 'غير مصرح للوصول' : 'Unauthorized access' });
       dispatch({ type: 'SET_LOADING', payload: false });
       return;
     }
 
     const reconnectInterval = setInterval(() => {
-      if (!isConnected && socket) {
+      if (!isConnected) {
         console.log('Attempting to reconnect WebSocket...');
-        socket.connect();
+        emit('reconnect');
       }
     }, 5000);
 
-    socket.on('connect', () => {
-      dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
-      dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
-    });
-
-    socket.on('connect_error', (err) => {
-      console.error('Socket connect error:', err.message);
-      dispatch({ type: 'SET_SOCKET_ERROR', payload: isRtl ? 'خطأ في الاتصال' : 'Connection error' });
-      dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
-    });
-
-    socket.on('newOrder', (order: any) => {
-      if (!order || !order._id || !order.orderNumber) {
-        console.warn('Invalid new order data:', order);
-        return;
-      }
-      const mappedOrder: Order = {
-        id: order._id,
-        orderNumber: order.orderNumber,
-        branchId: order.branch?._id || 'unknown',
-        branch: {
-          _id: order.branch?._id || 'unknown',
-          name: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-          nameEn: order.branch?.nameEn,
-          displayName: isRtl ? order.branch?.name : order.branch?.nameEn || order.branch?.name,
-        },
-        items: Array.isArray(order.items)
-          ? order.items.map((item: any) => ({
-              _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
-              productId: item.product?._id || 'unknown',
-              productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              productNameEn: item.product?.nameEn,
-              displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
-              quantity: Number(item.quantity) || 1,
-              price: Number(item.price) || 0,
-              unit: item.product?.unit || 'unit',
-              unitEn: item.product?.unitEn,
-              displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
-              department: {
-                _id: item.product?.department?._id || 'unknown',
-                name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: item.product?.department?.nameEn,
-                displayName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name,
-              },
-              assignedTo: item.assignedTo ? {
-                _id: item.assignedTo._id,
-                username: item.assignedTo.username,
-                name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: item.assignedTo.nameEn,
-                displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
-                department: item.assignedTo.department
-              } : undefined,
-              status: item.status || 'pending',
-              returnedQuantity: Number(item.returnedQuantity) || 0,
-              returnReason: item.returnReason || '',
-            }))
-          : [],
-        returns: Array.isArray(order.returns)
-          ? order.returns.map((ret: any) => ({
-              returnId: ret._id || `temp-${Math.random().toString(36).substring(2)}`,
-              returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
-              items: Array.isArray(ret.items)
-                ? ret.items.map((item: any) => ({
-                    productId: item.product?._id || 'unknown',
-                    productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    productNameEn: item.product?.nameEn,
-                    quantity: Number(item.quantity) || 0,
-                    reason: item.reason || (isRtl ? 'غير محدد' : 'Unspecified'),
-                    unit: item.product?.unit || 'unit',
-                    unitEn: item.product?.unitEn,
-                    displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
-                  }))
-                : [],
-              status: ret.status || 'pending',
-              reviewNotes: ret.notes || '',
-              createdAt: formatDate(ret.createdAt ? new Date(ret.createdAt) : new Date(), language),
-              createdBy: {
-                _id: ret.createdBy?._id,
-                username: ret.createdBy?.username,
-                name: ret.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: ret.createdBy?.nameEn,
-                displayName: isRtl ? ret.createdBy?.name : ret.createdBy?.nameEn || ret.createdBy?.name,
-              },
-            }))
-          : [],
-        status: order.status || 'pending',
-        totalAmount: Number(order.totalAmount) || 0,
-        adjustedTotal: Number(order.adjustedTotal) || 0,
-        date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
-        requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : undefined,
-        notes: order.notes || '',
-        priority: order.priority || 'medium',
-        createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-        approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
-        approvedAt: order.approvedAt ? new Date(order.approvedAt) : undefined,
-        deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : undefined,
-        transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : undefined,
-        statusHistory: Array.isArray(order.statusHistory)
-          ? order.statusHistory.map((history: any) => ({
-              status: history.status || 'pending',
-              changedBy: history.changedBy?.name || 'unknown',
-              changedAt: formatDate(history.changedAt ? new Date(history.changedAt) : new Date(), language),
-              notes: history.notes || '',
-            }))
-          : [],
-      };
-      dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
-      playNotificationSound('/sounds/notification.mp3', [200, 100, 200]);
-      toast.success(isRtl ? `طلب جديد: ${order.orderNumber}` : `New order: ${order.orderNumber}`, {
-        position: isRtl ? 'top-left' : 'top-right',
-      });
-    });
-
-    socket.on('orderStatusUpdated', ({ orderId, status }: { orderId: string; status: OrderStatus }) => {
-      if (!orderId || !status) {
-        console.warn('Invalid order status update data:', { orderId, status });
-        return;
-      }
-      dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
-      toast.info(isRtl ? `تم تحديث حالة الطلب ${orderId} إلى ${status}` : `Order ${orderId} status updated to ${status}`, {
-        position: isRtl ? 'top-left' : 'top-right',
-      });
-    });
-
-    socket.on('itemStatusUpdated', ({ orderId, itemId, status }: { orderId: string; itemId: string; status: string }) => {
-      if (!orderId || !itemId || !status) {
-        console.warn('Invalid item status update data:', { orderId, itemId, status });
-        return;
-      }
-      dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
-      toast.info(isRtl ? `تم تحديث حالة العنصر في الطلب ${orderId}` : `Item status updated in order ${orderId}`, {
-        position: isRtl ? 'top-left' : 'top-right',
-      });
-    });
-
-    socket.on('returnStatusUpdated', ({ orderId, returnId, status }: { orderId: string; returnId: string; status: string }) => {
-      if (!orderId || !returnId || !status) {
-        console.warn('Invalid return status update data:', { orderId, returnId, status });
-        return;
-      }
-      dispatch({ type: 'RETURN_STATUS_UPDATED', orderId, returnId, status });
-      toast.info(isRtl ? `تم تحديث حالة الإرجاع إلى: ${status}` : `Return status updated to: ${status}`, {
-        position: isRtl ? 'top-left' : 'top-right',
-      });
-    });
-
-    socket.on('taskAssigned', ({ orderId, items }: { orderId: string; items: any[] }) => {
-      if (!orderId || !items) {
-        console.warn('Invalid task assigned data:', { orderId, items });
-        return;
-      }
-      dispatch({ type: 'TASK_ASSIGNED', orderId, items });
-      toast.info(isRtl ? 'تم تعيين الشيفات' : 'Chefs assigned', { position: isRtl ? 'top-left' : 'top-right' });
-    });
-
-    return () => {
-      clearInterval(reconnectInterval);
-      socket.off('connect');
-      socket.off('connect_error');
-      socket.off('newOrder');
-      socket.off('orderStatusUpdated');
-      socket.off('itemStatusUpdated');
-      socket.off('returnStatusUpdated');
-      socket.off('taskAssigned');
-    };
-  }, [user, socket, isConnected, isRtl, language, playNotificationSound]);
+    return () => clearInterval(reconnectInterval);
+  }, [user, isConnected, emit, isRtl]);
 
   const fetchData = useCallback(
     async (retryCount = 0) => {
@@ -536,7 +378,6 @@ export const Orders: React.FC = () => {
           sortBy: state.sortBy,
           sortOrder: state.sortOrder,
         };
-        if (user.role === 'production' && user.department) query.department = user.department._id;
         const [ordersResponse, chefsResponse, branchesResponse] = await Promise.all([
           ordersAPI.getAll(query),
           chefsAPI.getAll(),
@@ -617,14 +458,14 @@ export const Orders: React.FC = () => {
             totalAmount: Number(order.totalAmount) || 0,
             adjustedTotal: Number(order.adjustedTotal) || 0,
             date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
-            requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : null,
+            requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : undefined,
             notes: order.notes || '',
             priority: order.priority || 'medium',
             createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
             approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
-            approvedAt: order.approvedAt ? new Date(order.approvedAt) : null,
-            deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : null,
-            transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : null,
+            approvedAt: order.approvedAt ? new Date(order.approvedAt) : undefined,
+            deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : undefined,
+            transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : undefined,
             statusHistory: Array.isArray(order.statusHistory)
               ? order.statusHistory.map((history: any) => ({
                   status: history.status || 'pending',
@@ -707,13 +548,10 @@ export const Orders: React.FC = () => {
         .filter(
           order =>
             (!state.filterStatus || order.status === state.filterStatus) &&
-            (!state.filterBranch || order.branchId === state.filterBranch) &&
-            (user?.role === 'production' && user?.department
-              ? order.items.some(item => item.department._id === user.department._id)
-              : true)
+            (!state.filterBranch || order.branchId === state.filterBranch)
         );
     },
-    [state.orders, state.searchQuery, state.filterStatus, state.filterBranch, user]
+    [state.orders, state.searchQuery, state.filterStatus, state.filterBranch]
   );
 
   const sortedOrders = useMemo(() => {
@@ -754,9 +592,7 @@ export const Orders: React.FC = () => {
       try {
         await ordersAPI.updateStatus(orderId, { status: newStatus });
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: newStatus });
-        if (socket && isConnected) {
-          emit('orderStatusUpdated', { orderId, status: newStatus });
-        }
+        emit('orderStatusUpdated', { orderId, status: newStatus });
         toast.success(isRtl ? `تم تحديث الحالة إلى: ${newStatus}` : `Order status updated to: ${newStatus}`, {
           position: isRtl ? 'top-left' : 'top-right',
         });
@@ -769,7 +605,7 @@ export const Orders: React.FC = () => {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     },
-    [state.orders, isRtl, socket, isConnected, emit]
+    [state.orders, isRtl, emit]
   );
 
   const updateItemStatus = useCallback(
@@ -782,9 +618,7 @@ export const Orders: React.FC = () => {
       try {
         await ordersAPI.updateItemStatus(orderId, itemId, { status });
         dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
-        if (socket && isConnected) {
-          emit('itemStatusUpdated', { orderId, itemId, status });
-        }
+        emit('itemStatusUpdated', { orderId, itemId, status });
         toast.success(isRtl ? `تم تحديث حالة العنصر إلى: ${status}` : `Item status updated to: ${status}`, {
           position: isRtl ? 'top-left' : 'top-right',
         });
@@ -797,7 +631,7 @@ export const Orders: React.FC = () => {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     },
-    [isRtl, user, socket, isConnected, emit]
+    [isRtl, user, emit]
   );
 
   const assignChefs = useCallback(
@@ -820,12 +654,10 @@ export const Orders: React.FC = () => {
           },
           status: 'assigned',
         }));
-        dispatch({ type: 'TASK_ASSIGNED', orderId, items });
+        dispatch({ type: 'TASK_ASSIGNED', payload: { orderId, items } });
         dispatch({ type: 'SET_MODAL', isOpen: false });
         dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
-        if (socket && isConnected) {
-          emit('taskAssigned', { orderId, items });
-        }
+        emit('taskAssigned', { orderId, items });
         toast.success(isRtl ? 'تم تعيين الشيفات بنجاح' : 'Chefs assigned successfully', {
           position: isRtl ? 'top-left' : 'top-right',
         });
@@ -838,7 +670,7 @@ export const Orders: React.FC = () => {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     },
-    [user, state.assignFormData, state.chefs, socket, isConnected, emit, isRtl]
+    [user, state.assignFormData, state.chefs, emit, isRtl]
   );
 
   const openAssignModal = useCallback(
@@ -882,7 +714,7 @@ export const Orders: React.FC = () => {
     <div className="px-2 py-4">
       <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: 'easeOut' }} className="mb-6">
-          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div className="w-full sm:w-auto text-center sm:text-start">
               <h1 className="text-xl font-bold text-gray-900 flex items-center justify-center sm:justify-start gap-2">
                 <ShoppingCart className="w-5 h-5 text-amber-700" />
