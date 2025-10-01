@@ -524,8 +524,19 @@ export function NewOrder() {
         orderNumber: orderData.orderNumber,
         branchName: isRtl ? orderData.branch.name : (orderData.branch.nameEn || orderData.branch.name),
       });
-   
-    
+      if (user.role === 'branch') {
+        message = t.orderCreated; // "تم إنشاء الطلب بنجاح"
+      }
+      addNotification({
+        _id: eventId,
+        type: 'success',
+        message,
+        data: { orderId: orderData._id, eventId },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: '/sounds/notification.mp3',
+        vibrate: [200, 100, 200],
+      });
       // هنا يمكن تحديث state صفحة المتابعة إذا كانت موجودة، عبر dispatch أو setState
     });
 
@@ -686,7 +697,7 @@ export function NewOrder() {
   };
 
   return (
-    <div className={`mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen `} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <div className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <ShoppingCart className="w-7 h-7 text-amber-600" />

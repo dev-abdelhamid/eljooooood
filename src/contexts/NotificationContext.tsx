@@ -328,7 +328,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           type: 'ADD_ORDER',
           sound: '/sounds/notification.mp3',
           vibrate: [200, 100, 200],
-          roles: ['admin', 'branch', 'production'],
+          roles: ['admin', 'production'],
         },
       },
       {
