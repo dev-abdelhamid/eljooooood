@@ -316,7 +316,7 @@ const OrderConfirmModal: React.FC<{
   );
 };
 
-const NewOrder: React.FC = () => {
+export const NewOrder: React.FC = () => {
   const { user } = useAuth();
   const { language, t: languageT } = useLanguage();
   const { addNotification } = useNotifications();
