@@ -12,7 +12,6 @@ import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI } from '../s
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 
-
 // In-memory cache
 const cache = new Map<string, any>();
 
@@ -301,7 +300,154 @@ const ChefDashboard: React.FC<{
   );
 });
 
-// مكون لوحة التحكم الرئيسية
+// مكون بطاقة أداء
+const PerformanceCard: React.FC<{ title: string; items: Array<{ name: string; nameEn?: string; performance: number; total: number; completed: number }>; isRtl: boolean; isBranch: boolean }> = React.memo(({ title, items, isRtl, isBranch }) => (
+  <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+    <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 text-gray-800">
+      <BarChart3 className="w-5 h-5 text-gray-600" />
+      {title}
+    </h3>
+    <div className="space-y-3">
+      {items.map((item, index) => (
+        <div key={index} className="flex items-center gap-3">
+          <span className="w-28 text-sm font-medium text-gray-700 truncate">{isRtl ? item.name : item.nameEn || item.name}</span>
+          <div className="flex-1 bg-gray-200 rounded-full h-3">
+            <motion.div
+              className={`h-3 rounded-full ${isBranch ? 'bg-amber-600' : 'bg-green-600'}`}
+              initial={{ width: 0 }}
+              animate={{ width: `${item.performance}%` }}
+              transition={{ duration: 0.8, ease: 'easeOut' }}
+            />
+          </div>
+          <span className="w-20 text-right text-sm text-gray-600">
+            {item.performance.toFixed(0)}% ({item.completed}/{item.total})
+          </span>
+        </div>
+      ))}
+      {items.length === 0 && <p className="text-center text-gray-600 text-sm">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>}
+    </div>
+  </div>
+));
+
+const PendingOrders: React.FC<{ orders: Order[]; isRtl: boolean; language: string; navigate: (path: string) => void }> = React.memo(({ orders, isRtl, language, navigate }) => (
+  <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+    <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 text-gray-800">
+      <Clock className="w-5 h-5 text-gray-600" />
+      {isRtl ? 'أحدث الطلبات المعلقة' : 'Latest Pending Orders'}
+    </h3>
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+      {orders.length === 0 && (
+        <p className="text-center text-gray-600 col-span-full text-sm">{isRtl ? 'لا توجد طلبات معلقة' : 'No pending orders'}</p>
+      )}
+      <AnimatePresence>
+        {orders.map((order, index) => (
+          <motion.div
+            key={order.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ delay: index * 0.1 }}
+            onClick={() => navigate(`/orders/${order.id}`)}
+            className="p-3 bg-gray-50 rounded-lg border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors duration-200 shadow-sm"
+          >
+            <h4 className="font-semibold text-sm text-gray-800 mb-2 truncate">
+              {order.orderNumber} - {isRtl ? order.branchName : order.branchNameEn || order.branchName}
+            </h4>
+            <span
+              className={`px-2 py-1 rounded-full text-xs font-medium ${
+                order.status === 'pending'
+                  ? 'bg-amber-100 text-amber-800'
+                  : order.status === 'approved'
+                  ? 'bg-blue-100 text-blue-800'
+                  : 'bg-purple-100 text-purple-800'
+              }`}
+            >
+              {isRtl
+                ? order.status === 'pending'
+                  ? 'معلق'
+                  : order.status === 'approved'
+                  ? 'معتمد'
+                  : 'قيد الإنتاج'
+                : order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+            </span>
+            <p className="text-sm text-gray-600 mt-2">
+              {isRtl ? 'الإجمالي' : 'Total'}: {order.totalAmount.toLocaleString(language, { style: 'currency', currency: 'SAR' })}
+            </p>
+            <p className="text-sm text-gray-600">{isRtl ? 'المنتجات' : 'Products'}: {order.items.reduce((sum, item) => sum + item.quantity, 0)}</p>
+            <p className="text-xs text-gray-500 mt-2">{isRtl ? 'تاريخ الإنشاء' : 'Created At'}: {order.date}</p>
+          </motion.div>
+        ))}
+      </AnimatePresence>
+    </div>
+  </div>
+));
+
+const StatsGrid: React.FC<{ stats: Stats; isRtl: boolean }> = React.memo(({ stats, isRtl }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 10 }}
+    animate={{ opacity: 1, y: 0 }}
+    transition={{ duration: 0.3 }}
+    className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-4"
+  >
+    <StatsCard
+      title={isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
+      value={stats.totalOrders.toString()}
+      icon={ShoppingCart}
+      color="amber"
+      ariaLabel={isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
+    />
+    <StatsCard
+      title={isRtl ? 'الطلبات المعلقة' : 'Pending Orders'}
+      value={stats.pendingOrders.toString()}
+      icon={AlertCircle}
+      color="red"
+      ariaLabel={isRtl ? 'الطلبات المعلقة' : 'Pending Orders'}
+    />
+    <StatsCard
+      title={isRtl ? 'الطلبات قيد الإنتاج' : 'In Production'}
+      value={stats.inProductionOrders.toString()}
+      icon={BarChart3}
+      color="blue"
+      ariaLabel={isRtl ? 'الطلبات قيد الإنتاج' : 'In Production'}
+    />
+    <StatsCard
+      title={isRtl ? 'الطلبات قيد النقل' : 'In Transit'}
+      value={stats.inTransitOrders.toString()}
+      icon={Package}
+      color="teal"
+      ariaLabel={isRtl ? 'الطلبات قيد النقل' : 'In Transit'}
+    />
+    <StatsCard
+      title={isRtl ? 'الطلبات المسلمة' : 'Delivered Orders'}
+      value={stats.deliveredOrders.toString()}
+      icon={ShoppingCart}
+      color="green"
+      ariaLabel={isRtl ? 'الطلبات المسلمة' : 'Delivered Orders'}
+    />
+    <StatsCard
+      title={isRtl ? 'إجمالي المبيعات' : 'Total Sales'}
+      value={stats.totalSales.toLocaleString(language, { style: 'currency', currency: 'SAR' })}
+      icon={DollarSign}
+      color="purple"
+      ariaLabel={isRtl ? 'إجمالي المبيعات' : 'Total Sales'}
+    />
+    <StatsCard
+      title={isRtl ? 'المرتجعات' : 'Returns'}
+      value={stats.returns.toString()}
+      icon={AlertCircle}
+      color="pink"
+      ariaLabel={isRtl ? 'المرتجعات' : 'Returns'}
+    />
+    <StatsCard
+      title={isRtl ? 'متوسط قيمة الطلب' : 'Avg Order Value'}
+      value={stats.averageOrderValue.toLocaleString(language, { style: 'currency', currency: 'SAR' })}
+      icon={DollarSign}
+      color="amber"
+      ariaLabel={isRtl ? 'متوسط قيمة الطلب' : 'Avg Order Value'}
+    />
+  </motion.div>
+));
+
 export const Dashboard: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
@@ -331,6 +477,30 @@ export const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  const stateRef = useRef<any>({});
+  useOrderNotifications((action: any) => {
+    // Dispatch actions to update state
+    if (action.type === 'ADD_ORDER') {
+      setOrders((prev) => [action.payload, ...prev]);
+    } else if (action.type === 'UPDATE_ORDER_STATUS') {
+      setOrders((prev) => prev.map(o => o.id === action.orderId ? { ...o, status: action.status } : o));
+    } else if (action.type === 'UPDATE_ITEM_STATUS') {
+      setTasks((prev) => prev.map(t => t.id === action.payload.itemId ? { ...t, status: action.payload.status } : t));
+    } else if (action.type === 'TASK_ASSIGNED') {
+      setTasks((prev) => prev.map(t => {
+        const assignment = action.payload.items.find((a: any) => a._id === t.id);
+        return assignment ? { ...t, status: 'assigned' } : t;
+      }));
+    } else if (action.type === 'RETURN_STATUS_UPDATED') {
+      setOrders((prev) => prev.map(o => o.id === action.orderId ? {
+        ...o,
+        returns: o.returns.map(r => r.returnId === action.returnId ? { ...r, status: action.status } : r)
+      } : o));
+    }
+    // Refresh dashboard on events
+    fetchDashboardData(true);
+  }, stateRef, user, addNotification);
+
   // مفتاح الكاش
   const cacheKey = useMemo(() => `${user?.id || user?._id}-${user?.role}-${timeFilter}`, [user, timeFilter]);
 
@@ -341,7 +511,6 @@ export const Dashboard: React.FC = () => {
         const errorMessage = isRtl ? 'الوصول غير مصرح به' : 'Unauthorized access';
         setError(errorMessage);
         setLoading(false);
-        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
         addNotification({
           _id: `error-noUserId-${Date.now()}`,
           type: 'error',
@@ -353,7 +522,7 @@ export const Dashboard: React.FC = () => {
         return;
       }
 
-      if (!forceRefresh && cache.has(cacheKey) ) {
+      if (!forceRefresh && cache.has(cacheKey)) {
         const cachedData = cache.get(cacheKey);
         setOrders(cachedData.orders);
         setTasks(cachedData.tasks);
@@ -573,114 +742,6 @@ export const Dashboard: React.FC = () => {
     fetchDashboardData();
     return () => fetchDashboardData.cancel();
   }, [fetchDashboardData, timeFilter]);
-
-  useEffect(() => {
-    if (!socket || !user || !isConnected) return;
-
-    socket.on('connect_error', () => {
-      const errorMessage = isRtl ? 'خطأ في الاتصال بالسوكت' : 'Socket connection error';
-      addNotification({
-        _id: `socket-error-${Date.now()}`,
-        type: 'error',
-        message: errorMessage,
-        read: false,
-        createdAt: new Date().toLocaleString(language),
-        path: '/dashboard',
-      });
-    });
-
-    socket.on('taskAssigned', (data: any) => {
-      if (!data.taskId || !data.orderId || !data.productName || !data.orderNumber || !data.branchName || !data.quantity || !data.eventId) return;
-
-      if (data.chefId === (user?.id || user?._id) || ['admin', 'production'].includes(user.role)) {
-        fetchDashboardData(true);
-        const notification = {
-          _id: data.taskId,
-          type: 'info' as const,
-          message: isRtl
-            ? `تم تعيين مهمة: ${data.productName} (${data.quantity} ${data.unit}) للطلب ${data.orderNumber} - ${data.branchName}`
-            : `Task assigned: ${data.productName} (${data.quantity} ${data.unit}) for order ${data.orderNumber} - ${data.branchName}`,
-          data: {
-            orderId: data.orderId,
-            taskId: data.taskId,
-            chefId: data.chefId,
-            eventId: data.eventId,
-          },
-          read: false,
-          createdAt: formatDate(new Date(), language),
-          sound: '/sounds/task-assigned.mp3',
-          vibrate: [400, 100, 400],
-          path: '/dashboard',
-        };
-        addNotification(notification);
-        if (user.role === 'chef') {
-          setTasks((prev) => [
-            {
-              id: data.taskId,
-              orderId: data.orderId,
-              orderNumber: data.orderNumber,
-              productName: data.productName,
-              quantity: Number(data.quantity) || 0,
-              unit: data.unit || 'unit',
-              status: data.status || 'assigned',
-              branchName: data.branchName,
-              createdAt: formatDate(new Date(), language),
-            },
-            ...prev.filter((t) => t.id !== data.taskId),
-          ]);
-        }
-      }
-    });
-
-    socket.on('orderCompleted', (data: any) => {
-      if (!data.orderId || !data.orderNumber || !data.branchName || !data.eventId) return;
-
-      if (['admin', 'branch', 'production'].includes(user.role)) {
-        fetchDashboardData(true);
-        addNotification({
-          _id: data._id || crypto.randomUUID(),
-          type: 'success' as const,
-          message: isRtl ? `تم إكمال الطلب ${data.orderNumber} - ${data.branchName}` : `Order completed: ${data.orderNumber} - ${data.branchName}`,
-          data: {
-            orderId: data.orderId,
-            eventId: data.eventId,
-          },
-          read: false,
-          createdAt: formatDate(new Date(), language),
-          sound: '/sounds/order-completed.mp3',
-          vibrate: [400, 100, 400],
-          path: '/dashboard',
-        });
-      }
-    });
-
-    socket.on('itemStatusUpdated', (data: any) => {
-      if (!data.orderId || !data.itemId || !data.status || !data.eventId) return;
-
-      setTasks((prev) =>
-        prev.map((task) =>
-          task.id === data.itemId && task.orderId === data.orderId ? { ...task, status: data.status } : task
-        )
-      );
-      addNotification({
-        _id: data.eventId,
-        type: 'info',
-        message: isRtl
-          ? `تم تحديث حالة المهمة: ${data.productName} للطلب ${data.orderNumber} إلى ${data.status === 'in_progress' ? 'قيد التنفيذ' : 'مكتمل'}`
-          : `Task status updated: ${data.productName} for order ${data.orderNumber} to ${data.status}`,
-        read: false,
-        createdAt: formatDate(new Date(), language),
-        path: '/dashboard',
-      });
-    });
-
-    return () => {
-      socket.off('connect_error');
-      socket.off('taskAssigned');
-      socket.off('orderCompleted');
-      socket.off('itemStatusUpdated');
-    };
-  }, [socket, user, isRtl, language, addNotification, fetchDashboardData, isConnected]);
 
   const handleStartTask = useCallback(
     async (taskId: string, orderId: string) => {
