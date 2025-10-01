@@ -1,17 +1,16 @@
 import React, { useReducer, useEffect, useMemo, useCallback, useState, useRef } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { returnsAPI, notificationsAPI, branchesAPI, inventoryAPI } from '../services/api';
+import { returnsAPI, notificationsAPI, branchesAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Package, AlertCircle, Grid, Table2, Download , Check } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Package, AlertCircle, Grid, Table2, Download } from 'lucide-react';
+import { motion } from 'framer-motion';
 import Filters from '../components/Returns/Filters';
 import ReturnCard from '../components/Returns/ReturnCard';
 import ReturnTable from '../components/Returns/ReturnTable';
@@ -21,10 +20,9 @@ import Pagination from '../components/Returns/Pagination';
 import ReturnModal from '../components/Returns/ReturnModal';
 import ActionModal from '../components/Returns/ActionModal';
 import { formatDate } from '../utils/formatDate';
-import 'react-toastify/dist/ReactToastify.css';
-import 'tailwindcss/tailwind.css';
+import { Return, Branch, ReturnStatus, State, Action } from '../types/types';
 
-const reducer = (state, action) => {
+const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case 'SET_RETURNS':
       return { ...state, returns: action.payload.returns, totalCount: action.payload.totalCount };
@@ -95,11 +93,17 @@ const reducer = (state, action) => {
   }
 };
 
-const initialState = {
+const initialState: State = {
+  orders: [],
+  selectedOrder: null,
+  chefs: [],
+  branches: [],
   returns: [],
   selectedReturn: null,
-  branches: [],
+  isAssignModalOpen: false,
   isViewModalOpen: false,
+  isConfirmDeliveryModalOpen: false,
+  isReturnModalOpen: false,
   isActionModalOpen: false,
   actionType: null,
   actionNotes: '',
@@ -113,6 +117,7 @@ const initialState = {
   loading: true,
   error: '',
   submitting: null,
+  toasts: [],
   socketConnected: false,
   socketError: null,
   viewMode: 'card',
@@ -121,54 +126,64 @@ const initialState = {
 const RETURNS_PER_PAGE_CARD = 10;
 const RETURNS_PER_PAGE_TABLE = 50;
 
-const AdminReturns = () => {
-  const { t, language } = useLanguage();
+export const AdminReturns: React.FC = () => {
+  const { language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
   const { socket } = useSocket();
   const { addNotification } = useNotifications();
-  const queryClient = useQueryClient();
   const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
+  const [hasInteracted, setHasInteracted] = useState(false);
   const [branchesLoading, setBranchesLoading] = useState(true);
 
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
 
-  const toastOptions = useMemo(
+  const playNotificationSound = useCallback(() => {
+    if (hasInteracted) {
+      const audio = new Audio('/sounds/notification.mp3');
+      audio.play().catch((err) => console.error('Audio play failed:', err));
+    }
+  }, [hasInteracted]);
+
+  useEffect(() => {
+    const handleUserInteraction = () => {
+      setHasInteracted(true);
+      const audio = new Audio('/sounds/notification.mp3');
+      audio.play()
+        .then(() => {
+          audio.pause();
+          audio.currentTime = 0;
+        })
+        .catch((err) => console.error('Audio context initialization failed:', err));
+      document.removeEventListener('click', handleUserInteraction);
+    };
+    document.addEventListener('click', handleUserInteraction, { once: true });
+    return () => document.removeEventListener('click', handleUserInteraction);
+  }, []);
+
+  const STATUS_COLORS = useMemo(
     () => ({
-      position: isRtl ? 'top-left' : 'top-right',
-      autoClose: 3000,
-      hideProgressBar: false,
-      closeOnClick: true,
-      pauseOnHover: true,
-      draggable: true,
-      className: 'bg-white text-gray-800 rounded-lg shadow-lg border border-gray-200 p-3',
-      progressClassName: 'bg-amber-500',
+      pending_approval: { color: 'bg-amber-100 text-amber-800', icon: AlertCircle, label: isRtl ? 'في انتظار الموافقة' : 'Pending Approval' },
+      approved: { color: 'bg-green-100 text-green-800', icon: AlertCircle, label: isRtl ? 'تمت الموافقة' : 'Approved' },
+      rejected: { color: 'bg-red-100 text-red-800', icon: AlertCircle, label: isRtl ? 'مرفوض' : 'Rejected' },
+      processed: { color: 'bg-blue-100 text-blue-800', icon: AlertCircle, label: isRtl ? 'تمت المعالجة' : 'Processed' },
     }),
     [isRtl]
   );
 
-  const STATUS_COLORS = useMemo(
-    () => ({
-      pending: { color: 'bg-amber-100 text-amber-800', icon: AlertCircle, label: t('returns.status.pending') },
-      approved: { color: 'bg-green-100 text-green-800', icon: Check, label: t('returns.status.approved') },
-      rejected: { color: 'bg-red-100 text-red-800', icon: AlertCircle, label: t('returns.status.rejected') },
-      processed: { color: 'bg-blue-100 text-blue-800', icon: Check, label: t('returns.status.processed') },
-    }),
-    [t]
-  );
-
   const getStatusInfo = useCallback(
-    (status) => STATUS_COLORS[status] || { color: 'bg-gray-100 text-gray-800', icon: AlertCircle, label: t('returns.status.unknown') },
-    [STATUS_COLORS, t]
+    (status: ReturnStatus) => STATUS_COLORS[status] || { color: 'bg-gray-100 text-gray-800', icon: AlertCircle, label: isRtl ? 'غير معروف' : 'Unknown' },
+    [STATUS_COLORS, isRtl]
   );
 
-  const arrayBufferToBase64 = (buffer) => {
+  const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
     let binary = '';
     const bytes = new Uint8Array(buffer);
-    for (let i = 0; i < bytes.byteLength; i++) {
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
       binary += String.fromCharCode(bytes[i]);
     }
     return window.btoa(binary);
@@ -176,25 +191,25 @@ const AdminReturns = () => {
 
   const exportToExcel = useCallback(() => {
     const exportData = state.returns.map((ret) => ({
-      [t('returns.return_number')]: ret.returnNumber,
-      [t('returns.order_number')]: ret.order.orderNumber,
-      [t('returns.status_label')]: getStatusInfo(ret.status).label,
-      [t('returns.date')]: formatDate(ret.createdAt, language),
-      [t('returns.items_count')]: ret.items.length,
-      [t('returns.products')]: ret.items.map((item) => `${item.productName} (${item.quantity})`).join(', '),
-      [t('returns.total_quantity')]: ret.items.reduce((sum, item) => sum + item.quantity, 0),
-      [t('returns.branch')]: ret.branch.name,
-      [t('returns.total_amount')]: `${ret.order.totalAmount.toFixed(2)} ${t('currency')}`,
-      [t('returns.notes_label')]: ret.notes || t('returns.no_notes'),
-      [t('returns.review_notes')]: ret.reviewNotes || t('returns.no_notes'),
+      [isRtl ? 'رقم الإرجاع' : 'Return Number']: ret.returnNumber,
+      [isRtl ? 'رقم الطلب' : 'Order Number']: ret.order.orderNumber,
+      [isRtl ? 'الحالة' : 'Status']: getStatusInfo(ret.status).label,
+      [isRtl ? 'التاريخ' : 'Date']: formatDate(ret.createdAt, language),
+      [isRtl ? 'عدد العناصر' : 'Items Count']: ret.items.length,
+      [isRtl ? 'المنتجات' : 'Products']: ret.items.map((item) => `${item.productName} (${item.quantity})`).join(', '),
+      [isRtl ? 'الكمية الإجمالية' : 'Total Quantity']: ret.items.reduce((sum, item) => sum + item.quantity, 0),
+      [isRtl ? 'الفرع' : 'Branch']: ret.branch.name,
+      [isRtl ? 'الإجمالي' : 'Total Amount']: `${ret.order.totalAmount.toFixed(2)} ${isRtl ? 'ريال' : 'SAR'}`,
+      [isRtl ? 'ملاحظات' : 'Notes']: ret.notes || (isRtl ? 'لا توجد ملاحظات' : 'No notes'),
+      [isRtl ? 'ملاحظات المراجعة' : 'Review Notes']: ret.reviewNotes || (isRtl ? 'لا توجد ملاحظات' : 'No notes'),
     }));
     const ws = XLSX.utils.json_to_sheet(isRtl ? exportData.map((row) => Object.fromEntries(Object.entries(row).reverse())) : exportData);
     ws['!cols'] = Object.keys(exportData[0] || {}).map(() => ({ wpx: 120 }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Returns');
     XLSX.writeFile(wb, `Returns_${new Date().toISOString().split('T')[0]}.xlsx`);
-    toast.success(t('returns.export_success'), toastOptions);
-  }, [state.returns, isRtl, getStatusInfo, language, t, toastOptions]);
+    toast.success(isRtl ? 'تم تصدير البيانات بنجاح' : 'Data exported successfully', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+  }, [state.returns, isRtl, getStatusInfo, language]);
 
   const exportToPDF = useCallback(async () => {
     try {
@@ -211,17 +226,17 @@ const AdminReturns = () => {
       doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
       doc.setFont(fontName);
       const headers = [
-        t('returns.return_number'),
-        t('returns.order_number'),
-        t('returns.status_label'),
-        t('returns.date'),
-        t('returns.items_count'),
-        t('returns.products'),
-        t('returns.total_quantity'),
-        t('returns.branch'),
-        t('returns.total_amount'),
-        t('returns.notes_label'),
-        t('returns.review_notes'),
+        isRtl ? 'رقم الإرجاع' : 'Return Number',
+        isRtl ? 'رقم الطلب' : 'Order Number',
+        isRtl ? 'الحالة' : 'Status',
+        isRtl ? 'التاريخ' : 'Date',
+        isRtl ? 'عدد العناصر' : 'Items Count',
+        isRtl ? 'المنتجات' : 'Products',
+        isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
+        isRtl ? 'الفرع' : 'Branch',
+        isRtl ? 'الإجمالي' : 'Total Amount',
+        isRtl ? 'ملاحظات' : 'Notes',
+        isRtl ? 'ملاحظات المراجعة' : 'Review Notes',
       ];
       const data = state.returns.map((ret) => [
         ret.returnNumber,
@@ -232,9 +247,9 @@ const AdminReturns = () => {
         ret.items.map((item) => `${item.productName} (${item.quantity})`).join(', '),
         ret.items.reduce((sum, item) => sum + item.quantity, 0).toString(),
         ret.branch.name,
-        `${ret.order.totalAmount.toFixed(2)} ${t('currency')}`,
-        ret.notes || t('returns.no_notes'),
-        ret.reviewNotes || t('returns.no_notes'),
+        `${ret.order.totalAmount.toFixed(2)} ${isRtl ? 'ريال' : 'SAR'}`,
+        ret.notes || (isRtl ? 'لا توجد ملاحظات' : 'No notes'),
+        ret.reviewNotes || (isRtl ? 'لا توجد ملاحظات' : 'No notes'),
       ]);
       const finalHeaders = isRtl ? headers.reverse() : headers;
       const finalData = isRtl ? data.map((row) => row.reverse()) : data;
@@ -248,41 +263,49 @@ const AdminReturns = () => {
         margin: { top: 20 },
         didDrawPage: (data) => {
           doc.setFont(fontName);
-          doc.text(t('returns.title'), isRtl ? doc.internal.pageSize.width - data.settings.margin.right : data.settings.margin.left, 10, {
+          doc.text(isRtl ? 'إدارة المرتجعات' : 'Returns Management', isRtl ? doc.internal.pageSize.width - data.settings.margin.right : data.settings.margin.left, 10, {
             align: isRtl ? 'right' : 'left',
           });
         },
       });
       doc.save(`Returns_${new Date().toISOString().split('T')[0]}.pdf`);
-      toast.success(t('returns.pdf_export_success'), toastOptions);
+      toast.success(isRtl ? 'تم تصدير PDF بنجاح' : 'PDF exported successfully', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
     } catch (err) {
       console.error('PDF export error:', err);
-      toast.error(t('errors.pdf_export'), toastOptions);
+      toast.error(isRtl ? 'خطأ في تصدير PDF' : 'PDF export error', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
     }
-  }, [state.returns, isRtl, getStatusInfo, language, t, toastOptions]);
+  }, [state.returns, isRtl, getStatusInfo, language]);
 
-  const { data: branchesData, isLoading: isBranchesLoading, error: branchesError } = useQuery({
-    queryKey: ['branches'],
-    queryFn: async () => {
+  const fetchBranches = useCallback(async () => {
+    setBranchesLoading(true);
+    try {
       const response = await branchesAPI.getAll();
-      return response.map((branch) => ({
-        _id: branch._id || 'unknown',
-        name: isRtl ? branch.name : branch.nameEn || t('branches.unknown'),
-      }));
-    },
-    onError: (err) => {
-      toast.error(t('errors.fetch_branches'), toastOptions);
-    },
-    onSuccess: (data) => {
-      dispatch({ type: 'SET_BRANCHES', payload: data });
+      const branches = Array.isArray(response)
+        ? response.map((branch: any) => ({
+            _id: branch._id || 'unknown',
+            name: branch.name || (isRtl ? 'فرع غير معروف' : 'Unknown branch'),
+          }))
+        : [];
+      dispatch({ type: 'SET_BRANCHES', payload: branches });
+      if (branches.length === 0) {
+        toast.warn(isRtl ? 'لا توجد فروع متاحة' : 'No branches available', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+      }
+    } catch (err: any) {
+      console.error('Error fetching branches:', err);
+      toast.error(isRtl ? 'خطأ في جلب الفروع' : 'Error fetching branches', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+    } finally {
       setBranchesLoading(false);
-    },
-  });
+    }
+  }, [isRtl]);
 
-  const { data: returnsData, isLoading, error } = useQuery({
-    queryKey: ['returns', state.filterStatus, state.filterBranch, state.searchQuery, state.sortBy, state.sortOrder, state.currentPage, state.viewMode],
-    queryFn: async () => {
-      if (!user) throw new Error(t('errors.unauthorized_access'));
+  const fetchData = useCallback(async () => {
+    if (!user) {
+      dispatch({ type: 'SET_ERROR', payload: isRtl ? 'الوصول غير مصرح به' : 'Unauthorized access' });
+      dispatch({ type: 'SET_LOADING', payload: false });
+      return;
+    }
+    dispatch({ type: 'SET_LOADING', payload: true });
+    try {
       const query = {
         status: state.filterStatus,
         branch: state.filterBranch,
@@ -293,69 +316,84 @@ const AdminReturns = () => {
         limit: state.viewMode === 'table' ? RETURNS_PER_PAGE_TABLE : RETURNS_PER_PAGE_CARD,
       };
       const { returns: returnsData, total } = await returnsAPI.getAll(query);
-      if (!Array.isArray(returnsData)) throw new Error('Invalid returns data format');
-      return {
-        returns: returnsData.map((ret) => ({
-          id: ret._id || 'unknown',
-          returnNumber: ret.returnNumber || t('returns.unknown'),
-          order: {
-            id: ret.order?._id || 'unknown',
-            orderNumber: ret.order?.orderNumber || t('orders.unknown'),
-            totalAmount: Number(ret.order?.totalAmount) || 0,
-            createdAt: ret.order?.createdAt || new Date().toISOString(),
-            branch: ret.order?.branch?._id || 'unknown',
-            branchName: isRtl ? ret.order?.branch?.name : ret.order?.branch?.nameEn || t('branches.unknown'),
-          },
-          items: Array.isArray(ret.items)
-            ? ret.items.map((item) => ({
-                itemId: item.itemId || item._id || 'unknown',
-                productId: item.product?._id || 'unknown',
-                productName: isRtl ? item.product?.name : item.product?.nameEn || t('products.unknown'),
-                quantity: Number(item.quantity) || 0,
-                price: Number(item.product?.price) || 0,
-                reason: isRtl ? item.reason : item.reasonEn || item.reason || t('returns.reason.unknown'),
-                status: item.status || 'pending',
-                reviewNotes: item.reviewNotes || '',
-              }))
-            : [],
-          status: ret.status || 'pending',
-          date: formatDate(ret.createdAt, language),
-          createdAt: ret.createdAt || new Date().toISOString(),
-          notes: isRtl ? ret.notes : ret.notesEn || ret.notes || '',
-          reviewNotes: isRtl ? ret.reviewNotes : ret.reviewNotesEn || ret.reviewNotes || '',
-          branch: {
-            _id: ret.branch?._id || 'unknown',
-            name: isRtl ? ret.branch?.name : ret.branch?.nameEn || t('branches.unknown'),
-          },
-          createdBy: {
-            _id: ret.createdBy?._id || 'unknown',
-            username: ret.createdBy?.username || t('users.unknown'),
-          },
-          reviewedBy: ret.reviewedBy
-            ? { _id: ret.reviewedBy._id, username: ret.reviewedBy.username || t('users.unknown') }
-            : undefined,
-          statusHistory: Array.isArray(ret.statusHistory) ? ret.statusHistory : [],
-        })),
-        total,
-      };
-    },
-    onSuccess: (data) => {
-      dispatch({ type: 'SET_RETURNS', payload: { returns: data.returns, totalCount: data.total } });
+      if (!Array.isArray(returnsData)) {
+        throw new Error('Invalid returns data format');
+      }
+      const formattedReturns = returnsData.map((ret: any) => ({
+        id: ret._id || 'unknown',
+        returnNumber: ret.returnNumber || (isRtl ? 'رقم غير معروف' : 'Unknown number'),
+        order: {
+          id: ret.order?._id || 'unknown',
+          orderNumber: ret.order?.orderNumber || (isRtl ? 'طلب غير معروف' : 'Unknown order'),
+          totalAmount: Number(ret.order?.totalAmount) || 0,
+          createdAt: ret.order?.createdAt || new Date().toISOString(),
+          branch: ret.order?.branch?._id || 'unknown',
+          branchName: ret.order?.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown branch'),
+        },
+        items: Array.isArray(ret.items)
+          ? ret.items.map((item: any) => ({
+              itemId: item.itemId || item._id || 'unknown',
+              productId: item.product?._id || 'unknown',
+              productName: item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown product'),
+              quantity: Number(item.quantity) || 0,
+              price: Number(item.product?.price) || 0,
+              reason: item.reason || (isRtl ? 'سبب غير معروف' : 'Unknown reason'),
+              status: item.status || ReturnStatus.PendingApproval,
+              reviewNotes: item.reviewNotes || '',
+            }))
+          : [],
+        status: ret.status === 'pending' ? ReturnStatus.PendingApproval : ret.status || ReturnStatus.PendingApproval,
+        date: formatDate(ret.createdAt, language),
+        createdAt: ret.createdAt || new Date().toISOString(),
+        notes: ret.notes || '',
+        reviewNotes: ret.reviewNotes || '',
+        branch: {
+          _id: ret.branch?._id || 'unknown',
+          name: ret.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown branch'),
+        },
+        createdBy: {
+          _id: ret.createdBy?._id || 'unknown',
+          username: ret.createdBy?.username || (isRtl ? 'مستخدم غير معروف' : 'Unknown user'),
+        },
+        reviewedBy: ret.reviewedBy
+          ? { _id: ret.reviewedBy._id, username: ret.reviewedBy.username || (isRtl ? 'مستخدم غير معروف' : 'Unknown user') }
+          : undefined,
+        statusHistory: Array.isArray(ret.statusHistory) ? ret.statusHistory : [],
+      }));
+      dispatch({ type: 'SET_RETURNS', payload: { returns: formattedReturns, totalCount: total } });
       dispatch({ type: 'SET_ERROR', payload: '' });
-      dispatch({ type: 'SET_LOADING', payload: false });
-    },
-    onError: (err) => {
+    } catch (err: any) {
       const errorMessage =
         err.status === 403
-          ? t('errors.unauthorized_access')
+          ? isRtl ? 'الوصول غير مصرح به' : 'Unauthorized access'
           : err.status === 404
-          ? t('errors.return_not_found')
-          : err.message || t('errors.fetch_returns');
+          ? isRtl ? 'لم يتم العثور على المرتجع' : 'Return not found'
+          : err.message || (isRtl ? 'خطأ في جلب المرتجعات' : 'Error fetching returns');
       dispatch({ type: 'SET_ERROR', payload: errorMessage });
+      toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+    } finally {
       dispatch({ type: 'SET_LOADING', payload: false });
-      toast.error(errorMessage, toastOptions);
+    }
+  }, [state.filterStatus, state.filterBranch, state.searchQuery, state.sortBy, state.sortOrder, state.currentPage, state.viewMode, user, isRtl, language]);
+
+  const debouncedFetchData = useCallback(debounce(fetchData, 300), [fetchData]);
+
+  const handleSearchChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const value = e.target.value || '';
+      dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
     },
-  });
+    []
+  );
+
+  useEffect(() => {
+    fetchBranches();
+  }, [fetchBranches]);
+
+  useEffect(() => {
+    debouncedFetchData();
+    return () => debouncedFetchData.cancel();
+  }, [state.filterStatus, state.filterBranch, state.searchQuery, state.sortBy, state.sortOrder, state.currentPage, state.viewMode, debouncedFetchData]);
 
   useEffect(() => {
     if (!socket || !user) return;
@@ -367,18 +405,16 @@ const AdminReturns = () => {
       });
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
       dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
-      toast.info(t('socket.connected'), toastOptions);
     };
     const handleDisconnect = () => {
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
-      dispatch({ type: 'SET_SOCKET_ERROR', payload: t('socket.disconnected') });
-      toast.warn(t('socket.disconnected'), toastOptions);
+      dispatch({ type: 'SET_SOCKET_ERROR', payload: isRtl ? 'تم قطع الاتصال' : 'Disconnected' });
     };
-    const handleConnectError = (error) => {
-      dispatch({ type: 'SET_SOCKET_ERROR', payload: t('socket.connect_error', { message: error.message }) });
-      toast.error(t('socket.connect_error', { message: error.message }), toastOptions);
+    const handleConnectError = (error: Error) => {
+      dispatch({ type: 'SET_SOCKET_ERROR', payload: isRtl ? `خطأ في الاتصال: ${error.message}` : `Connection error: ${error.message}` });
+      toast.error(isRtl ? `خطأ في الاتصال: ${error.message}` : `Connection error: ${error.message}`, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
     };
-    const handleReturnCreated = (newReturn) => {
+    const handleReturnCreated = (newReturn: any) => {
       const currentState = stateRef.current;
       if (currentState.filterStatus && newReturn.status !== currentState.filterStatus) return;
       if (currentState.filterBranch && newReturn.branch?._id !== currentState.filterBranch) return;
@@ -389,44 +425,44 @@ const AdminReturns = () => {
       ) {
         return;
       }
-      const mappedReturn = {
+      const mappedReturn: Return = {
         id: newReturn._id || 'unknown',
-        returnNumber: newReturn.returnNumber || t('returns.unknown'),
+        returnNumber: newReturn.returnNumber || (isRtl ? 'رقم غير معروف' : 'Unknown number'),
         order: {
           id: newReturn.order?._id || 'unknown',
-          orderNumber: newReturn.order?.orderNumber || t('orders.unknown'),
+          orderNumber: newReturn.order?.orderNumber || (isRtl ? 'طلب غير معروف' : 'Unknown order'),
           totalAmount: Number(newReturn.order?.totalAmount) || 0,
           createdAt: newReturn.order?.createdAt || new Date().toISOString(),
           branch: newReturn.order?.branch?._id || 'unknown',
-          branchName: isRtl ? newReturn.order?.branch?.name : newReturn.order?.branch?.nameEn || t('branches.unknown'),
+          branchName: newReturn.order?.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown branch'),
         },
         items: Array.isArray(newReturn.items)
-          ? newReturn.items.map((item) => ({
+          ? newReturn.items.map((item: any) => ({
               itemId: item.itemId || item._id || 'unknown',
               productId: item.product?._id || 'unknown',
-              productName: isRtl ? item.product?.name : item.product?.nameEn || t('products.unknown'),
+              productName: item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown product'),
               quantity: Number(item.quantity) || 0,
               price: Number(item.product?.price) || 0,
-              reason: isRtl ? item.reason : item.reasonEn || item.reason || t('returns.reason.unknown'),
-              status: item.status || 'pending',
+              reason: item.reason || (isRtl ? 'سبب غير معروف' : 'Unknown reason'),
+              status: item.status || ReturnStatus.PendingApproval,
               reviewNotes: item.reviewNotes || '',
             }))
           : [],
-        status: newReturn.status || 'pending',
+        status: newReturn.status === 'pending' ? ReturnStatus.PendingApproval : newReturn.status || ReturnStatus.PendingApproval,
         date: formatDate(newReturn.createdAt, language),
         createdAt: newReturn.createdAt || new Date().toISOString(),
-        notes: isRtl ? newReturn.notes : newReturn.notesEn || newReturn.notes || '',
-        reviewNotes: isRtl ? newReturn.reviewNotes : newReturn.reviewNotesEn || newReturn.reviewNotes || '',
+        notes: newReturn.notes || '',
+        reviewNotes: newReturn.reviewNotes || '',
         branch: {
           _id: newReturn.branch?._id || 'unknown',
-          name: isRtl ? newReturn.branch?.name : newReturn.branch?.nameEn || t('branches.unknown'),
+          name: newReturn.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown branch'),
         },
         createdBy: {
           _id: newReturn.createdBy?._id || 'unknown',
-          username: newReturn.createdBy?.username || t('users.unknown'),
+          username: newReturn.createdBy?.username || (isRtl ? 'مستخدم غير معروف' : 'Unknown user'),
         },
         reviewedBy: newReturn.reviewedBy
-          ? { _id: newReturn.reviewedBy._id, username: newReturn.reviewedBy.username || t('users.unknown') }
+          ? { _id: newReturn.reviewedBy._id, username: newReturn.reviewedBy.username || (isRtl ? 'مستخدم غير معروف' : 'Unknown user') }
           : undefined,
         statusHistory: Array.isArray(newReturn.statusHistory) ? newReturn.statusHistory : [],
       };
@@ -435,18 +471,31 @@ const AdminReturns = () => {
         addNotification({
           _id: `return-${newReturn._id}-${Date.now()}`,
           type: 'success',
-          message: t('returns.new_return_notification', { returnNumber: newReturn.returnNumber }),
+          message: isRtl ? `تم إنشاء مرتجع جديد: ${newReturn.returnNumber}` : `New return created: ${newReturn.returnNumber}`,
           data: { returnId: newReturn._id, orderId: newReturn.order?._id },
           read: false,
           createdAt: newReturn.createdAt,
         });
+        playNotificationSound();
       }
     };
-    const handleReturnStatusUpdated = ({ returnId, status, reviewNotes, branchId, adjustedTotal }) => {
+    const handleReturnStatusUpdated = ({
+      returnId,
+      status,
+      reviewNotes,
+      branchId,
+      adjustedTotal,
+    }: {
+      returnId: string;
+      status: ReturnStatus;
+      reviewNotes?: string;
+      branchId: string;
+      adjustedTotal?: number;
+    }) => {
       dispatch({
         type: 'UPDATE_RETURN_STATUS',
         returnId,
-        status,
+        status: status === 'pending' ? ReturnStatus.PendingApproval : status,
         reviewNotes,
         adjustedTotal,
       });
@@ -454,13 +503,16 @@ const AdminReturns = () => {
         addNotification({
           _id: `return-status-${returnId}-${Date.now()}`,
           type: 'info',
-          message: t('socket.return_status_updated', { status: getStatusInfo(status).label, returnNumber: state.returns.find((r) => r.id === returnId)?.returnNumber || returnId }),
+          message: isRtl
+            ? `تم تحديث حالة المرتجع إلى ${getStatusInfo(status).label}: ${state.returns.find((r) => r.id === returnId)?.returnNumber || returnId}`
+            : `Return status updated to ${getStatusInfo(status).label}: ${state.returns.find((r) => r.id === returnId)?.returnNumber || returnId}`,
           data: { returnId },
           read: false,
           createdAt: new Date().toISOString(),
         });
+        playNotificationSound();
       }
-      if (status === 'approved') {
+      if (status === 'rejected') {
         socket.emit('inventoryUpdated', { branchId });
       }
     };
@@ -470,28 +522,28 @@ const AdminReturns = () => {
     socket.on('returnCreated', handleReturnCreated);
     socket.on('returnStatusUpdated', handleReturnStatusUpdated);
     socket.on('reconnect_attempt', () => {
-      dispatch({ type: 'SET_SOCKET_ERROR', payload: t('socket.reconnecting') });
+      dispatch({ type: 'SET_SOCKET_ERROR', payload: isRtl ? 'جاري إعادة الاتصال' : 'Reconnecting' });
     });
     return () => {
-      socket.off('connect');
-      socket.off('disconnect');
-      socket.off('connect_error');
-      socket.off('returnCreated');
-      socket.off('returnStatusUpdated');
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('connect_error', handleConnectError);
+      socket.off('returnCreated', handleReturnCreated);
+      socket.off('returnStatusUpdated', handleReturnStatusUpdated);
       socket.off('reconnect_attempt');
     };
-  }, [socket, user, addNotification, getStatusInfo, state.returns, t, toastOptions]);
+  }, [socket, user, isRtl, addNotification, playNotificationSound, state.returns, getStatusInfo, language]);
 
-  const handlePageChange = useCallback((page) => {
+  const handlePageChange = useCallback((page: number) => {
     dispatch({ type: 'SET_PAGE', payload: page });
   }, []);
 
-  const viewReturn = useCallback((ret) => {
+  const viewReturn = useCallback((ret: Return) => {
     dispatch({ type: 'SET_SELECTED_RETURN', payload: ret });
     dispatch({ type: 'SET_VIEW_MODAL', isOpen: true });
   }, []);
 
-  const openActionModal = useCallback((ret, type) => {
+  const openActionModal = useCallback((ret: Return, type: 'approve' | 'reject') => {
     dispatch({ type: 'SET_SELECTED_RETURN', payload: ret });
     dispatch({ type: 'SET_ACTION_TYPE', payload: type });
     dispatch({ type: 'SET_ACTION_MODAL', isOpen: true });
@@ -512,21 +564,10 @@ const AdminReturns = () => {
           reviewNotes: state.actionNotes || undefined,
         };
         const response = await returnsAPI.updateReturnStatus(state.selectedReturn.id, data);
-        if (state.actionType === 'approved') {
-          await inventoryAPI.processReturnItems(state.selectedReturn.id, {
-            branchId: state.selectedReturn.branch._id,
-            items: state.selectedReturn.items.map((item) => ({
-              productId: item.productId,
-              quantity: item.quantity,
-              status: state.actionType,
-              reviewNotes: state.actionNotes,
-            })),
-          });
-        }
         dispatch({
           type: 'UPDATE_RETURN_STATUS',
           returnId: state.selectedReturn.id,
-          status: state.actionType,
+          status: state.actionType === 'approve' ? ReturnStatus.Approved : ReturnStatus.Rejected,
           reviewNotes: state.actionNotes,
           adjustedTotal: response.adjustedTotal,
         });
@@ -540,189 +581,136 @@ const AdminReturns = () => {
         await notificationsAPI.create({
           user: user._id,
           type: 'return_status_updated',
-          message: t('socket.return_status_updated', { status: t(`returns.status.${state.actionType}`), returnNumber: state.selectedReturn.returnNumber }),
+          message: isRtl
+            ? `تم تحديث حالة المرتجع إلى ${state.actionType === 'approve' ? 'تمت الموافقة' : 'مرفوض'}: ${state.selectedReturn.returnNumber}`
+            : `Return status updated to ${state.actionType === 'approve' ? 'approved' : 'rejected'}: ${state.selectedReturn.returnNumber}`,
           data: { returnId: state.selectedReturn.id, orderId: state.selectedReturn.order.id },
         });
-        toast.success(t(`returns.${state.actionType}_success`), toastOptions);
+        toast.success(isRtl ? `تم ${state.actionType === 'approve' ? 'الموافقة' : 'الرفض'} بنجاح` : `${state.actionType === 'approve' ? 'Approval' : 'Rejection'} successful`, {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 3000,
+        });
         dispatch({ type: 'SET_ACTION_MODAL', isOpen: false });
         dispatch({ type: 'SET_ACTION_TYPE', payload: null });
         dispatch({ type: 'SET_ACTION_NOTES', payload: '' });
         dispatch({ type: 'SET_SELECTED_RETURN', payload: null });
-      } catch (err) {
-        const errorMessage = err.message || t(`errors.${state.actionType}_return`);
+      } catch (err: any) {
+        const errorMessage = err.message || (isRtl ? `فشل ${state.actionType === 'approve' ? 'الموافقة' : 'الرفض'} على المرتجع` : `Failed to ${state.actionType === 'approve' ? 'approve' : 'reject'} return`);
         dispatch({ type: 'SET_ERROR', payload: errorMessage });
-        toast.error(errorMessage, toastOptions);
+        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     }, 500),
-    [state.selectedReturn, state.actionType, state.actionNotes, user, socket, t, toastOptions]
+    [state.selectedReturn, state.actionType, state.actionNotes, user, isRtl, socket]
   );
-
-  const handleSearchChange = useCallback((e) => {
-    const value = e.target.value || '';
-    dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
-  }, []);
-
-  const handleFilterStatusChange = useCallback((value) => {
-    dispatch({ type: 'SET_FILTER_STATUS', payload: value });
-  }, []);
-
-  const handleFilterBranchChange = useCallback((value) => {
-    dispatch({ type: 'SET_FILTER_BRANCH', payload: value });
-  }, []);
-
-  const handleSortChange = useCallback((by, order) => {
-    dispatch({ type: 'SET_SORT', by, order });
-  }, []);
-
-  const handleViewModeToggle = useCallback(() => {
-    dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' });
-  }, [state.viewMode]);
 
   const totalPages = useMemo(() => {
     return Math.ceil(state.totalCount / (state.viewMode === 'table' ? RETURNS_PER_PAGE_TABLE : RETURNS_PER_PAGE_CARD));
   }, [state.totalCount, state.viewMode]);
 
-  const paginatedReturns = useMemo(() => {
-    const start = (state.currentPage - 1) * (state.viewMode === 'table' ? RETURNS_PER_PAGE_TABLE : RETURNS_PER_PAGE_CARD);
-    const end = start + (state.viewMode === 'table' ? RETURNS_PER_PAGE_TABLE : RETURNS_PER_PAGE_CARD);
-    return state.returns.slice(start, end);
-  }, [state.returns, state.currentPage, state.viewMode]);
+  const handleViewModeToggle = useCallback(() => {
+    dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' });
+  }, [state.viewMode]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-      className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen bg-gray-50"
-      dir={isRtl ? 'rtl' : 'ltr'}
-    >
-      <AnimatePresence>
-        {isLoading || branchesLoading ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-            className="min-h-screen flex items-center justify-center"
+    <div className=" mx-auto px-4 py-8 min-h-screen " dir={isRtl ? 'rtl' : 'ltr'}>
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <Package className="w-8 h-8 text-teal-600" />
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">{isRtl ? 'إدارة المرتجعات' : 'Returns Management'}</h1>
+            <p className="text-sm text-gray-600">{isRtl ? 'إدارة ومراجعة طلبات المرتجعات بكفاءة' : 'Manage and review return requests efficiently'}</p>
+          </div>
+        </div>
+        <div className={`flex ${isRtl ? 'flex-row-reverse' : 'flex-row'} gap-2 flex-wrap`}>
+          <button
+            onClick={handleViewModeToggle}
+            className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 text-white rounded-full text-sm hover:bg-teal-700 transition-colors"
+            aria-label={isRtl ? (state.viewMode === 'card' ? 'عرض الجدول' : 'عرض البطاقات') : (state.viewMode === 'card' ? 'Table View' : 'Card View')}
           >
-            <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-amber-600"></div>
-          </motion.div>
-        ) : error || branchesError ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="flex justify-center"
+            {state.viewMode === 'card' ? <Table2 className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
+            {isRtl ? (state.viewMode === 'card' ? 'جدوال' : 'بطاقات') : (state.viewMode === 'card' ? 'Table' : 'Cards')}
+          </button>
+          <button
+            onClick={exportToExcel}
+            className="flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded-full text-sm hover:bg-green-700 transition-colors"
+            aria-label={isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
           >
-            <div className="p-6 max-w-md text-center bg-red-50 shadow-lg rounded-lg border border-red-200">
-              <div className={`flex items-center justify-center gap-3 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <AlertCircle className="w-8 h-8 text-red-600" />
-                <p className="text-lg font-semibold text-red-600">{error || branchesError?.message || t('errors.fetch_returns')}</p>
-              </div>
-              <button
-                onClick={() => queryClient.invalidateQueries(['returns', 'branches'])}
-                className="bg-amber-600 hover:bg-amber-700 text-white rounded-full px-6 py-2 transition-colors duration-200"
-                aria-label={t('common.retry')}
-              >
-                {t('common.retry')}
-              </button>
-            </div>
-          </motion.div>
-        ) : (
-          <div className="flex flex-col gap-6">
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
-              className="sticky top-0 z-10 bg-gray-50 py-4 border-b border-gray-100"
-            >
-              <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 ${isRtl ? 'sm:flex-row-reverse' : ''}`}>
-                <div className="flex items-center gap-3">
-                  <Package className="w-8 h-8 text-teal-600" />
-                  <div>
-                    <h1 className="text-2xl font-bold text-gray-800">{t('returns.title')}</h1>
-                    <p className="text-sm text-gray-600">{t('returns.subtitle_admin')}</p>
-                  </div>
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  <button
-                    onClick={handleViewModeToggle}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-teal-600 text-white rounded-full text-sm hover:bg-teal-700 transition-colors"
-                    aria-label={t(`returns.${state.viewMode === 'card' ? 'table_view' : 'card_view'}`)}
-                  >
-                    {state.viewMode === 'card' ? <Table2 className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
-                    {t(`returns.${state.viewMode === 'card' ? 'table' : 'cards'}`)}
-                  </button>
-                  <button
-                    onClick={exportToExcel}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded-full text-sm hover:bg-green-700 transition-colors"
-                    aria-label={t('returns.export_excel')}
-                  >
-                    <Download className="w-4 h-4" />
-                    {t('returns.excel')}
-                  </button>
-                  <button
-                    onClick={exportToPDF}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-full text-sm hover:bg-blue-700 transition-colors"
-                    aria-label={t('returns.export_pdf')}
-                  >
-                    <Download className="w-4 h-4" />
-                    {t('returns.pdf')}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
-            >
-              <Filters
-                filterStatus={state.filterStatus}
-                filterBranch={state.filterBranch}
-                searchQuery={state.searchQuery}
-                sortBy={state.sortBy}
-                sortOrder={state.sortOrder}
-                branches={state.branches}
-                onFilterStatusChange={handleFilterStatusChange}
-                onFilterBranchChange={handleFilterBranchChange}
-                onSearchChange={handleSearchChange}
-                onSortChange={handleSortChange}
-                isRtl={isRtl}
-                t={t}
-              />
-              <div className="text-sm text-center text-gray-600 mt-3">{t('returns.returns_count', { count: state.returns.length })}</div>
-            </motion.div>
-            <div className="flex flex-col gap-4">
-              {paginatedReturns.length === 0 ? (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <div className="p-6 text-center bg-white shadow-lg rounded-lg border border-gray-200">
-                    <Package className="w-16 h-16 text-gray-400 mx-auto mb-3" />
-                    <h3 className="text-xl font-semibold text-gray-900 mb-2">{t('returns.no_returns')}</h3>
-                    <p className="text-base text-gray-600">{state.filterStatus || state.filterBranch || state.searchQuery ? t('returns.no_matching_returns') : t('returns.no_returns_yet')}</p>
-                  </div>
-                </motion.div>
-              ) : state.viewMode === 'card' ? (
-                paginatedReturns.map((ret) => (
-                  <ReturnCard
-                    key={ret.id}
-                    ret={ret}
-                    isRtl={isRtl}
-                    getStatusInfo={getStatusInfo}
-                    viewReturn={viewReturn}
-                    openActionModal={openActionModal}
-                    submitting={state.submitting}
-                    user={user}
-                  />
-                ))
-              ) : (
-                <ReturnTable
-                  returns={paginatedReturns}
+            <Download className="w-4 h-4" />
+            {isRtl ? 'Excel' : 'Excel'}
+          </button>
+          <button
+            onClick={exportToPDF}
+            className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded-full text-sm hover:bg-blue-700 transition-colors"
+            aria-label={isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
+          >
+            <Download className="w-4 h-4" />
+            {isRtl ? 'PDF' : 'PDF'}
+          </button>
+        </div>
+      </motion.div>
+      {state.error && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className={`mb-6 p-4 bg-red-100 border border-red-200 rounded-lg flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}
+        >
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <span className="text-sm text-red-600">{state.error}</span>
+        </motion.div>
+      )}
+      {!state.socketConnected && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className={`mb-6 p-4 bg-yellow-100 border border-yellow-200 rounded-lg flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}
+        >
+          <AlertCircle className="w-5 h-5 text-yellow-600" />
+          <span className="text-sm text-yellow-600">{state.socketError || (isRtl ? 'تم قطع الاتصال' : 'Disconnected')}</span>
+        </motion.div>
+      )}
+      {branchesLoading ? (
+        <div className="mb-6 p-4 bg-gray-100 rounded-lg text-center text-sm text-gray-600">
+        </div>
+      ) : (
+        <div className="mb-6">
+          <Filters
+            state={state}
+            dispatch={dispatch}
+            isRtl={isRtl}
+            branches={state.branches}
+            onSearchChange={handleSearchChange}
+          />
+        </div>
+      )}
+      {state.loading ? (
+        <div className="space-y-4">
+          {state.viewMode === 'table' ? (
+            <ReturnTableSkeleton isRtl={isRtl} />
+          ) : (
+            Array(5).fill(0).map((_, index) => <ReturnCardSkeleton key={index} />)
+          )}
+        </div>
+      ) : state.returns.length === 0 ? (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
+        >
+          <div className="p-8 text-center bg-white rounded-xl shadow-md">
+            <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-sm text-gray-600">{isRtl ? 'لا توجد مرتجعات' : 'No returns available'}</p>
+          </div>
+        </motion.div>
+      ) : (
+        <>
+          {state.viewMode === 'card' ? (
+            <div className="grid grid-cols-1 gap-4">
+              {state.returns.map((ret) => (
+                <ReturnCard
+                  key={ret.id}
+                  ret={ret}
                   isRtl={isRtl}
                   getStatusInfo={getStatusInfo}
                   viewReturn={viewReturn}
@@ -730,43 +718,57 @@ const AdminReturns = () => {
                   submitting={state.submitting}
                   user={user}
                 />
-              )}
+              ))}
             </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <ReturnTable
+                returns={state.returns}
+                isRtl={isRtl}
+                getStatusInfo={getStatusInfo}
+                viewReturn={viewReturn}
+                openActionModal={openActionModal}
+                submitting={state.submitting}
+                user={user}
+              />
+            </div>
+          )}
+          {totalPages > 1 && (
             <Pagination
+              handlePageChange={handlePageChange}
               currentPage={state.currentPage}
               totalPages={totalPages}
-              onPageChange={handlePageChange}
               isRtl={isRtl}
-              t={t}
             />
-            <AnimatePresence>
-              {state.isViewModalOpen && state.selectedReturn && (
-                <ReturnModal
-                  isOpen={state.isViewModalOpen}
-                  onClose={() => dispatch({ type: 'SET_VIEW_MODAL', isOpen: false })}
-                  selectedReturn={state.selectedReturn}
-                  isRtl={isRtl}
-                  getStatusInfo={getStatusInfo}
-                />
-              )}
-              {state.isActionModalOpen && state.selectedReturn && state.actionType && (
-                <ActionModal
-                  isOpen={state.isActionModalOpen}
-                  onClose={() => dispatch({ type: 'SET_ACTION_MODAL', isOpen: false })}
-                  selectedReturn={state.selectedReturn}
-                  actionType={state.actionType}
-                  actionNotes={state.actionNotes}
-                  submitting={state.submitting}
-                  isRtl={isRtl}
-                  handleActionSubmit={handleActionSubmit}
-                  setActionNotes={(notes) => dispatch({ type: 'SET_ACTION_NOTES', payload: notes })}
-                />
-              )}
-            </AnimatePresence>
-          </div>
-        )}
-      </AnimatePresence>
-    </motion.div>
+          )}
+        </>
+      )}
+      <ReturnModal
+        isOpen={state.isViewModalOpen}
+        onClose={() => {
+          dispatch({ type: 'SET_VIEW_MODAL', isOpen: false });
+          dispatch({ type: 'SET_SELECTED_RETURN', payload: null });
+        }}
+        selectedReturn={state.selectedReturn}
+        isRtl={isRtl}
+        getStatusInfo={getStatusInfo}
+      />
+      <ActionModal
+        isOpen={state.isActionModalOpen}
+        onClose={() => {
+          dispatch({ type: 'SET_ACTION_MODAL', isOpen: false });
+          dispatch({ type: 'SET_ACTION_TYPE', payload: null });
+          dispatch({ type: 'SET_ACTION_NOTES', payload: '' });
+        }}
+        selectedReturn={state.selectedReturn}
+        actionType={state.actionType}
+        actionNotes={state.actionNotes}
+        submitting={state.submitting}
+        isRtl={isRtl}
+        handleActionSubmit={handleActionSubmit}
+        setActionNotes={(notes) => dispatch({ type: 'SET_ACTION_NOTES', payload: notes })}
+      />
+    </div>
   );
 };
 
