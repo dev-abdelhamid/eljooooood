@@ -72,7 +72,6 @@ interface SalesAnalytics {
   topCustomers: Array<{ customerName: string; customerPhone: string; totalSpent: number; purchaseCount: number }>;
   paymentMethods: Array<{ paymentMethod: string; totalAmount: number; count: number }>;
   returnStats: Array<{ status: string; count: number; totalQuantity: number }>;
-  returnReasons: Array<{ reason: string; count: number; totalQuantity: number }>;
 }
 
 const translations = {
@@ -92,7 +91,6 @@ const translations = {
     topCustomers: 'أفضل العملاء',
     paymentMethodsLabel: 'طرق الدفع',
     returnStats: 'إحصائيات المرتجعات',
-    returnReasons: 'أسباب المرتجعات',
     previousSales: 'المبيعات السابقة',
     noSales: 'لا توجد مبيعات',
     date: 'التاريخ',
@@ -147,7 +145,6 @@ const translations = {
     topCustomers: 'Top Customers',
     paymentMethodsLabel: 'Payment Methods',
     returnStats: 'Return Statistics',
-    returnReasons: 'Return Reasons',
     previousSales: 'Previous Sales',
     noSales: 'No sales found',
     date: 'Date',
@@ -204,7 +201,7 @@ const SearchInput = React.memo<{
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -237,14 +234,14 @@ const Dropdown = React.memo<{
     <div className={`relative group ${className || ''}`}>
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         aria-label={ariaLabel}
       >
         <span className="truncate">{selectedOption.label}</span>
         <ChevronDown className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200 w-5 h-5 text-gray-400 group-focus-within:text-amber-500`} />
       </button>
       {isOpen && !disabled && (
-        <div className="absolute w-full mt-2 bg-white rounded-xl shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none">
+        <div className="absolute w-full mt-2 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none">
           {options.length > 0 ? (
             options.map((option) => (
               <div
@@ -272,65 +269,46 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   return (
-    <div className="p-6 bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 hover:border-amber-200">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div className="space-y-4 flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="font-bold text-gray-900 text-xl">{sale.saleNumber}</h3>
-            <span className="text-sm text-gray-500">({sale.branch.displayName})</span>
+    <div className="h-[200px] p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200">
+      <div className="flex flex-col h-full">
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="font-bold text-gray-900 text-base truncate">{sale.saleNumber} - {sale.branch.displayName}</h3>
+            <p className="text-sm text-gray-600">{t.date}: {formatDate(sale.createdAt, language)}</p>
           </div>
-          <div className="space-y-2">
+          <div className="flex gap-2">
+            <button onClick={() => onEdit(sale)} aria-label={t.editSale} className="w-8 h-8 bg-blue-100 hover:bg-blue-200 rounded-full transition-colors duration-200 flex items-center justify-center">
+              <Edit className="w-4 h-4 text-blue-600" />
+            </button>
+            <button onClick={() => onDelete(sale._id)} aria-label={t.deleteSale} className="w-8 h-8 bg-red-100 hover:bg-red-200 rounded-full transition-colors duration-200 flex items-center justify-center">
+              <Trash className="w-4 h-4 text-red-600" />
+            </button>
+          </div>
+        </div>
+        <div className="mt-2 flex-1 overflow-y-auto scrollbar-none">
+          <ul className="list-disc list-inside text-sm text-gray-600">
             {sale.items.map((item, index) => (
-              <div key={index} className="flex justify-between items-center text-sm text-gray-700">
-                <span className="truncate max-w-[60%]">
-                  {item.quantity} {item.displayUnit || t.units.default} {item.displayName || t.departments.unknown}
-                </span>
-                <span className="font-semibold text-amber-600">
-                  {item.quantity}x{item.unitPrice} = {(item.quantity * item.unitPrice).toFixed(2)} {t.currency}
-                </span>
-              </div>
+              <li key={index} className="truncate">
+                {item.displayName || t.departments.unknown} ({item.department?.displayName || t.departments.unknown}) - {t.quantity}: {item.quantity} {item.displayUnit || t.units.default}, {t.unitPrice}: {item.unitPrice} {t.currency}
+              </li>
             ))}
-            <div className="flex justify-between items-center font-bold text-gray-900 text-base border-t pt-2 mt-2">
-              <span>{t.total}:</span>
-              <span className="text-amber-600">{sale.totalAmount.toFixed(2)} {t.currency}</span>
-            </div>
-          </div>
-          <div className="space-y-2 text-sm text-gray-600">
-            <p>{t.date}: {formatDate(sale.createdAt, language)}</p>
-            {sale.paymentMethod && (
-              <p>{t.paymentMethodsLabel}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] || t.paymentMethods.cash}</p>
-            )}
-            {sale.customerName && <p>{t.customerName}: {sale.customerName}</p>}
-            {sale.customerPhone && <p>{t.customerPhone}: {sale.customerPhone}</p>}
-            {sale.notes && <p className="italic">{t.notes}: {sale.notes}</p>}
-          </div>
+          </ul>
           {sale.returns && sale.returns.length > 0 && (
-            <div className="mt-4">
+            <div className="mt-2">
               <p className="text-sm font-medium text-gray-700">{t.returns}:</p>
               <ul className="list-disc list-inside text-sm text-gray-600">
                 {sale.returns.map((ret, index) => (
-                  <li key={index}>
-                    {t.return} #{ret.returnNumber} ({t.returns.status[ret.status as keyof typeof t.returns.status]}) - {t.reason}: {ret.reason} ({t.date}: {formatDate(ret.createdAt, language)})
-                    <ul className="list-circle list-inside ml-4">
-                      {ret.items.map((item, i) => (
-                        <li key={i}>
-                          {item.productName || t.departments.unknown} - {t.quantity}: {item.quantity}, {t.reason}: {item.reason}
-                        </li>
-                      ))}
-                    </ul>
+                  <li key={index} className="truncate">
+                    {t.return} #{ret.returnNumber} ({t.returns.status[ret.status as keyof typeof t.returns.status]})
                   </li>
                 ))}
               </ul>
             </div>
           )}
         </div>
-        <div className="flex gap-3 self-start">
-          <button onClick={() => onEdit(sale)} aria-label={t.editSale} className="p-2 bg-blue-100 hover:bg-blue-200 rounded-lg transition-colors duration-200">
-            <Edit className="w-5 h-5 text-blue-600" />
-          </button>
-          <button onClick={() => onDelete(sale._id)} aria-label={t.deleteSale} className="p-2 bg-red-100 hover:bg-red-200 rounded-lg transition-colors duration-200">
-            <Trash className="w-5 h-5 text-red-600" />
-          </button>
+        <div className="mt-2 flex justify-between items-center font-bold text-gray-900 text-sm">
+          <span>{t.total}:</span>
+          <span className="text-amber-600">{sale.totalAmount.toFixed(2)} {t.currency}</span>
         </div>
       </div>
     </div>
@@ -338,11 +316,14 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
 });
 
 const SaleSkeletonCard = React.memo(() => (
-  <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+  <div className="h-[200px] p-5 bg-white rounded-xl shadow-sm border border-gray-100">
     <div className="space-y-3 animate-pulse">
       <div className="h-4 bg-gray-200 rounded w-3/4"></div>
       <div className="h-3 bg-gray-200 rounded w-1/2"></div>
       <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+      <div className="mt-4 flex justify-end">
+        <div className="h-8 bg-gray-200 rounded-lg w-24"></div>
+      </div>
     </div>
   </div>
 ));
@@ -367,7 +348,6 @@ const AdminSalesReport: React.FC = () => {
     topCustomers: [],
     paymentMethods: [],
     returnStats: [],
-    returnReasons: [],
   });
   const [filterBranch, setFilterBranch] = useState('');
   const [filterPeriod, setFilterPeriod] = useState('day');
@@ -577,7 +557,7 @@ const AdminSalesReport: React.FC = () => {
             : [],
           departmentSales: Array.isArray(analyticsResponse.departmentSales)
             ? analyticsResponse.departmentSales.map((ds: any) => ({
-                ...ds,
+                ...bs,
                 displayName: isRtl ? ds.departmentName : (ds.departmentNameEn || ds.departmentName || t.departments.unknown),
               }))
             : [],
@@ -606,12 +586,6 @@ const AdminSalesReport: React.FC = () => {
             ? analyticsResponse.returnStats.map((rs: any) => ({
                 ...rs,
                 status: t.returns.status[rs.status as keyof typeof t.returns.status] || rs.status,
-              }))
-            : [],
-          returnReasons: Array.isArray(analyticsResponse.returnReasons)
-            ? analyticsResponse.returnReasons.map((rr: any) => ({
-                ...rr,
-                reason: rr.reason || t.departments.unknown,
               }))
             : [],
         });
@@ -681,6 +655,7 @@ const AdminSalesReport: React.FC = () => {
         params.endDate = endDate;
       }
       await salesAPI.exportReport(params);
+      toast.success(t.exportReport, { position: isRtl ? 'top-right' : 'top-left' });
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Export error:`, err);
       toast.error(t.errors.export_failed, { position: isRtl ? 'top-right' : 'top-left' });
@@ -708,328 +683,159 @@ const AdminSalesReport: React.FC = () => {
     [t]
   );
 
-  const branchSalesChart = useMemo(
+  const branchSalesChartData = useMemo(
     () => ({
-      type: 'bar',
-      data: {
-        labels: analytics.branchSales.map((b) => b.displayName),
-        datasets: [
-          {
-            label: t.branchSales,
-            data: analytics.branchSales.map((b) => b.totalSales),
-            backgroundColor: 'rgba(251, 191, 36, 0.6)',
-            borderColor: 'rgba(251, 191, 36, 1)',
-            borderWidth: 1,
-          },
-          {
-            label: t.totalCount,
-            data: analytics.branchSales.map((b) => b.saleCount),
-            backgroundColor: 'rgba(59, 130, 246, 0.6)',
-            borderColor: 'rgba(59, 130, 246, 1)',
-            borderWidth: 1,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'top', labels: { font: { size: 12 } } },
-          title: { display: true, text: t.branchSales, font: { size: 16 } },
-          tooltip: {
-            callbacks: {
-              label: (context) => `${context.dataset.label}: ${formatNumber(context.parsed.y)} ${context.dataset.label === t.totalCount ? '' : t.currency}`,
-            },
-          },
+      labels: analytics.branchSales.map((b) => b.displayName),
+      datasets: [
+        {
+          label: t.branchSales,
+          data: analytics.branchSales.map((b) => b.totalSales),
+          backgroundColor: 'rgba(251, 191, 36, 0.6)',
+          borderColor: 'rgba(251, 191, 36, 1)',
+          borderWidth: 1,
         },
-        scales: {
-          y: { beginAtZero: true, ticks: { callback: (value) => formatNumber(value) } },
-          x: { ticks: { maxRotation: 45, minRotation: 0 } },
+        {
+          label: t.totalCount,
+          data: analytics.branchSales.map((b) => b.saleCount),
+          backgroundColor: 'rgba(59, 130, 246, 0.6)',
+          borderColor: 'rgba(59, 130, 246, 1)',
+          borderWidth: 1,
         },
-      },
+      ],
     }),
     [analytics.branchSales, t]
   );
 
-  const productSalesChart = useMemo(
+  const productSalesChartData = useMemo(
     () => ({
-      type: 'bar',
-      data: {
-        labels: analytics.productSales.slice(0, 5).map((p) => p.displayName),
-        datasets: [
-          {
-            label: t.productSales,
-            data: analytics.productSales.slice(0, 5).map((p) => p.totalRevenue),
-            backgroundColor: 'rgba(251, 191, 36, 0.6)',
-            borderColor: 'rgba(251, 191, 36, 1)',
-            borderWidth: 1,
-          },
-          {
-            label: t.quantity,
-            data: analytics.productSales.slice(0, 5).map((p) => p.totalQuantity),
-            backgroundColor: 'rgba(59, 130, 246, 0.6)',
-            borderColor: 'rgba(59, 130, 246, 1)',
-            borderWidth: 1,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'top', labels: { font: { size: 12 } } },
-          title: { display: true, text: t.productSales, font: { size: 16 } },
-          tooltip: {
-            callbacks: {
-              label: (context) => `${context.dataset.label}: ${formatNumber(context.parsed.y)} ${context.dataset.label === t.quantity ? '' : t.currency}`,
-            },
-          },
+      labels: analytics.productSales.slice(0, 5).map((p) => p.displayName),
+      datasets: [
+        {
+          label: t.productSales,
+          data: analytics.productSales.slice(0, 5).map((p) => p.totalRevenue),
+          backgroundColor: 'rgba(251, 191, 36, 0.6)',
+          borderColor: 'rgba(251, 191, 36, 1)',
+          borderWidth: 1,
         },
-        scales: {
-          y: { beginAtZero: true, ticks: { callback: (value) => formatNumber(value) } },
-          x: { ticks: { maxRotation: 45, minRotation: 0 } },
+        {
+          label: t.quantity,
+          data: analytics.productSales.slice(0, 5).map((p) => p.totalQuantity),
+          backgroundColor: 'rgba(59, 130, 246, 0.6)',
+          borderColor: 'rgba(59, 130, 246, 1)',
+          borderWidth: 1,
         },
-      },
+      ],
     }),
     [analytics.productSales, t]
   );
 
-  const departmentSalesChart = useMemo(
+  const departmentSalesChartData = useMemo(
     () => ({
-      type: 'bar',
-      data: {
-        labels: analytics.departmentSales.map((d) => d.displayName),
-        datasets: [
-          {
-            label: t.departmentSales,
-            data: analytics.departmentSales.map((d) => d.totalRevenue),
-            backgroundColor: 'rgba(251, 191, 36, 0.6)',
-            borderColor: 'rgba(251, 191, 36, 1)',
-            borderWidth: 1,
-          },
-          {
-            label: t.quantity,
-            data: analytics.departmentSales.map((d) => d.totalQuantity),
-            backgroundColor: 'rgba(59, 130, 246, 0.6)',
-            borderColor: 'rgba(59, 130, 246, 1)',
-            borderWidth: 1,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'top', labels: { font: { size: 12 } } },
-          title: { display: true, text: t.departmentSales, font: { size: 16 } },
-          tooltip: {
-            callbacks: {
-              label: (context) => `${context.dataset.label}: ${formatNumber(context.parsed.y)} ${context.dataset.label === t.quantity ? '' : t.currency}`,
-            },
-          },
+      labels: analytics.departmentSales.map((d) => d.displayName),
+      datasets: [
+        {
+          label: t.departmentSales,
+          data: analytics.departmentSales.map((d) => d.totalRevenue),
+          backgroundColor: 'rgba(251, 191, 36, 0.6)',
+          borderColor: 'rgba(251, 191, 36, 1)',
+          borderWidth: 1,
         },
-        scales: {
-          y: { beginAtZero: true, ticks: { callback: (value) => formatNumber(value) } },
-          x: { ticks: { maxRotation: 45, minRotation: 0 } },
+        {
+          label: t.quantity,
+          data: analytics.departmentSales.map((d) => d.totalQuantity),
+          backgroundColor: 'rgba(59, 130, 246, 0.6)',
+          borderColor: 'rgba(59, 130, 246, 1)',
+          borderWidth: 1,
         },
-      },
+      ],
     }),
     [analytics.departmentSales, t]
   );
 
-  const salesTrendsChart = useMemo(
+  const salesTrendsChartData = useMemo(
     () => ({
-      type: 'line',
-      data: {
-        labels: analytics.salesTrends.map((t) => t.period),
-        datasets: [
-          {
-            label: t.salesTrends,
-            data: analytics.salesTrends.map((t) => t.totalSales),
-            fill: true,
-            backgroundColor: 'rgba(251, 191, 36, 0.2)',
-            borderColor: 'rgba(251, 191, 36, 1)',
-            tension: 0.3,
-            pointBackgroundColor: 'rgba(251, 191, 36, 1)',
-            pointBorderColor: '#fff',
-            pointHoverBackgroundColor: '#fff',
-            pointHoverBorderColor: 'rgba(251, 191, 36, 1)',
-          },
-          {
-            label: t.totalCount,
-            data: analytics.salesTrends.map((t) => t.saleCount),
-            fill: true,
-            backgroundColor: 'rgba(59, 130, 246, 0.2)',
-            borderColor: 'rgba(59, 130, 246, 1)',
-            tension: 0.3,
-            pointBackgroundColor: 'rgba(59, 130, 246, 1)',
-            pointBorderColor: '#fff',
-            pointHoverBackgroundColor: '#fff',
-            pointHoverBorderColor: 'rgba(59, 130, 246, 1)',
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'top', labels: { font: { size: 12 } } },
-          title: { display: true, text: t.salesTrends, font: { size: 16 } },
-          tooltip: {
-            callbacks: {
-              label: (context) => `${context.dataset.label}: ${formatNumber(context.parsed.y)} ${context.dataset.label === t.totalCount ? '' : t.currency}`,
-            },
-          },
+      labels: analytics.salesTrends.map((t) => t.period),
+      datasets: [
+        {
+          label: t.salesTrends,
+          data: analytics.salesTrends.map((t) => t.totalSales),
+          fill: false,
+          borderColor: 'rgba(251, 191, 36, 1)',
+          tension: 0.1,
         },
-        scales: {
-          y: { beginAtZero: true, ticks: { callback: (value) => formatNumber(value) } },
-          x: { ticks: { maxRotation: 45, minRotation: 0 } },
+        {
+          label: t.totalCount,
+          data: analytics.salesTrends.map((t) => t.saleCount),
+          fill: false,
+          borderColor: 'rgba(59, 130, 246, 1)',
+          tension: 0.1,
         },
-      },
+      ],
     }),
     [analytics.salesTrends, t]
   );
 
-  const paymentMethodsChart = useMemo(
+  const paymentMethodsChartData = useMemo(
     () => ({
-      type: 'pie',
-      data: {
-        labels: analytics.paymentMethods.map((pm) => pm.paymentMethod),
-        datasets: [
-          {
-            label: t.paymentMethodsLabel,
-            data: analytics.paymentMethods.map((pm) => pm.totalAmount),
-            backgroundColor: ['rgba(251, 191, 36, 0.6)', 'rgba(59, 130, 246, 0.6)', 'rgba(34, 197, 94, 0.6)'],
-            borderColor: ['rgba(251, 191, 36, 1)', 'rgba(59, 130, 246, 1)', 'rgba(34, 197, 94, 1)'],
-            borderWidth: 1,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'top', labels: { font: { size: 12 } } },
-          title: { display: true, text: t.paymentMethodsLabel, font: { size: 16 } },
-          tooltip: {
-            callbacks: {
-              label: (context) => `${context.label}: ${formatNumber(context.parsed)} ${t.currency}`,
-            },
-          },
+      labels: analytics.paymentMethods.map((pm) => pm.paymentMethod),
+      datasets: [
+        {
+          label: t.paymentMethodsLabel,
+          data: analytics.paymentMethods.map((pm) => pm.totalAmount),
+          backgroundColor: ['rgba(251, 191, 36, 0.6)', 'rgba(59, 130, 246, 0.6)', 'rgba(34, 197, 94, 0.6)'],
+          borderColor: ['rgba(251, 191, 36, 1)', 'rgba(59, 130, 246, 1)', 'rgba(34, 197, 94, 1)'],
+          borderWidth: 1,
         },
-      },
+      ],
     }),
     [analytics.paymentMethods, t]
   );
 
-  const returnStatsChart = useMemo(
+  const returnStatsChartData = useMemo(
     () => ({
-      type: 'bar',
-      data: {
-        labels: analytics.returnStats.map((rs) => rs.status),
-        datasets: [
-          {
-            label: t.returnStats,
-            data: analytics.returnStats.map((rs) => rs.count),
-            backgroundColor: 'rgba(251, 191, 36, 0.6)',
-            borderColor: 'rgba(251, 191, 36, 1)',
-            borderWidth: 1,
-          },
-          {
-            label: t.quantity,
-            data: analytics.returnStats.map((rs) => rs.totalQuantity),
-            backgroundColor: 'rgba(59, 130, 246, 0.6)',
-            borderColor: 'rgba(59, 130, 246, 1)',
-            borderWidth: 1,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'top', labels: { font: { size: 12 } } },
-          title: { display: true, text: t.returnStats, font: { size: 16 } },
-          tooltip: {
-            callbacks: {
-              label: (context) => `${context.dataset.label}: ${formatNumber(context.parsed.y)}`,
-            },
-          },
+      labels: analytics.returnStats.map((rs) => rs.status),
+      datasets: [
+        {
+          label: t.returnStats,
+          data: analytics.returnStats.map((rs) => rs.count),
+          backgroundColor: 'rgba(251, 191, 36, 0.6)',
+          borderColor: 'rgba(251, 191, 36, 1)',
+          borderWidth: 1,
         },
-        scales: {
-          y: { beginAtZero: true, ticks: { callback: (value) => formatNumber(value) } },
-          x: { ticks: { maxRotation: 45, minRotation: 0 } },
+        {
+          label: t.quantity,
+          data: analytics.returnStats.map((rs) => rs.totalQuantity),
+          backgroundColor: 'rgba(59, 130, 246, 0.6)',
+          borderColor: 'rgba(59, 130, 246, 1)',
+          borderWidth: 1,
         },
-      },
+      ],
     }),
     [analytics.returnStats, t]
   );
 
-  const returnReasonsChart = useMemo(
-    () => ({
-      type: 'bar',
-      data: {
-        labels: analytics.returnReasons.map((rr) => rr.reason),
-        datasets: [
-          {
-            label: t.returnReasons,
-            data: analytics.returnReasons.map((rr) => rr.count),
-            backgroundColor: 'rgba(251, 191, 36, 0.6)',
-            borderColor: 'rgba(251, 191, 36, 1)',
-            borderWidth: 1,
-          },
-          {
-            label: t.quantity,
-            data: analytics.returnReasons.map((rr) => rr.totalQuantity),
-            backgroundColor: 'rgba(59, 130, 246, 0.6)',
-            borderColor: 'rgba(59, 130, 246, 1)',
-            borderWidth: 1,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { position: 'top', labels: { font: { size: 12 } } },
-          title: { display: true, text: t.returnReasons, font: { size: 16 } },
-          tooltip: {
-            callbacks: {
-              label: (context) => `${context.dataset.label}: ${formatNumber(context.parsed.y)}`,
-            },
-          },
-        },
-        scales: {
-          y: { beginAtZero: true, ticks: { callback: (value) => formatNumber(value) } },
-          x: { ticks: { maxRotation: 45, minRotation: 0 } },
-        },
-      },
-    }),
-    [analytics.returnReasons, t]
-  );
-
   return (
-    <div className={`mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`mx-auto px-4 sm:px-6 py-4 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
-          <DollarSign className="w-8 h-8 text-amber-600" />
+          <DollarSign className="w-7 h-7 text-amber-600" />
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">{t.title}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
             <p className="text-gray-600 text-sm">{t.subtitle}</p>
           </div>
         </div>
         <button
           onClick={handleExportReport}
-          className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-medium transition-colors duration-200"
+          className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm"
           aria-label={t.exportReport}
         >
-          <Download className="w-5 h-5" />
+          <Download className="w-4 h-4" />
           {t.exportReport}
         </button>
       </header>
 
       {error && (
-        <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 animate-pulse">
+        <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-red-600" />
           <span className="text-red-600 text-sm font-medium">{error}</span>
         </div>
@@ -1038,21 +844,21 @@ const AdminSalesReport: React.FC = () => {
       <div className="mb-6 flex flex-wrap gap-4 border-b border-gray-200 pb-2">
         <button
           onClick={() => setActiveTab('sales')}
-          className={`px-6 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'sales' ? 'bg-amber-600 text-white shadow-md' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}
+          className={`px-6 py-2 rounded-t-lg text-sm font-medium transition-all duration-200 ${activeTab === 'sales' ? 'bg-amber-600 text-white shadow-md' : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'}`}
         >
           {t.salesTab}
         </button>
         <button
           onClick={() => setActiveTab('analytics')}
-          className={`px-6 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'analytics' ? 'bg-amber-600 text-white shadow-md' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}
+          className={`px-6 py-2 rounded-t-lg text-sm font-medium transition-all duration-200 ${activeTab === 'analytics' ? 'bg-amber-600 text-white shadow-md' : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'}`}
         >
           {t.analyticsTab}
         </button>
       </div>
 
-      <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100 mb-8">
+      <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-8">
         <h2 className="text-xl font-bold text-gray-900 mb-6">{t.filters}</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           <Dropdown value={filterBranch} onChange={setFilterBranch} options={branchOptions} ariaLabel={t.branches.select_branch} />
           <Dropdown
             value={filterPeriod}
@@ -1072,20 +878,18 @@ const AdminSalesReport: React.FC = () => {
                 type="date"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                 aria-label={t.date}
               />
               <input
                 type="date"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                 aria-label={t.date}
               />
             </>
           )}
-        </div>
-        <div className="mt-4">
           <SearchInput value={searchInput} onChange={handleSearchChange} placeholder={t.searchPlaceholder} ariaLabel={t.searchPlaceholder} />
         </div>
       </div>
@@ -1100,7 +904,7 @@ const AdminSalesReport: React.FC = () => {
               ))}
             </div>
           ) : filteredSales.length === 0 ? (
-            <div className="p-8 text-center bg-white rounded-xl shadow-md border border-gray-100">
+            <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
               <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 text-sm font-medium">{t.noSales}</p>
             </div>
@@ -1115,7 +919,7 @@ const AdminSalesReport: React.FC = () => {
                 <div className="flex justify-center mt-6">
                   <button
                     onClick={loadMoreSales}
-                    className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                    className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
                     disabled={salesLoading}
                   >
                     {salesLoading ? (
@@ -1137,70 +941,160 @@ const AdminSalesReport: React.FC = () => {
       {activeTab === 'analytics' && (
         <div className="mt-8">
           <h2 className="text-xl font-bold text-gray-900 mb-6">{t.analyticsTab}</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.branchSales}</h3>
               <div className="h-64">
-                ```chartjs
-                ${JSON.stringify(branchSalesChart, null, 2)}
-                ```
+                <Bar
+                  data={branchSalesChartData}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: { position: 'top', labels: { font: { size: 12 } } },
+                      title: { display: true, text: t.branchSales, font: { size: 16 } },
+                      tooltip: {
+                        callbacks: {
+                          label: (context) => `${context.dataset.label}: ${formatNumber(context.parsed.y)} ${context.dataset.label === t.totalCount ? '' : t.currency}`,
+                        },
+                      },
+                    },
+                    scales: {
+                      y: { beginAtZero: true, ticks: { callback: (value) => formatNumber(value) } },
+                      x: { ticks: { maxRotation: 45, minRotation: 0 } },
+                    },
+                  }}
+                />
               </div>
             </div>
-            <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100">
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.productSales}</h3>
               <div className="h-64">
-                ```chartjs
-                ${JSON.stringify(productSalesChart, null, 2)}
-                ```
+                <Bar
+                  data={productSalesChartData}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: { position: 'top', labels: { font: { size: 12 } } },
+                      title: { display: true, text: t.productSales, font: { size: 16 } },
+                      tooltip: {
+                        callbacks: {
+                          label: (context) => `${context.dataset.label}: ${formatNumber(context.parsed.y)} ${context.dataset.label === t.quantity ? '' : t.currency}`,
+                        },
+                      },
+                    },
+                    scales: {
+                      y: { beginAtZero: true, ticks: { callback: (value) => formatNumber(value) } },
+                      x: { ticks: { maxRotation: 45, minRotation: 0 } },
+                    },
+                  }}
+                />
               </div>
             </div>
-            <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100">
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.departmentSales}</h3>
               <div className="h-64">
-                ```chartjs
-                ${JSON.stringify(departmentSalesChart, null, 2)}
-                ```
+                <Bar
+                  data={departmentSalesChartData}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: { position: 'top', labels: { font: { size: 12 } } },
+                      title: { display: true, text: t.departmentSales, font: { size: 16 } },
+                      tooltip: {
+                        callbacks: {
+                          label: (context) => `${context.dataset.label}: ${formatNumber(context.parsed.y)} ${context.dataset.label === t.quantity ? '' : t.currency}`,
+                        },
+                      },
+                    },
+                    scales: {
+                      y: { beginAtZero: true, ticks: { callback: (value) => formatNumber(value) } },
+                      x: { ticks: { maxRotation: 45, minRotation: 0 } },
+                    },
+                  }}
+                />
               </div>
             </div>
-            <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100">
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.salesTrends}</h3>
               <div className="h-64">
-                ```chartjs
-                ${JSON.stringify(salesTrendsChart, null, 2)}
-                ```
+                <Line
+                  data={salesTrendsChartData}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: { position: 'top', labels: { font: { size: 12 } } },
+                      title: { display: true, text: t.salesTrends, font: { size: 16 } },
+                      tooltip: {
+                        callbacks: {
+                          label: (context) => `${context.dataset.label}: ${formatNumber(context.parsed.y)} ${context.dataset.label === t.totalCount ? '' : t.currency}`,
+                        },
+                      },
+                    },
+                    scales: {
+                      y: { beginAtZero: true, ticks: { callback: (value) => formatNumber(value) } },
+                      x: { ticks: { maxRotation: 45, minRotation: 0 } },
+                    },
+                  }}
+                />
               </div>
             </div>
-            <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100">
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.paymentMethodsLabel}</h3>
               <div className="h-64">
-                ```chartjs
-                ${JSON.stringify(paymentMethodsChart, null, 2)}
-                ```
+                <Pie
+                  data={paymentMethodsChartData}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: { position: 'top', labels: { font: { size: 12 } } },
+                      title: { display: true, text: t.paymentMethodsLabel, font: { size: 16 } },
+                      tooltip: {
+                        callbacks: {
+                          label: (context) => `${context.label}: ${formatNumber(context.parsed)} ${t.currency}`,
+                        },
+                      },
+                    },
+                  }}
+                />
               </div>
             </div>
-            <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100">
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.returnStats}</h3>
               <div className="h-64">
-                ```chartjs
-                ${JSON.stringify(returnStatsChart, null, 2)}
-                ```
+                <Bar
+                  data={returnStatsChartData}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: { position: 'top', labels: { font: { size: 12 } } },
+                      title: { display: true, text: t.returnStats, font: { size: 16 } },
+                      tooltip: {
+                        callbacks: {
+                          label: (context) => `${context.dataset.label}: ${formatNumber(context.parsed.y)}`,
+                        },
+                      },
+                    },
+                    scales: {
+                      y: { beginAtZero: true, ticks: { callback: (value) => formatNumber(value) } },
+                      x: { ticks: { maxRotation: 45, minRotation: 0 } },
+                    },
+                  }}
+                />
               </div>
             </div>
-            <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.returnReasons}</h3>
-              <div className="h-64">
-                ```chartjs
-                ${JSON.stringify(returnReasonsChart, null, 2)}
-                ```
-              </div>
-            </div>
-            <div className="p-6 bg-gray-50 rounded-xl border border-gray-100">
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.totalSales}</h3>
               <p className="text-2xl font-bold text-amber-600">{formatNumber(analytics.totalSales)} {t.currency}</p>
               <p className="text-sm text-gray-600 mt-2">{t.totalCount}: {analytics.totalCount}</p>
               <p className="text-sm text-gray-600 mt-2">{t.topProduct}: {analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity})</p>
             </div>
-            <div className="p-6 bg-gray-50 rounded-xl border border-gray-100">
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.topCustomers}</h3>
               {analytics.topCustomers.length > 0 ? (
                 <ul className="space-y-2">
