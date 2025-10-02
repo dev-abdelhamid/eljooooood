@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { branchesAPI, salesAPI } from '../services/api';
+import {  salesAPI } from '../services/salesAPI';
+import { branchesAPI } from '../services/api';
+
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, DollarSign, Trash, Edit, Search, X, ChevronDown, Download } from 'lucide-react';
 import { toast } from 'react-toastify';
