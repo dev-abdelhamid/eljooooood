@@ -113,7 +113,6 @@ const translations = {
       credit_card: 'بطاقة ائتمان',
       bank_transfer: 'تحويل بنكي',
     },
-    returns: { status: { pending: 'معلق', approved: 'مقبول', rejected: 'مرفوض' } },
   },
   en: {
     title: 'Sales Report',
@@ -162,7 +161,6 @@ const translations = {
       credit_card: 'Credit Card',
       bank_transfer: 'Bank Transfer',
     },
-    returns: { status: { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' } },
   },
 };
 
