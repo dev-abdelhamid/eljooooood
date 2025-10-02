@@ -72,7 +72,7 @@ const translations = {
     subtitle: 'إدارة المبيعات وإضافة مبيعات جديدة',
     filters: 'الفلاتر',
     availableProducts: 'المنتجات المتاحة',
-    noProducts: 'لا يوجد منتجات متاحة',
+    noProducts: 'لا توجد منتجات متاحة',
     department: 'القسم',
     availableStock: 'المخزون المتاح',
     unitPrice: 'سعر الوحدة',
@@ -285,7 +285,7 @@ const ProductCard: React.FC<{
     <div className="h-[200px] p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col justify-between border border-gray-100 hover:border-amber-200">
       <div className="space-y-2">
         <h3 className="font-bold text-gray-900 text-base truncate">{product.displayName}</h3>
-        <p className="text-sm text-gray-600">{t.department}: {product.product.department?.displayName || t.departments.unknown}</p>
+        <p className="text-sm text-amber-600">{t.department}: {product.product.department?.displayName || t.departments.unknown}</p>
         <p className="text-sm text-gray-600">{t.availableStock}: {product.currentStock} {t.units.kg}</p>
         <p className="font-semibold text-gray-900 text-sm">{t.unitPrice}: {product.product.price} {t.currency}</p>
       </div>
@@ -300,7 +300,7 @@ const ProductCard: React.FC<{
         ) : (
           <button
             onClick={onAdd}
-            className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors duration-200 flex items-center justify-center gap-2 shadow-sm"
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors duration-200 flex items-center justify-center gap-2 shadow-sm"
             aria-label={t.addToCart}
             disabled={product.currentStock < 1}
           >
@@ -508,7 +508,7 @@ export const SalesReport: React.FC = () => {
           ? branchesResponse.branches.map((branch: any) => ({
               _id: branch._id,
               name: branch.name,
-              nameEn: branch.nameEn || branch.name,
+              nameEn: branch.nameEn,
               displayName: isRtl ? branch.name : (branch.nameEn || branch.name),
             }))
           : []
@@ -743,8 +743,8 @@ export const SalesReport: React.FC = () => {
       )}
 
       {user?.role === 'branch' && (
-        <div className="space-y-8 lg:grid lg:grid-cols-3 lg:gap-8 lg:space-y-0">
-          <section className="lg:col-span-2 lg:overflow-y-auto lg:max-h-[calc(100vh-12rem)] scrollbar-none">
+        <div className={`space-y-8 ${cart.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-8 lg:space-y-0' : ''}`}>
+          <section className={`${cart.length > 0 ? 'lg:col-span-2 lg:overflow-y-auto lg:max-h-[calc(100vh-12rem)] scrollbar-none' : ''}`}>
             <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
               <h2 className="text-xl font-bold text-gray-900 mb-6">{t.availableProducts}</h2>
               {user.role === 'branch' && !user.branchId && (
@@ -778,6 +778,7 @@ export const SalesReport: React.FC = () => {
               </div>
             ) : filteredInventory.length === 0 ? (
               <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100 mt-6">
+                <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600 text-sm font-medium">{searchTerm ? t.noProducts : t.noProducts}</p>
               </div>
             ) : (
