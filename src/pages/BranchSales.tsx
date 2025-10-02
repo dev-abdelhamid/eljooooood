@@ -1,3 +1,4 @@
+// src/pages/SalesReport.tsx
 import React, { useState, useEffect, useCallback } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,28 +11,29 @@ import { AlertCircle, DollarSign } from 'lucide-react';
 
 interface Sale {
   id: string;
-  branch: { _id: string; name: string };
-  items: Array<{ productId: string; productName: string; quantity: number; unitPrice: number }>;
-  total: number;
-  date: string;
+  branch: { _id: string; name: string; nameEn: string };
+  items: Array<{ product: { _id: string; name: string; nameEn: string; unit: string; unitEn: string; department: { name: string; nameEn: string } }; quantity: number; unitPrice: number }>;
+  totalAmount: number;
+  createdAt: string;
   notes?: string;
 }
 
 interface Branch {
   _id: string;
   name: string;
+  nameEn: string;
 }
 
 interface InventoryItem {
-  productId: string;
-  productName: string;
-  quantity: number;
-  branchId: string;
+  product: { _id: string; name: string; nameEn: string };
+  currentStock: number;
+  branch: { _id: string };
 }
 
 interface Product {
   _id: string;
   name: string;
+  nameEn: string;
   price: number;
 }
 
@@ -91,17 +93,26 @@ export const SalesReport: React.FC = () => {
       setSales(
         salesResponse.sales.map((sale: any) => ({
           id: sale._id,
-          branch: sale.branch || { _id: 'unknown', name: t('branches.unknown') },
+          branch: sale.branch || { _id: 'unknown', name: t('branches.unknown'), nameEn: t('branches.unknown') },
           items: Array.isArray(sale.items)
             ? sale.items.map((item: any) => ({
-                productId: item.product?._id || item.productId,
-                productName: item.product?.name || item.productName || t('products.unknown'),
+                product: {
+                  _id: item.product?._id || item.productId,
+                  name: item.product?.name || item.productName || t('products.unknown'),
+                  nameEn: item.product?.nameEn || item.product?.name || t('products.unknown'),
+                  unit: item.product?.unit || 'غير محدد',
+                  unitEn: item.product?.unitEn || item.product?.unit || 'N/A',
+                  department: {
+                    name: item.product?.department?.name || 'غير معروف',
+                    nameEn: item.product?.department?.nameEn || item.product?.department?.name || 'Unknown',
+                  },
+                },
                 quantity: item.quantity,
                 unitPrice: item.unitPrice,
               }))
             : [],
-          total: sale.totalAmount || (Array.isArray(sale.items) ? sale.items.reduce((sum: number, item: any) => sum + item.quantity * item.unitPrice, 0) : 0),
-          date: new Date(sale.createdAt).toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
+          totalAmount: sale.totalAmount || (Array.isArray(sale.items) ? sale.items.reduce((sum: number, item: any) => sum + item.quantity * item.unitPrice, 0) : 0),
+          createdAt: new Date(sale.createdAt).toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
             year: 'numeric',
             month: 'long',
             day: 'numeric',
@@ -114,6 +125,7 @@ export const SalesReport: React.FC = () => {
         ? branchesResponse.branches.map((branch: any) => ({
             _id: branch._id,
             name: branch.name,
+            nameEn: branch.nameEn || branch.name,
           }))
         : [];
       setBranches(branchesData);
@@ -121,10 +133,15 @@ export const SalesReport: React.FC = () => {
       setInventory(
         Array.isArray(inventoryResponse)
           ? inventoryResponse.map((item: any) => ({
-              productId: item.productId || item.product?._id,
-              productName: item.productName || item.product?.name || t('products.unknown'),
-              quantity: item.quantity,
-              branchId: item.branchId || item.branch?._id,
+              product: {
+                _id: item.product?._id || item.productId,
+                name: item.product?.name || item.productName || t('products.unknown'),
+                nameEn: item.product?.nameEn || item.product?.name || t('products.unknown'),
+              },
+              currentStock: item.currentStock,
+              branch: {
+                _id: item.branch?._id || item.branchId,
+              },
             }))
           : []
       );
@@ -132,7 +149,7 @@ export const SalesReport: React.FC = () => {
       const productsData = Array.isArray(productsResponse)
         ? productsResponse.map((product: any) => ({
             _id: product._id,
-            name: product.name,
+            name: isRtl ? product.name : product.nameEn || product.name,
             price: product.price,
           }))
         : [];
@@ -197,62 +214,42 @@ export const SalesReport: React.FC = () => {
           <Input
             type="date"
             value={startDate}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-              if (e.target) {
-                setStartDate(e.target.value);
-              } else {
-                console.warn('onChange - e.target is undefined:', e);
-              }
-            }}
+            onChange={(e) => setStartDate(e.target.value)}
             className="w-full sm:w-40"
             aria-label={t('salesReport.startDate')}
           />
           <Input
             type="date"
             value={endDate}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-              if (e.target) {
-                setEndDate(e.target.value);
-              } else {
-                console.warn('onChange - e.target is undefined:', e);
-              }
-            }}
+            onChange={(e) => setEndDate(e.target.value)}
             className="w-full sm:w-40"
             aria-label={t('salesReport.endDate')}
           />
           {user?.role === 'admin' && (
             <Select
               value={filterBranch}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                if (e.target) {
-                  setFilterBranch(e.target.value);
-                } else {
-                  console.warn('Select onChange - e.target is undefined:', e);
-                }
-              }}
-              options={branches.map((branch) => ({
-                value: branch._id,
-                label: branch.name,
-              }))}
-              placeholder={t('branches.select_branch')}
+              onChange={(e) => setFilterBranch(e.target.value)}
+              options={[
+                { value: '', label: t('branches.select_branch') },
+                ...branches.map((branch) => ({
+                  value: branch._id,
+                  label: isRtl ? branch.name : branch.nameEn || branch.name,
+                })),
+              ]}
               className="w-full sm:w-40"
               aria-label={t('salesReport.selectBranch')}
             />
           )}
           <Select
             value={filterProduct}
-            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-              if (e.target) {
-                setFilterProduct(e.target.value);
-              } else {
-                console.warn('Select onChange - e.target is undefined:', e);
-              }
-            }}
-            options={products.map((product) => ({
-              value: product._id,
-              label: product.name,
-            }))}
-            placeholder={t('products.select_product')}
+            onChange={(e) => setFilterProduct(e.target.value)}
+            options={[
+              { value: '', label: t('products.select_product') },
+              ...products.map((product) => ({
+                value: product._id,
+                label: isRtl ? product.name : product.nameEn || product.name,
+              })),
+            ]}
             className="w-full sm:w-40"
             aria-label={t('salesReport.selectProduct')}
           />
@@ -273,16 +270,16 @@ export const SalesReport: React.FC = () => {
             >
               <div className="flex items-center justify-between gap-4">
                 <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">{sale.branch.name}</h3>
-                  <p className="text-sm text-gray-600">{t('salesReport.date')}: {sale.date}</p>
-                  <p className="text-sm text-gray-600">{t('salesReport.total')}: {sale.total}</p>
+                  <h3 className="font-semibold text-gray-900">{isRtl ? sale.branch.name : sale.branch.nameEn || sale.branch.name}</h3>
+                  <p className="text-sm text-gray-600">{t('salesReport.date')}: {sale.createdAt}</p>
+                  <p className="text-sm text-gray-600">{t('salesReport.total')}: {sale.totalAmount}</p>
                   {sale.notes && <p className="text-sm text-gray-500">{t('salesReport.notes')}: {sale.notes}</p>}
                   <div className="mt-2">
                     <p className="text-sm font-medium text-gray-700">{t('salesReport.items')}:</p>
                     <ul className="list-disc list-inside text-sm text-gray-600">
                       {sale.items.map((item, index) => (
                         <li key={index}>
-                          {item.productName} - {t('salesReport.quantity')}: {item.quantity}, {t('salesReport.unitPrice')}: {item.unitPrice}
+                          {isRtl ? item.product.name : item.product.nameEn || item.product.name} - {t('salesReport.quantity')}: {item.quantity}, {t('salesReport.unitPrice')}: {item.unitPrice}
                         </li>
                       ))}
                     </ul>
