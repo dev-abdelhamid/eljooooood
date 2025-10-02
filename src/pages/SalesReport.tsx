@@ -3,7 +3,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import salesAPI from '../services/salesAPI';
 import { formatDate } from '../utils/formatDate';
-import { AlertCircle, Search, X, ChevronDown, Edit, Trash, Download } from 'lucide-react';
+import { AlertCircle, Search, X, DollarSign, Edit, Trash, Download } from 'lucide-react';
 import { toast } from 'react-toastify';
 import {
   Chart as ChartJS,
