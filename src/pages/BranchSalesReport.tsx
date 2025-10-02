@@ -374,30 +374,37 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   return (
-    <div className="p-6 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200">
+    <div className="p-6 bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 hover:border-amber-200">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div className="space-y-3">
+        <div className="space-y-4 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="font-bold text-gray-900 text-lg">{sale.saleNumber}</h3>
+            <h3 className="font-bold text-gray-900 text-xl">{sale.saleNumber}</h3>
             <span className="text-sm text-gray-500">({sale.branch.displayName})</span>
           </div>
-          <p className="text-sm text-gray-600">{t.date}: {formatDate(sale.createdAt, language)}</p>
-          <p className="text-sm font-semibold text-gray-900">{t.total}: {sale.totalAmount} {t.currency}</p>
-          {sale.paymentMethod && (
-            <p className="text-sm text-gray-600">{t.paymentMethod}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] || t.paymentMethods.cash}</p>
-          )}
-          {sale.customerName && <p className="text-sm text-gray-600">{t.customerName}: {sale.customerName}</p>}
-          {sale.customerPhone && <p className="text-sm text-gray-600">{t.customerPhone}: {sale.customerPhone}</p>}
-          {sale.notes && <p className="text-sm text-gray-500 italic">{t.notes}: {sale.notes}</p>}
-          <div className="mt-2">
-            <p className="text-sm font-medium text-gray-700">{t.quantity}:</p>
-            <ul className="list-disc list-inside text-sm text-gray-600">
-              {sale.items.map((item, index) => (
-                <li key={index}>
-                  {item.displayName || t.errors.deleted_product} ({item.department?.displayName || t.departments.unknown}) - {t.quantity}: {item.quantity} {item.displayUnit || t.units.default}, {t.unitPrice}: {item.unitPrice} {t.currency}
-                </li>
-              ))}
-            </ul>
+          <div className="space-y-2">
+            {sale.items.map((item, index) => (
+              <div key={index} className="flex justify-between items-center text-sm text-gray-700">
+                <span className="truncate max-w-[60%]">
+                  {item.quantity} {item.displayUnit || t.units.default} {item.displayName || t.errors.deleted_product}
+                </span>
+                <span className="font-semibold text-amber-600">
+                  {item.quantity}x{item.unitPrice} = {(item.quantity * item.unitPrice).toFixed(2)} {t.currency}
+                </span>
+              </div>
+            ))}
+            <div className="flex justify-between items-center font-bold text-gray-900 text-base border-t pt-2 mt-2">
+              <span>{t.total}:</span>
+              <span className="text-amber-600">{sale.totalAmount.toFixed(2)} {t.currency}</span>
+            </div>
+          </div>
+          <div className="space-y-2 text-sm text-gray-600">
+            <p>{t.date}: {formatDate(sale.createdAt, language)}</p>
+            {sale.paymentMethod && (
+              <p>{t.paymentMethod}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] || t.paymentMethods.cash}</p>
+            )}
+            {sale.customerName && <p>{t.customerName}: {sale.customerName}</p>}
+            {sale.customerPhone && <p>{t.customerPhone}: {sale.customerPhone}</p>}
+            {sale.notes && <p className="italic">{t.notes}: {sale.notes}</p>}
           </div>
           {sale.returns && sale.returns.length > 0 && (
             <div className="mt-4">
@@ -419,7 +426,7 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
             </div>
           )}
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 self-start">
           <button onClick={() => onEdit(sale)} aria-label={t.editSale} className="p-2 bg-blue-100 hover:bg-blue-200 rounded-lg transition-colors duration-200">
             <Edit className="w-5 h-5 text-blue-600" />
           </button>
@@ -497,6 +504,28 @@ const BranchSalesReport: React.FC = () => {
     const lowerSearchTerm = searchTerm.toLowerCase();
     return inventory.filter((item) => item.displayName.toLowerCase().includes(lowerSearchTerm));
   }, [inventory, searchTerm]);
+
+  // Update cart display names when language changes
+  useEffect(() => {
+    setCart((prevCart) =>
+      prevCart.map((item) => {
+        const product = inventory.find((inv) => inv.product._id === item.productId);
+        return {
+          ...item,
+          displayName: product
+            ? isRtl
+              ? product.product.name || t.departments.unknown
+              : product.product.nameEn || product.product.name || t.departments.unknown
+            : item.displayName,
+          displayUnit: product
+            ? isRtl
+              ? product.product.unit || t.units.default
+              : product.product.unitEn || product.product.unit || t.units.default
+            : item.displayUnit,
+        };
+      })
+    );
+  }, [language, inventory, isRtl, t]);
 
   const fetchData = useCallback(
     async (pageNum: number = 1, append: boolean = false) => {
@@ -713,8 +742,8 @@ const BranchSalesReport: React.FC = () => {
             productNameEn: product.product.nameEn,
             unit: product.product.unit,
             unitEn: product.product.unitEn,
-            displayName: product.displayName,
-            displayUnit: product.displayUnit,
+            displayName: isRtl ? (product.product.name || t.departments.unknown) : (product.product.nameEn || product.product.name || t.departments.unknown),
+            displayUnit: isRtl ? (product.product.unit || t.units.default) : (product.product.unitEn || product.product.unit || t.units.default),
             quantity: 1,
             unitPrice: product.product.price,
           },
@@ -740,7 +769,16 @@ const BranchSalesReport: React.FC = () => {
         return;
       }
       setCart((prev) =>
-        prev.map((item) => (item.productId === productId ? { ...item, quantity } : item))
+        prev.map((item) =>
+          item.productId === productId
+            ? {
+                ...item,
+                quantity,
+                displayName: isRtl ? (product.product.name || t.departments.unknown) : (product.product.nameEn || product.product.name || t.departments.unknown),
+                displayUnit: isRtl ? (product.product.unit || t.units.default) : (product.product.unitEn || product.product.unit || t.units.default),
+              }
+            : item
+        )
       );
     },
     [inventory, t, isRtl]
@@ -833,8 +871,8 @@ const BranchSalesReport: React.FC = () => {
           productNameEn: item.productNameEn,
           unit: item.unit,
           unitEn: item.unitEn,
-          displayName: item.displayName,
-          displayUnit: item.displayUnit,
+          displayName: isRtl ? (item.productName || t.departments.unknown) : (item.productNameEn || item.productName || t.departments.unknown),
+          displayUnit: isRtl ? (item.unit || t.units.default) : (item.unitEn || item.unit || t.units.default),
           quantity: item.quantity,
           unitPrice: item.unitPrice,
         }))
@@ -844,7 +882,7 @@ const BranchSalesReport: React.FC = () => {
       setCustomerName(sale.customerName || '');
       setCustomerPhone(sale.customerPhone || undefined);
     },
-    []
+    [isRtl, t]
   );
 
   const handleDeleteSale = useCallback(
@@ -994,7 +1032,7 @@ const BranchSalesReport: React.FC = () => {
                       <div className="flex-1">
                         <p className="font-semibold text-gray-900 text-sm">{item.displayName || t.errors.deleted_product}</p>
                         <p className="text-sm text-gray-600">
-                          {item.unitPrice} {t.currency} / {item.displayUnit || t.units.default}
+                          {item.quantity} {item.displayUnit || t.units.default} | {item.unitPrice} {t.currency} = {(item.quantity * item.unitPrice).toFixed(2)} {t.currency}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
