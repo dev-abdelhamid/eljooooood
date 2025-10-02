@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { branchesAPI, inventoryAPI, returnsAPI } from '../services/api';
+import { branchesAPI, inventoryAPI } from '../services/api';
 import salesAPI from '../services/salesAPI';
 import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown, Edit, Trash } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -10,14 +10,17 @@ import {
   CategoryScale,
   LinearScale,
   BarElement,
+  LineElement,
+  PointElement,
   Title,
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Bar } from 'react-chartjs-2';
+import { Bar, Line } from 'react-chartjs-2';
 import { debounce } from 'lodash';
+import { format } from 'date-fns';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend);
 
 interface Sale {
   _id: string;
@@ -38,6 +41,9 @@ interface Sale {
   totalAmount: number;
   createdAt: string;
   notes?: string;
+  paymentMethod?: string;
+  customerName?: string;
+  customerPhone?: string;
   returns?: Array<{
     _id: string;
     returnNumber: string;
@@ -84,11 +90,16 @@ interface CartItem {
 }
 
 interface SalesAnalytics {
-  branchSales: Array<{ branchId: string; branchName: string; branchNameEn?: string; displayName: string; totalSales: number }>;
+  branchSales: Array<{ branchId: string; branchName: string; branchNameEn?: string; displayName: string; totalSales: number; saleCount: number }>;
   productSales: Array<{ productId: string; productName: string; productNameEn?: string; displayName: string; totalQuantity: number; totalRevenue: number }>;
-  departmentSales: Array<{ departmentId: string; departmentName: string; departmentNameEn?: string; displayName: string; totalRevenue: number }>;
+  departmentSales: Array<{ departmentId: string; departmentName: string; departmentNameEn?: string; displayName: string; totalRevenue: number; totalQuantity: number }>;
   totalSales: number;
-  topProduct: { productName: string; productNameEn?: string; displayName: string; totalQuantity: number };
+  totalCount: number;
+  topProduct: { productId: string | null; productName: string; productNameEn?: string; displayName: string; totalQuantity: number; totalRevenue: number };
+  salesTrends: Array<{ period: string; totalSales: number; saleCount: number }>;
+  topCustomers: Array<{ customerName: string; customerPhone: string; totalSpent: number; purchaseCount: number }>;
+  paymentMethods: Array<{ paymentMethod: string; totalAmount: number; count: number }>;
+  returnStats: Array<{ status: string; count: number; totalQuantity: number }>;
 }
 
 const translations = {
@@ -106,13 +117,21 @@ const translations = {
     emptyCart: 'السلة فارغة',
     total: 'الإجمالي',
     notes: 'ملاحظات',
+    paymentMethod: 'طريقة الدفع',
+    customerName: 'اسم العميل',
+    customerPhone: 'هاتف العميل',
     submitSale: 'إرسال المبيعة',
     analytics: 'إحصائيات المبيعات',
     branchSales: 'مبيعات الفروع',
     productSales: 'مبيعات المنتجات',
     departmentSales: 'مبيعات الأقسام',
     totalSales: 'إجمالي المبيعات',
+    totalCount: 'عدد المبيعات',
     topProduct: 'المنتج الأكثر مبيعًا',
+    salesTrends: 'اتجاهات المبيعات',
+    topCustomers: 'أفضل العملاء',
+    paymentMethods: 'طرق الدفع',
+    returnStats: 'إحصائيات المرتجعات',
     previousSales: 'المبيعات السابقة',
     noSales: 'لا توجد مبيعات',
     date: 'التاريخ',
@@ -138,11 +157,14 @@ const translations = {
       empty_cart: 'السلة فارغة',
       deleted_product: 'منتج محذوف',
       invalid_sale_id: 'معرف المبيعة غير صالح',
+      invalid_customer_phone: 'رقم هاتف العميل غير صالح',
+      invalid_payment_method: 'طريقة الدفع غير صالحة',
     },
     currency: 'ريال',
     units: { default: 'غير محدد' },
     branches: { all_branches: 'كل الفروع', select_branch: 'اختر الفرع', unknown: 'غير معروف' },
     departments: { unknown: 'غير معروف' },
+    paymentMethods: { cash: 'نقدي', credit_card: 'بطاقة ائتمان', bank_transfer: 'تحويل بنكي' },
     returns: { status: { pending: 'معلق', approved: 'مقبول', rejected: 'مرفوض' } },
   },
   en: {
@@ -159,13 +181,21 @@ const translations = {
     emptyCart: 'Cart is empty',
     total: 'Total',
     notes: 'Notes',
+    paymentMethod: 'Payment Method',
+    customerName: 'Customer Name',
+    customerPhone: 'Customer Phone',
     submitSale: 'Submit Sale',
     analytics: 'Sales Analytics',
     branchSales: 'Branch Sales',
     productSales: 'Product Sales',
     departmentSales: 'Department Sales',
     totalSales: 'Total Sales',
+    totalCount: 'Total Sale Count',
     topProduct: 'Top Selling Product',
+    salesTrends: 'Sales Trends',
+    topCustomers: 'Top Customers',
+    paymentMethods: 'Payment Methods',
+    returnStats: 'Return Statistics',
     previousSales: 'Previous Sales',
     noSales: 'No sales found',
     date: 'Date',
@@ -191,11 +221,14 @@ const translations = {
       empty_cart: 'Cart is empty',
       deleted_product: 'Deleted Product',
       invalid_sale_id: 'Invalid sale ID',
+      invalid_customer_phone: 'Invalid customer phone',
+      invalid_payment_method: 'Invalid payment method',
     },
     currency: 'SAR',
     units: { default: 'N/A' },
     branches: { all_branches: 'All Branches', select_branch: 'Select Branch', unknown: 'Unknown' },
     departments: { unknown: 'Unknown' },
+    paymentMethods: { cash: 'Cash', credit_card: 'Credit Card', bank_transfer: 'Bank Transfer' },
     returns: { status: { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' } },
   },
 };
@@ -334,12 +367,21 @@ const ProductCard = React.memo<{
       </div>
       <div className="mt-4 flex justify-end">
         {cartItem ? (
-          <QuantityInput
-            value={cartItem.quantity}
-            onChange={(val) => onUpdate(parseInt(val) || 0)}
-            onIncrement={() => onUpdate(cartItem.quantity + 1)}
-            onDecrement={() => onUpdate(cartItem.quantity - 1)}
-          />
+          <div className="flex items-center gap-2">
+            <QuantityInput
+              value={cartItem.quantity}
+              onChange={(val) => onUpdate(parseInt(val) || 0)}
+              onIncrement={() => onUpdate(cartItem.quantity + 1)}
+              onDecrement={() => onUpdate(cartItem.quantity - 1)}
+            />
+            <button
+              onClick={onRemove}
+              className="w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
+              aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
         ) : (
           <button
             onClick={onAdd}
@@ -368,6 +410,9 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
           <h3 className="font-bold text-gray-900 text-base">{sale.orderNumber} - {sale.branch.displayName}</h3>
           <p className="text-sm text-gray-600">{t.date}: {sale.createdAt}</p>
           <p className="text-sm text-gray-600">{t.total}: {sale.totalAmount} {t.currency}</p>
+          {sale.paymentMethod && <p className="text-sm text-gray-600">{t.paymentMethod}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods]}</p>}
+          {sale.customerName && <p className="text-sm text-gray-600">{t.customerName}: {sale.customerName}</p>}
+          {sale.customerPhone && <p className="text-sm text-gray-600">{t.customerPhone}: {sale.customerPhone}</p>}
           {sale.notes && <p className="text-sm text-gray-500">{t.notes}: {sale.notes}</p>}
           <ul className="list-disc list-inside text-sm text-gray-600 mt-2">
             {sale.items.map((item, index) => (
@@ -382,7 +427,7 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
               <ul className="list-disc list-inside text-sm text-gray-600">
                 {sale.returns.map((ret, index) => (
                   <li key={index}>
-                    {t.return} #{ret.returnNumber} ({t.returns.status[ret.status]}) - {t.reason}: {ret.reason} ({t.date}: {ret.createdAt})
+                    {t.return} #{ret.returnNumber} ({t.returns.status[ret.status as keyof typeof t.returns.status]}) - {t.reason}: {ret.reason} ({t.date}: {ret.createdAt})
                     <ul className="list-circle list-inside ml-4">
                       {ret.items.map((item, i) => (
                         <li key={i}>
@@ -437,7 +482,12 @@ export const SalesReport: React.FC = () => {
     productSales: [],
     departmentSales: [],
     totalSales: 0,
-    topProduct: { productName: '', displayName: '', totalQuantity: 0 },
+    totalCount: 0,
+    topProduct: { productId: null, productName: '', displayName: '', totalQuantity: 0, totalRevenue: 0 },
+    salesTrends: [],
+    topCustomers: [],
+    paymentMethods: [],
+    returnStats: [],
   });
   const [filterBranch, setFilterBranch] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -449,6 +499,9 @@ export const SalesReport: React.FC = () => {
   const [error, setError] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [notes, setNotes] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<string>('cash');
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
   const [selectedBranch, setSelectedBranch] = useState(user?.role === 'branch' && user?.branchId ? user.branchId : '');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
@@ -462,9 +515,7 @@ export const SalesReport: React.FC = () => {
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchInput(value);
-    if (value.length >= 2 || value === '') {
-      debouncedSearch(value);
-    }
+    debouncedSearch(value);
   };
 
   const filteredInventory = useMemo(() => {
@@ -520,7 +571,12 @@ export const SalesReport: React.FC = () => {
           productSales: [],
           departmentSales: [],
           totalSales: 0,
-          topProduct: { productName: t.departments.unknown, displayName: t.departments.unknown, totalQuantity: 0 },
+          totalCount: 0,
+          topProduct: { productId: null, productName: t.departments.unknown, displayName: t.departments.unknown, totalQuantity: 0, totalRevenue: 0 },
+          salesTrends: [],
+          topCustomers: [],
+          paymentMethods: [],
+          returnStats: [],
         }),
       ]);
 
@@ -589,6 +645,9 @@ export const SalesReport: React.FC = () => {
           day: 'numeric',
         }),
         notes: sale.notes,
+        paymentMethod: sale.paymentMethod,
+        customerName: sale.customerName,
+        customerPhone: sale.customerPhone,
         returns: returnsMap.get(sale._id) || [],
       }));
 
@@ -650,17 +709,37 @@ export const SalesReport: React.FC = () => {
           : [],
         departmentSales: Array.isArray(analyticsResponse.departmentSales)
           ? analyticsResponse.departmentSales.map((ds: any) => ({
-              ...bs,
+              ...ds,
               displayName: isRtl ? ds.departmentName : (ds.departmentNameEn || ds.departmentName),
             }))
           : [],
         totalSales: analyticsResponse.totalSales || 0,
+        totalCount: analyticsResponse.totalCount || 0,
         topProduct: analyticsResponse.topProduct
           ? {
               ...analyticsResponse.topProduct,
               displayName: isRtl ? (analyticsResponse.topProduct.productName || t.errors.deleted_product) : (analyticsResponse.topProduct.productNameEn || analyticsResponse.topProduct.productName || t.errors.deleted_product),
             }
-          : { productName: t.departments.unknown, displayName: t.departments.unknown, totalQuantity: 0 },
+          : { productId: null, productName: t.departments.unknown, displayName: t.departments.unknown, totalQuantity: 0, totalRevenue: 0 },
+        salesTrends: Array.isArray(analyticsResponse.salesTrends)
+          ? analyticsResponse.salesTrends.map((trend: any) => ({
+              ...trend,
+              period: format(new Date(trend.period), isRtl ? 'yyyy-MM-dd' : 'MM/dd/yyyy'),
+            }))
+          : [],
+        topCustomers: Array.isArray(analyticsResponse.topCustomers) ? analyticsResponse.topCustomers : [],
+        paymentMethods: Array.isArray(analyticsResponse.paymentMethods)
+          ? analyticsResponse.paymentMethods.map((pm: any) => ({
+              ...pm,
+              paymentMethod: t.paymentMethods[pm.paymentMethod as keyof typeof t.paymentMethods] || pm.paymentMethod,
+            }))
+          : [],
+        returnStats: Array.isArray(analyticsResponse.returnStats)
+          ? analyticsResponse.returnStats.map((rs: any) => ({
+              ...rs,
+              status: t.returns.status[rs.status as keyof typeof t.returns.status] || rs.status,
+            }))
+          : [],
       });
 
       setError('');
@@ -698,6 +777,9 @@ export const SalesReport: React.FC = () => {
       unitPrice: item.unitPrice,
     })));
     setNotes(sale.notes || '');
+    setPaymentMethod(sale.paymentMethod || 'cash');
+    setCustomerName(sale.customerName || '');
+    setCustomerPhone(sale.customerPhone || '');
     setSelectedBranch(sale.branch._id);
   }, []);
 
@@ -729,6 +811,18 @@ export const SalesReport: React.FC = () => {
       return;
     }
 
+    if (customerPhone && !/^\+?\d{7,15}$/.test(customerPhone)) {
+      setError(t.errors.invalid_customer_phone);
+      toast.error(t.errors.invalid_customer_phone, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+
+    if (!['cash', 'credit_card', 'bank_transfer'].includes(paymentMethod)) {
+      setError(t.errors.invalid_payment_method);
+      toast.error(t.errors.invalid_payment_method, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+
     try {
       const payload = {
         items: cart.map((item) => ({
@@ -738,12 +832,18 @@ export const SalesReport: React.FC = () => {
         })),
         branch: user?.role === 'branch' ? user.branchId || selectedBranch : selectedBranch,
         notes,
+        paymentMethod,
+        customerName: customerName.trim() || undefined,
+        customerPhone: customerPhone.trim() || undefined,
       };
 
       await salesAPI.update(editingSale._id, payload);
       toast.success(t.editSale, { position: isRtl ? 'top-right' : 'top-left' });
       setCart([]);
       setNotes('');
+      setPaymentMethod('cash');
+      setCustomerName('');
+      setCustomerPhone('');
       setSelectedBranch(user?.role === 'branch' && user?.branchId ? user.branchId : '');
       setEditingSale(null);
       await fetchData();
@@ -752,7 +852,7 @@ export const SalesReport: React.FC = () => {
       setError(err.message || t.errors.update_sale_failed);
       toast.error(err.message || t.errors.update_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
     }
-  }, [editingSale, cart, notes, selectedBranch, user, t, isRtl, fetchData]);
+  }, [editingSale, cart, notes, paymentMethod, customerName, customerPhone, selectedBranch, user, t, isRtl, fetchData]);
 
   const addToCart = useCallback((product: InventoryItem) => {
     if (product.currentStock < 1) {
@@ -821,6 +921,18 @@ export const SalesReport: React.FC = () => {
       return;
     }
 
+    if (customerPhone && !/^\+?\d{7,15}$/.test(customerPhone)) {
+      setError(t.errors.invalid_customer_phone);
+      toast.error(t.errors.invalid_customer_phone, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+
+    if (!['cash', 'credit_card', 'bank_transfer'].includes(paymentMethod)) {
+      setError(t.errors.invalid_payment_method);
+      toast.error(t.errors.invalid_payment_method, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+
     try {
       const payload = {
         items: cart.map((item) => ({
@@ -830,12 +942,18 @@ export const SalesReport: React.FC = () => {
         })),
         branch: user?.role === 'branch' ? user.branchId || selectedBranch : selectedBranch,
         notes,
+        paymentMethod,
+        customerName: customerName.trim() || undefined,
+        customerPhone: customerPhone.trim() || undefined,
       };
 
       await salesAPI.create(payload);
       toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
       setCart([]);
       setNotes('');
+      setPaymentMethod('cash');
+      setCustomerName('');
+      setCustomerPhone('');
       setSelectedBranch(user?.role === 'branch' && user?.branchId ? user.branchId : '');
       await fetchData();
     } catch (err: any) {
@@ -843,7 +961,7 @@ export const SalesReport: React.FC = () => {
       setError(err.message || t.errors.create_sale_failed);
       toast.error(err.message || t.errors.create_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
     }
-  }, [cart, notes, selectedBranch, user, t, isRtl, fetchData]);
+  }, [cart, notes, paymentMethod, customerName, customerPhone, selectedBranch, user, t, isRtl, fetchData]);
 
   const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0).toFixed(2), [cart]);
 
@@ -855,6 +973,13 @@ export const SalesReport: React.FC = () => {
         data: analytics.branchSales.map((b) => b.totalSales),
         backgroundColor: 'rgba(251, 191, 36, 0.6)',
         borderColor: 'rgba(251, 191, 36, 1)',
+        borderWidth: 1,
+      },
+      {
+        label: t.totalCount,
+        data: analytics.branchSales.map((b) => b.saleCount),
+        backgroundColor: 'rgba(59, 130, 246, 0.6)',
+        borderColor: 'rgba(59, 130, 246, 1)',
         borderWidth: 1,
       },
     ],
@@ -870,6 +995,13 @@ export const SalesReport: React.FC = () => {
         borderColor: 'rgba(251, 191, 36, 1)',
         borderWidth: 1,
       },
+      {
+        label: t.quantity,
+        data: analytics.productSales.slice(0, 5).map((p) => p.totalQuantity),
+        backgroundColor: 'rgba(59, 130, 246, 0.6)',
+        borderColor: 'rgba(59, 130, 246, 1)',
+        borderWidth: 1,
+      },
     ],
   }), [analytics.productSales, t]);
 
@@ -883,8 +1015,75 @@ export const SalesReport: React.FC = () => {
         borderColor: 'rgba(251, 191, 36, 1)',
         borderWidth: 1,
       },
+      {
+        label: t.quantity,
+        data: analytics.departmentSales.map((d) => d.totalQuantity),
+        backgroundColor: 'rgba(59, 130, 246, 0.6)',
+        borderColor: 'rgba(59, 130, 246, 1)',
+        borderWidth: 1,
+      },
     ],
   }), [analytics.departmentSales, t]);
+
+  const salesTrendsChartData = useMemo(() => ({
+    labels: analytics.salesTrends.map((t) => t.period),
+    datasets: [
+      {
+        label: t.salesTrends,
+        data: analytics.salesTrends.map((t) => t.totalSales),
+        fill: false,
+        borderColor: 'rgba(251, 191, 36, 1)',
+        tension: 0.1,
+      },
+      {
+        label: t.totalCount,
+        data: analytics.salesTrends.map((t) => t.saleCount),
+        fill: false,
+        borderColor: 'rgba(59, 130, 246, 1)',
+        tension: 0.1,
+      },
+    ],
+  }), [analytics.salesTrends, t]);
+
+  const paymentMethodsChartData = useMemo(() => ({
+    labels: analytics.paymentMethods.map((pm) => pm.paymentMethod),
+    datasets: [
+      {
+        label: t.paymentMethods,
+        data: analytics.paymentMethods.map((pm) => pm.totalAmount),
+        backgroundColor: 'rgba(251, 191, 36, 0.6)',
+        borderColor: 'rgba(251, 191, 36, 1)',
+        borderWidth: 1,
+      },
+      {
+        label: t.totalCount,
+        data: analytics.paymentMethods.map((pm) => pm.count),
+        backgroundColor: 'rgba(59, 130, 246, 0.6)',
+        borderColor: 'rgba(59, 130, 246, 1)',
+        borderWidth: 1,
+      },
+    ],
+  }), [analytics.paymentMethods, t]);
+
+  const returnStatsChartData = useMemo(() => ({
+    labels: analytics.returnStats.map((rs) => rs.status),
+    datasets: [
+      {
+        label: t.returnStats,
+        data: analytics.returnStats.map((rs) => rs.count),
+        backgroundColor: 'rgba(251, 191, 36, 0.6)',
+        borderColor: 'rgba(251, 191, 36, 1)',
+        borderWidth: 1,
+      },
+      {
+        label: t.quantity,
+        data: analytics.returnStats.map((rs) => rs.totalQuantity),
+        backgroundColor: 'rgba(59, 130, 246, 0.6)',
+        borderColor: 'rgba(59, 130, 246, 1)',
+        borderWidth: 1,
+      },
+    ],
+  }), [analytics.returnStats, t]);
 
   return (
     <div className={`mx-auto px-4 sm:px-6 py-4 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
@@ -1027,8 +1226,35 @@ export const SalesReport: React.FC = () => {
                     <div className="flex justify-between font-bold text-gray-900 text-sm">
                       <span>{t.total}:</span>
                       <span className="text-amber-600">{cartTotal} {t.currency}</span>
-                    </div>                  </div>
-                  <div className="mt-4">
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-4">
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder={t.customerName}
+                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                      aria-label={t.customerName}
+                    />
+                    <input
+                      type="text"
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      placeholder={t.customerPhone}
+                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                      aria-label={t.customerPhone}
+                    />
+                    <ProductDropdown
+                      value={paymentMethod}
+                      onChange={setPaymentMethod}
+                      options={[
+                        { value: 'cash', label: t.paymentMethods.cash },
+                        { value: 'credit_card', label: t.paymentMethods.credit_card },
+                        { value: 'bank_transfer', label: t.paymentMethods.bank_transfer },
+                      ]}
+                      ariaLabel={t.paymentMethod}
+                    />
                     <textarea
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
@@ -1098,10 +1324,67 @@ export const SalesReport: React.FC = () => {
                 />
               </div>
             </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.salesTrends}</h3>
+              <div className="h-64">
+                <Line
+                  data={salesTrendsChartData}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top' }, title: { display: true, text: t.salesTrends } },
+                    scales: { y: { beginAtZero: true } },
+                  }}
+                />
+              </div>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.paymentMethods}</h3>
+              <div className="h-64">
+                <Bar
+                  data={paymentMethodsChartData}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top' }, title: { display: true, text: t.paymentMethods } },
+                    scales: { y: { beginAtZero: true } },
+                  }}
+                />
+              </div>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.returnStats}</h3>
+              <div className="h-64">
+                <Bar
+                  data={returnStatsChartData}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top' }, title: { display: true, text: t.returnStats } },
+                    scales: { y: { beginAtZero: true } },
+                  }}
+                />
+              </div>
+            </div>
             <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.totalSales}</h3>
               <p className="text-2xl font-bold text-amber-600">{analytics.totalSales} {t.currency}</p>
+              <p className="text-sm text-gray-600 mt-2">{t.totalCount}: {analytics.totalCount}</p>
               <p className="text-sm text-gray-600 mt-2">{t.topProduct}: {analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity})</p>
+            </div>
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.topCustomers}</h3>
+              {analytics.topCustomers.length > 0 ? (
+                <ul className="space-y-2">
+                  {analytics.topCustomers.map((customer, index) => (
+                    <li key={index} className="text-sm text-gray-600">
+                      {customer.customerName || t.branches.unknown} ({customer.customerPhone || 'N/A'}) - {customer.totalSpent} {t.currency}, {customer.purchaseCount} {t.totalCount}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-gray-600">{t.noSales}</p>
+              )}
             </div>
           </div>
         </div>
