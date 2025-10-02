@@ -3,7 +3,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI, inventoryAPI, returnsAPI } from '../services/api';
 import salesAPI from '../services/salesAPI';
-import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown } from 'lucide-react';
+import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown, Edit, Download } from 'lucide-react';
 import { toast } from 'react-toastify';
 import {
   Chart as ChartJS,
@@ -13,11 +13,13 @@ import {
   Title,
   Tooltip,
   Legend,
+  LineElement,
+  PointElement,
 } from 'chart.js';
-import { Bar } from 'react-chartjs-2';
+import { Bar, Line } from 'react-chartjs-2';
 import { debounce } from 'lodash';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend);
 
 interface Sale {
   _id: string;
@@ -36,13 +38,17 @@ interface Sale {
     department?: { _id: string; name: string; nameEn?: string; displayName: string };
   }>;
   totalAmount: number;
+  status: string;
+  paymentMethod: string;
+  customerName?: string;
+  customerPhone?: string;
   createdAt: string;
   notes?: string;
   returns?: Array<{
     _id: string;
     returnNumber: string;
     status: string;
-    items: Array<{ product: string; productName: string; productNameEn?: string; quantity: number; reason: string }>;
+    items: Array<{ product: string; productName: string; quantity: number; reason: string }>;
     reason: string;
     createdAt: string;
   }>;
@@ -89,6 +95,13 @@ interface SalesAnalytics {
   departmentSales: Array<{ departmentId: string; departmentName: string; departmentNameEn?: string; displayName: string; totalRevenue: number }>;
   totalSales: number;
   topProduct: { productName: string; productNameEn?: string; displayName: string; totalQuantity: number };
+  salesTrend?: Array<{ date: string; totalSales: number }>;
+}
+
+interface ReturnForm {
+  saleId: string;
+  items: Array<{ product: string; quantity: number; reason: string }>;
+  reason: string;
 }
 
 const translations = {
@@ -106,6 +119,20 @@ const translations = {
     emptyCart: 'السلة فارغة',
     total: 'الإجمالي',
     notes: 'ملاحظات',
+    customerName: 'اسم العميل',
+    customerPhone: 'رقم هاتف العميل',
+    paymentMethod: 'طريقة الدفع',
+    paymentStatus: 'حالة الدفع',
+    paymentMethods: {
+      cash: 'نقدًا',
+      card: 'بطاقة',
+      credit: 'آجل',
+    },
+    paymentStatuses: {
+      completed: 'مكتمل',
+      pending: 'معلق',
+      canceled: 'ملغى',
+    },
     submitSale: 'إرسال المبيعة',
     analytics: 'إحصائيات المبيعات',
     branchSales: 'مبيعات الفروع',
@@ -114,19 +141,27 @@ const translations = {
     totalSales: 'إجمالي المبيعات',
     topProduct: 'المنتج الأكثر مبيعًا',
     previousSales: 'المبيعات السابقة',
-    noSales: 'لا توجد مبيعات',
+    noSales: 'لا توجد طلبات',
     date: 'التاريخ',
     returns: 'المرتجعات',
     return: 'مرتجع',
     reason: 'السبب',
     quantity: 'الكمية',
     searchPlaceholder: 'ابحث عن المنتجات...',
+    editSale: 'تعديل المبيعة',
+    deleteSale: 'حذف المبيعة',
+    createReturn: 'إنشاء مرتجع',
     loadMore: 'تحميل المزيد',
+    exportReport: 'تصدير التقرير',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       no_branch_assigned: 'لم يتم تعيين فرع',
       fetch_sales: 'خطأ أثناء جلب المبيعات',
       create_sale_failed: 'فشل إنشاء المبيعة',
+      update_sale_failed: 'فشل تحديث المبيعة',
+      delete_sale_failed: 'فشل حذف المبيعة',
+      create_return_failed: 'فشل إنشاء المرتجع',
+      export_failed: 'فشل تصدير التقرير',
       insufficient_stock: 'المخزون غير كافٍ',
       exceeds_max_quantity: 'الكمية تتجاوز الحد الأقصى',
       invalid_quantity: 'الكمية غير صالحة',
@@ -153,6 +188,20 @@ const translations = {
     emptyCart: 'Cart is empty',
     total: 'Total',
     notes: 'Notes',
+    customerName: 'Customer Name',
+    customerPhone: 'Customer Phone',
+    paymentMethod: 'Payment Method',
+    paymentStatus: 'Payment Status',
+    paymentMethods: {
+      cash: 'Cash',
+      card: 'Card',
+      credit: 'Credit',
+    },
+    paymentStatuses: {
+      completed: 'Completed',
+      pending: 'Pending',
+      canceled: 'Canceled',
+    },
     submitSale: 'Submit Sale',
     analytics: 'Sales Analytics',
     branchSales: 'Branch Sales',
@@ -168,12 +217,20 @@ const translations = {
     reason: 'Reason',
     quantity: 'Quantity',
     searchPlaceholder: 'Search products...',
+    editSale: 'Edit Sale',
+    deleteSale: 'Delete Sale',
+    createReturn: 'Create Return',
     loadMore: 'Load More',
+    exportReport: 'Export Report',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       no_branch_assigned: 'No branch assigned',
       fetch_sales: 'Error fetching sales',
       create_sale_failed: 'Failed to create sale',
+      update_sale_failed: 'Failed to update sale',
+      delete_sale_failed: 'Failed to delete sale',
+      create_return_failed: 'Failed to create return',
+      export_failed: 'Failed to export report',
       insufficient_stock: 'Insufficient stock',
       exceeds_max_quantity: 'Quantity exceeds maximum available',
       invalid_quantity: 'Invalid quantity',
@@ -321,12 +378,21 @@ const ProductCard: React.FC<{
       </div>
       <div className="mt-4 flex justify-end">
         {cartItem ? (
-          <QuantityInput
-            value={cartItem.quantity}
-            onChange={(val) => onUpdate(parseInt(val) || 0)}
-            onIncrement={() => onUpdate(cartItem.quantity + 1)}
-            onDecrement={() => onUpdate(cartItem.quantity - 1)}
-          />
+          <div className="flex items-center gap-2">
+            <QuantityInput
+              value={cartItem.quantity}
+              onChange={(val) => onUpdate(parseInt(val) || 0)}
+              onIncrement={() => onUpdate(cartItem.quantity + 1)}
+              onDecrement={() => cartItem.quantity > 1 ? onUpdate(cartItem.quantity - 1) : onRemove()}
+            />
+            <button
+              onClick={onRemove}
+              className="w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
+              aria-label={isRtl ? 'إزالة من السلة' : 'Remove from cart'}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
         ) : (
           <button
             onClick={onAdd}
@@ -343,7 +409,12 @@ const ProductCard: React.FC<{
   );
 };
 
-const SaleCard: React.FC<{ sale: Sale }> = ({ sale }) => {
+const SaleCard: React.FC<{
+  sale: Sale;
+  onEdit: () => void;
+  onDelete: () => void;
+  onCreateReturn: () => void;
+}> = ({ sale, onEdit, onDelete, onCreateReturn }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
@@ -354,11 +425,13 @@ const SaleCard: React.FC<{ sale: Sale }> = ({ sale }) => {
           <h3 className="font-bold text-gray-900 text-base">{sale.orderNumber} - {sale.branch.displayName}</h3>
           <p className="text-sm text-gray-600">{t.date}: {sale.createdAt}</p>
           <p className="text-sm text-gray-600">{t.total}: {sale.totalAmount} {t.currency}</p>
+          {sale.customerName && <p className="text-sm text-gray-600">{t.customerName}: {sale.customerName}</p>}
+          {sale.customerPhone && <p className="text-sm text-gray-600">{t.customerPhone}: {sale.customerPhone}</p>}
           {sale.notes && <p className="text-sm text-gray-500">{t.notes}: {sale.notes}</p>}
           <ul className="list-disc list-inside text-sm text-gray-600 mt-2">
             {sale.items.map((item, index) => (
               <li key={index}>
-                {item.displayName || t.errors.deleted_product} ({item.department?.displayName || t.departments.unknown}) - {t.quantity}: {item.quantity} {item.displayUnit}, {t.unitPrice}: {item.unitPrice} {t.currency}
+                {item.displayName} ({item.department?.displayName || t.departments.unknown}) - {t.quantity}: {item.quantity} {item.displayUnit}, {t.unitPrice}: {item.unitPrice} {t.currency}
               </li>
             ))}
           </ul>
@@ -368,7 +441,7 @@ const SaleCard: React.FC<{ sale: Sale }> = ({ sale }) => {
               <ul className="list-disc list-inside text-sm text-gray-600">
                 {sale.returns.map((ret, index) => (
                   <li key={index}>
-                    {t.return} #{ret.returnNumber} ({t.returns.status[ret.status]}) - {t.reason}: {ret.reason} ({t.date}: {ret.createdAt})
+                    {t.return} #{ret.returnNumber} ({t.returns.status[ret.status]}) - {t.reason}: {ret.reason}
                     <ul className="list-circle list-inside ml-4">
                       {ret.items.map((item, i) => (
                         <li key={i}>
@@ -381,6 +454,17 @@ const SaleCard: React.FC<{ sale: Sale }> = ({ sale }) => {
               </ul>
             </div>
           )}
+        </div>
+        <div className="flex flex-col gap-2">
+          <button onClick={onEdit} className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center" aria-label={t.editSale}>
+            <Edit className="w-4 h-4" />
+          </button>
+          <button onClick={onDelete} className="w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center" aria-label={t.deleteSale}>
+            <Trash2 className="w-4 h-4" />
+          </button>
+          <button onClick={onCreateReturn} className="w-8 h-8 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center" aria-label={t.createReturn}>
+            <Plus className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </div>
@@ -400,6 +484,247 @@ const ProductSkeletonCard: React.FC = () => (
   </div>
 );
 
+const SaleModal: React.FC<{
+  sale: Sale | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (saleData: Partial<Sale>) => void;
+  isEditMode: boolean;
+}> = ({ sale, isOpen, onClose, onSave, isEditMode }) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  const t = translations[isRtl ? 'ar' : 'en'];
+  const [formData, setFormData] = useState<Partial<Sale>>({
+    items: [],
+    totalAmount: 0,
+    status: 'completed',
+    paymentMethod: 'cash',
+    customerName: '',
+    customerPhone: '',
+    notes: '',
+  });
+
+  useEffect(() => {
+    if (sale && isOpen) {
+      setFormData({
+        items: sale.items,
+        totalAmount: sale.totalAmount,
+        status: sale.status,
+        paymentMethod: sale.paymentMethod,
+        customerName: sale.customerName,
+        customerPhone: sale.customerPhone,
+        notes: sale.notes,
+      });
+    } else {
+      setFormData({
+        items: [],
+        totalAmount: 0,
+        status: 'completed',
+        paymentMethod: 'cash',
+        customerName: '',
+        customerPhone: '',
+        notes: '',
+      });
+    }
+  }, [sale, isOpen]);
+
+  const handleChange = (field: keyof Sale, value: any) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSubmit = () => {
+    onSave(formData);
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl p-6 max-w-lg w-full">
+        <h2 className="text-xl font-bold mb-4">{isEditMode ? t.editSale : t.submitSale}</h2>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">{t.status}</label>
+            <ProductDropdown
+              value={formData.status || 'completed'}
+              onChange={(value) => handleChange('status', value)}
+              options={Object.keys(t.paymentStatuses).map((key) => ({
+                value: key,
+                label: t.paymentStatuses[key as keyof typeof t.paymentStatuses],
+              }))}
+              ariaLabel={t.paymentStatus}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">{t.paymentMethod}</label>
+            <ProductDropdown
+              value={formData.paymentMethod || 'cash'}
+              onChange={(value) => handleChange('paymentMethod', value)}
+              options={Object.keys(t.paymentMethods).map((key) => ({
+                value: key,
+                label: t.paymentMethods[key as keyof typeof t.paymentMethods],
+              }))}
+              ariaLabel={t.paymentMethod}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">{t.customerName}</label>
+            <input
+              type="text"
+              value={formData.customerName || ''}
+              onChange={(e) => handleChange('customerName', e.target.value)}
+              className="w-full p-2 border border-gray-200 rounded-lg"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">{t.customerPhone}</label>
+            <input
+              type="text"
+              value={formData.customerPhone || ''}
+              onChange={(e) => handleChange('customerPhone', e.target.value)}
+              className="w-full p-2 border border-gray-200 rounded-lg"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">{t.notes}</label>
+            <textarea
+              value={formData.notes || ''}
+              onChange={(e) => handleChange('notes', e.target.value)}
+              className="w-full p-2 border border-gray-200 rounded-lg"
+              rows={4}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
+            >
+              {isRtl ? 'إلغاء' : 'Cancel'}
+            </button>
+            <button
+              onClick={handleSubmit}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg"
+            >
+              {isRtl ? 'حفظ' : 'Save'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ReturnModal: React.FC<{
+  sale: Sale | null;
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (returnData: ReturnForm) => void;
+}> = ({ sale, isOpen, onClose, onSave }) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  const t = translations[isRtl ? 'ar' : 'en'];
+  const [returnItems, setReturnItems] = useState<Array<{ product: string; quantity: number; reason: string }>>([]);
+  const [reason, setReason] = useState('');
+
+  useEffect(() => {
+    if (sale && isOpen) {
+      setReturnItems(sale.items.map(item => ({
+        product: item.product,
+        quantity: 0,
+        reason: '',
+      })));
+      setReason('');
+    }
+  }, [sale, isOpen]);
+
+  const handleQuantityChange = (productId: string, quantity: number) => {
+    setReturnItems(prev => prev.map(item =>
+      item.product === productId ? { ...item, quantity: Math.max(0, Math.min(quantity, sale?.items.find(i => i.product === productId)?.quantity || 0)) } : item
+    ));
+  };
+
+  const handleReasonChange = (productId: string, reason: string) => {
+    setReturnItems(prev => prev.map(item =>
+      item.product === productId ? { ...item, reason } : item
+    ));
+  };
+
+  const handleSubmit = () => {
+    const validItems = returnItems.filter(item => item.quantity > 0 && item.reason.trim());
+    if (validItems.length === 0 || !reason.trim()) {
+      toast.error(isRtl ? 'يرجى تحديد كمية وسبب للمرتجع' : 'Please specify quantity and reason for return');
+      return;
+    }
+    onSave({
+      saleId: sale?._id || '',
+      items: validItems,
+      reason,
+    });
+    onClose();
+  };
+
+  if (!isOpen || !sale) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-xl p-6 max-w-lg w-full">
+        <h2 className="text-xl font-bold mb-4">{t.createReturn}</h2>
+        <div className="space-y-4">
+          {sale.items.map((item, index) => (
+            <div key={index} className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium">{item.displayName}</p>
+                <p className="text-sm text-gray-600">{t.quantity}: {item.quantity} {item.displayUnit}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  max={item.quantity}
+                  value={returnItems.find(r => r.product === item.product)?.quantity || 0}
+                  onChange={(e) => handleQuantityChange(item.product, parseInt(e.target.value) || 0)}
+                  className="w-16 p-2 border border-gray-200 rounded-lg"
+                />
+                <input
+                  type="text"
+                  placeholder={t.reason}
+                  value={returnItems.find(r => r.product === item.product)?.reason || ''}
+                  onChange={(e) => handleReasonChange(item.product, e.target.value)}
+                  className="w-32 p-2 border border-gray-200 rounded-lg"
+                />
+              </div>
+            </div>
+          ))}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">{t.reason}</label>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="w-full p-2 border border-gray-200 rounded-lg"
+              rows={4}
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
+            >
+              {isRtl ? 'إلغاء' : 'Cancel'}
+            </button>
+            <button
+              onClick={handleSubmit}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg"
+            >
+              {isRtl ? 'إرسال' : 'Submit'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const SalesReport: React.FC = () => {
   const { t: languageT, language } = useLanguage();
   const { user } = useAuth();
@@ -413,7 +738,8 @@ export const SalesReport: React.FC = () => {
     productSales: [],
     departmentSales: [],
     totalSales: 0,
-    topProduct: { productName: '', displayName: '', totalQuantity: 0 },
+    topProduct: { productName: t.departments.unknown, displayName: t.departments.unknown, totalQuantity: 0 },
+    salesTrend: [],
   });
   const [filterBranch, setFilterBranch] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -425,9 +751,17 @@ export const SalesReport: React.FC = () => {
   const [error, setError] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [notes, setNotes] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentStatus, setPaymentStatus] = useState('completed');
   const [selectedBranch, setSelectedBranch] = useState(user?.role === 'branch' && user?.branchId ? user.branchId : '');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEdit, setIsEdit] = useState(false);
+  const [isReturnOpen, setIsReturnOpen] = useState(false);
 
   const debouncedSearch = useCallback(
     debounce((value: string) => setSearchTerm(value.trim()), 500),
@@ -451,7 +785,7 @@ export const SalesReport: React.FC = () => {
   }, [inventory, searchTerm]);
 
   const fetchData = useCallback(async (pageNum: number = 1, append: boolean = false) => {
-    if (!user?.role || !['branch', 'admin'].includes(user.role)) {
+    if (!user?.role || !['branch', 'admin', 'production'].includes(user.role)) {
       setError(t.errors.unauthorized_access);
       toast.error(t.errors.unauthorized_access, { position: isRtl ? 'top-right' : 'top-left' });
       setLoading(false);
@@ -469,7 +803,7 @@ export const SalesReport: React.FC = () => {
     setSalesLoading(pageNum > 1);
     try {
       const params: any = { page: pageNum, limit: 20, sort: '-createdAt', lang: language };
-      if (user.role === 'branch') {
+      if (user.role === 'branch' || user.role === 'production') {
         params.branch = user.branchId || selectedBranch;
       } else if (filterBranch) {
         params.branch = filterBranch;
@@ -479,272 +813,46 @@ export const SalesReport: React.FC = () => {
 
       const [salesResponse, branchesResponse, inventoryResponse, analyticsResponse] = await Promise.all([
         salesAPI.getAll(params),
-        user.role === 'admin' ? branchesAPI.getAll({ lang: language }) : Promise.resolve({ branches: [] }),
-        inventoryAPI.getInventory({ branch: user.branchId || selectedBranch, lowStock: false, lang: language }),
+        user.role === 'admin' ? branchesAPI.getAll() : Promise.resolve({ branches: [] }),
+        inventoryAPI.getInventory({ branch: user.branchId || selectedBranch, lowStock: false }),
         user.role === 'admin' ? salesAPI.getAnalytics(params) : Promise.resolve({
           branchSales: [],
           productSales: [],
           departmentSales: [],
           totalSales: 0,
           topProduct: { productName: t.departments.unknown, displayName: t.departments.unknown, totalQuantity: 0 },
+          salesTrend: [],
         }),
       ]);
 
-      const returnsMap = new Map<string, Sale['returns']>();
-      if (Array.isArray(salesResponse.returns)) {
-        salesResponse.returns.forEach((ret: any) => {
-          const orderId = ret.order?._id || ret.order;
-          if (!returnsMap.has(orderId)) returnsMap.set(orderId, []);
-          returnsMap.get(orderId)!.push({
-            _id: ret._id,
-            returnNumber: ret.returnNumber,
-            status: ret.status,
-            items: Array.isArray(ret.items)
-              ? ret.items.map((item: any) => ({
-                  product: item.product?._id || item.product,
-                  productName: item.product?.name || t.errors.deleted_product,
-                  productNameEn: item.product?.nameEn,
-                  quantity: item.quantity,
-                  reason: item.reason,
-                }))
-              : [],
-            reason: ret.reason,
-            createdAt: new Date(ret.createdAt).toLocaleDateString(languageT('locale'), {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            }),
-          });
-        });
-      }
-
-      const newSales = salesResponse.sales.map((sale: any) => ({
-        _id: sale._id,
-        orderNumber: sale.saleNumber || sale.orderNumber,
-        branch: {
-          _id: sale.branch?._id || 'unknown',
-          name: sale.branch?.name || t.branches.unknown,
-          nameEn: sale.branch?.nameEn,
-          displayName: isRtl ? sale.branch?.name : (sale.branch?.nameEn || sale.branch?.name || t.branches.unknown),
-        },
-        items: Array.isArray(sale.items)
-          ? sale.items.map((item: any) => ({
-              product: item.product?._id || item.productId,
-              productName: item.product?.name || t.errors.deleted_product,
-              productNameEn: item.product?.nameEn,
-              unit: item.product?.unit,
-              unitEn: item.product?.unitEn,
-              displayName: isRtl ? (item.product?.name || t.errors.deleted_product) : (item.product?.nameEn || item.product?.name || t.errors.deleted_product),
-              displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              department: item.product?.department
-                ? {
-                    _id: item.product.department._id,
-                    name: item.product.department.name,
-                    nameEn: item.product.department.nameEn,
-                    displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name),
-                  }
-                : undefined,
-            }))
-          : [],
-        totalAmount: sale.totalAmount || 0,
-        createdAt: new Date(sale.createdAt).toLocaleDateString(languageT('locale'), {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        }),
-        notes: sale.notes,
-        returns: returnsMap.get(sale._id) || [],
-      }));
-
-      setSales((prev) => (append ? [...prev, ...newSales] : newSales));
-      setHasMore(salesResponse.total > pageNum * 20);
-
-      setBranches(
-        Array.isArray(branchesResponse.branches)
-          ? branchesResponse.branches.map((branch: any) => ({
-              _id: branch._id,
-              name: branch.name,
-              nameEn: branch.nameEn,
-              displayName: isRtl ? branch.name : (branch.nameEn || branch.name),
-            }))
-          : []
-      );
-
-      setInventory(
-        Array.isArray(inventoryResponse)
-          ? inventoryResponse
-              .filter((item: any) => item.currentStock > 0 && item.product?._id && item.product?.name)
-              .map((item: any) => ({
-                _id: item._id,
-                product: {
-                  _id: item.product?._id || 'unknown',
-                  name: item.product?.name || t.errors.deleted_product,
-                  nameEn: item.product?.nameEn,
-                  unit: item.product?.unit,
-                  unitEn: item.product?.unitEn,
-                  price: item.product?.price || 0,
-                  department: item.product?.department
-                    ? {
-                        _id: item.product.department._id,
-                        name: item.product.department.name,
-                        nameEn: item.product.department.nameEn,
-                        displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name),
-                      }
-                    : { _id: 'unknown', name: t.departments.unknown, displayName: t.departments.unknown },
-                },
-                currentStock: item.currentStock || 0,
-                displayName: isRtl ? (item.product?.name || t.errors.deleted_product) : (item.product?.nameEn || item.product?.name || t.errors.deleted_product),
-                displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
-              }))
-          : []
-      );
-
-      setAnalytics({
-        branchSales: Array.isArray(analyticsResponse.branchSales)
-          ? analyticsResponse.branchSales.map((bs: any) => ({
-              branchId: bs.branchId,
-              branchName: bs.branchName,
-              branchNameEn: bs.branchNameEn,
-              displayName: isRtl ? bs.branchName : (bs.branchNameEn || bs.branchName),
-              totalSales: bs.totalSales,
-            }))
-          : [],
-        productSales: Array.isArray(analyticsResponse.productSales)
-          ? analyticsResponse.productSales.map((ps: any) => ({
-              productId: ps.productId,
-              productName: ps.productName,
-              productNameEn: ps.productNameEn,
-              displayName: isRtl ? (ps.productName || t.errors.deleted_product) : (ps.productNameEn || ps.productName || t.errors.deleted_product),
-              totalQuantity: ps.totalQuantity,
-              totalRevenue: ps.totalRevenue,
-            }))
-          : [],
-        departmentSales: Array.isArray(analyticsResponse.departmentSales)
-          ? analyticsResponse.departmentSales.map((ds: any) => ({
-              departmentId: ds.departmentId,
-              departmentName: ds.departmentName,
-              departmentNameEn: ds.departmentNameEn,
-              displayName: isRtl ? ds.departmentName : (ds.departmentNameEn || ds.departmentName),
-              totalRevenue: ds.totalRevenue,
-            }))
-          : [],
-        totalSales: analyticsResponse.totalSales || 0,
-        topProduct: analyticsResponse.topProduct
-          ? {
-              productName: analyticsResponse.topProduct.productName,
-              productNameEn: analyticsResponse.topProduct.productNameEn,
-              displayName: isRtl ? (analyticsResponse.topProduct.productName || t.errors.deleted_product) : (analyticsResponse.topProduct.productNameEn || analyticsResponse.topProduct.productName || t.errors.deleted_product),
-              totalQuantity: analyticsResponse.topProduct.totalQuantity,
-            }
-          : { productName: t.departments.unknown, displayName: t.departments.unknown, totalQuantity: 0 },
-      });
-
-      setError('');
+      setSales(append ? (prev) => [...prev, ...salesResponse.sales] : salesResponse.sales);
+      setBranches(branchesResponse.branches);
+      setInventory(inventoryResponse.inventory);
+      setAnalytics(analyticsResponse);
+      setHasMore(salesResponse.sales.length === 20);
+      setLoading(false);
+      setSalesLoading(false);
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Fetch error:`, err);
-      setError(err.message || t.errors.fetch_sales);
-      toast.error(err.message || t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left' });
-      setSales([]);
-    } finally {
+      setError(t.errors.fetch_sales);
+      toast.error(t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left' });
       setLoading(false);
       setSalesLoading(false);
     }
-  }, [filterBranch, startDate, endDate, selectedBranch, user, t, isRtl, languageT, language]);
+  }, [user, selectedBranch, filterBranch, startDate, endDate, language, isRtl, t]);
 
   useEffect(() => {
-    fetchData();
+    fetchData(1);
   }, [fetchData]);
 
-  const loadMoreSales = useCallback(() => {
-    setPage((prev) => prev + 1);
-    fetchData(page + 1, true);
-  }, [fetchData, page]);
-
-  useEffect(() => {
-    setSales((prev) =>
-      prev.map((sale) => ({
-        ...sale,
-        branch: {
-          ...sale.branch,
-          displayName: isRtl ? sale.branch.name : (sale.branch.nameEn || sale.branch.name),
-        },
-        items: sale.items.map((item) => ({
-          ...item,
-          displayName: isRtl ? (item.productName || t.errors.deleted_product) : (item.productNameEn || item.productName || t.errors.deleted_product),
-          displayUnit: isRtl ? (item.unit || t.units.default) : (item.unitEn || item.unit || t.units.default),
-          department: item.department
-            ? {
-                ...item.department,
-                displayName: isRtl ? item.department.name : (item.department.nameEn || item.department.name),
-              }
-            : undefined,
-        })),
-        returns: sale.returns?.map((ret) => ({
-          ...ret,
-          items: ret.items.map((item) => ({
-            ...item,
-            productName: isRtl ? (item.productName || t.errors.deleted_product) : (item.productNameEn || item.productName || t.errors.deleted_product),
-          })),
-        })),
-      }))
-    );
-    setInventory((prev) =>
-      prev.map((item) => ({
-        ...item,
-        displayName: isRtl ? (item.product.name || t.errors.deleted_product) : (item.product.nameEn || item.product.name || t.errors.deleted_product),
-        displayUnit: isRtl ? (item.product.unit || t.units.default) : (item.product.unitEn || item.product.unit || t.units.default),
-        product: {
-          ...item.product,
-          department: item.product.department
-            ? {
-                ...item.product.department,
-                displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name),
-              }
-            : item.product.department,
-        },
-      }))
-    );
-    setCart((prev) =>
-      prev.map((item) => ({
-        ...item,
-        displayName: isRtl ? (item.productName || t.errors.deleted_product) : (item.productNameEn || item.productName || t.errors.deleted_product),
-        displayUnit: isRtl ? (item.unit || t.units.default) : (item.unitEn || item.unit || t.units.default),
-      }))
-    );
-    setAnalytics((prev) => ({
-      ...prev,
-      branchSales: prev.branchSales.map((bs) => ({
-        ...bs,
-        displayName: isRtl ? bs.branchName : (bs.branchNameEn || bs.branchName),
-      })),
-      productSales: prev.productSales.map((ps) => ({
-        ...ps,
-        displayName: isRtl ? (ps.productName || t.errors.deleted_product) : (ps.productNameEn || ps.productName || t.errors.deleted_product),
-      })),
-      departmentSales: prev.departmentSales.map((ds) => ({
-        ...ds,
-        displayName: isRtl ? ds.departmentName : (ds.departmentNameEn || ds.departmentName),
-      })),
-      topProduct: {
-        ...prev.topProduct,
-        displayName: isRtl ? (prev.topProduct.productName || t.errors.deleted_product) : (prev.topProduct.productNameEn || prev.topProduct.productName || t.errors.deleted_product),
-      },
-    }));
-  }, [isRtl, t]);
-
-  const addToCart = useCallback((product: InventoryItem) => {
+  const handleAddToCart = (product: InventoryItem) => {
     if (product.currentStock < 1) {
-      setError(t.errors.insufficient_stock);
       toast.error(t.errors.insufficient_stock, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
     setCart((prev) => {
-      const existingItem = prev.find((item) => item.productId === product.product._id);
-      if (existingItem) {
-        if (existingItem.quantity >= product.currentStock) {
-          setError(t.errors.exceeds_max_quantity);
+      const existing = prev.find((item) => item.productId === product.product._id);
+      if (existing) {
+        if (existing.quantity >= product.currentStock) {
           toast.error(t.errors.exceeds_max_quantity, { position: isRtl ? 'top-right' : 'top-left' });
           return prev;
         }
@@ -760,373 +868,502 @@ export const SalesReport: React.FC = () => {
           productNameEn: product.product.nameEn,
           unit: product.product.unit,
           unitEn: product.product.unitEn,
-          displayName: isRtl ? product.product.name : (product.product.nameEn || product.product.name),
-          displayUnit: isRtl ? (product.product.unit || t.units.default) : (product.product.unitEn || product.product.unit || t.units.default),
+          displayName: product.displayName,
+          displayUnit: product.displayUnit,
           quantity: 1,
           unitPrice: product.product.price,
         },
       ];
     });
-    setError('');
-  }, [isRtl, t]);
+  };
 
-  const updateCartQuantity = useCallback((productId: string, quantity: number) => {
-    const inventoryItem = inventory.find((item) => item.product._id === productId);
-    if (!inventoryItem || quantity < 1 || quantity > inventoryItem.currentStock) {
-      setError(quantity < 1 ? t.errors.invalid_quantity : t.errors.exceeds_max_quantity);
-      toast.error(quantity < 1 ? t.errors.invalid_quantity : t.errors.exceeds_max_quantity, { position: isRtl ? 'top-right' : 'top-left' });
+  const handleUpdateCart = (productId: string, quantity: number) => {
+    const product = inventory.find((item) => item.product._id === productId);
+    if (!product) {
+      toast.error(t.errors.deleted_product, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+    if (quantity > product.currentStock) {
+      toast.error(t.errors.exceeds_max_quantity, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+    if (quantity < 0) {
+      toast.error(t.errors.invalid_quantity, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+    if (quantity === 0) {
+      setCart((prev) => prev.filter((item) => item.productId !== productId));
       return;
     }
     setCart((prev) =>
       prev.map((item) => (item.productId === productId ? { ...item, quantity } : item))
     );
-    setError('');
-  }, [inventory, t, isRtl]);
+  };
 
-  const removeFromCart = useCallback((productId: string) => {
+  const handleRemoveFromCart = (productId: string) => {
     setCart((prev) => prev.filter((item) => item.productId !== productId));
-    setError('');
-  }, []);
+  };
 
-  const handleAddSale = useCallback(async () => {
-    if (user?.role === 'branch' && !user.branchId && !selectedBranch) {
-      setError(t.errors.no_branch_assigned);
-      toast.error(t.errors.no_branch_assigned, { position: isRtl ? 'top-right' : 'top-left' });
-      return;
-    }
-
+  const handleSubmitSale = async () => {
     if (cart.length === 0) {
-      setError(t.errors.empty_cart);
       toast.error(t.errors.empty_cart, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
-
+    if (!selectedBranch) {
+      toast.error(t.errors.no_branch_assigned, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
     try {
-      const payload = {
+      const totalAmount = cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+      await salesAPI.create({
+        branch: selectedBranch,
         items: cart.map((item) => ({
-          productId: item.productId,
+          product: item.productId,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
         })),
-        branch: user?.role === 'branch' ? user.branchId || selectedBranch : selectedBranch,
-        notes,
-      };
-
-      await salesAPI.create(payload);
-      toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
+        totalAmount,
+        status: paymentStatus,
+        paymentMethod,
+        customerName: customerName.trim() || undefined,
+        customerPhone: customerPhone.trim() || undefined,
+        notes: notes.trim() || undefined,
+        lang: language,
+      });
       setCart([]);
       setNotes('');
-      setSelectedBranch(user?.role === 'branch' && user?.branchId ? user.branchId : '');
-      await fetchData();
+      setCustomerName('');
+      setCustomerPhone('');
+      setPaymentMethod('cash');
+      setPaymentStatus('completed');
+      toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
+      fetchData(1);
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Create error:`, err);
-      setError(err.message || t.errors.create_sale_failed);
-      toast.error(err.message || t.errors.create_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(t.errors.create_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
     }
-  }, [cart, notes, selectedBranch, user, t, isRtl, fetchData]);
+  };
 
-  const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0).toFixed(2), [cart]);
+  const handleEditSale = async (saleData: Partial<Sale>) => {
+    if (!selectedSale) return;
+    try {
+      await salesAPI.update(selectedSale._id, {
+        ...saleData,
+        lang: language,
+      });
+      toast.success(t.editSale, { position: isRtl ? 'top-right' : 'top-left' });
+      fetchData(1);
+    } catch (err: any) {
+      toast.error(t.errors.update_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
+    }
+  };
 
-  const branchSalesChartData = useMemo(() => ({
-    labels: analytics.branchSales.map((b) => b.displayName),
+  const handleDeleteSale = async (saleId: string) => {
+    try {
+      await salesAPI.delete(saleId);
+      toast.success(t.deleteSale, { position: isRtl ? 'top-right' : 'top-left' });
+      fetchData(1);
+    } catch (err: any) {
+      toast.error(t.errors.delete_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
+    }
+  };
+
+  const handleCreateReturn = async (returnData: ReturnForm) => {
+    try {
+      await returnsAPI.create(returnData);
+      toast.success(t.createReturn, { position: isRtl ? 'top-right' : 'top-left' });
+      fetchData(1);
+    } catch (err: any) {
+      toast.error(t.errors.create_return_failed, { position: isRtl ? 'top-right' : 'top-left' });
+    }
+  };
+
+  const handleExportReport = async () => {
+    try {
+      const params: any = { format: 'csv', lang: language };
+      if (filterBranch) params.branch = filterBranch;
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
+      const response = await salesAPI.exportReport(params);
+      const blob = new Blob([response], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'sales_report.csv';
+      a.click();
+      window.URL.revokeObjectURL(url);
+      toast.success(t.exportReport, { position: isRtl ? 'top-right' : 'top-left' });
+    } catch (err: any) {
+      toast.error(t.errors.export_failed, { position: isRtl ? 'top-right' : 'top-left' });
+    }
+  };
+
+  const branchSalesChartData = {
+    labels: analytics.branchSales.map((bs) => bs.displayName),
     datasets: [
       {
         label: t.branchSales,
-        data: analytics.branchSales.map((b) => b.totalSales),
-        backgroundColor: 'rgba(251, 191, 36, 0.6)',
-        borderColor: 'rgba(251, 191, 36, 1)',
+        data: analytics.branchSales.map((bs) => bs.totalSales),
+        backgroundColor: 'rgba(245, 158, 11, 0.6)',
+        borderColor: 'rgba(245, 158, 11, 1)',
         borderWidth: 1,
       },
     ],
-  }), [analytics.branchSales, t]);
+  };
 
-  const productSalesChartData = useMemo(() => ({
-    labels: analytics.productSales.slice(0, 5).map((p) => p.displayName),
+  const productSalesChartData = {
+    labels: analytics.productSales.map((ps) => ps.displayName),
     datasets: [
       {
         label: t.productSales,
-        data: analytics.productSales.slice(0, 5).map((p) => p.totalRevenue),
-        backgroundColor: 'rgba(251, 191, 36, 0.6)',
-        borderColor: 'rgba(251, 191, 36, 1)',
+        data: analytics.productSales.map((ps) => ps.totalQuantity),
+        backgroundColor: 'rgba(245, 158, 11, 0.6)',
+        borderColor: 'rgba(245, 158, 11, 1)',
         borderWidth: 1,
       },
     ],
-  }), [analytics.productSales, t]);
+  };
 
-  const departmentSalesChartData = useMemo(() => ({
-    labels: analytics.departmentSales.map((d) => d.displayName),
+  const salesTrendChartData = {
+    labels: analytics.salesTrend?.map((st) => st.date) || [],
     datasets: [
       {
-        label: t.departmentSales,
-        data: analytics.departmentSales.map((d) => d.totalRevenue),
-        backgroundColor: 'rgba(251, 191, 36, 0.6)',
-        borderColor: 'rgba(251, 191, 36, 1)',
-        borderWidth: 1,
+        label: t.totalSales,
+        data: analytics.salesTrend?.map((st) => st.totalSales) || [],
+        fill: false,
+        borderColor: 'rgba(245, 158, 11, 1)',
+        tension: 0.1,
       },
     ],
-  }), [analytics.departmentSales, t]);
+  };
 
   return (
-    <div className={`mx-auto px-4 sm:px-6 py-4 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
-      <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
-        <div className="flex items-center gap-3">
-          <DollarSign className="w-7 h-7 text-amber-600" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
-            <p className="text-gray-600 text-sm">{t.subtitle}</p>
+    <div className={`min-h-screen bg-gray-50 p-4 md:p-8 ${isRtl ? 'font-arabic' : 'font-sans'}`}>
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">{t.title}</h1>
+        <p className="text-gray-600 mb-6">{t.subtitle}</p>
+
+        {error && (
+          <div className="mb-6 p-4 bg-red-100 text-red-700 rounded-lg flex items-center gap-2">
+            <AlertCircle className="w-5 h-5" />
+            {error}
           </div>
-        </div>
-      </header>
+        )}
 
-      {error && (
-        <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <span className="text-red-600 text-sm font-medium">{error}</span>
-        </div>
-      )}
-
-      {user?.role === 'admin' && (
-        <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-8">
-          <h2 className="text-xl font-bold text-gray-900 mb-6">{t.filters}</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-            <ProductDropdown
-              value={filterBranch}
-              onChange={setFilterBranch}
-              options={[{ value: '', label: t.branches.all_branches }, ...branches.map((branch) => ({
-                value: branch._id,
-                label: branch.displayName,
-              }))]}
-              ariaLabel={t.branches.select_branch}
-            />
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-              placeholder={t.date}
-              aria-label={t.date}
-            />
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-              placeholder={t.date}
-              aria-label={t.date}
-            />
-          </div>
-        </div>
-      )}
-
-      {user?.role === 'branch' && (
-        <div className={`space-y-8 ${cart.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-8 lg:space-y-0' : ''}`}>
-          <section className={`${cart.length > 0 ? 'lg:col-span-2 lg:overflow-y-auto lg:max-h-[calc(100vh-12rem)] scrollbar-none' : ''}`}>
-            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <h2 className="text-xl font-bold text-gray-900 mb-6">{t.availableProducts}</h2>
-              {user.role === 'branch' && !user.branchId && (
-                <ProductDropdown
-                  value={selectedBranch}
-                  onChange={setSelectedBranch}
-                  options={[{ value: '', label: t.branches.select_branch }, ...branches.map((branch) => ({
-                    value: branch._id,
-                    label: branch.displayName,
-                  }))]}
-                  ariaLabel={t.branches.select_branch}
-                  disabled={!!user.branchId}
-                  className="mb-4"
+        {(user?.role === 'branch' || user?.role === 'admin') && (
+          <>
+            <div className="mb-8">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">{t.availableProducts}</h2>
+              <div className="mb-4">
+                <ProductSearchInput
+                  value={searchInput}
+                  onChange={handleSearchChange}
+                  placeholder={t.searchPlaceholder}
+                  ariaLabel={t.searchPlaceholder}
                 />
-              )}
-              <ProductSearchInput
-                value={searchInput}
-                onChange={handleSearchChange}
-                placeholder={t.searchPlaceholder}
-                ariaLabel={t.searchPlaceholder}
-              />
-              <div className="mt-4 text-center text-sm text-gray-600 font-medium">
-                {isRtl ? `عدد المنتجات: ${filteredInventory.length}` : `Products Count: ${filteredInventory.length}`}
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {loading ? (
+                  Array.from({ length: 6 }).map((_, index) => <ProductSkeletonCard key={index} />)
+                ) : filteredInventory.length === 0 ? (
+                  <p className="col-span-full text-center text-gray-500">{t.noProducts}</p>
+                ) : (
+                  filteredInventory.map((product) => (
+                    <ProductCard
+                      key={product._id}
+                      product={product}
+                      cartItem={cart.find((item) => item.productId === product.product._id)}
+                      onAdd={() => handleAddToCart(product)}
+                      onUpdate={(quantity) => handleUpdateCart(product.product._id, quantity)}
+                      onRemove={() => handleRemoveFromCart(product.product._id)}
+                    />
+                  ))
+                )}
               </div>
             </div>
-            {loading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-                {[...Array(filteredInventory.length || 6)].map((_, index) => (
-                  <ProductSkeletonCard key={index} />
-                ))}
-              </div>
-            ) : filteredInventory.length === 0 ? (
-              <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100 mt-6">
-                <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 text-sm font-medium">{searchTerm ? t.noProducts : t.noProducts}</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-                {filteredInventory.map((product) => (
-                  <ProductCard
-                    key={product._id}
-                    product={product}
-                    cartItem={cart.find((item) => item.productId === product.product._id)}
-                    onAdd={() => addToCart(product)}
-                    onUpdate={(quantity) => updateCartQuantity(product.product._id, quantity)}
-                    onRemove={() => removeFromCart(product.product._id)}
-                  />
-                ))}
-              </div>
-            )}
-          </section>
 
-          {cart.length > 0 && (
-            <aside className="lg:col-span-1 lg:sticky lg:top-8 space-y-6 max-h-[calc(100vh-12rem)] overflow-y-auto scrollbar-none">
-              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-xl font-bold text-gray-900 mb-6">{t.cart}</h3>
-                <div className="space-y-4">
-                  {cart.map((item) => (
-                    <div key={item.productId} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
-                      <div className="flex-1">
-                        <p className="font-semibold text-gray-900 text-sm">{item.displayName}</p>
-                        <p className="text-sm text-gray-600">
-                          {item.unitPrice} {t.currency} / {item.displayUnit}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
+            <div className="mb-8">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">{t.cart}</h2>
+              <div className="bg-white rounded-xl shadow-sm p-6">
+                {cart.length === 0 ? (
+                  <p className="text-gray-500 text-center">{t.emptyCart}</p>
+                ) : (
+                  <div className="space-y-4">
+                    {cart.map((item, index) => (
+                      <div key={index} className="flex items-center justify-between border-b pb-2">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{item.displayName}</p>
+                          <p className="text-sm text-gray-600">{t.quantity}: {item.quantity} {item.displayUnit}</p>
+                          <p className="text-sm text-gray-600">{t.unitPrice}: {item.unitPrice} {t.currency}</p>
+                        </div>
                         <QuantityInput
                           value={item.quantity}
-                          onChange={(val) => updateCartQuantity(item.productId, parseInt(val) || 0)}
-                          onIncrement={() => updateCartQuantity(item.productId, item.quantity + 1)}
-                          onDecrement={() => updateCartQuantity(item.productId, item.quantity - 1)}
+                          onChange={(val) => handleUpdateCart(item.productId, parseInt(val) || 0)}
+                          onIncrement={() => handleUpdateCart(item.productId, item.quantity + 1)}
+                          onDecrement={() => handleUpdateCart(item.productId, item.quantity - 1)}
                         />
-                        <button
-                          onClick={() => removeFromCart(item.productId)}
-                          className="w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
-                          aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
                       </div>
-                    </div>
-                  ))}
-                  <div className="border-t pt-4">
-                    <div className="flex justify-between font-bold text-gray-900 text-sm">
-                      <span>{t.total}:</span>
-                      <span className="text-amber-600">{cartTotal} {t.currency}</span>
+                    ))}
+                    <div className="flex justify-between items-center">
+                      <p className="text-lg font-semibold text-gray-900">
+                        {t.total}: {cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0)} {t.currency}
+                      </p>
                     </div>
                   </div>
+                )}
+                <div className="mt-6 space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">{t.notes}</label>
+                    <textarea
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      className="w-full p-2 border border-gray-200 rounded-lg"
+                      rows={4}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">{t.customerName}</label>
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      className="w-full p-2 border border-gray-200 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">{t.customerPhone}</label>
+                    <input
+                      type="text"
+                      value={customerPhone}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      className="w-full p-2 border border-gray-200 rounded-lg"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">{t.paymentMethod}</label>
+                    <ProductDropdown
+                      value={paymentMethod}
+                      onChange={setPaymentMethod}
+                      options={Object.keys(t.paymentMethods).map((key) => ({
+                        value: key,
+                        label: t.paymentMethods[key as keyof typeof t.paymentMethods],
+                      }))}
+                      ariaLabel={t.paymentMethod}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">{t.paymentStatus}</label>
+                    <ProductDropdown
+                      value={paymentStatus}
+                      onChange={setPaymentStatus}
+                      options={Object.keys(t.paymentStatuses).map((key) => ({
+                        value: key,
+                        label: t.paymentStatuses[key as keyof typeof t.paymentStatuses],
+                      }))}
+                      ariaLabel={t.paymentStatus}
+                    />
+                  </div>
+                  {user?.role === 'admin' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">{t.branches.select_branch}</label>
+                      <ProductDropdown
+                        value={selectedBranch}
+                        onChange={setSelectedBranch}
+                        options={[
+                          { value: '', label: t.branches.select_branch },
+                          ...branches.map((branch) => ({
+                            value: branch._id,
+                            label: branch.displayName,
+                          })),
+                        ]}
+                        ariaLabel={t.branches.select_branch}
+                      />
+                    </div>
+                  )}
+                  <button
+                    onClick={handleSubmitSale}
+                    className="w-full px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg flex items-center justify-center gap-2"
+                    disabled={cart.length === 0 || !selectedBranch}
+                  >
+                    <DollarSign className="w-5 h-5" />
+                    {t.submitSale}
+                  </button>
                 </div>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder={t.notes}
-                  className={`w-full mt-4 p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-                  rows={4}
-                  aria-label={t.notes}
-                />
-                <button
-                  onClick={handleAddSale}
-                  className="w-full mt-4 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm disabled:opacity-50"
-                  disabled={cart.length === 0 || (user?.role === 'branch' && !user.branchId && !selectedBranch)}
-                  aria-label={t.submitSale}
-                >
-                  {t.submitSale}
-                </button>
-              </div>
-            </aside>
-          )}
-        </div>
-      )}
-
-      {user?.role === 'admin' && (
-        <div className="mt-8 space-y-8">
-          <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">{t.analytics}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
-              <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
-                <p className="text-sm font-medium text-gray-600">{t.totalSales}</p>
-                <p className="text-2xl font-bold text-amber-600">{analytics.totalSales.toFixed(2)} {t.currency}</p>
-              </div>
-              <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
-                <p className="text-sm font-medium text-gray-600">{t.topProduct}</p>
-                <p className="text-2xl font-bold text-amber-600">{analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity} {t.units.default})</p>
               </div>
             </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">{t.branchSales}</h3>
+          </>
+        )}
+
+        {user?.role === 'admin' && (
+          <div className="mb-8">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">{t.analytics}</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white rounded-xl shadow-sm p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.branchSales}</h3>
                 <Bar
                   data={branchSalesChartData}
                   options={{
                     responsive: true,
                     plugins: { legend: { position: 'top' }, title: { display: true, text: t.branchSales } },
-                    scales: { y: { beginAtZero: true } },
                   }}
                 />
               </div>
-              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">{t.productSales}</h3>
+              <div className="bg-white rounded-xl shadow-sm p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.productSales}</h3>
                 <Bar
                   data={productSalesChartData}
                   options={{
                     responsive: true,
                     plugins: { legend: { position: 'top' }, title: { display: true, text: t.productSales } },
-                    scales: { y: { beginAtZero: true } },
                   }}
                 />
               </div>
-              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">{t.departmentSales}</h3>
-                <Bar
-                  data={departmentSalesChartData}
-                  options={{
-                    responsive: true,
-                    plugins: { legend: { position: 'top' }, title: { display: true, text: t.departmentSales } },
-                    scales: { y: { beginAtZero: true } },
-                  }}
-                />
+              {analytics.salesTrend && analytics.salesTrend.length > 0 && (
+                <div className="bg-white rounded-xl shadow-sm p-6 col-span-full">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.totalSales}</h3>
+                  <Line
+                    data={salesTrendChartData}
+                    options={{
+                      responsive: true,
+                      plugins: { legend: { position: 'top' }, title: { display: true, text: t.totalSales } },
+                    }}
+                  />
+                </div>
+              )}
+              <div className="bg-white rounded-xl shadow-sm p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.totalSales}</h3>
+                <p className="text-2xl font-bold text-amber-600">{analytics.totalSales} {t.currency}</p>
+              </div>
+              <div className="bg-white rounded-xl shadow-sm p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.topProduct}</h3>
+                <p className="text-lg text-gray-700">{analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity} {t.units.default})</p>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="mt-8 space-y-4">
-        <h2 className="text-xl font-bold text-gray-900">{t.previousSales}</h2>
-        {loading ? (
-          <div className="flex justify-center">
-            <svg className="animate-spin h-8 w-8 text-amber-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          </div>
-        ) : sales.length === 0 ? (
-          <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
-            <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600 text-sm font-medium">{t.noSales}</p>
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {sales.map((sale) => (
-                <SaleCard key={sale._id} sale={sale} />
-              ))}
-            </div>
-            {hasMore && (
-              <div className="flex justify-center mt-6">
-                <button
-                  onClick={loadMoreSales}
-                  className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                  disabled={salesLoading}
-                >
-                  {salesLoading ? (
-                    <svg className="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                  ) : (
-                    t.loadMore
-                  )}
-                </button>
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">{t.previousSales}</h2>
+          <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {user?.role === 'admin' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700">{t.branches.select_branch}</label>
+                <ProductDropdown
+                  value={filterBranch}
+                  onChange={(value) => {
+                    setFilterBranch(value);
+                    fetchData(1);
+                  }}
+                  options={[
+                    { value: '', label: t.branches.all_branches },
+                    ...branches.map((branch) => ({
+                      value: branch._id,
+                      label: branch.displayName,
+                    })),
+                  ]}
+                  ariaLabel={t.branches.select_branch}
+                />
               </div>
             )}
-          </>
-        )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">{t.date}</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => {
+                  setStartDate(e.target.value);
+                  fetchData(1);
+                }}
+                className="w-full p-2 border border-gray-200 rounded-lg"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">{t.date}</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => {
+                  setEndDate(e.target.value);
+                  fetchData(1);
+                }}
+                className="w-full p-2 border border-gray-200 rounded-lg"
+              />
+            </div>
+          </div>
+          {user?.role === 'admin' && (
+            <button
+              onClick={handleExportReport}
+              className="mb-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg flex items-center gap-2"
+            >
+              <Download className="w-5 h-5" />
+              {t.exportReport}
+            </button>
+          )}
+          <div className="space-y-6">
+            {sales.length === 0 && !loading ? (
+              <p className="text-gray-500 text-center">{t.noSales}</p>
+            ) : (
+              sales.map((sale) => (
+                <SaleCard
+                  key={sale._id}
+                  sale={sale}
+                  onEdit={() => {
+                    setSelectedSale(sale);
+                    setIsEdit(true);
+                    setIsModalOpen(true);
+                  }}
+                  onDelete={() => handleDeleteSale(sale._id)}
+                  onCreateReturn={() => {
+                    setSelectedSale(sale);
+                    setIsReturnOpen(true);
+                  }}
+                />
+              ))
+            )}
+            {salesLoading && (
+              <div className="space-y-6">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="p-5 bg-white rounded-xl shadow-sm border border-gray-100">
+                    <div className="space-y-3 animate-pulse">
+                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {hasMore && (
+              <button
+                onClick={() => fetchData(page + 1, true).then(() => setPage(page + 1))}
+                className="w-full px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg"
+                disabled={salesLoading}
+              >
+                {t.loadMore}
+              </button>
+            )}
+          </div>
+        </div>
       </div>
+      <SaleModal
+        sale={selectedSale}
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setSelectedSale(null);
+          setIsEdit(false);
+        }}
+        onSave={handleEditSale}
+        isEditMode={isEdit}
+      />
+      <ReturnModal
+        sale={selectedSale}
+        isOpen={isReturnOpen}
+        onClose={() => {
+          setIsReturnOpen(false);
+          setSelectedSale(null);
+        }}
+        onSave={handleCreateReturn}
+      />
     </div>
   );
 };
