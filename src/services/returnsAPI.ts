@@ -1,15 +1,14 @@
+// src/services/returnsAPI.ts
 import axios from 'axios';
 import axiosRetry from 'axios-retry';
 import { toast } from 'react-toastify';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
-const isRtl = localStorage.getItem('language') === 'ar';
 
 const returnsAxios = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
-  params: { isRtl: isRtl.toString() },
 });
 
 axiosRetry(returnsAxios, { retries: 3, retryDelay: (retryCount) => retryCount * 1000 });
@@ -20,6 +19,8 @@ returnsAxios.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    const language = localStorage.getItem('language') || 'en';
+    config.params = { ...config.params, lang: language };
     console.log(`[${new Date().toISOString()}] Returns API request:`, {
       url: config.url,
       method: config.method,
@@ -46,7 +47,8 @@ returnsAxios.interceptors.response.use(
       message: error.message,
     });
 
-    let message = error.response?.data?.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
+    let message = error.response?.data?.message || 'Unexpected error';
+    const isRtl = localStorage.getItem('language') === 'ar';
     if (error.response?.status === 400) message = error.response?.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
     if (error.response?.status === 403) message = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
     if (error.response?.status === 404) message = error.response?.data?.message || (isRtl ? 'الإرجاع غير موجود' : 'Return not found');
@@ -111,9 +113,9 @@ export const returnsAPI = {
     try {
       if (query.branch && !isValidObjectId(query.branch)) {
         console.error(`[${new Date().toISOString()}] returnsAPI.getAll - Invalid branch ID:`, query.branch);
-        throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
+        throw new Error('Invalid branch ID');
       }
-      const response = await returnsAxios.get('/returns', { params: { ...query, lang: isRtl ? 'ar' : 'en' } });
+      const response = await returnsAxios.get('/returns', { params: query });
       console.log(`[${new Date().toISOString()}] returnsAPI.getAll - Response:`, response);
       return response;
     } catch (error: any) {
@@ -125,7 +127,7 @@ export const returnsAPI = {
   getBranches: async () => {
     console.log(`[${new Date().toISOString()}] returnsAPI.getBranches - Sending`);
     try {
-      const response = await returnsAxios.get('/branches', { params: { lang: isRtl ? 'ar' : 'en' } });
+      const response = await returnsAxios.get('/branches');
       console.log(`[${new Date().toISOString()}] returnsAPI.getBranches - Response:`, response);
       return response;
     } catch (error: any) {
@@ -139,10 +141,10 @@ export const returnsAPI = {
     branchId: string;
     reason: string;
     items: Array<{
+      itemId: string;
       product: string;
       quantity: number;
       reason: string;
-      itemId: string;
     }>;
     notes?: string;
   }) => {
@@ -154,26 +156,14 @@ export const returnsAPI = {
       !Array.isArray(data.items) ||
       data.items.length === 0 ||
       data.items.some(
-        (item) => !isValidObjectId(item.product) || !isValidObjectId(item.itemId) || item.quantity < 1 || !item.reason
+        (item) => !isValidObjectId(item.itemId) || !isValidObjectId(item.product) || item.quantity < 1 || !item.reason
       )
     ) {
       console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Invalid data:`, data);
-      throw new Error(isRtl ? 'معرف الطلب، الفرع، السبب، أو العناصر غير صالحة' : 'Invalid order ID, branch ID, reason, or item data');
+      throw new Error('Invalid order ID, branch ID, reason, or item data');
     }
     try {
-      const response = await returnsAxios.post('/returns', {
-        orderId: data.orderId,
-        branchId: data.branchId,
-        reason: data.reason.trim(),
-        items: data.items.map((item) => ({
-          product: item.product,
-          quantity: item.quantity,
-          reason: item.reason.trim(),
-          itemId: item.itemId,
-        })),
-        notes: data.notes?.trim(),
-        lang: isRtl ? 'ar' : 'en',
-      });
+      const response = await returnsAxios.post('/returns', data);
       console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Response:`, response);
       return response;
     } catch (error: any) {
@@ -195,20 +185,16 @@ export const returnsAPI = {
       !['approved', 'rejected'].includes(data.status)
     ) {
       console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Invalid data:`, { returnId, data });
-      throw new Error(isRtl ? 'معرف الإرجاع أو الحالة غير صالحة' : 'Invalid return ID or status');
+      throw new Error('Invalid return ID or status');
     }
     try {
-      const response = await returnsAxios.put(`/returns/${returnId}`, {
-        status: data.status,
-        reviewNotes: data.reviewNotes?.trim(),
-        lang: isRtl ? 'ar' : 'en',
-      });
+      const response = await returnsAxios.put(`/returns/${returnId}`, data);
       console.log(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Response:`, response);
       return response;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Error:`, error);
       if (error.status === 404) {
-        throw new Error(isRtl ? 'الإرجاع غير موجود أو المسار غير صحيح' : 'Return not found or invalid endpoint');
+        throw new Error('Return not found or invalid endpoint');
       }
       throw error;
     }
