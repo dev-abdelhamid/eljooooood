@@ -507,7 +507,8 @@ const BranchSalesReport: React.FC = () => {
         return;
       }
 
-      if (!user.branchId && !selectedBranch) {
+      const effectiveBranch = user.branchId || selectedBranch;
+      if (!effectiveBranch) {
         setError(t.errors.no_branch_assigned);
         toast.error(t.errors.no_branch_assigned, { position: isRtl ? 'top-right' : 'top-left' });
         setLoading(false);
@@ -517,13 +518,16 @@ const BranchSalesReport: React.FC = () => {
       setLoading(pageNum === 1);
       setSalesLoading(pageNum > 1);
       try {
-        const salesParams: any = { page: pageNum, limit: 20, sort: '-createdAt', branch: user.branchId || selectedBranch };
+        const salesParams: any = { page: pageNum, limit: 20, sort: '-createdAt', branch: effectiveBranch };
         if (filterPeriod === 'custom' && startDate && endDate) {
           salesParams.startDate = startDate;
           salesParams.endDate = endDate;
         }
 
-        const inventoryParams: any = { lowStock: false, branch: user.branchId || selectedBranch };
+        const inventoryParams: any = { lowStock: false };
+        if (effectiveBranch) {
+          inventoryParams.branch = effectiveBranch;
+        }
 
         const [salesResponse, branchesResponse, inventoryResponse] = await Promise.all([
           salesAPI.getAll(salesParams).catch((err) => {
@@ -536,12 +540,14 @@ const BranchSalesReport: React.FC = () => {
             toast.error(t.errors.fetch_branches, { position: isRtl ? 'top-right' : 'top-left' });
             return { branches: [] };
           }),
-          inventoryAPI.getAll(inventoryParams).catch((err) => {
-            console.error(`[${new Date().toISOString()}] Inventory fetch error:`, err);
+          inventoryAPI.getInventory(inventoryParams).catch((err) => {
+            console.error(`[${new Date().toISOString()}] Inventory fetch error:`, err, { params: inventoryParams });
             toast.error(t.errors.fetch_inventory, { position: isRtl ? 'top-right' : 'top-left' });
-            return { inventory: [] };
+            return [];
           }),
         ]);
+
+        console.log(`[${new Date().toISOString()}] Inventory response:`, inventoryResponse);
 
         const returnsMap = new Map<string, Sale['returns']>();
         if (Array.isArray(salesResponse.returns)) {
@@ -624,8 +630,8 @@ const BranchSalesReport: React.FC = () => {
           toast.warn(t.errors.no_branches_available, { position: isRtl ? 'top-right' : 'top-left' });
         }
 
-        const newInventory = Array.isArray(inventoryResponse.inventory)
-          ? inventoryResponse.inventory
+        const newInventory = Array.isArray(inventoryResponse)
+          ? inventoryResponse
               .filter((item: any) => item.currentStock > 0 && item.product?._id)
               .map((item: any) => ({
                 _id: item._id,
@@ -650,9 +656,15 @@ const BranchSalesReport: React.FC = () => {
                 displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
               }))
           : [];
+        console.log(`[${new Date().toISOString()}] Processed inventory:`, newInventory);
         setInventory(newInventory);
 
-        setError('');
+        if (newInventory.length === 0 && !error) {
+          setError(t.noProducts);
+          toast.warn(t.noProducts, { position: isRtl ? 'top-right' : 'top-left' });
+        } else {
+          setError('');
+        }
       } catch (err: any) {
         console.error(`[${new Date().toISOString()}] Fetch error:`, err);
         setError(err.message === 'Invalid sale ID' ? t.errors.invalid_sale_id : (err.message || t.errors.fetch_sales));
@@ -664,7 +676,7 @@ const BranchSalesReport: React.FC = () => {
         setSalesLoading(false);
       }
     },
-    [filterPeriod, startDate, endDate, user, t, isRtl, language, selectedBranch]
+    [filterPeriod, startDate, endDate, user, t, isRtl, language, selectedBranch, error]
   );
 
   useEffect(() => {
@@ -754,6 +766,12 @@ const BranchSalesReport: React.FC = () => {
       return;
     }
 
+    const effectiveBranch = user?.branchId || selectedBranch;
+    if (!effectiveBranch) {
+      toast.error(t.errors.no_branch_assigned, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+
     for (const item of cart) {
       const product = inventory.find((inv) => inv.product._id === item.productId);
       if (!product) {
@@ -771,7 +789,7 @@ const BranchSalesReport: React.FC = () => {
     }
 
     const saleData = {
-      branch: user?.branchId || selectedBranch,
+      branch: effectiveBranch,
       items: cart.map((item) => ({
         productId: item.productId,
         quantity: item.quantity,
@@ -941,7 +959,7 @@ const BranchSalesReport: React.FC = () => {
             </div>
             {loading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
-                {[...Array(filteredInventory.length || 6)].map((_, index) => (
+                {[...Array(6)].map((_, index) => (
                   <ProductSkeletonCard key={index} />
                 ))}
               </div>

@@ -12,10 +12,13 @@ const salesAxios = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-axiosRetry(salesAxios, { retries: 3, retryDelay: (retryCount) => retryCount * 1000 });
+axiosRetry(salesAxios, {
+  retries: 3,
+  retryDelay: (retryCount) => retryCount * 1000,
+  retryCondition: (error) => !error.response || error.response.status >= 500,
+});
 
 const handleError = async (error: any, originalRequest: any): Promise<never> => {
-  const isRtl = localStorage.getItem('language') === 'ar';
   console.error(`[${new Date().toISOString()}] Sales API response error:`, {
     url: error.config?.url,
     method: error.config?.method,
@@ -25,18 +28,10 @@ const handleError = async (error: any, originalRequest: any): Promise<never> => 
   });
 
   let message = error.response?.data?.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
-  if (error.response?.status === 400) {
-    message = error.response?.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
-  }
-  if (error.response?.status === 403) {
-    message = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
-  }
-  if (error.response?.status === 404) {
-    message = error.response?.data?.message || (isRtl ? 'المبيعة غير موجودة' : 'Sale not found');
-  }
-  if (error.response?.status === 429) {
-    message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
-  }
+  if (error.response?.status === 400) message = error.response?.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
+  if (error.response?.status === 403) message = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
+  if (error.response?.status === 404) message = error.response?.data?.message || (isRtl ? 'المبيعة غير موجودة' : 'Sale not found');
+  if (error.response?.status === 429) message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
 
   if (error.response?.status === 401 && !originalRequest._retry) {
     originalRequest._retry = true;
@@ -49,7 +44,7 @@ const handleError = async (error: any, originalRequest: any): Promise<never> => 
         localStorage.removeItem('refreshToken');
         window.location.href = '/login';
         toast.error(isRtl ? 'التوكن منتهي الصلاحية، يرجى تسجيل الدخول مجددًا' : 'Token expired, please log in again', {
-          position: 'top-right',
+          position: isRtl ? 'top-right' : 'top-left',
           autoClose: 3000,
           pauseOnFocusLoss: true,
         });
@@ -69,7 +64,7 @@ const handleError = async (error: any, originalRequest: any): Promise<never> => 
       localStorage.removeItem('refreshToken');
       window.location.href = '/login';
       toast.error(isRtl ? 'فشل تجديد التوكن، يرجى تسجيل الدخول مجددًا' : 'Failed to refresh token, please log in again', {
-        position: 'top-right',
+        position: isRtl ? 'top-right' : 'top-left',
         autoClose: 3000,
         pauseOnFocusLoss: true,
       });
@@ -77,16 +72,14 @@ const handleError = async (error: any, originalRequest: any): Promise<never> => 
     }
   }
 
-  toast.error(message, { position: 'top-right', autoClose: 3000, pauseOnFocusLoss: true });
+  toast.error(message, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000, pauseOnFocusLoss: true });
   return Promise.reject({ message, status: error.response?.status });
 };
 
 salesAxios.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+    if (token) config.headers.Authorization = `Bearer ${token}`;
     const language = localStorage.getItem('language') || 'en';
     config.params = { ...config.params, lang: language };
     console.log(`[${new Date().toISOString()}] Sales API request:`, {
@@ -104,7 +97,14 @@ salesAxios.interceptors.request.use(
 );
 
 salesAxios.interceptors.response.use(
-  (response) => response.data,
+  (response) => {
+    const data = response.data;
+    if (!data) {
+      console.error(`[${new Date().toISOString()}] Empty response data:`, response);
+      throw new Error(isRtl ? 'استجابة فارغة من الخادم' : 'Empty response from server');
+    }
+    return data;
+  },
   (error) => handleError(error, error.config)
 );
 
@@ -112,6 +112,12 @@ const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7,15}$/.test(phone);
 const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'credit_card', 'bank_transfer'].includes(method);
 const isValidPaymentStatus = (status: string | undefined): boolean => !status || ['pending', 'completed', 'failed'].includes(status);
+
+const formatDateForAPI = (date: Date): string => {
+  const offset = date.getTimezoneOffset();
+  const adjustedDate = new Date(date.getTime() - offset * 60 * 1000);
+  return adjustedDate.toISOString().split('T')[0];
+};
 
 export const salesAPI = {
   create: async (saleData: {
@@ -128,9 +134,9 @@ export const salesAPI = {
       console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid branch ID:`, saleData.branch);
       throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
     }
-    if (saleData.items.some((item) => !isValidObjectId(item.productId) || item.quantity < 1 || item.unitPrice < 0)) {
-      console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid productId, quantity, or unitPrice in items:`, saleData.items);
-      throw new Error(isRtl ? 'معرف المنتج، الكمية، أو السعر غير صالح' : 'Invalid product ID, quantity, or unit price');
+    if (!saleData.items?.length || saleData.items.some((item) => !isValidObjectId(item.productId) || item.quantity < 1 || item.unitPrice < 0)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid items:`, saleData.items);
+      throw new Error(isRtl ? 'بيانات المنتجات غير صالحة' : 'Invalid product data');
     }
     if (!isValidPhone(saleData.customerPhone)) {
       console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid customer phone:`, saleData.customerPhone);
@@ -147,7 +153,7 @@ export const salesAPI = {
     try {
       for (const item of saleData.items) {
         const inventory = await inventoryAPI.getInventory({ branch: saleData.branch, product: item.productId });
-        if (!inventory || inventory.length === 0 || inventory[0].currentStock < item.quantity) {
+        if (!inventory?.length || inventory[0].currentStock < item.quantity) {
           console.error(`[${new Date().toISOString()}] salesAPI.create - Insufficient stock for product:`, item.productId);
           throw new Error(isRtl ? `المخزون غير كافٍ للمنتج ${item.productId}` : `Insufficient stock for product ${item.productId}`);
         }
@@ -167,7 +173,7 @@ export const salesAPI = {
         lang: isRtl ? 'ar' : 'en',
       });
       console.log(`[${new Date().toISOString()}] salesAPI.create - Response:`, response);
-      toast.success(isRtl ? 'تم إنشاء المبيعة بنجاح' : 'Sale created successfully', { position: 'top-right' });
+      toast.success(isRtl ? 'تم إنشاء المبيعة بنجاح' : 'Sale created successfully', { position: isRtl ? 'top-right' : 'top-left' });
       return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.create - Error:`, err);
@@ -193,9 +199,9 @@ export const salesAPI = {
       console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid branch ID:`, saleData.branch);
       throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
     }
-    if (saleData.items?.some((item) => !isValidObjectId(item.productId) || item.quantity < 1 || item.unitPrice < 0)) {
-      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid productId, quantity, or unitPrice in items:`, saleData.items);
-      throw new Error(isRtl ? 'معرف المنتج، الكمية، أو السعر غير صالح' : 'Invalid product ID, quantity, or unit price');
+    if (saleData.items?.length && saleData.items.some((item) => !isValidObjectId(item.productId) || item.quantity < 1 || item.unitPrice < 0)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid items:`, saleData.items);
+      throw new Error(isRtl ? 'بيانات المنتجات غير صالحة' : 'Invalid product data');
     }
     if (!isValidPhone(saleData.customerPhone)) {
       console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid customer phone:`, saleData.customerPhone);
@@ -213,7 +219,7 @@ export const salesAPI = {
       if (saleData.items && saleData.branch) {
         for (const item of saleData.items) {
           const inventory = await inventoryAPI.getInventory({ branch: saleData.branch, product: item.productId });
-          if (!inventory || inventory.length === 0 || inventory[0].currentStock < item.quantity) {
+          if (!inventory?.length || inventory[0].currentStock < item.quantity) {
             console.error(`[${new Date().toISOString()}] salesAPI.update - Insufficient stock for product:`, item.productId);
             throw new Error(isRtl ? `المخزون غير كافٍ للمنتج ${item.productId}` : `Insufficient stock for product ${item.productId}`);
           }
@@ -234,7 +240,7 @@ export const salesAPI = {
         lang: isRtl ? 'ar' : 'en',
       });
       console.log(`[${new Date().toISOString()}] salesAPI.update - Response:`, response);
-      toast.success(isRtl ? 'تم تعديل المبيعة بنجاح' : 'Sale updated successfully', { position: 'top-right' });
+      toast.success(isRtl ? 'تم تعديل المبيعة بنجاح' : 'Sale updated successfully', { position: isRtl ? 'top-right' : 'top-left' });
       return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.update - Error:`, err);
@@ -251,7 +257,7 @@ export const salesAPI = {
     try {
       const response = await salesAxios.delete(`/sales/${id}`, { params: { lang: isRtl ? 'ar' : 'en' } });
       console.log(`[${new Date().toISOString()}] salesAPI.delete - Response:`, response);
-      toast.success(isRtl ? 'تم حذف المبيعة بنجاح' : 'Sale deleted successfully', { position: 'top-right' });
+      toast.success(isRtl ? 'تم حذف المبيعة بنجاح' : 'Sale deleted successfully', { position: isRtl ? 'top-right' : 'top-left' });
       return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.delete - Error:`, err);
@@ -259,20 +265,34 @@ export const salesAPI = {
     }
   },
 
-  getAll: async (params: { branch?: string; startDate?: string; endDate?: string; page?: number; limit?: number; paymentStatus?: string } = {}) => {
+  getAll: async (params: { branch?: string; startDate?: string; endDate?: string; page?: number; limit?: number; paymentStatus?: string; sort?: string } = {}) => {
     console.log(`[${new Date().toISOString()}] salesAPI.getAll - Params:`, params);
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid branch ID:`, params.branch);
       throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
     }
     try {
-      const response = await salesAxios.get('/sales', { params: { ...params, lang: isRtl ? 'ar' : 'en' } });
+      const cleanedParams = {
+        branch: params.branch,
+        startDate: params.startDate,
+        endDate: params.endDate,
+        page: params.page || 1,
+        limit: params.limit || 20,
+        paymentStatus: params.paymentStatus,
+        sort: params.sort || '-createdAt',
+        lang: isRtl ? 'ar' : 'en',
+      };
+      const response = await salesAxios.get('/sales', { params: cleanedParams });
       console.log(`[${new Date().toISOString()}] salesAPI.getAll - Response:`, response);
       if (!response || !Array.isArray(response.sales)) {
         console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid sales response:`, response);
-        throw new Error(isRtl ? 'استجابة المبيعات غير صالحة من الخادم' : 'Invalid sales response from server');
+        return { sales: [], total: 0, returns: [] };
       }
-      return response;
+      return {
+        sales: response.sales || [],
+        total: response.total || 0,
+        returns: response.returns || [],
+      };
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAll - Error:`, err);
       throw err;
@@ -288,7 +308,7 @@ export const salesAPI = {
     try {
       const response = await salesAxios.get(`/sales/${id}`, { params: { lang: isRtl ? 'ar' : 'en' } });
       console.log(`[${new Date().toISOString()}] salesAPI.getById - Response:`, response);
-      return response;
+      return response || {};
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.getById - Error:`, err);
       throw err;
@@ -302,16 +322,16 @@ export const salesAPI = {
       throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
     }
     try {
-      const filteredParams = {
+      const cleanedParams = {
         branch: params.branch,
         startDate: params.startDate,
         endDate: params.endDate,
         paymentStatus: params.paymentStatus,
         lang: isRtl ? 'ar' : 'en',
       };
-      const response = await salesAxios.get('/sales/analytics', { params: filteredParams });
+      const response = await salesAxios.get('/sales/analytics', { params: cleanedParams });
       console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Response:`, response);
-      return response;
+      return response || {};
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Error:`, err);
       throw err;
