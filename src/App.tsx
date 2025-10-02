@@ -23,8 +23,10 @@ import BranchOrders from './pages/BranchOrders';
 import BranchReturns from './pages/BranchReturns';
 import { Users } from './pages/Users';
 import { BranchInventory } from './pages/BranchInventory';
+import SalesReport from './pages/SalesReport';
 import BranchSalesReport from './pages/BranchSalesReport';
 import  AdminSalesReport   from './pages/AdminSalesReport';
+
 
 
 
@@ -84,6 +86,7 @@ function AppContent() {
                   <Route path="/branches" element={<Branches />} />
                   <Route path="/branch-inventory" element={<BranchInventory />} />
                   <Route path="/branch-sales" element={<BranchSalesReport />} />
+                  <Route path="/new" element={<SalesReport />} />
                   <Route path="/branch-returns" element={<BranchReturns />} />
                   <Route path="/branch-orders" element={<BranchOrders />} />
                   <Route path="/chefstatics" element={<Chefstatics />} />
