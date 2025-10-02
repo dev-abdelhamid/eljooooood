@@ -241,24 +241,25 @@ const ProductDropdown = React.memo<{
   options: { value: string; label: string }[];
   ariaLabel: string;
   disabled?: boolean;
-}>(({ value, onChange, options, ariaLabel, disabled = false }) => {
+  className?: string;
+}>(({ value, onChange, options, ariaLabel, disabled = false, className }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
   const selectedOption = options.find((opt) => opt.value === value) || options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
 
   return (
-    <div className="relative group">
+    <div className={`relative group ${className || ''}`}>
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         aria-label={ariaLabel}
       >
         <span className="truncate">{selectedOption.label}</span>
         <ChevronDown className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200 w-5 h-5 text-gray-400 group-focus-within:text-amber-500`} />
       </button>
       {isOpen && !disabled && (
-        <div className="absolute w-full mt-2 bg-white rounded-lg shadow-lg border border-gray-100 z-20 max-h-60 overflow-y-auto">
+        <div className="absolute w-full mt-2 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none">
           {options.length > 0 ? (
             options.map((option) => (
               <div
@@ -267,13 +268,13 @@ const ProductDropdown = React.memo<{
                   onChange(option.value);
                   setIsOpen(false);
                 }}
-                className="px-4 py-2 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
+                className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
               >
                 {option.label}
               </div>
             ))
           ) : (
-            <div className="px-4 py-2 text-sm text-gray-500">{isRtl ? 'لا توجد خيارات متاحة' : 'No options available'}</div>
+            <div className="px-4 py-2.5 text-sm text-gray-500">{isRtl ? 'لا توجد خيارات متاحة' : 'No options available'}</div>
           )}
         </div>
       )}
@@ -328,16 +329,16 @@ const ProductCard = React.memo<{
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   return (
-    <div className="p-5 bg-white rounded-lg shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200">
+    <div className="h-[200px] p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200">
       <div className="space-y-2">
-        <h3 className="font-bold text-gray-900 text-lg truncate">{product.displayName}</h3>
+        <h3 className="font-bold text-gray-900 text-base truncate">{product.displayName}</h3>
         <p className="text-sm text-amber-600">{t.department}: {product.product.department?.displayName || t.departments.unknown}</p>
         <p className="text-sm text-gray-600">{t.availableStock}: {product.currentStock} {product.displayUnit || t.units.default}</p>
         <p className="font-semibold text-gray-900 text-sm">{t.unitPrice}: {product.product.price} {t.currency}</p>
       </div>
       <div className="mt-4 flex justify-end">
         {cartItem ? (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <QuantityInput
               value={cartItem.quantity}
               onChange={(val) => onUpdate(parseInt(val) || 0)}
@@ -373,7 +374,7 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   return (
-    <div className="p-6 bg-white rounded-lg shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 hover:border-amber-200">
+    <div className="p-6 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div className="space-y-3">
           <div className="flex items-center gap-2">
@@ -432,7 +433,7 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
 });
 
 const ProductSkeletonCard = React.memo(() => (
-  <div className="p-5 bg-white rounded-lg shadow-md border border-gray-100">
+  <div className="h-[200px] p-5 bg-white rounded-xl shadow-sm border border-gray-100">
     <div className="space-y-3 animate-pulse">
       <div className="h-4 bg-gray-200 rounded w-3/4"></div>
       <div className="h-3 bg-gray-200 rounded w-1/2"></div>
@@ -445,7 +446,7 @@ const ProductSkeletonCard = React.memo(() => (
 ));
 
 const SaleSkeletonCard = React.memo(() => (
-  <div className="p-6 bg-white rounded-lg shadow-md border border-gray-100">
+  <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
     <div className="space-y-3 animate-pulse">
       <div className="h-4 bg-gray-200 rounded w-3/4"></div>
       <div className="h-3 bg-gray-200 rounded w-1/2"></div>
@@ -624,28 +625,30 @@ const BranchSalesReport: React.FC = () => {
         }
 
         const newInventory = Array.isArray(inventoryResponse.inventory)
-          ? inventoryResponse.inventory.map((item: any) => ({
-              _id: item._id,
-              product: {
-                _id: item.product?._id || item.productId,
-                name: item.product?.name || t.departments.unknown,
-                nameEn: item.product?.nameEn,
-                unit: item.product?.unit,
-                unitEn: item.product?.unitEn,
-                price: item.product?.price || 0,
-                department: item.product?.department
-                  ? {
-                      _id: item.product.department._id,
-                      name: item.product.department.name,
-                      nameEn: item.product.department.nameEn,
-                      displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
-                    }
-                  : undefined,
-              },
-              currentStock: item.currentStock || 0,
-              displayName: isRtl ? (item.product?.name || t.departments.unknown) : (item.product?.nameEn || item.product?.name || t.departments.unknown),
-              displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
-            }))
+          ? inventoryResponse.inventory
+              .filter((item: any) => item.currentStock > 0 && item.product?._id)
+              .map((item: any) => ({
+                _id: item._id,
+                product: {
+                  _id: item.product?._id || 'unknown',
+                  name: item.product?.name || t.departments.unknown,
+                  nameEn: item.product?.nameEn,
+                  unit: item.product?.unit,
+                  unitEn: item.product?.unitEn,
+                  price: item.product?.price || 0,
+                  department: item.product?.department
+                    ? {
+                        _id: item.product.department._id || 'unknown',
+                        name: item.product.department.name || t.departments.unknown,
+                        nameEn: item.product.department.nameEn,
+                        displayName: isRtl ? (item.product.department.name || t.departments.unknown) : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
+                      }
+                    : undefined,
+                },
+                currentStock: item.currentStock || 0,
+                displayName: isRtl ? (item.product?.name || t.departments.unknown) : (item.product?.nameEn || item.product?.name || t.departments.unknown),
+                displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
+              }))
           : [];
         setInventory(newInventory);
 
@@ -872,16 +875,16 @@ const BranchSalesReport: React.FC = () => {
   );
 
   const totalCartAmount = useMemo(() => {
-    return cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+    return cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0).toFixed(2);
   }, [cart]);
 
   return (
-    <div className={`mx-auto px-4 sm:px-6 py-8 min-h-screen bg-gray-50 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`mx-auto px-4 sm:px-6 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
-          <DollarSign className="w-8 h-8 text-amber-600" />
+          <DollarSign className="w-7 h-7 text-amber-600" />
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">{t.title || 'Sales Report'}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
             <p className="text-gray-600 text-sm">{t.subtitle}</p>
           </div>
         </div>
@@ -912,59 +915,43 @@ const BranchSalesReport: React.FC = () => {
       </div>
 
       {activeTab === 'new' && (
-        <>
-          {user?.role !== 'branch' && (
-            <div className="p-6 bg-white rounded-lg shadow-md border border-gray-100 mb-8">
-              <h2 className="text-xl font-bold text-gray-900 mb-6">{t.filters}</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        <div className={`space-y-8 ${cart.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-8 lg:space-y-0' : ''}`}>
+          <section className={`${cart.length > 0 ? 'lg:col-span-2 lg:overflow-y-auto lg:max-h-[calc(100vh-12rem)] scrollbar-none' : ''}`}>
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+              <h2 className="text-xl font-bold text-gray-900 mb-6">{t.availableProducts}</h2>
+              {!user?.branchId && (
                 <ProductDropdown
                   value={selectedBranch}
                   onChange={setSelectedBranch}
                   options={branchOptions}
                   ariaLabel={t.branches.select_branch}
                   disabled={!!user?.branchId}
+                  className="mb-4"
                 />
-                <ProductDropdown value={filterPeriod} onChange={setFilterPeriod} options={periodOptions} ariaLabel={t.filterBy} />
-                {filterPeriod === 'custom' && (
-                  <>
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-                      aria-label={t.date}
-                    />
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-                      aria-label={t.date}
-                    />
-                  </>
-                )}
+              )}
+              <ProductSearchInput
+                value={searchInput}
+                onChange={handleSearchChange}
+                placeholder={t.searchPlaceholder}
+                ariaLabel={t.searchPlaceholder}
+              />
+              <div className="mt-4 text-center text-sm text-gray-600 font-medium">
+                {isRtl ? `عدد المنتجات: ${filteredInventory.length}` : `Products Count: ${filteredInventory.length}`}
               </div>
             </div>
-          )}
-
-          <div className="mb-8">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">{t.availableProducts}</h2>
-            <div className="mb-6">
-              <ProductSearchInput value={searchInput} onChange={handleSearchChange} placeholder={t.searchPlaceholder} ariaLabel={t.searchPlaceholder} />
-            </div>
             {loading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[...Array(6)].map((_, index) => (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+                {[...Array(filteredInventory.length || 6)].map((_, index) => (
                   <ProductSkeletonCard key={index} />
                 ))}
               </div>
             ) : filteredInventory.length === 0 ? (
-              <div className="p-8 text-center bg-white rounded-lg shadow-md border border-gray-100">
+              <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100 mt-6">
                 <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600 text-sm font-medium">{t.noProducts}</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
                 {filteredInventory.map((product) => (
                   <ProductCard
                     key={product._id}
@@ -977,44 +964,45 @@ const BranchSalesReport: React.FC = () => {
                 ))}
               </div>
             )}
-          </div>
+          </section>
 
-          <div className="mb-8 p-6 bg-white rounded-lg shadow-md border border-gray-100">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">{t.cart}</h2>
-            {cart.length === 0 ? (
-              <div className="p-8 text-center bg-gray-50 rounded-lg border border-gray-100">
-                <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 text-sm font-medium">{t.emptyCart}</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {cart.map((item, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
-                    <div>
-                      <p className="font-semibold text-gray-900 text-sm">{item.displayName}</p>
-                      <p className="text-sm text-gray-600">{t.unitPrice}: {item.unitPrice} {t.currency}</p>
-                      <p className="text-sm text-gray-600">{t.quantity}: {item.quantity} {item.displayUnit}</p>
+          {cart.length > 0 && (
+            <aside className="lg:col-span-1 lg:sticky lg:top-8 space-y-6 max-h-[calc(100vh-12rem)] overflow-y-auto scrollbar-none">
+              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+                <h3 className="text-xl font-bold text-gray-900 mb-6">{t.cart}</h3>
+                <div className="space-y-4">
+                  {cart.map((item) => (
+                    <div key={item.productId} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900 text-sm">{item.displayName || t.errors.deleted_product}</p>
+                        <p className="text-sm text-gray-600">
+                          {item.unitPrice} {t.currency} / {item.displayUnit || t.units.default}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <QuantityInput
+                          value={item.quantity}
+                          onChange={(val) => updateCartQuantity(item.productId, parseInt(val) || 0)}
+                          onIncrement={() => updateCartQuantity(item.productId, item.quantity + 1)}
+                          onDecrement={() => updateCartQuantity(item.productId, item.quantity - 1)}
+                        />
+                        <button
+                          onClick={() => removeFromCart(item.productId)}
+                          className="w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
+                          aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <QuantityInput
-                        value={item.quantity}
-                        onChange={(val) => updateCartQuantity(item.productId, parseInt(val) || 0)}
-                        onIncrement={() => updateCartQuantity(item.productId, item.quantity + 1)}
-                        onDecrement={() => updateCartQuantity(item.productId, item.quantity - 1)}
-                      />
-                      <button
-                        onClick={() => removeFromCart(item.productId)}
-                        className="w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
-                        aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                  ))}
+                  <div className="border-t pt-4">
+                    <div className="flex justify-between font-bold text-gray-900 text-sm">
+                      <span>{t.total}:</span>
+                      <span className="text-amber-600">{totalCartAmount} {t.currency}</span>
                     </div>
                   </div>
-                ))}
-                <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                  <p className="text-lg font-semibold text-gray-900">{t.total}: {totalCartAmount} {t.currency}</p>
-                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="mt-4 space-y-4">
                     <input
                       type="text"
                       value={customerName}
@@ -1031,36 +1019,40 @@ const BranchSalesReport: React.FC = () => {
                       className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                       aria-label={t.customerPhone}
                     />
-                    <ProductDropdown value={paymentMethod} onChange={setPaymentMethod} options={paymentMethodOptions} ariaLabel={t.paymentMethod} />
+                    <ProductDropdown
+                      value={paymentMethod}
+                      onChange={setPaymentMethod}
+                      options={paymentMethodOptions}
+                      ariaLabel={t.paymentMethod}
+                    />
                     <textarea
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       placeholder={t.notes}
-                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm resize-none h-24 ${isRtl ? 'text-right' : 'text-left'}`}
                       aria-label={t.notes}
-                      rows={3}
                     />
                   </div>
                   <button
                     onClick={handleSubmitSale}
-                    className="mt-4 w-full px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center justify-center gap-2 shadow-sm"
+                    className="w-full mt-4 px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                    disabled={cart.length === 0 || !selectedBranch}
                     aria-label={editingSale ? t.editSale : t.submitSale}
                   >
-                    <DollarSign className="w-5 h-5" />
                     {editingSale ? t.editSale : t.submitSale}
                   </button>
                 </div>
               </div>
-            )}
-          </div>
-        </>
+            </aside>
+          )}
+        </div>
       )}
 
       {activeTab === 'previous' && (
         <div className="mt-8">
           <h2 className="text-xl font-bold text-gray-900 mb-6">{t.previousSales}</h2>
-          {user?.role !== 'branch' && (
-            <div className="p-6 bg-white rounded-lg shadow-md border border-gray-100 mb-8">
+          {!user?.branchId && (
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-8">
               <h2 className="text-xl font-bold text-gray-900 mb-6">{t.filters}</h2>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                 <ProductDropdown
@@ -1099,7 +1091,7 @@ const BranchSalesReport: React.FC = () => {
               ))}
             </div>
           ) : sales.length === 0 ? (
-            <div className="p-8 text-center bg-white rounded-lg shadow-md border border-gray-100">
+            <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
               <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 text-sm font-medium">{t.noSales}</p>
             </div>
