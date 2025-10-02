@@ -42,7 +42,7 @@ interface Sale {
     _id: string;
     returnNumber: string;
     status: string;
-    items: Array<{ product: string; quantity: number; reason: string }>;
+    items: Array<{ product: string; productName: string; productNameEn?: string; quantity: number; reason: string }>;
     reason: string;
     createdAt: string;
   }>;
@@ -114,13 +114,14 @@ const translations = {
     totalSales: 'إجمالي المبيعات',
     topProduct: 'المنتج الأكثر مبيعًا',
     previousSales: 'المبيعات السابقة',
-    noSales: 'لا توجد طلبات',
+    noSales: 'لا توجد مبيعات',
     date: 'التاريخ',
     returns: 'المرتجعات',
     return: 'مرتجع',
     reason: 'السبب',
     quantity: 'الكمية',
     searchPlaceholder: 'ابحث عن المنتجات...',
+    loadMore: 'تحميل المزيد',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       no_branch_assigned: 'لم يتم تعيين فرع',
@@ -130,6 +131,7 @@ const translations = {
       exceeds_max_quantity: 'الكمية تتجاوز الحد الأقصى',
       invalid_quantity: 'الكمية غير صالحة',
       empty_cart: 'السلة فارغة',
+      deleted_product: 'منتج محذوف',
     },
     currency: 'ريال',
     units: { default: 'غير محدد' },
@@ -166,6 +168,7 @@ const translations = {
     reason: 'Reason',
     quantity: 'Quantity',
     searchPlaceholder: 'Search products...',
+    loadMore: 'Load More',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       no_branch_assigned: 'No branch assigned',
@@ -175,6 +178,7 @@ const translations = {
       exceeds_max_quantity: 'Quantity exceeds maximum available',
       invalid_quantity: 'Invalid quantity',
       empty_cart: 'Cart is empty',
+      deleted_product: 'Deleted Product',
     },
     currency: 'SAR',
     units: { default: 'N/A' },
@@ -339,7 +343,7 @@ const ProductCard: React.FC<{
   );
 };
 
-const SaleCard: React.FC<{ sale: Sale; onEdit: () => void; onDelete: () => void; onCreateReturn: () => void; }> = ({ sale, onEdit, onDelete, onCreateReturn }) => {
+const SaleCard: React.FC<{ sale: Sale }> = ({ sale }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
@@ -354,7 +358,7 @@ const SaleCard: React.FC<{ sale: Sale; onEdit: () => void; onDelete: () => void;
           <ul className="list-disc list-inside text-sm text-gray-600 mt-2">
             {sale.items.map((item, index) => (
               <li key={index}>
-                {item.displayName} ({item.department?.displayName || t.departments.unknown}) - {t.quantity}: {item.quantity} {item.displayUnit}, {t.unitPrice}: {item.unitPrice} {t.currency}
+                {item.displayName || t.errors.deleted_product} ({item.department?.displayName || t.departments.unknown}) - {t.quantity}: {item.quantity} {item.displayUnit}, {t.unitPrice}: {item.unitPrice} {t.currency}
               </li>
             ))}
           </ul>
@@ -364,7 +368,7 @@ const SaleCard: React.FC<{ sale: Sale; onEdit: () => void; onDelete: () => void;
               <ul className="list-disc list-inside text-sm text-gray-600">
                 {sale.returns.map((ret, index) => (
                   <li key={index}>
-                    {t.return} #{ret.returnNumber} ({t.returns.status[ret.status]}) - {t.reason}: {ret.reason}
+                    {t.return} #{ret.returnNumber} ({t.returns.status[ret.status]}) - {t.reason}: {ret.reason} ({t.date}: {ret.createdAt})
                     <ul className="list-circle list-inside ml-4">
                       {ret.items.map((item, i) => (
                         <li key={i}>
@@ -377,17 +381,6 @@ const SaleCard: React.FC<{ sale: Sale; onEdit: () => void; onDelete: () => void;
               </ul>
             </div>
           )}
-        </div>
-        <div className="flex flex-col gap-2">
-          <button onClick={onEdit} className="w-8 h-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center" aria-label={t.editSale}>
-            <Edit className="w-4 h-4" />
-          </button>
-          <button onClick={onDelete} className="w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center" aria-label={t.deleteSale}>
-            <Trash2 className="w-4 h-4" />
-          </button>
-          <button onClick={onCreateReturn} className="w-8 h-8 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center" aria-label={t.createReturn}>
-            <Plus className="w-4 h-4" />
-          </button>
         </div>
       </div>
     </div>
@@ -421,7 +414,6 @@ export const SalesReport: React.FC = () => {
     departmentSales: [],
     totalSales: 0,
     topProduct: { productName: '', displayName: '', totalQuantity: 0 },
-    salesTrend: [],
   });
   const [filterBranch, setFilterBranch] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -436,10 +428,6 @@ export const SalesReport: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState(user?.role === 'branch' && user?.branchId ? user.branchId : '');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isEdit, setIsEdit] = useState(false);
-  const [isReturnOpen, setIsReturnOpen] = useState(false);
 
   const debouncedSearch = useCallback(
     debounce((value: string) => setSearchTerm(value.trim()), 500),
@@ -463,7 +451,7 @@ export const SalesReport: React.FC = () => {
   }, [inventory, searchTerm]);
 
   const fetchData = useCallback(async (pageNum: number = 1, append: boolean = false) => {
-    if (!user?.role || !['branch', 'admin', 'production'].includes(user.role)) {
+    if (!user?.role || !['branch', 'admin'].includes(user.role)) {
       setError(t.errors.unauthorized_access);
       toast.error(t.errors.unauthorized_access, { position: isRtl ? 'top-right' : 'top-left' });
       setLoading(false);
@@ -481,7 +469,7 @@ export const SalesReport: React.FC = () => {
     setSalesLoading(pageNum > 1);
     try {
       const params: any = { page: pageNum, limit: 20, sort: '-createdAt', lang: language };
-      if (user.role === 'branch' || user.role === 'production') {
+      if (user.role === 'branch') {
         params.branch = user.branchId || selectedBranch;
       } else if (filterBranch) {
         params.branch = filterBranch;
@@ -489,11 +477,10 @@ export const SalesReport: React.FC = () => {
       if (startDate) params.startDate = startDate;
       if (endDate) params.endDate = endDate;
 
-      const [salesResponse, branchesResponse, inventoryResponse, returnsResponse, analyticsResponse] = await Promise.all([
+      const [salesResponse, branchesResponse, inventoryResponse, analyticsResponse] = await Promise.all([
         salesAPI.getAll(params),
-        user.role === 'admin' ? branchesAPI.getAll() : Promise.resolve({ branches: [] }),
-        inventoryAPI.getInventory({ branch: user.branchId || selectedBranch, lowStock: false }),
-        returnsAPI.getAll(params),
+        user.role === 'admin' ? branchesAPI.getAll({ lang: language }) : Promise.resolve({ branches: [] }),
+        inventoryAPI.getInventory({ branch: user.branchId || selectedBranch, lowStock: false, lang: language }),
         user.role === 'admin' ? salesAPI.getAnalytics(params) : Promise.resolve({
           branchSales: [],
           productSales: [],
@@ -504,8 +491,8 @@ export const SalesReport: React.FC = () => {
       ]);
 
       const returnsMap = new Map<string, Sale['returns']>();
-      if (Array.isArray(returnsResponse.returns)) {
-        returnsResponse.returns.forEach((ret: any) => {
+      if (Array.isArray(salesResponse.returns)) {
+        salesResponse.returns.forEach((ret: any) => {
           const orderId = ret.order?._id || ret.order;
           if (!returnsMap.has(orderId)) returnsMap.set(orderId, []);
           returnsMap.get(orderId)!.push({
@@ -515,6 +502,8 @@ export const SalesReport: React.FC = () => {
             items: Array.isArray(ret.items)
               ? ret.items.map((item: any) => ({
                   product: item.product?._id || item.product,
+                  productName: item.product?.name || t.errors.deleted_product,
+                  productNameEn: item.product?.nameEn,
                   quantity: item.quantity,
                   reason: item.reason,
                 }))
@@ -531,7 +520,7 @@ export const SalesReport: React.FC = () => {
 
       const newSales = salesResponse.sales.map((sale: any) => ({
         _id: sale._id,
-        orderNumber: sale.orderNumber,
+        orderNumber: sale.saleNumber || sale.orderNumber,
         branch: {
           _id: sale.branch?._id || 'unknown',
           name: sale.branch?.name || t.branches.unknown,
@@ -662,7 +651,7 @@ export const SalesReport: React.FC = () => {
       setLoading(false);
       setSalesLoading(false);
     }
-  }, [filterBranch, startDate, endDate, selectedBranch, user, t, isRtl, languageT]);
+  }, [filterBranch, startDate, endDate, selectedBranch, user, t, isRtl, languageT, language]);
 
   useEffect(() => {
     fetchData();
@@ -683,7 +672,7 @@ export const SalesReport: React.FC = () => {
         },
         items: sale.items.map((item) => ({
           ...item,
-          displayName: isRtl ? item.productName : (item.productNameEn || item.productName),
+          displayName: isRtl ? (item.productName || t.errors.deleted_product) : (item.productNameEn || item.productName || t.errors.deleted_product),
           displayUnit: isRtl ? (item.unit || t.units.default) : (item.unitEn || item.unit || t.units.default),
           department: item.department
             ? {
@@ -692,12 +681,19 @@ export const SalesReport: React.FC = () => {
               }
             : undefined,
         })),
+        returns: sale.returns?.map((ret) => ({
+          ...ret,
+          items: ret.items.map((item) => ({
+            ...item,
+            productName: isRtl ? (item.productName || t.errors.deleted_product) : (item.productNameEn || item.productName || t.errors.deleted_product),
+          })),
+        })),
       }))
     );
     setInventory((prev) =>
       prev.map((item) => ({
         ...item,
-        displayName: isRtl ? item.product.name : (item.product.nameEn || item.product.name),
+        displayName: isRtl ? (item.product.name || t.errors.deleted_product) : (item.product.nameEn || item.product.name || t.errors.deleted_product),
         displayUnit: isRtl ? (item.product.unit || t.units.default) : (item.product.unitEn || item.product.unit || t.units.default),
         product: {
           ...item.product,
@@ -713,7 +709,7 @@ export const SalesReport: React.FC = () => {
     setCart((prev) =>
       prev.map((item) => ({
         ...item,
-        displayName: isRtl ? item.productName : (item.productNameEn || item.productName),
+        displayName: isRtl ? (item.productName || t.errors.deleted_product) : (item.productNameEn || item.productName || t.errors.deleted_product),
         displayUnit: isRtl ? (item.unit || t.units.default) : (item.unitEn || item.unit || t.units.default),
       }))
     );
@@ -725,7 +721,7 @@ export const SalesReport: React.FC = () => {
       })),
       productSales: prev.productSales.map((ps) => ({
         ...ps,
-        displayName: isRtl ? ps.productName : (ps.productNameEn || ps.productName),
+        displayName: isRtl ? (ps.productName || t.errors.deleted_product) : (ps.productNameEn || ps.productName || t.errors.deleted_product),
       })),
       departmentSales: prev.departmentSales.map((ds) => ({
         ...ds,
@@ -733,7 +729,7 @@ export const SalesReport: React.FC = () => {
       })),
       topProduct: {
         ...prev.topProduct,
-        displayName: isRtl ? prev.topProduct.productName : (prev.topProduct.productNameEn || prev.topProduct.productName),
+        displayName: isRtl ? (prev.topProduct.productName || t.errors.deleted_product) : (prev.topProduct.productNameEn || prev.topProduct.productName || t.errors.deleted_product),
       },
     }));
   }, [isRtl, t]);
@@ -829,54 +825,6 @@ export const SalesReport: React.FC = () => {
     }
   }, [cart, notes, selectedBranch, user, t, isRtl, fetchData]);
 
-  const handleUpdateSale = useCallback(async (saleData: Partial<Sale>) => {
-    if (selectedSale) {
-      try {
-        const response = await salesAPI.update(selectedSale._id, saleData);
-        setSales((prev) => prev.map((s) => (s._id === selectedSale._id ? response : s)));
-        toast.success(t.update_sale_success, { position: isRtl ? 'top-right' : 'top-left' });
-      } catch (err: any) {
-        toast.error(err.message || t.errors.update_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
-      }
-    }
-  }, [selectedSale, t, isRtl]);
-
-  const handleDeleteSale = useCallback(async (id: string) => {
-    try {
-      await salesAPI.delete(id);
-      setSales((prev) => prev.filter((s) => s._id !== id));
-      toast.success(t.delete_sale_success, { position: isRtl ? 'top-right' : 'top-left' });
-    } catch (err: any) {
-      toast.error(err.message || t.errors.delete_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
-    }
-  }, [t, isRtl]);
-
-  const handleCreateReturn = useCallback(async (returnData: ReturnForm) => {
-    try {
-      const response = await inventoryAPI.createReturn(returnData);
-      toast.success(t.create_return_success, { position: isRtl ? 'top-right' : 'top-left' });
-      fetchData();
-    } catch (err: any) {
-      toast.error(err.message || t.errors.create_return_failed, { position: isRtl ? 'top-right' : 'top-left' });
-    }
-  }, [t, isRtl, fetchData]);
-
-  const handleExportReport = useCallback(async () => {
-    try {
-      const response = await salesAPI.exportReport({ branch: filterBranch, startDate, endDate, format: 'csv' });
-      const blob = new Blob([response], { type: 'text/csv' });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', 'sales_report.csv');
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (err: any) {
-      toast.error(err.message || t.errors.export_failed, { position: isRtl ? 'top-right' : 'top-left' });
-    }
-  }, [filterBranch, startDate, endDate, t, isRtl]);
-
   const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0).toFixed(2), [cart]);
 
   const branchSalesChartData = useMemo(() => ({
@@ -918,40 +866,6 @@ export const SalesReport: React.FC = () => {
     ],
   }), [analytics.departmentSales, t]);
 
-  const salesTrendChartData = useMemo(() => ({
-    labels: analytics.salesTrend.map((st) => st.date),
-    datasets: [
-      {
-        label: t.salesTrend,
-        data: analytics.salesTrend.map((st) => st.totalSales),
-        borderColor: 'rgba(251, 191, 36, 1)',
-        backgroundColor: 'rgba(251, 191, 36, 0.2)',
-        fill: true,
-      },
-    ],
-  }), [analytics.salesTrend, t]);
-
-  const openModal = (sale: Sale, edit: boolean) => {
-    setSelectedSale(sale);
-    setIsEdit(edit);
-    setIsModalOpen(true);
-  };
-
-  const closeModal = () => {
-    setIsModalOpen(false);
-    setSelectedSale(null);
-  };
-
-  const openReturnModal = (sale: Sale) => {
-    setSelectedSale(sale);
-    setIsReturnOpen(true);
-  };
-
-  const closeReturnModal = () => {
-    setIsReturnOpen(false);
-    setSelectedSale(null);
-  };
-
   return (
     <div className={`mx-auto px-4 sm:px-6 py-4 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
@@ -962,12 +876,6 @@ export const SalesReport: React.FC = () => {
             <p className="text-gray-600 text-sm">{t.subtitle}</p>
           </div>
         </div>
-        {user?.role === 'admin' && (
-          <button onClick={handleExportReport} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center gap-2">
-            <Download className="w-4 h-4" />
-            {t.exportReport}
-          </button>
-        )}
       </header>
 
       {error && (
@@ -977,21 +885,19 @@ export const SalesReport: React.FC = () => {
         </div>
       )}
 
-      {['admin', 'production', 'branch'].includes(user?.role || '') && (
+      {user?.role === 'admin' && (
         <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-8">
           <h2 className="text-xl font-bold text-gray-900 mb-6">{t.filters}</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
-            {user?.role === 'admin' && (
-              <ProductDropdown
-                value={filterBranch}
-                onChange={setFilterBranch}
-                options={[{ value: '', label: t.branches.all_branches }, ...branches.map((branch) => ({
-                  value: branch._id,
-                  label: branch.displayName,
-                }))]}
-                ariaLabel={t.branches.select_branch}
-              />
-            )}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <ProductDropdown
+              value={filterBranch}
+              onChange={setFilterBranch}
+              options={[{ value: '', label: t.branches.all_branches }, ...branches.map((branch) => ({
+                value: branch._id,
+                label: branch.displayName,
+              }))]}
+              ariaLabel={t.branches.select_branch}
+            />
             <input
               type="date"
               value={startDate}
@@ -1104,66 +1010,22 @@ export const SalesReport: React.FC = () => {
                     </div>
                   </div>
                 </div>
-                <div className="space-y-4 mt-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">{t.customerName}</label>
-                    <input
-                      type="text"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      className="w-full p-2 border border-gray-200 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">{t.customerPhone}</label>
-                    <input
-                      type="text"
-                      value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      className="w-full p-2 border border-gray-200 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">{t.paymentMethod}</label>
-                    <ProductDropdown
-                      value={paymentMethod}
-                      onChange={setPaymentMethod}
-                      options={Object.keys(t.paymentMethods).map((key) => ({
-                        value: key,
-                        label: t.paymentMethods[key as keyof typeof t.paymentMethods],
-                      }))}
-                      ariaLabel={t.paymentMethod}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">{t.paymentStatus}</label>
-                    <ProductDropdown
-                      value={paymentStatus}
-                      onChange={setPaymentStatus}
-                      options={Object.keys(t.paymentStatuses).map((key) => ({
-                        value: key,
-                        label: t.paymentStatuses[key as keyof typeof t.paymentStatuses],
-                      }))}
-                      ariaLabel={t.paymentStatus}
-                    />
-                  </div>
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder={t.notes}
-                    className={`w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-                    rows={4}
-                    aria-label={t.notes}
-                  />
-                  <button
-                    onClick={handleAddSale}
-                    className="w-full px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm disabled:opacity-50"
-                    disabled={cart.length === 0 || (user?.role === 'branch' && !user.branchId && !selectedBranch)}
-                    aria-label={t.submitSale}
-                  >
-                    {t.submitSale}
-                  </button>
-                </div>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder={t.notes}
+                  className={`w-full mt-4 p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                  rows={4}
+                  aria-label={t.notes}
+                />
+                <button
+                  onClick={handleAddSale}
+                  className="w-full mt-4 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm disabled:opacity-50"
+                  disabled={cart.length === 0 || (user?.role === 'branch' && !user.branchId && !selectedBranch)}
+                  aria-label={t.submitSale}
+                >
+                  {t.submitSale}
+                </button>
               </div>
             </aside>
           )}
@@ -1192,6 +1054,7 @@ export const SalesReport: React.FC = () => {
                   options={{
                     responsive: true,
                     plugins: { legend: { position: 'top' }, title: { display: true, text: t.branchSales } },
+                    scales: { y: { beginAtZero: true } },
                   }}
                 />
               </div>
@@ -1202,16 +1065,18 @@ export const SalesReport: React.FC = () => {
                   options={{
                     responsive: true,
                     plugins: { legend: { position: 'top' }, title: { display: true, text: t.productSales } },
+                    scales: { y: { beginAtZero: true } },
                   }}
                 />
               </div>
-              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 col-span-2">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">{t.salesTrend}</h3>
-                <Line
-                  data={salesTrendChartData}
+              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">{t.departmentSales}</h3>
+                <Bar
+                  data={departmentSalesChartData}
                   options={{
                     responsive: true,
-                    plugins: { legend: { position: 'top' }, title: { display: true, text: t.salesTrend } },
+                    plugins: { legend: { position: 'top' }, title: { display: true, text: t.departmentSales } },
+                    scales: { y: { beginAtZero: true } },
                   }}
                 />
               </div>
@@ -1235,48 +1100,33 @@ export const SalesReport: React.FC = () => {
             <p className="text-gray-600 text-sm font-medium">{t.noSales}</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {sales.map((sale) => (
-              <SaleCard
-                key={sale._id}
-                sale={sale}
-                onEdit={() => openModal(sale, true)}
-                onDelete={() => handleDeleteSale(sale._id)}
-                onCreateReturn={() => openReturnModal(sale)}
-              />
-            ))}
-          </div>
-        )}
-        {hasMore && !salesLoading && (
-          <div className="flex justify-center mt-6">
-            <button onClick={loadMoreSales} className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg">
-              {t.loadMore}
-            </button>
-          </div>
-        )}
-        {salesLoading && (
-          <div className="flex justify-center mt-6">
-            <svg className="animate-spin h-5 w-5 text-amber-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          </div>
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {sales.map((sale) => (
+                <SaleCard key={sale._id} sale={sale} />
+              ))}
+            </div>
+            {hasMore && (
+              <div className="flex justify-center mt-6">
+                <button
+                  onClick={loadMoreSales}
+                  className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                  disabled={salesLoading}
+                >
+                  {salesLoading ? (
+                    <svg className="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  ) : (
+                    t.loadMore
+                  )}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
-
-      <SaleModal
-        sale={selectedSale}
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSave={handleUpdateSale}
-        isEditMode={isEdit}
-      />
-      <ReturnModal
-        sale={selectedSale}
-        isOpen={isReturnOpen}
-        onClose={() => setIsReturnOpen(false)}
-        onSave={handleCreateReturn}
-      />
     </div>
   );
 };
