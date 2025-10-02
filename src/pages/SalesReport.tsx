@@ -130,7 +130,7 @@ const translations = {
     topProduct: 'المنتج الأكثر مبيعًا',
     salesTrends: 'اتجاهات المبيعات',
     topCustomers: 'أفضل العملاء',
-    paymentMethods: 'طرق الدفع',
+    paymentMethodsLabel: 'طرق الدفع', // Renamed to avoid duplicate key
     returnStats: 'إحصائيات المرتجعات',
     previousSales: 'المبيعات السابقة',
     noSales: 'لا توجد مبيعات',
@@ -148,6 +148,7 @@ const translations = {
       unauthorized_access: 'غير مصرح لك بالوصول',
       no_branch_assigned: 'لم يتم تعيين فرع',
       fetch_sales: 'خطأ أثناء جلب المبيعات',
+      fetch_branches: 'خطأ أثناء جلب الفروع',
       create_sale_failed: 'فشل إنشاء المبيعة',
       update_sale_failed: 'فشل تعديل المبيعة',
       delete_sale_failed: 'فشل حذف المبيعة',
@@ -159,12 +160,18 @@ const translations = {
       invalid_sale_id: 'معرف المبيعة غير صالح',
       invalid_customer_phone: 'رقم هاتف العميل غير صالح',
       invalid_payment_method: 'طريقة الدفع غير صالحة',
+      no_branches_available: 'لا توجد فروع متاحة',
     },
     currency: 'ريال',
     units: { default: 'غير محدد' },
     branches: { all_branches: 'كل الفروع', select_branch: 'اختر الفرع', unknown: 'غير معروف' },
     departments: { unknown: 'غير معروف' },
-
+    paymentMethods: {
+      cash: 'نقدي',
+      credit_card: 'بطاقة ائتمان',
+      bank_transfer: 'تحويل بنكي',
+    },
+    returns: { status: { pending: 'معلق', approved: 'مقبول', rejected: 'مرفوض' } },
   },
   en: {
     title: 'Sales Report',
@@ -193,7 +200,7 @@ const translations = {
     topProduct: 'Top Selling Product',
     salesTrends: 'Sales Trends',
     topCustomers: 'Top Customers',
-    paymentMethods: 'Payment Methods',
+    paymentMethodsLabel: 'Payment Methods', // Renamed to avoid duplicate key
     returnStats: 'Return Statistics',
     previousSales: 'Previous Sales',
     noSales: 'No sales found',
@@ -211,6 +218,7 @@ const translations = {
       unauthorized_access: 'You are not authorized to access',
       no_branch_assigned: 'No branch assigned',
       fetch_sales: 'Error fetching sales',
+      fetch_branches: 'Error fetching branches',
       create_sale_failed: 'Failed to create sale',
       update_sale_failed: 'Failed to update sale',
       delete_sale_failed: 'Failed to delete sale',
@@ -222,12 +230,18 @@ const translations = {
       invalid_sale_id: 'Invalid sale ID',
       invalid_customer_phone: 'Invalid customer phone',
       invalid_payment_method: 'Invalid payment method',
+      no_branches_available: 'No branches available',
     },
     currency: 'SAR',
     units: { default: 'N/A' },
     branches: { all_branches: 'All Branches', select_branch: 'Select Branch', unknown: 'Unknown' },
     departments: { unknown: 'Unknown' },
- 
+    paymentMethods: {
+      cash: 'Cash',
+      credit_card: 'Credit Card',
+      bank_transfer: 'Bank Transfer',
+    },
+    returns: { status: { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' } },
   },
 };
 
@@ -277,7 +291,7 @@ const ProductDropdown = React.memo<{
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
-  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { label: isRtl ? 'اختر' : 'Select' };
+  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
 
   return (
     <div className={`relative group ${className || ''}`}>
@@ -291,18 +305,22 @@ const ProductDropdown = React.memo<{
       </button>
       {isOpen && !disabled && (
         <div className="absolute w-full mt-2 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none">
-          {options.map((option) => (
-            <div
-              key={option.value}
-              onClick={() => {
-                onChange(option.value);
-                setIsOpen(false);
-              }}
-              className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
-            >
-              {option.label}
-            </div>
-          ))}
+          {options.length > 0 ? (
+            options.map((option) => (
+              <div
+                key={option.value}
+                onClick={() => {
+                  onChange(option.value);
+                  setIsOpen(false);
+                }}
+                className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
+              >
+                {option.label}
+              </div>
+            ))
+          ) : (
+            <div className="px-4 py-2.5 text-sm text-gray-500">{isRtl ? 'لا توجد خيارات متاحة' : 'No options available'}</div>
+          )}
         </div>
       )}
     </div>
@@ -408,7 +426,7 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
           <h3 className="font-bold text-gray-900 text-base">{sale.orderNumber} - {sale.branch.displayName}</h3>
           <p className="text-sm text-gray-600">{t.date}: {formatDate(sale.createdAt, language)}</p>
           <p className="text-sm text-gray-600">{t.total}: {sale.totalAmount} {t.currency}</p>
-          {sale.paymentMethod && <p className="text-sm text-gray-600">{t.paymentMethod}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods]}</p>}
+          {sale.paymentMethod && <p className="text-sm text-gray-600">{t.paymentMethodsLabel}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods]}</p>}
           {sale.customerName && <p className="text-sm text-gray-600">{t.customerName}: {sale.customerName}</p>}
           {sale.customerPhone && <p className="text-sm text-gray-600">{t.customerPhone}: {sale.customerPhone}</p>}
           {sale.notes && <p className="text-sm text-gray-500">{t.notes}: {sale.notes}</p>}
@@ -562,7 +580,11 @@ export const SalesReport: React.FC = () => {
 
       const [salesResponse, branchesResponse, inventoryResponse, analyticsResponse] = await Promise.all([
         salesAPI.getAll(salesParams),
-        user.role === 'admin' ? branchesAPI.getAll() : Promise.resolve({ branches: [] }),
+        user.role === 'admin' ? branchesAPI.getAll().catch((err) => {
+          console.error(`[${new Date().toISOString()}] Branch fetch error:`, err);
+          toast.error(t.errors.fetch_branches, { position: isRtl ? 'top-right' : 'top-left' });
+          return { branches: [] };
+        }) : Promise.resolve({ branches: [] }),
         inventoryAPI.getInventory(inventoryParams),
         user.role === 'admin' ? salesAPI.getAnalytics(analyticsParams) : Promise.resolve({
           branchSales: [],
@@ -644,16 +666,20 @@ export const SalesReport: React.FC = () => {
       setSales((prev) => (append ? [...prev, ...newSales] : newSales));
       setHasMore(salesResponse.total > pageNum * 20);
 
-      setBranches(
-        Array.isArray(branchesResponse.branches)
-          ? branchesResponse.branches.map((branch: any) => ({
-              _id: branch._id,
-              name: branch.name,
-              nameEn: branch.nameEn,
-              displayName: isRtl ? branch.name : (branch.nameEn || branch.name),
-            }))
-          : []
-      );
+      const fetchedBranches = Array.isArray(branchesResponse.branches)
+        ? branchesResponse.branches.map((branch: any) => ({
+            _id: branch._id,
+            name: branch.name || t.branches.unknown,
+            nameEn: branch.nameEn,
+            displayName: isRtl ? branch.name : (branch.nameEn || branch.name || t.branches.unknown),
+          }))
+        : [];
+      setBranches(fetchedBranches);
+
+      if (user.role === 'admin' && fetchedBranches.length === 0) {
+        setError(t.errors.no_branches_available);
+        toast.warn(t.errors.no_branches_available, { position: isRtl ? 'top-right' : 'top-left' });
+      }
 
       setInventory(
         Array.isArray(inventoryResponse)
@@ -961,6 +987,14 @@ export const SalesReport: React.FC = () => {
     { value: 'bank_transfer', label: t.paymentMethods.bank_transfer },
   ], [t.paymentMethods]);
 
+  const branchOptions = useMemo(() => [
+    { value: '', label: t.branches.all_branches },
+    ...branches.map((branch) => ({
+      value: branch._id,
+      label: branch.displayName,
+    })),
+  ], [branches, t.branches]);
+
   const branchSalesChartData = useMemo(() => ({
     labels: analytics.branchSales.map((b) => b.displayName),
     datasets: [
@@ -1045,7 +1079,7 @@ export const SalesReport: React.FC = () => {
     labels: analytics.paymentMethods.map((pm) => pm.paymentMethod),
     datasets: [
       {
-        label: t.paymentMethods,
+        label: t.paymentMethodsLabel,
         data: analytics.paymentMethods.map((pm) => pm.totalAmount),
         backgroundColor: 'rgba(251, 191, 36, 0.6)',
         borderColor: 'rgba(251, 191, 36, 1)',
@@ -1107,10 +1141,7 @@ export const SalesReport: React.FC = () => {
             <ProductDropdown
               value={filterBranch}
               onChange={setFilterBranch}
-              options={[{ value: '', label: t.branches.all_branches }, ...branches.map((branch) => ({
-                value: branch._id,
-                label: branch.displayName,
-              }))]}
+              options={branchOptions}
               ariaLabel={t.branches.select_branch}
             />
             <input
@@ -1142,10 +1173,7 @@ export const SalesReport: React.FC = () => {
                 <ProductDropdown
                   value={selectedBranch}
                   onChange={setSelectedBranch}
-                  options={[{ value: '', label: t.branches.select_branch }, ...branches.map((branch) => ({
-                    value: branch._id,
-                    label: branch.displayName,
-                  }))]}
+                  options={branchOptions}
                   ariaLabel={t.branches.select_branch}
                   disabled={!!user.branchId}
                   className="mb-4"
@@ -1245,7 +1273,7 @@ export const SalesReport: React.FC = () => {
                       value={paymentMethod}
                       onChange={setPaymentMethod}
                       options={paymentMethodOptions}
-                      ariaLabel={t.paymentMethod}
+                      ariaLabel={t.paymentMethodsLabel}
                     />
                     <textarea
                       value={notes}
@@ -1331,14 +1359,14 @@ export const SalesReport: React.FC = () => {
               </div>
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.paymentMethods}</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.paymentMethodsLabel}</h3>
               <div className="h-64">
                 <Bar
                   data={paymentMethodsChartData}
                   options={{
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { position: 'top' }, title: { display: true, text: t.paymentMethods } },
+                    plugins: { legend: { position: 'top' }, title: { display: true, text: t.paymentMethodsLabel } },
                     scales: { y: { beginAtZero: true } },
                   }}
                 />
