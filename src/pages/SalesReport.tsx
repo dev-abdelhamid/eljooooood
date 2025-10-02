@@ -468,20 +468,25 @@ export const SalesReport: React.FC = () => {
     setLoading(pageNum === 1);
     setSalesLoading(pageNum > 1);
     try {
-      const params: any = { page: pageNum, limit: 20, sort: '-createdAt', lang: language };
+      const salesParams: any = { page: pageNum, limit: 20, sort: '-createdAt', lang: language };
       if (user.role === 'branch') {
-        params.branch = user.branchId || selectedBranch;
+        salesParams.branch = user.branchId || selectedBranch;
       } else if (filterBranch) {
-        params.branch = filterBranch;
+        salesParams.branch = filterBranch;
       }
-      if (startDate) params.startDate = startDate;
-      if (endDate) params.endDate = endDate;
+      if (startDate) salesParams.startDate = startDate;
+      if (endDate) salesParams.endDate = endDate;
+
+      const analyticsParams: any = { lang: language }; // عدلت هنا: فقط المعلمات المناسبة للـ analytics
+      if (filterBranch) analyticsParams.branch = filterBranch;
+      if (startDate) analyticsParams.startDate = startDate;
+      if (endDate) analyticsParams.endDate = endDate;
 
       const [salesResponse, branchesResponse, inventoryResponse, analyticsResponse] = await Promise.all([
-        salesAPI.getAll(params),
+        salesAPI.getAll(salesParams),
         user.role === 'admin' ? branchesAPI.getAll({ lang: language }) : Promise.resolve({ branches: [] }),
         inventoryAPI.getInventory({ branch: user.branchId || selectedBranch, lowStock: false, lang: language }),
-        user.role === 'admin' ? salesAPI.getAnalytics(params) : Promise.resolve({
+        user.role === 'admin' ? salesAPI.getAnalytics(analyticsParams) : Promise.resolve({
           branchSales: [],
           productSales: [],
           departmentSales: [],
@@ -604,39 +609,27 @@ export const SalesReport: React.FC = () => {
       setAnalytics({
         branchSales: Array.isArray(analyticsResponse.branchSales)
           ? analyticsResponse.branchSales.map((bs: any) => ({
-              branchId: bs.branchId,
-              branchName: bs.branchName,
-              branchNameEn: bs.branchNameEn,
+              ...bs,
               displayName: isRtl ? bs.branchName : (bs.branchNameEn || bs.branchName),
-              totalSales: bs.totalSales,
             }))
           : [],
         productSales: Array.isArray(analyticsResponse.productSales)
           ? analyticsResponse.productSales.map((ps: any) => ({
-              productId: ps.productId,
-              productName: ps.productName,
-              productNameEn: ps.productNameEn,
+              ...ps,
               displayName: isRtl ? (ps.productName || t.errors.deleted_product) : (ps.productNameEn || ps.productName || t.errors.deleted_product),
-              totalQuantity: ps.totalQuantity,
-              totalRevenue: ps.totalRevenue,
             }))
           : [],
         departmentSales: Array.isArray(analyticsResponse.departmentSales)
           ? analyticsResponse.departmentSales.map((ds: any) => ({
-              departmentId: ds.departmentId,
-              departmentName: ds.departmentName,
-              departmentNameEn: ds.departmentNameEn,
+              ...ds,
               displayName: isRtl ? ds.departmentName : (ds.departmentNameEn || ds.departmentName),
-              totalRevenue: ds.totalRevenue,
             }))
           : [],
         totalSales: analyticsResponse.totalSales || 0,
         topProduct: analyticsResponse.topProduct
           ? {
-              productName: analyticsResponse.topProduct.productName,
-              productNameEn: analyticsResponse.topProduct.productNameEn,
+              ...analyticsResponse.topProduct,
               displayName: isRtl ? (analyticsResponse.topProduct.productName || t.errors.deleted_product) : (analyticsResponse.topProduct.productNameEn || analyticsResponse.topProduct.productName || t.errors.deleted_product),
-              totalQuantity: analyticsResponse.topProduct.totalQuantity,
             }
           : { productName: t.departments.unknown, displayName: t.departments.unknown, totalQuantity: 0 },
       });
@@ -741,9 +734,9 @@ export const SalesReport: React.FC = () => {
       return;
     }
     setCart((prev) => {
-      const existingItem = prev.find((item) => item.productId === product.product._id);
-      if (existingItem) {
-        if (existingItem.quantity >= product.currentStock) {
+      const prevItem = prev.find((item) => item.productId === product.product._id);
+      if (prevItem) {
+        if (prevItem.quantity >= product.currentStock) {
           setError(t.errors.exceeds_max_quantity);
           toast.error(t.errors.exceeds_max_quantity, { position: isRtl ? 'top-right' : 'top-left' });
           return prev;
