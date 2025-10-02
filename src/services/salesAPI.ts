@@ -156,9 +156,11 @@ export const salesAPI = {
         lang: isRtl ? 'ar' : 'en',
       });
       console.log(`[${new Date().toISOString()}] salesAPI.create - Response:`, response);
+      toast.success(isRtl ? 'تم إنشاء المبيعة بنجاح' : 'Sale created successfully', { position: 'top-right' });
       return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.create - Error:`, err);
+      toast.error(err.message || (isRtl ? 'فشل إنشاء المبيعة' : 'Failed to create sale'), { position: 'top-right' });
       throw err;
     }
   },
@@ -222,9 +224,11 @@ export const salesAPI = {
         lang: isRtl ? 'ar' : 'en',
       });
       console.log(`[${new Date().toISOString()}] salesAPI.update - Response:`, response);
+      toast.success(isRtl ? 'تم تعديل المبيعة بنجاح' : 'Sale updated successfully', { position: 'top-right' });
       return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.update - Error:`, err);
+      toast.error(err.message || (isRtl ? 'فشل تعديل المبيعة' : 'Failed to update sale'), { position: 'top-right' });
       throw err;
     }
   },
@@ -238,9 +242,11 @@ export const salesAPI = {
     try {
       const response = await salesAxios.delete(`/sales/${id}`, { params: { lang: isRtl ? 'ar' : 'en' } });
       console.log(`[${new Date().toISOString()}] salesAPI.delete - Response:`, response);
+      toast.success(isRtl ? 'تم حذف المبيعة بنجاح' : 'Sale deleted successfully', { position: 'top-right' });
       return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.delete - Error:`, err);
+      toast.error(err.message || (isRtl ? 'فشل حذف المبيعة' : 'Failed to delete sale'), { position: 'top-right' });
       throw err;
     }
   },
@@ -261,6 +267,7 @@ export const salesAPI = {
       return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAll - Error:`, err);
+      toast.error(err.message || (isRtl ? 'فشل جلب المبيعات' : 'Failed to fetch sales'), { position: 'top-right' });
       throw err;
     }
   },
@@ -277,6 +284,7 @@ export const salesAPI = {
       return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.getById - Error:`, err);
+      toast.error(err.message || (isRtl ? 'فشل جلب المبيعة' : 'Failed to fetch sale'), { position: 'top-right' });
       throw err;
     }
   },
@@ -288,11 +296,19 @@ export const salesAPI = {
       throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
     }
     try {
-      const response = await salesAxios.get('/sales/analytics', { params: { ...params, lang: isRtl ? 'ar' : 'en' } });
+      const filteredParams = {
+        branch: params.branch,
+        startDate: params.startDate,
+        endDate: params.endDate,
+        paymentStatus: params.paymentStatus,
+        lang: isRtl ? 'ar' : 'en',
+      };
+      const response = await salesAxios.get('/sales/analytics', { params: filteredParams });
       console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Response:`, response);
       return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Error:`, err);
+      toast.error(err.message || (isRtl ? 'فشل جلب إحصائيات المبيعات' : 'Failed to fetch sales analytics'), { position: 'top-right' });
       throw err;
     }
   },
@@ -312,6 +328,7 @@ export const salesAPI = {
       return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.exportReport - Error:`, err);
+      toast.error(err.message || (isRtl ? 'فشل تصدير التقرير' : 'Failed to export report'), { position: 'top-right' });
       throw err;
     }
   },
