@@ -1,377 +1,938 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { branchesAPI, salesAPI } from '../services/api';
+import salesAPI from '../services/salesAPI';
 import { formatDate } from '../utils/formatDate';
-import { AlertCircle, DollarSign, Search, ChevronDown, Trash, Download } from 'lucide-react';
+import { AlertCircle, Search, X, ChevronDown, Edit, Trash, Download } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { Bar, Pie, Line } from 'react-chartjs-2';
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, ArcElement, Title, Tooltip, Legend } from 'chart.js';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  LineElement,
+  PointElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+import { Bar, Line } from 'react-chartjs-2';
 import { debounce } from 'lodash';
 import Papa from 'papaparse';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, ArcElement, Title, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend);
 
 interface Sale {
   _id: string;
   orderNumber: string;
-  branch: { _id: string; displayName: string };
-  items: Array<{ displayName: string; quantity: number; unitPrice: number; displayUnit: string }>;
+  items: Array<{
+    product: string;
+    productName: string;
+    productNameEn?: string;
+    unit?: string;
+    unitEn?: string;
+    quantity: number;
+    unitPrice: number;
+    displayName: string;
+    displayUnit: string;
+    department?: { _id: string; name: string; nameEn?: string; displayName: string };
+  }>;
   totalAmount: number;
   createdAt: string;
+  notes?: string;
   paymentMethod?: string;
   customerName?: string;
   customerPhone?: string;
-}
-
-interface Branch {
-  _id: string;
-  displayName: string;
+  returns?: Array<{
+    _id: string;
+    returnNumber: string;
+    status: string;
+    items: Array<{ product: string; productName: string; productNameEn?: string; quantity: number; reason: string }>;
+    reason: string;
+    createdAt: string;
+  }>;
 }
 
 interface SalesAnalytics {
-  branchSales: Array<{ branchId: string; displayName: string; totalSales: number; saleCount: number }>;
-  productSales: Array<{ displayName: string; totalQuantity: number; totalRevenue: number }>;
-  departmentSales: Array<{ displayName: string; totalRevenue: number; totalQuantity: number }>;
+  productSales: Array<{ productId: string; productName: string; productNameEn?: string; displayName: string; totalQuantity: number; totalRevenue: number }>;
+  departmentSales: Array<{ departmentId: string; departmentName: string; departmentNameEn?: string; displayName: string; totalRevenue: number; totalQuantity: number }>;
   totalSales: number;
   totalCount: number;
-  topProduct: { displayName: string; totalQuantity: number };
-  salesTrends: Array<{ period: string; totalSales: number }>;
-  paymentMethods: Array<{ paymentMethod: string; totalAmount: number }>;
+  topProduct: { productId: string | null; productName: string; productNameEn?: string; displayName: string; totalQuantity: number; totalRevenue: number };
+  salesTrends: Array<{ period: string; totalSales: number; saleCount: number }>;
+  topCustomers: Array<{ customerName: string; customerPhone: string; totalSpent: number; purchaseCount: number }>;
+  paymentMethods: Array<{ paymentMethod: string; totalAmount: number; count: number }>;
+  returnStats: Array<{ status: string; count: number; totalQuantity: number }>;
 }
 
 const translations = {
   ar: {
     title: 'تقرير المبيعات',
-    salesTab: 'المبيعات',
-    analyticsTab: 'الإحصائيات',
+    previousSales: 'المبيعات',
+    analytics: 'الإحصائيات',
     filters: 'الفلاتر',
-    searchPlaceholder: 'ابحث عن المبيعات...',
-    exportCSV: 'تصدير CSV',
-    branch: 'الفرع',
-    allBranches: 'كل الفروع',
     noSales: 'لا توجد مبيعات',
-    totalSales: 'إجمالي المبيعات',
-    totalCount: 'عدد المبيعات',
-    branchSales: 'مبيعات الفروع',
+    date: 'التاريخ',
+    total: 'الإجمالي',
+    paymentMethod: 'طريقة الدفع',
+    customerName: 'اسم العميل',
+    customerPhone: 'هاتف العميل',
+    notes: 'ملاحظات',
+    returns: 'المرتجعات',
+    return: 'مرتجع',
+    reason: 'السبب',
+    quantity: 'الكمية',
+    searchPlaceholder: 'ابحث عن المبيعات...',
+    loadMore: 'تحميل المزيد',
+    editSale: 'تعديل المبيعة',
+    deleteSale: 'حذف المبيعة',
+    confirmDelete: 'هل أنت متأكد من حذف هذه المبيعة؟',
+    export: 'تصدير إلى CSV',
     productSales: 'مبيعات المنتجات',
     departmentSales: 'مبيعات الأقسام',
+    totalSales: 'إجمالي المبيعات',
+    totalCount: 'عدد المبيعات',
+    topProduct: 'المنتج الأكثر مبيعًا',
     salesTrends: 'اتجاهات المبيعات',
+    topCustomers: 'أفضل العملاء',
     paymentMethodsLabel: 'طرق الدفع',
+    returnStats: 'إحصائيات المرتجعات',
     errors: {
-      unauthorized_access: 'غير مصرح لك',
+      unauthorized_access: 'غير مصرح لك بالوصول',
       fetch_sales: 'خطأ أثناء جلب المبيعات',
       delete_sale_failed: 'فشل حذف المبيعة',
+      update_sale_failed: 'فشل تعديل المبيعة',
+      invalid_sale_id: 'معرف المبيعة غير صالح',
+      deleted_product: 'منتج محذوف',
+      departments: { unknown: 'غير معروف' },
     },
     currency: 'ريال',
-    paymentMethods: { cash: 'نقدي', credit_card: 'بطاقة', bank_transfer: 'تحويل' },
+    units: { default: 'غير محدد' },
+    paymentMethods: {
+      cash: 'نقدي',
+      credit_card: 'بطاقة ائتمان',
+      bank_transfer: 'تحويل بنكي',
+    },
+    returns: { status: { pending: 'معلق', approved: 'مقبول', rejected: 'مرفوض' } },
+  },
+  en: {
+    title: 'Sales Report',
+    previousSales: 'Sales',
+    analytics: 'Analytics',
+    filters: 'Filters',
+    noSales: 'No sales found',
+    date: 'Date',
+    total: 'Total',
+    paymentMethod: 'Payment Method',
+    customerName: 'Customer Name',
+    customerPhone: 'Customer Phone',
+    notes: 'Notes',
+    returns: 'Returns',
+    return: 'Return',
+    reason: 'Reason',
+    quantity: 'Quantity',
+    searchPlaceholder: 'Search sales...',
+    loadMore: 'Load More',
+    editSale: 'Edit Sale',
+    deleteSale: 'Delete Sale',
+    confirmDelete: 'Are you sure you want to delete this sale?',
+    export: 'Export to CSV',
+    productSales: 'Product Sales',
+    departmentSales: 'Department Sales',
+    totalSales: 'Total Sales',
+    totalCount: 'Total Sale Count',
+    topProduct: 'Top Selling Product',
+    salesTrends: 'Sales Trends',
+    topCustomers: 'Top Customers',
+    paymentMethodsLabel: 'Payment Methods',
+    returnStats: 'Return Statistics',
+    errors: {
+      unauthorized_access: 'You are not authorized to access',
+      fetch_sales: 'Error fetching sales',
+      delete_sale_failed: 'Failed to delete sale',
+      update_sale_failed: 'Failed to update sale',
+      invalid_sale_id: 'Invalid sale ID',
+      deleted_product: 'Deleted Product',
+      departments: { unknown: 'Unknown' },
+    },
+    currency: 'SAR',
+    units: { default: 'N/A' },
+    paymentMethods: {
+      cash: 'Cash',
+      credit_card: 'Credit Card',
+      bank_transfer: 'Bank Transfer',
+    },
+    returns: { status: { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' } },
   },
 };
 
-const Dropdown = React.memo<{ value: string; onChange: (value: string) => void; options: { value: string; label: string }[] }>(
-  ({ value, onChange, options }) => {
+// Memoized Components
+const SearchInput = React.memo<{
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  ariaLabel: string;
+}>(({ value, onChange, placeholder, ariaLabel }) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="relative group">
+      <Search
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
+      />
+      <input
+        type="text"
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={ariaLabel}
+      />
+      {value && (
+        <button
+          onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
+          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
+          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
+        >
+          <X className="w-5 h-5" />
+        </button>
+      )}
+    </div>
+  );
+});
+
+const Dropdown = React.memo<{
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  ariaLabel: string;
+}>(({ value, onChange, options, ariaLabel }) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center`}
+        aria-label={ariaLabel}
+      >
+        <span className="truncate">{selectedOption.label}</span>
+        <ChevronDown className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200 w-5 h-5 text-gray-400`} />
+      </button>
+      {isOpen && (
+        <div className="absolute w-full mt-2 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none">
+          {options.map((option) => (
+            <div
+              key={option.value}
+              onClick={() => {
+                onChange(option.value);
+                setIsOpen(false);
+              }}
+              className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
+            >
+              {option.label}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+});
+
+const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete: (id: string) => void }>(
+  ({ sale, onEdit, onDelete }) => {
     const { language } = useLanguage();
     const isRtl = language === 'ar';
-    const [isOpen, setIsOpen] = useState(false);
-    const selected = options.find(opt => opt.value === value) || options[0] || { value: '', label: 'اختر' };
+    const t = translations[isRtl ? 'ar' : 'en'];
     return (
-      <div className="relative">
-        <button
-          onClick={() => setIsOpen(!isOpen)}
-          className={`w-full px-4 py-2 border border-gray-200 rounded-lg bg-white text-sm flex justify-between items-center ${isRtl ? 'text-right' : 'text-left'}`}
-        >
-          <span>{selected.label}</span>
-          <ChevronDown className={`${isOpen ? 'rotate-180' : ''} w-4 h-4`} />
-        </button>
-        {isOpen && (
-          <div className="absolute w-full mt-1 bg-white rounded-lg shadow-lg z-10 max-h-60 overflow-y-auto">
-            {options.map(opt => (
-              <div
-                key={opt.value}
-                onClick={() => { onChange(opt.value); setIsOpen(false); }}
-                className="px-4 py-2 text-sm hover:bg-amber-50 cursor-pointer"
-              >
-                {opt.label}
+      <div className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200">
+        <div className="flex items-start justify-between">
+          <div>
+            <h3 className="font-bold text-gray-900 text-base">{sale.orderNumber}</h3>
+            <p className="text-sm text-gray-600">{t.date}: {sale.createdAt}</p>
+            <p className="text-sm text-gray-600">{t.total}: {sale.totalAmount} {t.currency}</p>
+            {sale.paymentMethod && (
+              <p className="text-sm text-gray-600">{t.paymentMethod}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods]}</p>
+            )}
+            {sale.customerName && <p className="text-sm text-gray-600">{t.customerName}: {sale.customerName}</p>}
+            {sale.customerPhone && <p className="text-sm text-gray-600">{t.customerPhone}: {sale.customerPhone}</p>}
+            {sale.notes && <p className="text-sm text-gray-500">{t.notes}: {sale.notes}</p>}
+            <ul className="list-disc list-inside text-sm text-gray-600 mt-2">
+              {sale.items.map((item, index) => (
+                <li key={index}>
+                  {item.displayName || t.errors.deleted_product} ({item.department?.displayName || t.errors.departments.unknown}) - {t.quantity}: {item.quantity} {item.displayUnit || t.units.default}, {t.unitPrice}: {item.unitPrice} {t.currency}
+                </li>
+              ))}
+            </ul>
+            {sale.returns && sale.returns.length > 0 && (
+              <div className="mt-4">
+                <p className="text-sm font-medium text-gray-700">{t.returns}:</p>
+                <ul className="list-disc list-inside text-sm text-gray-600">
+                  {sale.returns.map((ret, index) => (
+                    <li key={index}>
+                      {t.return} #{ret.returnNumber} ({t.returns.status[ret.status as keyof typeof t.returns.status]}) - {t.reason}: {ret.reason} ({t.date}: {ret.createdAt})
+                      <ul className="list-circle list-inside ml-4">
+                        {ret.items.map((item, i) => (
+                          <li key={i}>
+                            {item.productName || t.errors.deleted_product} - {t.quantity}: {item.quantity}, {t.reason}: {item.reason}
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
               </div>
-            ))}
+            )}
           </div>
-        )}
+          <div className="flex gap-2">
+            <button onClick={() => onEdit(sale)} aria-label={t.editSale}>
+              <Edit className="w-5 h-5 text-blue-600 hover:text-blue-800 transition-colors" />
+            </button>
+            <button onClick={() => onDelete(sale._id)} aria-label={t.deleteSale}>
+              <Trash className="w-5 h-5 text-red-600 hover:text-red-800 transition-colors" />
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 );
 
 const SalesReport: React.FC = () => {
-  const { t, language } = useLanguage();
+  const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
-  const [activeTab, setActiveTab] = useState<'sales' | 'analytics'>('sales');
+  const t = translations[isRtl ? 'ar' : 'en'];
   const [sales, setSales] = useState<Sale[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
   const [analytics, setAnalytics] = useState<SalesAnalytics>({
-    branchSales: [], productSales: [], departmentSales: [], totalSales: 0, totalCount: 0,
-    topProduct: { displayName: '', totalQuantity: 0 }, salesTrends: [], paymentMethods: []
+    productSales: [],
+    departmentSales: [],
+    totalSales: 0,
+    totalCount: 0,
+    topProduct: { productId: null, productName: '', displayName: '', totalQuantity: 0, totalRevenue: 0 },
+    salesTrends: [],
+    topCustomers: [],
+    paymentMethods: [],
+    returnStats: [],
   });
-  const [filterBranch, setFilterBranch] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [salesLoading, setSalesLoading] = useState(false);
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [tabValue, setTabValue] = useState(0);
+  const [editingSale, setEditingSale] = useState<Sale | null>(null);
+  const [notes, setNotes] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<string>('cash');
+  const [customerName, setCustomerName] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+
   const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim()), 300), []);
 
-  const fetchData = useCallback(async (pageNum: number = 1, append: boolean = false) => {
-    if (user?.role !== 'admin') {
-      setError(t.errors.unauthorized_access);
-      toast.error(t.errors.unauthorized_access, { position: isRtl ? 'top-right' : 'top-left' });
-      setLoading(false);
-      return;
-    }
-    setLoading(pageNum === 1);
-    try {
-      const params: any = { page: pageNum, limit: 20, sort: '-createdAt', branch: filterBranch, startDate, endDate };
-      const [salesResponse, branchesResponse, analyticsResponse] = await Promise.all([
-        salesAPI.getAll(params),
-        branchesAPI.getAll(),
-        salesAPI.getAnalytics(params),
-      ]);
-      setSales(prev => append ? [...prev, ...salesResponse.sales.map((sale: any) => ({
-        ...sale,
-        branch: { ...sale.branch, displayName: isRtl ? sale.branch.name : (sale.branch.nameEn || sale.branch.name) },
-        items: sale.items.map((item: any) => ({
-          ...item,
-          displayName: isRtl ? item.product.name : (item.product.nameEn || item.product.name),
-          displayUnit: isRtl ? (item.product.unit || t.units?.default || 'غير محدد') : (item.product.unitEn || item.product.unit || t.units?.default || 'N/A'),
-        })),
-        createdAt: formatDate(sale.createdAt, language),
-      }))] : salesResponse.sales.map((sale: any) => ({
-        ...sale,
-        branch: { ...sale.branch, displayName: isRtl ? sale.branch.name : (sale.branch.nameEn || sale.branch.name) },
-        items: sale.items.map((item: any) => ({
-          ...item,
-          displayName: isRtl ? item.product.name : (item.product.nameEn || item.product.name),
-          displayUnit: isRtl ? (item.product.unit || t.units?.default || 'غير محدد') : (item.product.unitEn || item.product.unit || t.units?.default || 'N/A'),
-        })),
-        createdAt: formatDate(sale.createdAt, language),
-      })));
-      setBranches(branchesResponse.branches.map((b: any) => ({
-        _id: b._id,
-        displayName: isRtl ? b.name : (b.nameEn || b.name),
-      })));
-      setAnalytics({
-        ...analyticsResponse,
-        branchSales: analyticsResponse.branchSales.map((bs: any) => ({
-          ...bs,
-          displayName: isRtl ? bs.branchName : (bs.branchNameEn || bs.branchName),
-        })),
-        productSales: analyticsResponse.productSales.map((ps: any) => ({
-          ...ps,
-          displayName: isRtl ? ps.productName : (ps.productNameEn || ps.productName),
-        })),
-        departmentSales: analyticsResponse.departmentSales.map((ds: any) => ({
-          ...ds,
-          displayName: isRtl ? ds.departmentName : (ds.departmentNameEn || ds.departmentName),
-        })),
-        topProduct: { ...analyticsResponse.topProduct, displayName: isRtl ? analyticsResponse.topProduct.productName : (analyticsResponse.topProduct.productNameEn || analyticsResponse.topProduct.productName) },
-        salesTrends: analyticsResponse.salesTrends.map((t: any) => ({ ...t, period: formatDate(t.period, language) })),
-        paymentMethods: analyticsResponse.paymentMethods.map((pm: any) => ({ ...pm, paymentMethod: t.paymentMethods[pm.paymentMethod] || pm.paymentMethod })),
-      });
-      setError('');
-    } catch {
-      setError(t.errors.fetch_sales);
-      toast.error(t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left' });
-    } finally {
-      setLoading(false);
-    }
-  }, [filterBranch, startDate, endDate, user, t, isRtl, language]);
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchInput(value);
+    debouncedSearch(value);
+  };
+
+  const fetchData = useCallback(
+    async (pageNum: number = 1, append: boolean = false) => {
+      if (user?.role !== 'admin') {
+        setError(t.errors.unauthorized_access);
+        toast.error(t.errors.unauthorized_access, { position: isRtl ? 'top-right' : 'top-left' });
+        setLoading(false);
+        return;
+      }
+
+      setLoading(pageNum === 1);
+      setSalesLoading(pageNum > 1);
+      try {
+        const salesParams: any = { page: pageNum, limit: 20, sort: '-createdAt' };
+        if (filterStartDate) salesParams.startDate = filterStartDate;
+        if (filterEndDate) salesParams.endDate = filterEndDate;
+
+        const analyticsParams: any = {};
+        if (filterStartDate) analyticsParams.startDate = filterStartDate;
+        if (filterEndDate) analyticsParams.endDate = filterEndDate;
+
+        const [salesResponse, analyticsResponse] = await Promise.all([
+          salesAPI.getAll(salesParams),
+          salesAPI.getAnalytics(analyticsParams),
+        ]);
+
+        const returnsMap = new Map<string, Sale['returns']>();
+        if (Array.isArray(salesResponse.returns)) {
+          salesResponse.returns.forEach((ret: any) => {
+            const orderId = ret.order?._id || ret.order;
+            if (!returnsMap.has(orderId)) returnsMap.set(orderId, []);
+            returnsMap.get(orderId)!.push({
+              _id: ret._id,
+              returnNumber: ret.returnNumber,
+              status: ret.status,
+              items: Array.isArray(ret.items)
+                ? ret.items.map((item: any) => ({
+                    product: item.product?._id || item.product,
+                    productName: item.product?.name || t.errors.deleted_product,
+                    productNameEn: item.product?.nameEn,
+                    quantity: item.quantity,
+                    reason: item.reason,
+                  }))
+                : [],
+              reason: ret.reason,
+              createdAt: formatDate(ret.createdAt, language),
+            });
+          });
+        }
+
+        const newSales = salesResponse.sales.map((sale: any) => ({
+          _id: sale._id,
+          orderNumber: sale.saleNumber || sale.orderNumber,
+          items: Array.isArray(sale.items)
+            ? sale.items.map((item: any) => ({
+                product: item.product?._id || item.productId,
+                productName: item.product?.name || t.errors.deleted_product,
+                productNameEn: item.product?.nameEn,
+                unit: item.product?.unit,
+                unitEn: item.product?.unitEn,
+                displayName: isRtl ? (item.product?.name || t.errors.deleted_product) : (item.product?.nameEn || item.product?.name || t.errors.deleted_product),
+                displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                department: item.product?.department
+                  ? {
+                      _id: item.product.department._id,
+                      name: item.product.department.name,
+                      nameEn: item.product.department.nameEn,
+                      displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name || t.errors.departments.unknown),
+                    }
+                  : undefined,
+              }))
+            : [],
+          totalAmount: sale.totalAmount || 0,
+          createdAt: formatDate(sale.createdAt, language),
+          notes: sale.notes,
+          paymentMethod: sale.paymentMethod,
+          customerName: sale.customerName,
+          customerPhone: sale.customerPhone,
+          returns: returnsMap.get(sale._id) || [],
+        }));
+
+        setSales((prev) => (append ? [...prev, ...newSales] : newSales));
+        setHasMore(salesResponse.total > pageNum * 20);
+
+        setAnalytics({
+          productSales: Array.isArray(analyticsResponse.productSales)
+            ? analyticsResponse.productSales.map((ps: any) => ({
+                ...ps,
+                displayName: isRtl ? (ps.productName || t.errors.deleted_product) : (ps.productNameEn || ps.productName || t.errors.deleted_product),
+              }))
+            : [],
+          departmentSales: Array.isArray(analyticsResponse.departmentSales)
+            ? analyticsResponse.departmentSales.map((ds: any) => ({
+                ...ds,
+                displayName: isRtl ? ds.departmentName : (ds.departmentNameEn || ds.departmentName || t.errors.departments.unknown),
+              }))
+            : [],
+          totalSales: analyticsResponse.totalSales || 0,
+          totalCount: analyticsResponse.totalCount || 0,
+          topProduct: analyticsResponse.topProduct
+            ? {
+                ...analyticsResponse.topProduct,
+                displayName: isRtl
+                  ? (analyticsResponse.topProduct.productName || t.errors.deleted_product)
+                  : (analyticsResponse.topProduct.productNameEn || analyticsResponse.topProduct.productName || t.errors.deleted_product),
+              }
+            : { productId: null, productName: t.errors.departments.unknown, displayName: t.errors.departments.unknown, totalQuantity: 0, totalRevenue: 0 },
+          salesTrends: Array.isArray(analyticsResponse.salesTrends)
+            ? analyticsResponse.salesTrends.map((trend: any) => ({
+                ...trend,
+                period: formatDate(trend.period, language),
+              }))
+            : [],
+          topCustomers: Array.isArray(analyticsResponse.topCustomers) ? analyticsResponse.topCustomers : [],
+          paymentMethods: Array.isArray(analyticsResponse.paymentMethods)
+            ? analyticsResponse.paymentMethods.map((pm: any) => ({
+                ...pm,
+                paymentMethod: t.paymentMethods[pm.paymentMethod as keyof typeof t.paymentMethods] || pm.paymentMethod,
+              }))
+            : [],
+          returnStats: Array.isArray(analyticsResponse.returnStats)
+            ? analyticsResponse.returnStats.map((rs: any) => ({
+                ...rs,
+                status: t.returns.status[rs.status as keyof typeof t.returns.status] || rs.status,
+              }))
+            : [],
+        });
+
+        setError('');
+      } catch (err: any) {
+        console.error(`[${new Date().toISOString()}] Fetch error:`, err);
+        setError(err.message === 'Invalid sale ID' ? t.errors.invalid_sale_id : (err.message || t.errors.fetch_sales));
+        toast.error(err.message === 'Invalid sale ID' ? t.errors.invalid_sale_id : (err.message || t.errors.fetch_sales), { position: isRtl ? 'top-right' : 'top-left' });
+      } finally {
+        setLoading(false);
+        setSalesLoading(false);
+      }
+    },
+    [filterStartDate, filterEndDate, user, t, isRtl, language]
+  );
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const exportToCSV = useCallback(() => {
-    const csvData = sales.map(sale => ({
-      orderNumber: sale.orderNumber,
-      branch: sale.branch.displayName,
-      totalAmount: sale.totalAmount,
-      date: sale.createdAt,
-      items: sale.items.map(item => `${item.displayName} (${item.quantity})`).join(', '),
+  const loadMoreSales = useCallback(() => {
+    setPage((prev) => prev + 1);
+    fetchData(page + 1, true);
+  }, [fetchData, page]);
+
+  const handleEditSale = useCallback((sale: Sale) => {
+    setEditingSale(sale);
+    setNotes(sale.notes || '');
+    setPaymentMethod(sale.paymentMethod || 'cash');
+    setCustomerName(sale.customerName || '');
+    setCustomerPhone(sale.customerPhone || '');
+  }, []);
+
+  const handleDeleteSale = useCallback(
+    async (id: string) => {
+      if (window.confirm(t.confirmDelete)) {
+        try {
+          await salesAPI.delete(id);
+          toast.success(t.deleteSale, { position: isRtl ? 'top-right' : 'top-left' });
+          fetchData();
+        } catch (err: any) {
+          console.error(`[${new Date().toISOString()}] Delete error:`, err);
+          setError(t.errors.delete_sale_failed);
+          toast.error(t.errors.delete_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
+        }
+      }
+    },
+    [t, fetchData, isRtl]
+  );
+
+  const handleUpdateSale = useCallback(async () => {
+    if (!editingSale) return;
+    if (customerPhone && !/^\+?\d{7,15}$/.test(customerPhone)) {
+      setError(t.errors.invalid_customer_phone);
+      toast.error(t.errors.invalid_customer_phone, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+    if (!['cash', 'credit_card', 'bank_transfer'].includes(paymentMethod)) {
+      setError(t.errors.invalid_payment_method);
+      toast.error(t.errors.invalid_payment_method, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+    try {
+      const payload = {
+        notes,
+        paymentMethod,
+        customerName: customerName.trim() || undefined,
+        customerPhone: customerPhone.trim() || undefined,
+      };
+      await salesAPI.update(editingSale._id, payload);
+      toast.success(t.editSale, { position: isRtl ? 'top-right' : 'top-left' });
+      setNotes('');
+      setPaymentMethod('cash');
+      setCustomerName('');
+      setCustomerPhone('');
+      setEditingSale(null);
+      await fetchData();
+    } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] Update error:`, err);
+      setError(err.message || t.errors.update_sale_failed);
+      toast.error(err.message || t.errors.update_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
+    }
+  }, [editingSale, notes, paymentMethod, customerName, customerPhone, t, isRtl, fetchData]);
+
+  const handleExport = useCallback(() => {
+    const csvData = filteredSales.map((sale) => ({
+      OrderNumber: sale.orderNumber,
+      TotalAmount: sale.totalAmount,
+      Date: sale.createdAt,
+      PaymentMethod: sale.paymentMethod ? t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] : 'N/A',
+      CustomerName: sale.customerName || 'N/A',
+      CustomerPhone: sale.customerPhone || 'N/A',
+      Items: sale.items.map((item) => `${item.displayName} (${item.quantity} x ${item.unitPrice})`).join(', '),
     }));
     const csv = Papa.unparse(csvData);
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = url;
+    link.href = URL.createObjectURL(blob);
     link.download = 'sales_report.csv';
     link.click();
-  }, [sales]);
+  }, [filteredSales, t]);
 
-  const filteredSales = useMemo(() =>
-    sales.filter(sale =>
-      sale.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      sale.branch.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      sale.items.some(item => item.displayName.toLowerCase().includes(searchTerm.toLowerCase()))
-    ), [sales, searchTerm]);
+  const filteredSales = useMemo(() => {
+    const lowerSearch = searchTerm.toLowerCase();
+    return sales.filter(
+      (sale) =>
+        sale.orderNumber.toLowerCase().includes(lowerSearch) ||
+        (sale.customerName && sale.customerName.toLowerCase().includes(lowerSearch)) ||
+        (sale.customerPhone && sale.customerPhone.toLowerCase().includes(lowerSearch))
+    );
+  }, [sales, searchTerm]);
 
-  const branchOptions = useMemo(() => [
-    { value: '', label: t.allBranches },
-    ...branches.map(b => ({ value: b._id, label: b.displayName })),
-  ], [branches, t]);
+  const paymentMethodOptions = useMemo(
+    () => [
+      { value: 'cash', label: t.paymentMethods.cash },
+      { value: 'credit_card', label: t.paymentMethods.credit_card },
+      { value: 'bank_transfer', label: t.paymentMethods.bank_transfer },
+    ],
+    [t.paymentMethods]
+  );
 
-  const chartOptions = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top' as const } }, scales: { y: { beginAtZero: true } } };
-  const colors = ['#FBBF24', '#3B82F6', '#EF4444'];
+  const productSalesChartData = useMemo(() => ({
+    labels: analytics.productSales.slice(0, 5).map((p) => p.displayName),
+    datasets: [
+      {
+        label: t.productSales,
+        data: analytics.productSales.slice(0, 5).map((p) => p.totalRevenue),
+        backgroundColor: 'rgba(251, 191, 36, 0.6)',
+        borderColor: 'rgba(251, 191, 36, 1)',
+        borderWidth: 1,
+        hoverBackgroundColor: 'rgba(251, 191, 36, 0.8)',
+      },
+      {
+        label: t.quantity,
+        data: analytics.productSales.slice(0, 5).map((p) => p.totalQuantity),
+        backgroundColor: 'rgba(59, 130, 246, 0.6)',
+        borderColor: 'rgba(59, 130, 246, 1)',
+        borderWidth: 1,
+        hoverBackgroundColor: 'rgba(59, 130, 246, 0.8)',
+      },
+    ],
+  }), [analytics.productSales, t]);
+
+  const departmentSalesChartData = useMemo(() => ({
+    labels: analytics.departmentSales.map((d) => d.displayName),
+    datasets: [
+      {
+        label: t.departmentSales,
+        data: analytics.departmentSales.map((d) => d.totalRevenue),
+        backgroundColor: 'rgba(251, 191, 36, 0.6)',
+        borderColor: 'rgba(251, 191, 36, 1)',
+        borderWidth: 1,
+        hoverBackgroundColor: 'rgba(251, 191, 36, 0.8)',
+      },
+      {
+        label: t.quantity,
+        data: analytics.departmentSales.map((d) => d.totalQuantity),
+        backgroundColor: 'rgba(59, 130, 246, 0.6)',
+        borderColor: 'rgba(59, 130, 246, 1)',
+        borderWidth: 1,
+        hoverBackgroundColor: 'rgba(59, 130, 246, 0.8)',
+      },
+    ],
+  }), [analytics.departmentSales, t]);
+
+  const salesTrendsChartData = useMemo(() => ({
+    labels: analytics.salesTrends.map((t) => t.period),
+    datasets: [
+      {
+        label: t.salesTrends,
+        data: analytics.salesTrends.map((t) => t.totalSales),
+        fill: false,
+        borderColor: 'rgba(251, 191, 36, 1)',
+        tension: 0.3,
+        pointBackgroundColor: 'rgba(251, 191, 36, 1)',
+        pointHoverBackgroundColor: 'rgba(251, 191, 36, 0.8)',
+      },
+      {
+        label: t.totalCount,
+        data: analytics.salesTrends.map((t) => t.saleCount),
+        fill: false,
+        borderColor: 'rgba(59, 130, 246, 1)',
+        tension: 0.3,
+        pointBackgroundColor: 'rgba(59, 130, 246, 1)',
+        pointHoverBackgroundColor: 'rgba(59, 130, 246, 0.8)',
+      },
+    ],
+  }), [analytics.salesTrends, t]);
+
+  const paymentMethodsChartData = useMemo(() => ({
+    labels: analytics.paymentMethods.map((pm) => pm.paymentMethod),
+    datasets: [
+      {
+        label: t.paymentMethodsLabel,
+        data: analytics.paymentMethods.map((pm) => pm.totalAmount),
+        backgroundColor: 'rgba(251, 191, 36, 0.6)',
+        borderColor: 'rgba(251, 191, 36, 1)',
+        borderWidth: 1,
+        hoverBackgroundColor: 'rgba(251, 191, 36, 0.8)',
+      },
+      {
+        label: t.totalCount,
+        data: analytics.paymentMethods.map((pm) => pm.count),
+        backgroundColor: 'rgba(59, 130, 246, 0.6)',
+        borderColor: 'rgba(59, 130, 246, 1)',
+        borderWidth: 1,
+        hoverBackgroundColor: 'rgba(59, 130, 246, 0.8)',
+      },
+    ],
+  }), [analytics.paymentMethods, t]);
+
+  const returnStatsChartData = useMemo(() => ({
+    labels: analytics.returnStats.map((rs) => rs.status),
+    datasets: [
+      {
+        label: t.returnStats,
+        data: analytics.returnStats.map((rs) => rs.count),
+        backgroundColor: 'rgba(251, 191, 36, 0.6)',
+        borderColor: 'rgba(251, 191, 36, 1)',
+        borderWidth: 1,
+        hoverBackgroundColor: 'rgba(251, 191, 36, 0.8)',
+      },
+      {
+        label: t.quantity,
+        data: analytics.returnStats.map((rs) => rs.totalQuantity),
+        backgroundColor: 'rgba(59, 130, 246, 0.6)',
+        borderColor: 'rgba(59, 130, 246, 1)',
+        borderWidth: 1,
+        hoverBackgroundColor: 'rgba(59, 130, 246, 0.8)',
+      },
+    ],
+  }), [analytics.returnStats, t]);
+
+  const chartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'top' as const, labels: { font: { size: 14 } } },
+      title: { display: true, font: { size: 16 } },
+      tooltip: { backgroundColor: 'rgba(0, 0, 0, 0.8)', titleFont: { size: 14 }, bodyFont: { size: 12 } },
+    },
+    scales: {
+      y: { beginAtZero: true, grid: { color: 'rgba(0, 0, 0, 0.1)' } },
+      x: { grid: { display: false } },
+    },
+  };
 
   return (
-    <div className={`min-h-screen bg-gray-50 p-4 ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
-      <header className="mb-6 flex flex-col sm:flex-row justify-between items-center">
-        <div className="flex items-center gap-2">
-          <DollarSign className="w-6 h-6 text-amber-600" />
-          <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
-        </div>
-        <div className="flex gap-2 mt-4 sm:mt-0">
-          <button
-            onClick={() => setActiveTab('sales')}
-            className={`px-3 py-1.5 rounded-lg text-sm ${activeTab === 'sales' ? 'bg-amber-600 text-white' : 'bg-white border border-gray-200'}`}
-          >
-            {t.salesTab}
-          </button>
-          <button
-            onClick={() => setActiveTab('analytics')}
-            className={`px-3 py-1.5 rounded-lg text-sm ${activeTab === 'analytics' ? 'bg-amber-600 text-white' : 'bg-white border border-gray-200'}`}
-          >
-            {t.analyticsTab}
-          </button>
-        </div>
+    <div className={`min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+      <header className="mb-8 px-4 sm:px-6 py-4">
+        <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
       </header>
-
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-red-600" />
-          <span className="text-red-600 text-sm">{error}</span>
+        <div className="mx-4 sm:mx-6 mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <span className="text-red-600 text-sm font-medium">{error}</span>
         </div>
       )}
-
-      <div className="p-4 bg-white rounded-lg shadow-sm mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Dropdown value={filterBranch} onChange={setFilterBranch} options={branchOptions} />
-          <input
-            type="date"
-            value={startDate}
-            onChange={e => setStartDate(e.target.value)}
-            className="px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm"
-          />
-          <input
-            type="date"
-            value={endDate}
-            onChange={e => setEndDate(e.target.value)}
-            className="px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm"
-          />
+      <div className="px-4 sm:px-6">
+        <div className="flex border-b border-gray-200 mb-6">
+          <button
+            className={`px-4 py-2 text-sm font-medium ${tabValue === 0 ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-500 hover:text-amber-600'} transition-colors duration-200`}
+            onClick={() => setTabValue(0)}
+          >
+            {t.previousSales}
+          </button>
+          <button
+            className={`px-4 py-2 text-sm font-medium ${tabValue === 1 ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-500 hover:text-amber-600'} transition-colors duration-200`}
+            onClick={() => setTabValue(1)}
+          >
+            {t.analytics}
+          </button>
         </div>
-        <div className="mt-4 relative">
-          <Search className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400`} />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={e => { setSearchTerm(e.target.value); debouncedSearch(e.target.value); }}
-            placeholder={t.searchPlaceholder}
-            className={`w-full ${isRtl ? 'pr-10 pl-3' : 'pl-10 pr-3'} py-2 border border-gray-200 rounded-lg bg-white text-sm`}
-          />
-        </div>
-      </div>
-
-      {activeTab === 'sales' && (
-        <div>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-bold">{t.salesTab}</h2>
-            <button onClick={exportToCSV} className="px-3 py-1.5 bg-amber-600 text-white rounded-lg flex items-center gap-1 text-sm">
-              <Download className="w-4 h-4" /> {t.exportCSV}
-            </button>
-          </div>
-          {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[...Array(6)].map((_, i) => (
-                <div key={i} className="p-4 bg-white rounded-lg shadow-sm animate-pulse">
-                  <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
-                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                </div>
-              ))}
+        {tabValue === 0 && (
+          <div>
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-6">{t.filters}</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                <SearchInput
+                  value={searchInput}
+                  onChange={handleSearchChange}
+                  placeholder={t.searchPlaceholder}
+                  ariaLabel={t.searchPlaceholder}
+                />
+                <input
+                  type="date"
+                  value={filterStartDate}
+                  onChange={(e) => setFilterStartDate(e.target.value)}
+                  className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                  placeholder={t.date}
+                  aria-label={t.date}
+                />
+                <input
+                  type="date"
+                  value={filterEndDate}
+                  onChange={(e) => setFilterEndDate(e.target.value)}
+                  className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                  placeholder={t.date}
+                  aria-label={t.date}
+                />
+              </div>
+              <button
+                onClick={handleExport}
+                className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+              >
+                <Download className="w-5 h-5" />
+                {t.export}
+              </button>
             </div>
-          ) : filteredSales.length === 0 ? (
-            <div className="p-6 text-center bg-white rounded-lg shadow-sm">
-              <DollarSign className="w-10 h-10 text-gray-400 mx-auto mb-2" />
-              <p className="text-gray-600 text-sm">{t.noSales}</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {filteredSales.map(sale => (
-                <div key={sale._id} className="p-4 bg-white rounded-lg shadow-sm">
-                  <div className="flex justify-between">
-                    <div>
-                      <h3 className="font-bold text-gray-900">{sale.orderNumber} - {sale.branch.displayName}</h3>
-                      <p className="text-sm text-gray-600">{sale.createdAt}</p>
-                      <p className="text-sm text-gray-600">{t.total}: {sale.totalAmount} {t.currency}</p>
-                      {sale.paymentMethod && <p className="text-sm text-gray-600">{t.paymentMethods[sale.paymentMethod]}</p>}
-                      {sale.items.map((item, i) => (
-                        <p key={i} className="text-sm text-gray-600">
-                          {item.displayName} ({item.quantity} {item.displayUnit})
-                        </p>
-                      ))}
+            {loading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[...Array(6)].map((_, index) => (
+                  <div key={index} className="h-[200px] p-5 bg-white rounded-xl shadow-sm border border-gray-100">
+                    <div className="space-y-3 animate-pulse">
+                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/3"></div>
                     </div>
-                    <button onClick={() => window.confirm(t.confirmDelete) && salesAPI.delete(sale._id).then(() => fetchData()).catch(() => toast.error(t.errors.delete_sale_failed))}>
-                      <Trash className="w-4 h-4 text-red-600" />
+                  </div>
+                ))}
+              </div>
+            ) : filteredSales.length === 0 ? (
+              <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
+                <p className="text-gray-600 text-sm font-medium">{t.noSales}</p>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filteredSales.map((sale) => (
+                    <SaleCard
+                      key={sale._id}
+                      sale={sale}
+                      onEdit={handleEditSale}
+                      onDelete={handleDeleteSale}
+                    />
+                  ))}
+                </div>
+                {hasMore && (
+                  <div className="flex justify-center mt-6">
+                    <button
+                      onClick={loadMoreSales}
+                      className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                      disabled={salesLoading}
+                    >
+                      {salesLoading ? (
+                        <svg className="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                      ) : (
+                        t.loadMore
+                      )}
                     </button>
                   </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+        {tabValue === 1 && (
+          <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">{t.analytics}</h2>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.productSales}</h3>
+                <div className="h-64">
+                  <Bar data={productSalesChartData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { display: true, text: t.productSales } } }} />
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'analytics' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="p-4 bg-white rounded-lg shadow-sm">
-            <h3 className="text-lg font-semibold mb-2">{t.branchSales}</h3>
-            <div className="h-[250px]">
-              <Bar
-                data={{ labels: analytics.branchSales.map(b => b.displayName), datasets: [{ label: t.totalSales, data: analytics.branchSales.map(b => b.totalSales), backgroundColor: colors[0] }] }}
-                options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { display: true, text: t.branchSales } } }}
-              />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.departmentSales}</h3>
+                <div className="h-64">
+                  <Bar data={departmentSalesChartData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { display: true, text: t.departmentSales } } }} />
+                </div>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.salesTrends}</h3>
+                <div className="h-64">
+                  <Line data={salesTrendsChartData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { display: true, text: t.salesTrends } } }} />
+                </div>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.paymentMethodsLabel}</h3>
+                <div className="h-64">
+                  <Bar data={paymentMethodsChartData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { display: true, text: t.paymentMethodsLabel } } }} />
+                </div>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.returnStats}</h3>
+                <div className="h-64">
+                  <Bar data={returnStatsChartData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { display: true, text: t.returnStats } } }} />
+                </div>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.totalSales}</h3>
+                <p className="text-2xl font-bold text-amber-600">{analytics.totalSales} {t.currency}</p>
+                <p className="text-sm text-gray-600 mt-2">{t.totalCount}: {analytics.totalCount}</p>
+                <p className="text-sm text-gray-600 mt-2">{t.topProduct}: {analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity})</p>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.topCustomers}</h3>
+                {analytics.topCustomers.length > 0 ? (
+                  <ul className="space-y-2">
+                    {analytics.topCustomers.map((customer, index) => (
+                      <li key={index} className="text-sm text-gray-600">
+                        {customer.customerName || 'N/A'} ({customer.customerPhone || 'N/A'}) - {customer.totalSpent} {t.currency}, {customer.purchaseCount} {t.totalCount}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-gray-600">{t.noSales}</p>
+                )}
+              </div>
             </div>
           </div>
-          <div className="p-4 bg-white rounded-lg shadow-sm">
-            <h3 className="text-lg font-semibold mb-2">{t.productSales}</h3>
-            <div className="h-[250px]">
-              <Pie
-                data={{ labels: analytics.productSales.slice(0, 5).map(p => p.displayName), datasets: [{ data: analytics.productSales.slice(0, 5).map(p => p.totalRevenue), backgroundColor: colors }] }}
-                options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { display: true, text: t.productSales } } }}
+        )}
+      </div>
+      {editingSale && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-xl shadow-lg max-w-md w-full">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">{t.editSale}</h2>
+            <div className="space-y-4">
+              <input
+                type="text"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder={t.customerName}
+                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                aria-label={t.customerName}
               />
-            </div>
-          </div>
-          <div className="p-4 bg-white rounded-lg shadow-sm">
-            <h3 className="text-lg font-semibold mb-2">{t.departmentSales}</h3>
-            <div className="h-[250px]">
-              <Bar
-                data={{ labels: analytics.departmentSales.map(d => d.displayName), datasets: [{ label: t.totalSales, data: analytics.departmentSales.map(d => d.totalRevenue), backgroundColor: colors[0] }] }}
-                options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { display: true, text: t.departmentSales } } }}
+              <input
+                type="text"
+                value={customerPhone}
+                onChange={(e) => setCustomerPhone(e.target.value)}
+                placeholder={t.customerPhone}
+                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                aria-label={t.customerPhone}
               />
-            </div>
-          </div>
-          <div className="p-4 bg-white rounded-lg shadow-sm">
-            <h3 className="text-lg font-semibold mb-2">{t.salesTrends}</h3>
-            <div className="h-[250px]">
-              <Line
-                data={{ labels: analytics.salesTrends.map(t => t.period), datasets: [{ label: t.totalSales, data: analytics.salesTrends.map(t => t.totalSales), borderColor: colors[0], fill: false }] }}
-                options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { display: true, text: t.salesTrends } } }}
+              <Dropdown
+                value={paymentMethod}
+                onChange={setPaymentMethod}
+                options={paymentMethodOptions}
+                ariaLabel={t.paymentMethod}
               />
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder={t.notes}
+                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm resize-none h-24 ${isRtl ? 'text-right' : 'text-left'}`}
+                aria-label={t.notes}
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleUpdateSale}
+                  className="flex-1 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+                >
+                  {t.editSale}
+                </button>
+                <button
+                  onClick={() => setEditingSale(null)}
+                  className="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm font-medium transition-colors duration-200"
+                >
+                  {isRtl ? 'إلغاء' : 'Cancel'}
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="p-4 bg-white rounded-lg shadow-sm">
-            <h3 className="text-lg font-semibold mb-2">{t.totalSales}</h3>
-            <p className="text-xl font-bold text-amber-600">{analytics.totalSales} {t.currency}</p>
-            <p className="text-sm text-gray-600">{t.totalCount}: {analytics.totalCount}</p>
-            <p className="text-sm text-gray-600">{t.topProduct}: {analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity})</p>
           </div>
         </div>
       )}
