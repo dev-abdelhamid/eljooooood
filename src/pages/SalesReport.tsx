@@ -1,9 +1,10 @@
+// src/components/SalesReport.tsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI, inventoryAPI, returnsAPI } from '../services/api';
 import salesAPI from '../services/salesAPI';
-import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown } from 'lucide-react';
+import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown, Edit, Trash } from 'lucide-react';
 import { toast } from 'react-toastify';
 import {
   Chart as ChartJS,
@@ -122,16 +123,22 @@ const translations = {
     quantity: 'الكمية',
     searchPlaceholder: 'ابحث عن المنتجات...',
     loadMore: 'تحميل المزيد',
+    editSale: 'تعديل المبيعة',
+    deleteSale: 'حذف المبيعة',
+    confirmDelete: 'هل أنت متأكد من حذف هذه المبيعة؟',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       no_branch_assigned: 'لم يتم تعيين فرع',
       fetch_sales: 'خطأ أثناء جلب المبيعات',
       create_sale_failed: 'فشل إنشاء المبيعة',
+      update_sale_failed: 'فشل تعديل المبيعة',
+      delete_sale_failed: 'فشل حذف المبيعة',
       insufficient_stock: 'المخزون غير كافٍ',
       exceeds_max_quantity: 'الكمية تتجاوز الحد الأقصى',
       invalid_quantity: 'الكمية غير صالحة',
       empty_cart: 'السلة فارغة',
       deleted_product: 'منتج محذوف',
+      invalid_sale_id: 'معرف المبيعة غير صالح',
     },
     currency: 'ريال',
     units: { default: 'غير محدد' },
@@ -169,16 +176,22 @@ const translations = {
     quantity: 'Quantity',
     searchPlaceholder: 'Search products...',
     loadMore: 'Load More',
+    editSale: 'Edit Sale',
+    deleteSale: 'Delete Sale',
+    confirmDelete: 'Are you sure you want to delete this sale?',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       no_branch_assigned: 'No branch assigned',
       fetch_sales: 'Error fetching sales',
       create_sale_failed: 'Failed to create sale',
+      update_sale_failed: 'Failed to update sale',
+      delete_sale_failed: 'Failed to delete sale',
       insufficient_stock: 'Insufficient stock',
       exceeds_max_quantity: 'Quantity exceeds maximum available',
       invalid_quantity: 'Invalid quantity',
       empty_cart: 'Cart is empty',
       deleted_product: 'Deleted Product',
+      invalid_sale_id: 'Invalid sale ID',
     },
     currency: 'SAR',
     units: { default: 'N/A' },
@@ -188,12 +201,13 @@ const translations = {
   },
 };
 
-const ProductSearchInput: React.FC<{
+// Memoized components for performance
+const ProductSearchInput = React.memo<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder: string;
   ariaLabel: string;
-}> = ({ value, onChange, placeholder, ariaLabel }) => {
+}>(({ value, onChange, placeholder, ariaLabel }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
@@ -220,16 +234,16 @@ const ProductSearchInput: React.FC<{
       )}
     </div>
   );
-};
+});
 
-const ProductDropdown: React.FC<{
+const ProductDropdown = React.memo<{
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
   ariaLabel: string;
   disabled?: boolean;
   className?: string;
-}> = ({ value, onChange, options, ariaLabel, disabled = false, className }) => {
+}>(({ value, onChange, options, ariaLabel, disabled = false, className }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
@@ -263,14 +277,14 @@ const ProductDropdown: React.FC<{
       )}
     </div>
   );
-};
+});
 
-const QuantityInput: React.FC<{
+const QuantityInput = React.memo<{
   value: number;
   onChange: (val: string) => void;
   onIncrement: () => void;
   onDecrement: () => void;
-}> = ({ value, onChange, onIncrement, onDecrement }) => {
+}>(({ value, onChange, onIncrement, onDecrement }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
@@ -299,15 +313,15 @@ const QuantityInput: React.FC<{
       </button>
     </div>
   );
-};
+});
 
-const ProductCard: React.FC<{
+const ProductCard = React.memo<{
   product: InventoryItem;
   cartItem?: CartItem;
   onAdd: () => void;
   onUpdate: (quantity: number) => void;
   onRemove: () => void;
-}> = ({ product, cartItem, onAdd, onUpdate, onRemove }) => {
+}>(({ product, cartItem, onAdd, onUpdate, onRemove }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
@@ -341,10 +355,11 @@ const ProductCard: React.FC<{
       </div>
     </div>
   );
-};
+});
 
-const SaleCard: React.FC<{ sale: Sale }> = ({ sale }) => {
+const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete: (id: string) => void }>(({ sale, onEdit, onDelete }) => {
   const { language } = useLanguage();
+  const { user } = useAuth();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   return (
@@ -382,12 +397,22 @@ const SaleCard: React.FC<{ sale: Sale }> = ({ sale }) => {
             </div>
           )}
         </div>
+        {user?.role === 'admin' && (
+          <div className="flex gap-2">
+            <button onClick={() => onEdit(sale)} aria-label={t.editSale}>
+              <Edit className="w-5 h-5 text-blue-600 hover:text-blue-800 transition-colors" />
+            </button>
+            <button onClick={() => onDelete(sale._id)} aria-label={t.deleteSale}>
+              <Trash className="w-5 h-5 text-red-600 hover:text-red-800 transition-colors" />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
-};
+});
 
-const ProductSkeletonCard: React.FC = () => (
+const ProductSkeletonCard = React.memo(() => (
   <div className="h-[200px] p-5 bg-white rounded-xl shadow-sm border border-gray-100">
     <div className="space-y-3 animate-pulse">
       <div className="h-4 bg-gray-200 rounded w-3/4"></div>
@@ -398,7 +423,7 @@ const ProductSkeletonCard: React.FC = () => (
       </div>
     </div>
   </div>
-);
+));
 
 export const SalesReport: React.FC = () => {
   const { t: languageT, language } = useLanguage();
@@ -428,9 +453,10 @@ export const SalesReport: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState(user?.role === 'branch' && user?.branchId ? user.branchId : '');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [editingSale, setEditingSale] = useState<Sale | null>(null);
 
   const debouncedSearch = useCallback(
-    debounce((value: string) => setSearchTerm(value.trim()), 500),
+    debounce((value: string) => setSearchTerm(value.trim()), 300),
     []
   );
 
@@ -444,10 +470,7 @@ export const SalesReport: React.FC = () => {
 
   const filteredInventory = useMemo(() => {
     const lowerSearchTerm = searchTerm.toLowerCase();
-    return inventory.filter((item) => {
-      const name = item.displayName.toLowerCase();
-      return name.startsWith(lowerSearchTerm) || name.includes(lowerSearchTerm);
-    });
+    return inventory.filter((item) => item.displayName.toLowerCase().includes(lowerSearchTerm));
   }, [inventory, searchTerm]);
 
   const fetchData = useCallback(async (pageNum: number = 1, append: boolean = false) => {
@@ -468,20 +491,25 @@ export const SalesReport: React.FC = () => {
     setLoading(pageNum === 1);
     setSalesLoading(pageNum > 1);
     try {
-      const params: any = { page: pageNum, limit: 20, sort: '-createdAt', lang: language };
+      const salesParams: any = { page: pageNum, limit: 20, sort: '-createdAt' };
       if (user.role === 'branch') {
-        params.branch = user.branchId || selectedBranch;
+        salesParams.branch = user.branchId || selectedBranch;
       } else if (filterBranch) {
-        params.branch = filterBranch;
+        salesParams.branch = filterBranch;
       }
-      if (startDate) params.startDate = startDate;
-      if (endDate) params.endDate = endDate;
+      if (startDate) salesParams.startDate = startDate;
+      if (endDate) salesParams.endDate = endDate;
+
+      const analyticsParams: any = {};
+      if (filterBranch) analyticsParams.branch = filterBranch;
+      if (startDate) analyticsParams.startDate = startDate;
+      if (endDate) analyticsParams.endDate = endDate;
 
       const [salesResponse, branchesResponse, inventoryResponse, analyticsResponse] = await Promise.all([
-        salesAPI.getAll(params),
-        user.role === 'admin' ? branchesAPI.getAll({ lang: language }) : Promise.resolve({ branches: [] }),
-        inventoryAPI.getInventory({ branch: user.branchId || selectedBranch, lowStock: false, lang: language }),
-        user.role === 'admin' ? salesAPI.getAnalytics(params) : Promise.resolve({
+        salesAPI.getAll(salesParams),
+        user.role === 'admin' ? branchesAPI.getAll() : Promise.resolve({ branches: [] }),
+        inventoryAPI.getInventory({ branch: user.branchId || selectedBranch, lowStock: false }),
+        user.role === 'admin' ? salesAPI.getAnalytics(analyticsParams) : Promise.resolve({
           branchSales: [],
           productSales: [],
           departmentSales: [],
@@ -604,39 +632,27 @@ export const SalesReport: React.FC = () => {
       setAnalytics({
         branchSales: Array.isArray(analyticsResponse.branchSales)
           ? analyticsResponse.branchSales.map((bs: any) => ({
-              branchId: bs.branchId,
-              branchName: bs.branchName,
-              branchNameEn: bs.branchNameEn,
+              ...bs,
               displayName: isRtl ? bs.branchName : (bs.branchNameEn || bs.branchName),
-              totalSales: bs.totalSales,
             }))
           : [],
         productSales: Array.isArray(analyticsResponse.productSales)
           ? analyticsResponse.productSales.map((ps: any) => ({
-              productId: ps.productId,
-              productName: ps.productName,
-              productNameEn: ps.productNameEn,
+              ...ps,
               displayName: isRtl ? (ps.productName || t.errors.deleted_product) : (ps.productNameEn || ps.productName || t.errors.deleted_product),
-              totalQuantity: ps.totalQuantity,
-              totalRevenue: ps.totalRevenue,
             }))
           : [],
         departmentSales: Array.isArray(analyticsResponse.departmentSales)
           ? analyticsResponse.departmentSales.map((ds: any) => ({
-              departmentId: ds.departmentId,
-              departmentName: ds.departmentName,
-              departmentNameEn: ds.departmentNameEn,
+              ...ds,
               displayName: isRtl ? ds.departmentName : (ds.departmentNameEn || ds.departmentName),
-              totalRevenue: ds.totalRevenue,
             }))
           : [],
         totalSales: analyticsResponse.totalSales || 0,
         topProduct: analyticsResponse.topProduct
           ? {
-              productName: analyticsResponse.topProduct.productName,
-              productNameEn: analyticsResponse.topProduct.productNameEn,
+              ...analyticsResponse.topProduct,
               displayName: isRtl ? (analyticsResponse.topProduct.productName || t.errors.deleted_product) : (analyticsResponse.topProduct.productNameEn || analyticsResponse.topProduct.productName || t.errors.deleted_product),
-              totalQuantity: analyticsResponse.topProduct.totalQuantity,
             }
           : { productName: t.departments.unknown, displayName: t.departments.unknown, totalQuantity: 0 },
       });
@@ -644,14 +660,14 @@ export const SalesReport: React.FC = () => {
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Fetch error:`, err);
-      setError(err.message || t.errors.fetch_sales);
-      toast.error(err.message || t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left' });
+      setError(err.message === 'Invalid sale ID' ? t.errors.invalid_sale_id : (err.message || t.errors.fetch_sales));
+      toast.error(err.message === 'Invalid sale ID' ? t.errors.invalid_sale_id : (err.message || t.errors.fetch_sales), { position: isRtl ? 'top-right' : 'top-left' });
       setSales([]);
     } finally {
       setLoading(false);
       setSalesLoading(false);
     }
-  }, [filterBranch, startDate, endDate, selectedBranch, user, t, isRtl, languageT, language]);
+  }, [filterBranch, startDate, endDate, selectedBranch, user, t, isRtl, languageT]);
 
   useEffect(() => {
     fetchData();
@@ -662,77 +678,76 @@ export const SalesReport: React.FC = () => {
     fetchData(page + 1, true);
   }, [fetchData, page]);
 
-  useEffect(() => {
-    setSales((prev) =>
-      prev.map((sale) => ({
-        ...sale,
-        branch: {
-          ...sale.branch,
-          displayName: isRtl ? sale.branch.name : (sale.branch.nameEn || sale.branch.name),
-        },
-        items: sale.items.map((item) => ({
-          ...item,
-          displayName: isRtl ? (item.productName || t.errors.deleted_product) : (item.productNameEn || item.productName || t.errors.deleted_product),
-          displayUnit: isRtl ? (item.unit || t.units.default) : (item.unitEn || item.unit || t.units.default),
-          department: item.department
-            ? {
-                ...item.department,
-                displayName: isRtl ? item.department.name : (item.department.nameEn || item.department.name),
-              }
-            : undefined,
+  const handleEditSale = useCallback((sale: Sale) => {
+    setEditingSale(sale);
+    // يمكن هنا فتح modal لتعديل المبيعة
+    setCart(sale.items.map(item => ({
+      productId: item.product,
+      productName: item.productName,
+      productNameEn: item.productNameEn,
+      unit: item.unit,
+      unitEn: item.unitEn,
+      displayName: item.displayName,
+      displayUnit: item.displayUnit,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+    })));
+    setNotes(sale.notes || '');
+    setSelectedBranch(sale.branch._id);
+  }, []);
+
+  const handleDeleteSale = useCallback(async (id: string) => {
+    if (window.confirm(t.confirmDelete)) {
+      try {
+        await salesAPI.delete(id);
+        toast.success(t.deleteSale, { position: isRtl ? 'top-right' : 'top-left' });
+        fetchData();
+      } catch (err: any) {
+        console.error(`[${new Date().toISOString()}] Delete error:`, err);
+        setError(t.errors.delete_sale_failed);
+        toast.error(t.errors.delete_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
+      }
+    }
+  }, [t, fetchData, isRtl]);
+
+  const handleUpdateSale = useCallback(async () => {
+    if (!editingSale) return;
+    if (user?.role === 'branch' && !user.branchId && !selectedBranch) {
+      setError(t.errors.no_branch_assigned);
+      toast.error(t.errors.no_branch_assigned, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+
+    if (cart.length === 0) {
+      setError(t.errors.empty_cart);
+      toast.error(t.errors.empty_cart, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+
+    try {
+      const payload = {
+        items: cart.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
         })),
-        returns: sale.returns?.map((ret) => ({
-          ...ret,
-          items: ret.items.map((item) => ({
-            ...item,
-            productName: isRtl ? (item.productName || t.errors.deleted_product) : (item.productNameEn || item.productName || t.errors.deleted_product),
-          })),
-        })),
-      }))
-    );
-    setInventory((prev) =>
-      prev.map((item) => ({
-        ...item,
-        displayName: isRtl ? (item.product.name || t.errors.deleted_product) : (item.product.nameEn || item.product.name || t.errors.deleted_product),
-        displayUnit: isRtl ? (item.product.unit || t.units.default) : (item.product.unitEn || item.product.unit || t.units.default),
-        product: {
-          ...item.product,
-          department: item.product.department
-            ? {
-                ...item.product.department,
-                displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name),
-              }
-            : item.product.department,
-        },
-      }))
-    );
-    setCart((prev) =>
-      prev.map((item) => ({
-        ...item,
-        displayName: isRtl ? (item.productName || t.errors.deleted_product) : (item.productNameEn || item.productName || t.errors.deleted_product),
-        displayUnit: isRtl ? (item.unit || t.units.default) : (item.unitEn || item.unit || t.units.default),
-      }))
-    );
-    setAnalytics((prev) => ({
-      ...prev,
-      branchSales: prev.branchSales.map((bs) => ({
-        ...bs,
-        displayName: isRtl ? bs.branchName : (bs.branchNameEn || bs.branchName),
-      })),
-      productSales: prev.productSales.map((ps) => ({
-        ...ps,
-        displayName: isRtl ? (ps.productName || t.errors.deleted_product) : (ps.productNameEn || ps.productName || t.errors.deleted_product),
-      })),
-      departmentSales: prev.departmentSales.map((ds) => ({
-        ...ds,
-        displayName: isRtl ? ds.departmentName : (ds.departmentNameEn || ds.departmentName),
-      })),
-      topProduct: {
-        ...prev.topProduct,
-        displayName: isRtl ? (prev.topProduct.productName || t.errors.deleted_product) : (prev.topProduct.productNameEn || prev.topProduct.productName || t.errors.deleted_product),
-      },
-    }));
-  }, [isRtl, t]);
+        branch: user?.role === 'branch' ? user.branchId || selectedBranch : selectedBranch,
+        notes,
+      };
+
+      await salesAPI.update(editingSale._id, payload);
+      toast.success(t.editSale, { position: isRtl ? 'top-right' : 'top-left' });
+      setCart([]);
+      setNotes('');
+      setSelectedBranch(user?.role === 'branch' && user?.branchId ? user.branchId : '');
+      setEditingSale(null);
+      await fetchData();
+    } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] Update error:`, err);
+      setError(err.message || t.errors.update_sale_failed);
+      toast.error(err.message || t.errors.update_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
+    }
+  }, [editingSale, cart, notes, selectedBranch, user, t, isRtl, fetchData]);
 
   const addToCart = useCallback((product: InventoryItem) => {
     if (product.currentStock < 1) {
@@ -741,9 +756,9 @@ export const SalesReport: React.FC = () => {
       return;
     }
     setCart((prev) => {
-      const existingItem = prev.find((item) => item.productId === product.product._id);
-      if (existingItem) {
-        if (existingItem.quantity >= product.currentStock) {
+      const prevItem = prev.find((item) => item.productId === product.product._id);
+      if (prevItem) {
+        if (prevItem.quantity >= product.currentStock) {
           setError(t.errors.exceeds_max_quantity);
           toast.error(t.errors.exceeds_max_quantity, { position: isRtl ? 'top-right' : 'top-left' });
           return prev;
@@ -1019,12 +1034,12 @@ export const SalesReport: React.FC = () => {
                   aria-label={t.notes}
                 />
                 <button
-                  onClick={handleAddSale}
+                  onClick={editingSale ? handleUpdateSale : handleAddSale}
                   className="w-full mt-4 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm disabled:opacity-50"
                   disabled={cart.length === 0 || (user?.role === 'branch' && !user.branchId && !selectedBranch)}
-                  aria-label={t.submitSale}
+                  aria-label={editingSale ? t.editSale : t.submitSale}
                 >
-                  {t.submitSale}
+                  {editingSale ? t.editSale : t.submitSale}
                 </button>
               </div>
             </aside>
@@ -1091,7 +1106,7 @@ export const SalesReport: React.FC = () => {
           <div className="flex justify-center">
             <svg className="animate-spin h-8 w-8 text-amber-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
           </div>
         ) : sales.length === 0 ? (
@@ -1103,7 +1118,12 @@ export const SalesReport: React.FC = () => {
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
               {sales.map((sale) => (
-                <SaleCard key={sale._id} sale={sale} />
+                <SaleCard
+                  key={sale._id}
+                  sale={sale}
+                  onEdit={handleEditSale}
+                  onDelete={handleDeleteSale}
+                />
               ))}
             </div>
             {hasMore && (
@@ -1131,4 +1151,4 @@ export const SalesReport: React.FC = () => {
   );
 };
 
-export default SalesReport;
+export default React.memo(SalesReport);
