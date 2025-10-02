@@ -24,6 +24,9 @@ import BranchReturns from './pages/BranchReturns';
 import { Users } from './pages/Users';
 import { BranchInventory } from './pages/BranchInventory';
 import { SalesReport } from './pages/SalesReport';
+import  AdminSalesReport   from './pages/AdminSalesReport';
+
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Chefstatics from './pages/Chefstatics';
 import BranchProfile from './pages/BranchProfile';
@@ -89,7 +92,7 @@ function AppContent() {
                   <Route path="/branches/:id" element={<BranchProfile />} />
                   <Route path="/departments" element={<Departments />} />
                   <Route path="/inventory" element={<div className="p-8 text-center">قريباً: إدارة المخزون</div>} />
-                  <Route path="/sales" element={<SalesReport />} />
+                  <Route path="/sales" element={<AdminSalesReport />} />
                   <Route path="/reports" element={<div className="p-8 text-center">قريباً: التقارير والتحليلات</div>} />
                   <Route path="/settings" element={<div className="p-8 text-center">قريباً: الإعدادات</div>} />
                 </Routes>
