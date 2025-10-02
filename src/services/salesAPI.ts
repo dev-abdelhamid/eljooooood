@@ -98,6 +98,9 @@ salesAxios.interceptors.response.use(
 );
 
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
+const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7,15}$/.test(phone);
+const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'credit_card', 'bank_transfer'].includes(method);
+const isValidPaymentStatus = (status: string | undefined): boolean => !status || ['pending', 'completed', 'failed'].includes(status);
 
 export const salesAPI = {
   create: async (saleData: {
@@ -105,6 +108,7 @@ export const salesAPI = {
     branch: string;
     notes?: string;
     paymentMethod?: string;
+    paymentStatus?: string;
     customerName?: string;
     customerPhone?: string;
   }) => {
@@ -117,8 +121,19 @@ export const salesAPI = {
       console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid productId, quantity, or unitPrice in items:`, saleData.items);
       throw new Error(isRtl ? 'معرف المنتج، الكمية، أو السعر غير صالح' : 'Invalid product ID, quantity, or unit price');
     }
+    if (!isValidPhone(saleData.customerPhone)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid customer phone:`, saleData.customerPhone);
+      throw new Error(isRtl ? 'رقم هاتف العميل غير صالح' : 'Invalid customer phone');
+    }
+    if (!isValidPaymentMethod(saleData.paymentMethod)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid payment method:`, saleData.paymentMethod);
+      throw new Error(isRtl ? 'طريقة الدفع غير صالحة' : 'Invalid payment method');
+    }
+    if (!isValidPaymentStatus(saleData.paymentStatus)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid payment status:`, saleData.paymentStatus);
+      throw new Error(isRtl ? 'حالة الدفع غير صالحة' : 'Invalid payment status');
+    }
     try {
-      // التحقق من المخزون قبل إنشاء المبيعة
       for (const item of saleData.items) {
         const inventory = await inventoryAPI.getInventory({ branch: saleData.branch, product: item.productId });
         if (!inventory || inventory.length === 0 || inventory[0].currentStock < item.quantity) {
@@ -135,6 +150,7 @@ export const salesAPI = {
         branch: saleData.branch,
         notes: saleData.notes?.trim(),
         paymentMethod: saleData.paymentMethod?.trim(),
+        paymentStatus: saleData.paymentStatus?.trim() || 'pending',
         customerName: saleData.customerName?.trim(),
         customerPhone: saleData.customerPhone?.trim(),
         lang: isRtl ? 'ar' : 'en',
@@ -147,7 +163,89 @@ export const salesAPI = {
     }
   },
 
-  getAll: async (params: { branch?: string; startDate?: string; endDate?: string; page?: number; limit?: number } = {}) => {
+  update: async (id: string, saleData: Partial<{
+    items: Array<{ productId: string; quantity: number; unitPrice: number }>;
+    branch: string;
+    notes?: string;
+    paymentMethod?: string;
+    paymentStatus?: string;
+    customerName?: string;
+    customerPhone?: string;
+  }>) => {
+    console.log(`[${new Date().toISOString()}] salesAPI.update - Sending:`, { id, saleData });
+    if (!isValidObjectId(id)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid sale ID:`, id);
+      throw new Error(isRtl ? 'معرف المبيعة غير صالح' : 'Invalid sale ID');
+    }
+    if (saleData.branch && !isValidObjectId(saleData.branch)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid branch ID:`, saleData.branch);
+      throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
+    }
+    if (saleData.items?.some((item) => !isValidObjectId(item.productId) || item.quantity < 1 || item.unitPrice < 0)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid productId, quantity, or unitPrice in items:`, saleData.items);
+      throw new Error(isRtl ? 'معرف المنتج، الكمية، أو السعر غير صالح' : 'Invalid product ID, quantity, or unit price');
+    }
+    if (!isValidPhone(saleData.customerPhone)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid customer phone:`, saleData.customerPhone);
+      throw new Error(isRtl ? 'رقم هاتف العميل غير صالح' : 'Invalid customer phone');
+    }
+    if (!isValidPaymentMethod(saleData.paymentMethod)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid payment method:`, saleData.paymentMethod);
+      throw new Error(isRtl ? 'طريقة الدفع غير صالحة' : 'Invalid payment method');
+    }
+    if (!isValidPaymentStatus(saleData.paymentStatus)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid payment status:`, saleData.paymentStatus);
+      throw new Error(isRtl ? 'حالة الدفع غير صالحة' : 'Invalid payment status');
+    }
+    try {
+      if (saleData.items && saleData.branch) {
+        for (const item of saleData.items) {
+          const inventory = await inventoryAPI.getInventory({ branch: saleData.branch, product: item.productId });
+          if (!inventory || inventory.length === 0 || inventory[0].currentStock < item.quantity) {
+            console.error(`[${new Date().toISOString()}] salesAPI.update - Insufficient stock for product:`, item.productId);
+            throw new Error(isRtl ? `المخزون غير كافٍ للمنتج ${item.productId}` : `Insufficient stock for product ${item.productId}`);
+          }
+        }
+      }
+      const response = await salesAxios.put(`/sales/${id}`, {
+        items: saleData.items?.map(item => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })),
+        branch: saleData.branch,
+        notes: saleData.notes?.trim(),
+        paymentMethod: saleData.paymentMethod?.trim(),
+        paymentStatus: saleData.paymentStatus?.trim(),
+        customerName: saleData.customerName?.trim(),
+        customerPhone: saleData.customerPhone?.trim(),
+        lang: isRtl ? 'ar' : 'en',
+      });
+      console.log(`[${new Date().toISOString()}] salesAPI.update - Response:`, response);
+      return response;
+    } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Error:`, err);
+      throw err;
+    }
+  },
+
+  delete: async (id: string) => {
+    console.log(`[${new Date().toISOString()}] salesAPI.delete - Sending:`, id);
+    if (!isValidObjectId(id)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.delete - Invalid sale ID:`, id);
+      throw new Error(isRtl ? 'معرف المبيعة غير صالح' : 'Invalid sale ID');
+    }
+    try {
+      const response = await salesAxios.delete(`/sales/${id}`, { params: { lang: isRtl ? 'ar' : 'en' } });
+      console.log(`[${new Date().toISOString()}] salesAPI.delete - Response:`, response);
+      return response;
+    } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] salesAPI.delete - Error:`, err);
+      throw err;
+    }
+  },
+
+  getAll: async (params: { branch?: string; startDate?: string; endDate?: string; page?: number; limit?: number; paymentStatus?: string } = {}) => {
     console.log(`[${new Date().toISOString()}] salesAPI.getAll - Params:`, params);
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid branch ID:`, params.branch);
@@ -183,7 +281,7 @@ export const salesAPI = {
     }
   },
 
-  getAnalytics: async (params: { branch?: string; startDate?: string; endDate?: string } = {}) => {
+  getAnalytics: async (params: { branch?: string; startDate?: string; endDate?: string; paymentStatus?: string } = {}) => {
     console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Params:`, params);
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid branch ID:`, params.branch);
@@ -195,6 +293,25 @@ export const salesAPI = {
       return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Error:`, err);
+      throw err;
+    }
+  },
+
+  exportReport: async (params: { branch?: string; startDate?: string; endDate?: string; format: 'csv' | 'pdf' }) => {
+    console.log(`[${new Date().toISOString()}] salesAPI.exportReport - Params:`, params);
+    if (params.branch && !isValidObjectId(params.branch)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.exportReport - Invalid branch ID:`, params.branch);
+      throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
+    }
+    try {
+      const response = await salesAxios.get('/sales/export', {
+        params: { ...params, lang: isRtl ? 'ar' : 'en' },
+        responseType: 'blob',
+      });
+      console.log(`[${new Date().toISOString()}] salesAPI.exportReport - Response:`, response);
+      return response;
+    } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] salesAPI.exportReport - Error:`, err);
       throw err;
     }
   },
