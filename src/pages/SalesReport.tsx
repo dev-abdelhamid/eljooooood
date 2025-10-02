@@ -1,4 +1,3 @@
-// src/components/SalesReport.tsx
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -505,10 +504,17 @@ export const SalesReport: React.FC = () => {
       if (startDate) analyticsParams.startDate = startDate;
       if (endDate) analyticsParams.endDate = endDate;
 
+      const inventoryParams: any = { lowStock: false };
+      if (user.role === 'branch') {
+        inventoryParams.branch = user.branchId || selectedBranch;
+      } else if (selectedBranch) {
+        inventoryParams.branch = selectedBranch;
+      }
+
       const [salesResponse, branchesResponse, inventoryResponse, analyticsResponse] = await Promise.all([
         salesAPI.getAll(salesParams),
         user.role === 'admin' ? branchesAPI.getAll() : Promise.resolve({ branches: [] }),
-        inventoryAPI.getInventory({ branch: user.branchId || selectedBranch, lowStock: false }),
+        inventoryAPI.getInventory(inventoryParams),
         user.role === 'admin' ? salesAPI.getAnalytics(analyticsParams) : Promise.resolve({
           branchSales: [],
           productSales: [],
@@ -644,7 +650,7 @@ export const SalesReport: React.FC = () => {
           : [],
         departmentSales: Array.isArray(analyticsResponse.departmentSales)
           ? analyticsResponse.departmentSales.map((ds: any) => ({
-              ...ds,
+              ...bs,
               displayName: isRtl ? ds.departmentName : (ds.departmentNameEn || ds.departmentName),
             }))
           : [],
@@ -680,7 +686,6 @@ export const SalesReport: React.FC = () => {
 
   const handleEditSale = useCallback((sale: Sale) => {
     setEditingSale(sale);
-    // يمكن هنا فتح modal لتعديل المبيعة
     setCart(sale.items.map(item => ({
       productId: item.product,
       productName: item.productName,
@@ -1022,25 +1027,25 @@ export const SalesReport: React.FC = () => {
                     <div className="flex justify-between font-bold text-gray-900 text-sm">
                       <span>{t.total}:</span>
                       <span className="text-amber-600">{cartTotal} {t.currency}</span>
-                    </div>
+                    </div>                  </div>
+                  <div className="mt-4">
+                    <textarea
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder={t.notes}
+                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm resize-none h-24 ${isRtl ? 'text-right' : 'text-left'}`}
+                      aria-label={t.notes}
+                    />
                   </div>
+                  <button
+                    onClick={editingSale ? handleUpdateSale : handleAddSale}
+                    className="w-full mt-4 px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                    disabled={cart.length === 0 || !selectedBranch}
+                    aria-label={editingSale ? t.editSale : t.submitSale}
+                  >
+                    {editingSale ? t.editSale : t.submitSale}
+                  </button>
                 </div>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder={t.notes}
-                  className={`w-full mt-4 p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-                  rows={4}
-                  aria-label={t.notes}
-                />
-                <button
-                  onClick={editingSale ? handleUpdateSale : handleAddSale}
-                  className="w-full mt-4 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm disabled:opacity-50"
-                  disabled={cart.length === 0 || (user?.role === 'branch' && !user.branchId && !selectedBranch)}
-                  aria-label={editingSale ? t.editSale : t.submitSale}
-                >
-                  {editingSale ? t.editSale : t.submitSale}
-                </button>
               </div>
             </aside>
           )}
@@ -1048,66 +1053,67 @@ export const SalesReport: React.FC = () => {
       )}
 
       {user?.role === 'admin' && (
-        <div className="mt-8 space-y-8">
-          <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">{t.analytics}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
-              <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
-                <p className="text-sm font-medium text-gray-600">{t.totalSales}</p>
-                <p className="text-2xl font-bold text-amber-600">{analytics.totalSales.toFixed(2)} {t.currency}</p>
-              </div>
-              <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
-                <p className="text-sm font-medium text-gray-600">{t.topProduct}</p>
-                <p className="text-2xl font-bold text-amber-600">{analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity} {t.units.default})</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">{t.branchSales}</h3>
+        <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mt-8">
+          <h2 className="text-xl font-bold text-gray-900 mb-6">{t.analytics}</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.branchSales}</h3>
+              <div className="h-64">
                 <Bar
                   data={branchSalesChartData}
                   options={{
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: { legend: { position: 'top' }, title: { display: true, text: t.branchSales } },
                     scales: { y: { beginAtZero: true } },
                   }}
                 />
               </div>
-              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">{t.productSales}</h3>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.productSales}</h3>
+              <div className="h-64">
                 <Bar
                   data={productSalesChartData}
                   options={{
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: { legend: { position: 'top' }, title: { display: true, text: t.productSales } },
                     scales: { y: { beginAtZero: true } },
                   }}
                 />
               </div>
-              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">{t.departmentSales}</h3>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.departmentSales}</h3>
+              <div className="h-64">
                 <Bar
                   data={departmentSalesChartData}
                   options={{
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: { legend: { position: 'top' }, title: { display: true, text: t.departmentSales } },
                     scales: { y: { beginAtZero: true } },
                   }}
                 />
               </div>
             </div>
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.totalSales}</h3>
+              <p className="text-2xl font-bold text-amber-600">{analytics.totalSales} {t.currency}</p>
+              <p className="text-sm text-gray-600 mt-2">{t.topProduct}: {analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity})</p>
+            </div>
           </div>
         </div>
       )}
 
-      <div className="mt-8 space-y-4">
-        <h2 className="text-xl font-bold text-gray-900">{t.previousSales}</h2>
+      <div className="mt-8">
+        <h2 className="text-xl font-bold text-gray-900 mb-6">{t.previousSales}</h2>
         {loading ? (
-          <div className="flex justify-center">
-            <svg className="animate-spin h-8 w-8 text-amber-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(6)].map((_, index) => (
+              <ProductSkeletonCard key={index} />
+            ))}
           </div>
         ) : sales.length === 0 ? (
           <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
