@@ -1,8 +1,9 @@
+// src/pages/BranchReturns.tsx
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { returnsAPI, inventoryAPI, salesAPI } from '../services/api';
+import { returnsAPI, ordersAPI, inventoryAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Input } from '../components/UI/Input';
@@ -42,6 +43,7 @@ const BranchReturns = () => {
   });
   const [formErrors, setFormErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [availableItems, setAvailableItems] = useState([]);
 
   const toastOptions = useMemo(
     () => ({
@@ -81,10 +83,9 @@ const BranchReturns = () => {
   const statusOptions = useMemo(
     () => [
       { value: '', label: t('returns.status.all') },
-      { value: 'pending', label: t('returns.status.pending') },
+      { value: 'pending_approval', label: t('returns.status.pending') },
       { value: 'approved', label: t('returns.status.approved') },
       { value: 'rejected', label: t('returns.status.rejected') },
-      { value: 'processed', label: t('returns.status.processed') },
     ],
     [t]
   );
@@ -101,10 +102,9 @@ const BranchReturns = () => {
 
   const STATUS_COLORS = useMemo(
     () => ({
-      pending: { color: 'bg-amber-100 text-amber-800', icon: Clock, label: t('returns.status.pending') },
+      pending_approval: { color: 'bg-amber-100 text-amber-800', icon: Clock, label: t('returns.status.pending') },
       approved: { color: 'bg-green-100 text-green-800', icon: Check, label: t('returns.status.approved') },
       rejected: { color: 'bg-red-100 text-red-800', icon: AlertCircle, label: t('returns.status.rejected') },
-      processed: { color: 'bg-blue-100 text-blue-800', icon: Check, label: t('returns.status.processed') },
     }),
     [t]
   );
@@ -140,9 +140,11 @@ const BranchReturns = () => {
                 quantity: item.quantity || 0,
                 price: item.product?.price || 0,
                 reason: isRtl ? item.reason : item.reasonEn || item.reason || 'unknown',
+                unit: isRtl ? item.product?.unit : item.product?.unitEn || 'N/A',
+                departmentName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || 'Unknown',
               }))
             : [],
-          status: ret.status || 'pending',
+          status: ret.status || 'pending_approval',
           date: formatDate(ret.createdAt || new Date().toISOString(), language),
           createdAt: ret.createdAt || new Date().toISOString(),
           notes: isRtl ? ret.notes : ret.notesEn || ret.notes || '',
@@ -159,7 +161,7 @@ const BranchReturns = () => {
     },
   });
 
-  // Inventory and sales queries with language in key
+  // Inventory query with language in key
   const { data: inventoryData } = useQuery({
     queryKey: ['inventory', user?.branchId, language],
     queryFn: async () => {
@@ -176,42 +178,74 @@ const BranchReturns = () => {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: salesData } = useQuery({
-    queryKey: ['sales', user?.branchId, language],
+  // Delivered orders query
+  const { data: deliveredOrders } = useQuery({
+    queryKey: ['deliveredOrders', user?.branchId, language],
     queryFn: async () => {
       if (!user?.branchId) return [];
-      const response = await salesAPI.getAll({ branch: user.branchId });
-      return response.sales || [];
+      const { orders } = await ordersAPI.getAll({ branch: user.branchId, status: 'delivered' });
+      return orders || [];
     },
     enabled: !!user?.branchId,
     staleTime: 5 * 60 * 1000,
   });
 
+  // Fetch selected order details
+  useQuery({
+    queryKey: ['selectedOrder', formData.orderId, language],
+    queryFn: async () => {
+      if (!formData.orderId) return null;
+      const order = await ordersAPI.getById(formData.orderId);
+      const items = order.items.map((i: any) => {
+        const inv = inventoryData?.find((inv: any) => inv.productId === i.product._id) || { currentStock: 0 };
+        return {
+          itemId: i._id,
+          productId: i.product._id,
+          productName: isRtl ? i.product.name : i.product.nameEn || i.product.name,
+          available: i.quantity - (i.returnedQuantity || 0),
+          unit: isRtl ? i.product.unit : i.product.unitEn || i.product.unit,
+          departmentName: isRtl ? i.product.department.name : i.product.department.nameEn || i.product.department.name,
+          stock: inv.currentStock,
+        };
+      });
+      setAvailableItems(items);
+      return order;
+    },
+    enabled: !!formData.orderId,
+  });
+
   // Form validation function
   const validateFormData = useCallback(() => {
-    const errors = {};
+    const errors: any = {};
     if (!formData.orderId.trim()) errors.orderId = t('errors.required', { field: t('returns.order_id') });
     if (!formData.reason.trim()) errors.reason = t('errors.required', { field: t('returns.reason') });
     if (formData.items.length === 0) errors.items = t('errors.required', { field: t('returns.items') });
-    formData.items.forEach((item, index) => {
-      if (!item.productId.trim()) errors[`item_${index}_productId`] = t('errors.required', { field: t('returns.product') });
+    formData.items.forEach((item: any, index) => {
+      if (!item.itemId) errors[`item_${index}_productId`] = t('errors.required', { field: t('returns.product') });
       if (!item.reason.trim()) errors[`item_${index}_reason`] = t('errors.required', { field: t('returns.reason') });
-      if (item.quantity < 1 || isNaN(item.quantity)) errors[`item_${index}_quantity`] = t('errors.invalid_quantity');
+      const maxQty = item.maxQuantity || 0;
+      if (item.quantity < 1 || item.quantity > maxQty || isNaN(item.quantity)) {
+        errors[`item_${index}_quantity`] = t('errors.invalid_quantity_max', { max: maxQty });
+      }
     });
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   }, [formData, t]);
 
   const createReturnMutation = useMutation({
-    mutationFn: (data) => {
+    mutationFn: (data: any) => {
       if (!validateFormData()) {
         throw new Error(t('errors.invalid_form'));
       }
-      // Map productId to product for backend compatibility
+      // Map to backend format
       const payload = {
-        ...data,
-        items: data.items.map((item) => ({
-          product: item.productId, // Backend expects 'product', not 'productId'
+        orderId: data.orderId,
+        branchId: data.branchId,
+        reason: data.reason,
+        notes: data.notes,
+        items: data.items.map((item: any) => ({
+          itemId: item.itemId,
+          product: item.productId,
           quantity: item.quantity,
           reason: item.reason,
         })),
@@ -223,16 +257,16 @@ const BranchReturns = () => {
       setIsCreateModalOpen(false);
       setFormData({ orderId: '', branchId: user?.branchId || '', reason: '', notes: '', items: [] });
       setFormErrors({});
+      setAvailableItems([]);
       toast.success(t('returns.create_success'), toastOptions);
     },
-    onError: (err) => {
+    onError: (err: any) => {
       const errorMessage = err.message || t('errors.create_return');
       toast.error(errorMessage, toastOptions);
       // Parse backend validation errors
       if (err.response?.data?.errors) {
-        const backendErrors = err.response.data.errors.reduce((acc, error) => {
-          if (error.path === 'items.0.product') acc.product = t('errors.invalid_product');
-          if (error.path === 'items.0.reason') acc.reason = t('errors.invalid_reason');
+        const backendErrors = err.response.data.errors.reduce((acc: any, error: any) => {
+          acc[error.path] = error.msg;
           return acc;
         }, {});
         setFormErrors(backendErrors);
@@ -296,28 +330,38 @@ const BranchReturns = () => {
 
   // Form handlers
   const handleCreateReturn = useCallback(() => {
-    createReturnMutation.mutate(formData);
+    setSubmitting(true);
+    createReturnMutation.mutate(formData, {
+      onSettled: () => setSubmitting(false),
+    });
   }, [createReturnMutation, formData]);
 
   const addItemToForm = useCallback(() => {
     setFormData((prev) => ({
       ...prev,
-      items: [...prev.items, { productId: '', quantity: 1, reason: '' }],
+      items: [...prev.items, { productId: '', itemId: '', quantity: 1, reason: '', maxQuantity: 0 }],
     }));
   }, []);
 
-  const updateItemInForm = useCallback((index, field, value) => {
-    setFormData((prev) => {
+  const updateItemInForm = useCallback((index: number, field: string, value: any) => {
+    setFormData((prev: any) => {
       const newItems = [...prev.items];
       newItems[index] = { ...newItems[index], [field]: value };
+      if (field === 'productId') {
+        const sel = availableItems.find((a: any) => a.productId === value);
+        if (sel) {
+          newItems[index].itemId = sel.itemId;
+          newItems[index].maxQuantity = Math.min(sel.available, sel.stock);
+        }
+      }
       return { ...prev, items: newItems };
     });
-  }, []);
+  }, [availableItems]);
 
-  const removeItemFromForm = useCallback((index) => {
-    setFormData((prev) => ({
+  const removeItemFromForm = useCallback((index: number) => {
+    setFormData((prev: any) => ({
       ...prev,
-      items: prev.items.filter((_, i) => i !== index),
+      items: prev.items.filter((_: any, i: number) => i !== index),
     }));
   }, []);
 
@@ -387,7 +431,7 @@ const BranchReturns = () => {
   }, [sortedReturns, isRtl, t, getStatusInfo, toastOptions]);
 
   // ReturnCard component (optimized)
-  const ReturnCard = useMemo(() => ({ ret }) => {
+  const ReturnCard = useMemo(() => ({ ret }: any) => {
     const statusInfo = getStatusInfo(ret.status);
     const StatusIcon = statusInfo.icon;
     return (
@@ -427,14 +471,16 @@ const BranchReturns = () => {
               </div>
               <div>
                 <p className="text-sm text-gray-500">{t('returns.total_amount')}</p>
-                <p className="text-base font-medium text-teal-600">{ret.items.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0)} {t('currency')}</p>
+                <p className="text-base font-medium text-teal-600">{ret.items.reduce((sum: number, item: any) => sum + (item.price || 0) * item.quantity, 0)} {t('currency')}</p>
               </div>
             </div>
             <div className="flex flex-col gap-2">
-              {ret.items.map((item, index) => (
+              {ret.items.map((item: any, index: number) => (
                 <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100">
                   <p className="text-base font-medium text-gray-900">{item.productName}</p>
                   <p className="text-sm text-gray-600">{t('returns.quantity', { quantity: item.quantity })}</p>
+                  <p className="text-sm text-gray-600">{t('returns.unit', { unit: item.unit })}</p>
+                  <p className="text-sm text-gray-600">{t('returns.department', { department: item.departmentName })}</p>
                   <p className="text-sm text-gray-600">{t('returns.reason', { reason: item.reason })}</p>
                   {item.price && (
                     <p className="text-sm text-gray-600">{t('returns.price', { price: item.price })} {t('currency')}</p>
@@ -625,7 +671,7 @@ const BranchReturns = () => {
                   <p className="text-lg font-semibold text-gray-600">{t('returns.no_returns')}</p>
                 </Card>
               ) : (
-                paginatedReturns.map((ret) => <ReturnCard key={ret.id} ret={ret} />)
+                paginatedReturns.map((ret: any) => <ReturnCard key={ret.id} ret={ret} />)
               )}
             </motion.div>
             <Pagination />
@@ -640,6 +686,7 @@ const BranchReturns = () => {
           setIsCreateModalOpen(false);
           setFormData({ orderId: '', branchId: user?.branchId || '', reason: '', notes: '', items: [] });
           setFormErrors({});
+          setAvailableItems([]);
         }}
         title={t('returns.create_return')}
         className="max-w-2xl"
@@ -650,12 +697,12 @@ const BranchReturns = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">{t('returns.order_id')}</label>
               <Select
                 value={formData.orderId}
-                onChange={(e) => setFormData({ ...formData, orderId: e.target.value })}
+                onChange={(e) => setFormData({ ...formData, orderId: e.target.value, items: [] })}
                 options={[
                   { value: '', label: t('returns.select_order') },
-                  ...(salesData || []).map((sale) => ({
-                    value: sale._id,
-                    label: `${sale.orderNumber} - ${formatDate(sale.createdAt, language)}`,
+                  ...(deliveredOrders || []).map((order: any) => ({
+                    value: order._id,
+                    label: `${order.orderNumber} - ${formatDate(order.deliveredAt || order.createdAt, language)}`,
                   })),
                 ]}
                 className={`w-full rounded-full border ${formErrors.orderId ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent`}
@@ -688,7 +735,7 @@ const BranchReturns = () => {
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">{t('returns.items')}</label>
-            {formData.items.map((item, index) => (
+            {formData.items.map((item: any, index: number) => (
               <div key={index} className="flex flex-col sm:flex-row gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t('returns.product')}</label>
@@ -697,9 +744,9 @@ const BranchReturns = () => {
                     onChange={(e) => updateItemInForm(index, 'productId', e.target.value)}
                     options={[
                       { value: '', label: t('returns.select_product') },
-                      ...(inventoryData || []).map((inv) => ({
-                        value: inv.productId,
-                        label: `${inv.productName} (${inv.currentStock} ${inv.unit})`,
+                      ...availableItems.map((a: any) => ({
+                        value: a.productId,
+                        label: `${a.productName} (available: ${a.available}, stock: ${a.stock})`,
                       })),
                     ]}
                     className={`w-full rounded-full border ${formErrors[`item_${index}_productId`] ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent`}
@@ -714,6 +761,7 @@ const BranchReturns = () => {
                   <Input
                     type="number"
                     min="1"
+                    max={item.maxQuantity}
                     value={item.quantity}
                     onChange={(e) => updateItemInForm(index, 'quantity', parseInt(e.target.value))}
                     className={`w-full rounded-full border ${formErrors[`item_${index}_quantity`] ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent`}
@@ -753,6 +801,7 @@ const BranchReturns = () => {
               onClick={addItemToForm}
               className="mt-4 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
               aria-label={t('returns.add_item')}
+              disabled={availableItems.length === 0}
             >
               {t('returns.add_item')}
             </Button>
@@ -764,6 +813,7 @@ const BranchReturns = () => {
                 setIsCreateModalOpen(false);
                 setFormData({ orderId: '', branchId: user?.branchId || '', reason: '', notes: '', items: [] });
                 setFormErrors({});
+                setAvailableItems([]);
               }}
               className="bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
               aria-label={t('common.cancel')}
@@ -773,11 +823,11 @@ const BranchReturns = () => {
             <Button
               variant="primary"
               onClick={handleCreateReturn}
-              disabled={submitting}
+              disabled={submitting || createReturnMutation.isPending}
               className="bg-amber-600 hover:bg-amber-700 text-white rounded-full px-4 py-2 transition-colors duration-200 disabled:opacity-50"
               aria-label={t('returns.submit_return')}
             >
-              {submitting ? t('common.submitting') : t('returns.submit_return')}
+              {submitting || createReturnMutation.isPending ? t('common.submitting') : t('returns.submit_return')}
             </Button>
           </div>
         </div>
@@ -820,10 +870,12 @@ const BranchReturns = () => {
             </div>
             <div>
               <p className="text-sm font-medium text-gray-700 mb-2">{t('returns.items')}</p>
-              {selectedReturn.items.map((item, index) => (
+              {selectedReturn.items.map((item: any, index: number) => (
                 <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100 mb-2">
                   <p className="text-base font-medium text-gray-900">{item.productName}</p>
                   <p className="text-sm text-gray-600">{t('returns.quantity', { quantity: item.quantity })}</p>
+                  <p className="text-sm text-gray-600">{t('returns.unit', { unit: item.unit })}</p>
+                  <p className="text-sm text-gray-600">{t('returns.department', { department: item.departmentName })}</p>
                   <p className="text-sm text-gray-600">{t('returns.reason', { reason: item.reason })}</p>
                   {item.price && (
                     <p className="text-sm text-gray-600">{t('returns.price', { price: item.price })} {t('currency')}</p>
