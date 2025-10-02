@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import {  salesAPI } from '../services/salesAPI';
-import { branchesAPI } from '../services/api';
-
+import { branchesAPI, salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, DollarSign, Trash, Edit, Search, X, ChevronDown, Download } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -117,8 +115,10 @@ const translations = {
       fetch_branches: 'خطأ أثناء جلب الفروع',
       delete_sale_failed: 'فشل حذف المبيعة',
       invalid_sale_id: 'معرف المبيعة غير صالح',
+      invalid_branch_id: 'معرف الفرع غير صالح',
       no_branches_available: 'لا توجد فروع متاحة',
       export_failed: 'فشل تصدير التقرير',
+      path_not_found: 'المسار غير موجود',
     },
     currency: 'ريال',
     units: { default: 'غير محدد' },
@@ -171,8 +171,10 @@ const translations = {
       fetch_branches: 'Error fetching branches',
       delete_sale_failed: 'Failed to delete sale',
       invalid_sale_id: 'Invalid sale ID',
+      invalid_branch_id: 'Invalid branch ID',
       no_branches_available: 'No branches available',
       export_failed: 'Failed to export report',
+      path_not_found: 'Path not found',
     },
     currency: 'SAR',
     units: { default: 'N/A' },
@@ -276,7 +278,7 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
         <div className="flex items-start justify-between">
           <div>
             <h3 className="font-bold text-gray-900 text-base truncate">{sale.saleNumber} - {sale.branch.displayName}</h3>
-            <p className="text-sm text-gray-600">{t.date}: {formatDate(sale.createdAt, language)}</p>
+            <p className="text-sm text-gray-600">{t.date}: {sale.createdAt}</p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => onEdit(sale)} aria-label={t.editSale} className="w-8 h-8 bg-blue-100 hover:bg-blue-200 rounded-full transition-colors duration-200 flex items-center justify-center">
@@ -331,6 +333,9 @@ const SaleSkeletonCard = React.memo(() => (
 ));
 
 const formatNumber = (num: number) => num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Validate MongoDB ObjectId
+const isValidObjectId = (id: string) => /^[0-9a-fA-F]{24}$/.test(id);
 
 const AdminSalesReport: React.FC = () => {
   const { t: languageT, language } = useLanguage();
@@ -393,7 +398,7 @@ const AdminSalesReport: React.FC = () => {
 
   const fetchData = useCallback(
     async (pageNum: number = 1, append: boolean = false) => {
-      if (user?.role !== 'admin') {
+      if (!user || user.role !== 'admin') {
         setError(t.errors.unauthorized_access);
         toast.error(t.errors.unauthorized_access, { position: isRtl ? 'top-right' : 'top-left' });
         setLoading(false);
@@ -403,6 +408,11 @@ const AdminSalesReport: React.FC = () => {
       setLoading(pageNum === 1);
       setSalesLoading(pageNum > 1);
       try {
+        // Validate branch ID
+        if (filterBranch && !isValidObjectId(filterBranch)) {
+          throw new Error(t.errors.invalid_branch_id);
+        }
+
         const salesParams: any = { page: pageNum, limit: 20, sort: '-createdAt', role: 'admin' };
         if (filterBranch) salesParams.branch = filterBranch;
         if (filterPeriod === 'day') {
@@ -448,18 +458,15 @@ const AdminSalesReport: React.FC = () => {
         const [salesResponse, branchesResponse, analyticsResponse] = await Promise.all([
           salesAPI.getAll(salesParams).catch((err) => {
             console.error(`[${new Date().toISOString()}] Sales fetch error:`, err);
-            toast.error(t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left' });
-            return { sales: [], total: 0, returns: [] };
+            throw new Error(err.response?.status === 404 ? t.errors.path_not_found : t.errors.fetch_sales);
           }),
           branchesAPI.getAll().catch((err) => {
             console.error(`[${new Date().toISOString()}] Branch fetch error:`, err);
-            toast.error(t.errors.fetch_branches, { position: isRtl ? 'top-right' : 'top-left' });
-            return { branches: [] };
+            throw new Error(err.response?.status === 404 ? t.errors.path_not_found : t.errors.fetch_branches);
           }),
           salesAPI.getAnalytics(analyticsParams).catch((err) => {
             console.error(`[${new Date().toISOString()}] Analytics fetch error:`, err);
-            toast.error(t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left' });
-            return {};
+            throw new Error(err.response?.status === 404 ? t.errors.path_not_found : t.errors.fetch_sales);
           }),
         ]);
 
@@ -467,127 +474,164 @@ const AdminSalesReport: React.FC = () => {
         if (Array.isArray(salesResponse.returns)) {
           salesResponse.returns.forEach((ret: any) => {
             const saleId = ret.sale?._id || ret.sale;
+            if (!isValidObjectId(saleId)) return;
             if (!returnsMap.has(saleId)) returnsMap.set(saleId, []);
             returnsMap.get(saleId)!.push({
-              _id: ret._id,
-              returnNumber: ret.returnNumber,
-              status: ret.status,
+              _id: ret._id || 'unknown',
+              returnNumber: ret.returnNumber || 'N/A',
+              status: ret.status || 'unknown',
               items: Array.isArray(ret.items)
                 ? ret.items.map((item: any) => ({
-                    productId: item.product?._id || item.productId,
+                    productId: item.product?._id || item.productId || 'unknown',
                     productName: item.product?.name || t.departments.unknown,
                     productNameEn: item.product?.nameEn,
-                    quantity: item.quantity,
-                    reason: item.reason,
+                    quantity: item.quantity || 0,
+                    reason: item.reason || 'N/A',
                   }))
                 : [],
-              reason: ret.reason,
-              createdAt: formatDate(ret.createdAt, language),
+              reason: ret.reason || 'N/A',
+              createdAt: formatDate(ret.createdAt, language) || 'N/A',
             });
           });
         }
 
-        const newSales = salesResponse.sales.map((sale: any) => ({
-          _id: sale._id,
-          saleNumber: sale.saleNumber || 'N/A',
-          branch: {
-            _id: sale.branch?._id || 'unknown',
-            name: sale.branch?.name || t.branches.unknown,
-            nameEn: sale.branch?.nameEn,
-            displayName: isRtl ? sale.branch?.name : (sale.branch?.nameEn || sale.branch?.name || t.branches.unknown),
-          },
-          items: Array.isArray(sale.items)
-            ? sale.items.map((item: any) => ({
-                productId: item.product?._id || item.productId,
-                productName: item.product?.name || t.departments.unknown,
-                productNameEn: item.product?.nameEn,
-                unit: item.product?.unit,
-                unitEn: item.product?.unitEn,
-                displayName: isRtl ? (item.product?.name || t.departments.unknown) : (item.product?.nameEn || item.product?.name || t.departments.unknown),
-                displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-                department: item.product?.department
-                  ? {
-                      _id: item.product.department._id,
-                      name: item.product.department.name,
-                      nameEn: item.product.department.nameEn,
-                      displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
-                    }
-                  : undefined,
-              }))
-            : [],
-          totalAmount: sale.totalAmount || 0,
-          createdAt: formatDate(sale.createdAt, language),
-          notes: sale.notes,
-          paymentMethod: sale.paymentMethod,
-          customerName: sale.customerName,
-          customerPhone: sale.customerPhone,
-          returns: returnsMap.get(sale._id) || [],
-        }));
+        const newSales = salesResponse.sales.map((sale: any) => {
+          if (!isValidObjectId(sale._id)) {
+            console.warn(`Invalid sale ID: ${sale._id}`);
+            return null;
+          }
+          return {
+            _id: sale._id,
+            saleNumber: sale.saleNumber || 'N/A',
+            branch: {
+              _id: sale.branch?._id || 'unknown',
+              name: sale.branch?.name || t.branches.unknown,
+              nameEn: sale.branch?.nameEn,
+              displayName: isRtl ? (sale.branch?.name || t.branches.unknown) : (sale.branch?.nameEn || sale.branch?.name || t.branches.unknown),
+            },
+            items: Array.isArray(sale.items)
+              ? sale.items.map((item: any) => ({
+                  productId: item.product?._id || item.productId || 'unknown',
+                  productName: item.product?.name || t.departments.unknown,
+                  productNameEn: item.product?.nameEn,
+                  unit: item.product?.unit,
+                  unitEn: item.product?.unitEn,
+                  displayName: isRtl ? (item.product?.name || t.departments.unknown) : (item.product?.nameEn || item.product?.name || t.departments.unknown),
+                  displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
+                  quantity: item.quantity || 0,
+                  unitPrice: item.unitPrice || 0,
+                  department: item.product?.department
+                    ? {
+                        _id: item.product.department._id || 'unknown',
+                        name: item.product.department.name || t.departments.unknown,
+                        nameEn: item.product.department.nameEn,
+                        displayName: isRtl ? (item.product.department.name || t.departments.unknown) : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
+                      }
+                    : undefined,
+                }))
+              : [],
+            totalAmount: sale.totalAmount || 0,
+            createdAt: formatDate(sale.createdAt, language) || 'N/A',
+            notes: sale.notes,
+            paymentMethod: sale.paymentMethod,
+            customerName: sale.customerName,
+            customerPhone: sale.customerPhone,
+            returns: returnsMap.get(sale._id) || [],
+          };
+        }).filter((sale: any) => sale !== null);
 
         setSales((prev) => (append ? [...prev, ...newSales] : newSales));
         setHasMore(salesResponse.total > pageNum * 20);
 
         const fetchedBranches = Array.isArray(branchesResponse.branches)
-          ? branchesResponse.branches.map((branch: any) => ({
-              _id: branch._id,
-              name: branch.name || t.branches.unknown,
-              nameEn: branch.nameEn,
-              displayName: isRtl ? branch.name : (branch.nameEn || branch.name || t.branches.unknown),
-            }))
+          ? branchesResponse.branches
+              .filter((branch: any) => isValidObjectId(branch._id))
+              .map((branch: any) => ({
+                _id: branch._id,
+                name: branch.name || t.branches.unknown,
+                nameEn: branch.nameEn,
+                displayName: isRtl ? (branch.name || t.branches.unknown) : (branch.nameEn || branch.name || t.branches.unknown),
+              }))
           : [];
         setBranches(fetchedBranches);
 
         if (fetchedBranches.length === 0) {
           setError(t.errors.no_branches_available);
           toast.warn(t.errors.no_branches_available, { position: isRtl ? 'top-right' : 'top-left' });
+        } else if (!filterBranch && fetchedBranches.length > 0) {
+          setFilterBranch(fetchedBranches[0]._id);
         }
 
         setAnalytics({
           branchSales: Array.isArray(analyticsResponse.branchSales)
             ? analyticsResponse.branchSales.map((bs: any) => ({
-                ...bs,
-                displayName: isRtl ? bs.branchName : (bs.branchNameEn || bs.branchName),
+                branchId: bs.branchId || 'unknown',
+                branchName: bs.branchName || t.branches.unknown,
+                branchNameEn: bs.branchNameEn,
+                displayName: isRtl ? (bs.branchName || t.branches.unknown) : (bs.branchNameEn || bs.branchName || t.branches.unknown),
+                totalSales: bs.totalSales || 0,
+                saleCount: bs.saleCount || 0,
               }))
             : [],
           productSales: Array.isArray(analyticsResponse.productSales)
             ? analyticsResponse.productSales.map((ps: any) => ({
-                ...ps,
+                productId: ps.productId || 'unknown',
+                productName: ps.productName || t.departments.unknown,
+                productNameEn: ps.productNameEn,
                 displayName: isRtl ? (ps.productName || t.departments.unknown) : (ps.productNameEn || ps.productName || t.departments.unknown),
+                totalQuantity: ps.totalQuantity || 0,
+                totalRevenue: ps.totalRevenue || 0,
               }))
             : [],
           departmentSales: Array.isArray(analyticsResponse.departmentSales)
             ? analyticsResponse.departmentSales.map((ds: any) => ({
-                ...bs,
-                displayName: isRtl ? ds.departmentName : (ds.departmentNameEn || ds.departmentName || t.departments.unknown),
+                departmentId: ds.departmentId || 'unknown',
+                departmentName: ds.departmentName || t.departments.unknown,
+                departmentNameEn: ds.departmentNameEn,
+                displayName: isRtl ? (ds.departmentName || t.departments.unknown) : (ds.departmentNameEn || ds.departmentName || t.departments.unknown),
+                totalRevenue: ds.totalRevenue || 0,
+                totalQuantity: ds.totalQuantity || 0,
               }))
             : [],
           totalSales: analyticsResponse.totalSales || 0,
           totalCount: analyticsResponse.totalCount || 0,
           topProduct: analyticsResponse.topProduct
             ? {
-                ...analyticsResponse.topProduct,
+                productId: analyticsResponse.topProduct.productId || null,
+                productName: analyticsResponse.topProduct.productName || t.departments.unknown,
+                productNameEn: analyticsResponse.topProduct.productNameEn,
                 displayName: isRtl ? (analyticsResponse.topProduct.productName || t.departments.unknown) : (analyticsResponse.topProduct.productNameEn || analyticsResponse.topProduct.productName || t.departments.unknown),
+                totalQuantity: analyticsResponse.topProduct.totalQuantity || 0,
+                totalRevenue: analyticsResponse.topProduct.totalRevenue || 0,
               }
             : { productId: null, productName: t.departments.unknown, displayName: t.departments.unknown, totalQuantity: 0, totalRevenue: 0 },
           salesTrends: Array.isArray(analyticsResponse.salesTrends)
             ? analyticsResponse.salesTrends.map((trend: any) => ({
-                ...trend,
-                period: formatDate(trend.period, language),
+                period: formatDate(trend.period, language) || 'N/A',
+                totalSales: trend.totalSales || 0,
+                saleCount: trend.saleCount || 0,
               }))
             : [],
-          topCustomers: Array.isArray(analyticsResponse.topCustomers) ? analyticsResponse.topCustomers : [],
+          topCustomers: Array.isArray(analyticsResponse.topCustomers)
+            ? analyticsResponse.topCustomers.map((customer: any) => ({
+                customerName: customer.customerName || 'N/A',
+                customerPhone: customer.customerPhone || 'N/A',
+                totalSpent: customer.totalSpent || 0,
+                purchaseCount: customer.purchaseCount || 0,
+              }))
+            : [],
           paymentMethods: Array.isArray(analyticsResponse.paymentMethods)
             ? analyticsResponse.paymentMethods.map((pm: any) => ({
-                ...pm,
-                paymentMethod: t.paymentMethods[pm.paymentMethod as keyof typeof t.paymentMethods] || pm.paymentMethod,
+                paymentMethod: t.paymentMethods[pm.paymentMethod as keyof typeof t.paymentMethods] || pm.paymentMethod || 'Unknown',
+                totalAmount: pm.totalAmount || 0,
+                count: pm.count || 0,
               }))
             : [],
           returnStats: Array.isArray(analyticsResponse.returnStats)
             ? analyticsResponse.returnStats.map((rs: any) => ({
-                ...rs,
-                status: t.returns.status[rs.status as keyof typeof t.returns.status] || rs.status,
+                status: t.returns.status[rs.status as keyof typeof t.returns.status] || rs.status || 'Unknown',
+                count: rs.count || 0,
+                totalQuantity: rs.totalQuantity || 0,
               }))
             : [],
         });
@@ -595,8 +639,13 @@ const AdminSalesReport: React.FC = () => {
         setError('');
       } catch (err: any) {
         console.error(`[${new Date().toISOString()}] Fetch error:`, err);
-        setError(err.message === 'Invalid sale ID' ? t.errors.invalid_sale_id : (err.message || t.errors.fetch_sales));
-        toast.error(err.message === 'Invalid sale ID' ? t.errors.invalid_sale_id : (err.message || t.errors.fetch_sales), { position: isRtl ? 'top-right' : 'top-left' });
+        const errorMessage =
+          err.message.includes('Invalid sale ID') ? t.errors.invalid_sale_id :
+          err.message.includes('Invalid branch ID') ? t.errors.invalid_branch_id :
+          err.message.includes('not found') ? t.errors.path_not_found :
+          err.message || t.errors.fetch_sales;
+        setError(errorMessage);
+        toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
         setSales([]);
       } finally {
         setLoading(false);
@@ -607,10 +656,16 @@ const AdminSalesReport: React.FC = () => {
   );
 
   useEffect(() => {
+    if (!user || !user.token) {
+      setError(t.errors.unauthorized_access);
+      toast.error(t.errors.unauthorized_access, { position: isRtl ? 'top-right' : 'top-left' });
+      setLoading(false);
+      return;
+    }
     if (filterPeriod !== 'custom' || (startDate && endDate)) {
       debouncedFetch(1, false);
     }
-  }, [filterBranch, filterPeriod, startDate, endDate, debouncedFetch]);
+  }, [filterBranch, filterPeriod, startDate, endDate, debouncedFetch, user, t, isRtl]);
 
   const loadMoreSales = useCallback(() => {
     setPage((prev) => prev + 1);
@@ -619,6 +674,10 @@ const AdminSalesReport: React.FC = () => {
 
   const handleDeleteSale = useCallback(
     async (id: string) => {
+      if (!isValidObjectId(id)) {
+        toast.error(t.errors.invalid_sale_id, { position: isRtl ? 'top-right' : 'top-left' });
+        return;
+      }
       if (window.confirm(t.confirmDelete)) {
         try {
           await salesAPI.delete(id);
@@ -626,8 +685,9 @@ const AdminSalesReport: React.FC = () => {
           debouncedFetch(1, false);
         } catch (err: any) {
           console.error(`[${new Date().toISOString()}] Delete error:`, err);
-          setError(t.errors.delete_sale_failed);
-          toast.error(t.errors.delete_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
+          const errorMessage = err.response?.status === 404 ? t.errors.path_not_found : t.errors.delete_sale_failed;
+          setError(errorMessage);
+          toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
         }
       }
     },
@@ -637,7 +697,7 @@ const AdminSalesReport: React.FC = () => {
   const handleExportReport = useCallback(async () => {
     try {
       const params: any = { format: 'csv', role: 'admin' };
-      if (filterBranch) params.branch = filterBranch;
+      if (filterBranch && isValidObjectId(filterBranch)) params.branch = filterBranch;
       if (filterPeriod === 'day') {
         const today = new Date();
         params.startDate = formatDate(today);
@@ -660,7 +720,8 @@ const AdminSalesReport: React.FC = () => {
       toast.success(t.exportReport, { position: isRtl ? 'top-right' : 'top-left' });
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Export error:`, err);
-      toast.error(t.errors.export_failed, { position: isRtl ? 'top-right' : 'top-left' });
+      const errorMessage = err.response?.status === 404 ? t.errors.path_not_found : t.errors.export_failed;
+      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
     }
   }, [filterBranch, filterPeriod, startDate, endDate, t, isRtl]);
 
@@ -861,7 +922,7 @@ const AdminSalesReport: React.FC = () => {
       <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-8">
         <h2 className="text-xl font-bold text-gray-900 mb-6">{t.filters}</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-          <Dropdown value={filterBranch} onChange={setFilterBranch} options={branchOptions} ariaLabel={t.branches.select_branch} />
+          <Dropdown value={filterBranch} onChange={setFilterBranch} options={branchOptions} ariaLabel={t.branches.select_branch} disabled={branches.length === 0} />
           <Dropdown
             value={filterPeriod}
             onChange={(value) => {
