@@ -3,7 +3,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI, salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
-import { AlertCircle, DollarSign, Trash, Edit, Search, X, ChevronDown } from 'lucide-react';
+import { AlertCircle, DollarSign, Trash, Edit, Search, X, ChevronDown, Download } from 'lucide-react';
 import { toast } from 'react-toastify';
 import {
   Chart as ChartJS,
@@ -12,21 +12,22 @@ import {
   BarElement,
   LineElement,
   PointElement,
+  ArcElement,
   Title,
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Bar, Line } from 'react-chartjs-2';
+import { Bar, Line, Pie } from 'react-chartjs-2';
 import { debounce } from 'lodash';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Title, Tooltip, Legend);
 
 interface Sale {
   _id: string;
-  orderNumber: string;
+  saleNumber: string;
   branch: { _id: string; name: string; nameEn?: string; displayName: string };
   items: Array<{
-    product: string;
+    productId: string;
     productName: string;
     productNameEn?: string;
     unit?: string;
@@ -47,7 +48,7 @@ interface Sale {
     _id: string;
     returnNumber: string;
     status: string;
-    items: Array<{ product: string; productName: string; productNameEn?: string; quantity: number; reason: string }>;
+    items: Array<{ productId: string; productName: string; productNameEn?: string; quantity: number; reason: string }>;
     reason: string;
     createdAt: string;
   }>;
@@ -71,6 +72,7 @@ interface SalesAnalytics {
   topCustomers: Array<{ customerName: string; customerPhone: string; totalSpent: number; purchaseCount: number }>;
   paymentMethods: Array<{ paymentMethod: string; totalAmount: number; count: number }>;
   returnStats: Array<{ status: string; count: number; totalQuantity: number }>;
+  returnReasons: Array<{ reason: string; count: number; totalQuantity: number }>;
 }
 
 const translations = {
@@ -90,6 +92,7 @@ const translations = {
     topCustomers: 'أفضل العملاء',
     paymentMethodsLabel: 'طرق الدفع',
     returnStats: 'إحصائيات المرتجعات',
+    returnReasons: 'أسباب المرتجعات',
     previousSales: 'المبيعات السابقة',
     noSales: 'لا توجد مبيعات',
     date: 'التاريخ',
@@ -107,6 +110,7 @@ const translations = {
     week: 'أسبوع',
     month: 'شهر',
     customRange: 'نطاق مخصص',
+    exportReport: 'تصدير التقرير',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       fetch_sales: 'خطأ أثناء جلب المبيعات',
@@ -114,8 +118,10 @@ const translations = {
       delete_sale_failed: 'فشل حذف المبيعة',
       invalid_sale_id: 'معرف المبيعة غير صالح',
       no_branches_available: 'لا توجد فروع متاحة',
+      export_failed: 'فشل تصدير التقرير',
     },
     currency: 'ريال',
+    units: { default: 'غير محدد' },
     branches: { all_branches: 'كل الفروع', select_branch: 'اختر الفرع', unknown: 'غير معروف' },
     departments: { unknown: 'غير معروف' },
     paymentMethods: {
@@ -141,6 +147,7 @@ const translations = {
     topCustomers: 'Top Customers',
     paymentMethodsLabel: 'Payment Methods',
     returnStats: 'Return Statistics',
+    returnReasons: 'Return Reasons',
     previousSales: 'Previous Sales',
     noSales: 'No sales found',
     date: 'Date',
@@ -158,6 +165,7 @@ const translations = {
     week: 'Week',
     month: 'Month',
     customRange: 'Custom Range',
+    exportReport: 'Export Report',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       fetch_sales: 'Error fetching sales',
@@ -165,8 +173,10 @@ const translations = {
       delete_sale_failed: 'Failed to delete sale',
       invalid_sale_id: 'Invalid sale ID',
       no_branches_available: 'No branches available',
+      export_failed: 'Failed to export report',
     },
     currency: 'SAR',
+    units: { default: 'N/A' },
     branches: { all_branches: 'All Branches', select_branch: 'Select Branch', unknown: 'Unknown' },
     departments: { unknown: 'Unknown' },
     paymentMethods: {
@@ -262,23 +272,38 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   return (
-    <div className="p-6 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="font-bold text-gray-900 text-base">{sale.orderNumber} - {sale.branch.displayName}</h3>
-          <p className="text-sm text-gray-600">{t.date}: {formatDate(sale.createdAt, language)}</p>
-          <p className="text-sm text-gray-600">{t.total}: {sale.totalAmount} {t.currency}</p>
-          {sale.paymentMethod && <p className="text-sm text-gray-600">{t.paymentMethodsLabel}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods]}</p>}
-          {sale.customerName && <p className="text-sm text-gray-600">{t.customerName}: {sale.customerName}</p>}
-          {sale.customerPhone && <p className="text-sm text-gray-600">{t.customerPhone}: {sale.customerPhone}</p>}
-          {sale.notes && <p className="text-sm text-gray-500">{t.notes}: {sale.notes}</p>}
-          <ul className="list-disc list-inside text-sm text-gray-600 mt-2">
+    <div className="p-6 bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 hover:border-amber-200">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <div className="space-y-4 flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="font-bold text-gray-900 text-xl">{sale.saleNumber}</h3>
+            <span className="text-sm text-gray-500">({sale.branch.displayName})</span>
+          </div>
+          <div className="space-y-2">
             {sale.items.map((item, index) => (
-              <li key={index}>
-                {item.displayName || t.departments.unknown} ({item.department?.displayName || t.departments.unknown}) - {t.quantity}: {item.quantity} {item.displayUnit || t.units.default}, {t.unitPrice}: {item.unitPrice} {t.currency}
-              </li>
+              <div key={index} className="flex justify-between items-center text-sm text-gray-700">
+                <span className="truncate max-w-[60%]">
+                  {item.quantity} {item.displayUnit || t.units.default} {item.displayName || t.departments.unknown}
+                </span>
+                <span className="font-semibold text-amber-600">
+                  {item.quantity}x{item.unitPrice} = {(item.quantity * item.unitPrice).toFixed(2)} {t.currency}
+                </span>
+              </div>
             ))}
-          </ul>
+            <div className="flex justify-between items-center font-bold text-gray-900 text-base border-t pt-2 mt-2">
+              <span>{t.total}:</span>
+              <span className="text-amber-600">{sale.totalAmount.toFixed(2)} {t.currency}</span>
+            </div>
+          </div>
+          <div className="space-y-2 text-sm text-gray-600">
+            <p>{t.date}: {formatDate(sale.createdAt, language)}</p>
+            {sale.paymentMethod && (
+              <p>{t.paymentMethodsLabel}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] || t.paymentMethods.cash}</p>
+            )}
+            {sale.customerName && <p>{t.customerName}: {sale.customerName}</p>}
+            {sale.customerPhone && <p>{t.customerPhone}: {sale.customerPhone}</p>}
+            {sale.notes && <p className="italic">{t.notes}: {sale.notes}</p>}
+          </div>
           {sale.returns && sale.returns.length > 0 && (
             <div className="mt-4">
               <p className="text-sm font-medium text-gray-700">{t.returns}:</p>
@@ -299,12 +324,12 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
             </div>
           )}
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => onEdit(sale)} aria-label={t.editSale}>
-            <Edit className="w-5 h-5 text-blue-600 hover:text-blue-800 transition-colors" />
+        <div className="flex gap-3 self-start">
+          <button onClick={() => onEdit(sale)} aria-label={t.editSale} className="p-2 bg-blue-100 hover:bg-blue-200 rounded-lg transition-colors duration-200">
+            <Edit className="w-5 h-5 text-blue-600" />
           </button>
-          <button onClick={() => onDelete(sale._id)} aria-label={t.deleteSale}>
-            <Trash className="w-5 h-5 text-red-600 hover:text-red-800 transition-colors" />
+          <button onClick={() => onDelete(sale._id)} aria-label={t.deleteSale} className="p-2 bg-red-100 hover:bg-red-200 rounded-lg transition-colors duration-200">
+            <Trash className="w-5 h-5 text-red-600" />
           </button>
         </div>
       </div>
@@ -321,6 +346,8 @@ const SaleSkeletonCard = React.memo(() => (
     </div>
   </div>
 ));
+
+const formatNumber = (num: number) => num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const AdminSalesReport: React.FC = () => {
   const { t: languageT, language } = useLanguage();
@@ -340,6 +367,7 @@ const AdminSalesReport: React.FC = () => {
     topCustomers: [],
     paymentMethods: [],
     returnStats: [],
+    returnReasons: [],
   });
   const [filterBranch, setFilterBranch] = useState('');
   const [filterPeriod, setFilterPeriod] = useState('day');
@@ -352,10 +380,15 @@ const AdminSalesReport: React.FC = () => {
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [activeTab, setActiveTab] = useState('sales');
+  const [activeTab, setActiveTab] = useState<'sales' | 'analytics'>('sales');
 
   const debouncedSearch = useCallback(
     debounce((value: string) => setSearchTerm(value.trim()), 300),
+    []
+  );
+
+  const debouncedFetch = useCallback(
+    debounce((pageNum: number, append: boolean) => fetchData(pageNum, append), 500),
     []
   );
 
@@ -369,7 +402,7 @@ const AdminSalesReport: React.FC = () => {
     const lowerSearchTerm = searchTerm.toLowerCase();
     return sales.filter(
       (sale) =>
-        sale.orderNumber.toLowerCase().includes(lowerSearchTerm) ||
+        sale.saleNumber.toLowerCase().includes(lowerSearchTerm) ||
         sale.branch.displayName.toLowerCase().includes(lowerSearchTerm) ||
         sale.customerName?.toLowerCase().includes(lowerSearchTerm) ||
         sale.customerPhone?.toLowerCase().includes(lowerSearchTerm)
@@ -388,70 +421,78 @@ const AdminSalesReport: React.FC = () => {
       setLoading(pageNum === 1);
       setSalesLoading(pageNum > 1);
       try {
-        const salesParams: any = { page: pageNum, limit: 20, sort: '-createdAt' };
+        const salesParams: any = { page: pageNum, limit: 20, sort: '-createdAt', role: 'admin' };
         if (filterBranch) salesParams.branch = filterBranch;
         if (filterPeriod === 'day') {
-          const today = new Date().toISOString().split('T')[0];
-          salesParams.startDate = today;
-          salesParams.endDate = today;
+          const today = new Date();
+          salesParams.startDate = formatDate(today);
+          salesParams.endDate = formatDate(today);
         } else if (filterPeriod === 'week') {
           const start = new Date();
           start.setDate(start.getDate() - 7);
-          salesParams.startDate = start.toISOString().split('T')[0];
-          salesParams.endDate = new Date().toISOString().split('T')[0];
+          salesParams.startDate = formatDate(start);
+          salesParams.endDate = formatDate(new Date());
         } else if (filterPeriod === 'month') {
           const start = new Date();
           start.setMonth(start.getMonth() - 1);
-          salesParams.startDate = start.toISOString().split('T')[0];
-          salesParams.endDate = new Date().toISOString().split('T')[0];
+          salesParams.startDate = formatDate(start);
+          salesParams.endDate = formatDate(new Date());
         } else if (filterPeriod === 'custom' && startDate && endDate) {
           salesParams.startDate = startDate;
           salesParams.endDate = endDate;
         }
 
-        const analyticsParams: any = {};
+        const analyticsParams: any = { role: 'admin' };
         if (filterBranch) analyticsParams.branch = filterBranch;
         if (filterPeriod === 'day') {
-          const today = new Date().toISOString().split('T')[0];
-          analyticsParams.startDate = today;
-          analyticsParams.endDate = today;
+          const today = new Date();
+          analyticsParams.startDate = formatDate(today);
+          analyticsParams.endDate = formatDate(today);
         } else if (filterPeriod === 'week') {
           const start = new Date();
           start.setDate(start.getDate() - 7);
-          analyticsParams.startDate = start.toISOString().split('T')[0];
-          analyticsParams.endDate = new Date().toISOString().split('T')[0];
+          analyticsParams.startDate = formatDate(start);
+          analyticsParams.endDate = formatDate(new Date());
         } else if (filterPeriod === 'month') {
           const start = new Date();
           start.setMonth(start.getMonth() - 1);
-          analyticsParams.startDate = start.toISOString().split('T')[0];
-          analyticsParams.endDate = new Date().toISOString().split('T')[0];
+          analyticsParams.startDate = formatDate(start);
+          analyticsParams.endDate = formatDate(new Date());
         } else if (filterPeriod === 'custom' && startDate && endDate) {
           analyticsParams.startDate = startDate;
           analyticsParams.endDate = endDate;
         }
 
         const [salesResponse, branchesResponse, analyticsResponse] = await Promise.all([
-          salesAPI.getAll(salesParams),
+          salesAPI.getAll(salesParams).catch((err) => {
+            console.error(`[${new Date().toISOString()}] Sales fetch error:`, err);
+            toast.error(t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left' });
+            return { sales: [], total: 0, returns: [] };
+          }),
           branchesAPI.getAll().catch((err) => {
             console.error(`[${new Date().toISOString()}] Branch fetch error:`, err);
             toast.error(t.errors.fetch_branches, { position: isRtl ? 'top-right' : 'top-left' });
             return { branches: [] };
           }),
-          salesAPI.getAnalytics(analyticsParams),
+          salesAPI.getAnalytics(analyticsParams).catch((err) => {
+            console.error(`[${new Date().toISOString()}] Analytics fetch error:`, err);
+            toast.error(t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left' });
+            return {};
+          }),
         ]);
 
         const returnsMap = new Map<string, Sale['returns']>();
         if (Array.isArray(salesResponse.returns)) {
           salesResponse.returns.forEach((ret: any) => {
-            const orderId = ret.order?._id || ret.order;
-            if (!returnsMap.has(orderId)) returnsMap.set(orderId, []);
-            returnsMap.get(orderId)!.push({
+            const saleId = ret.sale?._id || ret.sale;
+            if (!returnsMap.has(saleId)) returnsMap.set(saleId, []);
+            returnsMap.get(saleId)!.push({
               _id: ret._id,
               returnNumber: ret.returnNumber,
               status: ret.status,
               items: Array.isArray(ret.items)
                 ? ret.items.map((item: any) => ({
-                    product: item.product?._id || item.product,
+                    productId: item.product?._id || item.productId,
                     productName: item.product?.name || t.departments.unknown,
                     productNameEn: item.product?.nameEn,
                     quantity: item.quantity,
@@ -466,7 +507,7 @@ const AdminSalesReport: React.FC = () => {
 
         const newSales = salesResponse.sales.map((sale: any) => ({
           _id: sale._id,
-          orderNumber: sale.saleNumber || sale.orderNumber,
+          saleNumber: sale.saleNumber || 'N/A',
           branch: {
             _id: sale.branch?._id || 'unknown',
             name: sale.branch?.name || t.branches.unknown,
@@ -475,7 +516,7 @@ const AdminSalesReport: React.FC = () => {
           },
           items: Array.isArray(sale.items)
             ? sale.items.map((item: any) => ({
-                product: item.product?._id || item.productId,
+                productId: item.product?._id || item.productId,
                 productName: item.product?.name || t.departments.unknown,
                 productNameEn: item.product?.nameEn,
                 unit: item.product?.unit,
@@ -567,6 +608,12 @@ const AdminSalesReport: React.FC = () => {
                 status: t.returns.status[rs.status as keyof typeof t.returns.status] || rs.status,
               }))
             : [],
+          returnReasons: Array.isArray(analyticsResponse.returnReasons)
+            ? analyticsResponse.returnReasons.map((rr: any) => ({
+                ...rr,
+                reason: rr.reason || t.departments.unknown,
+              }))
+            : [],
         });
 
         setError('');
@@ -584,13 +631,15 @@ const AdminSalesReport: React.FC = () => {
   );
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (filterPeriod !== 'custom' || (startDate && endDate)) {
+      debouncedFetch(1, false);
+    }
+  }, [filterBranch, filterPeriod, startDate, endDate, debouncedFetch]);
 
   const loadMoreSales = useCallback(() => {
     setPage((prev) => prev + 1);
-    fetchData(page + 1, true);
-  }, [fetchData, page]);
+    debouncedFetch(page + 1, true);
+  }, [debouncedFetch, page]);
 
   const handleDeleteSale = useCallback(
     async (id: string) => {
@@ -598,7 +647,7 @@ const AdminSalesReport: React.FC = () => {
         try {
           await salesAPI.delete(id);
           toast.success(t.deleteSale, { position: isRtl ? 'top-right' : 'top-left' });
-          fetchData();
+          debouncedFetch(1, false);
         } catch (err: any) {
           console.error(`[${new Date().toISOString()}] Delete error:`, err);
           setError(t.errors.delete_sale_failed);
@@ -606,8 +655,37 @@ const AdminSalesReport: React.FC = () => {
         }
       }
     },
-    [t, fetchData, isRtl]
+    [t, debouncedFetch, isRtl]
   );
+
+  const handleExportReport = useCallback(async () => {
+    try {
+      const params: any = { format: 'csv', role: 'admin' };
+      if (filterBranch) params.branch = filterBranch;
+      if (filterPeriod === 'day') {
+        const today = new Date();
+        params.startDate = formatDate(today);
+        params.endDate = formatDate(today);
+      } else if (filterPeriod === 'week') {
+        const start = new Date();
+        start.setDate(start.getDate() - 7);
+        params.startDate = formatDate(start);
+        params.endDate = formatDate(new Date());
+      } else if (filterPeriod === 'month') {
+        const start = new Date();
+        start.setMonth(start.getMonth() - 1);
+        params.startDate = formatDate(start);
+        params.endDate = formatDate(new Date());
+      } else if (filterPeriod === 'custom' && startDate && endDate) {
+        params.startDate = startDate;
+        params.endDate = endDate;
+      }
+      await salesAPI.exportReport(params);
+    } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] Export error:`, err);
+      toast.error(t.errors.export_failed, { position: isRtl ? 'top-right' : 'top-left' });
+    }
+  }, [filterBranch, filterPeriod, startDate, endDate, t, isRtl]);
 
   const branchOptions = useMemo(
     () => [
@@ -630,146 +708,308 @@ const AdminSalesReport: React.FC = () => {
     [t]
   );
 
-  const branchSalesChartData = useMemo(
+  const branchSalesChart = useMemo(
     () => ({
-      labels: analytics.branchSales.map((b) => b.displayName),
-      datasets: [
-        {
-          label: t.branchSales,
-          data: analytics.branchSales.map((b) => b.totalSales),
-          backgroundColor: 'rgba(251, 191, 36, 0.6)',
-          borderColor: 'rgba(251, 191, 36, 1)',
-          borderWidth: 1,
+      type: 'bar',
+      data: {
+        labels: analytics.branchSales.map((b) => b.displayName),
+        datasets: [
+          {
+            label: t.branchSales,
+            data: analytics.branchSales.map((b) => b.totalSales),
+            backgroundColor: 'rgba(251, 191, 36, 0.6)',
+            borderColor: 'rgba(251, 191, 36, 1)',
+            borderWidth: 1,
+          },
+          {
+            label: t.totalCount,
+            data: analytics.branchSales.map((b) => b.saleCount),
+            backgroundColor: 'rgba(59, 130, 246, 0.6)',
+            borderColor: 'rgba(59, 130, 246, 1)',
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { font: { size: 12 } } },
+          title: { display: true, text: t.branchSales, font: { size: 16 } },
+          tooltip: {
+            callbacks: {
+              label: (context) => `${context.dataset.label}: ${formatNumber(context.parsed.y)} ${context.dataset.label === t.totalCount ? '' : t.currency}`,
+            },
+          },
         },
-        {
-          label: t.totalCount,
-          data: analytics.branchSales.map((b) => b.saleCount),
-          backgroundColor: 'rgba(59, 130, 246, 0.6)',
-          borderColor: 'rgba(59, 130, 246, 1)',
-          borderWidth: 1,
+        scales: {
+          y: { beginAtZero: true, ticks: { callback: (value) => formatNumber(value) } },
+          x: { ticks: { maxRotation: 45, minRotation: 0 } },
         },
-      ],
+      },
     }),
     [analytics.branchSales, t]
   );
 
-  const productSalesChartData = useMemo(
+  const productSalesChart = useMemo(
     () => ({
-      labels: analytics.productSales.slice(0, 5).map((p) => p.displayName),
-      datasets: [
-        {
-          label: t.productSales,
-          data: analytics.productSales.slice(0, 5).map((p) => p.totalRevenue),
-          backgroundColor: 'rgba(251, 191, 36, 0.6)',
-          borderColor: 'rgba(251, 191, 36, 1)',
-          borderWidth: 1,
+      type: 'bar',
+      data: {
+        labels: analytics.productSales.slice(0, 5).map((p) => p.displayName),
+        datasets: [
+          {
+            label: t.productSales,
+            data: analytics.productSales.slice(0, 5).map((p) => p.totalRevenue),
+            backgroundColor: 'rgba(251, 191, 36, 0.6)',
+            borderColor: 'rgba(251, 191, 36, 1)',
+            borderWidth: 1,
+          },
+          {
+            label: t.quantity,
+            data: analytics.productSales.slice(0, 5).map((p) => p.totalQuantity),
+            backgroundColor: 'rgba(59, 130, 246, 0.6)',
+            borderColor: 'rgba(59, 130, 246, 1)',
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { font: { size: 12 } } },
+          title: { display: true, text: t.productSales, font: { size: 16 } },
+          tooltip: {
+            callbacks: {
+              label: (context) => `${context.dataset.label}: ${formatNumber(context.parsed.y)} ${context.dataset.label === t.quantity ? '' : t.currency}`,
+            },
+          },
         },
-        {
-          label: t.quantity,
-          data: analytics.productSales.slice(0, 5).map((p) => p.totalQuantity),
-          backgroundColor: 'rgba(59, 130, 246, 0.6)',
-          borderColor: 'rgba(59, 130, 246, 1)',
-          borderWidth: 1,
+        scales: {
+          y: { beginAtZero: true, ticks: { callback: (value) => formatNumber(value) } },
+          x: { ticks: { maxRotation: 45, minRotation: 0 } },
         },
-      ],
+      },
     }),
     [analytics.productSales, t]
   );
 
-  const departmentSalesChartData = useMemo(
+  const departmentSalesChart = useMemo(
     () => ({
-      labels: analytics.departmentSales.map((d) => d.displayName),
-      datasets: [
-        {
-          label: t.departmentSales,
-          data: analytics.departmentSales.map((d) => d.totalRevenue),
-          backgroundColor: 'rgba(251, 191, 36, 0.6)',
-          borderColor: 'rgba(251, 191, 36, 1)',
-          borderWidth: 1,
+      type: 'bar',
+      data: {
+        labels: analytics.departmentSales.map((d) => d.displayName),
+        datasets: [
+          {
+            label: t.departmentSales,
+            data: analytics.departmentSales.map((d) => d.totalRevenue),
+            backgroundColor: 'rgba(251, 191, 36, 0.6)',
+            borderColor: 'rgba(251, 191, 36, 1)',
+            borderWidth: 1,
+          },
+          {
+            label: t.quantity,
+            data: analytics.departmentSales.map((d) => d.totalQuantity),
+            backgroundColor: 'rgba(59, 130, 246, 0.6)',
+            borderColor: 'rgba(59, 130, 246, 1)',
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { font: { size: 12 } } },
+          title: { display: true, text: t.departmentSales, font: { size: 16 } },
+          tooltip: {
+            callbacks: {
+              label: (context) => `${context.dataset.label}: ${formatNumber(context.parsed.y)} ${context.dataset.label === t.quantity ? '' : t.currency}`,
+            },
+          },
         },
-        {
-          label: t.quantity,
-          data: analytics.departmentSales.map((d) => d.totalQuantity),
-          backgroundColor: 'rgba(59, 130, 246, 0.6)',
-          borderColor: 'rgba(59, 130, 246, 1)',
-          borderWidth: 1,
+        scales: {
+          y: { beginAtZero: true, ticks: { callback: (value) => formatNumber(value) } },
+          x: { ticks: { maxRotation: 45, minRotation: 0 } },
         },
-      ],
+      },
     }),
     [analytics.departmentSales, t]
   );
 
-  const salesTrendsChartData = useMemo(
+  const salesTrendsChart = useMemo(
     () => ({
-      labels: analytics.salesTrends.map((t) => t.period),
-      datasets: [
-        {
-          label: t.salesTrends,
-          data: analytics.salesTrends.map((t) => t.totalSales),
-          fill: false,
-          borderColor: 'rgba(251, 191, 36, 1)',
-          tension: 0.1,
+      type: 'line',
+      data: {
+        labels: analytics.salesTrends.map((t) => t.period),
+        datasets: [
+          {
+            label: t.salesTrends,
+            data: analytics.salesTrends.map((t) => t.totalSales),
+            fill: true,
+            backgroundColor: 'rgba(251, 191, 36, 0.2)',
+            borderColor: 'rgba(251, 191, 36, 1)',
+            tension: 0.3,
+            pointBackgroundColor: 'rgba(251, 191, 36, 1)',
+            pointBorderColor: '#fff',
+            pointHoverBackgroundColor: '#fff',
+            pointHoverBorderColor: 'rgba(251, 191, 36, 1)',
+          },
+          {
+            label: t.totalCount,
+            data: analytics.salesTrends.map((t) => t.saleCount),
+            fill: true,
+            backgroundColor: 'rgba(59, 130, 246, 0.2)',
+            borderColor: 'rgba(59, 130, 246, 1)',
+            tension: 0.3,
+            pointBackgroundColor: 'rgba(59, 130, 246, 1)',
+            pointBorderColor: '#fff',
+            pointHoverBackgroundColor: '#fff',
+            pointHoverBorderColor: 'rgba(59, 130, 246, 1)',
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { font: { size: 12 } } },
+          title: { display: true, text: t.salesTrends, font: { size: 16 } },
+          tooltip: {
+            callbacks: {
+              label: (context) => `${context.dataset.label}: ${formatNumber(context.parsed.y)} ${context.dataset.label === t.totalCount ? '' : t.currency}`,
+            },
+          },
         },
-        {
-          label: t.totalCount,
-          data: analytics.salesTrends.map((t) => t.saleCount),
-          fill: false,
-          borderColor: 'rgba(59, 130, 246, 1)',
-          tension: 0.1,
+        scales: {
+          y: { beginAtZero: true, ticks: { callback: (value) => formatNumber(value) } },
+          x: { ticks: { maxRotation: 45, minRotation: 0 } },
         },
-      ],
+      },
     }),
     [analytics.salesTrends, t]
   );
 
-  const paymentMethodsChartData = useMemo(
+  const paymentMethodsChart = useMemo(
     () => ({
-      labels: analytics.paymentMethods.map((pm) => pm.paymentMethod),
-      datasets: [
-        {
-          label: t.paymentMethodsLabel,
-          data: analytics.paymentMethods.map((pm) => pm.totalAmount),
-          backgroundColor: 'rgba(251, 191, 36, 0.6)',
-          borderColor: 'rgba(251, 191, 36, 1)',
-          borderWidth: 1,
+      type: 'pie',
+      data: {
+        labels: analytics.paymentMethods.map((pm) => pm.paymentMethod),
+        datasets: [
+          {
+            label: t.paymentMethodsLabel,
+            data: analytics.paymentMethods.map((pm) => pm.totalAmount),
+            backgroundColor: ['rgba(251, 191, 36, 0.6)', 'rgba(59, 130, 246, 0.6)', 'rgba(34, 197, 94, 0.6)'],
+            borderColor: ['rgba(251, 191, 36, 1)', 'rgba(59, 130, 246, 1)', 'rgba(34, 197, 94, 1)'],
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { font: { size: 12 } } },
+          title: { display: true, text: t.paymentMethodsLabel, font: { size: 16 } },
+          tooltip: {
+            callbacks: {
+              label: (context) => `${context.label}: ${formatNumber(context.parsed)} ${t.currency}`,
+            },
+          },
         },
-        {
-          label: t.totalCount,
-          data: analytics.paymentMethods.map((pm) => pm.count),
-          backgroundColor: 'rgba(59, 130, 246, 0.6)',
-          borderColor: 'rgba(59, 130, 246, 1)',
-          borderWidth: 1,
-        },
-      ],
+      },
     }),
     [analytics.paymentMethods, t]
   );
 
-  const returnStatsChartData = useMemo(
+  const returnStatsChart = useMemo(
     () => ({
-      labels: analytics.returnStats.map((rs) => rs.status),
-      datasets: [
-        {
-          label: t.returnStats,
-          data: analytics.returnStats.map((rs) => rs.count),
-          backgroundColor: 'rgba(251, 191, 36, 0.6)',
-          borderColor: 'rgba(251, 191, 36, 1)',
-          borderWidth: 1,
+      type: 'bar',
+      data: {
+        labels: analytics.returnStats.map((rs) => rs.status),
+        datasets: [
+          {
+            label: t.returnStats,
+            data: analytics.returnStats.map((rs) => rs.count),
+            backgroundColor: 'rgba(251, 191, 36, 0.6)',
+            borderColor: 'rgba(251, 191, 36, 1)',
+            borderWidth: 1,
+          },
+          {
+            label: t.quantity,
+            data: analytics.returnStats.map((rs) => rs.totalQuantity),
+            backgroundColor: 'rgba(59, 130, 246, 0.6)',
+            borderColor: 'rgba(59, 130, 246, 1)',
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { font: { size: 12 } } },
+          title: { display: true, text: t.returnStats, font: { size: 16 } },
+          tooltip: {
+            callbacks: {
+              label: (context) => `${context.dataset.label}: ${formatNumber(context.parsed.y)}`,
+            },
+          },
         },
-        {
-          label: t.quantity,
-          data: analytics.returnStats.map((rs) => rs.totalQuantity),
-          backgroundColor: 'rgba(59, 130, 246, 0.6)',
-          borderColor: 'rgba(59, 130, 246, 1)',
-          borderWidth: 1,
+        scales: {
+          y: { beginAtZero: true, ticks: { callback: (value) => formatNumber(value) } },
+          x: { ticks: { maxRotation: 45, minRotation: 0 } },
         },
-      ],
+      },
     }),
     [analytics.returnStats, t]
   );
 
+  const returnReasonsChart = useMemo(
+    () => ({
+      type: 'bar',
+      data: {
+        labels: analytics.returnReasons.map((rr) => rr.reason),
+        datasets: [
+          {
+            label: t.returnReasons,
+            data: analytics.returnReasons.map((rr) => rr.count),
+            backgroundColor: 'rgba(251, 191, 36, 0.6)',
+            borderColor: 'rgba(251, 191, 36, 1)',
+            borderWidth: 1,
+          },
+          {
+            label: t.quantity,
+            data: analytics.returnReasons.map((rr) => rr.totalQuantity),
+            backgroundColor: 'rgba(59, 130, 246, 0.6)',
+            borderColor: 'rgba(59, 130, 246, 1)',
+            borderWidth: 1,
+          },
+        ],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top', labels: { font: { size: 12 } } },
+          title: { display: true, text: t.returnReasons, font: { size: 16 } },
+          tooltip: {
+            callbacks: {
+              label: (context) => `${context.dataset.label}: ${formatNumber(context.parsed.y)}`,
+            },
+          },
+        },
+        scales: {
+          y: { beginAtZero: true, ticks: { callback: (value) => formatNumber(value) } },
+          x: { ticks: { maxRotation: 45, minRotation: 0 } },
+        },
+      },
+    }),
+    [analytics.returnReasons, t]
+  );
+
   return (
-    <div className={`mx-auto px-4 sm:px-6 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <DollarSign className="w-8 h-8 text-amber-600" />
@@ -778,6 +1018,14 @@ const AdminSalesReport: React.FC = () => {
             <p className="text-gray-600 text-sm">{t.subtitle}</p>
           </div>
         </div>
+        <button
+          onClick={handleExportReport}
+          className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-sm font-medium transition-colors duration-200"
+          aria-label={t.exportReport}
+        >
+          <Download className="w-5 h-5" />
+          {t.exportReport}
+        </button>
       </header>
 
       {error && (
@@ -787,7 +1035,7 @@ const AdminSalesReport: React.FC = () => {
         </div>
       )}
 
-      <div className="mb-6 flex flex-wrap gap-4">
+      <div className="mb-6 flex flex-wrap gap-4 border-b border-gray-200 pb-2">
         <button
           onClick={() => setActiveTab('sales')}
           className={`px-6 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${activeTab === 'sales' ? 'bg-amber-600 text-white shadow-md' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}
@@ -802,11 +1050,22 @@ const AdminSalesReport: React.FC = () => {
         </button>
       </div>
 
-      <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-8">
+      <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100 mb-8">
         <h2 className="text-xl font-bold text-gray-900 mb-6">{t.filters}</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Dropdown value={filterBranch} onChange={setFilterBranch} options={branchOptions} ariaLabel={t.branches.select_branch} />
-          <Dropdown value={filterPeriod} onChange={setFilterPeriod} options={periodOptions} ariaLabel={t.filterBy} />
+          <Dropdown
+            value={filterPeriod}
+            onChange={(value) => {
+              setFilterPeriod(value);
+              if (value !== 'custom') {
+                setStartDate('');
+                setEndDate('');
+              }
+            }}
+            options={periodOptions}
+            ariaLabel={t.filterBy}
+          />
           {filterPeriod === 'custom' && (
             <>
               <input
@@ -826,7 +1085,7 @@ const AdminSalesReport: React.FC = () => {
             </>
           )}
         </div>
-        <div className="mt-6">
+        <div className="mt-4">
           <SearchInput value={searchInput} onChange={handleSearchChange} placeholder={t.searchPlaceholder} ariaLabel={t.searchPlaceholder} />
         </div>
       </div>
@@ -841,7 +1100,7 @@ const AdminSalesReport: React.FC = () => {
               ))}
             </div>
           ) : filteredSales.length === 0 ? (
-            <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
+            <div className="p-8 text-center bg-white rounded-xl shadow-md border border-gray-100">
               <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <p className="text-gray-600 text-sm font-medium">{t.noSales}</p>
             </div>
@@ -876,106 +1135,78 @@ const AdminSalesReport: React.FC = () => {
       )}
 
       {activeTab === 'analytics' && (
-        <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mt-8">
+        <div className="mt-8">
           <h2 className="text-xl font-bold text-gray-900 mb-6">{t.analyticsTab}</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.branchSales}</h3>
               <div className="h-64">
-                <Bar
-                  data={branchSalesChartData}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'top' }, title: { display: true, text: t.branchSales } },
-                    scales: { y: { beginAtZero: true } },
-                  }}
-                />
+                ```chartjs
+                ${JSON.stringify(branchSalesChart, null, 2)}
+                ```
               </div>
             </div>
-            <div>
+            <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.productSales}</h3>
               <div className="h-64">
-                <Bar
-                  data={productSalesChartData}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'top' }, title: { display: true, text: t.productSales } },
-                    scales: { y: { beginAtZero: true } },
-                  }}
-                />
+                ```chartjs
+                ${JSON.stringify(productSalesChart, null, 2)}
+                ```
               </div>
             </div>
-            <div>
+            <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.departmentSales}</h3>
               <div className="h-64">
-                <Bar
-                  data={departmentSalesChartData}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'top' }, title: { display: true, text: t.departmentSales } },
-                    scales: { y: { beginAtZero: true } },
-                  }}
-                />
+                ```chartjs
+                ${JSON.stringify(departmentSalesChart, null, 2)}
+                ```
               </div>
             </div>
-            <div>
+            <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.salesTrends}</h3>
               <div className="h-64">
-                <Line
-                  data={salesTrendsChartData}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'top' }, title: { display: true, text: t.salesTrends } },
-                    scales: { y: { beginAtZero: true } },
-                  }}
-                />
+                ```chartjs
+                ${JSON.stringify(salesTrendsChart, null, 2)}
+                ```
               </div>
             </div>
-            <div>
+            <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.paymentMethodsLabel}</h3>
               <div className="h-64">
-                <Bar
-                  data={paymentMethodsChartData}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'top' }, title: { display: true, text: t.paymentMethodsLabel } },
-                    scales: { y: { beginAtZero: true } },
-                  }}
-                />
+                ```chartjs
+                ${JSON.stringify(paymentMethodsChart, null, 2)}
+                ```
               </div>
             </div>
-            <div>
+            <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.returnStats}</h3>
               <div className="h-64">
-                <Bar
-                  data={returnStatsChartData}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'top' }, title: { display: true, text: t.returnStats } },
-                    scales: { y: { beginAtZero: true } },
-                  }}
-                />
+                ```chartjs
+                ${JSON.stringify(returnStatsChart, null, 2)}
+                ```
               </div>
             </div>
-            <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+            <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.returnReasons}</h3>
+              <div className="h-64">
+                ```chartjs
+                ${JSON.stringify(returnReasonsChart, null, 2)}
+                ```
+              </div>
+            </div>
+            <div className="p-6 bg-gray-50 rounded-xl border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.totalSales}</h3>
-              <p className="text-2xl font-bold text-amber-600">{analytics.totalSales} {t.currency}</p>
+              <p className="text-2xl font-bold text-amber-600">{formatNumber(analytics.totalSales)} {t.currency}</p>
               <p className="text-sm text-gray-600 mt-2">{t.totalCount}: {analytics.totalCount}</p>
               <p className="text-sm text-gray-600 mt-2">{t.topProduct}: {analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity})</p>
             </div>
-            <div className="p-4 bg-gray-50 rounded-xl border border-gray-100">
+            <div className="p-6 bg-gray-50 rounded-xl border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.topCustomers}</h3>
               {analytics.topCustomers.length > 0 ? (
                 <ul className="space-y-2">
                   {analytics.topCustomers.map((customer, index) => (
                     <li key={index} className="text-sm text-gray-600">
-                      {customer.customerName || t.branches.unknown} ({customer.customerPhone || 'N/A'}) - {customer.totalSpent} {t.currency}, {customer.purchaseCount} {t.totalCount}
+                      {customer.customerName || t.branches.unknown} ({customer.customerPhone || 'N/A'}) - {formatNumber(customer.totalSpent)} {t.currency}, {customer.purchaseCount} {t.totalCount}
                     </li>
                   ))}
                 </ul>
