@@ -288,7 +288,7 @@ export const salesAPI = {
       throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
     }
     try {
-      const response = await salesAxios.get('/sales/analytics', { params: { ...params, lang: isRtl ? 'ar' : 'en' } });
+      const response = await salesAxios.get('/sales/analytics');
       console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Response:`, response);
       return response;
     } catch (err: any) {
