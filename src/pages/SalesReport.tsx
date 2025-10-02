@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -34,6 +33,7 @@ interface Sale {
     unitPrice: number;
     displayName: string;
     displayUnit: string;
+    department?: { _id: string; name: string; nameEn?: string; displayName: string };
   }>;
   totalAmount: number;
   createdAt: string;
@@ -84,11 +84,11 @@ interface CartItem {
 }
 
 interface SalesAnalytics {
-  branchSales: Array<{ branchId: string; branchName: string; displayName: string; totalSales: number }>;
-  productSales: Array<{ productId: string; productName: string; displayName: string; totalQuantity: number; totalRevenue: number }>;
-  departmentSales: Array<{ departmentId: string; departmentName: string; displayName: string; totalRevenue: number }>;
+  branchSales: Array<{ branchId: string; branchName: string; branchNameEn?: string; displayName: string; totalSales: number }>;
+  productSales: Array<{ productId: string; productName: string; productNameEn?: string; displayName: string; totalQuantity: number; totalRevenue: number }>;
+  departmentSales: Array<{ departmentId: string; departmentName: string; departmentNameEn?: string; displayName: string; totalRevenue: number }>;
   totalSales: number;
-  topProduct: { productName: string; displayName: string; totalQuantity: number };
+  topProduct: { productName: string; productNameEn?: string; displayName: string; totalQuantity: number };
 }
 
 const translations = {
@@ -344,7 +344,7 @@ const SaleCard: React.FC<{ sale: Sale }> = ({ sale }) => {
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   return (
-    <div className="h-[200px] p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200 overflow-y-auto">
+    <div className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200 overflow-y-auto">
       <div className="flex items-start justify-between">
         <div>
           <h3 className="font-bold text-gray-900 text-base">{sale.orderNumber} - {sale.branch.displayName}</h3>
@@ -354,7 +354,7 @@ const SaleCard: React.FC<{ sale: Sale }> = ({ sale }) => {
           <ul className="list-disc list-inside text-sm text-gray-600 mt-2">
             {sale.items.map((item, index) => (
               <li key={index}>
-                {item.displayName} - {t.quantity}: {item.quantity} {item.displayUnit}, {t.unitPrice}: {item.unitPrice} {t.currency}
+                {item.displayName} ({item.department?.displayName || t.departments.unknown}) - {t.quantity}: {item.quantity} {item.displayUnit}, {t.unitPrice}: {item.unitPrice} {t.currency}
               </li>
             ))}
           </ul>
@@ -512,7 +512,7 @@ export const SalesReport: React.FC = () => {
       setSales(
         salesResponse.sales.map((sale: any) => ({
           _id: sale._id,
-          orderNumber: sale.orderNumber,
+          orderNumber: sale.saleNumber || sale.orderNumber,
           branch: {
             _id: sale.branch?._id || 'unknown',
             name: sale.branch?.name || t.branches.unknown,
@@ -530,6 +530,14 @@ export const SalesReport: React.FC = () => {
                 displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
                 quantity: item.quantity,
                 unitPrice: item.unitPrice,
+                department: item.product?.department
+                  ? {
+                      _id: item.product.department._id,
+                      name: item.product.department.name,
+                      nameEn: item.product.department.nameEn,
+                      displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name),
+                    }
+                  : undefined,
               }))
             : [],
           totalAmount: sale.totalAmount || 0,
@@ -588,6 +596,7 @@ export const SalesReport: React.FC = () => {
           ? analyticsResponse.branchSales.map((bs: any) => ({
               branchId: bs.branchId,
               branchName: bs.branchName,
+              branchNameEn: bs.branchNameEn,
               displayName: isRtl ? bs.branchName : (bs.branchNameEn || bs.branchName),
               totalSales: bs.totalSales,
             }))
@@ -596,6 +605,7 @@ export const SalesReport: React.FC = () => {
           ? analyticsResponse.productSales.map((ps: any) => ({
               productId: ps.productId,
               productName: ps.productName,
+              productNameEn: ps.productNameEn,
               displayName: isRtl ? ps.productName : (ps.productNameEn || ps.productName),
               totalQuantity: ps.totalQuantity,
               totalRevenue: ps.totalRevenue,
@@ -605,6 +615,7 @@ export const SalesReport: React.FC = () => {
           ? analyticsResponse.departmentSales.map((ds: any) => ({
               departmentId: ds.departmentId,
               departmentName: ds.departmentName,
+              departmentNameEn: ds.departmentNameEn,
               displayName: isRtl ? ds.departmentName : (ds.departmentNameEn || ds.departmentName),
               totalRevenue: ds.totalRevenue,
             }))
@@ -613,6 +624,7 @@ export const SalesReport: React.FC = () => {
         topProduct: analyticsResponse.topProduct
           ? {
               productName: analyticsResponse.topProduct.productName,
+              productNameEn: analyticsResponse.topProduct.productNameEn,
               displayName: isRtl ? analyticsResponse.topProduct.productName : (analyticsResponse.topProduct.productNameEn || analyticsResponse.topProduct.productName),
               totalQuantity: analyticsResponse.topProduct.totalQuantity,
             }
@@ -646,6 +658,12 @@ export const SalesReport: React.FC = () => {
           ...item,
           displayName: isRtl ? item.productName : (item.productNameEn || item.productName),
           displayUnit: isRtl ? (item.unit || t.units.default) : (item.unitEn || item.unit || t.units.default),
+          department: item.department
+            ? {
+                ...item.department,
+                displayName: isRtl ? item.department.name : (item.department.nameEn || item.department.name),
+              }
+            : undefined,
         })),
       }))
     );
