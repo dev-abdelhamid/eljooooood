@@ -1,3 +1,4 @@
+// src/pages/BranchInventory.tsx
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,7 +13,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 interface InventoryItem {
   _id: string;
-  product: { _id: string; name: string; code: string };
+  product: {
+    _id: string;
+    name: string;
+    nameEn: string;
+    code: string;
+    unit: string;
+    unitEn: string;
+    department: { name: string; nameEn: string };
+  };
   currentStock: number;
   minStockLevel: number;
   maxStockLevel: number;
@@ -82,7 +91,14 @@ export const BranchInventory: React.FC = () => {
         product: {
           _id: item.product?._id || '',
           name: item.product?.name || 'Unknown Product',
+          nameEn: item.product?.nameEn || item.product?.name || 'Unknown Product',
           code: item.product?.code || 'N/A',
+          unit: item.product?.unit || 'غير محدد',
+          unitEn: item.product?.unitEn || item.product?.unit || 'N/A',
+          department: {
+            name: item.product?.department?.name || 'غير معروف',
+            nameEn: item.product?.department?.nameEn || item.product?.department?.name || 'Unknown',
+          },
         },
         status:
           item.currentStock <= item.minStockLevel
@@ -165,6 +181,7 @@ export const BranchInventory: React.FC = () => {
         (item) =>
           (!filterStatus || item.status === filterStatus) &&
           (item.product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.product.nameEn.toLowerCase().includes(searchQuery.toLowerCase()) ||
             item.product.code.toLowerCase().includes(searchQuery.toLowerCase()))
       ),
     [inventory, searchQuery, filterStatus]
@@ -264,7 +281,7 @@ export const BranchInventory: React.FC = () => {
                 <Card className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-shadow duration-200">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900">{item.product.name}</h3>
+                      <h3 className="font-semibold text-gray-900">{isRtl ? item.product.name : item.product.nameEn}</h3>
                       <p className="text-sm text-gray-500">
                         {isRtl ? 'الكود' : 'Code'}: {item.product.code}
                       </p>
@@ -276,6 +293,12 @@ export const BranchInventory: React.FC = () => {
                       </p>
                       <p className="text-sm text-gray-600">
                         {isRtl ? 'الحد الأقصى للمخزون' : 'Max Stock Level'}: {item.maxStockLevel}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {isRtl ? 'الوحدة' : 'Unit'}: {isRtl ? item.product.unit : item.product.unitEn}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {isRtl ? 'القسم' : 'Department'}: {isRtl ? item.product.department.name : item.product.department.nameEn}
                       </p>
                       <p
                         className={`text-sm font-medium ${
