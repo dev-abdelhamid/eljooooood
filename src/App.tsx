@@ -23,14 +23,16 @@ import BranchOrders from './pages/BranchOrders';
 import BranchReturns from './pages/BranchReturns';
 import { Users } from './pages/Users';
 import { BranchInventory } from './pages/BranchInventory';
-import { SalesReport } from './pages/SalesReport';
+import BranchSalesReport from './pages/BranchSalesReport';
 import  AdminSalesReport   from './pages/AdminSalesReport';
+
 
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Chefstatics from './pages/Chefstatics';
 import BranchProfile from './pages/BranchProfile';
 import { ChefDetails } from './pages/ChefDetails';
+
 
 // إعداد QueryClient لإدارة الاستعلامات
 const queryClient = new QueryClient({
@@ -81,7 +83,7 @@ function AppContent() {
                   <Route path="/production-tasks" element={<ChefTasks />} />
                   <Route path="/branches" element={<Branches />} />
                   <Route path="/branch-inventory" element={<BranchInventory />} />
-                  <Route path="/branch-sales" element={<SalesReport />} />
+                  <Route path="/branch-sales" element={<BranchSalesReport />} />
                   <Route path="/branch-returns" element={<BranchReturns />} />
                   <Route path="/branch-orders" element={<BranchOrders />} />
                   <Route path="/chefstatics" element={<Chefstatics />} />
