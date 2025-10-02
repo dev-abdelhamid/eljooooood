@@ -10,7 +10,7 @@ const salesAxios = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
-  params: { lang: isRtl ? 'ar' : 'en' },
+  params: { isRtl: isRtl.toString() },
 });
 
 axiosRetry(salesAxios, { retries: 3, retryDelay: (retryCount) => retryCount * 1000 });
@@ -21,7 +21,6 @@ salesAxios.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    config.params = { ...config.params, lang: isRtl ? 'ar' : 'en' };
     console.log(`[${new Date().toISOString()}] Sales API request:`, {
       url: config.url,
       method: config.method,
@@ -119,7 +118,7 @@ export const salesAPI = {
       throw new Error(isRtl ? 'معرف المنتج، الكمية، أو السعر غير صالح' : 'Invalid product ID, quantity, or unit price');
     }
     try {
-      // Check inventory before creating sale
+      // التحقق من المخزون قبل إنشاء المبيعة
       for (const item of saleData.items) {
         const inventory = await inventoryAPI.getInventory({ branch: saleData.branch, product: item.productId });
         if (!inventory || inventory.length === 0 || inventory[0].currentStock < item.quantity) {
