@@ -42,7 +42,7 @@ interface Sale {
     _id: string;
     returnNumber: string;
     status: string;
-    items: Array<{ product: string; productName: string; productNameEn?: string; quantity: number; reason: string }>;
+    items: Array<{ product: string; quantity: number; reason: string }>;
     reason: string;
     createdAt: string;
   }>;
@@ -121,7 +121,6 @@ const translations = {
     reason: 'السبب',
     quantity: 'الكمية',
     searchPlaceholder: 'ابحث عن المنتجات...',
-    loadMore: 'تحميل المزيد',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       no_branch_assigned: 'لم يتم تعيين فرع',
@@ -131,7 +130,6 @@ const translations = {
       exceeds_max_quantity: 'الكمية تتجاوز الحد الأقصى',
       invalid_quantity: 'الكمية غير صالحة',
       empty_cart: 'السلة فارغة',
-      deleted_product: 'منتج محذوف',
     },
     currency: 'ريال',
     units: { default: 'غير محدد' },
@@ -168,7 +166,6 @@ const translations = {
     reason: 'Reason',
     quantity: 'Quantity',
     searchPlaceholder: 'Search products...',
-    loadMore: 'Load More',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       no_branch_assigned: 'No branch assigned',
@@ -178,7 +175,6 @@ const translations = {
       exceeds_max_quantity: 'Quantity exceeds maximum available',
       invalid_quantity: 'Invalid quantity',
       empty_cart: 'Cart is empty',
-      deleted_product: 'Deleted Product',
     },
     currency: 'SAR',
     units: { default: 'N/A' },
@@ -312,7 +308,7 @@ const ProductCard: React.FC<{
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   return (
-    <div className="h-[200px] p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200">
+    <div className="h-[200px] p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col justify-between border border-gray-100 hover:border-amber-200">
       <div className="space-y-2">
         <h3 className="font-bold text-gray-900 text-base truncate">{product.displayName}</h3>
         <p className="text-sm text-amber-600">{t.department}: {product.product.department?.displayName || t.departments.unknown}</p>
@@ -348,7 +344,7 @@ const SaleCard: React.FC<{ sale: Sale }> = ({ sale }) => {
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   return (
-    <div className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200">
+    <div className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200 overflow-y-auto">
       <div className="flex items-start justify-between">
         <div>
           <h3 className="font-bold text-gray-900 text-base">{sale.orderNumber} - {sale.branch.displayName}</h3>
@@ -358,7 +354,7 @@ const SaleCard: React.FC<{ sale: Sale }> = ({ sale }) => {
           <ul className="list-disc list-inside text-sm text-gray-600 mt-2">
             {sale.items.map((item, index) => (
               <li key={index}>
-                {item.displayName || t.errors.deleted_product} ({item.department?.displayName || t.departments.unknown}) - {t.quantity}: {item.quantity} {item.displayUnit}, {t.unitPrice}: {item.unitPrice} {t.currency}
+                {item.displayName} ({item.department?.displayName || t.departments.unknown}) - {t.quantity}: {item.quantity} {item.displayUnit}, {t.unitPrice}: {item.unitPrice} {t.currency}
               </li>
             ))}
           </ul>
@@ -368,11 +364,11 @@ const SaleCard: React.FC<{ sale: Sale }> = ({ sale }) => {
               <ul className="list-disc list-inside text-sm text-gray-600">
                 {sale.returns.map((ret, index) => (
                   <li key={index}>
-                    {t.return} #{ret.returnNumber} ({t.returns.status[ret.status]}) - {t.reason}: {ret.reason} ({t.date}: {ret.createdAt})
+                    {t.return} #{ret.returnNumber} ({t.returns.status[ret.status]}) - {t.reason}: {ret.reason}
                     <ul className="list-circle list-inside ml-4">
                       {ret.items.map((item, i) => (
                         <li key={i}>
-                          {item.productName || t.errors.deleted_product} - {t.quantity}: {item.quantity}, {t.reason}: {item.reason}
+                          {t.quantity}: {item.quantity} {t.units.default}, {t.reason}: {item.reason}
                         </li>
                       ))}
                     </ul>
@@ -421,13 +417,10 @@ export const SalesReport: React.FC = () => {
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
-  const [salesLoading, setSalesLoading] = useState(false);
   const [error, setError] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [notes, setNotes] = useState('');
   const [selectedBranch, setSelectedBranch] = useState(user?.role === 'branch' && user?.branchId ? user.branchId : '');
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
 
   const debouncedSearch = useCallback(
     debounce((value: string) => setSearchTerm(value.trim()), 500),
@@ -450,7 +443,7 @@ export const SalesReport: React.FC = () => {
     });
   }, [inventory, searchTerm]);
 
-  const fetchData = useCallback(async (pageNum: number = 1, append: boolean = false) => {
+  const fetchData = useCallback(async () => {
     if (!user?.role || !['branch', 'admin'].includes(user.role)) {
       setError(t.errors.unauthorized_access);
       toast.error(t.errors.unauthorized_access, { position: isRtl ? 'top-right' : 'top-left' });
@@ -465,10 +458,9 @@ export const SalesReport: React.FC = () => {
       return;
     }
 
-    setLoading(pageNum === 1);
-    setSalesLoading(pageNum > 1);
+    setLoading(true);
     try {
-      const params: any = { page: pageNum, limit: 20, sort: '-createdAt', lang: language };
+      const params: any = { page: 1, limit: 20, sort: '-createdAt' };
       if (user.role === 'branch') {
         params.branch = user.branchId || selectedBranch;
       } else if (filterBranch) {
@@ -477,10 +469,11 @@ export const SalesReport: React.FC = () => {
       if (startDate) params.startDate = startDate;
       if (endDate) params.endDate = endDate;
 
-      const [salesResponse, branchesResponse, inventoryResponse, analyticsResponse] = await Promise.all([
+      const [salesResponse, branchesResponse, inventoryResponse, returnsResponse, analyticsResponse] = await Promise.all([
         salesAPI.getAll(params),
-        user.role === 'admin' ? branchesAPI.getAll({ lang: language }) : Promise.resolve({ branches: [] }),
-        inventoryAPI.getInventory({ branch: user.branchId || selectedBranch, lowStock: false, lang: language }),
+        user.role === 'admin' ? branchesAPI.getAll() : Promise.resolve({ branches: [] }),
+        inventoryAPI.getInventory({ branch: user.branchId || selectedBranch, lowStock: false }),
+        returnsAPI.getAll(params),
         user.role === 'admin' ? salesAPI.getAnalytics(params) : Promise.resolve({
           branchSales: [],
           productSales: [],
@@ -491,8 +484,8 @@ export const SalesReport: React.FC = () => {
       ]);
 
       const returnsMap = new Map<string, Sale['returns']>();
-      if (Array.isArray(salesResponse.returns)) {
-        salesResponse.returns.forEach((ret: any) => {
+      if (Array.isArray(returnsResponse.returns)) {
+        returnsResponse.returns.forEach((ret: any) => {
           const orderId = ret.order?._id || ret.order;
           if (!returnsMap.has(orderId)) returnsMap.set(orderId, []);
           returnsMap.get(orderId)!.push({
@@ -502,8 +495,6 @@ export const SalesReport: React.FC = () => {
             items: Array.isArray(ret.items)
               ? ret.items.map((item: any) => ({
                   product: item.product?._id || item.product,
-                  productName: item.product?.name || t.errors.deleted_product,
-                  productNameEn: item.product?.nameEn,
                   quantity: item.quantity,
                   reason: item.reason,
                 }))
@@ -518,48 +509,47 @@ export const SalesReport: React.FC = () => {
         });
       }
 
-      const newSales = salesResponse.sales.map((sale: any) => ({
-        _id: sale._id,
-        orderNumber: sale.saleNumber || sale.orderNumber,
-        branch: {
-          _id: sale.branch?._id || 'unknown',
-          name: sale.branch?.name || t.branches.unknown,
-          nameEn: sale.branch?.nameEn,
-          displayName: isRtl ? sale.branch?.name : (sale.branch?.nameEn || sale.branch?.name || t.branches.unknown),
-        },
-        items: Array.isArray(sale.items)
-          ? sale.items.map((item: any) => ({
-              product: item.product?._id || item.productId,
-              productName: item.product?.name || t.errors.deleted_product,
-              productNameEn: item.product?.nameEn,
-              unit: item.product?.unit,
-              unitEn: item.product?.unitEn,
-              displayName: isRtl ? (item.product?.name || t.errors.deleted_product) : (item.product?.nameEn || item.product?.name || t.errors.deleted_product),
-              displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              department: item.product?.department
-                ? {
-                    _id: item.product.department._id,
-                    name: item.product.department.name,
-                    nameEn: item.product.department.nameEn,
-                    displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name),
-                  }
-                : undefined,
-            }))
-          : [],
-        totalAmount: sale.totalAmount || 0,
-        createdAt: new Date(sale.createdAt).toLocaleDateString(languageT('locale'), {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        }),
-        notes: sale.notes,
-        returns: returnsMap.get(sale._id) || [],
-      }));
-
-      setSales((prev) => (append ? [...prev, ...newSales] : newSales));
-      setHasMore(salesResponse.total > pageNum * 20);
+      setSales(
+        salesResponse.sales.map((sale: any) => ({
+          _id: sale._id,
+          orderNumber: sale.saleNumber || sale.orderNumber,
+          branch: {
+            _id: sale.branch?._id || 'unknown',
+            name: sale.branch?.name || t.branches.unknown,
+            nameEn: sale.branch?.nameEn,
+            displayName: isRtl ? sale.branch?.name : (sale.branch?.nameEn || sale.branch?.name || t.branches.unknown),
+          },
+          items: Array.isArray(sale.items)
+            ? sale.items.map((item: any) => ({
+                product: item.product?._id || item.productId,
+                productName: item.product?.name || item.productName || t.departments.unknown,
+                productNameEn: item.product?.nameEn,
+                unit: item.product?.unit,
+                unitEn: item.product?.unitEn,
+                displayName: isRtl ? item.product?.name : (item.product?.nameEn || item.product?.name || t.departments.unknown),
+                displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                department: item.product?.department
+                  ? {
+                      _id: item.product.department._id,
+                      name: item.product.department.name,
+                      nameEn: item.product.department.nameEn,
+                      displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name),
+                    }
+                  : undefined,
+              }))
+            : [],
+          totalAmount: sale.totalAmount || 0,
+          createdAt: new Date(sale.createdAt).toLocaleDateString(languageT('locale'), {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          }),
+          notes: sale.notes,
+          returns: returnsMap.get(sale._id) || [],
+        }))
+      );
 
       setBranches(
         Array.isArray(branchesResponse.branches)
@@ -580,7 +570,7 @@ export const SalesReport: React.FC = () => {
                 _id: item._id,
                 product: {
                   _id: item.product?._id || 'unknown',
-                  name: item.product?.name || t.errors.deleted_product,
+                  name: item.product?.name || t.departments.unknown,
                   nameEn: item.product?.nameEn,
                   unit: item.product?.unit,
                   unitEn: item.product?.unitEn,
@@ -595,7 +585,7 @@ export const SalesReport: React.FC = () => {
                     : { _id: 'unknown', name: t.departments.unknown, displayName: t.departments.unknown },
                 },
                 currentStock: item.currentStock || 0,
-                displayName: isRtl ? (item.product?.name || t.errors.deleted_product) : (item.product?.nameEn || item.product?.name || t.errors.deleted_product),
+                displayName: isRtl ? item.product?.name : (item.product?.nameEn || item.product?.name || t.departments.unknown),
                 displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
               }))
           : []
@@ -616,7 +606,7 @@ export const SalesReport: React.FC = () => {
               productId: ps.productId,
               productName: ps.productName,
               productNameEn: ps.productNameEn,
-              displayName: isRtl ? (ps.productName || t.errors.deleted_product) : (ps.productNameEn || ps.productName || t.errors.deleted_product),
+              displayName: isRtl ? ps.productName : (ps.productNameEn || ps.productName),
               totalQuantity: ps.totalQuantity,
               totalRevenue: ps.totalRevenue,
             }))
@@ -635,7 +625,7 @@ export const SalesReport: React.FC = () => {
           ? {
               productName: analyticsResponse.topProduct.productName,
               productNameEn: analyticsResponse.topProduct.productNameEn,
-              displayName: isRtl ? (analyticsResponse.topProduct.productName || t.errors.deleted_product) : (analyticsResponse.topProduct.productNameEn || analyticsResponse.topProduct.productName || t.errors.deleted_product),
+              displayName: isRtl ? analyticsResponse.topProduct.productName : (analyticsResponse.topProduct.productNameEn || analyticsResponse.topProduct.productName),
               totalQuantity: analyticsResponse.topProduct.totalQuantity,
             }
           : { productName: t.departments.unknown, displayName: t.departments.unknown, totalQuantity: 0 },
@@ -649,18 +639,12 @@ export const SalesReport: React.FC = () => {
       setSales([]);
     } finally {
       setLoading(false);
-      setSalesLoading(false);
     }
-  }, [filterBranch, startDate, endDate, selectedBranch, user, t, isRtl, languageT, language]);
+  }, [filterBranch, startDate, endDate, selectedBranch, user, t, isRtl, languageT]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
-
-  const loadMoreSales = useCallback(() => {
-    setPage((prev) => prev + 1);
-    fetchData(page + 1, true);
-  }, [fetchData, page]);
 
   useEffect(() => {
     setSales((prev) =>
@@ -672,7 +656,7 @@ export const SalesReport: React.FC = () => {
         },
         items: sale.items.map((item) => ({
           ...item,
-          displayName: isRtl ? (item.productName || t.errors.deleted_product) : (item.productNameEn || item.productName || t.errors.deleted_product),
+          displayName: isRtl ? item.productName : (item.productNameEn || item.productName),
           displayUnit: isRtl ? (item.unit || t.units.default) : (item.unitEn || item.unit || t.units.default),
           department: item.department
             ? {
@@ -681,19 +665,12 @@ export const SalesReport: React.FC = () => {
               }
             : undefined,
         })),
-        returns: sale.returns?.map((ret) => ({
-          ...ret,
-          items: ret.items.map((item) => ({
-            ...item,
-            productName: isRtl ? (item.productName || t.errors.deleted_product) : (item.productNameEn || item.productName || t.errors.deleted_product),
-          })),
-        })),
       }))
     );
     setInventory((prev) =>
       prev.map((item) => ({
         ...item,
-        displayName: isRtl ? (item.product.name || t.errors.deleted_product) : (item.product.nameEn || item.product.name || t.errors.deleted_product),
+        displayName: isRtl ? item.product.name : (item.product.nameEn || item.product.name),
         displayUnit: isRtl ? (item.product.unit || t.units.default) : (item.product.unitEn || item.product.unit || t.units.default),
         product: {
           ...item.product,
@@ -709,7 +686,7 @@ export const SalesReport: React.FC = () => {
     setCart((prev) =>
       prev.map((item) => ({
         ...item,
-        displayName: isRtl ? (item.productName || t.errors.deleted_product) : (item.productNameEn || item.productName || t.errors.deleted_product),
+        displayName: isRtl ? item.productName : (item.productNameEn || item.productName),
         displayUnit: isRtl ? (item.unit || t.units.default) : (item.unitEn || item.unit || t.units.default),
       }))
     );
@@ -721,7 +698,7 @@ export const SalesReport: React.FC = () => {
       })),
       productSales: prev.productSales.map((ps) => ({
         ...ps,
-        displayName: isRtl ? (ps.productName || t.errors.deleted_product) : (ps.productNameEn || ps.productName || t.errors.deleted_product),
+        displayName: isRtl ? ps.productName : (ps.productNameEn || ps.productName),
       })),
       departmentSales: prev.departmentSales.map((ds) => ({
         ...ds,
@@ -729,7 +706,7 @@ export const SalesReport: React.FC = () => {
       })),
       topProduct: {
         ...prev.topProduct,
-        displayName: isRtl ? (prev.topProduct.productName || t.errors.deleted_product) : (prev.topProduct.productNameEn || prev.topProduct.productName || t.errors.deleted_product),
+        displayName: isRtl ? prev.topProduct.productName : (prev.topProduct.productNameEn || prev.topProduct.productName),
       },
     }));
   }, [isRtl, t]);
@@ -805,6 +782,10 @@ export const SalesReport: React.FC = () => {
       const payload = {
         items: cart.map((item) => ({
           productId: item.productId,
+          productName: item.productName,
+          productNameEn: item.productNameEn,
+          unit: item.unit,
+          unitEn: item.unitEn,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
         })),
@@ -1054,7 +1035,6 @@ export const SalesReport: React.FC = () => {
                   options={{
                     responsive: true,
                     plugins: { legend: { position: 'top' }, title: { display: true, text: t.branchSales } },
-                    scales: { y: { beginAtZero: true } },
                   }}
                 />
               </div>
@@ -1065,18 +1045,6 @@ export const SalesReport: React.FC = () => {
                   options={{
                     responsive: true,
                     plugins: { legend: { position: 'top' }, title: { display: true, text: t.productSales } },
-                    scales: { y: { beginAtZero: true } },
-                  }}
-                />
-              </div>
-              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">{t.departmentSales}</h3>
-                <Bar
-                  data={departmentSalesChartData}
-                  options={{
-                    responsive: true,
-                    plugins: { legend: { position: 'top' }, title: { display: true, text: t.departmentSales } },
-                    scales: { y: { beginAtZero: true } },
                   }}
                 />
               </div>
@@ -1100,31 +1068,11 @@ export const SalesReport: React.FC = () => {
             <p className="text-gray-600 text-sm font-medium">{t.noSales}</p>
           </div>
         ) : (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {sales.map((sale) => (
-                <SaleCard key={sale._id} sale={sale} />
-              ))}
-            </div>
-            {hasMore && (
-              <div className="flex justify-center mt-6">
-                <button
-                  onClick={loadMoreSales}
-                  className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                  disabled={salesLoading}
-                >
-                  {salesLoading ? (
-                    <svg className="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                  ) : (
-                    t.loadMore
-                  )}
-                </button>
-              </div>
-            )}
-          </>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {sales.map((sale) => (
+              <SaleCard key={sale._id} sale={sale} />
+            ))}
+          </div>
         )}
       </div>
     </div>
