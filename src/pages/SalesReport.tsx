@@ -164,12 +164,7 @@ const translations = {
     units: { default: 'غير محدد' },
     branches: { all_branches: 'كل الفروع', select_branch: 'اختر الفرع', unknown: 'غير معروف' },
     departments: { unknown: 'غير معروف' },
-    paymentMethods: {
-      cash: 'نقدي',
-      credit_card: 'بطاقة ائتمان',
-      bank_transfer: 'تحويل بنكي',
-    },
-    returns: { status: { pending: 'معلق', approved: 'مقبول', rejected: 'مرفوض' } },
+
   },
   en: {
     title: 'Sales Report',
@@ -232,12 +227,7 @@ const translations = {
     units: { default: 'N/A' },
     branches: { all_branches: 'All Branches', select_branch: 'Select Branch', unknown: 'Unknown' },
     departments: { unknown: 'Unknown' },
-    paymentMethods: {
-      cash: 'Cash',
-      credit_card: 'Credit Card',
-      bank_transfer: 'Bank Transfer',
-    },
-    returns: { status: { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' } },
+ 
   },
 };
 
