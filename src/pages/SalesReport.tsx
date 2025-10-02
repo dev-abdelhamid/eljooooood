@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -23,7 +24,17 @@ interface Sale {
   _id: string;
   orderNumber: string;
   branch: { _id: string; name: string; nameEn?: string; displayName: string };
-  items: Array<{ product: string; productName: string; productNameEn?: string; quantity: number; unitPrice: number }>;
+  items: Array<{
+    product: string;
+    productName: string;
+    productNameEn?: string;
+    unit?: string;
+    unitEn?: string;
+    quantity: number;
+    unitPrice: number;
+    displayName: string;
+    displayUnit: string;
+  }>;
   totalAmount: number;
   createdAt: string;
   notes?: string;
@@ -46,24 +57,38 @@ interface Branch {
 
 interface InventoryItem {
   _id: string;
-  product: { _id: string; name: string; nameEn?: string; price: number; department?: { _id: string; name: string; nameEn?: string; displayName: string } };
+  product: {
+    _id: string;
+    name: string;
+    nameEn?: string;
+    unit?: string;
+    unitEn?: string;
+    price: number;
+    department?: { _id: string; name: string; nameEn?: string; displayName: string };
+  };
   currentStock: number;
   displayName: string;
+  displayUnit: string;
 }
 
 interface CartItem {
   productId: string;
   productName: string;
+  productNameEn?: string;
+  unit?: string;
+  unitEn?: string;
+  displayName: string;
+  displayUnit: string;
   quantity: number;
   unitPrice: number;
 }
 
 interface SalesAnalytics {
-  branchSales: Array<{ branchId: string; branchName: string; totalSales: number }>;
-  productSales: Array<{ productId: string; productName: string; totalQuantity: number; totalRevenue: number }>;
-  departmentSales: Array<{ departmentId: string; departmentName: string; totalRevenue: number }>;
+  branchSales: Array<{ branchId: string; branchName: string; displayName: string; totalSales: number }>;
+  productSales: Array<{ productId: string; productName: string; displayName: string; totalQuantity: number; totalRevenue: number }>;
+  departmentSales: Array<{ departmentId: string; departmentName: string; displayName: string; totalRevenue: number }>;
   totalSales: number;
-  topProduct: { productName: string; totalQuantity: number };
+  topProduct: { productName: string; displayName: string; totalQuantity: number };
 }
 
 const translations = {
@@ -72,7 +97,7 @@ const translations = {
     subtitle: 'إدارة المبيعات وإضافة مبيعات جديدة',
     filters: 'الفلاتر',
     availableProducts: 'المنتجات المتاحة',
-    noProducts: 'لا يوجد منتجات متاحة',
+    noProducts: 'لا توجد منتجات متاحة',
     department: 'القسم',
     availableStock: 'المخزون المتاح',
     unitPrice: 'سعر الوحدة',
@@ -107,7 +132,7 @@ const translations = {
       empty_cart: 'السلة فارغة',
     },
     currency: 'ريال',
-    units: { kg: 'كجم' },
+    units: { default: 'غير محدد' },
     branches: { all_branches: 'كل الفروع', select_branch: 'اختر الفرع', unknown: 'غير معروف' },
     departments: { unknown: 'غير معروف' },
     returns: { status: { pending: 'معلق', approved: 'مقبول', rejected: 'مرفوض' } },
@@ -152,7 +177,7 @@ const translations = {
       empty_cart: 'Cart is empty',
     },
     currency: 'SAR',
-    units: { kg: 'kg' },
+    units: { default: 'N/A' },
     branches: { all_branches: 'All Branches', select_branch: 'Select Branch', unknown: 'Unknown' },
     departments: { unknown: 'Unknown' },
     returns: { status: { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' } },
@@ -199,14 +224,15 @@ const ProductDropdown: React.FC<{
   options: { value: string; label: string }[];
   ariaLabel: string;
   disabled?: boolean;
-}> = ({ value, onChange, options, ariaLabel, disabled = false }) => {
+  className?: string;
+}> = ({ value, onChange, options, ariaLabel, disabled = false, className }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
   const selectedOption = options.find((opt) => opt.value === value) || options[0] || { label: isRtl ? 'اختر' : 'Select' };
 
   return (
-    <div className="relative group">
+    <div className={`relative group ${className || ''}`}>
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
         className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -285,8 +311,8 @@ const ProductCard: React.FC<{
     <div className="h-[200px] p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col justify-between border border-gray-100 hover:border-amber-200">
       <div className="space-y-2">
         <h3 className="font-bold text-gray-900 text-base truncate">{product.displayName}</h3>
-        <p className="text-sm text-gray-600">{t.department}: {product.product.department?.displayName || t.departments.unknown}</p>
-        <p className="text-sm text-gray-600">{t.availableStock}: {product.currentStock} {t.units.kg}</p>
+        <p className="text-sm text-amber-600">{t.department}: {product.product.department?.displayName || t.departments.unknown}</p>
+        <p className="text-sm text-gray-600">{t.availableStock}: {product.currentStock} {product.displayUnit}</p>
         <p className="font-semibold text-gray-900 text-sm">{t.unitPrice}: {product.product.price} {t.currency}</p>
       </div>
       <div className="mt-4 flex justify-end">
@@ -300,7 +326,7 @@ const ProductCard: React.FC<{
         ) : (
           <button
             onClick={onAdd}
-            className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors duration-200 flex items-center justify-center gap-2 shadow-sm"
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors duration-200 flex items-center justify-center gap-2 shadow-sm"
             aria-label={t.addToCart}
             disabled={product.currentStock < 1}
           >
@@ -328,7 +354,7 @@ const SaleCard: React.FC<{ sale: Sale }> = ({ sale }) => {
           <ul className="list-disc list-inside text-sm text-gray-600 mt-2">
             {sale.items.map((item, index) => (
               <li key={index}>
-                {isRtl ? item.productName : (item.productNameEn || item.productName)} - {t.quantity}: {item.quantity} {t.units.kg}, {t.unitPrice}: {item.unitPrice} {t.currency}
+                {item.displayName} - {t.quantity}: {item.quantity} {item.displayUnit}, {t.unitPrice}: {item.unitPrice} {t.currency}
               </li>
             ))}
           </ul>
@@ -342,7 +368,7 @@ const SaleCard: React.FC<{ sale: Sale }> = ({ sale }) => {
                     <ul className="list-circle list-inside ml-4">
                       {ret.items.map((item, i) => (
                         <li key={i}>
-                          {t.quantity}: {item.quantity} {t.units.kg}, {t.reason}: {item.reason}
+                          {t.quantity}: {item.quantity} {t.units.default}, {t.reason}: {item.reason}
                         </li>
                       ))}
                     </ul>
@@ -379,7 +405,11 @@ export const SalesReport: React.FC = () => {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [analytics, setAnalytics] = useState<SalesAnalytics>({
-    branchSales: [], productSales: [], departmentSales: [], totalSales: 0, topProduct: { productName: '', totalQuantity: 0 }
+    branchSales: [],
+    productSales: [],
+    departmentSales: [],
+    totalSales: 0,
+    topProduct: { productName: '', displayName: '', totalQuantity: 0 },
   });
   const [filterBranch, setFilterBranch] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -444,7 +474,13 @@ export const SalesReport: React.FC = () => {
         user.role === 'admin' ? branchesAPI.getAll() : Promise.resolve({ branches: [] }),
         inventoryAPI.getInventory({ branch: user.branchId || selectedBranch, lowStock: false }),
         returnsAPI.getAll(params),
-        user.role === 'admin' ? salesAPI.getAnalytics(params) : Promise.resolve({ branchSales: [], productSales: [], departmentSales: [], totalSales: 0, topProduct: { productName: '', totalQuantity: 0 } }),
+        user.role === 'admin' ? salesAPI.getAnalytics(params) : Promise.resolve({
+          branchSales: [],
+          productSales: [],
+          departmentSales: [],
+          totalSales: 0,
+          topProduct: { productName: t.departments.unknown, displayName: t.departments.unknown, totalQuantity: 0 },
+        }),
       ]);
 
       const returnsMap = new Map<string, Sale['returns']>();
@@ -488,6 +524,10 @@ export const SalesReport: React.FC = () => {
                 product: item.product?._id || item.productId,
                 productName: item.product?.name || item.productName || t.departments.unknown,
                 productNameEn: item.product?.nameEn,
+                unit: item.product?.unit,
+                unitEn: item.product?.unitEn,
+                displayName: isRtl ? item.product?.name : (item.product?.nameEn || item.product?.name || t.departments.unknown),
+                displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
                 quantity: item.quantity,
                 unitPrice: item.unitPrice,
               }))
@@ -508,7 +548,7 @@ export const SalesReport: React.FC = () => {
           ? branchesResponse.branches.map((branch: any) => ({
               _id: branch._id,
               name: branch.name,
-              nameEn: branch.nameEn || branch.name,
+              nameEn: branch.nameEn,
               displayName: isRtl ? branch.name : (branch.nameEn || branch.name),
             }))
           : []
@@ -524,6 +564,8 @@ export const SalesReport: React.FC = () => {
                   _id: item.product?._id || 'unknown',
                   name: item.product?.name || t.departments.unknown,
                   nameEn: item.product?.nameEn,
+                  unit: item.product?.unit,
+                  unitEn: item.product?.unitEn,
                   price: item.product?.price || 0,
                   department: item.product?.department
                     ? {
@@ -536,16 +578,45 @@ export const SalesReport: React.FC = () => {
                 },
                 currentStock: item.currentStock || 0,
                 displayName: isRtl ? item.product?.name : (item.product?.nameEn || item.product?.name || t.departments.unknown),
+                displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
               }))
           : []
       );
 
       setAnalytics({
-        branchSales: analyticsResponse.branchSales || [],
-        productSales: analyticsResponse.productSales || [],
-        departmentSales: analyticsResponse.departmentSales || [],
+        branchSales: Array.isArray(analyticsResponse.branchSales)
+          ? analyticsResponse.branchSales.map((bs: any) => ({
+              branchId: bs.branchId,
+              branchName: bs.branchName,
+              displayName: isRtl ? bs.branchName : (bs.branchNameEn || bs.branchName),
+              totalSales: bs.totalSales,
+            }))
+          : [],
+        productSales: Array.isArray(analyticsResponse.productSales)
+          ? analyticsResponse.productSales.map((ps: any) => ({
+              productId: ps.productId,
+              productName: ps.productName,
+              displayName: isRtl ? ps.productName : (ps.productNameEn || ps.productName),
+              totalQuantity: ps.totalQuantity,
+              totalRevenue: ps.totalRevenue,
+            }))
+          : [],
+        departmentSales: Array.isArray(analyticsResponse.departmentSales)
+          ? analyticsResponse.departmentSales.map((ds: any) => ({
+              departmentId: ds.departmentId,
+              departmentName: ds.departmentName,
+              displayName: isRtl ? ds.departmentName : (ds.departmentNameEn || ds.departmentName),
+              totalRevenue: ds.totalRevenue,
+            }))
+          : [],
         totalSales: analyticsResponse.totalSales || 0,
-        topProduct: analyticsResponse.topProduct || { productName: t.departments.unknown, totalQuantity: 0 },
+        topProduct: analyticsResponse.topProduct
+          ? {
+              productName: analyticsResponse.topProduct.productName,
+              displayName: isRtl ? analyticsResponse.topProduct.productName : (analyticsResponse.topProduct.productNameEn || analyticsResponse.topProduct.productName),
+              totalQuantity: analyticsResponse.topProduct.totalQuantity,
+            }
+          : { productName: t.departments.unknown, displayName: t.departments.unknown, totalQuantity: 0 },
       });
 
       setError('');
@@ -558,6 +629,69 @@ export const SalesReport: React.FC = () => {
       setLoading(false);
     }
   }, [filterBranch, startDate, endDate, selectedBranch, user, t, isRtl, languageT]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
+    setSales((prev) =>
+      prev.map((sale) => ({
+        ...sale,
+        branch: {
+          ...sale.branch,
+          displayName: isRtl ? sale.branch.name : (sale.branch.nameEn || sale.branch.name),
+        },
+        items: sale.items.map((item) => ({
+          ...item,
+          displayName: isRtl ? item.productName : (item.productNameEn || item.productName),
+          displayUnit: isRtl ? (item.unit || t.units.default) : (item.unitEn || item.unit || t.units.default),
+        })),
+      }))
+    );
+    setInventory((prev) =>
+      prev.map((item) => ({
+        ...item,
+        displayName: isRtl ? item.product.name : (item.product.nameEn || item.product.name),
+        displayUnit: isRtl ? (item.product.unit || t.units.default) : (item.product.unitEn || item.product.unit || t.units.default),
+        product: {
+          ...item.product,
+          department: item.product.department
+            ? {
+                ...item.product.department,
+                displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name),
+              }
+            : item.product.department,
+        },
+      }))
+    );
+    setCart((prev) =>
+      prev.map((item) => ({
+        ...item,
+        displayName: isRtl ? item.productName : (item.productNameEn || item.productName),
+        displayUnit: isRtl ? (item.unit || t.units.default) : (item.unitEn || item.unit || t.units.default),
+      }))
+    );
+    setAnalytics((prev) => ({
+      ...prev,
+      branchSales: prev.branchSales.map((bs) => ({
+        ...bs,
+        displayName: isRtl ? bs.branchName : (bs.branchNameEn || bs.branchName),
+      })),
+      productSales: prev.productSales.map((ps) => ({
+        ...ps,
+        displayName: isRtl ? ps.productName : (ps.productNameEn || ps.productName),
+      })),
+      departmentSales: prev.departmentSales.map((ds) => ({
+        ...ds,
+        displayName: isRtl ? ds.departmentName : (ds.departmentNameEn || ds.departmentName),
+      })),
+      topProduct: {
+        ...prev.topProduct,
+        displayName: isRtl ? prev.topProduct.productName : (prev.topProduct.productNameEn || prev.topProduct.productName),
+      },
+    }));
+  }, [isRtl, t]);
 
   const addToCart = useCallback((product: InventoryItem) => {
     if (product.currentStock < 1) {
@@ -581,7 +715,12 @@ export const SalesReport: React.FC = () => {
         ...prev,
         {
           productId: product.product._id,
-          productName: isRtl ? product.product.name : (product.product.nameEn || product.product.name),
+          productName: product.product.name,
+          productNameEn: product.product.nameEn,
+          unit: product.product.unit,
+          unitEn: product.product.unitEn,
+          displayName: isRtl ? product.product.name : (product.product.nameEn || product.product.name),
+          displayUnit: isRtl ? (product.product.unit || t.units.default) : (product.product.unitEn || product.product.unit || t.units.default),
           quantity: 1,
           unitPrice: product.product.price,
         },
@@ -625,6 +764,10 @@ export const SalesReport: React.FC = () => {
       const payload = {
         items: cart.map((item) => ({
           productId: item.productId,
+          productName: item.productName,
+          productNameEn: item.productNameEn,
+          unit: item.unit,
+          unitEn: item.unitEn,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
         })),
@@ -645,19 +788,15 @@ export const SalesReport: React.FC = () => {
     }
   }, [cart, notes, selectedBranch, user, t, isRtl, fetchData]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
   const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0).toFixed(2), [cart]);
 
   const branchSalesChartData = useMemo(() => ({
-    labels: analytics.branchSales.map((b) => b.branchName),
+    labels: analytics.branchSales.map((b) => b.displayName),
     datasets: [
       {
         label: t.branchSales,
         data: analytics.branchSales.map((b) => b.totalSales),
-        backgroundColor: 'rgba(251, 191, 36, 0.6)', // Amber color
+        backgroundColor: 'rgba(251, 191, 36, 0.6)',
         borderColor: 'rgba(251, 191, 36, 1)',
         borderWidth: 1,
       },
@@ -665,7 +804,7 @@ export const SalesReport: React.FC = () => {
   }), [analytics.branchSales, t]);
 
   const productSalesChartData = useMemo(() => ({
-    labels: analytics.productSales.slice(0, 5).map((p) => p.productName),
+    labels: analytics.productSales.slice(0, 5).map((p) => p.displayName),
     datasets: [
       {
         label: t.productSales,
@@ -678,7 +817,7 @@ export const SalesReport: React.FC = () => {
   }), [analytics.productSales, t]);
 
   const departmentSalesChartData = useMemo(() => ({
-    labels: analytics.departmentSales.map((d) => d.departmentName),
+    labels: analytics.departmentSales.map((d) => d.displayName),
     datasets: [
       {
         label: t.departmentSales,
@@ -691,7 +830,7 @@ export const SalesReport: React.FC = () => {
   }), [analytics.departmentSales, t]);
 
   return (
-    <div className={`mx-auto  px-4 sm:px-6  py-4 `}>
+    <div className={`mx-auto px-4 sm:px-6 py-4 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <DollarSign className="w-7 h-7 text-amber-600" />
@@ -743,8 +882,8 @@ export const SalesReport: React.FC = () => {
       )}
 
       {user?.role === 'branch' && (
-        <div className="space-y-8 lg:grid lg:grid-cols-3 lg:gap-8 lg:space-y-0">
-          <section className="lg:col-span-2 lg:overflow-y-auto lg:max-h-[calc(100vh-12rem)] scrollbar-none">
+        <div className={`space-y-8 ${cart.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-8 lg:space-y-0' : ''}`}>
+          <section className={`${cart.length > 0 ? 'lg:col-span-2 lg:overflow-y-auto lg:max-h-[calc(100vh-12rem)] scrollbar-none' : ''}`}>
             <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
               <h2 className="text-xl font-bold text-gray-900 mb-6">{t.availableProducts}</h2>
               {user.role === 'branch' && !user.branchId && (
@@ -778,6 +917,7 @@ export const SalesReport: React.FC = () => {
               </div>
             ) : filteredInventory.length === 0 ? (
               <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100 mt-6">
+                <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600 text-sm font-medium">{searchTerm ? t.noProducts : t.noProducts}</p>
               </div>
             ) : (
@@ -804,9 +944,9 @@ export const SalesReport: React.FC = () => {
                   {cart.map((item) => (
                     <div key={item.productId} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
                       <div className="flex-1">
-                        <p className="font-semibold text-gray-900 text-sm">{item.productName}</p>
+                        <p className="font-semibold text-gray-900 text-sm">{item.displayName}</p>
                         <p className="text-sm text-gray-600">
-                          {item.unitPrice} {t.currency} / {t.units.kg}
+                          {item.unitPrice} {t.currency} / {item.displayUnit}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -866,7 +1006,7 @@ export const SalesReport: React.FC = () => {
               </div>
               <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
                 <p className="text-sm font-medium text-gray-600">{t.topProduct}</p>
-                <p className="text-2xl font-bold text-amber-600">{analytics.topProduct.productName} ({analytics.topProduct.totalQuantity} {t.units.kg})</p>
+                <p className="text-2xl font-bold text-amber-600">{analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity} {t.units.default})</p>
               </div>
             </div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
