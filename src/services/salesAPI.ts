@@ -46,7 +46,6 @@ const handleError = async (error: any, originalRequest: any): Promise<never> => 
         toast.error(isRtl ? 'التوكن منتهي الصلاحية، يرجى تسجيل الدخول مجددًا' : 'Token expired, please log in again', {
           position: isRtl ? 'top-right' : 'top-left',
           autoClose: 3000,
-          pauseOnFocusLoss: true,
         });
         return Promise.reject({ message: isRtl ? 'التوكن منتهي الصلاحية ولا يوجد توكن منعش' : 'Token expired and no refresh token available', status: 401 });
       }
@@ -66,13 +65,12 @@ const handleError = async (error: any, originalRequest: any): Promise<never> => 
       toast.error(isRtl ? 'فشل تجديد التوكن، يرجى تسجيل الدخول مجددًا' : 'Failed to refresh token, please log in again', {
         position: isRtl ? 'top-right' : 'top-left',
         autoClose: 3000,
-        pauseOnFocusLoss: true,
       });
       return Promise.reject({ message: isRtl ? 'فشل تجديد التوكن' : 'Failed to refresh token', status: 401 });
     }
   }
 
-  toast.error(message, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000, pauseOnFocusLoss: true });
+  toast.error(message, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
   return Promise.reject({ message, status: error.response?.status });
 };
 
@@ -113,9 +111,11 @@ const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7
 const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'credit_card', 'bank_transfer'].includes(method);
 const isValidPaymentStatus = (status: string | undefined): boolean => !status || ['pending', 'completed', 'failed'].includes(status);
 
-const formatDateForAPI = (date: Date): string => {
-  const offset = date.getTimezoneOffset();
-  const adjustedDate = new Date(date.getTime() - offset * 60 * 1000);
+const formatDateForAPI = (date: Date | string): string => {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  if (isNaN(d.getTime())) return '';
+  const offset = d.getTimezoneOffset();
+  const adjustedDate = new Date(d.getTime() - offset * 60 * 1000);
   return adjustedDate.toISOString().split('T')[0];
 };
 
@@ -265,13 +265,14 @@ export const salesAPI = {
     }
   },
 
-  getAll: async (params: { branch?: string; startDate?: string; endDate?: string; page?: number; limit?: number; paymentStatus?: string; sort?: string } = {}) => {
+  getAll: async (params: { branch?: string; startDate?: string; endDate?: string; page?: number; limit?: number; paymentStatus?: string; sort?: string; role?: string } = {}) => {
     console.log(`[${new Date().toISOString()}] salesAPI.getAll - Params:`, params);
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid branch ID:`, params.branch);
       throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
     }
     try {
+      const endpoint = params.role === 'admin' ? '/sales/admin' : '/sales';
       const cleanedParams = {
         branch: params.branch,
         startDate: params.startDate,
@@ -282,7 +283,7 @@ export const salesAPI = {
         sort: params.sort || '-createdAt',
         lang: isRtl ? 'ar' : 'en',
       };
-      const response = await salesAxios.get('/sales', { params: cleanedParams });
+      const response = await salesAxios.get(endpoint, { params: cleanedParams });
       console.log(`[${new Date().toISOString()}] salesAPI.getAll - Response:`, response);
       if (!response || !Array.isArray(response.sales)) {
         console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid sales response:`, response);
@@ -299,14 +300,15 @@ export const salesAPI = {
     }
   },
 
-  getById: async (id: string) => {
+  getById: async (id: string, role: string = 'branch') => {
     console.log(`[${new Date().toISOString()}] salesAPI.getById - Sending:`, id);
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getById - Invalid sale ID:`, id);
       throw new Error(isRtl ? 'معرف المبيعة غير صالح' : 'Invalid sale ID');
     }
     try {
-      const response = await salesAxios.get(`/sales/${id}`, { params: { lang: isRtl ? 'ar' : 'en' } });
+      const endpoint = role === 'admin' ? `/sales/admin/${id}` : `/sales/${id}`;
+      const response = await salesAxios.get(endpoint, { params: { lang: isRtl ? 'ar' : 'en' } });
       console.log(`[${new Date().toISOString()}] salesAPI.getById - Response:`, response);
       return response || {};
     } catch (err: any) {
@@ -315,13 +317,14 @@ export const salesAPI = {
     }
   },
 
-  getAnalytics: async (params: { branch?: string; startDate?: string; endDate?: string; paymentStatus?: string } = {}) => {
+  getAnalytics: async (params: { branch?: string; startDate?: string; endDate?: string; paymentStatus?: string; role?: string } = {}) => {
     console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Params:`, params);
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid branch ID:`, params.branch);
       throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
     }
     try {
+      const endpoint = params.role === 'admin' ? '/sales/admin/analytics' : '/sales/analytics';
       const cleanedParams = {
         branch: params.branch,
         startDate: params.startDate,
@@ -329,7 +332,7 @@ export const salesAPI = {
         paymentStatus: params.paymentStatus,
         lang: isRtl ? 'ar' : 'en',
       };
-      const response = await salesAxios.get('/sales/analytics', { params: cleanedParams });
+      const response = await salesAxios.get(endpoint, { params: cleanedParams });
       console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Response:`, response);
       return response || {};
     } catch (err: any) {
@@ -338,18 +341,28 @@ export const salesAPI = {
     }
   },
 
-  exportReport: async (params: { branch?: string; startDate?: string; endDate?: string; format: 'csv' | 'pdf' }) => {
+  exportReport: async (params: { branch?: string; startDate?: string; endDate?: string; format: 'csv' | 'pdf'; role?: string }) => {
     console.log(`[${new Date().toISOString()}] salesAPI.exportReport - Params:`, params);
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] salesAPI.exportReport - Invalid branch ID:`, params.branch);
       throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
     }
     try {
-      const response = await salesAxios.get('/sales/export', {
+      const endpoint = params.role === 'admin' ? '/sales/admin/export' : '/sales/export';
+      const response = await salesAxios.get(endpoint, {
         params: { ...params, lang: isRtl ? 'ar' : 'en' },
         responseType: 'blob',
       });
       console.log(`[${new Date().toISOString()}] salesAPI.exportReport - Response:`, response);
+      const url = window.URL.createObjectURL(new Blob([response]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `sales_report_${params.format}_${new Date().toISOString().split('T')[0]}.${params.format}`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success(isRtl ? 'تم تصدير التقرير بنجاح' : 'Report exported successfully', { position: isRtl ? 'top-right' : 'top-left' });
       return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.exportReport - Error:`, err);
