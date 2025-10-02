@@ -3,6 +3,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI, inventoryAPI } from '../services/api';
 import salesAPI from '../services/salesAPI';
+import { formatDate } from '../utils/formatDate';
 import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown, Edit, Trash } from 'lucide-react';
 import { toast } from 'react-toastify';
 import {
@@ -18,7 +19,6 @@ import {
 } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
 import { debounce } from 'lodash';
-import { format } from 'date-fns';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Title, Tooltip, Legend);
 
@@ -164,7 +164,11 @@ const translations = {
     units: { default: 'غير محدد' },
     branches: { all_branches: 'كل الفروع', select_branch: 'اختر الفرع', unknown: 'غير معروف' },
     departments: { unknown: 'غير معروف' },
-    paymentMethods: { cash: 'نقدي', credit_card: 'بطاقة ائتمان', bank_transfer: 'تحويل بنكي' },
+    paymentMethods: {
+      cash: 'نقدي',
+      credit_card: 'بطاقة ائتمان',
+      bank_transfer: 'تحويل بنكي',
+    },
     returns: { status: { pending: 'معلق', approved: 'مقبول', rejected: 'مرفوض' } },
   },
   en: {
@@ -228,7 +232,11 @@ const translations = {
     units: { default: 'N/A' },
     branches: { all_branches: 'All Branches', select_branch: 'Select Branch', unknown: 'Unknown' },
     departments: { unknown: 'Unknown' },
-    paymentMethods: { cash: 'Cash', credit_card: 'Credit Card', bank_transfer: 'Bank Transfer' },
+    paymentMethods: {
+      cash: 'Cash',
+      credit_card: 'Credit Card',
+      bank_transfer: 'Bank Transfer',
+    },
     returns: { status: { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' } },
   },
 };
@@ -362,7 +370,7 @@ const ProductCard = React.memo<{
       <div className="space-y-2">
         <h3 className="font-bold text-gray-900 text-base truncate">{product.displayName}</h3>
         <p className="text-sm text-amber-600">{t.department}: {product.product.department?.displayName || t.departments.unknown}</p>
-        <p className="text-sm text-gray-600">{t.availableStock}: {product.currentStock} {product.displayUnit}</p>
+        <p className="text-sm text-gray-600">{t.availableStock}: {product.currentStock} {product.displayUnit || t.units.default}</p>
         <p className="font-semibold text-gray-900 text-sm">{t.unitPrice}: {product.product.price} {t.currency}</p>
       </div>
       <div className="mt-4 flex justify-end">
@@ -408,7 +416,7 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
       <div className="flex items-start justify-between">
         <div>
           <h3 className="font-bold text-gray-900 text-base">{sale.orderNumber} - {sale.branch.displayName}</h3>
-          <p className="text-sm text-gray-600">{t.date}: {sale.createdAt}</p>
+          <p className="text-sm text-gray-600">{t.date}: {formatDate(sale.createdAt, language)}</p>
           <p className="text-sm text-gray-600">{t.total}: {sale.totalAmount} {t.currency}</p>
           {sale.paymentMethod && <p className="text-sm text-gray-600">{t.paymentMethod}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods]}</p>}
           {sale.customerName && <p className="text-sm text-gray-600">{t.customerName}: {sale.customerName}</p>}
@@ -417,7 +425,7 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
           <ul className="list-disc list-inside text-sm text-gray-600 mt-2">
             {sale.items.map((item, index) => (
               <li key={index}>
-                {item.displayName || t.errors.deleted_product} ({item.department?.displayName || t.departments.unknown}) - {t.quantity}: {item.quantity} {item.displayUnit}, {t.unitPrice}: {item.unitPrice} {t.currency}
+                {item.displayName || t.errors.deleted_product} ({item.department?.displayName || t.departments.unknown}) - {t.quantity}: {item.quantity} {item.displayUnit || t.units.default}, {t.unitPrice}: {item.unitPrice} {t.currency}
               </li>
             ))}
           </ul>
@@ -427,7 +435,7 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
               <ul className="list-disc list-inside text-sm text-gray-600">
                 {sale.returns.map((ret, index) => (
                   <li key={index}>
-                    {t.return} #{ret.returnNumber} ({t.returns.status[ret.status as keyof typeof t.returns.status]}) - {t.reason}: {ret.reason} ({t.date}: {ret.createdAt})
+                    {t.return} #{ret.returnNumber} ({t.returns.status[ret.status as keyof typeof t.returns.status]}) - {t.reason}: {ret.reason} ({t.date}: {formatDate(ret.createdAt, language)})
                     <ul className="list-circle list-inside ml-4">
                       {ret.items.map((item, i) => (
                         <li key={i}>
@@ -599,11 +607,7 @@ export const SalesReport: React.FC = () => {
                 }))
               : [],
             reason: ret.reason,
-            createdAt: new Date(ret.createdAt).toLocaleDateString(languageT('locale'), {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-            }),
+            createdAt: formatDate(ret.createdAt, language),
           });
         });
       }
@@ -633,17 +637,13 @@ export const SalesReport: React.FC = () => {
                     _id: item.product.department._id,
                     name: item.product.department.name,
                     nameEn: item.product.department.nameEn,
-                    displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name),
+                    displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
                   }
                 : undefined,
             }))
           : [],
         totalAmount: sale.totalAmount || 0,
-        createdAt: new Date(sale.createdAt).toLocaleDateString(languageT('locale'), {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        }),
+        createdAt: formatDate(sale.createdAt, language),
         notes: sale.notes,
         paymentMethod: sale.paymentMethod,
         customerName: sale.customerName,
@@ -680,10 +680,10 @@ export const SalesReport: React.FC = () => {
                   price: item.product?.price || 0,
                   department: item.product?.department
                     ? {
-                        _id: item.product.department._id,
-                        name: item.product.department.name,
+                        _id: item.product.department._id || 'unknown',
+                        name: item.product.department.name || t.departments.unknown,
                         nameEn: item.product.department.nameEn,
-                        displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name),
+                        displayName: isRtl ? (item.product.department.name || t.departments.unknown) : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
                       }
                     : { _id: 'unknown', name: t.departments.unknown, displayName: t.departments.unknown },
                 },
@@ -710,7 +710,7 @@ export const SalesReport: React.FC = () => {
         departmentSales: Array.isArray(analyticsResponse.departmentSales)
           ? analyticsResponse.departmentSales.map((ds: any) => ({
               ...ds,
-              displayName: isRtl ? ds.departmentName : (ds.departmentNameEn || ds.departmentName),
+              displayName: isRtl ? ds.departmentName : (ds.departmentNameEn || ds.departmentName || t.departments.unknown),
             }))
           : [],
         totalSales: analyticsResponse.totalSales || 0,
@@ -724,7 +724,7 @@ export const SalesReport: React.FC = () => {
         salesTrends: Array.isArray(analyticsResponse.salesTrends)
           ? analyticsResponse.salesTrends.map((trend: any) => ({
               ...trend,
-              period: format(new Date(trend.period), isRtl ? 'yyyy-MM-dd' : 'MM/dd/yyyy'),
+              period: formatDate(trend.period, language),
             }))
           : [],
         topCustomers: Array.isArray(analyticsResponse.topCustomers) ? analyticsResponse.topCustomers : [],
@@ -752,7 +752,7 @@ export const SalesReport: React.FC = () => {
       setLoading(false);
       setSalesLoading(false);
     }
-  }, [filterBranch, startDate, endDate, selectedBranch, user, t, isRtl, languageT]);
+  }, [filterBranch, startDate, endDate, selectedBranch, user, t, isRtl, language]);
 
   useEffect(() => {
     fetchData();
@@ -772,7 +772,7 @@ export const SalesReport: React.FC = () => {
       unit: item.unit,
       unitEn: item.unitEn,
       displayName: item.displayName,
-      displayUnit: item.displayUnit,
+      displayUnit: item.displayUnit || t.units.default,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
     })));
@@ -781,7 +781,7 @@ export const SalesReport: React.FC = () => {
     setCustomerName(sale.customerName || '');
     setCustomerPhone(sale.customerPhone || '');
     setSelectedBranch(sale.branch._id);
-  }, []);
+  }, [t]);
 
   const handleDeleteSale = useCallback(async (id: string) => {
     if (window.confirm(t.confirmDelete)) {
@@ -964,6 +964,12 @@ export const SalesReport: React.FC = () => {
   }, [cart, notes, paymentMethod, customerName, customerPhone, selectedBranch, user, t, isRtl, fetchData]);
 
   const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0).toFixed(2), [cart]);
+
+  const paymentMethodOptions = useMemo(() => [
+    { value: 'cash', label: t.paymentMethods.cash },
+    { value: 'credit_card', label: t.paymentMethods.credit_card },
+    { value: 'bank_transfer', label: t.paymentMethods.bank_transfer },
+  ], [t.paymentMethods]);
 
   const branchSalesChartData = useMemo(() => ({
     labels: analytics.branchSales.map((b) => b.displayName),
@@ -1200,9 +1206,9 @@ export const SalesReport: React.FC = () => {
                   {cart.map((item) => (
                     <div key={item.productId} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
                       <div className="flex-1">
-                        <p className="font-semibold text-gray-900 text-sm">{item.displayName}</p>
+                        <p className="font-semibold text-gray-900 text-sm">{item.displayName || t.errors.deleted_product}</p>
                         <p className="text-sm text-gray-600">
-                          {item.unitPrice} {t.currency} / {item.displayUnit}
+                          {item.unitPrice} {t.currency} / {item.displayUnit || t.units.default}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1248,11 +1254,7 @@ export const SalesReport: React.FC = () => {
                     <ProductDropdown
                       value={paymentMethod}
                       onChange={setPaymentMethod}
-                      options={[
-                        { value: 'cash', label: t.paymentMethods.cash },
-                        { value: 'credit_card', label: t.paymentMethods.credit_card },
-                        { value: 'bank_transfer', label: t.paymentMethods.bank_transfer },
-                      ]}
+                      options={paymentMethodOptions}
                       ariaLabel={t.paymentMethod}
                     />
                     <textarea
