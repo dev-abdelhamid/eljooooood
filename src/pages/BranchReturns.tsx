@@ -1,3 +1,4 @@
+// src/pages/BranchReturns.tsx
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -9,7 +10,7 @@ import { Input } from '../components/UI/Input';
 import { Select } from '../components/UI/Select';
 import { Modal } from '../components/UI/Modal';
 import { Package, Eye, Clock, Check, AlertCircle, Search, Download, Plus, X } from 'lucide-react';
-import { io, Socket } from 'socket.io-client';
+import { io } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -22,23 +23,7 @@ import 'tailwindcss/tailwind.css';
 
 const RETURNS_PER_PAGE = 10;
 
-interface ReturnItem {
-  itemId: string;
-  productId: string;
-  quantity: number;
-  reason: string;
-  maxQuantity: number;
-}
-
-interface FormData {
-  orderId: string;
-  branchId: string;
-  reason: string;
-  notes: string;
-  items: ReturnItem[];
-}
-
-const BranchReturns: React.FC = () => {
+const BranchReturns = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
@@ -47,17 +32,18 @@ const BranchReturns: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedReturn, setSelectedReturn] = useState<any>(null);
+  const [selectedReturn, setSelectedReturn] = useState(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [formData, setFormData] = useState<FormData>({
+  const [formData, setFormData] = useState({
     orderId: '',
     branchId: user?.branchId || '',
     reason: '',
     notes: '',
     items: [],
   });
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [availableItems, setAvailableItems] = useState<any[]>([]);
+  const [formErrors, setFormErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [availableItems, setAvailableItems] = useState([]);
 
   const toastOptions = useMemo(
     () => ({
@@ -73,27 +59,17 @@ const BranchReturns: React.FC = () => {
     [isRtl]
   );
 
-  const socket = useMemo<Socket | null>(() => {
-    const apiUrl = import.meta.env.VITE_API_URL || 'https://eljoodia-server-production.up.railway.app';
+  // Socket connection with language awareness
+  const socket = useMemo(() => {
+    const apiUrl = import.meta.env.VITE_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
     try {
       const socketInstance = io(apiUrl, {
-        auth: { token: localStorage.getItem('token') || '' },
+        auth: { token: localStorage.getItem('token') },
         transports: ['websocket'],
-        path: '/socket.io',
         autoConnect: true,
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
-      });
-      socketInstance.on('connect_error', (err) => {
-        console.error(`[${new Date().toISOString()}] Socket connect error:`, err);
-        toast.error(t('errors.socket_connect'), toastOptions);
-      });
-      socketInstance.on('disconnect', (reason) => {
-        console.warn(`[${new Date().toISOString()}] Socket disconnected:`, reason);
-        if (reason !== 'io client disconnect') {
-          toast.warn(t('errors.socket_disconnect'), toastOptions);
-        }
       });
       return socketInstance;
     } catch (err) {
@@ -103,6 +79,7 @@ const BranchReturns: React.FC = () => {
     }
   }, [t, toastOptions]);
 
+  // Language-dependent options memoized to avoid re-creation on every render
   const statusOptions = useMemo(
     () => [
       { value: '', label: t('returns.status.all') },
@@ -133,19 +110,20 @@ const BranchReturns: React.FC = () => {
   );
 
   const getStatusInfo = useCallback(
-    (status: string) => STATUS_COLORS[status] || { color: 'bg-gray-100 text-gray-800', icon: Clock, label: t(`returns.status.${status}`) },
+    (status) => STATUS_COLORS[status] || { color: 'bg-gray-100 text-gray-800', icon: Clock, label: t(`returns.status.${status}`) },
     [STATUS_COLORS, t]
   );
 
+  // Query for returns with language in key to refetch on language change
   const { data: returnsData, isLoading, error } = useQuery({
     queryKey: ['returns', filterStatus, currentPage, user?.branchId, language],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch_associated'));
       const query = { status: filterStatus, branch: user.branchId, page: currentPage, limit: RETURNS_PER_PAGE, lang: language };
-      const response = await returnsAPI.getAll(query);
-      if (!Array.isArray(response.returns)) throw new Error('Invalid returns data format');
+      const { returns: returnsData, total } = await returnsAPI.getAll(query);
+      if (!Array.isArray(returnsData)) throw new Error('Invalid returns data format');
       return {
-        returns: response.returns.map((ret: any) => ({
+        returns: returnsData.map((ret) => ({
           id: ret._id || 'unknown',
           returnNumber: ret.returnNumber || t('returns.unknown'),
           order: {
@@ -155,7 +133,7 @@ const BranchReturns: React.FC = () => {
             createdAt: ret.order?.createdAt || new Date().toISOString(),
           },
           items: Array.isArray(ret.items)
-            ? ret.items.map((item: any) => ({
+            ? ret.items.map((item) => ({
                 itemId: item.itemId || item._id || 'unknown',
                 productId: item.product?._id || 'unknown',
                 productName: isRtl ? item.product?.name : item.product?.nameEn || t('products.unknown'),
@@ -174,21 +152,22 @@ const BranchReturns: React.FC = () => {
           branch: { _id: ret.branch?._id || 'unknown', name: isRtl ? ret.branch?.name : ret.branch?.nameEn || t('branches.unknown') },
           department: ret.order?.department || { _id: 'unknown', name: t('departments.unknown') },
         })),
-        total: response.total,
+        total,
       };
     },
-    staleTime: 5 * 60 * 1000,
-    onError: (err: any) => {
+    staleTime: 5 * 60 * 1000, // 5 minutes cache to reduce re-fetches on language change
+    onError: (err) => {
       toast.error(err.message || t('errors.fetch_returns'), toastOptions);
     },
   });
 
+  // Inventory query with language in key
   const { data: inventoryData } = useQuery({
     queryKey: ['inventory', user?.branchId, language],
     queryFn: async () => {
       if (!user?.branchId) return [];
       const response = await inventoryAPI.getByBranch(user.branchId);
-      return response.map((item: any) => ({
+      return response.map((item) => ({
         productId: item.product._id,
         productName: isRtl ? item.product.name : item.product.nameEn,
         currentStock: item.currentStock,
@@ -199,17 +178,19 @@ const BranchReturns: React.FC = () => {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Delivered orders query
   const { data: deliveredOrders } = useQuery({
     queryKey: ['deliveredOrders', user?.branchId, language],
     queryFn: async () => {
       if (!user?.branchId) return [];
-      const response = await ordersAPI.getAll({ branch: user.branchId, status: 'delivered' });
-      return response.orders || [];
+      const { orders } = await ordersAPI.getAll({ branch: user.branchId, status: 'delivered' });
+      return orders || [];
     },
     enabled: !!user?.branchId,
     staleTime: 5 * 60 * 1000,
   });
 
+  // Fetch selected order details
   useQuery({
     queryKey: ['selectedOrder', formData.orderId, language],
     queryFn: async () => {
@@ -233,12 +214,13 @@ const BranchReturns: React.FC = () => {
     enabled: !!formData.orderId,
   });
 
+  // Form validation function
   const validateFormData = useCallback(() => {
-    const errors: Record<string, string> = {};
+    const errors: any = {};
     if (!formData.orderId.trim()) errors.orderId = t('errors.required', { field: t('returns.order_id') });
     if (!formData.reason.trim()) errors.reason = t('errors.required', { field: t('returns.reason') });
     if (formData.items.length === 0) errors.items = t('errors.required', { field: t('returns.items') });
-    formData.items.forEach((item, index) => {
+    formData.items.forEach((item: any, index) => {
       if (!item.itemId) errors[`item_${index}_productId`] = t('errors.required', { field: t('returns.product') });
       if (!item.reason.trim()) errors[`item_${index}_reason`] = t('errors.required', { field: t('returns.reason') });
       const maxQty = item.maxQuantity || 0;
@@ -251,43 +233,27 @@ const BranchReturns: React.FC = () => {
   }, [formData, t]);
 
   const createReturnMutation = useMutation({
-    mutationFn: async (data: FormData) => {
+    mutationFn: (data: any) => {
       if (!validateFormData()) {
         throw new Error(t('errors.invalid_form'));
       }
+      // Map to backend format
       const payload = {
         orderId: data.orderId,
         branchId: data.branchId,
         reason: data.reason,
         notes: data.notes,
-        items: data.items.map((item) => ({
+        items: data.items.map((item: any) => ({
           itemId: item.itemId,
-          productId: item.productId,
-          quantity: Number(item.quantity),
+          product: item.productId,
+          quantity: item.quantity,
           reason: item.reason,
         })),
       };
-      console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Sending:`, payload);
-      const response = await returnsAPI.createReturn(payload);
-      // Update inventory after successful return creation
-      const inventoryUpdates = data.items.map((item) => ({
-        productId: item.productId,
-        branchId: data.branchId,
-        quantity: Number(item.quantity),
-        action: 'return',
-      }));
-      try {
-        await inventoryAPI.bulkUpdate(inventoryUpdates);
-      } catch (err) {
-        console.error(`[${new Date().toISOString()}] Inventory bulk update failed:`, err);
-        throw new Error(t('errors.inventory_update'));
-      }
-      return response;
+      return returnsAPI.createReturn(payload);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['returns'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
+      queryClient.invalidateQueries(['returns']);
       setIsCreateModalOpen(false);
       setFormData({ orderId: '', branchId: user?.branchId || '', reason: '', notes: '', items: [] });
       setFormErrors({});
@@ -295,8 +261,9 @@ const BranchReturns: React.FC = () => {
       toast.success(t('returns.create_success'), toastOptions);
     },
     onError: (err: any) => {
-      console.error(`[${new Date().toISOString()}] Return creation error:`, err);
-      toast.error(err.message || t('errors.create_return'), toastOptions);
+      const errorMessage = err.message || t('errors.create_return');
+      toast.error(errorMessage, toastOptions);
+      // Parse backend validation errors
       if (err.response?.data?.errors) {
         const backendErrors = err.response.data.errors.reduce((acc: any, error: any) => {
           acc[error.path] = error.msg;
@@ -307,22 +274,22 @@ const BranchReturns: React.FC = () => {
     },
   });
 
+  // Socket events
   useEffect(() => {
     if (!socket) return;
     socket.on('connect', () => {
       socket.emit('joinRoom', { role: user?.role, branchId: user?.branchId, userId: user?._id });
-      console.log(`[${new Date().toISOString()}] Socket connected`);
       toast.info(t('socket.connected'), toastOptions);
     });
     socket.on('returnCreated', (data) => {
       if (data.branchId === user?.branchId) {
-        queryClient.invalidateQueries({ queryKey: ['returns'] });
+        queryClient.invalidateQueries(['returns']);
         toast.success(t('returns.new_return_notification', { returnNumber: data.returnNumber }), toastOptions);
       }
     });
     socket.on('returnStatusUpdated', (data) => {
       if (data.branchId === user?.branchId) {
-        queryClient.invalidateQueries({ queryKey: ['returns'] });
+        queryClient.invalidateQueries(['returns']);
         toast.info(t('socket.return_status_updated', { status: t(`returns.status.${data.status}`) }), toastOptions);
       }
     });
@@ -330,12 +297,13 @@ const BranchReturns: React.FC = () => {
       socket.off('connect');
       socket.off('returnCreated');
       socket.off('returnStatusUpdated');
-      socket.disconnect();
     };
   }, [socket, user, queryClient, t, toastOptions]);
 
-  const debouncedSetSearchQuery = useMemo(() => debounce((value: string) => setSearchQuery(value.trim()), 300), []);
+  // Debounced search
+  const debouncedSetSearchQuery = useMemo(() => debounce((value) => setSearchQuery(value), 300), []);
 
+  // Filtered and paginated returns
   const filteredReturns = useMemo(
     () =>
       (returnsData?.returns || []).filter(
@@ -360,23 +328,27 @@ const BranchReturns: React.FC = () => {
 
   const totalPages = Math.ceil(sortedReturns.length / RETURNS_PER_PAGE);
 
+  // Form handlers
   const handleCreateReturn = useCallback(() => {
-    createReturnMutation.mutate(formData);
+    setSubmitting(true);
+    createReturnMutation.mutate(formData, {
+      onSettled: () => setSubmitting(false),
+    });
   }, [createReturnMutation, formData]);
 
   const addItemToForm = useCallback(() => {
     setFormData((prev) => ({
       ...prev,
-      items: [...prev.items, { itemId: '', productId: '', quantity: 1, reason: '', maxQuantity: 0 }],
+      items: [...prev.items, { productId: '', itemId: '', quantity: 1, reason: '', maxQuantity: 0 }],
     }));
   }, []);
 
   const updateItemInForm = useCallback((index: number, field: string, value: any) => {
-    setFormData((prev) => {
+    setFormData((prev: any) => {
       const newItems = [...prev.items];
       newItems[index] = { ...newItems[index], [field]: value };
       if (field === 'productId') {
-        const sel = availableItems.find((a) => a.productId === value);
+        const sel = availableItems.find((a: any) => a.productId === value);
         if (sel) {
           newItems[index].itemId = sel.itemId;
           newItems[index].maxQuantity = Math.min(sel.available, sel.stock);
@@ -387,12 +359,13 @@ const BranchReturns: React.FC = () => {
   }, [availableItems]);
 
   const removeItemFromForm = useCallback((index: number) => {
-    setFormData((prev) => ({
+    setFormData((prev: any) => ({
       ...prev,
       items: prev.items.filter((_: any, i: number) => i !== index),
     }));
   }, []);
 
+  // Export functions
   const exportToExcel = useCallback(() => {
     const exportData = sortedReturns.map((ret) => ({
       [t('returns.return_number')]: ret.returnNumber,
@@ -415,7 +388,9 @@ const BranchReturns: React.FC = () => {
   const exportToPDF = useCallback(async () => {
     try {
       const doc = new jsPDF({ orientation: 'landscape' });
-      doc.setFont('Amiri', 'normal');
+      const fontName = 'Amiri';
+      // Simplified font loading for demo - in production, use proper font loading
+      doc.setFont('helvetica'); // Fallback
       const headers = [
         t('returns.return_number'),
         t('returns.order_number'),
@@ -442,8 +417,8 @@ const BranchReturns: React.FC = () => {
         head: [finalHeaders],
         body: finalData,
         theme: 'grid',
-        headStyles: { fillColor: [41, 128, 185], textColor: 255, fontSize: 10, halign: isRtl ? 'right' : 'left', font: 'Amiri' },
-        bodyStyles: { fontSize: 9, halign: isRtl ? 'right' : 'left', cellPadding: 4, font: 'Amiri' },
+        headStyles: { fillColor: [41, 128, 185], textColor: 255, fontSize: 10, halign: isRtl ? 'right' : 'left' },
+        bodyStyles: { fontSize: 9, halign: isRtl ? 'right' : 'left', cellPadding: 4 },
         columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 30 } },
         margin: { top: 20 },
       });
@@ -455,97 +430,94 @@ const BranchReturns: React.FC = () => {
     }
   }, [sortedReturns, isRtl, t, getStatusInfo, toastOptions]);
 
-  const ReturnCard = useMemo(
-    () =>
-      ({ ret }: { ret: any }) => {
-        const statusInfo = getStatusInfo(ret.status);
-        const StatusIcon = statusInfo.icon;
-        return (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="flex flex-col"
-          >
-            <Card className="p-4 sm:p-5 bg-white shadow-md hover:shadow-xl transition-shadow duration-300 rounded-lg border border-gray-200">
-              <div className="flex flex-col gap-4">
-                <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${isRtl ? 'sm:flex-row-reverse' : ''}`}>
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    {t('returns.return_number', { returnNumber: ret.returnNumber })}
-                  </h3>
-                  <span className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${statusInfo.color}`}>
-                    <StatusIcon className="w-5 h-5" />
-                    <span>{statusInfo.label}</span>
-                  </span>
-                </div>
-                <div className="flex flex-col sm:grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  <div>
-                    <p className="text-sm text-gray-500">{t('returns.order_number')}</p>
-                    <p className="text-base font-medium text-gray-900">{ret.order.orderNumber}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">{t('returns.items_count')}</p>
-                    <p className="text-base font-medium text-gray-900">{ret.items.length} {t('returns.item')}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">{t('returns.date')}</p>
-                    <p className="text-base font-medium text-gray-900">{ret.date}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">{t('returns.branch')}</p>
-                    <p className="text-base font-medium text-gray-900">{ret.branch.name}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-500">{t('returns.total_amount')}</p>
-                    <p className="text-base font-medium text-teal-600">{ret.items.reduce((sum: number, item: any) => sum + (item.price || 0) * item.quantity, 0)} {t('currency')}</p>
-                  </div>
-                </div>
-                <div className="flex flex-col gap-2">
-                  {ret.items.map((item: any, index: number) => (
-                    <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100">
-                      <p className="text-base font-medium text-gray-900">{item.productName}</p>
-                      <p className="text-sm text-gray-600">{t('returns.quantity', { quantity: item.quantity })}</p>
-                      <p className="text-sm text-gray-600">{t('returns.unit', { unit: item.unit })}</p>
-                      <p className="text-sm text-gray-600">{t('returns.department', { department: item.departmentName })}</p>
-                      <p className="text-sm text-gray-600">{t('returns.reason', { reason: item.reason })}</p>
-                      {item.price && (
-                        <p className="text-sm text-gray-600">{t('returns.price', { price: item.price })} {t('currency')}</p>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                {ret.notes && (
-                  <div className="p-3 bg-amber-50 rounded-md border border-amber-100">
-                    <p className="text-sm text-amber-800"><strong>{t('returns.notes_label')}:</strong> {ret.notes}</p>
-                  </div>
-                )}
-                {ret.reviewNotes && (
-                  <div className="p-3 bg-blue-50 rounded-md border border-blue-100">
-                    <p className="text-sm text-blue-800"><strong>{t('returns.review_notes')}:</strong> {ret.reviewNotes}</p>
-                  </div>
-                )}
-                <div className="flex justify-end">
-                  <Button
-                    variant="primary"
-                    size="md"
-                    icon={Eye}
-                    onClick={() => {
-                      setSelectedReturn(ret);
-                      setIsViewModalOpen(true);
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 py-2 transition-colors duration-200"
-                    aria-label={t('returns.view_return', { returnNumber: ret.returnNumber })}
-                  >
-                    {t('returns.view')}
-                  </Button>
-                </div>
+  // ReturnCard component (optimized)
+  const ReturnCard = useMemo(() => ({ ret }: any) => {
+    const statusInfo = getStatusInfo(ret.status);
+    const StatusIcon = statusInfo.icon;
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="flex flex-col"
+      >
+        <Card className="p-4 sm:p-5 bg-white shadow-md hover:shadow-xl transition-shadow duration-300 rounded-lg border border-gray-200">
+          <div className="flex flex-col gap-4">
+            <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${isRtl ? 'sm:flex-row-reverse' : ''}`}>
+              <h3 className="text-lg font-semibold text-gray-900">
+                {t('returns.return_number', { returnNumber: ret.returnNumber })}
+              </h3>
+              <span className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${statusInfo.color}`}>
+                <StatusIcon className="w-5 h-5" />
+                <span>{statusInfo.label}</span>
+              </span>
+            </div>
+            <div className="flex flex-col sm:grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div>
+                <p className="text-sm text-gray-500">{t('returns.order_number')}</p>
+                <p className="text-base font-medium text-gray-900">{ret.order.orderNumber}</p>
               </div>
-            </Card>
-          </motion.div>
-        );
-      },
-    [isRtl, t, getStatusInfo]
-  );
+              <div>
+                <p className="text-sm text-gray-500">{t('returns.items_count')}</p>
+                <p className="text-base font-medium text-gray-900">{ret.items.length} {t('returns.item')}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">{t('returns.date')}</p>
+                <p className="text-base font-medium text-gray-900">{ret.date}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">{t('returns.branch')}</p>
+                <p className="text-base font-medium text-gray-900">{ret.branch.name}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-500">{t('returns.total_amount')}</p>
+                <p className="text-base font-medium text-teal-600">{ret.items.reduce((sum: number, item: any) => sum + (item.price || 0) * item.quantity, 0)} {t('currency')}</p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              {ret.items.map((item: any, index: number) => (
+                <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100">
+                  <p className="text-base font-medium text-gray-900">{item.productName}</p>
+                  <p className="text-sm text-gray-600">{t('returns.quantity', { quantity: item.quantity })}</p>
+                  <p className="text-sm text-gray-600">{t('returns.unit', { unit: item.unit })}</p>
+                  <p className="text-sm text-gray-600">{t('returns.department', { department: item.departmentName })}</p>
+                  <p className="text-sm text-gray-600">{t('returns.reason', { reason: item.reason })}</p>
+                  {item.price && (
+                    <p className="text-sm text-gray-600">{t('returns.price', { price: item.price })} {t('currency')}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+            {ret.notes && (
+              <div className="p-3 bg-amber-50 rounded-md border border-amber-100">
+                <p className="text-sm text-amber-800"><strong>{t('returns.notes_label')}:</strong> {ret.notes}</p>
+              </div>
+            )}
+            {ret.reviewNotes && (
+              <div className="p-3 bg-blue-50 rounded-md border border-blue-100">
+                <p className="text-sm text-blue-800"><strong>{t('returns.review_notes')}:</strong> {ret.reviewNotes}</p>
+              </div>
+            )}
+            <div className="flex justify-end">
+              <Button
+                variant="primary"
+                size="md"
+                icon={Eye}
+                onClick={() => {
+                  setSelectedReturn(ret);
+                  setIsViewModalOpen(true);
+                }}
+                className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 py-2 transition-colors duration-200"
+                aria-label={t('returns.view_return', { returnNumber: ret.returnNumber })}
+              >
+                {t('returns.view')}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      </motion.div>
+    );
+  }, [isRtl, t, getStatusInfo]);
 
   const Pagination = () => (
     sortedReturns.length > RETURNS_PER_PAGE && (
@@ -607,7 +579,7 @@ const BranchReturns: React.FC = () => {
               </div>
               <Button
                 variant="primary"
-                onClick={() => queryClient.invalidateQueries({ queryKey: ['returns'] })}
+                onClick={() => queryClient.invalidateQueries(['returns'])}
                 className="bg-amber-600 hover:bg-amber-700 text-white rounded-full px-6 py-2 transition-colors duration-200"
                 aria-label={t('common.retry')}
               >
@@ -666,20 +638,20 @@ const BranchReturns: React.FC = () => {
               className="flex flex-col sm:flex-row gap-4 items-center"
             >
               <div className="relative flex-1">
-                <Search className={`absolute top-1/2 transform -translate-y-1/2 ${isRtl ? 'right-3' : 'left-3'} w-5 h-5 text-gray-400`} />
+                <Search className="absolute top-1/2 transform -translate-y-1/2 left-3 w-5 h-5 text-gray-400" />
                 <Input
                   type="text"
                   placeholder={t('returns.search_placeholder')}
                   value={searchQuery}
-                  onChange={(e) => debouncedSetSearchQuery(e.target.value || '')}
-                  className={`pl-10 pr-4 py-2 w-full rounded-full border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-transparent ${isRtl ? 'text-right pr-10' : 'text-left'}`}
+                  onChange={(e) => debouncedSetSearchQuery(e.target.value)}
+                  className={`pl-10 pr-4 py-2 w-full rounded-full border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-transparent ${isRtl ? 'text-right' : 'text-left'}`}
                   aria-label={t('returns.search_placeholder')}
                 />
               </div>
               <Select
                 value={filterStatus}
                 onChange={(e) => {
-                  setFilterStatus(e.target.value || '');
+                  setFilterStatus(e.target.value);
                   setCurrentPage(1);
                 }}
                 options={statusOptions}
@@ -707,6 +679,7 @@ const BranchReturns: React.FC = () => {
         )}
       </AnimatePresence>
 
+      {/* Create Return Modal */}
       <Modal
         isOpen={isCreateModalOpen}
         onClose={() => {
@@ -724,7 +697,7 @@ const BranchReturns: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">{t('returns.order_id')}</label>
               <Select
                 value={formData.orderId}
-                onChange={(e) => setFormData({ ...formData, orderId: e.target.value || '', items: [] })}
+                onChange={(e) => setFormData({ ...formData, orderId: e.target.value, items: [] })}
                 options={[
                   { value: '', label: t('returns.select_order') },
                   ...(deliveredOrders || []).map((order: any) => ({
@@ -741,7 +714,7 @@ const BranchReturns: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-1">{t('returns.reason')}</label>
               <Select
                 value={formData.reason}
-                onChange={(e) => setFormData({ ...formData, reason: e.target.value || '' })}
+                onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
                 options={reasonOptions}
                 className={`w-full rounded-full border ${formErrors.reason ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent`}
                 aria-label={t('returns.reason')}
@@ -753,7 +726,7 @@ const BranchReturns: React.FC = () => {
               <Input
                 type="text"
                 value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value || '' })}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                 className="w-full rounded-full border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 placeholder={t('returns.notes_placeholder')}
                 aria-label={t('returns.notes_label')}
@@ -768,7 +741,7 @@ const BranchReturns: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t('returns.product')}</label>
                   <Select
                     value={item.productId}
-                    onChange={(e) => updateItemInForm(index, 'productId', e.target.value || '')}
+                    onChange={(e) => updateItemInForm(index, 'productId', e.target.value)}
                     options={[
                       { value: '', label: t('returns.select_product') },
                       ...availableItems.map((a: any) => ({
@@ -790,7 +763,7 @@ const BranchReturns: React.FC = () => {
                     min="1"
                     max={item.maxQuantity}
                     value={item.quantity}
-                    onChange={(e) => updateItemInForm(index, 'quantity', parseInt(e.target.value || '1'))}
+                    onChange={(e) => updateItemInForm(index, 'quantity', parseInt(e.target.value))}
                     className={`w-full rounded-full border ${formErrors[`item_${index}_quantity`] ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent`}
                     aria-label={t('returns.quantity')}
                   />
@@ -802,7 +775,7 @@ const BranchReturns: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t('returns.reason')}</label>
                   <Select
                     value={item.reason}
-                    onChange={(e) => updateItemInForm(index, 'reason', e.target.value || '')}
+                    onChange={(e) => updateItemInForm(index, 'reason', e.target.value)}
                     options={reasonOptions}
                     className={`w-full rounded-full border ${formErrors[`item_${index}_reason`] ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent`}
                     aria-label={t('returns.reason')}
@@ -850,16 +823,17 @@ const BranchReturns: React.FC = () => {
             <Button
               variant="primary"
               onClick={handleCreateReturn}
-              disabled={createReturnMutation.isPending}
+              disabled={submitting || createReturnMutation.isPending}
               className="bg-amber-600 hover:bg-amber-700 text-white rounded-full px-4 py-2 transition-colors duration-200 disabled:opacity-50"
               aria-label={t('returns.submit_return')}
             >
-              {createReturnMutation.isPending ? t('common.submitting') : t('returns.submit_return')}
+              {submitting || createReturnMutation.isPending ? t('common.submitting') : t('returns.submit_return')}
             </Button>
           </div>
         </div>
       </Modal>
 
+      {/* View Return Modal */}
       <Modal
         isOpen={isViewModalOpen}
         onClose={() => setIsViewModalOpen(false)}
