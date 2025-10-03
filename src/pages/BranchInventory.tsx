@@ -285,7 +285,7 @@ const Pagination = ({
   )
 );
 
-export const BranchInventory = () => {
+const BranchInventory = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
@@ -312,7 +312,7 @@ export const BranchInventory = () => {
   const [availableItems, setAvailableItems] = useState<any[]>([]);
 
   const socket = useMemo<Socket | null>(() => {
-    const apiUrl = process.env.REACT_APP_API_URL || 'https://api.example.com';
+    const apiUrl = 'https://eljoodia-server-production.up.railway.app';
     try {
       return io(apiUrl, {
         auth: { token: localStorage.getItem('token') || '' },
@@ -325,7 +325,7 @@ export const BranchInventory = () => {
       });
     } catch (err) {
       console.error('Socket initialization error:', err);
-      toast.error(isRtl ? 'فشل في تهيئة الاتصال' : 'Failed to initialize connection');
+      toast.error(isRtl ? 'فشل في تهيئة الاتصال بالسوكت' : 'Failed to initialize socket connection');
       return null;
     }
   }, [isRtl]);
@@ -336,9 +336,18 @@ export const BranchInventory = () => {
   >({
     queryKey: ['inventory', user?.branchId, language],
     queryFn: async () => {
-      if (!user?.branchId) throw new Error('Branch ID is missing');
-      const response = await inventoryAPI.getByBranch(user.branchId);
-      return response.data || [];
+      if (!user?.branchId) {
+        console.error('No branchId available for inventory fetch');
+        throw new Error(isRtl ? 'معرف الفرع غير متوفر' : 'Branch ID is missing');
+      }
+      try {
+        const response = await inventoryAPI.getByBranch(user.branchId);
+        console.log('Inventory fetch response:', response);
+        return Array.isArray(response) ? response : response.data || [];
+      } catch (err: any) {
+        console.error('Inventory fetch error:', err);
+        throw new Error(err.message || (isRtl ? 'فشل في جلب المخزون' : 'Failed to fetch inventory'));
+      }
     },
     enabled: !!user?.branchId,
     select: (data) =>
@@ -364,6 +373,10 @@ export const BranchInventory = () => {
             ? 'full'
             : 'normal',
       })),
+    onError: (err) => {
+      console.error('useQuery inventory error:', err);
+      toast.error(err.message || (isRtl ? 'خطأ في جلب المخزون' : 'Error fetching inventory'));
+    },
   });
 
   const { data: historyData, isLoading: historyLoading, error: historyError } = useQuery<
@@ -372,29 +385,61 @@ export const BranchInventory = () => {
   >({
     queryKey: ['inventoryHistory', user?.branchId, language],
     queryFn: async () => {
-      if (!user?.branchId) throw new Error('Branch ID is missing');
-      const response = await inventoryAPI.getHistory({ branchId: user.branchId });
-      return response.data || [];
+      if (!user?.branchId) {
+        console.error('No branchId available for history fetch');
+        throw new Error(isRtl ? 'معرف الفرع غير متوفر' : 'Branch ID is missing');
+      }
+      try {
+        const response = await inventoryAPI.getHistory({ branchId: user.branchId });
+        console.log('History fetch response:', response);
+        return Array.isArray(response) ? response : response.data || [];
+      } catch (err: any) {
+        console.error('History fetch error:', err);
+        throw new Error(err.message || (isRtl ? 'فشل في جلب سجل الحركات' : 'Failed to fetch history'));
+      }
     },
     enabled: activeTab === 'history' && !!user?.branchId,
+    onError: (err) => {
+      console.error('useQuery history error:', err);
+      toast.error(err.message || (isRtl ? 'خطأ في جلب سجل الحركات' : 'Error fetching history'));
+    },
   });
 
   const { data: ordersData, isLoading: ordersLoading } = useQuery<Order[], Error>({
     queryKey: ['orders', user?.branchId, language],
     queryFn: async () => {
-      if (!user?.branchId) throw new Error('Branch ID is missing');
-      const response = await ordersAPI.getAll({ branch: user.branchId, status: 'delivered' });
-      return response.data?.orders || [];
+      if (!user?.branchId) {
+        console.error('No branchId available for orders fetch');
+        throw new Error(isRtl ? 'معرف الفرع غير متوفر' : 'Branch ID is missing');
+      }
+      try {
+        const response = await ordersAPI.getAll({ branch: user.branchId, status: 'delivered' });
+        console.log('Orders fetch response:', response);
+        return Array.isArray(response.orders) ? response.orders : response.data?.orders || [];
+      } catch (err: any) {
+        console.error('Orders fetch error:', err);
+        throw new Error(err.message || (isRtl ? 'فشل في جلب الطلبات' : 'Failed to fetch orders'));
+      }
     },
     enabled: !!user?.branchId,
+    onError: (err) => {
+      console.error('useQuery orders error:', err);
+      toast.error(err.message || (isRtl ? 'خطأ في جلب الطلبات' : 'Error fetching orders'));
+    },
   });
 
   const { data: selectedOrderData } = useQuery<Order | null, Error>({
     queryKey: ['selectedOrder', returnForm.orderId, language],
     queryFn: async () => {
       if (!returnForm.orderId) return null;
-      const response = await ordersAPI.getById(returnForm.orderId);
-      return response.data || null;
+      try {
+        const response = await ordersAPI.getById(returnForm.orderId);
+        console.log('Selected order fetch response:', response);
+        return response || null;
+      } catch (err: any) {
+        console.error('Selected order fetch error:', err);
+        throw new Error(err.message || (isRtl ? 'فشل في جلب الطلب' : 'Failed to fetch order'));
+      }
     },
     enabled: !!returnForm.orderId,
     onSuccess: (order) => {
@@ -432,21 +477,33 @@ export const BranchInventory = () => {
         setAvailableItems([]);
       }
     },
+    onError: (err) => {
+      console.error('useQuery selectedOrder error:', err);
+      toast.error(err.message || (isRtl ? 'خطأ في جلب الطلب' : 'Error fetching order'));
+    },
   });
 
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('connect', () => console.log('Socket connected'));
-    socket.on('connect_error', (err) => console.error('Socket connect error:', err));
+    socket.on('connect', () => {
+      console.log('Socket connected successfully');
+      toast.success(isRtl ? 'تم الاتصال بالسوكت' : 'Socket connected');
+    });
+    socket.on('connect_error', (err) => {
+      console.error('Socket connect error:', err);
+      toast.error(isRtl ? 'فشل في الاتصال بالسوكت' : 'Socket connection failed');
+    });
     socket.on('inventoryUpdated', ({ branchId }) => {
       if (branchId === user?.branchId) {
+        console.log('Inventory updated via socket:', branchId);
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
         queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
       }
     });
     socket.on('returnCreated', ({ branchId }) => {
       if (branchId === user?.branchId) {
+        console.log('Return created via socket:', branchId);
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
         queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
         queryClient.invalidateQueries({ queryKey: ['orders'] });
@@ -454,6 +511,7 @@ export const BranchInventory = () => {
     });
     socket.on('returnStatusUpdated', ({ branchId }) => {
       if (branchId === user?.branchId) {
+        console.log('Return status updated via socket:', branchId);
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
         queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
         queryClient.invalidateQueries({ queryKey: ['orders'] });
@@ -468,7 +526,7 @@ export const BranchInventory = () => {
       socket.off('returnStatusUpdated');
       socket.disconnect();
     };
-  }, [socket, user?.branchId, queryClient]);
+  }, [socket, user?.branchId, queryClient, isRtl]);
 
   const debouncedSearch = useCallback(
     debounce((value: string) => setSearchQuery(value.trim()), 300),
@@ -518,7 +576,7 @@ export const BranchInventory = () => {
     [filteredInventory, currentPage]
   );
 
-  const totalInventoryPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
+  const totalInventoryPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE) || 1;
 
   const filteredHistory = useMemo(
     () =>
@@ -536,7 +594,7 @@ export const BranchInventory = () => {
     [filteredHistory, currentPage]
   );
 
-  const totalHistoryPages = Math.ceil(filteredHistory.length / ITEMS_PER_PAGE);
+  const totalHistoryPages = Math.ceil(filteredHistory.length / ITEMS_PER_PAGE) || 1;
 
   const handleOpenReturnModal = (item: InventoryItem) => {
     setSelectedItem(item);
@@ -639,6 +697,7 @@ export const BranchInventory = () => {
       toast.success(t('returns.create_success'), { icon: <CheckCircle className="text-green-500" /> });
     },
     onError: (err) => {
+      console.error('createReturnMutation error:', err);
       const errorMessage = err.message || t('errors.create_return');
       toast.error(errorMessage, { icon: <AlertCircle className="text-red-500" /> });
       if (err.cause) {
@@ -658,7 +717,7 @@ export const BranchInventory = () => {
     mutationFn: async () => {
       if (!validateEditForm()) throw new Error(t('errors.invalid_form'));
       if (!selectedItem) throw new Error(t('errors.no_item_selected'));
-      await inventoryAPI.update(selectedItem._id, {
+      await inventoryAPI.updateStock(selectedItem._id, {
         minStockLevel: editForm.minStockLevel,
         maxStockLevel: editForm.maxStockLevel,
       });
@@ -672,6 +731,7 @@ export const BranchInventory = () => {
       toast.success(t('inventory.update_success'), { icon: <CheckCircle className="text-green-500" /> });
     },
     onError: (err) => {
+      console.error('updateInventoryMutation error:', err);
       toast.error(err.message || t('errors.update_inventory'), { icon: <AlertCircle className="text-red-500" /> });
     },
   });
@@ -707,6 +767,25 @@ export const BranchInventory = () => {
           >
             <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
             {isRtl ? 'إعادة المحاولة' : 'Retry'}
+          </CustomButton>
+        </motion.div>
+      )}
+
+      {!user?.branchId && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8 p-6 bg-yellow-50 border border-yellow-200 rounded-2xl flex items-center gap-4 shadow-md"
+        >
+          <AlertTriangle className="w-6 h-6 text-yellow-600 flex-shrink-0" />
+          <span className="text-yellow-600 font-medium flex-1">
+            {isRtl ? 'معرف الفرع غير متوفر. الرجاء تسجيل الدخول مرة أخرى.' : 'Branch ID is missing. Please log in again.'}
+          </span>
+          <CustomButton
+            onClick={() => (window.location.href = '/login')}
+            className="bg-yellow-600 text-white px-5 py-2.5 rounded-full hover:bg-yellow-700 shadow-sm"
+          >
+            {isRtl ? 'تسجيل الدخول' : 'Log In'}
           </CustomButton>
         </motion.div>
       )}
