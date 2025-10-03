@@ -3,11 +3,11 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { inventoryAPI, ordersAPI, returnsAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
-import { CustomInput } from '../components/UI/CustomInput';
+import { Input } from '../components/UI/Input';
 import { Button } from '../components/UI/Button';
 import { Modal } from '../components/UI/Modal';
 import { Select } from '../components/UI/Select';
-import { Package, AlertCircle, Search, RefreshCw, History as HistoryIcon } from 'lucide-react';
+import { Package, AlertCircle, Search, RefreshCw, History as HistoryIcon, Edit, X, Plus } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -59,16 +59,30 @@ interface Order {
     quantity: number;
     returnedQuantity?: number;
   }>;
+  status: string;
 }
 
-interface ReturnForm {
-  orderId: string;
+interface ReturnItem {
   itemId: string;
   productId: string;
   quantity: number;
   reason: string;
-  notes: string;
+  maxQuantity: number;
 }
+
+interface ReturnForm {
+  orderId: string;
+  reason: string;
+  notes: string;
+  items: ReturnItem[];
+}
+
+interface EditForm {
+  minStockLevel: number;
+  maxStockLevel: number;
+}
+
+const ITEMS_PER_PAGE = 10;
 
 const InventoryCardSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
   <motion.div
@@ -89,6 +103,34 @@ const InventoryCardSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
   </motion.div>
 );
 
+const Pagination: React.FC<{ totalPages: number; currentPage: number; setCurrentPage: (page: number) => void; isRtl: boolean }> = ({ totalPages, currentPage, setCurrentPage, isRtl }) => (
+  totalPages > 1 && (
+    <div className={`flex items-center justify-center gap-3 mt-6 ${isRtl ? 'flex-row-reverse' : ''}`}>
+      <Button
+        variant="secondary"
+        size="md"
+        onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
+        disabled={currentPage === 1}
+        className="disabled:opacity-50 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
+      >
+        {isRtl ? 'السابق' : 'Previous'}
+      </Button>
+      <span className="text-gray-700 font-medium">
+        {isRtl ? `الصفحة ${currentPage} من ${totalPages}` : `Page ${currentPage} of ${totalPages}`}
+      </span>
+      <Button
+        variant="secondary"
+        size="md"
+        onClick={() => setCurrentPage(Math.min(currentPage + 1, totalPages))}
+        disabled={currentPage === totalPages}
+        className="disabled:opacity-50 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
+      >
+        {isRtl ? 'التالي' : 'Next'}
+      </Button>
+    </div>
+  )
+);
+
 export const BranchInventory: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
@@ -98,16 +140,22 @@ export const BranchInventory: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('');
   const [activeTab, setActiveTab] = useState<'inventory' | 'history'>('inventory');
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   const [returnForm, setReturnForm] = useState<ReturnForm>({
     orderId: '',
-    itemId: '',
-    productId: '',
-    quantity: 1,
     reason: '',
     notes: '',
+    items: [],
+  });
+  const [editForm, setEditForm] = useState<EditForm>({
+    minStockLevel: 0,
+    maxStockLevel: 0,
   });
   const [returnErrors, setReturnErrors] = useState({});
+  const [editErrors, setEditErrors] = useState({});
+  const [availableItems, setAvailableItems] = useState<any[]>([]);
 
   const socket = useMemo<Socket | null>(() => {
     const apiUrl = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app';
@@ -129,7 +177,7 @@ export const BranchInventory: React.FC = () => {
   }, [isRtl]);
 
   const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError, refetch: refetchInventory } = useQuery({
-    queryKey: ['inventory', user?.branchId],
+    queryKey: ['inventory', user?.branchId, language],
     queryFn: () => inventoryAPI.getByBranch(user?.branchId || ''),
     enabled: !!user?.branchId,
     select: (response) => {
@@ -160,16 +208,39 @@ export const BranchInventory: React.FC = () => {
   });
 
   const { data: historyData, isLoading: historyLoading, error: historyError } = useQuery({
-    queryKey: ['inventoryHistory', user?.branchId],
+    queryKey: ['inventoryHistory', user?.branchId, language],
     queryFn: () => inventoryAPI.getHistory({ branchId: user?.branchId }),
     enabled: activeTab === 'history' && !!user?.branchId,
   });
 
   const { data: ordersData, isLoading: ordersLoading } = useQuery({
-    queryKey: ['orders', user?.branchId],
+    queryKey: ['orders', user?.branchId, language],
     queryFn: () => ordersAPI.getAll({ branch: user?.branchId, status: 'delivered' }),
     enabled: !!user?.branchId,
-    select: (response) => response?.returns || [],
+    select: (response) => response?.orders || [],
+  });
+
+  useQuery({
+    queryKey: ['selectedOrder', returnForm.orderId, language],
+    queryFn: () => {
+      if (!returnForm.orderId) return null;
+      return ordersAPI.getById(returnForm.orderId);
+    },
+    onSuccess: (order) => {
+      if (order) {
+        const items = order.items.map((i: any) => ({
+          itemId: i._id,
+          productId: i.product._id,
+          productName: isRtl ? i.product.name : i.product.nameEn || i.product.name,
+          available: i.quantity - (i.returnedQuantity || 0),
+          unit: isRtl ? i.product.unit || t('products.unit_unknown') : i.product.unitEn || i.product.unit || 'N/A',
+          departmentName: isRtl ? i.product.department.name : i.product.department.nameEn || i.product.department.name,
+          stock: inventoryData?.find((inv: any) => inv.product._id === i.product._id)?.currentStock || 0,
+        }));
+        setAvailableItems(items);
+      }
+    },
+    enabled: !!returnForm.orderId,
   });
 
   useEffect(() => {
@@ -187,12 +258,14 @@ export const BranchInventory: React.FC = () => {
       if (branchId === user?.branchId) {
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
         queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
+        queryClient.invalidateQueries({ queryKey: ['orders'] });
       }
     });
     socket.on('returnStatusUpdated', ({ branchId }) => {
       if (branchId === user?.branchId) {
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
         queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
+        queryClient.invalidateQueries({ queryKey: ['orders'] });
       }
     });
 
@@ -213,6 +286,7 @@ export const BranchInventory: React.FC = () => {
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     debouncedSearch(e.target.value);
+    setCurrentPage(1);
   };
 
   const statusOptions = useMemo(
@@ -246,35 +320,112 @@ export const BranchInventory: React.FC = () => {
     [inventoryData, searchQuery, filterStatus]
   );
 
+  const paginatedInventory = useMemo(
+    () => filteredInventory.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+    [filteredInventory, currentPage]
+  );
+
+  const totalInventoryPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
+
+  const filteredHistory = useMemo(
+    () => (historyData || []).filter(
+      (entry) =>
+        (entry.product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          entry.product.nameEn.toLowerCase().includes(searchQuery.toLowerCase())) &&
+        (!filterStatus || entry.action === filterStatus)
+    ),
+    [historyData, searchQuery, filterStatus]
+  );
+
+  const paginatedHistory = useMemo(
+    () => filteredHistory.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+    [filteredHistory, currentPage]
+  );
+
+  const totalHistoryPages = Math.ceil(filteredHistory.length / ITEMS_PER_PAGE);
+
+  const handleOpenReturnModal = (item: InventoryItem) => {
+    setSelectedItem(item);
+    setReturnForm({ orderId: '', reason: '', notes: '', items: [{ itemId: '', productId: item.product._id, quantity: 1, reason: '', maxQuantity: 0 }] });
+    setReturnErrors({});
+    setIsReturnModalOpen(true);
+  };
+
+  const handleOpenEditModal = (item: InventoryItem) => {
+    setSelectedItem(item);
+    setEditForm({ minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
+    setEditErrors({});
+    setIsEditModalOpen(true);
+  };
+
+  const addItemToForm = () => {
+    setReturnForm((prev) => ({
+      ...prev,
+      items: [...prev.items, { itemId: '', productId: '', quantity: 1, reason: '', maxQuantity: 0 }],
+    }));
+  };
+
+  const updateItemInForm = (index: number, field: string, value: any) => {
+    setReturnForm((prev) => {
+      const newItems = [...prev.items];
+      newItems[index] = { ...newItems[index], [field]: value };
+      if (field === 'itemId') {
+        const sel = availableItems.find((a) => a.itemId === value);
+        if (sel) {
+          newItems[index].productId = sel.productId;
+          newItems[index].maxQuantity = Math.min(sel.available, sel.stock);
+        }
+      }
+      return { ...prev, items: newItems };
+    });
+  };
+
+  const removeItemFromForm = (index: number) => {
+    setReturnForm((prev) => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index),
+    }));
+  };
+
   const validateReturnForm = useCallback(() => {
     const errors: any = {};
     if (!returnForm.orderId) errors.orderId = t('errors.required', { field: t('returns.order') });
-    if (!returnForm.itemId) errors.itemId = t('errors.required', { field: t('returns.item') });
     if (!returnForm.reason) errors.reason = t('errors.required', { field: t('returns.reason') });
-    const selectedOrder = ordersData?.find((order: Order) => order._id === returnForm.orderId);
-    const selectedItem = selectedOrder?.items.find((item) => item._id === returnForm.itemId);
-    if (selectedItem && (returnForm.quantity < 1 || returnForm.quantity > (selectedItem.quantity - (selectedItem.returnedQuantity || 0)))) {
-      errors.quantity = t('errors.invalid_quantity_max', { max: selectedItem.quantity - (selectedItem.returnedQuantity || 0) });
-    }
+    if (returnForm.items.length === 0) errors.items = t('errors.required', { field: t('returns.items') });
+    returnForm.items.forEach((item, index) => {
+      if (!item.itemId) errors[`item_${index}_itemId`] = t('errors.required', { field: t('returns.item') });
+      if (!item.reason) errors[`item_${index}_reason`] = t('errors.required', { field: t('returns.reason') });
+      if (item.quantity < 1 || item.quantity > item.maxQuantity || isNaN(item.quantity)) {
+        errors[`item_${index}_quantity`] = t('errors.invalid_quantity_max', { max: item.maxQuantity });
+      }
+    });
     setReturnErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [returnForm, ordersData, t]);
+  }, [returnForm, t]);
+
+  const validateEditForm = useCallback(() => {
+    const errors: any = {};
+    if (editForm.minStockLevel < 0) errors.minStockLevel = t('errors.non_negative', { field: t('inventory.min_stock') });
+    if (editForm.maxStockLevel < 0) errors.maxStockLevel = t('errors.non_negative', { field: t('inventory.max_stock') });
+    if (editForm.maxStockLevel <= editForm.minStockLevel) errors.maxStockLevel = t('errors.max_greater_min');
+    setEditErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [editForm, t]);
 
   const createReturnMutation = useMutation({
     mutationFn: async () => {
       if (!validateReturnForm()) throw new Error(t('errors.invalid_form'));
       return returnsAPI.createReturn({
         orderId: returnForm.orderId,
+        branchId: user?.branchId,
         reason: returnForm.reason,
         notes: returnForm.notes,
-        items: [
-          {
-            itemId: returnForm.itemId,
-            productId: returnForm.productId,
-            quantity: returnForm.quantity,
-            reason: returnForm.reason,
-          },
-        ],
+        items: returnForm.items.map((item) => ({
+          itemId: item.itemId,
+          productId: item.productId,
+          quantity: item.quantity,
+          reason: item.reason,
+        })),
       });
     },
     onSuccess: () => {
@@ -282,25 +433,46 @@ export const BranchInventory: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
       setIsReturnModalOpen(false);
-      setReturnForm({ orderId: '', itemId: '', productId: '', quantity: 1, reason: '', notes: '' });
+      setReturnForm({ orderId: '', reason: '', notes: '', items: [] });
       setReturnErrors({});
+      setAvailableItems([]);
       setSelectedItem(null);
       toast.success(t('returns.create_success'));
     },
     onError: (err: any) => {
-      toast.error(err.message || t('errors.create_return'));
+      const errorMessage = err.response?.data?.message || err.message || t('errors.create_return');
+      toast.error(errorMessage);
+      if (err.response?.data?.errors) {
+        const backendErrors = err.response.data.errors.reduce((acc: any, error: any) => {
+          acc[error.path] = error.msg;
+          return acc;
+        }, {});
+        setReturnErrors(backendErrors);
+      }
     },
   });
 
-  const handleOpenReturnModal = (item: InventoryItem) => {
-    setSelectedItem(item);
-    setReturnForm({ orderId: '', itemId: '', productId: item.product._id, quantity: 1, reason: '', notes: '' });
-    setIsReturnModalOpen(true);
-  };
-
-  const handleCreateReturn = () => {
-    createReturnMutation.mutate();
-  };
+  const updateInventoryMutation = useMutation({
+    mutationFn: async () => {
+      if (!validateEditForm()) throw new Error(t('errors.invalid_form'));
+      if (!selectedItem) throw new Error(t('errors.no_item_selected'));
+      return inventoryAPI.update(selectedItem._id, {
+        minStockLevel: editForm.minStockLevel,
+        maxStockLevel: editForm.maxStockLevel,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      setIsEditModalOpen(false);
+      setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
+      setEditErrors({});
+      setSelectedItem(null);
+      toast.success(t('inventory.update_success'));
+    },
+    onError: (err: any) => {
+      toast.error(err.message || t('errors.update_inventory'));
+    },
+  });
 
   const errorMessage = inventoryError?.message || historyError?.message || '';
 
@@ -333,16 +505,20 @@ export const BranchInventory: React.FC = () => {
         </div>
       )}
 
-      <div className="flex mb-4">
+      <div className="flex mb-4 overflow-hidden rounded-full bg-white shadow-md">
         <Button
           onClick={() => setActiveTab('inventory')}
-          className={`flex-1 py-2 ${activeTab === 'inventory' ? 'bg-amber-600 text-white' : 'bg-white text-gray-700'} rounded-l-lg`}
+          className={`flex-1 py-2 font-semibold transition-all duration-300 ${
+            activeTab === 'inventory' ? 'bg-amber-600 text-white' : 'text-gray-700'
+          }`}
         >
           {isRtl ? 'المخزون' : 'Inventory'}
         </Button>
         <Button
           onClick={() => setActiveTab('history')}
-          className={`flex-1 py-2 ${activeTab === 'history' ? 'bg-amber-600 text-white' : 'bg-white text-gray-700'} rounded-r-lg`}
+          className={`flex-1 py-2 font-semibold transition-all duration-300 ${
+            activeTab === 'history' ? 'bg-amber-600 text-white' : 'text-gray-700'
+          }`}
         >
           <HistoryIcon className="inline w-4 h-4 mr-2" />
           {isRtl ? 'سجل الحركات' : 'Movement History'}
@@ -355,7 +531,7 @@ export const BranchInventory: React.FC = () => {
             <Search
               className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 ${isRtl ? 'right-3' : 'left-3'}`}
             />
-            <CustomInput
+            <Input
               placeholder={isRtl ? 'ابحث...' : 'Search...'}
               onChange={handleSearchChange}
               className={`pl-10 pr-4 py-2 border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 ${isRtl ? 'pr-10 pl-4' : ''}`}
@@ -363,126 +539,174 @@ export const BranchInventory: React.FC = () => {
           </div>
           <Select
             value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
+            onChange={(e) => {
+              setFilterStatus(e.target.value);
+              setCurrentPage(1);
+            }}
             options={statusOptions}
             label={isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}
           />
         </div>
       </Card>
 
-      {activeTab === 'inventory' ? (
-        inventoryLoading ? (
-          <div className="space-y-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <InventoryCardSkeleton key={i} isRtl={isRtl} />
-            ))}
-          </div>
-        ) : filteredInventory.length === 0 ? (
-          <Card className="p-8 text-center bg-white rounded-xl shadow-md">
-            <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600">{isRtl ? 'لا توجد عناصر' : 'No items'}</p>
-          </Card>
-        ) : (
-          <div className="space-y-4">
-            <AnimatePresence>
-              {filteredInventory.map((item) => (
-                <motion.div
-                  key={item._id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <Card className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-shadow">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900">{isRtl ? item.product.name : item.product.nameEn}</h3>
-                        <p className="text-sm text-gray-500">{isRtl ? 'الكود' : 'Code'}: {item.product.code}</p>
-                        <p className="text-sm text-gray-600">{isRtl ? 'المخزون' : 'Stock'}: {item.currentStock}</p>
-                        <p className="text-sm text-gray-600">{isRtl ? 'الحد الأدنى' : 'Min'}: {item.minStockLevel}</p>
-                        <p className="text-sm text-gray-600">{isRtl ? 'الحد الأقصى' : 'Max'}: {item.maxStockLevel}</p>
-                        <p className="text-sm text-gray-600">{isRtl ? 'الوحدة' : 'Unit'}: {isRtl ? item.product.unit : item.product.unitEn}</p>
-                        <p className="text-sm text-gray-600">{isRtl ? 'القسم' : 'Department'}: {isRtl ? item.product.department.name : item.product.department.nameEn}</p>
-                        <p className={`text-sm font-medium ${
-                          item.status === 'low' ? 'text-red-600' : item.status === 'full' ? 'text-yellow-600' : 'text-green-600'
-                        }`}>
-                          {isRtl
-                            ? item.status === 'low' ? 'منخفض' : item.status === 'full' ? 'ممتلئ' : 'عادي'
-                            : item.status}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          disabled={item.currentStock <= 0}
-                          onClick={() => handleOpenReturnModal(item)}
-                          className="text-red-600 hover:text-red-800 disabled:opacity-50"
-                        >
-                          {isRtl ? 'إرجاع' : 'Return'}
-                        </Button>
-                      </div>
-                    </div>
-                  </Card>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-        )
-      ) : (
-        historyLoading ? (
-          <div className="text-center py-8">{isRtl ? 'جاري التحميل...' : 'Loading...'}</div>
-        ) : (historyData || []).length === 0 ? (
-          <Card className="p-8 text-center">
-            <HistoryIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600">{isRtl ? 'لا توجد حركات' : 'No history'}</p>
-          </Card>
-        ) : (
-          <Card className="p-4 bg-white rounded-xl shadow-md">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'التاريخ' : 'Date'}</th>
-                  <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'الإجراء' : 'Action'}</th>
-                  <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'الكمية' : 'Quantity'}</th>
-                  <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'المرجع' : 'Reference'}</th>
-                  <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'بواسطة' : 'By'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(historyData || []).map((entry: InventoryHistoryItem) => (
-                  <tr key={entry._id} className="border-b">
-                    <td className="p-2">{new Date(entry.createdAt).toLocaleString()}</td>
-                    <td className="p-2">{isRtl ? t(`history.${entry.action}`) : entry.action}</td>
-                    <td className="p-2">{entry.quantity}</td>
-                    <td className="p-2">{entry.reference}</td>
-                    <td className="p-2">{entry.createdBy.username}</td>
-                  </tr>
+      <AnimatePresence mode="wait">
+        {activeTab === 'inventory' ? (
+          <motion.div
+            key="inventory"
+            initial={{ opacity: 0, x: isRtl ? -50 : 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: isRtl ? 50 : -50 }}
+            transition={{ duration: 0.3 }}
+          >
+            {inventoryLoading ? (
+              <div className="space-y-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <InventoryCardSkeleton key={i} isRtl={isRtl} />
                 ))}
-              </tbody>
-            </table>
-          </Card>
-        )
-      )}
+              </div>
+            ) : paginatedInventory.length === 0 ? (
+              <Card className="p-8 text-center bg-white rounded-xl shadow-md">
+                <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">{isRtl ? 'لا توجد عناصر' : 'No items'}</p>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                <AnimatePresence>
+                  {paginatedInventory.map((item) => (
+                    <motion.div
+                      key={item._id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <Card className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-shadow">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-900">{isRtl ? item.product.name : item.product.nameEn}</h3>
+                            <p className="text-sm text-gray-500">{isRtl ? 'الكود' : 'Code'}: {item.product.code}</p>
+                            <p className="text-sm text-gray-600">{isRtl ? 'المخزون' : 'Stock'}: {item.currentStock}</p>
+                            <p className="text-sm text-gray-600">{isRtl ? 'الحد الأدنى' : 'Min'}: {item.minStockLevel}</p>
+                            <p className="text-sm text-gray-600">{isRtl ? 'الحد الأقصى' : 'Max'}: {item.maxStockLevel}</p>
+                            <p className="text-sm text-gray-600">{isRtl ? 'الوحدة' : 'Unit'}: {isRtl ? item.product.unit : item.product.unitEn}</p>
+                            <p className="text-sm text-gray-600">{isRtl ? 'القسم' : 'Department'}: {isRtl ? item.product.department.name : item.product.department.nameEn}</p>
+                            <p className={`text-sm font-medium ${
+                              item.status === 'low' ? 'text-red-600' : item.status === 'full' ? 'text-yellow-600' : 'text-green-600'
+                            }`}>
+                              {isRtl
+                                ? item.status === 'low' ? 'منخفض' : item.status === 'full' ? 'ممتلئ' : 'عادي'
+                                : item.status}
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => handleOpenEditModal(item)}
+                              className="text-blue-600 hover:text-blue-800"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              disabled={item.currentStock <= 0}
+                              onClick={() => handleOpenReturnModal(item)}
+                              className="text-red-600 hover:text-red-800 disabled:opacity-50"
+                            >
+                              {isRtl ? 'إرجاع' : 'Return'}
+                            </Button>
+                          </div>
+                        </div>
+                      </Card>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+                <Pagination
+                  totalPages={totalInventoryPages}
+                  currentPage={currentPage}
+                  setCurrentPage={setCurrentPage}
+                  isRtl={isRtl}
+                />
+              </div>
+            )}
+          </motion.div>
+        ) : (
+          <motion.div
+            key="history"
+            initial={{ opacity: 0, x: isRtl ? 50 : -50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: isRtl ? -50 : 50 }}
+            transition={{ duration: 0.3 }}
+          >
+            {historyLoading ? (
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-amber-600 mx-auto"></div>
+              </div>
+            ) : paginatedHistory.length === 0 ? (
+              <Card className="p-8 text-center bg-white rounded-xl shadow-md">
+                <HistoryIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">{isRtl ? 'لا توجد حركات' : 'No history'}</p>
+              </Card>
+            ) : (
+              <Card className="p-4 bg-white rounded-xl shadow-md">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'التاريخ' : 'Date'}</th>
+                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'الإجراء' : 'Action'}</th>
+                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'الكمية' : 'Quantity'}</th>
+                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'المرجع' : 'Reference'}</th>
+                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'بواسطة' : 'By'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedHistory.map((entry: InventoryHistoryItem) => (
+                      <tr key={entry._id} className="border-b">
+                        <td className="p-2">{new Date(entry.createdAt).toLocaleString()}</td>
+                        <td className="p-2">{isRtl ? t(`history.${entry.action}`) : entry.action}</td>
+                        <td className="p-2">{entry.quantity}</td>
+                        <td className="p-2">{entry.reference}</td>
+                        <td className="p-2">{entry.createdBy.username}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <Pagination
+                  totalPages={totalHistoryPages}
+                  currentPage={currentPage}
+                  setCurrentPage={setCurrentPage}
+                  isRtl={isRtl}
+                />
+              </Card>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Return Modal */}
       <Modal
         isOpen={isReturnModalOpen}
-        onClose={() => setIsReturnModalOpen(false)}
+        onClose={() => {
+          setIsReturnModalOpen(false);
+          setReturnForm({ orderId: '', reason: '', notes: '', items: [] });
+          setReturnErrors({});
+          setAvailableItems([]);
+          setSelectedItem(null);
+        }}
         title={isRtl ? 'إنشاء إرجاع' : 'Create Return'}
       >
         <div className="flex flex-col gap-4">
-          <p className="text-sm text-gray-600">
-            {isRtl ? 'المنتج' : 'Product'}: {isRtl ? selectedItem?.product.name : selectedItem?.product.nameEn}
-          </p>
-          <p className="text-sm text-gray-600">
-            {isRtl ? 'الكمية المتاحة' : 'Available'}: {selectedItem?.currentStock}
-          </p>
+          {selectedItem && (
+            <p className="text-sm text-gray-600">
+              {isRtl ? 'المنتج' : 'Product'}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
+            </p>
+          )}
           <Select
             label={isRtl ? 'الطلب' : 'Order'}
             value={returnForm.orderId}
             onChange={(e) => {
-              setReturnForm({ ...returnForm, orderId: e.target.value, itemId: '' });
+              setReturnForm({ ...returnForm, orderId: e.target.value, items: [] });
             }}
             options={[{ value: '', label: isRtl ? 'اختر طلبًا' : 'Select Order' }].concat(
               (ordersData || []).map((order: Order) => ({
@@ -493,59 +717,149 @@ export const BranchInventory: React.FC = () => {
             error={returnErrors.orderId}
           />
           <Select
-            label={isRtl ? 'العنصر' : 'Item'}
-            value={returnForm.itemId}
-            onChange={(e) => {
-              const selectedOrder = ordersData?.find((order: Order) => order._id === returnForm.orderId);
-              const selectedItem = selectedOrder?.items.find((item) => item._id === e.target.value);
-              setReturnForm({
-                ...returnForm,
-                itemId: e.target.value,
-                productId: selectedItem?.product._id || returnForm.productId,
-              });
-            }}
-            options={[{ value: '', label: isRtl ? 'اختر عنصرًا' : 'Select Item' }].concat(
-              (ordersData?.find((order: Order) => order._id === returnForm.orderId)?.items || [])
-                .filter((item) => item.product._id === selectedItem?.product._id)
-                .map((item) => ({
-                  value: item._id,
-                  label: isRtl ? item.product.name : item.product.nameEn,
-                }))
-            )}
-            error={returnErrors.itemId}
-            disabled={!returnForm.orderId}
-          />
-          <CustomInput
-            label={isRtl ? 'الكمية' : 'Quantity'}
-            type="number"
-            min={1}
-            max={
-              ordersData?.find((order: Order) => order._id === returnForm.orderId)?.items.find((item) => item._id === returnForm.itemId)
-                ?.quantity - (ordersData?.find((order: Order) => order._id === returnForm.orderId)?.items.find((item) => item._id === returnForm.itemId)?.returnedQuantity || 0)
-            }
-            value={returnForm.quantity}
-            onChange={(e) => setReturnForm({ ...returnForm, quantity: Number(e.target.value) })}
-            error={returnErrors.quantity}
-          />
-          <Select
             label={isRtl ? 'السبب' : 'Reason'}
             value={returnForm.reason}
             onChange={(e) => setReturnForm({ ...returnForm, reason: e.target.value })}
             options={reasonOptions}
             error={returnErrors.reason}
           />
-          <CustomInput
+          <Input
             label={isRtl ? 'ملاحظات' : 'Notes'}
             value={returnForm.notes}
             onChange={(e) => setReturnForm({ ...returnForm, notes: e.target.value })}
+            placeholder={isRtl ? 'أدخل ملاحظات إضافية' : 'Enter additional notes'}
           />
-          <Button
-            onClick={handleCreateReturn}
-            disabled={createReturnMutation.isPending}
-            className="bg-amber-600 text-white hover:bg-amber-700"
-          >
-            {createReturnMutation.isPending ? (isRtl ? 'جاري...' : 'Submitting...') : isRtl ? 'إرسال' : 'Submit'}
-          </Button>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'العناصر' : 'Items'}</label>
+            {returnForm.items.map((item, index) => (
+              <div key={index} className="flex gap-2 mb-2 items-center">
+                <Select
+                  value={item.itemId}
+                  onChange={(e) => updateItemInForm(index, 'itemId', e.target.value)}
+                  options={[{ value: '', label: isRtl ? 'اختر عنصرًا' : 'Select Item' }].concat(
+                    availableItems.map((a) => ({
+                      value: a.itemId,
+                      label: `${a.productName} (${a.available} ${isRtl ? 'متاح' : 'available'})`,
+                    }))
+                  )}
+                  error={returnErrors[`item_${index}_itemId`]}
+                  disabled={!returnForm.orderId}
+                />
+                <Input
+                  type="number"
+                  min={1}
+                  max={item.maxQuantity}
+                  value={item.quantity}
+                  onChange={(e) => updateItemInForm(index, 'quantity', Number(e.target.value))}
+                  error={returnErrors[`item_${index}_quantity`]}
+                  className="w-24"
+                />
+                <Select
+                  value={item.reason}
+                  onChange={(e) => updateItemInForm(index, 'reason', e.target.value)}
+                  options={reasonOptions}
+                  error={returnErrors[`item_${index}_reason`]}
+                />
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => removeItemFromForm(index)}
+                  className="text-red-600 hover:text-red-800"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
+            {returnErrors.items && <p className="text-red-500 text-sm mt-1">{returnErrors.items}</p>}
+            <Button
+              variant="secondary"
+              onClick={addItemToForm}
+              className="mt-2 bg-gray-100 hover:bg-gray-200 text-gray-800"
+              disabled={availableItems.length === 0}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              {isRtl ? 'إضافة عنصر' : 'Add Item'}
+            </Button>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setIsReturnModalOpen(false);
+                setReturnForm({ orderId: '', reason: '', notes: '', items: [] });
+                setReturnErrors({});
+                setAvailableItems([]);
+                setSelectedItem(null);
+              }}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-800"
+            >
+              {isRtl ? 'إلغاء' : 'Cancel'}
+            </Button>
+            <Button
+              onClick={() => createReturnMutation.mutate()}
+              disabled={createReturnMutation.isPending}
+              className="bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+            >
+              {createReturnMutation.isPending ? (isRtl ? 'جاري...' : 'Submitting...') : isRtl ? 'إرسال' : 'Submit'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit Stock Levels Modal */}
+      <Modal
+        isOpen={isEditModalOpen}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
+          setEditErrors({});
+          setSelectedItem(null);
+        }}
+        title={isRtl ? 'تعديل حدود المخزون' : 'Edit Stock Limits'}
+      >
+        <div className="flex flex-col gap-4">
+          {selectedItem && (
+            <p className="text-sm text-gray-600">
+              {isRtl ? 'المنتج' : 'Product'}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
+            </p>
+          )}
+          <Input
+            label={isRtl ? 'الحد الأدنى للمخزون' : 'Minimum Stock Level'}
+            type="number"
+            min={0}
+            value={editForm.minStockLevel}
+            onChange={(e) => setEditForm({ ...editForm, minStockLevel: Number(e.target.value) })}
+            error={editErrors.minStockLevel}
+          />
+          <Input
+            label={isRtl ? 'الحد الأقصى للمخزون' : 'Maximum Stock Level'}
+            type="number"
+            min={0}
+            value={editForm.maxStockLevel}
+            onChange={(e) => setEditForm({ ...editForm, maxStockLevel: Number(e.target.value) })}
+            error={editErrors.maxStockLevel}
+          />
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setIsEditModalOpen(false);
+                setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
+                setEditErrors({});
+                setSelectedItem(null);
+              }}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-800"
+            >
+              {isRtl ? 'إلغاء' : 'Cancel'}
+            </Button>
+            <Button
+              onClick={() => updateInventoryMutation.mutate()}
+              disabled={updateInventoryMutation.isPending}
+              className="bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
+            >
+              {updateInventoryMutation.isPending ? (isRtl ? 'جاري...' : 'Saving...') : isRtl ? 'حفظ' : 'Save'}
+            </Button>
+          </div>
         </div>
       </Modal>
     </div>
