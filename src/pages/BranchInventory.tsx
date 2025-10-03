@@ -1,9 +1,8 @@
 // src/pages/BranchInventory.tsx
-import React, { useState, useMemo, useCallback ,useEffect } from 'react';
+import React, { useState, useMemo, useCallback , useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { inventoryAPI  } from '../services/api'; // Removed returnsAPI since merged
-
+import { inventoryAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Input } from '../components/UI/Input';
 import { Button } from '../components/UI/Button';
@@ -441,7 +440,7 @@ export const BranchInventory: React.FC = () => {
                           size="sm"
                           disabled={item.currentStock <= 0}
                           onClick={() => handleOpenReturnModal(item)}
-                          className="text-red-600 hover:text-red-800 disabled:opacity-50"
+                          className="text-red-600 hover:text-blue-800 disabled:opacity-50"
                         >
                           {isRtl ? 'إرجاع' : 'Return'}
                         </Button>
