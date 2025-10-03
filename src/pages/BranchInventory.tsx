@@ -2,11 +2,6 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { inventoryAPI, ordersAPI, returnsAPI } from '../services/api';
-import { Card } from '../components/UI/Card';
-import { Input } from '../components/UI/Input';
-import { Button } from '../components/UI/Button';
-import { Modal } from '../components/UI/Modal';
-import { Select } from '../components/UI/Select';
 import { Package, AlertCircle, Search, RefreshCw, History as HistoryIcon, Edit, X, Plus } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { debounce } from 'lodash';
@@ -84,6 +79,73 @@ interface EditForm {
 
 const ITEMS_PER_PAGE = 10;
 
+const CustomCard = ({ className, children }) => (
+  <div className={`bg-white shadow-md rounded-lg ${className}`}>
+    {children}
+  </div>
+);
+
+const CustomInput = ({ label, type = 'text', min, max, value, onChange, error, className, placeholder }) => (
+  <div className="flex flex-col">
+    {label && <label className="text-sm font-medium text-gray-700 mb-1">{label}</label>}
+    <input
+      type={type}
+      min={min}
+      max={max}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      className={`px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 ${error ? 'border-red-500' : ''} ${className}`}
+    />
+    {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+  </div>
+);
+
+const CustomButton = ({ variant = 'primary', size = 'md', onClick, disabled, className, children }) => {
+  let baseClass = 'px-4 py-2 rounded-lg transition-colors duration-200';
+  if (variant === 'secondary') baseClass += ' bg-gray-100 hover:bg-gray-200 text-gray-800';
+  else if (variant === 'destructive' || variant === 'danger') baseClass += ' text-red-600 hover:text-red-800';
+  else baseClass += ' bg-amber-600 text-white hover:bg-amber-700';
+  if (disabled) baseClass += ' opacity-50 cursor-not-allowed';
+  return (
+    <button onClick={onClick} disabled={disabled} className={`${baseClass} ${className}`}>
+      {children}
+    </button>
+  );
+};
+
+const CustomModal = ({ isOpen, onClose, title, children }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold">{title}</h2>
+          <CustomButton onClick={onClose}><X className="w-4 h-4" /></CustomButton>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+};
+
+const CustomSelect = ({ label, value, onChange, options, error, disabled }) => (
+  <div className="flex flex-col">
+    {label && <label className="text-sm font-medium text-gray-700 mb-1">{label}</label>}
+    <select
+      value={value}
+      onChange={onChange}
+      disabled={disabled}
+      className={`px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 ${error ? 'border-red-500' : ''} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+    >
+      {options.map((opt) => (
+        <option key={opt.value} value={opt.value}>{opt.label}</option>
+      ))}
+    </select>
+    {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+  </div>
+);
+
 const InventoryCardSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
@@ -106,7 +168,7 @@ const InventoryCardSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
 const Pagination: React.FC<{ totalPages: number; currentPage: number; setCurrentPage: (page: number) => void; isRtl: boolean }> = ({ totalPages, currentPage, setCurrentPage, isRtl }) => (
   totalPages > 1 && (
     <div className={`flex items-center justify-center gap-3 mt-6 ${isRtl ? 'flex-row-reverse' : ''}`}>
-      <Button
+      <CustomButton
         variant="secondary"
         size="md"
         onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
@@ -114,11 +176,11 @@ const Pagination: React.FC<{ totalPages: number; currentPage: number; setCurrent
         className="disabled:opacity-50 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
       >
         {isRtl ? 'السابق' : 'Previous'}
-      </Button>
+      </CustomButton>
       <span className="text-gray-700 font-medium">
         {isRtl ? `الصفحة ${currentPage} من ${totalPages}` : `Page ${currentPage} of ${totalPages}`}
       </span>
-      <Button
+      <CustomButton
         variant="secondary"
         size="md"
         onClick={() => setCurrentPage(Math.min(currentPage + 1, totalPages))}
@@ -126,7 +188,7 @@ const Pagination: React.FC<{ totalPages: number; currentPage: number; setCurrent
         className="disabled:opacity-50 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
       >
         {isRtl ? 'التالي' : 'Next'}
-      </Button>
+      </CustomButton>
     </div>
   )
 );
@@ -239,7 +301,6 @@ export const BranchInventory: React.FC = () => {
           stock: inventoryData?.find((inv: any) => inv.product._id === i.product._id)?.currentStock || 0,
         }));
         setAvailableItems(items);
-        // If selectedItem is set, auto-add the item if it's in the order
         if (selectedItem) {
           const matchingItem = items.find((a) => a.productId === selectedItem.product._id);
           if (matchingItem) {
@@ -366,7 +427,7 @@ export const BranchInventory: React.FC = () => {
 
   const handleOpenReturnModal = (item: InventoryItem) => {
     setSelectedItem(item);
-    setReturnForm({ orderId: '', reason: '', notes: '', items: [] });  // Reset items, will add after order select
+    setReturnForm({ orderId: '', reason: '', notes: '', items: [] });
     setReturnErrors({});
     setIsReturnModalOpen(true);
   };
@@ -440,12 +501,11 @@ export const BranchInventory: React.FC = () => {
       if (!validateReturnForm()) throw new Error(t('errors.invalid_form'));
       return returnsAPI.createReturn({
         orderId: returnForm.orderId,
-        branchId: user?.branchId,
         reason: returnForm.reason,
         notes: returnForm.notes,
         items: returnForm.items.map((item) => ({
           itemId: item.itemId,
-          productId: item.productId,
+          product: item.productId,
           quantity: item.quantity,
           reason: item.reason,
         })),
@@ -518,26 +578,26 @@ export const BranchInventory: React.FC = () => {
         <div className="mb-6 p-4 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-red-600" />
           <span className="text-red-600">{errorMessage}</span>
-          <Button
+          <CustomButton
             onClick={() => refetchInventory()}
             className="ml-4 bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
             {isRtl ? 'إعادة المحاولة' : 'Retry'}
-          </Button>
+          </CustomButton>
         </div>
       )}
 
       <div className="flex mb-4 overflow-hidden rounded-full bg-white shadow-md">
-        <Button
+        <CustomButton
           onClick={() => setActiveTab('inventory')}
           className={`flex-1 py-2 font-semibold transition-all duration-300 ${
             activeTab === 'inventory' ? 'bg-amber-600 text-white' : 'text-gray-700'
           }`}
         >
           {isRtl ? 'المخزون' : 'Inventory'}
-        </Button>
-        <Button
+        </CustomButton>
+        <CustomButton
           onClick={() => setActiveTab('history')}
           className={`flex-1 py-2 font-semibold transition-all duration-300 ${
             activeTab === 'history' ? 'bg-amber-600 text-white' : 'text-gray-700'
@@ -545,22 +605,22 @@ export const BranchInventory: React.FC = () => {
         >
           <HistoryIcon className="inline w-4 h-4 mr-2" />
           {isRtl ? 'سجل الحركات' : 'Movement History'}
-        </Button>
+        </CustomButton>
       </div>
 
-      <Card className="p-6 mb-6 bg-white rounded-xl shadow-md">
+      <CustomCard className="p-6 mb-6 bg-white rounded-xl shadow-md">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="relative">
             <Search
               className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 ${isRtl ? 'right-3' : 'left-3'}`}
             />
-            <Input
+            <CustomInput
               placeholder={isRtl ? 'ابحث...' : 'Search...'}
               onChange={handleSearchChange}
               className={`pl-10 pr-4 py-2 border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 ${isRtl ? 'pr-10 pl-4' : ''}`}
             />
           </div>
-          <Select
+          <CustomSelect
             value={filterStatus}
             onChange={(e) => {
               const value = e?.target?.value || '';
@@ -571,7 +631,7 @@ export const BranchInventory: React.FC = () => {
             label={isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}
           />
         </div>
-      </Card>
+      </CustomCard>
 
       <AnimatePresence mode="wait">
         {activeTab === 'inventory' ? (
@@ -589,10 +649,10 @@ export const BranchInventory: React.FC = () => {
                 ))}
               </div>
             ) : paginatedInventory.length === 0 ? (
-              <Card className="p-8 text-center bg-white rounded-xl shadow-md">
+              <CustomCard className="p-8 text-center bg-white rounded-xl shadow-md">
                 <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600">{isRtl ? 'لا توجد عناصر' : 'No items'}</p>
-              </Card>
+              </CustomCard>
             ) : (
               <div className="space-y-4">
                 <AnimatePresence>
@@ -604,7 +664,7 @@ export const BranchInventory: React.FC = () => {
                       exit={{ opacity: 0, y: -20 }}
                       transition={{ duration: 0.3 }}
                     >
-                      <Card className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-shadow">
+                      <CustomCard className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-shadow">
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1">
                             <h3 className="font-semibold text-gray-900">{isRtl ? item.product.name : item.product.nameEn}</h3>
@@ -623,15 +683,15 @@ export const BranchInventory: React.FC = () => {
                             </p>
                           </div>
                           <div className="flex gap-2">
-                            <Button
+                            <CustomButton
                               variant="secondary"
                               size="sm"
                               onClick={() => handleOpenEditModal(item)}
                               className="text-blue-600 hover:text-blue-800"
                             >
                               <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button
+                            </CustomButton>
+                            <CustomButton
                               variant="destructive"
                               size="sm"
                               disabled={item.currentStock <= 0}
@@ -639,10 +699,10 @@ export const BranchInventory: React.FC = () => {
                               className="text-red-600 hover:text-red-800 disabled:opacity-50"
                             >
                               {isRtl ? 'إرجاع' : 'Return'}
-                            </Button>
+                            </CustomButton>
                           </div>
                         </div>
-                      </Card>
+                      </CustomCard>
                     </motion.div>
                   ))}
                 </AnimatePresence>
@@ -668,12 +728,12 @@ export const BranchInventory: React.FC = () => {
                 <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-amber-600 mx-auto"></div>
               </div>
             ) : paginatedHistory.length === 0 ? (
-              <Card className="p-8 text-center bg-white rounded-xl shadow-md">
+              <CustomCard className="p-8 text-center bg-white rounded-xl shadow-md">
                 <HistoryIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600">{isRtl ? 'لا توجد حركات' : 'No history'}</p>
-              </Card>
+              </CustomCard>
             ) : (
-              <Card className="p-4 bg-white rounded-xl shadow-md">
+              <CustomCard className="p-4 bg-white rounded-xl shadow-md">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b">
@@ -702,14 +762,14 @@ export const BranchInventory: React.FC = () => {
                   setCurrentPage={setCurrentPage}
                   isRtl={isRtl}
                 />
-              </Card>
+              </CustomCard>
             )}
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Return Modal */}
-      <Modal
+      <CustomModal
         isOpen={isReturnModalOpen}
         onClose={() => {
           setIsReturnModalOpen(false);
@@ -726,7 +786,7 @@ export const BranchInventory: React.FC = () => {
               {isRtl ? 'المنتج' : 'Product'}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
             </p>
           )}
-          <Select
+          <CustomSelect
             label={isRtl ? 'الطلب' : 'Order'}
             value={returnForm.orderId}
             onChange={(e) => {
@@ -741,7 +801,7 @@ export const BranchInventory: React.FC = () => {
             )}
             error={returnErrors.orderId}
           />
-          <Select
+          <CustomSelect
             label={isRtl ? 'السبب' : 'Reason'}
             value={returnForm.reason}
             onChange={(e) => {
@@ -751,7 +811,7 @@ export const BranchInventory: React.FC = () => {
             options={reasonOptions}
             error={returnErrors.reason}
           />
-          <Input
+          <CustomInput
             label={isRtl ? 'ملاحظات' : 'Notes'}
             value={returnForm.notes}
             onChange={(e) => {
@@ -764,7 +824,7 @@ export const BranchInventory: React.FC = () => {
             <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'العناصر' : 'Items'}</label>
             {returnForm.items.map((item, index) => (
               <div key={index} className="flex gap-2 mb-2 items-center">
-                <Select
+                <CustomSelect
                   value={item.itemId}
                   onChange={(e) => {
                     const value = e?.target?.value || '';
@@ -779,7 +839,7 @@ export const BranchInventory: React.FC = () => {
                   error={returnErrors[`item_${index}_itemId`]}
                   disabled={!returnForm.orderId}
                 />
-                <Input
+                <CustomInput
                   type="number"
                   min={1}
                   max={item.maxQuantity ?? 0}
@@ -791,7 +851,7 @@ export const BranchInventory: React.FC = () => {
                   error={returnErrors[`item_${index}_quantity`]}
                   className="w-24"
                 />
-                <Select
+                <CustomSelect
                   value={item.reason}
                   onChange={(e) => {
                     const value = e?.target?.value || '';
@@ -800,18 +860,18 @@ export const BranchInventory: React.FC = () => {
                   options={reasonOptions}
                   error={returnErrors[`item_${index}_reason`]}
                 />
-                <Button
+                <CustomButton
                   variant="danger"
                   size="sm"
                   onClick={() => removeItemFromForm(index)}
                   className="text-red-600 hover:text-red-800"
                 >
                   <X className="w-4 h-4" />
-                </Button>
+                </CustomButton>
               </div>
             ))}
             {returnErrors.items && <p className="text-red-500 text-sm mt-1">{returnErrors.items}</p>}
-            <Button
+            <CustomButton
               variant="secondary"
               onClick={addItemToForm}
               className="mt-2 bg-gray-100 hover:bg-gray-200 text-gray-800"
@@ -819,10 +879,10 @@ export const BranchInventory: React.FC = () => {
             >
               <Plus className="w-4 h-4 mr-2" />
               {isRtl ? 'إضافة عنصر' : 'Add Item'}
-            </Button>
+            </CustomButton>
           </div>
           <div className="flex justify-end gap-2">
-            <Button
+            <CustomButton
               variant="secondary"
               onClick={() => {
                 setIsReturnModalOpen(false);
@@ -834,20 +894,20 @@ export const BranchInventory: React.FC = () => {
               className="bg-gray-100 hover:bg-gray-200 text-gray-800"
             >
               {isRtl ? 'إلغاء' : 'Cancel'}
-            </Button>
-            <Button
+            </CustomButton>
+            <CustomButton
               onClick={() => createReturnMutation.mutate()}
               disabled={createReturnMutation.isPending}
               className="bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
             >
               {createReturnMutation.isPending ? (isRtl ? 'جاري...' : 'Submitting...') : isRtl ? 'إرسال' : 'Submit'}
-            </Button>
+            </CustomButton>
           </div>
         </div>
-      </Modal>
+      </CustomModal>
 
       {/* Edit Stock Levels Modal */}
-      <Modal
+      <CustomModal
         isOpen={isEditModalOpen}
         onClose={() => {
           setIsEditModalOpen(false);
@@ -863,7 +923,7 @@ export const BranchInventory: React.FC = () => {
               {isRtl ? 'المنتج' : 'Product'}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
             </p>
           )}
-          <Input
+          <CustomInput
             label={isRtl ? 'الحد الأدنى للمخزون' : 'Minimum Stock Level'}
             type="number"
             min={0}
@@ -874,7 +934,7 @@ export const BranchInventory: React.FC = () => {
             }}
             error={editErrors.minStockLevel}
           />
-          <Input
+          <CustomInput
             label={isRtl ? 'الحد الأقصى للمخزون' : 'Maximum Stock Level'}
             type="number"
             min={0}
@@ -886,7 +946,7 @@ export const BranchInventory: React.FC = () => {
             error={editErrors.maxStockLevel}
           />
           <div className="flex justify-end gap-2">
-            <Button
+            <CustomButton
               variant="secondary"
               onClick={() => {
                 setIsEditModalOpen(false);
@@ -897,17 +957,17 @@ export const BranchInventory: React.FC = () => {
               className="bg-gray-100 hover:bg-gray-200 text-gray-800"
             >
               {isRtl ? 'إلغاء' : 'Cancel'}
-            </Button>
-            <Button
+            </CustomButton>
+            <CustomButton
               onClick={() => updateInventoryMutation.mutate()}
               disabled={updateInventoryMutation.isPending}
               className="bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
             >
               {updateInventoryMutation.isPending ? (isRtl ? 'جاري...' : 'Saving...') : isRtl ? 'حفظ' : 'Save'}
-            </Button>
+            </CustomButton>
           </div>
         </div>
-      </Modal>
+      </CustomModal>
     </div>
   );
 };
