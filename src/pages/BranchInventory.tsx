@@ -2,11 +2,10 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { inventoryAPI, ordersAPI, returnsAPI } from '../services/api';
-import { Package, AlertCircle, Search, RefreshCw, History as HistoryIcon, Edit, X, Plus, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Package, AlertCircle, Search, RefreshCw, History as HistoryIcon, Edit, X, Plus } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
-
 import { toast } from 'react-toastify';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
@@ -80,15 +79,15 @@ interface EditForm {
 
 const ITEMS_PER_PAGE = 10;
 
-export const CustomCard = ({ className, children }) => (
-  <div className={`bg-white shadow-md rounded-xl overflow-hidden transition-shadow hover:shadow-lg ${className}`}>
+const CustomCard = ({ className, children }) => (
+  <div className={`bg-white shadow-md rounded-lg ${className}`}>
     {children}
   </div>
 );
 
-export const CustomInput = ({ label, type = 'text', min, max, value, onChange, error, className, placeholder }) => (
+const CustomInput = ({ label, type = 'text', min, max, value, onChange, error, className, placeholder }) => (
   <div className="flex flex-col">
-    {label && <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">{label}</label>}
+    {label && <label className="text-sm font-medium text-gray-700 mb-1">{label}</label>}
     <input
       type={type}
       min={min}
@@ -96,16 +95,16 @@ export const CustomInput = ({ label, type = 'text', min, max, value, onChange, e
       value={value}
       onChange={onChange}
       placeholder={placeholder}
-      className={`px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all ${error ? 'border-red-500 animate-shake' : ''} ${className}`}
+      className={`px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 ${error ? 'border-red-500' : ''} ${className}`}
     />
-    {error && <p className="text-red-500 text-sm mt-1 flex items-center gap-1"><AlertTriangle size={14} /> {error}</p>}
+    {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
   </div>
 );
 
-export const CustomButton = ({ variant = 'primary', size = 'md', onClick, disabled, className, children }) => {
-  let baseClass = 'px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-2 font-medium';
-  if (variant === 'secondary') baseClass += ' bg-gray-200 hover:bg-gray-300 text-gray-800';
-  else if (variant === 'destructive' || variant === 'danger') baseClass += ' bg-red-100 hover:bg-red-200 text-red-600';
+const CustomButton = ({ variant = 'primary', size = 'md', onClick, disabled, className, children }) => {
+  let baseClass = 'px-4 py-2 rounded-lg transition-colors duration-200';
+  if (variant === 'secondary') baseClass += ' bg-gray-100 hover:bg-gray-200 text-gray-800';
+  else if (variant === 'destructive' || variant === 'danger') baseClass += ' text-red-600 hover:text-red-800';
   else baseClass += ' bg-amber-600 text-white hover:bg-amber-700';
   if (disabled) baseClass += ' opacity-50 cursor-not-allowed';
   return (
@@ -115,88 +114,78 @@ export const CustomButton = ({ variant = 'primary', size = 'md', onClick, disabl
   );
 };
 
-export const CustomModal = ({ isOpen, onClose, title, children }) => {
+const CustomModal = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50"
-    >
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
-        className="bg-white p-6 rounded-2xl shadow-2xl max-w-md w-full m-4"
-      >
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-gray-800">{title}</h2>
-          <CustomButton variant="secondary" size="sm" onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            <X className="w-5 h-5" />
-          </CustomButton>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold">{title}</h2>
+          <CustomButton onClick={onClose}><X className="w-4 h-4" /></CustomButton>
         </div>
         {children}
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 };
 
-export const CustomSelect = ({ label, value, onChange, options, error, disabled }) => (
+const CustomSelect = ({ label, value, onChange, options, error, disabled }) => (
   <div className="flex flex-col">
-    {label && <label className="text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">{label}</label>}
+    {label && <label className="text-sm font-medium text-gray-700 mb-1">{label}</label>}
     <select
       value={value}
       onChange={onChange}
       disabled={disabled}
-      className={`px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 transition-all ${error ? 'border-red-500 animate-shake' : ''} ${disabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : ''}`}
+      className={`px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 ${error ? 'border-red-500' : ''} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
     >
       {options.map((opt) => (
         <option key={opt.value} value={opt.value}>{opt.label}</option>
       ))}
     </select>
-    {error && <p className="text-red-500 text-sm mt-1 flex items-center gap-1"><AlertTriangle size={14} /> {error}</p>}
+    {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
   </div>
 );
 
-export const InventoryCardSkeleton = ({ isRtl }) => (
+const InventoryCardSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.3 }}
-    className="p-6 mb-6 bg-white shadow-md rounded-2xl border border-gray-100 animate-pulse"
+    className="p-4 mb-4 bg-white shadow-md rounded-lg border border-gray-200"
   >
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <div className={`flex items-center ${isRtl ? 'justify-between flex-row-reverse' : 'justify-between'}`}>
-        <div className="h-7 w-3/5 bg-gray-200 rounded-md" />
-        <div className="h-6 w-24 bg-gray-200 rounded-full" />
+        <div className="h-6 w-1/2 bg-gray-200 rounded animate-pulse" />
+        <div className="h-5 w-20 bg-gray-200 rounded-full animate-pulse" />
       </div>
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="h-5 w-1/2 bg-gray-200 rounded" />
-      ))}
+      <div className="h-4 w-1/3 bg-gray-200 rounded animate-pulse" />
+      <div className="h-4 w-1/4 bg-gray-200 rounded animate-pulse" />
+      <div className="h-4 w-1/4 bg-gray-200 rounded animate-pulse" />
     </div>
   </motion.div>
 );
 
-export const Pagination = ({ totalPages, currentPage, setCurrentPage, isRtl }) => (
+const Pagination: React.FC<{ totalPages: number; currentPage: number; setCurrentPage: (page: number) => void; isRtl: boolean }> = ({ totalPages, currentPage, setCurrentPage, isRtl }) => (
   totalPages > 1 && (
-    <div className={`flex items-center justify-center gap-4 mt-8 ${isRtl ? 'flex-row-reverse' : ''}`}>
+    <div className={`flex items-center justify-center gap-3 mt-6 ${isRtl ? 'flex-row-reverse' : ''}`}>
       <CustomButton
         variant="secondary"
+        size="md"
         onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
         disabled={currentPage === 1}
-        className="rounded-full px-5 py-2.5 shadow-sm hover:shadow-md"
+        className="disabled:opacity-50 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
       >
         {isRtl ? 'السابق' : 'Previous'}
       </CustomButton>
-      <span className="text-gray-700 font-semibold bg-gray-100 px-5 py-2.5 rounded-full shadow-sm">
+      <span className="text-gray-700 font-medium">
         {isRtl ? `الصفحة ${currentPage} من ${totalPages}` : `Page ${currentPage} of ${totalPages}`}
       </span>
       <CustomButton
         variant="secondary"
+        size="md"
         onClick={() => setCurrentPage(Math.min(currentPage + 1, totalPages))}
         disabled={currentPage === totalPages}
-        className="rounded-full px-5 py-2.5 shadow-sm hover:shadow-md"
+        className="disabled:opacity-50 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
       >
         {isRtl ? 'التالي' : 'Next'}
       </CustomButton>
@@ -204,7 +193,7 @@ export const Pagination = ({ totalPages, currentPage, setCurrentPage, isRtl }) =
   )
 );
 
-const BranchInventory = () => {
+export const BranchInventory: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
@@ -531,11 +520,11 @@ const BranchInventory = () => {
       setReturnErrors({});
       setAvailableItems([]);
       setSelectedItem(null);
-      toast.success(t('returns.create_success'), { icon: <CheckCircle className="text-green-500" /> });
+      toast.success(t('returns.create_success'));
     },
     onError: (err: any) => {
       const errorMessage = err.response?.data?.message || err.message || t('errors.create_return');
-      toast.error(errorMessage, { icon: <AlertCircle className="text-red-500" /> });
+      toast.error(errorMessage);
       if (err.response?.data?.errors) {
         const backendErrors = err.response.data.errors.reduce((acc: any, error: any) => {
           acc[error.path] = error.msg;
@@ -561,10 +550,10 @@ const BranchInventory = () => {
       setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
       setEditErrors({});
       setSelectedItem(null);
-      toast.success(t('inventory.update_success'), { icon: <CheckCircle className="text-green-500" /> });
+      toast.success(t('inventory.update_success'));
     },
     onError: (err: any) => {
-      toast.error(err.message || t('errors.update_inventory'), { icon: <AlertCircle className="text-red-500" /> });
+      toast.error(err.message || t('errors.update_inventory'));
     },
   });
 
@@ -572,78 +561,74 @@ const BranchInventory = () => {
 
   return (
     <div
-      className="container mx-auto px-4 py-8 min-h-screen bg-gradient-to-br from-amber-50/80 to-teal-50/80 backdrop-blur-sm"
+      className="container mx-auto px-4 py-6 min-h-screen bg-gradient-to-br from-amber-50 to-teal-50"
       dir={isRtl ? 'rtl' : 'ltr'}
     >
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold text-gray-900 flex items-center gap-3">
-          <Package className="w-10 h-10 text-amber-600 animate-pulse" />
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+          <Package className="w-8 h-8 text-amber-600" />
           {isRtl ? 'المخزون' : 'Inventory'}
         </h1>
-        <p className="text-gray-600 mt-2 text-lg">
-          {isRtl ? 'إدارة مخزون الفرع بكفاءة' : 'Efficiently manage branch inventory'}
+        <p className="text-gray-600 mt-2">
+          {isRtl ? 'إدارة مخزون الفرع' : 'Manage branch inventory'}
         </p>
       </div>
 
       {errorMessage && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8 p-6 bg-red-50 border border-red-200 rounded-2xl flex items-center gap-4 shadow-md"
-        >
-          <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0" />
-          <span className="text-red-600 font-medium flex-1">{errorMessage}</span>
+        <div className="mb-6 p-4 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <span className="text-red-600">{errorMessage}</span>
           <CustomButton
             onClick={() => refetchInventory()}
-            className="bg-red-600 text-white px-5 py-2.5 rounded-full hover:bg-red-700 shadow-sm"
+            className="ml-4 bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700"
           >
-            <RefreshCw className="w-5 h-5 mr-2 animate-spin" />
+            <RefreshCw className="w-4 h-4 mr-2" />
             {isRtl ? 'إعادة المحاولة' : 'Retry'}
           </CustomButton>
-        </motion.div>
+        </div>
       )}
 
-      <div className="flex mb-6 overflow-hidden rounded-full bg-white shadow-lg divide-x divide-gray-200">
+      <div className="flex mb-4 overflow-hidden rounded-full bg-white shadow-md">
         <CustomButton
           onClick={() => setActiveTab('inventory')}
-          className={`flex-1 py-3 font-semibold transition-all duration-300 text-lg ${
-            activeTab === 'inventory' ? 'bg-amber-600 text-white' : 'text-gray-700 hover:bg-amber-50'
+          className={`flex-1 py-2 font-semibold transition-all duration-300 ${
+            activeTab === 'inventory' ? 'bg-amber-600 text-white' : 'text-gray-700'
           }`}
         >
           {isRtl ? 'المخزون' : 'Inventory'}
         </CustomButton>
         <CustomButton
           onClick={() => setActiveTab('history')}
-          className={`flex-1 py-3 font-semibold transition-all duration-300 text-lg ${
-            activeTab === 'history' ? 'bg-amber-600 text-white' : 'text-gray-700 hover:bg-amber-50'
+          className={`flex-1 py-2 font-semibold transition-all duration-300 ${
+            activeTab === 'history' ? 'bg-amber-600 text-white' : 'text-gray-700'
           }`}
         >
-          <HistoryIcon className="inline w-5 h-5 mr-2" />
+          <HistoryIcon className="inline w-4 h-4 mr-2" />
           {isRtl ? 'سجل الحركات' : 'Movement History'}
         </CustomButton>
       </div>
 
-      <CustomCard className="p-6 mb-6 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <CustomCard className="p-6 mb-6 bg-white rounded-xl shadow-md">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="relative">
             <Search
-              className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 ${isRtl ? 'right-4' : 'left-4'}`}
+              className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 ${isRtl ? 'right-3' : 'left-3'}`}
             />
             <CustomInput
-              placeholder={isRtl ? 'ابحث بالاسم أو الكود...' : 'Search by name or code...'}
+              placeholder={isRtl ? 'ابحث...' : 'Search...'}
               onChange={handleSearchChange}
-              className={`pl-12 pr-4 py-3 border-gray-200 rounded-xl focus:border-amber-500 shadow-inner ${isRtl ? 'pr-12 pl-4' : ''}`}
+              className={`pl-10 pr-4 py-2 border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 ${isRtl ? 'pr-10 pl-4' : ''}`}
             />
           </div>
           <CustomSelect
             value={filterStatus}
             onChange={(e) => {
-              setFilterStatus(e.target.value);
+              const value = e?.target?.value || '';
+              setFilterStatus(value);
               setCurrentPage(1);
             }}
             options={statusOptions}
             label={isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}
-            className="py-3 rounded-xl"
           />
         </div>
       </CustomCard>
@@ -655,21 +640,21 @@ const BranchInventory = () => {
             initial={{ opacity: 0, x: isRtl ? -50 : 50 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: isRtl ? 50 : -50 }}
-            transition={{ duration: 0.3, ease: 'easeInOut' }}
+            transition={{ duration: 0.3 }}
           >
             {inventoryLoading ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="space-y-4">
                 {Array.from({ length: 6 }).map((_, i) => (
                   <InventoryCardSkeleton key={i} isRtl={isRtl} />
                 ))}
               </div>
             ) : paginatedInventory.length === 0 ? (
-              <CustomCard className="p-12 text-center bg-white/80 rounded-2xl shadow-lg">
-                <Package className="w-16 h-16 text-gray-300 mx-auto mb-4 animate-bounce" />
-                <p className="text-gray-500 text-lg font-medium">{isRtl ? 'لا توجد عناصر في المخزون' : 'No items in inventory'}</p>
+              <CustomCard className="p-8 text-center bg-white rounded-xl shadow-md">
+                <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">{isRtl ? 'لا توجد عناصر' : 'No items'}</p>
               </CustomCard>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="space-y-4">
                 <AnimatePresence>
                   {paginatedInventory.map((item) => (
                     <motion.div
@@ -679,62 +664,40 @@ const BranchInventory = () => {
                       exit={{ opacity: 0, y: -20 }}
                       transition={{ duration: 0.3 }}
                     >
-                      <CustomCard className="p-6 bg-white/90 rounded-2xl shadow-md hover:shadow-xl transition-all duration-300">
-                        <div className="flex flex-col gap-3">
-                          <div className="flex justify-between items-start">
-                            <h3 className="font-bold text-xl text-gray-900 line-clamp-1">{isRtl ? item.product.name : item.product.nameEn}</h3>
-                            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                              item.status === 'low' ? 'bg-red-100 text-red-600' : item.status === 'full' ? 'bg-yellow-100 text-yellow-600' : 'bg-green-100 text-green-600'
+                      <CustomCard className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-shadow">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-900">{isRtl ? item.product.name : item.product.nameEn}</h3>
+                            <p className="text-sm text-gray-500">{isRtl ? 'الكود' : 'Code'}: {item.product.code}</p>
+                            <p className="text-sm text-gray-600">{isRtl ? 'المخزون' : 'Stock'}: {item.currentStock}</p>
+                            <p className="text-sm text-gray-600">{isRtl ? 'الحد الأدنى' : 'Min'}: {item.minStockLevel}</p>
+                            <p className="text-sm text-gray-600">{isRtl ? 'الحد الأقصى' : 'Max'}: {item.maxStockLevel}</p>
+                            <p className="text-sm text-gray-600">{isRtl ? 'الوحدة' : 'Unit'}: {isRtl ? item.product.unit : item.product.unitEn}</p>
+                            <p className="text-sm text-gray-600">{isRtl ? 'القسم' : 'Department'}: {isRtl ? item.product.department.name : item.product.department.nameEn}</p>
+                            <p className={`text-sm font-medium ${
+                              item.status === 'low' ? 'text-red-600' : item.status === 'full' ? 'text-yellow-600' : 'text-green-600'
                             }`}>
                               {isRtl
                                 ? item.status === 'low' ? 'منخفض' : item.status === 'full' ? 'ممتلئ' : 'عادي'
-                                : item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-                            </span>
+                                : item.status}
+                            </p>
                           </div>
-                          <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
-                            <div>
-                              <p className="font-medium">{isRtl ? 'الكود' : 'Code'}</p>
-                              <p>{item.product.code}</p>
-                            </div>
-                            <div>
-                              <p className="font-medium">{isRtl ? 'المخزون' : 'Stock'}</p>
-                              <p className="text-lg font-bold">{item.currentStock}</p>
-                            </div>
-                            <div>
-                              <p className="font-medium">{isRtl ? 'الحد الأدنى' : 'Min'}</p>
-                              <p>{item.minStockLevel}</p>
-                            </div>
-                            <div>
-                              <p className="font-medium">{isRtl ? 'الحد الأقصى' : 'Max'}</p>
-                              <p>{item.maxStockLevel}</p>
-                            </div>
-                            <div>
-                              <p className="font-medium">{isRtl ? 'الوحدة' : 'Unit'}</p>
-                              <p>{isRtl ? item.product.unit : item.product.unitEn}</p>
-                            </div>
-                            <div>
-                              <p className="font-medium">{isRtl ? 'القسم' : 'Department'}</p>
-                              <p>{isRtl ? item.product.department.name : item.product.department.nameEn}</p>
-                            </div>
-                          </div>
-                          <div className="flex gap-3 mt-4">
+                          <div className="flex gap-2">
                             <CustomButton
                               variant="secondary"
                               size="sm"
                               onClick={() => handleOpenEditModal(item)}
-                              className="flex-1 py-2.5 rounded-xl text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100"
+                              className="text-blue-600 hover:text-blue-800"
                             >
-                              <Edit className="w-4 h-4 mr-2" />
-                              {isRtl ? 'تعديل' : 'Edit'}
+                              <Edit className="w-4 h-4" />
                             </CustomButton>
                             <CustomButton
                               variant="destructive"
                               size="sm"
                               disabled={item.currentStock <= 0}
                               onClick={() => handleOpenReturnModal(item)}
-                              className="flex-1 py-2.5 rounded-xl text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 disabled:opacity-30"
+                              className="text-red-600 hover:text-red-800 disabled:opacity-50"
                             >
-                              <X className="w-4 h-4 mr-2" />
                               {isRtl ? 'إرجاع' : 'Return'}
                             </CustomButton>
                           </div>
@@ -743,14 +706,14 @@ const BranchInventory = () => {
                     </motion.div>
                   ))}
                 </AnimatePresence>
+                <Pagination
+                  totalPages={totalInventoryPages}
+                  currentPage={currentPage}
+                  setCurrentPage={setCurrentPage}
+                  isRtl={isRtl}
+                />
               </div>
             )}
-            <Pagination
-              totalPages={totalInventoryPages}
-              currentPage={currentPage}
-              setCurrentPage={setCurrentPage}
-              isRtl={isRtl}
-            />
           </motion.div>
         ) : (
           <motion.div
@@ -761,39 +724,34 @@ const BranchInventory = () => {
             transition={{ duration: 0.3 }}
           >
             {historyLoading ? (
-              <div className="text-center py-16">
-                <RefreshCw className="w-16 h-16 text-amber-600 mx-auto animate-spin" />
-                <p className="mt-4 text-gray-600">{isRtl ? 'جاري تحميل السجل...' : 'Loading history...'}</p>
+              <div className="text-center py-8">
+                <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-amber-600 mx-auto"></div>
               </div>
             ) : paginatedHistory.length === 0 ? (
-              <CustomCard className="p-12 text-center bg-white/80 rounded-2xl shadow-lg">
-                <HistoryIcon className="w-16 h-16 text-gray-300 mx-auto mb-4 animate-pulse" />
-                <p className="text-gray-500 text-lg font-medium">{isRtl ? 'لا توجد حركات سابقة' : 'No previous movements'}</p>
+              <CustomCard className="p-8 text-center bg-white rounded-xl shadow-md">
+                <HistoryIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">{isRtl ? 'لا توجد حركات' : 'No history'}</p>
               </CustomCard>
             ) : (
-              <CustomCard className="overflow-x-auto bg-white/80 rounded-2xl shadow-lg">
-                <table className="w-full text-sm min-w-max">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className={`p-4 text-left ${isRtl ? 'text-right' : ''} font-semibold text-gray-700`}>{isRtl ? 'التاريخ' : 'Date'}</th>
-                      <th className={`p-4 text-left ${isRtl ? 'text-right' : ''} font-semibold text-gray-700`}>{isRtl ? 'الإجراء' : 'Action'}</th>
-                      <th className={`p-4 text-left ${isRtl ? 'text-right' : ''} font-semibold text-gray-700`}>{isRtl ? 'الكمية' : 'Quantity'}</th>
-                      <th className={`p-4 text-left ${isRtl ? 'text-right' : ''} font-semibold text-gray-700`}>{isRtl ? 'المرجع' : 'Reference'}</th>
-                      <th className={`p-4 text-left ${isRtl ? 'text-right' : ''} font-semibold text-gray-700`}>{isRtl ? 'بواسطة' : 'By'}</th>
+              <CustomCard className="p-4 bg-white rounded-xl shadow-md">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'التاريخ' : 'Date'}</th>
+                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'الإجراء' : 'Action'}</th>
+                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'الكمية' : 'Quantity'}</th>
+                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'المرجع' : 'Reference'}</th>
+                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'بواسطة' : 'By'}</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody>
                     {paginatedHistory.map((entry: InventoryHistoryItem) => (
-                      <tr key={entry._id} className="hover:bg-gray-50 transition-colors">
-                        <td className="p-4 text-gray-600">{new Date(entry.createdAt).toLocaleString()}</td>
-                        <td className="p-4">
-                          <span className="px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-600">
-                            {isRtl ? t(`history.${entry.action}`) : entry.action}
-                          </span>
-                        </td>
-                        <td className="p-4 font-medium text-gray-800">{entry.quantity}</td>
-                        <td className="p-4 text-gray-600 line-clamp-1">{entry.reference}</td>
-                        <td className="p-4 text-gray-600">{entry.createdBy.username}</td>
+                      <tr key={entry._id} className="border-b">
+                        <td className="p-2">{new Date(entry.createdAt).toLocaleString()}</td>
+                        <td className="p-2">{isRtl ? t(`history.${entry.action}`) : entry.action}</td>
+                        <td className="p-2">{entry.quantity}</td>
+                        <td className="p-2">{entry.reference}</td>
+                        <td className="p-2">{entry.createdBy.username}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -820,146 +778,129 @@ const BranchInventory = () => {
           setAvailableItems([]);
           setSelectedItem(null);
         }}
-        title={isRtl ? 'إنشاء طلب إرجاع' : 'Create Return Request'}
+        title={isRtl ? 'إنشاء إرجاع' : 'Create Return'}
       >
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4">
           {selectedItem && (
-            <div className="bg-amber-50 p-4 rounded-xl flex items-center gap-3">
-              <Package className="w-5 h-5 text-amber-600 flex-shrink-0" />
-              <p className="text-sm text-gray-700">
-                {isRtl ? 'المنتج' : 'Product'}: <span className="font-medium">{isRtl ? selectedItem.product.name : selectedItem.product.nameEn}</span>
-              </p>
-            </div>
+            <p className="text-sm text-gray-600">
+              {isRtl ? 'المنتج' : 'Product'}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
+            </p>
           )}
           <CustomSelect
-            label={isRtl ? 'اختر الطلب' : 'Select Order'}
+            label={isRtl ? 'الطلب' : 'Order'}
             value={returnForm.orderId}
-            onChange={(e) => setReturnForm({ ...returnForm, orderId: e.target.value, items: [] })}
-            options={[{ value: '', label: isRtl ? 'اختر طلبًا...' : 'Select an order...' }].concat(
+            onChange={(e) => {
+              const value = e?.target?.value || '';
+              setReturnForm({ ...returnForm, orderId: value, items: [] });
+            }}
+            options={[{ value: '', label: isRtl ? 'اختر طلبًا' : 'Select Order' }].concat(
               (ordersData || []).map((order: Order) => ({
                 value: order._id,
-                label: `${order.orderNumber} (${order.items.length} ${isRtl ? 'عناصر' : 'items'})`,
+                label: `${order.orderNumber}`,
               }))
             )}
             error={returnErrors.orderId}
           />
-          {ordersLoading ? (
-            <div className="flex items-center gap-2 text-gray-500">
-              <RefreshCw className="w-4 h-4 animate-spin" />
-              <p>{isRtl ? 'جاري تحميل الطلبات...' : 'Loading orders...'}</p>
-            </div>
-          ) : ordersData.length === 0 ? (
-            <div className="bg-yellow-50 p-4 rounded-xl flex items-center gap-3 text-yellow-700">
-              <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-              <p className="text-sm">{isRtl ? 'لا توجد طلبات متاحة للإرجاع' : 'No available orders for return'}</p>
-            </div>
-          ) : null}
           <CustomSelect
-            label={isRtl ? 'سبب الإرجاع العام' : 'General Return Reason'}
+            label={isRtl ? 'السبب' : 'Reason'}
             value={returnForm.reason}
-            onChange={(e) => setReturnForm({ ...returnForm, reason: e.target.value })}
-            options={[{ value: '', label: isRtl ? 'اختر سبب...' : 'Select reason...' }, ...reasonOptions]}
+            onChange={(e) => {
+              const value = e?.target?.value || '';
+              setReturnForm({ ...returnForm, reason: value });
+            }}
+            options={reasonOptions}
             error={returnErrors.reason}
           />
           <CustomInput
-            label={isRtl ? 'ملاحظات إضافية' : 'Additional Notes'}
-            type="text"
+            label={isRtl ? 'ملاحظات' : 'Notes'}
             value={returnForm.notes}
-            onChange={(e) => setReturnForm({ ...returnForm, notes: e.target.value })}
-            placeholder={isRtl ? 'أضف تفاصيل إضافية إذا لزم الأمر...' : 'Add extra details if needed...'}
+            onChange={(e) => {
+              const value = e?.target?.value || '';
+              setReturnForm({ ...returnForm, notes: value });
+            }}
+            placeholder={isRtl ? 'أدخل ملاحظات إضافية' : 'Enter additional notes'}
           />
-          <div className="bg-gray-50 p-4 rounded-xl">
-            <div className="flex items-center justify-between mb-4">
-              <label className="text-sm font-medium text-gray-700 flex items-center gap-2">
-                <Plus className="w-4 h-4" />
-                {isRtl ? 'العناصر المرتجعة' : 'Returned Items'}
-              </label>
-              <CustomButton
-                variant="secondary"
-                size="sm"
-                onClick={addItemToForm}
-                disabled={availableItems.length === 0 || returnForm.orderId === ''}
-                className="text-amber-600 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 rounded-full px-4 py-1.5"
-              >
-                <Plus className="w-4 h-4 mr-1" />
-                {isRtl ? 'إضافة عنصر' : 'Add Item'}
-              </CustomButton>
-            </div>
-            {returnForm.items.length === 0 && (
-              <p className="text-center text-gray-500 py-4">{isRtl ? 'لا توجد عناصر بعد - أضف عنصرًا لبدء الإرجاع' : 'No items yet - add an item to start the return'}</p>
-            )}
-            <AnimatePresence>
-              {returnForm.items.map((item, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="flex gap-3 mb-3 items-start bg-white p-3 rounded-lg shadow-sm"
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'العناصر' : 'Items'}</label>
+            {returnForm.items.map((item, index) => (
+              <div key={index} className="flex gap-2 mb-2 items-center">
+                <CustomSelect
+                  value={item.itemId}
+                  onChange={(e) => {
+                    const value = e?.target?.value || '';
+                    updateItemInForm(index, 'itemId', value);
+                  }}
+                  options={[{ value: '', label: isRtl ? 'اختر عنصرًا' : 'Select Item' }].concat(
+                    availableItems.map((a) => ({
+                      value: a.itemId,
+                      label: `${a.productName} (${a.available} ${isRtl ? 'متاح' : 'available'})`,
+                    }))
+                  )}
+                  error={returnErrors[`item_${index}_itemId`]}
+                  disabled={!returnForm.orderId}
+                />
+                <CustomInput
+                  type="number"
+                  min={1}
+                  max={item.maxQuantity ?? 0}
+                  value={item.quantity ?? ''}
+                  onChange={(e) => {
+                    const value = Number(e?.target?.value || 0);
+                    updateItemInForm(index, 'quantity', value);
+                  }}
+                  error={returnErrors[`item_${index}_quantity`]}
+                  className="w-24"
+                />
+                <CustomSelect
+                  value={item.reason}
+                  onChange={(e) => {
+                    const value = e?.target?.value || '';
+                    updateItemInForm(index, 'reason', value);
+                  }}
+                  options={reasonOptions}
+                  error={returnErrors[`item_${index}_reason`]}
+                />
+                <CustomButton
+                  variant="danger"
+                  size="sm"
+                  onClick={() => removeItemFromForm(index)}
+                  className="text-red-600 hover:text-red-800"
                 >
-                  <CustomSelect
-                    value={item.itemId}
-                    onChange={(e) => updateItemInForm(index, 'itemId', e.target.value)}
-                    options={[{ value: '', label: isRtl ? 'اختر عنصر...' : 'Select item...' }].concat(
-                      availableItems.map((a) => ({
-                        value: a.itemId,
-                        label: `${a.productName} (${a.available} ${isRtl ? 'متاح' : 'available'}) - ${a.stock} ${isRtl ? 'في المخزون' : 'in stock'}`,
-                      }))
-                    )}
-                    error={returnErrors[`item_${index}_itemId`]}
-                    disabled={!returnForm.orderId}
-                    className="flex-1"
-                  />
-                  <CustomInput
-                    type="number"
-                    min={1}
-                    max={item.maxQuantity ?? 0}
-                    value={item.quantity ?? ''}
-                    onChange={(e) => updateItemInForm(index, 'quantity', Number(e.target.value))}
-                    error={returnErrors[`item_${index}_quantity`]}
-                    className="w-24"
-                    placeholder={isRtl ? 'كمية' : 'Qty'}
-                  />
-                  <CustomSelect
-                    value={item.reason}
-                    onChange={(e) => updateItemInForm(index, 'reason', e.target.value)}
-                    options={[{ value: '', label: isRtl ? 'سبب...' : 'Reason...' }, ...reasonOptions]}
-                    error={returnErrors[`item_${index}_reason`]}
-                    className="flex-1"
-                  />
-                  <CustomButton
-                    variant="danger"
-                    size="sm"
-                    onClick={() => removeItemFromForm(index)}
-                    className="text-red-600 hover:text-red-800 bg-red-50 hover:bg-red-100 rounded-full p-2"
-                  >
-                    <X className="w-4 h-4" />
-                  </CustomButton>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-            {returnErrors.items && <p className="text-red-500 text-sm mt-2 flex items-center gap-1"><AlertTriangle size={14} /> {returnErrors.items}</p>}
-          </div>
-          <div className="flex justify-end gap-3">
+                  <X className="w-4 h-4" />
+                </CustomButton>
+              </div>
+            ))}
+            {returnErrors.items && <p className="text-red-500 text-sm mt-1">{returnErrors.items}</p>}
             <CustomButton
               variant="secondary"
-              onClick={() => setIsReturnModalOpen(false)}
-              className="px-6 py-2.5 rounded-xl"
+              onClick={addItemToForm}
+              className="mt-2 bg-gray-100 hover:bg-gray-200 text-gray-800"
+              disabled={availableItems.length === 0}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              {isRtl ? 'إضافة عنصر' : 'Add Item'}
+            </CustomButton>
+          </div>
+          <div className="flex justify-end gap-2">
+            <CustomButton
+              variant="secondary"
+              onClick={() => {
+                setIsReturnModalOpen(false);
+                setReturnForm({ orderId: '', reason: '', notes: '', items: [] });
+                setReturnErrors({});
+                setAvailableItems([]);
+                setSelectedItem(null);
+              }}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-800"
             >
               {isRtl ? 'إلغاء' : 'Cancel'}
             </CustomButton>
             <CustomButton
-              onClick={() => {
-                if (validateReturnForm()) {
-                  createReturnMutation.mutate();
-                }
-              }}
-              disabled={createReturnMutation.isPending || availableItems.length === 0}
-              className="px-6 py-2.5 rounded-xl flex items-center gap-2"
+              onClick={() => createReturnMutation.mutate()}
+              disabled={createReturnMutation.isPending}
+              className="bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
             >
-              {createReturnMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-              {createReturnMutation.isPending ? (isRtl ? 'جاري الإرسال...' : 'Submitting...') : isRtl ? 'إرسال الطلب' : 'Submit Request'}
+              {createReturnMutation.isPending ? (isRtl ? 'جاري...' : 'Submitting...') : isRtl ? 'إرسال' : 'Submit'}
             </CustomButton>
           </div>
         </div>
@@ -968,53 +909,61 @@ const BranchInventory = () => {
       {/* Edit Stock Levels Modal */}
       <CustomModal
         isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
+          setEditErrors({});
+          setSelectedItem(null);
+        }}
         title={isRtl ? 'تعديل حدود المخزون' : 'Edit Stock Limits'}
       >
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-4">
           {selectedItem && (
-            <div className="bg-amber-50 p-4 rounded-xl flex items-center gap-3">
-              <Package className="w-5 h-5 text-amber-600 flex-shrink-0" />
-              <p className="text-sm text-gray-700">
-                {isRtl ? 'المنتج' : 'Product'}: <span className="font-medium">{isRtl ? selectedItem.product.name : selectedItem.product.nameEn}</span>
-              </p>
-            </div>
+            <p className="text-sm text-gray-600">
+              {isRtl ? 'المنتج' : 'Product'}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
+            </p>
           )}
           <CustomInput
             label={isRtl ? 'الحد الأدنى للمخزون' : 'Minimum Stock Level'}
             type="number"
             min={0}
-            value={editForm.minStockLevel}
-            onChange={(e) => setEditForm({ ...editForm, minStockLevel: Number(e.target.value) })}
+            value={editForm.minStockLevel ?? ''}
+            onChange={(e) => {
+              const value = Number(e?.target?.value || 0);
+              setEditForm({ ...editForm, minStockLevel: value });
+            }}
             error={editErrors.minStockLevel}
           />
           <CustomInput
             label={isRtl ? 'الحد الأقصى للمخزون' : 'Maximum Stock Level'}
             type="number"
             min={0}
-            value={editForm.maxStockLevel}
-            onChange={(e) => setEditForm({ ...editForm, maxStockLevel: Number(e.target.value) })}
+            value={editForm.maxStockLevel ?? ''}
+            onChange={(e) => {
+              const value = Number(e?.target?.value || 0);
+              setEditForm({ ...editForm, maxStockLevel: value });
+            }}
             error={editErrors.maxStockLevel}
           />
-          <div className="flex justify-end gap-3">
+          <div className="flex justify-end gap-2">
             <CustomButton
               variant="secondary"
-              onClick={() => setIsEditModalOpen(false)}
-              className="px-6 py-2.5 rounded-xl"
+              onClick={() => {
+                setIsEditModalOpen(false);
+                setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
+                setEditErrors({});
+                setSelectedItem(null);
+              }}
+              className="bg-gray-100 hover:bg-gray-200 text-gray-800"
             >
               {isRtl ? 'إلغاء' : 'Cancel'}
             </CustomButton>
             <CustomButton
-              onClick={() => {
-                if (validateEditForm()) {
-                  updateInventoryMutation.mutate();
-                }
-              }}
+              onClick={() => updateInventoryMutation.mutate()}
               disabled={updateInventoryMutation.isPending}
-              className="px-6 py-2.5 rounded-xl flex items-center gap-2"
+              className="bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
             >
-              {updateInventoryMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-              {updateInventoryMutation.isPending ? (isRtl ? 'جاري الحفظ...' : 'Saving...') : isRtl ? 'حفظ التغييرات' : 'Save Changes'}
+              {updateInventoryMutation.isPending ? (isRtl ? 'جاري...' : 'Saving...') : isRtl ? 'حفظ' : 'Save'}
             </CustomButton>
           </div>
         </div>
