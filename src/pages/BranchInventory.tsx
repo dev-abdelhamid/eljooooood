@@ -312,7 +312,7 @@ const BranchInventory = () => {
   const [availableItems, setAvailableItems] = useState<any[]>([]);
 
   const socket = useMemo<Socket | null>(() => {
-    const apiUrl = 'https://eljoodia-server-production.up.railway.app';
+    const apiUrl = 'https://eljoodia-server-production.up.railway.app/api';
     try {
       return io(apiUrl, {
         auth: { token: localStorage.getItem('token') || '' },
