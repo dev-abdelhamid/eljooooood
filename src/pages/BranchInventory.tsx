@@ -3,7 +3,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { inventoryAPI, ordersAPI, returnsAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
-import { Input } from '../components/UI/Input';
+import { CustomInput } from '../components/UI/CustomInput';
 import { Button } from '../components/UI/Button';
 import { Modal } from '../components/UI/Modal';
 import { Select } from '../components/UI/Select';
@@ -355,7 +355,7 @@ export const BranchInventory: React.FC = () => {
             <Search
               className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 ${isRtl ? 'right-3' : 'left-3'}`}
             />
-            <Input
+            <CustomInput
               placeholder={isRtl ? 'ابحث...' : 'Search...'}
               onChange={handleSearchChange}
               className={`pl-10 pr-4 py-2 border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 ${isRtl ? 'pr-10 pl-4' : ''}`}
@@ -515,7 +515,7 @@ export const BranchInventory: React.FC = () => {
             error={returnErrors.itemId}
             disabled={!returnForm.orderId}
           />
-          <Input
+          <CustomInput
             label={isRtl ? 'الكمية' : 'Quantity'}
             type="number"
             min={1}
@@ -534,7 +534,7 @@ export const BranchInventory: React.FC = () => {
             options={reasonOptions}
             error={returnErrors.reason}
           />
-          <Input
+          <CustomInput
             label={isRtl ? 'ملاحظات' : 'Notes'}
             value={returnForm.notes}
             onChange={(e) => setReturnForm({ ...returnForm, notes: e.target.value })}
