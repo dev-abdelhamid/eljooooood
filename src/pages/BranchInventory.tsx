@@ -539,8 +539,8 @@ export const BranchInventory: React.FC = () => {
           </div>
           <Select
             value={filterStatus}
-            onChange={(e) => {
-              setFilterStatus(e.target.value);
+            onChange={(value) => {
+              setFilterStatus(value);
               setCurrentPage(1);
             }}
             options={statusOptions}
@@ -705,8 +705,8 @@ export const BranchInventory: React.FC = () => {
           <Select
             label={isRtl ? 'الطلب' : 'Order'}
             value={returnForm.orderId}
-            onChange={(e) => {
-              setReturnForm({ ...returnForm, orderId: e.target.value, items: [] });
+            onChange={(value) => {
+              setReturnForm({ ...returnForm, orderId: value, items: [] });
             }}
             options={[{ value: '', label: isRtl ? 'اختر طلبًا' : 'Select Order' }].concat(
               (ordersData || []).map((order: Order) => ({
@@ -719,7 +719,7 @@ export const BranchInventory: React.FC = () => {
           <Select
             label={isRtl ? 'السبب' : 'Reason'}
             value={returnForm.reason}
-            onChange={(e) => setReturnForm({ ...returnForm, reason: e.target.value })}
+            onChange={(value) => setReturnForm({ ...returnForm, reason: value })}
             options={reasonOptions}
             error={returnErrors.reason}
           />
@@ -735,7 +735,7 @@ export const BranchInventory: React.FC = () => {
               <div key={index} className="flex gap-2 mb-2 items-center">
                 <Select
                   value={item.itemId}
-                  onChange={(e) => updateItemInForm(index, 'itemId', e.target.value)}
+                  onChange={(value) => updateItemInForm(index, 'itemId', value)}
                   options={[{ value: '', label: isRtl ? 'اختر عنصرًا' : 'Select Item' }].concat(
                     availableItems.map((a) => ({
                       value: a.itemId,
@@ -756,7 +756,7 @@ export const BranchInventory: React.FC = () => {
                 />
                 <Select
                   value={item.reason}
-                  onChange={(e) => updateItemInForm(index, 'reason', e.target.value)}
+                  onChange={(value) => updateItemInForm(index, 'reason', value)}
                   options={reasonOptions}
                   error={returnErrors[`item_${index}_reason`]}
                 />
