@@ -285,7 +285,7 @@ const Pagination = ({
   )
 );
 
-const BranchInventory = () => {
+export const BranchInventory = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
