@@ -3,7 +3,7 @@ import { useLanguage, Language } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI, inventoryAPI, salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
-import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown, Edit, Trash } from 'lucide-react';
+import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 
@@ -103,9 +103,6 @@ const translations = {
     quantity: 'الكمية',
     searchPlaceholder: 'ابحث عن المنتجات...',
     loadMore: 'تحميل المزيد',
-    editSale: 'تعديل المبيعة',
-    deleteSale: 'حذف المبيعة',
-    confirmDelete: 'هل أنت متأكد من حذف هذه المبيعة؟',
     filterBy: 'تصفية حسب',
     customRange: 'نطاق مخصص',
     errors: {
@@ -115,14 +112,11 @@ const translations = {
       fetch_branches: 'خطأ أثناء جلب الفروع',
       fetch_inventory: 'خطأ أثناء جلب المخزون',
       create_sale_failed: 'فشل إنشاء المبيعة',
-      update_sale_failed: 'فشل تعديل المبيعة',
-      delete_sale_failed: 'فشل حذف المبيعة',
       insufficient_stock: 'المخزون غير كافٍ',
       exceeds_max_quantity: 'الكمية تتجاوز الحد الأقصى',
       invalid_quantity: 'الكمية غير صالحة',
       empty_cart: 'السلة فارغة',
       deleted_product: 'منتج محذوف',
-      invalid_sale_id: 'معرف المبيعة غير صالح',
       invalid_customer_phone: 'رقم هاتف العميل غير صالح',
       invalid_payment_method: 'طريقة الدفع غير صالحة',
       no_branches_available: 'لا توجد فروع متاحة',
@@ -136,7 +130,6 @@ const translations = {
       credit_card: 'بطاقة ائتمان',
       bank_transfer: 'تحويل بنكي',
     },
-    returns: { status: { pending: 'معلق', approved: 'مقبول', rejected: 'مرفوض' } },
   },
   en: {
     title: 'Sales Report',
@@ -166,9 +159,6 @@ const translations = {
     quantity: 'Quantity',
     searchPlaceholder: 'Search products...',
     loadMore: 'Load More',
-    editSale: 'Edit Sale',
-    deleteSale: 'Delete Sale',
-    confirmDelete: 'Are you sure you want to delete this sale?',
     filterBy: 'Filter By',
     customRange: 'Custom Range',
     errors: {
@@ -178,14 +168,11 @@ const translations = {
       fetch_branches: 'Error fetching branches',
       fetch_inventory: 'Error fetching inventory',
       create_sale_failed: 'Failed to create sale',
-      update_sale_failed: 'Failed to update sale',
-      delete_sale_failed: 'Failed to delete sale',
       insufficient_stock: 'Insufficient stock',
       exceeds_max_quantity: 'Quantity exceeds maximum available',
       invalid_quantity: 'Invalid quantity',
       empty_cart: 'Cart is empty',
       deleted_product: 'Deleted Product',
-      invalid_sale_id: 'Invalid sale ID',
       invalid_customer_phone: 'Invalid customer phone',
       invalid_payment_method: 'Invalid payment method',
       no_branches_available: 'No branches available',
@@ -199,7 +186,6 @@ const translations = {
       credit_card: 'Credit Card',
       bank_transfer: 'Bank Transfer',
     },
-    returns: { status: { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' } },
   },
 };
 
@@ -369,71 +355,61 @@ const ProductCard = React.memo<{
   );
 });
 
-const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete: (id: string) => void }>(({ sale, onEdit, onDelete }) => {
+const SaleCard = React.memo<{ sale: Sale }>(({ sale }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   return (
     <div className="p-6 bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 hover:border-amber-200">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div className="space-y-4 flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="font-bold text-gray-900 text-xl">{sale.saleNumber}</h3>
-            <span className="text-sm text-gray-500">({sale.branch.displayName})</span>
-          </div>
-          <div className="space-y-2">
-            {sale.items.map((item, index) => (
-              <div key={index} className="flex justify-between items-center text-sm text-gray-700">
-                <span className="truncate max-w-[60%]">
-                  {item.quantity} {item.displayUnit || t.units.default} {item.displayName || t.errors.deleted_product}
-                </span>
-                <span className="font-semibold text-amber-600">
-                  {item.quantity}x{item.unitPrice} = {(item.quantity * item.unitPrice).toFixed(2)} {t.currency}
-                </span>
-              </div>
-            ))}
-            <div className="flex justify-between items-center font-bold text-gray-900 text-base border-t pt-2 mt-2">
-              <span>{t.total}:</span>
-              <span className="text-amber-600">{sale.totalAmount.toFixed(2)} {t.currency}</span>
+      <div className="space-y-4">
+        <div className="flex items-center gap-2">
+          <h3 className="font-bold text-gray-900 text-xl">{sale.saleNumber}</h3>
+          <span className="text-sm text-gray-500">({sale.branch.displayName})</span>
+        </div>
+        <div className="space-y-2">
+          {sale.items.map((item, index) => (
+            <div key={index} className="flex justify-between items-center text-sm text-gray-700">
+              <span className="truncate max-w-[60%]">
+                {item.quantity} {item.displayUnit || t.units.default} {item.displayName || t.errors.deleted_product}
+              </span>
+              <span className="font-semibold text-amber-600">
+                {item.quantity}x{item.unitPrice} = {(item.quantity * item.unitPrice).toFixed(2)} {t.currency}
+              </span>
             </div>
+          ))}
+          <div className="flex justify-between items-center font-bold text-gray-900 text-base border-t pt-2 mt-2">
+            <span>{t.total}:</span>
+            <span className="text-amber-600">{sale.totalAmount.toFixed(2)} {t.currency}</span>
           </div>
-          <div className="space-y-2 text-sm text-gray-600">
-            <p>{t.date}: {formatDate(sale.createdAt, language)}</p>
-            {sale.paymentMethod && (
-              <p>{t.paymentMethod}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] || t.paymentMethods.cash}</p>
-            )}
-            {sale.customerName && <p>{t.customerName}: {sale.customerName}</p>}
-            {sale.customerPhone && <p>{t.customerPhone}: {sale.customerPhone}</p>}
-            {sale.notes && <p className="italic">{t.notes}: {sale.notes}</p>}
-          </div>
-          {sale.returns && sale.returns.length > 0 && (
-            <div className="mt-4">
-              <p className="text-sm font-medium text-gray-700">{t.returns}:</p>
-              <ul className="list-disc list-inside text-sm text-gray-600">
-                {sale.returns.map((ret, index) => (
-                  <li key={index}>
-                    {t.return} #{ret.returnNumber} ({t.returns.status[ret.status as keyof typeof t.returns.status]}) - {t.reason}: {ret.reason} ({t.date}: {formatDate(ret.createdAt, language)})
-                    <ul className="list-circle list-inside ml-4">
-                      {ret.items.map((item, i) => (
-                        <li key={i}>
-                          {item.productName || t.errors.deleted_product} - {t.quantity}: {item.quantity}, {t.reason}: {item.reason}
-                        </li>
-                      ))}
-                    </ul>
-                  </li>
-                ))}
-              </ul>
-            </div>
+        </div>
+        <div className="space-y-2 text-sm text-gray-600">
+          <p>{t.date}: {formatDate(sale.createdAt, language)}</p>
+          {sale.paymentMethod && (
+            <p>{t.paymentMethod}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] || t.paymentMethods.cash}</p>
           )}
+          {sale.customerName && <p>{t.customerName}: {sale.customerName}</p>}
+          {sale.customerPhone && <p>{t.customerPhone}: {sale.customerPhone}</p>}
+          {sale.notes && <p className="italic">{t.notes}: {sale.notes}</p>}
         </div>
-        <div className="flex gap-3 self-start">
-          <button onClick={() => onEdit(sale)} aria-label={t.editSale} className="p-2 bg-blue-100 hover:bg-blue-200 rounded-lg transition-colors duration-200">
-            <Edit className="w-5 h-5 text-blue-600" />
-          </button>
-          <button onClick={() => onDelete(sale._id)} aria-label={t.deleteSale} className="p-2 bg-red-100 hover:bg-red-200 rounded-lg transition-colors duration-200">
-            <Trash className="w-5 h-5 text-red-600" />
-          </button>
-        </div>
+        {sale.returns && sale.returns.length > 0 && (
+          <div className="mt-4">
+            <p className="text-sm font-medium text-gray-700">{t.returns}:</p>
+            <ul className="list-disc list-inside text-sm text-gray-600">
+              {sale.returns.map((ret, index) => (
+                <li key={index}>
+                  {t.return} #{ret.returnNumber} ({t.returns.status[ret.status as keyof typeof t.returns.status]}) - {t.reason}: {ret.reason} ({t.date}: {formatDate(ret.createdAt, language)})
+                  <ul className="list-circle list-inside ml-4">
+                    {ret.items.map((item, i) => (
+                      <li key={i}>
+                        {item.productName || t.errors.deleted_product} - {t.quantity}: {item.quantity}, {t.reason}: {item.reason}
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -487,7 +463,6 @@ const BranchSalesReport: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState(user?.role === 'branch' && user?.branchId ? user.branchId : '');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [editingSale, setEditingSale] = useState<Sale | null>(null);
 
   const debouncedSearch = useCallback(
     debounce((value: string) => setSearchTerm(value.trim()), 300),
@@ -505,7 +480,6 @@ const BranchSalesReport: React.FC = () => {
     return inventory.filter((item) => item.displayName.toLowerCase().includes(lowerSearchTerm));
   }, [inventory, searchTerm]);
 
-  // Update cart display names when language changes
   useEffect(() => {
     setCart((prevCart) =>
       prevCart.map((item) => {
@@ -688,7 +662,7 @@ const BranchSalesReport: React.FC = () => {
         console.log(`[${new Date().toISOString()}] Processed inventory:`, newInventory);
         setInventory(newInventory);
 
-        if (newInventory.length === 0 && !error) {
+        if (newInventory.length === 0) {
           setError(t.noProducts);
           toast.warn(t.noProducts, { position: isRtl ? 'top-right' : 'top-left' });
         } else {
@@ -696,8 +670,8 @@ const BranchSalesReport: React.FC = () => {
         }
       } catch (err: any) {
         console.error(`[${new Date().toISOString()}] Fetch error:`, err);
-        setError(err.message === 'Invalid sale ID' ? t.errors.invalid_sale_id : (err.message || t.errors.fetch_sales));
-        toast.error(err.message === 'Invalid sale ID' ? t.errors.invalid_sale_id : (err.message || t.errors.fetch_sales), { position: isRtl ? 'top-right' : 'top-left' });
+        setError(err.message || t.errors.fetch_sales);
+        toast.error(err.message || t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left' });
         setSales([]);
         setInventory([]);
       } finally {
@@ -705,12 +679,14 @@ const BranchSalesReport: React.FC = () => {
         setSalesLoading(false);
       }
     },
-    [filterPeriod, startDate, endDate, user, t, isRtl, language, selectedBranch, error]
+    [filterPeriod, startDate, endDate, user, t, isRtl, language, selectedBranch]
   );
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (!inventory.length && !error) {
+      fetchData();
+    }
+  }, [fetchData, inventory, error]);
 
   const loadMoreSales = useCallback(() => {
     setPage((prev) => prev + 1);
@@ -840,67 +816,19 @@ const BranchSalesReport: React.FC = () => {
     };
 
     try {
-      if (editingSale) {
-        await salesAPI.update(editingSale._id, saleData);
-        toast.success(t.editSale, { position: isRtl ? 'top-right' : 'top-left' });
-      } else {
-        await salesAPI.create(saleData);
-        toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
-      }
+      await salesAPI.create(saleData);
+      toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
       setCart([]);
       setNotes('');
       setCustomerName('');
       setCustomerPhone(undefined);
       setPaymentMethod('cash');
-      setEditingSale(null);
       fetchData();
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Sale submission error:`, err);
-      toast.error(editingSale ? t.errors.update_sale_failed : t.errors.create_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(t.errors.create_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
     }
-  }, [cart, notes, paymentMethod, customerName, customerPhone, user, selectedBranch, inventory, t, isRtl, editingSale, fetchData]);
-
-  const handleEditSale = useCallback(
-    (sale: Sale) => {
-      setActiveTab('new');
-      setEditingSale(sale);
-      setCart(
-        sale.items.map((item) => ({
-          productId: item.productId,
-          productName: item.productName,
-          productNameEn: item.productNameEn,
-          unit: item.unit,
-          unitEn: item.unitEn,
-          displayName: isRtl ? (item.productName || t.departments.unknown) : (item.productNameEn || item.productName || t.departments.unknown),
-          displayUnit: isRtl ? (item.unit || t.units.default) : (item.unitEn || item.unit || t.units.default),
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-        }))
-      );
-      setNotes(sale.notes || '');
-      setPaymentMethod(sale.paymentMethod || 'cash');
-      setCustomerName(sale.customerName || '');
-      setCustomerPhone(sale.customerPhone || undefined);
-    },
-    [isRtl, t]
-  );
-
-  const handleDeleteSale = useCallback(
-    async (id: string) => {
-      if (window.confirm(t.confirmDelete)) {
-        try {
-          await salesAPI.delete(id);
-          toast.success(t.deleteSale, { position: isRtl ? 'top-right' : 'top-left' });
-          fetchData();
-        } catch (err: any) {
-          console.error(`[${new Date().toISOString()}] Delete error:`, err);
-          setError(t.errors.delete_sale_failed);
-          toast.error(t.errors.delete_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
-        }
-      }
-    },
-    [t, fetchData, isRtl]
-  );
+  }, [cart, notes, paymentMethod, customerName, customerPhone, user, selectedBranch, inventory, t, isRtl, fetchData]);
 
   const branchOptions = useMemo(() => {
     if (user?.role === 'branch' && user?.branchId) {
@@ -1093,9 +1021,9 @@ const BranchSalesReport: React.FC = () => {
                     onClick={handleSubmitSale}
                     className="w-full mt-4 px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
                     disabled={cart.length === 0 || !selectedBranch}
-                    aria-label={editingSale ? t.editSale : t.submitSale}
+                    aria-label={t.submitSale}
                   >
-                    {editingSale ? t.editSale : t.submitSale}
+                    {t.submitSale}
                   </button>
                 </div>
               </div>
@@ -1155,7 +1083,7 @@ const BranchSalesReport: React.FC = () => {
             <>
               <div className="space-y-6">
                 {sales.map((sale) => (
-                  <SaleCard key={sale._id} sale={sale} onEdit={handleEditSale} onDelete={handleDeleteSale} />
+                  <SaleCard key={sale._id} sale={sale} />
                 ))}
               </div>
               {hasMore && (
@@ -1166,7 +1094,7 @@ const BranchSalesReport: React.FC = () => {
                     disabled={salesLoading}
                   >
                     {salesLoading ? (
-                      <svg className="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <svg className="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
