@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { memo, useCallback, useMemo, useState, useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
@@ -9,6 +9,11 @@ import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Modal } from '../components/UI/Modal';
+import { Button } from '../components/UI/Button';
+import { Input } from '../components/UI/Input';
+import { Select } from '../components/UI/Select';
+import { ReturnFormItem } from '../components/branch/types';
 
 // Interfaces
 interface InventoryItem {
@@ -68,6 +73,7 @@ interface ReturnItem {
   quantity: number;
   reason: string;
   maxQuantity: number;
+  notes?: string;
 }
 
 interface ReturnForm {
@@ -90,6 +96,16 @@ interface AvailableItem {
   unit: string;
   departmentName: string;
   stock: number;
+}
+
+interface ReturnItemRowProps {
+  index: number;
+  item: ReturnItem;
+  availableItems: AvailableItem[];
+  updateItem: (index: number, field: keyof ReturnItem, value: any) => void;
+  removeItem: (index: number) => void;
+  t: (key: string, params?: any) => string;
+  isRtl: boolean;
 }
 
 interface CustomCardProps {
@@ -128,7 +144,7 @@ interface CustomModalProps {
 interface CustomSelectProps {
   label?: string;
   value: string;
-  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  onChange: (value: string) => void;
   options: Array<{ value: string; label: string }>;
   error?: string;
   disabled?: boolean;
@@ -152,7 +168,7 @@ const CustomCard: React.FC<CustomCardProps> = ({ className, children }) => (
 const CustomInput: React.FC<CustomInputProps> = ({ label, type = 'text', min, max, value, onChange, error, className, placeholder }) => (
   <div className="flex flex-col">
     {label && <label className="text-sm font-medium text-gray-700 mb-1">{label}</label>}
-    <input
+    <Input
       type={type}
       min={min}
       max={max}
@@ -160,6 +176,7 @@ const CustomInput: React.FC<CustomInputProps> = ({ label, type = 'text', min, ma
       onChange={onChange}
       placeholder={placeholder}
       className={`px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 ${error ? 'border-red-500' : ''} ${className}`}
+      dir="rtl"
     />
     {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
   </div>
@@ -170,42 +187,32 @@ const CustomButton: React.FC<CustomButtonProps> = ({ variant = 'primary', size =
   if (variant === 'secondary') baseClass += ' bg-gray-100 hover:bg-gray-200 text-gray-800';
   else if (variant === 'destructive' || variant === 'danger') baseClass += ' text-red-600 hover:text-red-800';
   else baseClass += ' bg-amber-600 text-white hover:bg-amber-700';
+  if (size === 'sm') baseClass += ' text-sm';
   if (disabled) baseClass += ' opacity-50 cursor-not-allowed';
   return (
-    <button onClick={onClick} disabled={disabled} className={`${baseClass} ${className}`}>
+    <Button onClick={onClick} disabled={disabled} className={`${baseClass} ${className}`}>
       {children}
-    </button>
+    </Button>
   );
 };
 
-const CustomModal: React.FC<CustomModalProps> = ({ isOpen, onClose, title, children }) => {
-  if (!isOpen) return null;
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg shadow-xl max-w-2xl w-full">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">{title}</h2>
-          <CustomButton onClick={onClose}><X className="w-4 h-4" /></CustomButton>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-};
+const CustomModal: React.FC<CustomModalProps> = ({ isOpen, onClose, title, children }) => (
+  <Modal isOpen={isOpen} onClose={onClose} title={title} dir="rtl">
+    {children}
+  </Modal>
+);
 
 const CustomSelect: React.FC<CustomSelectProps> = ({ label, value, onChange, options, error, disabled }) => (
   <div className="flex flex-col">
     {label && <label className="text-sm font-medium text-gray-700 mb-1">{label}</label>}
-    <select
+    <Select
       value={value}
       onChange={onChange}
+      options={options}
       disabled={disabled}
       className={`px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 ${error ? 'border-red-500' : ''} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-    >
-      {options.map((opt) => (
-        <option key={opt.value} value={opt.value}>{opt.label}</option>
-      ))}
-    </select>
+      dir="rtl"
+    />
     {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
   </div>
 );
@@ -256,6 +263,231 @@ const Pagination: React.FC<PaginationProps> = ({ totalPages, currentPage, setCur
     </div>
   )
 );
+
+const reasonOptions = [
+  { value: 'تالف', label: 'تالف', labelEn: 'Damaged' },
+  { value: 'منتج خاطئ', label: 'منتج خاطئ', labelEn: 'Wrong Item' },
+  { value: 'كمية زائدة', label: 'كمية زائدة', labelEn: 'Excess Quantity' },
+  { value: 'أخرى', label: 'أخرى', labelEn: 'Other' },
+];
+
+const ReturnItemRow: React.FC<ReturnItemRowProps> = memo(({ index, item, availableItems, updateItem, removeItem, t, isRtl }) => {
+  const availableItemOptions = availableItems
+    .filter((a) => !item.itemId || a.itemId === item.itemId || !returnFormItems.some((i, idx) => i.itemId === a.itemId && idx !== index))
+    .map((a) => ({
+      value: a.itemId,
+      label: `${a.productName} (${a.available} ${isRtl ? 'متاح' : 'available'})`,
+    }));
+
+  return (
+    <div className="flex flex-col gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-gray-700">
+          {isRtl ? `عنصر ${index + 1}` : `Item ${index + 1}`}
+        </span>
+        {index > 0 && (
+          <CustomButton
+            variant="danger"
+            size="sm"
+            onClick={() => removeItem(index)}
+            className="text-red-600 hover:text-red-800"
+          >
+            <X className="w-4 h-4" />
+          </CustomButton>
+        )}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <CustomSelect
+          label={isRtl ? 'العنصر' : 'Item'}
+          value={item.itemId}
+          onChange={(value) => updateItem(index, 'itemId', value)}
+          options={[{ value: '', label: isRtl ? 'اختر عنصرًا' : 'Select Item' }, ...availableItemOptions]}
+          error={returnErrors[`item_${index}_itemId`]}
+          disabled={!availableItems.length}
+        />
+        <CustomInput
+          label={isRtl ? 'الكمية' : 'Quantity'}
+          type="number"
+          min={1}
+          max={item.maxQuantity}
+          value={item.quantity}
+          onChange={(e) => updateItem(index, 'quantity', Number(e.target.value))}
+          error={returnErrors[`item_${index}_quantity`]}
+          placeholder={isRtl ? 'أدخل الكمية' : 'Enter quantity'}
+        />
+        <CustomSelect
+          label={isRtl ? 'سبب الإرجاع' : 'Return Reason'}
+          value={item.reason}
+          onChange={(value) => updateItem(index, 'reason', value)}
+          options={reasonOptions.map((opt) => ({
+            value: opt.value,
+            label: isRtl ? opt.label : opt.labelEn,
+          }))}
+          error={returnErrors[`item_${index}_reason`]}
+        />
+      </div>
+      <CustomInput
+        label={isRtl ? 'ملاحظات' : 'Notes'}
+        value={item.notes || ''}
+        onChange={(e) => updateItem(index, 'notes', e.target.value)}
+        placeholder={isRtl ? 'أدخل ملاحظات إضافية (اختياري)' : 'Enter additional notes (optional)'}
+      />
+    </div>
+  );
+});
+ReturnItemRow.displayName = 'ReturnItemRow';
+
+const ReturnModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  orderId?: string | null;
+  preSelectedItems?: { itemId: string; productId: string; quantity: number }[];
+  returnForm: ReturnForm;
+  setReturnForm: (form: ReturnForm) => void;
+  t: (key: string, params?: any) => string;
+  isRtl: boolean;
+  onSubmit: (e: React.FormEvent, orderId: string | null, returnForm: ReturnForm) => void;
+  submitting: string | null;
+  availableItems: AvailableItem[];
+}> = memo(({ isOpen, onClose, orderId, preSelectedItems, returnForm, setReturnForm, t, isRtl, onSubmit, submitting, availableItems }) => {
+  const addItem = useCallback(() => {
+    const available = availableItems.find((a) => !returnForm.items.some((i) => i.itemId === a.itemId));
+    if (available) {
+      setReturnForm({
+        ...returnForm,
+        items: [...returnForm.items, { itemId: available.itemId, productId: available.productId, quantity: 1, reason: '', maxQuantity: Math.min(available.available, available.stock), notes: '' }],
+      });
+    }
+  }, [returnForm, setReturnForm, availableItems]);
+
+  const updateItem = useCallback(
+    (index: number, field: keyof ReturnItem, value: any) => {
+      const updatedItems = [...returnForm.items];
+      updatedItems[index] = { ...updatedItems[index], [field]: value };
+      if (field === 'itemId') {
+        const selected = availableItems.find((a) => a.itemId === value);
+        if (selected) {
+          updatedItems[index].productId = selected.productId;
+          updatedItems[index].maxQuantity = Math.min(selected.available, selected.stock);
+        } else {
+          updatedItems[index].productId = '';
+          updatedItems[index].maxQuantity = 0;
+        }
+      }
+      setReturnForm({ ...returnForm, items: updatedItems });
+    },
+    [returnForm, setReturnForm, availableItems]
+  );
+
+  const removeItem = useCallback(
+    (index: number) => {
+      setReturnForm({ ...returnForm, items: returnForm.items.filter((_, i) => i !== index) });
+    },
+    [returnForm, setReturnForm]
+  );
+
+  const isFormValid = useMemo(
+    () =>
+      returnForm.orderId &&
+      returnForm.reason &&
+      returnForm.items.every(
+        (item) =>
+          item.itemId &&
+          item.productId &&
+          item.quantity > 0 &&
+          item.reason &&
+          item.quantity <= (item.maxQuantity || 0)
+      ),
+    [returnForm]
+  );
+
+  return (
+    <CustomModal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={isRtl ? (orderId ? `طلب إرجاع للطلب #${orderId}` : 'طلب إرجاع جديد') : (orderId ? `Return Request for Order #${orderId}` : 'New Return Request')}
+    >
+      <form onSubmit={(e) => onSubmit(e, orderId, returnForm)} className="space-y-6">
+        <CustomSelect
+          label={isRtl ? 'الطلب' : 'Order'}
+          value={returnForm.orderId}
+          onChange={(value) => setReturnForm({ ...returnForm, orderId: value, items: [] })}
+          options={[{ value: '', label: isRtl ? 'اختر طلبًا' : 'Select Order' }].concat(
+            (ordersData || []).map((order) => ({
+              value: order._id,
+              label: `${order.orderNumber} (${isRtl ? 'تم التوصيل' : 'Delivered'})`,
+            }))
+          )}
+          error={returnErrors.orderId}
+        />
+        <CustomSelect
+          label={isRtl ? 'السبب' : 'Reason'}
+          value={returnForm.reason}
+          onChange={(value) => setReturnForm({ ...returnForm, reason: value })}
+          options={reasonOptions.map((opt) => ({
+            value: opt.value,
+            label: isRtl ? opt.label : opt.labelEn,
+          }))}
+          error={returnErrors.reason}
+        />
+        <CustomInput
+          label={isRtl ? 'ملاحظات' : 'Notes'}
+          value={returnForm.notes}
+          onChange={(e) => setReturnForm({ ...returnForm, notes: e.target.value })}
+          placeholder={isRtl ? 'أدخل ملاحظات إضافية' : 'Enter additional notes'}
+        />
+        <div className="space-y-4">
+          {returnForm.items.map((item, index) => (
+            <ReturnItemRow
+              key={index}
+              index={index}
+              item={item}
+              availableItems={availableItems}
+              updateItem={updateItem}
+              removeItem={removeItem}
+              t={t}
+              isRtl={isRtl}
+            />
+          ))}
+          {returnErrors.items && <p className="text-red-500 text-sm mt-1">{returnErrors.items}</p>}
+        </div>
+        <CustomButton
+          variant="secondary"
+          onClick={addItem}
+          className="bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-4 py-2 text-sm w-full sm:w-auto"
+          disabled={availableItems.length === 0 || availableItems.length === returnForm.items.length}
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          {isRtl ? 'إضافة عنصر' : 'Add Item'}
+        </CustomButton>
+        <div className={`flex gap-4 ${isRtl ? 'justify-start' : 'justify-end'}`}>
+          <CustomButton
+            variant="secondary"
+            onClick={onClose}
+            className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg px-4 py-2 text-sm"
+          >
+            {isRtl ? 'إلغاء' : 'Cancel'}
+          </CustomButton>
+          <CustomButton
+            variant="primary"
+            type="submit"
+            className="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-4 py-2 text-sm"
+            disabled={submitting || !isFormValid || availableItems.length === 0}
+          >
+            {submitting
+              ? isRtl
+                ? 'جاري الإرسال...'
+                : 'Submitting...'
+              : isRtl
+              ? 'إرسال'
+              : 'Submit'}
+          </CustomButton>
+        </div>
+      </form>
+    </CustomModal>
+  );
+});
+ReturnModal.displayName = 'ReturnModal';
 
 export const BranchInventory: React.FC = () => {
   const { t, language } = useLanguage();
@@ -384,29 +616,30 @@ export const BranchInventory: React.FC = () => {
             stock: inventoryData?.find((inv) => inv.product?._id === i.product!._id)?.currentStock || 0,
           }));
         setAvailableItems(items);
-        if (selectedItem && selectedItem.product) {
+        if (selectedItem?.product) {
           const matchingItem = items.find((a) => a.productId === selectedItem.product._id);
           if (matchingItem) {
-            setReturnForm((prev) => ({
-              ...prev,
+            setReturnForm({
+              ...returnForm,
               items: [{
                 itemId: matchingItem.itemId,
                 productId: matchingItem.productId,
                 quantity: 1,
                 reason: '',
                 maxQuantity: Math.min(matchingItem.available, matchingItem.stock),
+                notes: '',
               }],
-            }));
+            });
           } else {
-            setReturnForm((prev) => ({ ...prev, items: [] }));
+            setReturnForm({ ...returnForm, items: [] });
             toast.error(isRtl ? 'المنتج غير موجود في الطلب' : 'Product not found in the order');
           }
         } else {
-          setReturnForm((prev) => ({ ...prev, items: [] }));
+          setReturnForm({ ...returnForm, items: [] });
         }
       } else {
         setAvailableItems([]);
-        setReturnForm((prev) => ({ ...prev, items: [] }));
+        setReturnForm({ ...returnForm, items: [] });
       }
     },
   });
@@ -443,6 +676,7 @@ export const BranchInventory: React.FC = () => {
           sound: '/sounds/notification.mp3',
           vibrate: [400, 100, 400],
         });
+        toast.success(t('returns.create_success'));
       }
     });
     socket.on('returnStatusUpdated', ({ branchId, returnId, status, orderNumber }: { branchId: string; returnId: string; status: string; orderNumber: string }) => {
@@ -496,16 +730,6 @@ export const BranchInventory: React.FC = () => {
     [isRtl]
   );
 
-  const reasonOptions = useMemo(
-    () => [
-      { value: 'تالف', label: isRtl ? 'تالف' : 'Damaged' },
-      { value: 'منتج خاطئ', label: isRtl ? 'منتج خاطئ' : 'Wrong Item' },
-      { value: 'كمية زائدة', label: isRtl ? 'كمية زائدة' : 'Excess Quantity' },
-      { value: 'أخرى', label: isRtl ? 'أخرى' : 'Other' },
-    ],
-    [isRtl]
-  );
-
   const filteredInventory = useMemo(
     () =>
       (inventoryData || []).filter(
@@ -547,7 +771,12 @@ export const BranchInventory: React.FC = () => {
 
   const handleOpenReturnModal = (item?: InventoryItem) => {
     setSelectedItem(item || null);
-    setReturnForm({ orderId: '', reason: '', notes: '', items: [] });
+    setReturnForm({
+      orderId: '',
+      reason: '',
+      notes: '',
+      items: item?.product ? [{ itemId: '', productId: item.product._id, quantity: 1, reason: '', maxQuantity: item.currentStock, notes: '' }] : [],
+    });
     setReturnErrors({});
     setAvailableItems([]);
     setIsReturnModalOpen(true);
@@ -558,38 +787,6 @@ export const BranchInventory: React.FC = () => {
     setEditForm({ minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
     setEditErrors({});
     setIsEditModalOpen(true);
-  };
-
-  const addItemToForm = () => {
-    setReturnForm((prev) => ({
-      ...prev,
-      items: [...prev.items, { itemId: '', productId: '', quantity: 1, reason: '', maxQuantity: 0 }],
-    }));
-  };
-
-  const updateItemInForm = (index: number, field: keyof ReturnItem, value: string | number) => {
-    setReturnForm((prev) => {
-      const newItems = [...prev.items];
-      newItems[index] = { ...newItems[index], [field]: value };
-      if (field === 'itemId') {
-        const sel = availableItems.find((a) => a.itemId === value);
-        if (sel) {
-          newItems[index].productId = sel.productId;
-          newItems[index].maxQuantity = Math.min(sel.available, sel.stock);
-        } else {
-          newItems[index].productId = '';
-          newItems[index].maxQuantity = 0;
-        }
-      }
-      return { ...prev, items: newItems };
-    });
-  };
-
-  const removeItemFromForm = (index: number) => {
-    setReturnForm((prev) => ({
-      ...prev,
-      items: prev.items.filter((_, i) => i !== index),
-    }));
   };
 
   const validateReturnForm = useCallback(() => {
@@ -627,7 +824,7 @@ export const BranchInventory: React.FC = () => {
         notes: returnForm.notes,
         items: returnForm.items.map((item) => ({
           itemId: item.itemId,
-          product: item.productId, // Backend expects 'product' as the field name
+          product: item.productId,
           quantity: item.quantity,
           reason: item.reason,
         })),
@@ -645,7 +842,7 @@ export const BranchInventory: React.FC = () => {
       toast.success(t('returns.create_success'));
       socket?.emit('returnCreated', {
         branchId: user?.branchId,
-        returnId: crypto.randomUUID(), // Backend should ideally return this
+        returnId: crypto.randomUUID(),
         orderNumber: ordersData?.find((o) => o._id === returnForm.orderId)?.orderNumber,
         status: 'pending_approval',
         eventId: crypto.randomUUID(),
@@ -766,8 +963,8 @@ export const BranchInventory: React.FC = () => {
           </div>
           <CustomSelect
             value={filterStatus}
-            onChange={(e) => {
-              setFilterStatus(e.target.value);
+            onChange={(value) => {
+              setFilterStatus(value);
               setCurrentPage(1);
             }}
             options={statusOptions}
@@ -915,7 +1112,7 @@ export const BranchInventory: React.FC = () => {
         )}
       </AnimatePresence>
 
-      <CustomModal
+      <ReturnModal
         isOpen={isReturnModalOpen}
         onClose={() => {
           setIsReturnModalOpen(false);
@@ -924,123 +1121,19 @@ export const BranchInventory: React.FC = () => {
           setAvailableItems([]);
           setSelectedItem(null);
         }}
-        title={isRtl ? 'إنشاء مرتجع' : 'Create Return'}
-      >
-        <div className="flex flex-col gap-4">
-          {selectedItem?.product && (
-            <p className="text-sm text-gray-600">
-              {isRtl ? 'المنتج' : 'Product'}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
-            </p>
-          )}
-          <CustomSelect
-            label={isRtl ? 'الطلب' : 'Order'}
-            value={returnForm.orderId}
-            onChange={(e) => {
-              setReturnForm({ ...returnForm, orderId: e.target.value, items: [] });
-            }}
-            options={[{ value: '', label: isRtl ? 'اختر طلبًا' : 'Select Order' }].concat(
-              (ordersData || []).map((order) => ({
-                value: order._id,
-                label: `${order.orderNumber} (${isRtl ? 'تم التوصيل' : 'Delivered'})`,
-              }))
-            )}
-            error={returnErrors.orderId}
-          />
-          <CustomSelect
-            label={isRtl ? 'السبب' : 'Reason'}
-            value={returnForm.reason}
-            onChange={(e) => {
-              setReturnForm({ ...returnForm, reason: e.target.value });
-            }}
-            options={reasonOptions}
-            error={returnErrors.reason}
-          />
-          <CustomInput
-            label={isRtl ? 'ملاحظات' : 'Notes'}
-            value={returnForm.notes}
-            onChange={(e) => {
-              setReturnForm({ ...returnForm, notes: e.target.value });
-            }}
-            placeholder={isRtl ? 'أدخل ملاحظات إضافية' : 'Enter additional notes'}
-          />
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'العناصر' : 'Items'}</label>
-            {returnForm.items.map((item, index) => (
-              <div key={index} className="flex gap-2 mb-2 items-center">
-                <CustomSelect
-                  value={item.itemId}
-                  onChange={(e) => updateItemInForm(index, 'itemId', e.target.value)}
-                  options={[{ value: '', label: isRtl ? 'اختر عنصرًا' : 'Select Item' }].concat(
-                    availableItems
-                      .filter((a) => !returnForm.items.some((i, idx) => i.itemId === a.itemId && idx !== index))
-                      .map((a) => ({
-                        value: a.itemId,
-                        label: `${a.productName} (${a.available} ${isRtl ? 'متاح' : 'available'})`,
-                      }))
-                  )}
-                  error={returnErrors[`item_${index}_itemId`]}
-                  disabled={!returnForm.orderId}
-                />
-                <CustomInput
-                  type="number"
-                  min={1}
-                  max={item.maxQuantity}
-                  value={item.quantity}
-                  onChange={(e) => updateItemInForm(index, 'quantity', Number(e.target.value))}
-                  error={returnErrors[`item_${index}_quantity`]}
-                  className="w-24"
-                />
-                <CustomSelect
-                  value={item.reason}
-                  onChange={(e) => updateItemInForm(index, 'reason', e.target.value)}
-                  options={reasonOptions}
-                  error={returnErrors[`item_${index}_reason`]}
-                />
-                <CustomButton
-                  variant="danger"
-                  size="sm"
-                  onClick={() => removeItemFromForm(index)}
-                  className="text-red-600 hover:text-red-800"
-                >
-                  <X className="w-4 h-4" />
-                </CustomButton>
-              </div>
-            ))}
-            {returnErrors.items && <p className="text-red-500 text-sm mt-1">{returnErrors.items}</p>}
-            <CustomButton
-              variant="secondary"
-              onClick={addItemToForm}
-              className="mt-2 bg-gray-100 hover:bg-gray-200 text-gray-800"
-              disabled={availableItems.length === 0 || availableItems.length === returnForm.items.length}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              {isRtl ? 'إضافة عنصر' : 'Add Item'}
-            </CustomButton>
-          </div>
-          <div className="flex justify-end gap-2">
-            <CustomButton
-              variant="secondary"
-              onClick={() => {
-                setIsReturnModalOpen(false);
-                setReturnForm({ orderId: '', reason: '', notes: '', items: [] });
-                setReturnErrors({});
-                setAvailableItems([]);
-                setSelectedItem(null);
-              }}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-800"
-            >
-              {isRtl ? 'إلغاء' : 'Cancel'}
-            </CustomButton>
-            <CustomButton
-              onClick={() => createReturnMutation.mutate()}
-              disabled={createReturnMutation.isPending}
-              className="bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
-            >
-              {createReturnMutation.isPending ? (isRtl ? 'جاري...' : 'Submitting...') : isRtl ? 'إرسال' : 'Submit'}
-            </CustomButton>
-          </div>
-        </div>
-      </CustomModal>
+        orderId={returnForm.orderId}
+        preSelectedItems={selectedItem?.product ? [{ itemId: '', productId: selectedItem.product._id, quantity: 1 }] : []}
+        returnForm={returnForm}
+        setReturnForm={setReturnForm}
+        t={t}
+        isRtl={isRtl}
+        onSubmit={(e, orderId, form) => {
+          e.preventDefault();
+          createReturnMutation.mutate();
+        }}
+        submitting={createReturnMutation.isPending ? 'submitting' : null}
+        availableItems={availableItems}
+      />
 
       <CustomModal
         isOpen={isEditModalOpen}
