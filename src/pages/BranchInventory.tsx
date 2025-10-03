@@ -10,27 +10,22 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-interface Product {
+// Interfaces
+interface InventoryItem {
   _id: string;
-  name: string;
-  nameEn: string;
-  code: string;
-  unit: string;
-  unitEn: string;
-  department: {
+  product: {
     _id: string;
     name: string;
     nameEn: string;
+    code: string;
+    unit: string;
+    unitEn: string;
+    department: { name: string; nameEn: string; _id: string };
   };
-}
-
-interface InventoryItem {
-  _id: string;
-  product: Product;
   currentStock: number;
   minStockLevel: number;
   maxStockLevel: number;
-  status?: 'low' | 'normal' | 'full';
+  status?: string;
 }
 
 interface InventoryHistoryItem {
@@ -48,17 +43,22 @@ interface InventoryHistoryItem {
   createdAt: string;
 }
 
-interface OrderItem {
-  _id: string;
-  product: Product;
-  quantity: number;
-  returnedQuantity?: number;
-}
-
 interface Order {
   _id: string;
   orderNumber: string;
-  items: OrderItem[];
+  items: Array<{
+    _id: string;
+    product: {
+      _id: string;
+      name: string;
+      nameEn: string;
+      unit: string;
+      unitEn: string;
+      department: { name: string; nameEn: string; _id: string };
+    };
+    quantity: number;
+    returnedQuantity?: number;
+  }>;
   status: string;
 }
 
@@ -102,15 +102,15 @@ interface CustomInputProps {
   type?: string;
   min?: number;
   max?: number;
-  value?: string | number;
-  onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  value: string | number;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   error?: string;
   className?: string;
   placeholder?: string;
 }
 
 interface CustomButtonProps {
-  variant?: 'primary' | 'secondary' | 'danger';
+  variant?: 'primary' | 'secondary' | 'destructive' | 'danger';
   size?: 'sm' | 'md';
   onClick?: () => void;
   disabled?: boolean;
@@ -127,9 +127,9 @@ interface CustomModalProps {
 
 interface CustomSelectProps {
   label?: string;
-  value?: string;
-  onChange?: (e: React.ChangeEvent<HTMLSelectElement>) => void;
-  options: { value: string; label: string }[];
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  options: Array<{ value: string; label: string }>;
   error?: string;
   disabled?: boolean;
 }
@@ -168,7 +168,7 @@ const CustomInput: React.FC<CustomInputProps> = ({ label, type = 'text', min, ma
 const CustomButton: React.FC<CustomButtonProps> = ({ variant = 'primary', size = 'md', onClick, disabled, className, children }) => {
   let baseClass = 'px-4 py-2 rounded-lg transition-colors duration-200';
   if (variant === 'secondary') baseClass += ' bg-gray-100 hover:bg-gray-200 text-gray-800';
-  else if (variant === 'danger') baseClass += ' text-red-600 hover:text-red-800';
+  else if (variant === 'destructive' || variant === 'danger') baseClass += ' text-red-600 hover:text-red-800';
   else baseClass += ' bg-amber-600 text-white hover:bg-amber-700';
   if (disabled) baseClass += ' opacity-50 cursor-not-allowed';
   return (
@@ -290,7 +290,7 @@ export const BranchInventory: React.FC = () => {
     queryFn: () => inventoryAPI.getByBranch(user?.branchId || ''),
     enabled: !!user?.branchId,
     select: (response) => {
-      const inventoryData = Array.isArray(response) ? response : response?.data || [];
+      const inventoryData = Array.isArray(response) ? response : response?.inventory || [];
       return inventoryData.map((item: InventoryItem) => ({
         ...item,
         product: {
@@ -320,6 +320,7 @@ export const BranchInventory: React.FC = () => {
     queryKey: ['inventoryHistory', user?.branchId, language],
     queryFn: () => inventoryAPI.getHistory({ branchId: user?.branchId }),
     enabled: activeTab === 'history' && !!user?.branchId,
+    select: (response) => response?.history || [],
   });
 
   const { data: ordersData, isLoading: ordersLoading } = useQuery<Order[], Error>({
@@ -329,10 +330,10 @@ export const BranchInventory: React.FC = () => {
     select: (response) => response?.orders || [],
   });
 
-  const { data: selectedOrderData, isLoading: selectedOrderLoading } = useQuery<Order | null, Error>({
+  const { data: selectedOrderData } = useQuery<Order | null, Error>({
     queryKey: ['selectedOrder', returnForm.orderId, language],
-    queryFn: () => {
-      if (!returnForm.orderId) return Promise.resolve(null);
+    queryFn: async () => {
+      if (!returnForm.orderId) return null;
       return ordersAPI.getById(returnForm.orderId);
     },
     enabled: !!returnForm.orderId,
@@ -346,7 +347,7 @@ export const BranchInventory: React.FC = () => {
           unit: isRtl ? i.product.unit || t('products.unit_unknown') : i.product.unitEn || i.product.unit || 'N/A',
           departmentName: isRtl ? i.product.department.name : i.product.department.nameEn || i.product.department.name,
           stock: inventoryData?.find((inv) => inv.product._id === i.product._id)?.currentStock || 0,
-        })).filter((i) => i.available > 0);
+        }));
         setAvailableItems(items);
         if (selectedItem) {
           const matchingItem = items.find((a) => a.productId === selectedItem.product._id);
@@ -557,8 +558,8 @@ export const BranchInventory: React.FC = () => {
     returnForm.items.forEach((item, index) => {
       if (!item.itemId) errors[`item_${index}_itemId`] = t('errors.required', { field: t('returns.item') });
       if (!item.reason) errors[`item_${index}_reason`] = t('errors.required', { field: t('returns.reason') });
-      if (item.quantity < 1 || item.quantity > item.maxQuantity || isNaN(item.quantity)) {
-        errors[`item_${index}_quantity`] = t('errors.invalid_quantity_max', { max: item.maxQuantity });
+      if (item.quantity < 1 || item.quantity > (item.maxQuantity ?? 0) || isNaN(item.quantity)) {
+        errors[`item_${index}_quantity`] = t('errors.invalid_quantity_max', { max: item.maxQuantity ?? 0 });
       }
     });
     setReturnErrors(errors);
@@ -574,10 +575,11 @@ export const BranchInventory: React.FC = () => {
     return Object.keys(errors).length === 0;
   }, [editForm, t]);
 
-  const createReturnMutation = useMutation({
+  const createReturnMutation = useMutation<void, Error, void>({
     mutationFn: async () => {
       if (!validateReturnForm()) throw new Error(t('errors.invalid_form'));
-      const response = await returnsAPI.createReturn({
+      if (!user?.branchId) throw new Error(t('errors.no_branch'));
+      await returnsAPI.createReturn({
         orderId: returnForm.orderId,
         reason: returnForm.reason,
         notes: returnForm.notes,
@@ -588,9 +590,8 @@ export const BranchInventory: React.FC = () => {
           reason: item.reason,
         })),
       });
-      return response;
     },
-    onSuccess: (response) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
@@ -602,26 +603,25 @@ export const BranchInventory: React.FC = () => {
       toast.success(t('returns.create_success'));
       socket?.emit('returnCreated', {
         branchId: user?.branchId,
-        returnId: response._id,
+        returnId: crypto.randomUUID(), // Note: Ideally, the API response should provide the returnId
         orderNumber: ordersData?.find((o) => o._id === returnForm.orderId)?.orderNumber,
         status: 'pending',
         eventId: crypto.randomUUID(),
       });
     },
-    onError: (err: any) => {
-      const errorMessage = err.message || t('errors.create_return');
-      toast.error(errorMessage);
-      if (err.status === 400 && err.message.includes('Invalid')) {
-        setReturnErrors({ general: errorMessage });
+    onError: (err) => {
+      toast.error(err.message || t('errors.create_return'));
+      if (err.message.includes('Invalid')) {
+        setReturnErrors({ form: err.message });
       }
     },
   });
 
-  const updateInventoryMutation = useMutation({
+  const updateInventoryMutation = useMutation<void, Error, void>({
     mutationFn: async () => {
       if (!validateEditForm()) throw new Error(t('errors.invalid_form'));
       if (!selectedItem) throw new Error(t('errors.no_item_selected'));
-      return inventoryAPI.update(selectedItem._id, {
+      await inventoryAPI.updateStock(selectedItem._id, {
         minStockLevel: editForm.minStockLevel,
         maxStockLevel: editForm.maxStockLevel,
       });
@@ -635,7 +635,7 @@ export const BranchInventory: React.FC = () => {
       toast.success(t('inventory.update_success'));
       socket?.emit('inventoryUpdated', { branchId: user?.branchId, eventId: crypto.randomUUID() });
     },
-    onError: (err: any) => {
+    onError: (err) => {
       toast.error(err.message || t('errors.update_inventory'));
     },
   });
@@ -712,6 +712,7 @@ export const BranchInventory: React.FC = () => {
               placeholder={isRtl ? 'ابحث...' : 'Search...'}
               onChange={handleSearchChange}
               className={`pl-10 pr-4 py-2 border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 ${isRtl ? 'pr-10 pl-4' : ''}`}
+              value={searchQuery}
             />
           </div>
           <CustomSelect
@@ -785,7 +786,7 @@ export const BranchInventory: React.FC = () => {
                               <Edit className="w-4 h-4" />
                             </CustomButton>
                             <CustomButton
-                              variant="danger"
+                              variant="destructive"
                               size="sm"
                               disabled={item.currentStock <= 0}
                               onClick={() => handleOpenReturnModal(item)}
@@ -891,9 +892,7 @@ export const BranchInventory: React.FC = () => {
               }))
             )}
             error={returnErrors.orderId}
-            disabled={ordersLoading}
           />
-          {selectedOrderLoading && <div className="text-center py-4"><div className="animate-spin rounded-full h-8 w-8 border-t-4 border-b-4 border-amber-600 mx-auto"></div></div>}
           <CustomSelect
             label={isRtl ? 'السبب' : 'Reason'}
             value={returnForm.reason}
@@ -902,7 +901,6 @@ export const BranchInventory: React.FC = () => {
             }}
             options={reasonOptions}
             error={returnErrors.reason}
-            disabled={!returnForm.orderId}
           />
           <CustomInput
             label={isRtl ? 'ملاحظات' : 'Notes'}
@@ -928,7 +926,7 @@ export const BranchInventory: React.FC = () => {
                       }))
                   )}
                   error={returnErrors[`item_${index}_itemId`]}
-                  disabled={!returnForm.orderId || selectedOrderLoading}
+                  disabled={!returnForm.orderId}
                 />
                 <CustomInput
                   type="number"
@@ -938,14 +936,12 @@ export const BranchInventory: React.FC = () => {
                   onChange={(e) => updateItemInForm(index, 'quantity', Number(e.target.value))}
                   error={returnErrors[`item_${index}_quantity`]}
                   className="w-24"
-                  disabled={!item.itemId}
                 />
                 <CustomSelect
                   value={item.reason}
                   onChange={(e) => updateItemInForm(index, 'reason', e.target.value)}
                   options={reasonOptions}
                   error={returnErrors[`item_${index}_reason`]}
-                  disabled={!item.itemId}
                 />
                 <CustomButton
                   variant="danger"
@@ -958,12 +954,11 @@ export const BranchInventory: React.FC = () => {
               </div>
             ))}
             {returnErrors.items && <p className="text-red-500 text-sm mt-1">{returnErrors.items}</p>}
-            {returnErrors.general && <p className="text-red-500 text-sm mt-1">{returnErrors.general}</p>}
             <CustomButton
               variant="secondary"
               onClick={addItemToForm}
               className="mt-2 bg-gray-100 hover:bg-gray-200 text-gray-800"
-              disabled={!returnForm.orderId || selectedOrderLoading || availableItems.length === 0 || availableItems.length === returnForm.items.length}
+              disabled={availableItems.length === 0 || availableItems.length === returnForm.items.length}
             >
               <Plus className="w-4 h-4 mr-2" />
               {isRtl ? 'إضافة عنصر' : 'Add Item'}
@@ -985,7 +980,7 @@ export const BranchInventory: React.FC = () => {
             </CustomButton>
             <CustomButton
               onClick={() => createReturnMutation.mutate()}
-              disabled={createReturnMutation.isPending || !returnForm.orderId || selectedOrderLoading}
+              disabled={createReturnMutation.isPending}
               className="bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
             >
               {createReturnMutation.isPending ? (isRtl ? 'جاري...' : 'Submitting...') : isRtl ? 'إرسال' : 'Submit'}
@@ -1015,9 +1010,7 @@ export const BranchInventory: React.FC = () => {
             type="number"
             min={0}
             value={editForm.minStockLevel}
-            onChange={(e) => {
-              setEditForm({ ...editForm, minStockLevel: Number(e.target.value) });
-            }}
+            onChange={(e) => setEditForm({ ...editForm, minStockLevel: Number(e.target.value) })}
             error={editErrors.minStockLevel}
           />
           <CustomInput
@@ -1025,9 +1018,7 @@ export const BranchInventory: React.FC = () => {
             type="number"
             min={0}
             value={editForm.maxStockLevel}
-            onChange={(e) => {
-              setEditForm({ ...editForm, maxStockLevel: Number(e.target.value) });
-            }}
+            onChange={(e) => setEditForm({ ...editForm, maxStockLevel: Number(e.target.value) })}
             error={editErrors.maxStockLevel}
           />
           <div className="flex justify-end gap-2">
