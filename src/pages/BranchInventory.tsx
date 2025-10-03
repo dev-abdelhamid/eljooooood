@@ -220,12 +220,13 @@ export const BranchInventory: React.FC = () => {
     select: (response) => response?.orders || [],
   });
 
-  useQuery({
+  const { data: selectedOrderData } = useQuery({
     queryKey: ['selectedOrder', returnForm.orderId, language],
     queryFn: () => {
       if (!returnForm.orderId) return null;
       return ordersAPI.getById(returnForm.orderId);
     },
+    enabled: !!returnForm.orderId,
     onSuccess: (order) => {
       if (order) {
         const items = order.items.map((i: any) => ({
@@ -238,9 +239,28 @@ export const BranchInventory: React.FC = () => {
           stock: inventoryData?.find((inv: any) => inv.product._id === i.product._id)?.currentStock || 0,
         }));
         setAvailableItems(items);
+        // If selectedItem is set, auto-add the item if it's in the order
+        if (selectedItem) {
+          const matchingItem = items.find((a) => a.productId === selectedItem.product._id);
+          if (matchingItem) {
+            setReturnForm((prev) => ({
+              ...prev,
+              items: [{
+                itemId: matchingItem.itemId,
+                productId: matchingItem.productId,
+                quantity: 1,
+                reason: '',
+                maxQuantity: Math.min(matchingItem.available, matchingItem.stock),
+              }],
+            }));
+          } else {
+            toast.error(isRtl ? 'المنتج غير موجود في الطلب' : 'Product not found in the order');
+          }
+        }
+      } else {
+        setAvailableItems([]);
       }
     },
-    enabled: !!returnForm.orderId,
   });
 
   useEffect(() => {
@@ -285,7 +305,7 @@ export const BranchInventory: React.FC = () => {
   );
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    debouncedSearch(e.target.value);
+    debouncedSearch(e?.target?.value || '');
     setCurrentPage(1);
   };
 
@@ -346,7 +366,7 @@ export const BranchInventory: React.FC = () => {
 
   const handleOpenReturnModal = (item: InventoryItem) => {
     setSelectedItem(item);
-    setReturnForm({ orderId: '', reason: '', notes: '', items: [{ itemId: '', productId: item.product._id, quantity: 1, reason: '', maxQuantity: 0 }] });
+    setReturnForm({ orderId: '', reason: '', notes: '', items: [] });  // Reset items, will add after order select
     setReturnErrors({});
     setIsReturnModalOpen(true);
   };
@@ -374,6 +394,9 @@ export const BranchInventory: React.FC = () => {
         if (sel) {
           newItems[index].productId = sel.productId;
           newItems[index].maxQuantity = Math.min(sel.available, sel.stock);
+        } else {
+          newItems[index].productId = '';
+          newItems[index].maxQuantity = 0;
         }
       }
       return { ...prev, items: newItems };
@@ -395,8 +418,8 @@ export const BranchInventory: React.FC = () => {
     returnForm.items.forEach((item, index) => {
       if (!item.itemId) errors[`item_${index}_itemId`] = t('errors.required', { field: t('returns.item') });
       if (!item.reason) errors[`item_${index}_reason`] = t('errors.required', { field: t('returns.reason') });
-      if (item.quantity < 1 || item.quantity > item.maxQuantity || isNaN(item.quantity)) {
-        errors[`item_${index}_quantity`] = t('errors.invalid_quantity_max', { max: item.maxQuantity });
+      if (item.quantity < 1 || item.quantity > (item.maxQuantity ?? 0) || isNaN(item.quantity)) {
+        errors[`item_${index}_quantity`] = t('errors.invalid_quantity_max', { max: item.maxQuantity ?? 0 });
       }
     });
     setReturnErrors(errors);
@@ -539,7 +562,8 @@ export const BranchInventory: React.FC = () => {
           </div>
           <Select
             value={filterStatus}
-            onChange={(value) => {
+            onChange={(e) => {
+              const value = e?.target?.value || '';
               setFilterStatus(value);
               setCurrentPage(1);
             }}
@@ -705,7 +729,8 @@ export const BranchInventory: React.FC = () => {
           <Select
             label={isRtl ? 'الطلب' : 'Order'}
             value={returnForm.orderId}
-            onChange={(value) => {
+            onChange={(e) => {
+              const value = e?.target?.value || '';
               setReturnForm({ ...returnForm, orderId: value, items: [] });
             }}
             options={[{ value: '', label: isRtl ? 'اختر طلبًا' : 'Select Order' }].concat(
@@ -719,14 +744,20 @@ export const BranchInventory: React.FC = () => {
           <Select
             label={isRtl ? 'السبب' : 'Reason'}
             value={returnForm.reason}
-            onChange={(value) => setReturnForm({ ...returnForm, reason: value })}
+            onChange={(e) => {
+              const value = e?.target?.value || '';
+              setReturnForm({ ...returnForm, reason: value });
+            }}
             options={reasonOptions}
             error={returnErrors.reason}
           />
           <Input
             label={isRtl ? 'ملاحظات' : 'Notes'}
             value={returnForm.notes}
-            onChange={(e) => setReturnForm({ ...returnForm, notes: e.target.value })}
+            onChange={(e) => {
+              const value = e?.target?.value || '';
+              setReturnForm({ ...returnForm, notes: value });
+            }}
             placeholder={isRtl ? 'أدخل ملاحظات إضافية' : 'Enter additional notes'}
           />
           <div>
@@ -735,7 +766,10 @@ export const BranchInventory: React.FC = () => {
               <div key={index} className="flex gap-2 mb-2 items-center">
                 <Select
                   value={item.itemId}
-                  onChange={(value) => updateItemInForm(index, 'itemId', value)}
+                  onChange={(e) => {
+                    const value = e?.target?.value || '';
+                    updateItemInForm(index, 'itemId', value);
+                  }}
                   options={[{ value: '', label: isRtl ? 'اختر عنصرًا' : 'Select Item' }].concat(
                     availableItems.map((a) => ({
                       value: a.itemId,
@@ -748,15 +782,21 @@ export const BranchInventory: React.FC = () => {
                 <Input
                   type="number"
                   min={1}
-                  max={item.maxQuantity}
-                  value={item.quantity}
-                  onChange={(e) => updateItemInForm(index, 'quantity', Number(e.target.value))}
+                  max={item.maxQuantity ?? 0}
+                  value={item.quantity ?? ''}
+                  onChange={(e) => {
+                    const value = Number(e?.target?.value || 0);
+                    updateItemInForm(index, 'quantity', value);
+                  }}
                   error={returnErrors[`item_${index}_quantity`]}
                   className="w-24"
                 />
                 <Select
                   value={item.reason}
-                  onChange={(value) => updateItemInForm(index, 'reason', value)}
+                  onChange={(e) => {
+                    const value = e?.target?.value || '';
+                    updateItemInForm(index, 'reason', value);
+                  }}
                   options={reasonOptions}
                   error={returnErrors[`item_${index}_reason`]}
                 />
@@ -827,16 +867,22 @@ export const BranchInventory: React.FC = () => {
             label={isRtl ? 'الحد الأدنى للمخزون' : 'Minimum Stock Level'}
             type="number"
             min={0}
-            value={editForm.minStockLevel}
-            onChange={(e) => setEditForm({ ...editForm, minStockLevel: Number(e.target.value) })}
+            value={editForm.minStockLevel ?? ''}
+            onChange={(e) => {
+              const value = Number(e?.target?.value || 0);
+              setEditForm({ ...editForm, minStockLevel: value });
+            }}
             error={editErrors.minStockLevel}
           />
           <Input
             label={isRtl ? 'الحد الأقصى للمخزون' : 'Maximum Stock Level'}
             type="number"
             min={0}
-            value={editForm.maxStockLevel}
-            onChange={(e) => setEditForm({ ...editForm, maxStockLevel: Number(e.target.value) })}
+            value={editForm.maxStockLevel ?? ''}
+            onChange={(e) => {
+              const value = Number(e?.target?.value || 0);
+              setEditForm({ ...editForm, maxStockLevel: value });
+            }}
             error={editErrors.maxStockLevel}
           />
           <div className="flex justify-end gap-2">
