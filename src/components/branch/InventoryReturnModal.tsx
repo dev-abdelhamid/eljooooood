@@ -10,13 +10,11 @@ import { inventoryAPI } from '../../services/api';
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  orderId?: string | null; // Optional orderId for context
-  preSelectedItems?: { itemId: string; productId: string; quantity: number }[]; // Optional pre-selected items
   returnFormData: ReturnFormItem[];
   setReturnFormData: (data: ReturnFormItem[]) => void;
   t: (key: string, params?: any) => string;
   isRtl: boolean;
-  onSubmit: (e: React.FormEvent, orderId: string | null, returnFormData: ReturnFormItem[]) => void;
+  onSubmit: (e: React.FormEvent, returnFormData: ReturnFormItem[]) => void;
   submitting: string | null;
   branchId: string;
 }
@@ -123,8 +121,8 @@ const ReturnItemRow: React.FC<ReturnItemRowProps> = memo(({ index, item, invento
 
 ReturnItemRow.displayName = 'ReturnItemRow';
 
-const ReturnModal: React.FC<Props> = memo(
-  ({ isOpen, onClose, orderId, preSelectedItems, returnFormData, setReturnFormData, t, isRtl, onSubmit, submitting, branchId }) => {
+const InventoryReturnModal: React.FC<Props> = memo(
+  ({ isOpen, onClose, returnFormData, setReturnFormData, t, isRtl, onSubmit, submitting, branchId }) => {
     const [inventoryItems, setInventoryItems] = useState<
       { productId: string; name: string; nameEn?: string; currentStock: number; unit?: string; unitEn?: string }[]
     >([]);
@@ -151,18 +149,9 @@ const ReturnModal: React.FC<Props> = memo(
             }));
           setInventoryItems(mappedItems);
 
-          // Initialize returnFormData with pre-selected items if provided
-          if (preSelectedItems?.length) {
-            const initialFormData = preSelectedItems.map((item) => ({
-              productId: item.productId,
-              itemId: item.itemId,
-              quantity: Math.min(item.quantity, mappedItems.find((i) => i.productId === item.productId)?.currentStock || 1),
-              reason: '',
-              notes: '',
-            }));
-            setReturnFormData(initialFormData);
-          } else if (!returnFormData.length) {
-            setReturnFormData([{ productId: mappedItems[0]?.productId || '', quantity: 1, reason: '', notes: '' }]);
+          // Initialize returnFormData if empty
+          if (!returnFormData.length && mappedItems.length > 0) {
+            setReturnFormData([{ productId: mappedItems[0].productId, quantity: 1, reason: '', notes: '' }]);
           }
         } catch (err: any) {
           setError(isRtl ? `فشل في جلب المخزون: ${err.message}` : `Failed to fetch inventory: ${err.message}`);
@@ -172,7 +161,7 @@ const ReturnModal: React.FC<Props> = memo(
       };
 
       fetchInventory();
-    }, [isOpen, branchId, preSelectedItems, setReturnFormData, isRtl]);
+    }, [isOpen, branchId, setReturnFormData, isRtl]);
 
     const addItem = useCallback(() => {
       setReturnFormData([
@@ -215,7 +204,7 @@ const ReturnModal: React.FC<Props> = memo(
       <Modal
         isOpen={isOpen}
         onClose={onClose}
-        title={isRtl ? (orderId ? `طلب إرجاع للطلب #${orderId}` : 'طلب إرجاع جديد') : (orderId ? `Return Request for Order #${orderId}` : 'New Return Request')}
+        title={isRtl ? 'طلب إرجاع من المخزون' : 'Inventory Return Request'}
         icon={X}
         className="max-w-2xl w-full p-6 bg-white rounded-lg shadow-xl"
         dir={isRtl ? 'rtl' : 'ltr'}
@@ -225,7 +214,7 @@ const ReturnModal: React.FC<Props> = memo(
         ) : error ? (
           <div className="text-center text-red-600 py-4">{error}</div>
         ) : (
-          <form onSubmit={(e) => onSubmit(e, orderId, returnFormData)} className="space-y-6">
+          <form onSubmit={(e) => onSubmit(e, null, returnFormData)} className="space-y-6">
             <div className="space-y-4">
               {returnFormData.map((item, index) => (
                 <ReturnItemRow
@@ -278,6 +267,6 @@ const ReturnModal: React.FC<Props> = memo(
   }
 );
 
-ReturnModal.displayName = 'ReturnModal';
+InventoryReturnModal.displayName = 'InventoryReturnModal';
 
-export default ReturnModal;
+export default InventoryReturnModal;

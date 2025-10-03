@@ -7,7 +7,7 @@ import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Select } from '../components/UI/Select';
 import SearchInput from '../components/UI/SearchInput';
-import { ShoppingCart, Download, Upload, Table2, Grid, AlertCircle } from 'lucide-react';
+import { ShoppingCart, Download, Upload, Table2, Grid, AlertCircle, Package } from 'lucide-react';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -28,6 +28,7 @@ const Pagination = lazy(() => import('../components/branch/Pagination'));
 const ViewModal = lazy(() => import('../components/branch/ViewModal'));
 const ConfirmDeliveryModal = lazy(() => import('../components/branch/ConfirmDeliveryModal'));
 const ReturnModal = lazy(() => import('../components/branch/ReturnModal'));
+const InventoryReturnModal = lazy(() => import('../components/branch/InventoryReturnModal'));
 
 // State and Action interfaces
 interface State {
@@ -36,6 +37,7 @@ interface State {
   isViewModalOpen: boolean;
   isConfirmDeliveryModalOpen: boolean;
   isReturnModalOpen: boolean;
+  isInventoryReturnModalOpen: boolean;
   returnFormData: ReturnFormItem[];
   searchQuery: string;
   filterStatus: string;
@@ -73,7 +75,8 @@ const initialState: State = {
   isViewModalOpen: false,
   isConfirmDeliveryModalOpen: false,
   isReturnModalOpen: false,
-  returnFormData: [{ itemId: '', quantity: 0, reason: '', notes: '' }],
+  isInventoryReturnModalOpen: false,
+  returnFormData: [{ productId: '', quantity: 0, reason: '', notes: '' }],
   searchQuery: '',
   filterStatus: '',
   sortBy: 'date',
@@ -875,444 +878,333 @@ const BranchOrders: React.FC = () => {
     dispatch({ type: 'SET_MODAL', modal: 'confirmDelivery', isOpen: true });
   }, []);
 
-  const openReturnModal = useCallback((order: Order, itemId: string) => {
-    const item = order.items.find(i => i.itemId === itemId);
+  const openReturnModal = useCallback((order: Order, itemId?: string) => {
     dispatch({ type: 'SET_SELECTED_ORDER', payload: order });
-    dispatch({
-      type: 'SET_RETURN_FORM',
-      payload: [{ itemId, quantity: item?.quantity || 1, reason: '', notes: '' }],
-    });
+    if (itemId) {
+      const item = order.items.find(i => i.itemId === itemId);
+      dispatch({
+        type: 'SET_RETURN_FORM',
+        payload: [{ itemId, productId: item?.productId || '', quantity: item?.quantity || 1, reason: '', notes: '' }],
+      });
+    } else {
+      dispatch({
+        type: 'SET_RETURN_FORM',
+        payload: [{ productId: '', quantity: 1, reason: '', notes: '' }],
+      });
+    }
     dispatch({ type: 'SET_MODAL', modal: 'return', isOpen: true });
   }, []);
 
+  const openInventoryReturnModal = useCallback(() => {
+    dispatch({
+      type: 'SET_RETURN_FORM',
+      payload: [{ productId: '', quantity: 1, reason: '', notes: '' }],
+    });
+    dispatch({ type: 'SET_MODAL', modal: 'inventoryReturn', isOpen: true });
+  }, []);
+
   const handleReturnItem = useCallback(
-    async (e: React.FormEvent, order: Order | null, returnFormData: ReturnFormItem[]) => {
+    async (e: React.FormEvent, orderId: string | null, returnFormData: ReturnFormItem[]) => {
       e.preventDefault();
-      if (!order || !user?.branchId || returnFormData.some(item => !item.itemId || item.quantity < 1 || !item.reason) || state.submitting) {
+      if (!user?.branchId || returnFormData.some(item => !item.productId || item.quantity < 1 || !item.reason) || state.submitting) {
         toast.error(isRtl ? 'يرجى ملء جميع الحقول' : 'Please fill all fields', {
           position: isRtl ? 'top-left' : 'top-right',
           autoClose: 3000,
         });
         return;
       }
-      dispatch({ type: 'SET_SUBMITTING', payload: order.id });
+      dispatch({ type: 'SET_SUBMITTING', payload: orderId || 'inventory-return' });
       try {
-        const items = returnFormData.map(item => {
-          const orderItem = order.items.find(i => i.itemId === item.itemId);
-          if (!orderItem || !orderItem.productId) {
-            throw new Error(isRtl ? 'معرف المنتج غير صالح' : 'Invalid product ID');
-          }
-          return {
-            product: orderItem.productId,
-            quantity: item.quantity,
-            reason: item.reason,
-            notes: item.notes,
-          };
-        });
+        const items = returnFormData.map(item => ({
+          product: item.productId,
+          quantity: item.quantity,
+          reason: item.reason,
+          notes: item.notes,
+        }));
         const response = await returnsAPI.createReturn({
-          orderId: order.id,
+          orderId: orderId || undefined,
           branchId: user.branchId,
           items,
           notes: items.map(item => item.notes).filter(Boolean).join('; '),
         });
         const returnData = {
           returnId: response._id,
-          items: items.map(item => ({
+          items: response.items.map((item: any) => ({
             productId: item.product,
-            productName: order.items.find(i => i.productId === item.product)?.productName || '',
-            quantity: item.quantity,
-            reason: item.reason,
-            status: 'pending_approval',
+            productName: getDisplayName(item.productName, item.productNameEn, isRtl),
+            quantity: Number(item.quantity) || 0,
+            reason: item.reason || 'unknown',
+            status: item.status || 'pending_approval',
           })),
-          status: 'pending_approval',
-          reviewNotes: response.notes || '',
-          createdAt: formatDate(new Date(), language),
+          status: response.status || 'pending_approval',
+          reviewNotes: response.reviewNotes || '',
+          createdAt: formatDate(response.createdAt ? new Date(response.createdAt) : new Date(), language),
         };
-        dispatch({ type: 'ADD_RETURN', orderId: order.id, returnData });
-        dispatch({ type: 'SET_MODAL', modal: 'return', isOpen: false });
-        dispatch({ type: 'SET_RETURN_FORM', payload: [{ itemId: '', quantity: 0, reason: '', notes: '' }] });
-        playNotificationSound('/sounds/return-created.mp3', [200, 100, 200]);
-        toast.success(isRtl ? 'تم تقديم طلب الإرجاع' : 'Return submitted successfully', {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        });
-      } catch (err: any) {
-        console.error('Return item error:', err.message, err.response?.data);
-        toast.error(isRtl ? `فشل في تقديم طلب الإرجاع: ${err.message}` : `Failed to submit return: ${err.message}`, {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        });
-      } finally {
-        dispatch({ type: 'SET_SUBMITTING', payload: null });
-      }
-    },
-    [user, t, isRtl, language, playNotificationSound, state.submitting]
-  );
 
-  const confirmDelivery = useCallback(
-    async (orderId: string) => {
-      if (!user?.branchId || !user?.id) {
-        console.log('Confirm delivery - Missing user or branch:', { user });
-        toast.error(isRtl ? 'لا يوجد فرع أو مستخدم مرتبط' : 'No branch or user associated', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
-        return;
-      }
-      dispatch({ type: 'SET_SUBMITTING', payload: orderId });
-      try {
-        const order = await ordersAPI.getById(orderId);
-        if (!order || !Array.isArray(order.items)) {
-          throw new Error(isRtl ? 'بيانات الطلب غير صالحة' : 'Invalid order data');
+        if (orderId) {
+          dispatch({ type: 'ADD_RETURN', orderId, returnData });
         }
-
-        // Validate product IDs
-        const invalidItems = order.items.filter(item => !item.product?._id);
-        if (invalidItems.length > 0) {
-          throw new Error(isRtl ? 'بعض العناصر تحتوي على معرفات منتجات غير صالحة' : 'Some items have invalid product IDs');
-        }
-
-        // Confirm delivery
-        await ordersAPI.confirmDelivery(orderId, user.id);
-
-        // Update inventory using bulkCreate
-        const inventoryItems = order.items.map(item => ({
-          productId: item.product._id,
-          currentStock: item.quantity,
-          minStockLevel: 0,
-          maxStockLevel: 1000,
-        }));
-
-        try {
-          await inventoryAPI.bulkCreate({
-            branchId: user.branchId,
-            userId: user.id,
-            orderId,
-            items: inventoryItems,
-          });
-        } catch (bulkError: any) {
-          console.warn(`Bulk create failed: ${bulkError.message}. Falling back to individual updates.`);
-          for (const item of order.items) {
-            try {
-              let inventoryItem;
-              try {
-                const inventory = await inventoryAPI.getByBranch(user.branchId);
-                inventoryItem = inventory.find((inv: any) => inv.productId === item.product._id);
-              } catch (getError: any) {
-                if (getError.status === 403) {
-                  console.warn(`Permission denied for getting inventory for branch ${user.branchId}. Proceeding to create new inventory entry.`);
-                  inventoryItem = null;
-                } else {
-                  throw getError;
-                }
-              }
-
-              if (inventoryItem) {
-                try {
-                  await inventoryAPI.updateStock(inventoryItem._id, {
-                    currentStock: (inventoryItem.currentStock || 0) + item.quantity,
-                  });
-                } catch (updateError: any) {
-                  if (updateError.status === 403) {
-                    console.warn(`Permission denied for updating inventory item ${inventoryItem._id}. Creating new inventory entry.`);
-                    await inventoryAPI.create({
-                      branchId: user.branchId,
-                      productId: item.product._id,
-                      currentStock: item.quantity,
-                      minStockLevel: 0,
-                      maxStockLevel: 1000,
-                      userId: user.id,
-                      orderId,
-                    });
-                  } else {
-                    throw updateError;
-                  }
-                }
-              } else {
-                await inventoryAPI.create({
-                  branchId: user.branchId,
-                  productId: item.product._id,
-                  currentStock: item.quantity,
-                  minStockLevel: 0,
-                  maxStockLevel: 1000,
-                  userId: user.id,
-                  orderId,
-                });
-              }
-            } catch (itemError: any) {
-              console.warn(`Failed to update inventory for product ${item.product._id}:`, itemError.message);
-              toast.warn(
-                isRtl ? `فشل تحديث المخزون للمنتج ${getDisplayName(item.productName, item.productName, isRtl)}: ${itemError.message}` : `Failed to update inventory for product ${getDisplayName(item.productName, item.productName, isRtl)}: ${itemError.message}`,
-                { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
-              );
-              continue;
-            }
-          }
-        }
-
-        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: OrderStatus.Delivered });
-        if (socket && isConnected) {
-          emit('orderStatusUpdated', { orderId, status: OrderStatus.Delivered });
-        }
-        dispatch({ type: 'SET_MODAL', modal: 'confirmDelivery', isOpen: false });
-        playNotificationSound('/sounds/order-delivered.mp3', [400, 100, 400]);
-        toast.success(isRtl ? 'تم تأكيد التسليم' : 'Delivery confirmed successfully', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
-      } catch (err: any) {
-        console.error('Confirm delivery error:', err.message, err.response?.data);
-        toast.error(isRtl ? `فشل في تأكيد التسليم: ${err.message}` : `Failed to confirm delivery: ${err.message}`, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
-      } finally {
-        dispatch({ type: 'SET_SUBMITTING', payload: null });
-      }
-    },
-    [t, isRtl, playNotificationSound, user, socket, isConnected, emit]
-  );
-
-  // Update order status
-  const updateOrderStatus = useCallback(
-    async (orderId: string, status: OrderStatus) => {
-      if (!user?.branchId) {
-        toast.error(isRtl ? 'لا يوجد فرع مرتبط' : 'No branch associated', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
-        return;
-      }
-      dispatch({ type: 'SET_SUBMITTING', payload: orderId });
-      try {
-        await ordersAPI.updateStatus(orderId, { status });
-        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
-        if (socket && isConnected) {
-          emit('orderStatusUpdated', { orderId, status });
-        }
+        emit('newReturn', { orderId, returnId: response._id, branchId: user.branchId });
         toast.success(
-          isRtl ? `تم تحديث حالة الطلب إلى: ${t(`orders.status_${status}`)}` : `Order status updated to: ${t(`orders.status_${status}`)}`,
+          isRtl ? 'تم إنشاء طلب الإرجاع بنجاح' : 'Return request created successfully',
           { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
         );
+        dispatch({ type: 'SET_MODAL', modal: orderId ? 'return' : 'inventoryReturn', isOpen: false });
+        dispatch({ type: 'SET_RETURN_FORM', payload: [{ productId: '', quantity: 1, reason: '', notes: '' }] });
       } catch (err: any) {
-        console.error('Update order status error:', err.message, err.response?.data);
-        toast.error(isRtl ? `فشل في تحديث الحالة: ${err.message}` : `Failed to update status: ${err.message}`, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+        console.error('Return creation error:', err);
+        toast.error(
+          isRtl ? `فشل في إنشاء طلب الإرجاع: ${err.message}` : `Failed to create return request: ${err.message}`,
+          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
+        );
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     },
-    [t, isRtl, user, socket, isConnected, emit]
+    [user, state.submitting, isRtl, emit, language, getDisplayName]
   );
 
-  // Clear cache on user or branch change
+  const handleConfirmDelivery = useCallback(
+    async (orderId: string, notes: string) => {
+      if (!user?.branchId || state.submitting) return;
+      dispatch({ type: 'SET_SUBMITTING', payload: orderId });
+      try {
+        await ordersAPI.updateStatus(orderId, OrderStatus.Delivered, notes);
+        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: OrderStatus.Delivered });
+        emit('orderStatusUpdated', { orderId, status: OrderStatus.Delivered, branchId: user.branchId });
+        toast.success(
+          isRtl ? 'تم تأكيد التسليم بنجاح' : 'Delivery confirmed successfully',
+          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
+        );
+        dispatch({ type: 'SET_MODAL', modal: 'confirmDelivery', isOpen: false });
+      } catch (err: any) {
+        console.error('Confirm delivery error:', err);
+        toast.error(
+          isRtl ? `فشل في تأكيد التسليم: ${err.message}` : `Failed to confirm delivery: ${err.message}`,
+          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
+        );
+      } finally {
+        dispatch({ type: 'SET_SUBMITTING', payload: null });
+      }
+    },
+    [user, state.submitting, emit, isRtl]
+  );
+
+  // Fetch data on mount and when filters change
   useEffect(() => {
-    cacheRef.current.clear();
     fetchData();
-  }, [user?.branchId, fetchData]);
+  }, [fetchData]);
 
   // Render
   return (
-    <div className="px-4 py-6 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
-      <Suspense fallback={<LoadingSpinner size="lg" />}>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-8">
-          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-800 flex items-center gap-3">
-                <ShoppingCart className="w-8 h-8 text-amber-600" />
-                {isRtl ? 'الطلبات' : 'Orders'}
-              </h1>
-              <p className="text-sm text-gray-500 mt-1">{isRtl ? 'إدارة طلبات الفرع' : 'Manage branch orders'}</p>
-            </div>
-            <div className="flex gap-3 flex-wrap">
-              <Button
-                variant={state.orders.length > 0 ? 'primary' : 'secondary'}
-                onClick={state.orders.length > 0 ? exportToExcel : undefined}
-                className={`flex items-center gap-2 ${
-                  state.orders.length > 0 ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-lg px-4 py-2 text-sm shadow-sm`}
-                disabled={state.orders.length === 0}
+    <div className="container mx-auto p-4 sm:p-6 bg-gray-50 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
+      <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-800 flex items-center gap-2">
+          <ShoppingCart className="w-6 h-6 sm:w-8 sm:h-8 text-amber-500" />
+          {isRtl ? 'طلبات الفرع' : 'Branch Orders'}
+        </h1>
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 items-center">
+          <Button
+            variant="primary"
+            onClick={openInventoryReturnModal}
+            className="bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-4 py-2 text-sm flex items-center gap-2"
+          >
+            <Package className="w-4 h-4" />
+            {isRtl ? 'إنشاء إرجاع من المخزون' : 'Create Inventory Return'}
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={exportToExcel}
+            className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg px-4 py-2 text-sm flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" />
+            {isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={exportToPDF}
+            className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg px-4 py-2 text-sm flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" />
+            {isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-4 mb-6 items-center">
+        <SearchInput
+          placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
+          onChange={handleSearchChange}
+          className="w-full sm:w-64 rounded-lg border-gray-200 focus:ring-amber-500 text-sm"
+        />
+        <Select
+          options={statusOptions.map(opt => ({ value: opt.value, label: t(`orders.${opt.label}`) }))}
+          value={state.filterStatus}
+          onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
+          className="w-full sm:w-48 rounded-lg border-gray-200 focus:ring-amber-500 text-sm"
+          placeholder={isRtl ? 'تصفية حسب الحالة' : 'Filter by status'}
+        />
+        <Select
+          options={sortOptions.map(opt => ({ value: opt.value, label: t(`orders.${opt.label}`) }))}
+          value={state.sortBy}
+          onChange={(value) => dispatch({ type: 'SET_SORT', by: value as 'date' | 'totalAmount', order: state.sortOrder })}
+          className="w-full sm:w-48 rounded-lg border-gray-200 focus:ring-amber-500 text-sm"
+          placeholder={isRtl ? 'ترتيب حسب' : 'Sort by'}
+        />
+        <Select
+          options={[
+            { value: 'asc', label: isRtl ? 'تصاعدي' : 'Ascending' },
+            { value: 'desc', label: isRtl ? 'تنازلي' : 'Descending' },
+          ]}
+          value={state.sortOrder}
+          onChange={(value) => dispatch({ type: 'SET_SORT', by: state.sortBy, order: value as 'asc' | 'desc' })}
+          className="w-full sm:w-32 rounded-lg border-gray-200 focus:ring-amber-500 text-sm"
+        />
+        <div className="flex gap-2">
+          <Button
+            variant={state.viewMode === 'card' ? 'primary' : 'secondary'}
+            onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: 'card' })}
+            className="p-2 rounded-lg"
+          >
+            <Grid className="w-5 h-5" />
+          </Button>
+          <Button
+            variant={state.viewMode === 'table' ? 'primary' : 'secondary'}
+            onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: 'table' })}
+            className="p-2 rounded-lg"
+          >
+            <Table2 className="w-5 h-5" />
+          </Button>
+        </div>
+      </div>
+
+      {state.socketError && (
+        <div className="mb-4 p-4 bg-red-50 text-red-600 rounded-lg flex items-center gap-2">
+          <AlertCircle className="w-5 h-5" />
+          {state.socketError}
+        </div>
+      )}
+
+      {state.error && (
+        <div className="mb-4 p-4 bg-red-50 text-red-600 rounded-lg flex items-center gap-2">
+          <AlertCircle className="w-5 h-5" />
+          {state.error}
+        </div>
+      )}
+
+      {state.loading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: ORDERS_PER_PAGE[state.viewMode] }).map((_, index) =>
+            state.viewMode === 'card' ? <OrderCardSkeleton key={index} /> : <OrderTableSkeleton key={index} />
+          )}
+        </div>
+      ) : paginatedOrders.length === 0 ? (
+        <div className="text-center py-10 text-gray-500">
+          {isRtl ? 'لا توجد طلبات متاحة' : 'No orders available'}
+        </div>
+      ) : (
+        <Suspense fallback={<LoadingSpinner />}>
+          <AnimatePresence>
+            {state.viewMode === 'card' ? (
+              <motion.div
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
               >
-                <Download className="w-5 h-5" />
-                {isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
-              </Button>
-              <Button
-                variant={state.orders.length > 0 ? 'primary' : 'secondary'}
-                onClick={state.orders.length > 0 ? exportToPDF : undefined}
-                className={`flex items-center gap-2 ${
-                  state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-lg px-4 py-2 text-sm shadow-sm`}
-                disabled={state.orders.length === 0}
-              >
-                <Upload className="w-5 h-5" />
-                {isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
-              </Button>
-              <Button
-                variant="secondary"
-                onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' })}
-                className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-4 py-2 text-sm shadow-sm"
-              >
-                {state.viewMode === 'card' ? <Table2 className="w-5 h-5" /> : <Grid className="w-5 h-5" />}
-                {isRtl ? (state.viewMode === 'card' ? 'عرض كجدول' : 'عرض كبطاقات') : state.viewMode === 'card' ? 'View as Table' : 'View as Cards'}
-              </Button>
-            </div>
-          </div>
-          <Card className="p-4 sm:p-6 mt-6 bg-white shadow-lg rounded-lg border border-gray-100">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
-                <SearchInput
-                  value={state.searchQuery}
-                  onChange={handleSearchChange}
-                  placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
-                <Select
-                  options={statusOptions.map(opt => ({
-                    value: opt.value,
-                    label: t(`orders.status_${opt.value}`) || (isRtl ? 'كل الحالات' : 'All Statuses'),
-                  }))}
-                  value={state.filterStatus || ''}
-                  onChange={(value: string) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
-                <Select
-                  options={sortOptions.map(opt => ({
-                    value: opt.value,
-                    label: t(`orders.${opt.label}`) || opt.label,
-                  }))}
-                  value={state.sortBy}
-                  onChange={(value: string) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
-                />
-              </div>
-            </div>
-            <div className="text-sm text-center text-gray-500 mt-4">
-              {isRtl ? `عدد الطلبات: ${filteredOrders.length}` : `Orders count: ${filteredOrders.length}`}
-            </div>
-          </Card>
-          {state.loading ? (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-4 mt-6">
-              {state.viewMode === 'card' ? (
-                Array(6).fill(null).map((_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)
-              ) : (
-                <OrderTableSkeleton isRtl={isRtl} />
-              )}
-            </motion.div>
-          ) : state.error && state.orders.length === 0 ? (
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="mt-6">
-              <Card className="p-6 max-w-md mx-auto text-center bg-red-50 shadow-lg rounded-lg border border-red-100">
-                <div className={`flex items-center justify-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  <AlertCircle className="w-6 h-6 text-red-600" />
-                  <p className="text-lg font-medium text-red-600">{state.error}</p>
-                </div>
-                <Button
-                  variant="primary"
-                  onClick={() => fetchData()}
-                  className="mt-4 bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-6 py-2 text-sm shadow-sm"
-                >
-                  {isRtl ? 'إعادة المحاولة' : 'Retry'}
-                </Button>
-              </Card>
-            </motion.div>
-          ) : (
-            <AnimatePresence>
-              {paginatedOrders.length === 0 ? (
-                <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-6">
-                  <Card className="p-8 sm:p-12 text-center bg-white shadow-lg rounded-lg border border-gray-100">
-                    <ShoppingCart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-800 mb-2">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
-                    <p className="text-sm text-gray-500">
-                      {state.filterStatus || state.searchQuery
-                        ? isRtl
-                          ? 'لا توجد طلبات مطابقة'
-                          : 'No matching orders'
-                        : isRtl
-                        ? 'لا توجد طلبات بعد'
-                        : 'No orders yet'}
-                    </p>
-                  </Card>
-                </motion.div>
-              ) : state.viewMode === 'table' ? (
-                <motion.div key="table-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-6">
-                  <OrderTable
-                    orders={paginatedOrders.filter(o => o && o.id && o.branch && o.branch._id)}
+                {paginatedOrders.map(order => (
+                  <OrderCard
+                    key={order.id}
+                    order={order}
+                    onView={() => viewOrder(order)}
+                    onConfirmDelivery={() => openConfirmDeliveryModal(order)}
+                    onReturn={(itemId?: string) => openReturnModal(order, itemId)}
                     t={t}
                     isRtl={isRtl}
                     calculateAdjustedTotal={calculateAdjustedTotal}
                     calculateTotalQuantity={calculateTotalQuantity}
-                    startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
-                    viewOrder={viewOrder}
-                    openConfirmDeliveryModal={openConfirmDeliveryModal}
-                    openReturnModal={openReturnModal}
-                    user={user}
-                    submitting={state.submitting}
                   />
-                </motion.div>
-              ) : (
-                <motion.div key="card-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="space-y-4 mt-6">
-                  {paginatedOrders.filter(o => o && o.id && o.branch && o.branch._id).map(order => (
-                    <OrderCard
-                      key={order.id}
-                      order={order}
-                      t={t}
-                      isRtl={isRtl}
-                      calculateAdjustedTotal={calculateAdjustedTotal}
-                      calculateTotalQuantity={calculateTotalQuantity}
-                      viewOrder={viewOrder}
-                      openConfirmDeliveryModal={openConfirmDeliveryModal}
-                      openReturnModal={openReturnModal}
-                      user={user}
-                      submitting={state.submitting}
-                    />
-                  ))}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          )}
-          {paginatedOrders.length > 0 && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="mt-6">
-              <Pagination
-                currentPage={state.currentPage}
-                totalPages={Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode])}
+                ))}
+              </motion.div>
+            ) : (
+              <OrderTable
+                orders={paginatedOrders}
+                onView={viewOrder}
+                onConfirmDelivery={openConfirmDeliveryModal}
+                onReturn={openReturnModal}
                 t={t}
                 isRtl={isRtl}
-                handlePageChange={page => dispatch({ type: 'SET_PAGE', payload: page })}
+                calculateAdjustedTotal={calculateAdjustedTotal}
+                calculateTotalQuantity={calculateTotalQuantity}
               />
-            </motion.div>
-          )}
+            )}
+          </AnimatePresence>
+        </Suspense>
+      )}
+
+      <Suspense fallback={<LoadingSpinner />}>
+        <Pagination
+          currentPage={state.currentPage}
+          totalItems={sortedOrders.length}
+          itemsPerPage={ORDERS_PER_PAGE[state.viewMode]}
+          onPageChange={(page) => dispatch({ type: 'SET_PAGE', payload: page })}
+          isRtl={isRtl}
+        />
+      </Suspense>
+
+      <Suspense fallback={<LoadingSpinner />}>
+        {state.isViewModalOpen && state.selectedOrder && (
           <ViewModal
             isOpen={state.isViewModalOpen}
-            onClose={() => {
-              dispatch({ type: 'SET_MODAL', modal: 'view', isOpen: false });
-              dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
-            }}
+            onClose={() => dispatch({ type: 'SET_MODAL', modal: 'view', isOpen: false })}
             order={state.selectedOrder}
             t={t}
             isRtl={isRtl}
-            calculateAdjustedTotal={calculateAdjustedTotal}
           />
+        )}
+        {state.isConfirmDeliveryModalOpen && state.selectedOrder && (
           <ConfirmDeliveryModal
             isOpen={state.isConfirmDeliveryModalOpen}
-            onClose={() => {
-              dispatch({ type: 'SET_MODAL', modal: 'confirmDelivery', isOpen: false });
-              dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
-            }}
+            onClose={() => dispatch({ type: 'SET_MODAL', modal: 'confirmDelivery', isOpen: false })}
             order={state.selectedOrder}
+            onConfirm={handleConfirmDelivery}
             t={t}
             isRtl={isRtl}
-            confirmDelivery={confirmDelivery}
             submitting={state.submitting}
           />
+        )}
+        {state.isReturnModalOpen && state.selectedOrder && (
           <ReturnModal
             isOpen={state.isReturnModalOpen}
-            onClose={() => {
-              dispatch({ type: 'SET_MODAL', modal: 'return', isOpen: false });
-              dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
-              dispatch({ type: 'SET_RETURN_FORM', payload: [{ itemId: '', quantity: 0, reason: '', notes: '' }] });
-            }}
-            order={state.selectedOrder}
+            onClose={() => dispatch({ type: 'SET_MODAL', modal: 'return', isOpen: false })}
+            orderId={state.selectedOrder.id}
+            preSelectedItems={state.returnFormData[0]?.itemId ? state.returnFormData.map(item => ({
+              itemId: item.itemId,
+              productId: item.productId,
+              quantity: item.quantity,
+            })) : undefined}
             returnFormData={state.returnFormData}
             setReturnFormData={(data) => dispatch({ type: 'SET_RETURN_FORM', payload: data })}
             t={t}
             isRtl={isRtl}
             onSubmit={handleReturnItem}
             submitting={state.submitting}
+            branchId={user?.branchId || ''}
           />
-        </motion.div>
+        )}
+        {state.isInventoryReturnModalOpen && (
+          <InventoryReturnModal
+            isOpen={state.isInventoryReturnModalOpen}
+            onClose={() => dispatch({ type: 'SET_MODAL', modal: 'inventoryReturn', isOpen: false })}
+            returnFormData={state.returnFormData}
+            setReturnFormData={(data) => dispatch({ type: 'SET_RETURN_FORM', payload: data })}
+            t={t}
+            isRtl={isRtl}
+            onSubmit={handleReturnItem}
+            submitting={state.submitting}
+            branchId={user?.branchId || ''}
+          />
+        )}
       </Suspense>
     </div>
   );
