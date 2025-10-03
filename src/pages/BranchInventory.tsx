@@ -1,14 +1,13 @@
-// src/pages/BranchInventory.tsx
-import React, { useState, useMemo, useCallback , useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { inventoryAPI } from '../services/api';
+import { inventoryAPI, ordersAPI, returnsAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Input } from '../components/UI/Input';
 import { Button } from '../components/UI/Button';
 import { Modal } from '../components/UI/Modal';
 import { Select } from '../components/UI/Select';
-import { Package, AlertCircle, Search, RefreshCw, Edit, History as HistoryIcon } from 'lucide-react';
+import { Package, AlertCircle, Search, RefreshCw, History as HistoryIcon } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -47,6 +46,30 @@ interface InventoryHistoryItem {
   createdAt: string;
 }
 
+interface Order {
+  _id: string;
+  orderNumber: string;
+  items: Array<{
+    _id: string;
+    product: {
+      _id: string;
+      name: string;
+      nameEn: string;
+    };
+    quantity: number;
+    returnedQuantity?: number;
+  }>;
+}
+
+interface ReturnForm {
+  orderId: string;
+  itemId: string;
+  productId: string;
+  quantity: number;
+  reason: string;
+  notes: string;
+}
+
 const InventoryCardSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
@@ -75,21 +98,16 @@ export const BranchInventory: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('');
   const [activeTab, setActiveTab] = useState<'inventory' | 'history'>('inventory');
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
-  const [returnForm, setReturnForm] = useState({
+  const [returnForm, setReturnForm] = useState<ReturnForm>({
+    orderId: '',
+    itemId: '',
     productId: '',
     quantity: 1,
     reason: '',
     notes: '',
   });
-  const [editForm, setEditForm] = useState({
-    currentStock: 0,
-    minStockLevel: 0,
-    maxStockLevel: 0,
-  });
   const [returnErrors, setReturnErrors] = useState({});
-  const [editErrors, setEditErrors] = useState({});
 
   const socket = useMemo<Socket | null>(() => {
     const apiUrl = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app';
@@ -115,20 +133,20 @@ export const BranchInventory: React.FC = () => {
     queryFn: () => inventoryAPI.getByBranch(user?.branchId || ''),
     enabled: !!user?.branchId,
     select: (response) => {
-      const inventoryData = Array.isArray(response) ? response : response || [];
+      const inventoryData = Array.isArray(response) ? response : response?.data || [];
       return inventoryData.map((item: InventoryItem) => ({
         ...item,
         product: {
           _id: item.product?._id || '',
-          name: item.product?.name || 'Unknown Product',
-          nameEn: item.product?.nameEn || item.product?.name || 'Unknown Product',
+          name: item.product?.name || t('products.unknown'),
+          nameEn: item.product?.nameEn || item.product?.name || t('products.unknown'),
           code: item.product?.code || 'N/A',
-          unit: item.product?.unit || 'غير محدد',
+          unit: item.product?.unit || t('products.unit_unknown'),
           unitEn: item.product?.unitEn || item.product?.unit || 'N/A',
           department: {
             _id: item.product?.department?._id || '',
-            name: item.product?.department?.name || 'غير معروف',
-            nameEn: item.product?.department?.nameEn || item.product?.department?.name || 'Unknown',
+            name: item.product?.department?.name || t('departments.unknown'),
+            nameEn: item.product?.department?.nameEn || item.product?.department?.name || t('departments.unknown'),
           },
         },
         status:
@@ -145,6 +163,13 @@ export const BranchInventory: React.FC = () => {
     queryKey: ['inventoryHistory', user?.branchId],
     queryFn: () => inventoryAPI.getHistory({ branchId: user?.branchId }),
     enabled: activeTab === 'history' && !!user?.branchId,
+  });
+
+  const { data: ordersData, isLoading: ordersLoading } = useQuery({
+    queryKey: ['orders', user?.branchId],
+    queryFn: () => ordersAPI.getAll({ branch: user?.branchId, status: 'delivered' }),
+    enabled: !!user?.branchId,
+    select: (response) => response?.returns || [],
   });
 
   useEffect(() => {
@@ -223,39 +248,41 @@ export const BranchInventory: React.FC = () => {
 
   const validateReturnForm = useCallback(() => {
     const errors: any = {};
+    if (!returnForm.orderId) errors.orderId = t('errors.required', { field: t('returns.order') });
+    if (!returnForm.itemId) errors.itemId = t('errors.required', { field: t('returns.item') });
     if (!returnForm.reason) errors.reason = t('errors.required', { field: t('returns.reason') });
-    if (returnForm.quantity < 1 || returnForm.quantity > selectedItem?.currentStock) {
-      errors.quantity = t('errors.invalid_quantity_max', { max: selectedItem?.currentStock });
+    const selectedOrder = ordersData?.find((order: Order) => order._id === returnForm.orderId);
+    const selectedItem = selectedOrder?.items.find((item) => item._id === returnForm.itemId);
+    if (selectedItem && (returnForm.quantity < 1 || returnForm.quantity > (selectedItem.quantity - (selectedItem.returnedQuantity || 0)))) {
+      errors.quantity = t('errors.invalid_quantity_max', { max: selectedItem.quantity - (selectedItem.returnedQuantity || 0) });
     }
     setReturnErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [returnForm, selectedItem, t]);
-
-  const validateEditForm = useCallback(() => {
-    const errors: any = {};
-    if (editForm.currentStock < 0) errors.currentStock = t('errors.non_negative', { field: t('inventory.currentStock') });
-    if (editForm.minStockLevel < 0) errors.minStockLevel = t('errors.non_negative', { field: t('inventory.minStockLevel') });
-    if (editForm.maxStockLevel < 0) errors.maxStockLevel = t('errors.non_negative', { field: t('inventory.maxStockLevel') });
-    if (editForm.maxStockLevel < editForm.minStockLevel) errors.maxStockLevel = t('errors.max_greater_min');
-    setEditErrors(errors);
-    return Object.keys(errors).length === 0;
-  }, [editForm, t]);
+  }, [returnForm, ordersData, t]);
 
   const createReturnMutation = useMutation({
     mutationFn: async () => {
       if (!validateReturnForm()) throw new Error(t('errors.invalid_form'));
-      return inventoryAPI.createReturn({
-        branchId: user?.branchId,
+      return returnsAPI.createReturn({
+        orderId: returnForm.orderId,
         reason: returnForm.reason,
         notes: returnForm.notes,
-        items: [{ productId: returnForm.productId, quantity: returnForm.quantity, reason: returnForm.reason }],
+        items: [
+          {
+            itemId: returnForm.itemId,
+            productId: returnForm.productId,
+            quantity: returnForm.quantity,
+            reason: returnForm.reason,
+          },
+        ],
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
       setIsReturnModalOpen(false);
-      setReturnForm({ productId: '', quantity: 1, reason: '', notes: '' });
+      setReturnForm({ orderId: '', itemId: '', productId: '', quantity: 1, reason: '', notes: '' });
       setReturnErrors({});
       setSelectedItem(null);
       toast.success(t('returns.create_success'));
@@ -265,56 +292,14 @@ export const BranchInventory: React.FC = () => {
     },
   });
 
-  const updateStockMutation = useMutation({
-    mutationFn: (data: { id: string; currentStock: number; minStockLevel: number; maxStockLevel: number }) => 
-      inventoryAPI.updateStock(data.id, {
-        currentStock: data.currentStock,
-        minStockLevel: data.minStockLevel,
-        maxStockLevel: data.maxStockLevel,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
-      setIsEditModalOpen(false);
-      setEditForm({ currentStock: 0, minStockLevel: 0, maxStockLevel: 0 });
-      setEditErrors({});
-      setSelectedItem(null);
-      toast.success(t('inventory.update_success'));
-    },
-    onError: (err: any) => {
-      toast.error(err.message || t('errors.update_inventory'));
-    },
-  });
-
   const handleOpenReturnModal = (item: InventoryItem) => {
     setSelectedItem(item);
-    setReturnForm({ ...returnForm, productId: item.product._id, quantity: 1 });
+    setReturnForm({ orderId: '', itemId: '', productId: item.product._id, quantity: 1, reason: '', notes: '' });
     setIsReturnModalOpen(true);
-  };
-
-  const handleOpenEditModal = (item: InventoryItem) => {
-    setSelectedItem(item);
-    setEditForm({
-      currentStock: item.currentStock,
-      minStockLevel: item.minStockLevel,
-      maxStockLevel: item.maxStockLevel,
-    });
-    setIsEditModalOpen(true);
   };
 
   const handleCreateReturn = () => {
     createReturnMutation.mutate();
-  };
-
-  const handleUpdateStock = () => {
-    if (selectedItem) {
-      updateStockMutation.mutate({
-        id: selectedItem._id,
-        currentStock: editForm.currentStock,
-        minStockLevel: editForm.minStockLevel,
-        maxStockLevel: editForm.maxStockLevel,
-      });
-    }
   };
 
   const errorMessage = inventoryError?.message || historyError?.message || '';
@@ -421,26 +406,18 @@ export const BranchInventory: React.FC = () => {
                         <p className={`text-sm font-medium ${
                           item.status === 'low' ? 'text-red-600' : item.status === 'full' ? 'text-yellow-600' : 'text-green-600'
                         }`}>
-                          {isRtl 
+                          {isRtl
                             ? item.status === 'low' ? 'منخفض' : item.status === 'full' ? 'ممتلئ' : 'عادي'
                             : item.status}
                         </p>
                       </div>
                       <div className="flex gap-2">
                         <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => handleOpenEditModal(item)}
-                          className="text-blue-600 hover:text-blue-800"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
                           variant="destructive"
                           size="sm"
                           disabled={item.currentStock <= 0}
                           onClick={() => handleOpenReturnModal(item)}
-                          className="text-red-600 hover:text-blue-800 disabled:opacity-50"
+                          className="text-red-600 hover:text-red-800 disabled:opacity-50"
                         >
                           {isRtl ? 'إرجاع' : 'Return'}
                         </Button>
@@ -476,7 +453,7 @@ export const BranchInventory: React.FC = () => {
                 {(historyData || []).map((entry: InventoryHistoryItem) => (
                   <tr key={entry._id} className="border-b">
                     <td className="p-2">{new Date(entry.createdAt).toLocaleString()}</td>
-                    <td className="p-2">{entry.action}</td>
+                    <td className="p-2">{isRtl ? t(`history.${entry.action}`) : entry.action}</td>
                     <td className="p-2">{entry.quantity}</td>
                     <td className="p-2">{entry.reference}</td>
                     <td className="p-2">{entry.createdBy.username}</td>
@@ -501,11 +478,51 @@ export const BranchInventory: React.FC = () => {
           <p className="text-sm text-gray-600">
             {isRtl ? 'الكمية المتاحة' : 'Available'}: {selectedItem?.currentStock}
           </p>
+          <Select
+            label={isRtl ? 'الطلب' : 'Order'}
+            value={returnForm.orderId}
+            onChange={(e) => {
+              setReturnForm({ ...returnForm, orderId: e.target.value, itemId: '' });
+            }}
+            options={[{ value: '', label: isRtl ? 'اختر طلبًا' : 'Select Order' }].concat(
+              (ordersData || []).map((order: Order) => ({
+                value: order._id,
+                label: `${order.orderNumber}`,
+              }))
+            )}
+            error={returnErrors.orderId}
+          />
+          <Select
+            label={isRtl ? 'العنصر' : 'Item'}
+            value={returnForm.itemId}
+            onChange={(e) => {
+              const selectedOrder = ordersData?.find((order: Order) => order._id === returnForm.orderId);
+              const selectedItem = selectedOrder?.items.find((item) => item._id === e.target.value);
+              setReturnForm({
+                ...returnForm,
+                itemId: e.target.value,
+                productId: selectedItem?.product._id || returnForm.productId,
+              });
+            }}
+            options={[{ value: '', label: isRtl ? 'اختر عنصرًا' : 'Select Item' }].concat(
+              (ordersData?.find((order: Order) => order._id === returnForm.orderId)?.items || [])
+                .filter((item) => item.product._id === selectedItem?.product._id)
+                .map((item) => ({
+                  value: item._id,
+                  label: isRtl ? item.product.name : item.product.nameEn,
+                }))
+            )}
+            error={returnErrors.itemId}
+            disabled={!returnForm.orderId}
+          />
           <Input
             label={isRtl ? 'الكمية' : 'Quantity'}
             type="number"
             min={1}
-            max={selectedItem?.currentStock}
+            max={
+              ordersData?.find((order: Order) => order._id === returnForm.orderId)?.items.find((item) => item._id === returnForm.itemId)
+                ?.quantity - (ordersData?.find((order: Order) => order._id === returnForm.orderId)?.items.find((item) => item._id === returnForm.itemId)?.returnedQuantity || 0)
+            }
             value={returnForm.quantity}
             onChange={(e) => setReturnForm({ ...returnForm, quantity: Number(e.target.value) })}
             error={returnErrors.quantity}
@@ -528,50 +545,6 @@ export const BranchInventory: React.FC = () => {
             className="bg-amber-600 text-white hover:bg-amber-700"
           >
             {createReturnMutation.isPending ? (isRtl ? 'جاري...' : 'Submitting...') : isRtl ? 'إرسال' : 'Submit'}
-          </Button>
-        </div>
-      </Modal>
-
-      {/* Edit Modal */}
-      <Modal
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        title={isRtl ? 'تحرير المخزون' : 'Edit Inventory'}
-      >
-        <div className="flex flex-col gap-4">
-          <p className="text-sm text-gray-600">
-            {isRtl ? 'المنتج' : 'Product'}: {isRtl ? selectedItem?.product.name : selectedItem?.product.nameEn}
-          </p>
-          <Input
-            label={isRtl ? 'المخزون الحالي' : 'Current Stock'}
-            type="number"
-            min={0}
-            value={editForm.currentStock}
-            onChange={(e) => setEditForm({ ...editForm, currentStock: Number(e.target.value) })}
-            error={editErrors.currentStock}
-          />
-          <Input
-            label={isRtl ? 'الحد الأدنى' : 'Min Level'}
-            type="number"
-            min={0}
-            value={editForm.minStockLevel}
-            onChange={(e) => setEditForm({ ...editForm, minStockLevel: Number(e.target.value) })}
-            error={editErrors.minStockLevel}
-          />
-          <Input
-            label={isRtl ? 'الحد الأقصى' : 'Max Level'}
-            type="number"
-            min={0}
-            value={editForm.maxStockLevel}
-            onChange={(e) => setEditForm({ ...editForm, maxStockLevel: Number(e.target.value) })}
-            error={editErrors.maxStockLevel}
-          />
-          <Button
-            onClick={handleUpdateStock}
-            disabled={updateStockMutation.isPending}
-            className="bg-amber-600 text-white hover:bg-amber-700"
-          >
-            {updateStockMutation.isPending ? (isRtl ? 'جاري...' : 'Updating...') : isRtl ? 'تحديث' : 'Update'}
           </Button>
         </div>
       </Modal>
