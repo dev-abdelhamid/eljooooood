@@ -20,8 +20,8 @@ interface InventoryItem {
     code: string;
     unit: string;
     unitEn: string;
-    department: { name: string; nameEn: string; _id: string };
-  };
+    department: { name: string; nameEn: string; _id: string } | null;
+  } | null;
   currentStock: number;
   minStockLevel: number;
   maxStockLevel: number;
@@ -33,7 +33,7 @@ interface InventoryHistoryItem {
   product: {
     name: string;
     nameEn: string;
-  };
+  } | null;
   action: string;
   quantity: number;
   reference: string;
@@ -54,8 +54,8 @@ interface Order {
       nameEn: string;
       unit: string;
       unitEn: string;
-      department: { name: string; nameEn: string; _id: string };
-    };
+      department: { name: string; nameEn: string; _id: string } | null;
+    } | null;
     quantity: number;
     returnedQuantity?: number;
   }>;
@@ -293,19 +293,23 @@ export const BranchInventory: React.FC = () => {
       const inventoryData = Array.isArray(response) ? response : response?.inventory || [];
       return inventoryData.map((item: InventoryItem) => ({
         ...item,
-        product: {
-          _id: item.product?._id || '',
-          name: item.product?.name || t('products.unknown'),
-          nameEn: item.product?.nameEn || item.product?.name || t('products.unknown'),
-          code: item.product?.code || 'N/A',
-          unit: item.product?.unit || t('products.unit_unknown'),
-          unitEn: item.product?.unitEn || item.product?.unit || 'N/A',
-          department: {
-            _id: item.product?.department?._id || '',
-            name: item.product?.department?.name || t('departments.unknown'),
-            nameEn: item.product?.department?.nameEn || item.product?.department?.name || t('departments.unknown'),
-          },
-        },
+        product: item.product
+          ? {
+              _id: item.product._id || '',
+              name: item.product.name || t('products.unknown'),
+              nameEn: item.product.nameEn || item.product.name || t('products.unknown'),
+              code: item.product.code || 'N/A',
+              unit: item.product.unit || t('products.unit_unknown'),
+              unitEn: item.product.unitEn || item.product.unit || 'N/A',
+              department: item.product.department
+                ? {
+                    _id: item.product.department._id || '',
+                    name: item.product.department.name || t('departments.unknown'),
+                    nameEn: item.product.department.nameEn || item.product.department.name || t('departments.unknown'),
+                  }
+                : null,
+            }
+          : null,
         status:
           item.currentStock <= item.minStockLevel
             ? 'low'
@@ -320,14 +324,43 @@ export const BranchInventory: React.FC = () => {
     queryKey: ['inventoryHistory', user?.branchId, language],
     queryFn: () => inventoryAPI.getHistory({ branchId: user?.branchId }),
     enabled: activeTab === 'history' && !!user?.branchId,
-    select: (response) => response?.history || [],
+    select: (response) => (response?.history || []).map((entry: InventoryHistoryItem) => ({
+      ...entry,
+      product: entry.product
+        ? {
+            name: entry.product.name || t('products.unknown'),
+            nameEn: entry.product.nameEn || entry.product.name || t('products.unknown'),
+          }
+        : null,
+    })),
   });
 
   const { data: ordersData, isLoading: ordersLoading } = useQuery<Order[], Error>({
     queryKey: ['orders', user?.branchId, language],
     queryFn: () => ordersAPI.getAll({ branch: user?.branchId, status: 'delivered' }),
     enabled: !!user?.branchId,
-    select: (response) => response?.orders || [],
+    select: (response) => (response?.orders || []).map((order: Order) => ({
+      ...order,
+      items: order.items.map((item) => ({
+        ...item,
+        product: item.product
+          ? {
+              _id: item.product._id || '',
+              name: item.product.name || t('products.unknown'),
+              nameEn: item.product.nameEn || item.product.name || t('products.unknown'),
+              unit: item.product.unit || t('products.unit_unknown'),
+              unitEn: item.product.unitEn || item.product.unit || 'N/A',
+              department: item.product.department
+                ? {
+                    _id: item.product.department._id || '',
+                    name: item.product.department.name || t('departments.unknown'),
+                    nameEn: item.product.department.nameEn || item.product.department.name || t('departments.unknown'),
+                  }
+                : null,
+            }
+          : null,
+      })),
+    })),
   });
 
   const { data: selectedOrderData } = useQuery<Order | null, Error>({
@@ -339,17 +372,19 @@ export const BranchInventory: React.FC = () => {
     enabled: !!returnForm.orderId,
     onSuccess: (order) => {
       if (order) {
-        const items: AvailableItem[] = order.items.map((i) => ({
-          itemId: i._id,
-          productId: i.product._id,
-          productName: isRtl ? i.product.name : i.product.nameEn || i.product.name,
-          available: i.quantity - (i.returnedQuantity || 0),
-          unit: isRtl ? i.product.unit || t('products.unit_unknown') : i.product.unitEn || i.product.unit || 'N/A',
-          departmentName: isRtl ? i.product.department.name : i.product.department.nameEn || i.product.department.name,
-          stock: inventoryData?.find((inv) => inv.product._id === i.product._id)?.currentStock || 0,
-        }));
+        const items: AvailableItem[] = order.items
+          .filter((i) => i.product !== null)
+          .map((i) => ({
+            itemId: i._id,
+            productId: i.product!._id,
+            productName: isRtl ? i.product!.name : i.product!.nameEn || i.product!.name,
+            available: i.quantity - (i.returnedQuantity || 0),
+            unit: isRtl ? i.product!.unit || t('products.unit_unknown') : i.product!.unitEn || i.product!.unit || 'N/A',
+            departmentName: isRtl ? i.product!.department?.name || t('departments.unknown') : i.product!.department?.nameEn || i.product!.department?.name || t('departments.unknown'),
+            stock: inventoryData?.find((inv) => inv.product?._id === i.product!._id)?.currentStock || 0,
+          }));
         setAvailableItems(items);
-        if (selectedItem) {
+        if (selectedItem && selectedItem.product) {
           const matchingItem = items.find((a) => a.productId === selectedItem.product._id);
           if (matchingItem) {
             setReturnForm((prev) => ({
@@ -381,10 +416,13 @@ export const BranchInventory: React.FC = () => {
 
     socket.on('connect', () => console.log('Socket connected'));
     socket.on('connect_error', (err) => console.error('Socket connect error:', err));
-    socket.on('inventoryUpdated', ({ branchId }: { branchId: string }) => {
+    socket.on('inventoryUpdated', ({ branchId, minStockLevel, maxStockLevel }: { branchId: string; minStockLevel?: number; maxStockLevel?: number }) => {
       if (branchId === user?.branchId) {
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
         queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
+        if (minStockLevel !== undefined || maxStockLevel !== undefined) {
+          toast.info(t('inventory.update_success'));
+        }
       }
     });
     socket.on('returnCreated', ({ branchId, returnId, orderNumber, status }: { branchId: string; returnId: string; orderNumber: string; status: string }) => {
@@ -469,13 +507,15 @@ export const BranchInventory: React.FC = () => {
   );
 
   const filteredInventory = useMemo(
-    () => (inventoryData || []).filter(
-      (item) =>
-        (!filterStatus || item.status === filterStatus) &&
-        (item.product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          item.product.nameEn.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          item.product.code.toLowerCase().includes(searchQuery.toLowerCase()))
-    ),
+    () =>
+      (inventoryData || []).filter(
+        (item) =>
+          item.product &&
+          (!filterStatus || item.status === filterStatus) &&
+          (item.product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.product.nameEn?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.product.code?.toLowerCase().includes(searchQuery.toLowerCase()))
+      ),
     [inventoryData, searchQuery, filterStatus]
   );
 
@@ -487,12 +527,14 @@ export const BranchInventory: React.FC = () => {
   const totalInventoryPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
 
   const filteredHistory = useMemo(
-    () => (historyData || []).filter(
-      (entry) =>
-        (entry.product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          entry.product.nameEn.toLowerCase().includes(searchQuery.toLowerCase())) &&
-        (!filterStatus || entry.action === filterStatus)
-    ),
+    () =>
+      (historyData || []).filter(
+        (entry) =>
+          entry.product &&
+          (entry.product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            entry.product.nameEn?.toLowerCase().includes(searchQuery.toLowerCase())) &&
+          (!filterStatus || entry.action === filterStatus)
+      ),
     [historyData, searchQuery, filterStatus]
   );
 
@@ -585,7 +627,7 @@ export const BranchInventory: React.FC = () => {
         notes: returnForm.notes,
         items: returnForm.items.map((item) => ({
           itemId: item.itemId,
-          productId: item.productId,
+          product: item.productId, // Backend expects 'product' as the field name
           quantity: item.quantity,
           reason: item.reason,
         })),
@@ -603,13 +645,14 @@ export const BranchInventory: React.FC = () => {
       toast.success(t('returns.create_success'));
       socket?.emit('returnCreated', {
         branchId: user?.branchId,
-        returnId: crypto.randomUUID(), // Note: Ideally, the API response should provide the returnId
+        returnId: crypto.randomUUID(), // Backend should ideally return this
         orderNumber: ordersData?.find((o) => o._id === returnForm.orderId)?.orderNumber,
-        status: 'pending',
+        status: 'pending_approval',
         eventId: crypto.randomUUID(),
       });
     },
     onError: (err) => {
+      console.error('Create return error:', err);
       toast.error(err.message || t('errors.create_return'));
       if (err.message.includes('Invalid')) {
         setReturnErrors({ form: err.message });
@@ -621,7 +664,7 @@ export const BranchInventory: React.FC = () => {
     mutationFn: async () => {
       if (!validateEditForm()) throw new Error(t('errors.invalid_form'));
       if (!selectedItem) throw new Error(t('errors.no_item_selected'));
-      await inventoryAPI.updateStock(selectedItem._id, {
+      await inventoryAPI.updateStockLevels(selectedItem._id, {
         minStockLevel: editForm.minStockLevel,
         maxStockLevel: editForm.maxStockLevel,
       });
@@ -633,9 +676,15 @@ export const BranchInventory: React.FC = () => {
       setEditErrors({});
       setSelectedItem(null);
       toast.success(t('inventory.update_success'));
-      socket?.emit('inventoryUpdated', { branchId: user?.branchId, eventId: crypto.randomUUID() });
+      socket?.emit('inventoryUpdated', {
+        branchId: user?.branchId,
+        minStockLevel: editForm.minStockLevel,
+        maxStockLevel: editForm.maxStockLevel,
+        eventId: crypto.randomUUID(),
+      });
     },
     onError: (err) => {
+      console.error('Update inventory error:', err);
       toast.error(err.message || t('errors.update_inventory'));
     },
   });
@@ -751,53 +800,55 @@ export const BranchInventory: React.FC = () => {
               <div className="space-y-4">
                 <AnimatePresence>
                   {paginatedInventory.map((item) => (
-                    <motion.div
-                      key={item._id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -20 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <CustomCard className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-shadow">
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            <h3 className="font-semibold text-gray-900">{isRtl ? item.product.name : item.product.nameEn}</h3>
-                            <p className="text-sm text-gray-500">{isRtl ? 'الكود' : 'Code'}: {item.product.code}</p>
-                            <p className="text-sm text-gray-600">{isRtl ? 'المخزون' : 'Stock'}: {item.currentStock}</p>
-                            <p className="text-sm text-gray-600">{isRtl ? 'الحد الأدنى' : 'Min'}: {item.minStockLevel}</p>
-                            <p className="text-sm text-gray-600">{isRtl ? 'الحد الأقصى' : 'Max'}: {item.maxStockLevel}</p>
-                            <p className="text-sm text-gray-600">{isRtl ? 'الوحدة' : 'Unit'}: {isRtl ? item.product.unit : item.product.unitEn}</p>
-                            <p className="text-sm text-gray-600">{isRtl ? 'القسم' : 'Department'}: {isRtl ? item.product.department.name : item.product.department.nameEn}</p>
-                            <p className={`text-sm font-medium ${
-                              item.status === 'low' ? 'text-red-600' : item.status === 'full' ? 'text-yellow-600' : 'text-green-600'
-                            }`}>
-                              {isRtl
-                                ? item.status === 'low' ? 'منخفض' : item.status === 'full' ? 'ممتلئ' : 'عادي'
-                                : item.status}
-                            </p>
+                    item.product && (
+                      <motion.div
+                        key={item._id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        <CustomCard className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-shadow">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <h3 className="font-semibold text-gray-900">{isRtl ? item.product.name : item.product.nameEn}</h3>
+                              <p className="text-sm text-gray-500">{isRtl ? 'الكود' : 'Code'}: {item.product.code}</p>
+                              <p className="text-sm text-gray-600">{isRtl ? 'المخزون' : 'Stock'}: {item.currentStock}</p>
+                              <p className="text-sm text-gray-600">{isRtl ? 'الحد الأدنى' : 'Min'}: {item.minStockLevel}</p>
+                              <p className="text-sm text-gray-600">{isRtl ? 'الحد الأقصى' : 'Max'}: {item.maxStockLevel}</p>
+                              <p className="text-sm text-gray-600">{isRtl ? 'الوحدة' : 'Unit'}: {isRtl ? item.product.unit : item.product.unitEn}</p>
+                              <p className="text-sm text-gray-600">{isRtl ? 'القسم' : 'Department'}: {isRtl ? item.product.department?.name : item.product.department?.nameEn}</p>
+                              <p className={`text-sm font-medium ${
+                                item.status === 'low' ? 'text-red-600' : item.status === 'full' ? 'text-yellow-600' : 'text-green-600'
+                              }`}>
+                                {isRtl
+                                  ? item.status === 'low' ? 'منخفض' : item.status === 'full' ? 'ممتلئ' : 'عادي'
+                                  : item.status}
+                              </p>
+                            </div>
+                            <div className="flex gap-2">
+                              <CustomButton
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => handleOpenEditModal(item)}
+                                className="text-blue-600 hover:text-blue-800"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </CustomButton>
+                              <CustomButton
+                                variant="destructive"
+                                size="sm"
+                                disabled={item.currentStock <= 0}
+                                onClick={() => handleOpenReturnModal(item)}
+                                className="text-red-600 hover:text-red-800 disabled:opacity-50"
+                              >
+                                {isRtl ? 'إرجاع' : 'Return'}
+                              </CustomButton>
+                            </div>
                           </div>
-                          <div className="flex gap-2">
-                            <CustomButton
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => handleOpenEditModal(item)}
-                              className="text-blue-600 hover:text-blue-800"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </CustomButton>
-                            <CustomButton
-                              variant="destructive"
-                              size="sm"
-                              disabled={item.currentStock <= 0}
-                              onClick={() => handleOpenReturnModal(item)}
-                              className="text-red-600 hover:text-red-800 disabled:opacity-50"
-                            >
-                              {isRtl ? 'إرجاع' : 'Return'}
-                            </CustomButton>
-                          </div>
-                        </div>
-                      </CustomCard>
-                    </motion.div>
+                        </CustomCard>
+                      </motion.div>
+                    )
                   ))}
                 </AnimatePresence>
                 <Pagination
@@ -840,13 +891,15 @@ export const BranchInventory: React.FC = () => {
                   </thead>
                   <tbody>
                     {paginatedHistory.map((entry) => (
-                      <tr key={entry._id} className="border-b">
-                        <td className="p-2">{new Date(entry.createdAt).toLocaleString()}</td>
-                        <td className="p-2">{isRtl ? t(`history.${entry.action}`) : entry.action}</td>
-                        <td className="p-2">{entry.quantity}</td>
-                        <td className="p-2">{entry.reference}</td>
-                        <td className="p-2">{entry.createdBy.username}</td>
-                      </tr>
+                      entry.product && (
+                        <tr key={entry._id} className="border-b">
+                          <td className="p-2">{new Date(entry.createdAt).toLocaleString()}</td>
+                          <td className="p-2">{isRtl ? t(`history.${entry.action}`) : entry.action}</td>
+                          <td className="p-2">{entry.quantity}</td>
+                          <td className="p-2">{entry.reference}</td>
+                          <td className="p-2">{entry.createdBy.username}</td>
+                        </tr>
+                      )
                     ))}
                   </tbody>
                 </table>
@@ -874,7 +927,7 @@ export const BranchInventory: React.FC = () => {
         title={isRtl ? 'إنشاء مرتجع' : 'Create Return'}
       >
         <div className="flex flex-col gap-4">
-          {selectedItem && (
+          {selectedItem?.product && (
             <p className="text-sm text-gray-600">
               {isRtl ? 'المنتج' : 'Product'}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
             </p>
@@ -1000,7 +1053,7 @@ export const BranchInventory: React.FC = () => {
         title={isRtl ? 'تعديل حدود المخزون' : 'Edit Stock Limits'}
       >
         <div className="flex flex-col gap-4">
-          {selectedItem && (
+          {selectedItem?.product && (
             <p className="text-sm text-gray-600">
               {isRtl ? 'المنتج' : 'Product'}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
             </p>
