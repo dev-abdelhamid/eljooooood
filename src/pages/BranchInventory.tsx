@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useReducer } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
@@ -67,12 +67,6 @@ interface ReturnItem {
   maxQuantity: number;
 }
 
-interface ReturnForm {
-  reason: string;
-  notes: string;
-  items: ReturnItem[];
-}
-
 interface EditForm {
   minStockLevel: number;
   maxStockLevel: number;
@@ -87,6 +81,44 @@ interface AvailableItem {
   stock: number;
 }
 
+// Reducer for Return Form
+interface ReturnFormState {
+  reason: string;
+  notes: string;
+  items: ReturnItem[];
+}
+
+type ReturnFormAction =
+  | { type: 'SET_REASON'; payload: string }
+  | { type: 'SET_NOTES'; payload: string }
+  | { type: 'ADD_ITEM'; payload: ReturnItem }
+  | { type: 'UPDATE_ITEM'; payload: { index: number; field: keyof ReturnItem; value: string | number } }
+  | { type: 'REMOVE_ITEM'; payload: number }
+  | { type: 'RESET' };
+
+const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): ReturnFormState => {
+  switch (action.type) {
+    case 'SET_REASON':
+      return { ...state, reason: action.payload };
+    case 'SET_NOTES':
+      return { ...state, notes: action.payload };
+    case 'ADD_ITEM':
+      return { ...state, items: [...state.items, action.payload] };
+    case 'UPDATE_ITEM': {
+      const newItems = [...state.items];
+      newItems[action.payload.index] = { ...newItems[action.payload.index], [action.payload.field]: action.payload.value };
+      return { ...state, items: newItems };
+    }
+    case 'REMOVE_ITEM':
+      return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
+    case 'RESET':
+      return { reason: '', notes: '', items: [] };
+    default:
+      return state;
+  }
+};
+
+// Component Interfaces
 interface CustomCardProps {
   className?: string;
   children: React.ReactNode;
@@ -266,15 +298,8 @@ export const BranchInventory: React.FC = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [returnForm, setReturnForm] = useState<ReturnForm>({
-    reason: '',
-    notes: '',
-    items: [],
-  });
-  const [editForm, setEditForm] = useState<EditForm>({
-    minStockLevel: 0,
-    maxStockLevel: 0,
-  });
+  const [returnForm, dispatchReturnForm] = useReducer(returnFormReducer, { reason: '', notes: '', items: [] });
+  const [editForm, setEditForm] = useState<EditForm>({ minStockLevel: 0, maxStockLevel: 0 });
   const [returnErrors, setReturnErrors] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
@@ -473,7 +498,9 @@ export const BranchInventory: React.FC = () => {
           (!filterStatus || item.status === filterStatus) &&
           (item.product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             item.product.nameEn?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.product.code?.toLowerCase().includes(searchQuery.toLowerCase()))
+            item.product.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.product.department?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.product.department?.nameEn?.toLowerCase().includes(searchQuery.toLowerCase()))
       ),
     [inventoryData, searchQuery, filterStatus]
   );
@@ -522,49 +549,49 @@ export const BranchInventory: React.FC = () => {
 
   const totalReturnsPages = Math.ceil(filteredReturns.length / ITEMS_PER_PAGE);
 
-  const handleOpenReturnModal = (item?: InventoryItem) => {
+  const handleOpenReturnModal = useCallback((item?: InventoryItem) => {
     setSelectedItem(item || null);
-    setReturnForm({ reason: '', notes: '', items: [] });
+    dispatchReturnForm({ type: 'RESET' });
+    if (item?.product) {
+      dispatchReturnForm({
+        type: 'ADD_ITEM',
+        payload: { productId: item.product._id, quantity: 1, reason: '', maxQuantity: item.currentStock },
+      });
+    }
     setReturnErrors({});
     setIsReturnModalOpen(true);
-  };
+  }, []);
 
-  const handleOpenEditModal = (item: InventoryItem) => {
+  const handleOpenEditModal = useCallback((item: InventoryItem) => {
     setSelectedItem(item);
     setEditForm({ minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
     setEditErrors({});
     setIsEditModalOpen(true);
-  };
+  }, []);
 
-  const addItemToForm = () => {
-    setReturnForm((prev) => ({
-      ...prev,
-      items: [...prev.items, { productId: '', quantity: 1, reason: '', maxQuantity: 0 }],
-    }));
-  };
-
-  const updateItemInForm = (index: number, field: keyof ReturnItem, value: string | number) => {
-    setReturnForm((prev) => {
-      const newItems = [...prev.items];
-      newItems[index] = { ...newItems[index], [field]: value };
-      if (field === 'productId') {
-        const sel = availableItems.find((a) => a.productId === value);
-        if (sel) {
-          newItems[index].maxQuantity = sel.stock;
-        } else {
-          newItems[index].maxQuantity = 0;
-        }
-      }
-      return { ...prev, items: newItems };
+  const addItemToForm = useCallback(() => {
+    dispatchReturnForm({
+      type: 'ADD_ITEM',
+      payload: { productId: '', quantity: 1, reason: '', maxQuantity: 0 },
     });
-  };
+  }, []);
 
-  const removeItemFromForm = (index: number) => {
-    setReturnForm((prev) => ({
-      ...prev,
-      items: prev.items.filter((_, i) => i !== index),
-    }));
-  };
+  const updateItemInForm = useCallback((index: number, field: keyof ReturnItem, value: string | number) => {
+    dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
+    if (field === 'productId') {
+      const sel = availableItems.find((a) => a.productId === value);
+      if (sel) {
+        dispatchReturnForm({
+          type: 'UPDATE_ITEM',
+          payload: { index, field: 'maxQuantity', value: sel.stock },
+        });
+      }
+    }
+  }, [availableItems]);
+
+  const removeItemFromForm = useCallback((index: number) => {
+    dispatchReturnForm({ type: 'REMOVE_ITEM', payload: index });
+  }, []);
 
   const validateReturnForm = useCallback(() => {
     const errors: Record<string, string> = {};
@@ -610,12 +637,12 @@ export const BranchInventory: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
       queryClient.invalidateQueries({ queryKey: ['returns'] });
       setIsReturnModalOpen(false);
-      setReturnForm({ reason: '', notes: '', items: [] });
+      dispatchReturnForm({ type: 'RESET' });
       setReturnErrors({});
       toast.success(t('returns.create_success'));
       socket?.emit('returnCreated', {
         branchId: user?.branchId,
-        returnId: crypto.randomUUID(), // Backend should return this
+        returnId: crypto.randomUUID(),
         status: 'pending_approval',
         eventId: crypto.randomUUID(),
       });
@@ -794,7 +821,7 @@ export const BranchInventory: React.FC = () => {
                               <p className="text-sm text-gray-600">{isRtl ? 'الحد الأدنى' : 'Min'}: {item.minStockLevel}</p>
                               <p className="text-sm text-gray-600">{isRtl ? 'الحد الأقصى' : 'Max'}: {item.maxStockLevel}</p>
                               <p className="text-sm text-gray-600">{isRtl ? 'الوحدة' : 'Unit'}: {isRtl ? item.product.unit : item.product.unitEn}</p>
-                              <p className="text-sm text-gray-600">{isRtl ? 'القسم' : 'Department'}: {isRtl ? item.product.department?.name : item.product.department?.nameEn}</p>
+                              <p className="text-sm text-gray-600 font-medium">{isRtl ? 'القسم' : 'Department'}: {isRtl ? item.product.department?.name : item.product.department?.nameEn}</p>
                               <p className={`text-sm font-medium ${
                                 item.status === 'low' ? 'text-red-600' : item.status === 'full' ? 'text-yellow-600' : 'text-green-600'
                               }`}>
@@ -956,7 +983,7 @@ export const BranchInventory: React.FC = () => {
         isOpen={isReturnModalOpen}
         onClose={() => {
           setIsReturnModalOpen(false);
-          setReturnForm({ reason: '', notes: '', items: [] });
+          dispatchReturnForm({ type: 'RESET' });
           setReturnErrors({});
           setSelectedItem(null);
         }}
@@ -971,18 +998,14 @@ export const BranchInventory: React.FC = () => {
           <CustomSelect
             label={isRtl ? 'السبب' : 'Reason'}
             value={returnForm.reason}
-            onChange={(e) => {
-              setReturnForm({ ...returnForm, reason: e.target.value });
-            }}
+            onChange={(e) => dispatchReturnForm({ type: 'SET_REASON', payload: e.target.value })}
             options={reasonOptions}
             error={returnErrors.reason}
           />
           <CustomInput
             label={isRtl ? 'ملاحظات' : 'Notes'}
             value={returnForm.notes}
-            onChange={(e) => {
-              setReturnForm({ ...returnForm, notes: e.target.value });
-            }}
+            onChange={(e) => dispatchReturnForm({ type: 'SET_NOTES', payload: e.target.value })}
             placeholder={isRtl ? 'أدخل ملاحظات إضافية' : 'Enter additional notes'}
           />
           <div>
@@ -997,10 +1020,11 @@ export const BranchInventory: React.FC = () => {
                       .filter((a) => !returnForm.items.some((i, idx) => i.productId === a.productId && idx !== index))
                       .map((a) => ({
                         value: a.productId,
-                        label: `${a.productName} (${a.stock} ${isRtl ? 'متاح' : 'available'})`,
+                        label: `${a.productName} (${a.stock} ${isRtl ? 'متاح' : 'available'}) - ${a.departmentName}`,
                       }))
                   )}
                   error={returnErrors[`item_${index}_productId`]}
+                  disabled={!!selectedItem}
                 />
                 <CustomInput
                   type="number"
@@ -1022,28 +1046,31 @@ export const BranchInventory: React.FC = () => {
                   size="sm"
                   onClick={() => removeItemFromForm(index)}
                   className="text-red-600 hover:text-red-800"
+                  disabled={!!selectedItem}
                 >
                   <X className="w-4 h-4" />
                 </CustomButton>
               </div>
             ))}
             {returnErrors.items && <p className="text-red-500 text-sm mt-1">{returnErrors.items}</p>}
-            <CustomButton
-              variant="secondary"
-              onClick={addItemToForm}
-              className="mt-2 bg-gray-100 hover:bg-gray-200 text-gray-800"
-              disabled={availableItems.length === 0 || availableItems.length === returnForm.items.length}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              {isRtl ? 'إضافة عنصر' : 'Add Item'}
-            </CustomButton>
+            {!selectedItem && (
+              <CustomButton
+                variant="secondary"
+                onClick={addItemToForm}
+                className="mt-2 bg-gray-100 hover:bg-gray-200 text-gray-800"
+                disabled={availableItems.length === 0 || availableItems.length === returnForm.items.length}
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                {isRtl ? 'إضافة عنصر' : 'Add Item'}
+              </CustomButton>
+            )}
           </div>
           <div className="flex justify-end gap-2">
             <CustomButton
               variant="secondary"
               onClick={() => {
                 setIsReturnModalOpen(false);
-                setReturnForm({ reason: '', notes: '', items: [] });
+                dispatchReturnForm({ type: 'RESET' });
                 setReturnErrors({});
                 setSelectedItem(null);
               }}
