@@ -1,4 +1,3 @@
-
 // Now, the corrected OrderCard component
 import React, { memo } from 'react';
 import { Button } from '../UI/Button';
@@ -30,7 +29,7 @@ interface Props {
   calculateTotalQuantity: (order: Order) => number;
   viewOrder: (order: Order) => void;
   openConfirmDeliveryModal: (order: Order) => void;
-  openReturnModal: (order: Order) => void;  // Removed itemId parameter
+  openReturnModal: (order: Order) => void;
   user: any;
   submitting: string | null;
 }
@@ -63,7 +62,7 @@ const OrderCard: React.FC<Props> = memo(
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-2 gap-3">
               <div>
-                <p className="text-xs  leading-relaxed text-gray-500">{t('orders.total_quantity')}</p>
+                <p className="text-xs leading-relaxed text-gray-500">{t('orders.total_quantity')}</p>
                 <p className="text-sm font-medium text-gray-800">
                   {isRtl ? `${calculateTotalQuantity(order)} ${t('orders.items')}` : `${calculateTotalQuantity(order)} ${t('orders.items')}`}
                 </p>
@@ -132,7 +131,7 @@ const OrderCard: React.FC<Props> = memo(
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => openReturnModal(order)}  // Removed itemId
+                  onClick={() => openReturnModal(order)}
                   className="bg-red-500 hover:bg-red-600 text-white rounded-full px-3 py-1 text-xs"
                   disabled={submitting === 'return'}
                   aria-label={t('orders.return_order', { orderNumber: order.orderNumber })}
