@@ -46,21 +46,12 @@ returnsAxios.interceptors.response.use(
       message: error.message,
     });
 
+    let message = error.response?.data?.message || 'Unexpected error';
     const isRtl = localStorage.getItem('language') === 'ar';
-    let message = error.response?.data?.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
-
-    if (error.response?.status === 400) {
-      message = error.response?.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
-    }
-    if (error.response?.status === 403) {
-      message = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
-    }
-    if (error.response?.status === 404) {
-      message = error.response?.data?.message || (isRtl ? 'الإرجاع غير موجود' : 'Return not found');
-    }
-    if (error.response?.status === 429) {
-      message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
-    }
+    if (error.response?.status === 400) message = error.response?.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
+    if (error.response?.status === 403) message = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
+    if (error.response?.status === 404) message = error.response?.data?.message || (isRtl ? 'الإرجاع غير موجود' : 'Return not found');
+    if (error.response?.status === 429) message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
@@ -92,110 +83,137 @@ returnsAxios.interceptors.response.use(
         localStorage.removeItem('user');
         localStorage.removeItem('refreshToken');
         window.location.href = '/login';
-        toast.error(isRtl ? 'فشل في تحديث التوكن، يرجى تسجيل الدخول مجددًا' : 'Failed to refresh token, please log in again', {
+        toast.error(isRtl ? 'فشل تجديد التوكن، يرجى تسجيل الدخول مجددًا' : 'Failed to refresh token, please log in again', {
           position: 'top-right',
           autoClose: 3000,
           pauseOnFocusLoss: true,
         });
-        return Promise.reject(refreshError);
+        return Promise.reject({ message: isRtl ? 'فشل تجديد التوكن' : 'Failed to refresh token', status: 401 });
       }
     }
 
-    toast.error(message, {
-      position: 'top-right',
-      autoClose: 3000,
-      pauseOnFocusLoss: true,
-    });
-    return Promise.reject({ message, status: error.response?.status || 500 });
+    toast.error(message, { position: 'top-right', autoClose: 3000, pauseOnFocusLoss: true });
+    return Promise.reject({ message, status: error.response?.status });
   }
 );
 
-interface ReturnItem {
-  productId: string;
-  quantity: number;
-  reason: string;
-}
-
-interface CreateReturnData {
-  orderId?: string;
-  branchId: string;
-  reason: string;
-  items: ReturnItem[];
-  notes?: string;
-}
+const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 
 export const returnsAPI = {
-  createReturn: async (data: CreateReturnData) => {
+  getAll: async (query: {
+    status?: string;
+    branch?: string;
+    search?: string;
+    sort?: string;
+    page?: number;
+    limit?: number;
+  } = {}) => {
+    console.log(`[${new Date().toISOString()}] returnsAPI.getAll - Sending:`, query);
     try {
-      const response = await returnsAxios.post('/inventory/returns', {
-        orderId: data.orderId,
-        branchId: data.branchId,
-        reason: data.reason.trim(),
-        items: data.items.map(item => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          reason: item.reason.trim(),
-        })),
-        notes: data.notes?.trim(),
-      });
-      console.log(`[${new Date().toISOString()}] Return created successfully:`, response);
-      return response.returnRequest;
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] Error creating return:`, error);
+      if (query.branch && !isValidObjectId(query.branch)) {
+        console.error(`[${new Date().toISOString()}] returnsAPI.getAll - Invalid branch ID:`, query.branch);
+        throw new Error('Invalid branch ID');
+      }
+      const response = await returnsAxios.get('/returns', { params: query });
+      console.log(`[${new Date().toISOString()}] returnsAPI.getAll - Response:`, response);
+      return response;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] returnsAPI.getAll - Error:`, error);
       throw error;
     }
   },
 
-  getAll: async (params: { branchId?: string; status?: string; page?: number; limit?: number } = {}) => {
+  getById: async (returnId: string) => {
+    console.log(`[${new Date().toISOString()}] returnsAPI.getById - Sending:`, returnId);
+    if (!isValidObjectId(returnId)) {
+      console.error(`[${new Date().toISOString()}] returnsAPI.getById - Invalid return ID:`, returnId);
+      throw new Error('Invalid return ID');
+    }
     try {
-      const response = await returnsAxios.get('/inventory/returns', { params });
-      console.log(`[${new Date().toISOString()}] Returns fetched successfully:`, response);
-      return response.returns;
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] Error fetching returns:`, error);
+      const response = await returnsAxios.get(`/returns/${returnId}`);
+      console.log(`[${new Date().toISOString()}] returnsAPI.getById - Response:`, response);
+      return response;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] returnsAPI.getById - Error:`, error);
+      if (error.status === 404) {
+        throw new Error('Return not found');
+      }
       throw error;
     }
   },
 
-  getByBranch: async (branchId: string, status?: string, page: number = 1, limit: number = 10) => {
+  getBranches: async () => {
+    console.log(`[${new Date().toISOString()}] returnsAPI.getBranches - Sending`);
     try {
-      const params: { page: number; limit: number; status?: string } = { page, limit };
-      if (status) params.status = status;
-      const response = await returnsAxios.get(`/inventory/returns/branch/${branchId}`, { params });
-      console.log(`[${new Date().toISOString()}] Returns by branch fetched successfully:`, response);
-      return response.returns;
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] Error fetching returns by branch:`, error);
+      const response = await returnsAxios.get('/branches');
+      console.log(`[${new Date().toISOString()}] returnsAPI.getBranches - Response:`, response);
+      return response;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] returnsAPI.getBranches - Error:`, error);
       throw error;
     }
   },
 
-  updateReturnStatus: async (returnId: string, data: { branchId: string; items: Array<{ productId: string; quantity: number; status: 'approved' | 'rejected'; reviewNotes?: string }>; }) => {
+  createReturn: async (data: {
+    orderId: string;
+    branchId: string;
+    reason: string;
+    items: Array<{
+      itemId?: string;
+      product: string;
+      quantity: number;
+      reason: string;
+    }>;
+    notes?: string;
+  }) => {
+    console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Sending:`, data);
+    if (
+      !isValidObjectId(data.orderId) ||
+      !isValidObjectId(data.branchId) ||
+      !data.reason ||
+      !Array.isArray(data.items) ||
+      data.items.length === 0 ||
+      data.items.some(
+        (item) => (item.itemId && !isValidObjectId(item.itemId)) || !isValidObjectId(item.product) || item.quantity < 1 || !item.reason
+      )
+    ) {
+      console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Invalid data:`, data);
+      throw new Error('Invalid order ID, branch ID, reason, or item data');
+    }
     try {
-      const response = await returnsAxios.patch(`/inventory/returns/${returnId}/process`, {
-        branchId: data.branchId,
-        items: data.items.map(item => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          status: item.status,
-          reviewNotes: item.reviewNotes?.trim(),
-        })),
-      });
-      console.log(`[${new Date().toISOString()}] Return status updated successfully:`, response);
-      return response.returnRequest;
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] Error updating return status:`, error);
+      const response = await returnsAxios.post('/returns', data);
+      console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Response:`, response);
+      return response;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Error:`, error);
       throw error;
     }
   },
 
-  getReturnById: async (returnId: string) => {
+  updateReturnStatus: async (
+    returnId: string,
+    data: {
+      status: 'approved' | 'rejected';
+      reviewNotes?: string;
+    }
+  ) => {
+    console.log(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Sending:`, { returnId, data });
+    if (
+      !isValidObjectId(returnId) ||
+      !['approved', 'rejected'].includes(data.status)
+    ) {
+      console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Invalid data:`, { returnId, data });
+      throw new Error('Invalid return ID or status');
+    }
     try {
-      const response = await returnsAxios.get(`/inventory/returns/${returnId}`);
-      console.log(`[${new Date().toISOString()}] Return fetched by ID successfully:`, response);
-      return response.returnRequest;
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] Error fetching return by ID:`, error);
+      const response = await returnsAxios.put(`/returns/${returnId}`, data);
+      console.log(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Response:`, response);
+      return response;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Error:`, error);
+      if (error.status === 404) {
+        throw new Error('Return not found or invalid endpoint');
+      }
       throw error;
     }
   },
