@@ -25,7 +25,7 @@ export interface Department {
 }
 
 export interface OrderItem {
-  itemId: string;
+  itemId: string; // Corresponds to _id in backend
   productId: string;
   productName: string;
   productNameEn?: string;
@@ -59,8 +59,9 @@ export interface User {
   department?: string;
 }
 
-  export interface ReturnFormItem {
+export interface ReturnFormItem {
   itemId: string;
+  productId: string; // Added to match backend and frontend needs
   quantity: number;
   reason: string;
   notes: string;
@@ -68,12 +69,22 @@ export interface User {
 
 export interface OrderReturn {
   returnId: string;
-  items: ReturnFormItem[];
-  status: string;
+  orderId?: string; // Added for reference
+  items: (ReturnFormItem & { reasonEn?: string })[]; // Extended with reasonEn
+  status: 'pending_approval' | 'approved' | 'rejected';
   reviewNotes?: string;
   reviewNotesEn?: string;
   displayReviewNotes?: string; // Derived field: reviewNotes (isRtl=true) or reviewNotesEn (isRtl=false)
   createdAt: string;
+  reviewedBy?: { _id: string; name: string; nameEn?: string; displayName: string };
+  reviewedAt?: string;
+  statusHistory?: {
+    status: string;
+    changedBy: string;
+    notes?: string;
+    notesEn?: string;
+    changedAt: string;
+  }[];
 }
 
 export interface StatusHistory {
@@ -99,7 +110,7 @@ export interface Order {
   totalAmount: number;
   adjustedTotal: number;
   date: string;
-  requestedDeliveryDate: string;
+  requestedDeliveryDate?: string; // Made optional to match backend
   notes?: string;
   notesEn?: string;
   displayNotes: string; // Derived field: notes (isRtl=true) or notesEn (isRtl=false)
@@ -107,22 +118,18 @@ export interface Order {
   createdBy: string;
   createdByName: string; // Derived field: name (isRtl=true) or nameEn (isRtl=false)
   statusHistory: StatusHistory[];
+  approvedBy?: string;
   approvedAt?: string;
   transitStartedAt?: string;
   deliveredAt?: string;
   confirmedAt?: string;
   confirmedBy?: string;
   isRtl: boolean;
+  createdAt?: string; // Added from timestamps
+  updatedAt?: string; // Added from timestamps
 }
 
-export interface ReturnForm {
-  itemId: string;
-  quantity: number;
-  reason: string;
-  reasonEn?: string;
-  notes: string;
-  notesEn?: string;
-}
+// Removed ReturnForm as it's not used; use ReturnFormItem[] instead
 
 export interface State {
   orders: Order[];
@@ -151,7 +158,7 @@ export type Action =
   | { type: 'ADD_ORDER'; payload: Order }
   | { type: 'SET_SELECTED_ORDER'; payload: Order | null }
   | { type: 'SET_MODAL'; modal: 'view' | 'confirmDelivery' | 'return'; isOpen: boolean }
-  | { type: 'SET_RETURN_FORM'; payload: ReturnForm }
+  | { type: 'SET_RETURN_FORM'; payload: ReturnFormItem[] } // Updated to ReturnFormItem[]
   | { type: 'SET_SEARCH_QUERY'; payload: string }
   | { type: 'SET_FILTER_STATUS'; payload: string }
   | { type: 'SET_SORT'; by: 'date' | 'totalAmount'; order: 'asc' | 'desc' }
@@ -170,7 +177,3 @@ export type Action =
   | { type: 'SET_VIEW_MODE'; payload: 'card' | 'table' }
   | { type: 'SET_INVENTORY'; payload: any[] }
   | { type: 'UPDATE_INVENTORY'; payload: { productId: string; quantity: number; type: string } };
-
-
-
-  
