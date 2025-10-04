@@ -190,38 +190,50 @@ const BranchReturns = () => {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch selected order details
+  // Fetch selected order details or inventory if no order
   useQuery({
-    queryKey: ['selectedOrder', formData.orderId, language],
+    queryKey: ['selectedOrderOrInventory', formData.orderId, language],
     queryFn: async () => {
-      if (!formData.orderId) return null;
-      const order = await ordersAPI.getById(formData.orderId);
-      const items = order.items.map((i: any) => {
-        const inv = inventoryData?.find((inv: any) => inv.productId === i.product._id) || { currentStock: 0 };
-        return {
-          itemId: i._id,
-          productId: i.product._id,
-          productName: isRtl ? i.product.name : i.product.nameEn || i.product.name,
-          available: i.quantity - (i.returnedQuantity || 0),
-          unit: isRtl ? i.product.unit : i.product.unitEn || i.product.unit,
-          departmentName: isRtl ? i.product.department.name : i.product.department.nameEn || i.product.department.name,
+      if (formData.orderId) {
+        const order = await ordersAPI.getById(formData.orderId);
+        const items = order.items.map((i: any) => {
+          const inv = inventoryData?.find((inv: any) => inv.productId === i.product._id) || { currentStock: 0 };
+          return {
+            itemId: i._id,
+            productId: i.product._id,
+            productName: isRtl ? i.product.name : i.product.nameEn || i.product.name,
+            available: i.quantity - (i.returnedQuantity || 0),
+            unit: isRtl ? i.product.unit : i.product.unitEn || i.product.unit,
+            departmentName: isRtl ? i.product.department.name : i.product.department.nameEn || i.product.department.name,
+            stock: inv.currentStock,
+          };
+        });
+        setAvailableItems(items);
+        return order;
+      } else {
+        const items = inventoryData?.map((inv: any) => ({
+          itemId: '',
+          productId: inv.productId,
+          productName: inv.productName,
+          available: inv.currentStock,
+          unit: inv.unit,
+          departmentName: '',
           stock: inv.currentStock,
-        };
-      });
-      setAvailableItems(items);
-      return order;
+        })) || [];
+        setAvailableItems(items);
+        return null;
+      }
     },
-    enabled: !!formData.orderId,
+    enabled: !!formData.branchId,
   });
 
   // Form validation function
   const validateFormData = useCallback(() => {
     const errors: any = {};
-    if (!formData.orderId.trim()) errors.orderId = t('errors.required', { field: t('returns.order_id') });
     if (!formData.reason.trim()) errors.reason = t('errors.required', { field: t('returns.reason') });
     if (formData.items.length === 0) errors.items = t('errors.required', { field: t('returns.items') });
     formData.items.forEach((item: any, index) => {
-      if (!item.itemId) errors[`item_${index}_productId`] = t('errors.required', { field: t('returns.product') });
+      if (!item.productId) errors[`item_${index}_productId`] = t('errors.required', { field: t('returns.product') });
       if (!item.reason.trim()) errors[`item_${index}_reason`] = t('errors.required', { field: t('returns.reason') });
       const maxQty = item.maxQuantity || 0;
       if (item.quantity < 1 || item.quantity > maxQty || isNaN(item.quantity)) {
@@ -239,12 +251,12 @@ const BranchReturns = () => {
       }
       // Map to backend format
       const payload = {
-        orderId: data.orderId,
+        orderId: data.orderId || null,
         branchId: data.branchId,
         reason: data.reason,
         notes: data.notes,
         items: data.items.map((item: any) => ({
-          itemId: item.itemId,
+          itemId: item.itemId || null,
           product: item.productId,
           quantity: item.quantity,
           reason: item.reason,

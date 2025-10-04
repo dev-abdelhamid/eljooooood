@@ -3,15 +3,12 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { inventoryAPI, ordersAPI, returnsAPI } from '../services/api';
-import { Package, AlertCircle, Search, RefreshCw, History as HistoryIcon, Edit, X, Plus, Eye, Clock, Check, XCircle, Download } from 'lucide-react';
+import { inventoryAPI, returnsAPI } from '../services/api';
+import { Package, AlertCircle, Search, RefreshCw, History as HistoryIcon, Edit, X, Plus } from 'lucide-react';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
 // Interfaces
 interface InventoryItem {
@@ -46,63 +43,24 @@ interface InventoryHistoryItem {
   createdAt: string;
 }
 
-interface Order {
-  _id: string;
-  orderNumber: string;
-  items: Array<{
-    _id: string;
-    product: {
-      _id: string;
-      name: string;
-      nameEn: string;
-      unit: string;
-      unitEn: string;
-      department: { name: string; nameEn: string; _id: string } | null;
-    } | null;
-    quantity: number;
-    returnedQuantity?: number;
-  }>;
-  status: string;
-  createdAt: string;
-  deliveredAt?: string;
-}
-
 interface Return {
   _id: string;
   returnNumber: string;
-  order: {
-    _id: string;
-    orderNumber: string;
-    totalAmount: number;
-    createdAt: string;
-  };
   items: Array<{
-    _id: string;
     product: {
       _id: string;
       name: string;
       nameEn: string;
-      unit: string;
-      unitEn: string;
-      department: { name: string; nameEn: string; _id: string };
-      price?: number;
     };
     quantity: number;
     reason: string;
   }>;
   status: 'pending_approval' | 'approved' | 'rejected';
   createdAt: string;
-  notes: string;
   reviewNotes?: string;
-  branch: {
-    _id: string;
-    name: string;
-    nameEn: string;
-  };
 }
 
 interface ReturnItem {
-  itemId: string;
   productId: string;
   quantity: number;
   reason: string;
@@ -110,7 +68,6 @@ interface ReturnItem {
 }
 
 interface ReturnForm {
-  orderId: string;
   reason: string;
   notes: string;
   items: ReturnItem[];
@@ -122,7 +79,6 @@ interface EditForm {
 }
 
 interface AvailableItem {
-  itemId: string;
   productId: string;
   productName: string;
   available: number;
@@ -221,7 +177,7 @@ const CustomModal: React.FC<CustomModalProps> = ({ isOpen, onClose, title, child
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+      <div className="bg-white p-6 rounded-lg shadow-xl max-w-2xl w-full">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">{title}</h2>
           <CustomButton onClick={onClose}><X className="w-4 h-4" /></CustomButton>
@@ -308,12 +264,9 @@ export const BranchInventory: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'inventory' | 'history' | 'returns'>('inventory');
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isViewReturnModalOpen, setIsViewReturnModalOpen] = useState(false);
-  const [selectedReturn, setSelectedReturn] = useState<Return | null>(null);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [returnForm, setReturnForm] = useState<ReturnForm>({
-    orderId: '',
     reason: '',
     notes: '',
     items: [],
@@ -380,141 +333,34 @@ export const BranchInventory: React.FC = () => {
     queryKey: ['returns', user?.branchId, language],
     queryFn: () => returnsAPI.getAll({ branch: user?.branchId }),
     enabled: activeTab === 'returns' && !!user?.branchId,
-    select: (response) => {
-      const returns = response?.returns || [];
-      return returns.map((ret: Return) => ({
-        ...ret,
-        returnNumber: ret.returnNumber || t('returns.unknown'),
-        order: {
-          _id: ret.order?._id || 'unknown',
-          orderNumber: ret.order?.orderNumber || t('orders.unknown'),
-          totalAmount: ret.order?.totalAmount || 0,
-          createdAt: ret.order?.createdAt || new Date().toISOString(),
-        },
-        items: ret.items.map((item) => ({
-          ...item,
-          product: item.product
-            ? {
-                _id: item.product._id || '',
-                name: item.product.name || t('products.unknown'),
-                nameEn: item.product.nameEn || item.product.name || t('products.unknown'),
-                unit: item.product.unit || t('products.unit_unknown'),
-                unitEn: item.product.unitEn || item.product.unit || 'N/A',
-                department: item.product.department
-                  ? {
-                      _id: item.product.department._id || '',
-                      name: item.product.name || t('departments.unknown'),
-                      nameEn: item.product.nameEn || item.product.name || t('departments.unknown'),
-                    }
-                  : {
-                      _id: '',
-                      name: t('departments.unknown'),
-                      nameEn: t('departments.unknown'),
-                    },
-                price: item.product.price || 0,
-              }
-            : {
-                _id: '',
-                name: t('products.unknown'),
-                nameEn: t('products.unknown'),
-                unit: 'N/A',
-                unitEn: 'N/A',
-                department: {
-                  _id: '',
-                  name: t('departments.unknown'),
-                  nameEn: t('departments.unknown'),
-                },
-                price: 0,
-              },
-        })),
-        status: ret.status || 'pending_approval',
-        createdAt: ret.createdAt || new Date().toISOString(),
-        notes: ret.notes || '',
-        reviewNotes: ret.reviewNotes || '',
-        branch: {
-          _id: ret.branch?._id || 'unknown',
-          name: ret.branch?.name || t('branches.unknown'),
-          nameEn: ret.branch?.nameEn || ret.branch?.name || t('branches.unknown'),
-        },
-      }));
-    },
-  });
-
-  const { data: ordersData, isLoading: ordersLoading } = useQuery<Order[], Error>({
-    queryKey: ['orders', user?.branchId, language],
-    queryFn: () => ordersAPI.getAll({ branch: user?.branchId, status: 'delivered' }),
-    enabled: !!user?.branchId,
-    select: (response) => (response?.orders || []).map((order: Order) => ({
-      ...order,
-      items: order.items.map((item) => ({
+    select: (response) => (response || []).map((ret: Return) => ({
+      ...ret,
+      items: ret.items.map((item) => ({
         ...item,
-        product: item.product
-          ? {
-              _id: item.product._id || '',
-              name: item.product.name || t('products.unknown'),
-              nameEn: item.product.nameEn || item.product.name || t('products.unknown'),
-              unit: item.product.unit || t('products.unit_unknown'),
-              unitEn: item.product.unitEn || item.product.unit || 'N/A',
-              department: item.product.department
-                ? {
-                    _id: item.product.department._id || '',
-                    name: item.product.department.name || t('departments.unknown'),
-                    nameEn: item.product.department.nameEn || item.product.department.name || t('departments.unknown'),
-                  }
-                : null,
-            }
-          : null,
+        product: {
+          _id: item.product._id,
+          name: item.product.name || t('products.unknown'),
+          nameEn: item.product.nameEn || item.product.name || t('products.unknown'),
+        },
       })),
     })),
   });
 
-  const { data: selectedOrderData } = useQuery<Order | null, Error>({
-    queryKey: ['selectedOrder', returnForm.orderId, language],
-    queryFn: async () => {
-      if (!returnForm.orderId) return null;
-      return ordersAPI.getById(returnForm.orderId);
-    },
-    enabled: !!returnForm.orderId,
-    onSuccess: (order) => {
-      if (order) {
-        const items: AvailableItem[] = order.items
-          .filter((i) => i.product !== null)
-          .map((i) => ({
-            itemId: i._id,
-            productId: i.product!._id,
-            productName: isRtl ? i.product!.name : i.product!.nameEn || i.product!.name,
-            available: i.quantity - (i.returnedQuantity || 0),
-            unit: isRtl ? i.product!.unit || t('products.unit_unknown') : i.product!.unitEn || i.product!.unit || 'N/A',
-            departmentName: isRtl ? i.product!.department?.name || t('departments.unknown') : i.product!.department?.nameEn || i.product!.department?.name || t('departments.unknown'),
-            stock: inventoryData?.find((inv) => inv.product?._id === i.product!._id)?.currentStock || 0,
-          }));
-        setAvailableItems(items);
-        if (selectedItem && selectedItem.product) {
-          const matchingItem = items.find((a) => a.productId === selectedItem.product._id);
-          if (matchingItem) {
-            setReturnForm((prev) => ({
-              ...prev,
-              items: [{
-                itemId: matchingItem.itemId,
-                productId: matchingItem.productId,
-                quantity: 1,
-                reason: '',
-                maxQuantity: Math.min(matchingItem.available, matchingItem.stock),
-              }],
-            }));
-          } else {
-            setReturnForm((prev) => ({ ...prev, items: [] }));
-            toast.error(isRtl ? 'المنتج غير موجود في الطلب' : 'Product not found in the order');
-          }
-        } else {
-          setReturnForm((prev) => ({ ...prev, items: [] }));
-        }
-      } else {
-        setAvailableItems([]);
-        setReturnForm((prev) => ({ ...prev, items: [] }));
-      }
-    },
-  });
+  useEffect(() => {
+    if (inventoryData) {
+      const items: AvailableItem[] = inventoryData
+        .filter((item) => item.currentStock > 0 && item.product)
+        .map((item) => ({
+          productId: item.product!._id,
+          productName: isRtl ? item.product!.name : item.product!.nameEn || item.product!.name,
+          available: item.currentStock,
+          unit: isRtl ? item.product!.unit || t('products.unit_unknown') : item.product!.unitEn || item.product!.unit || 'N/A',
+          departmentName: isRtl ? item.product!.department?.name || t('departments.unknown') : item.product!.department?.nameEn || item.product!.department?.name || t('departments.unknown'),
+          stock: item.currentStock,
+        }));
+      setAvailableItems(items);
+    }
+  }, [inventoryData, isRtl, t]);
 
   useEffect(() => {
     if (!socket) return;
@@ -530,20 +376,18 @@ export const BranchInventory: React.FC = () => {
         }
       }
     });
-    socket.on('returnCreated', ({ branchId, returnId, orderNumber, status }: { branchId: string; returnId: string; orderNumber: string; status: string }) => {
+    socket.on('returnCreated', ({ branchId, returnId, status }: { branchId: string; returnId: string; status: string }) => {
       if (branchId === user?.branchId) {
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
         queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
-        queryClient.invalidateQueries({ queryKey: ['orders'] });
         queryClient.invalidateQueries({ queryKey: ['returns'] });
         addNotification({
           _id: crypto.randomUUID(),
           type: 'success',
           message: t('notifications.return_created', {
-            orderNumber,
             branchName: user?.branchId ? t('branches.current') : t('branches.unknown'),
           }),
-          data: { returnId, orderId: returnForm.orderId, eventId: crypto.randomUUID() },
+          data: { returnId, eventId: crypto.randomUUID() },
           read: false,
           createdAt: new Date().toISOString(),
           sound: '/sounds/notification.mp3',
@@ -551,21 +395,19 @@ export const BranchInventory: React.FC = () => {
         });
       }
     });
-    socket.on('returnStatusUpdated', ({ branchId, returnId, status, orderNumber }: { branchId: string; returnId: string; status: string; orderNumber: string }) => {
+    socket.on('returnStatusUpdated', ({ branchId, returnId, status }: { branchId: string; returnId: string; status: string }) => {
       if (branchId === user?.branchId) {
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
         queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
-        queryClient.invalidateQueries({ queryKey: ['orders'] });
         queryClient.invalidateQueries({ queryKey: ['returns'] });
         addNotification({
           _id: crypto.randomUUID(),
           type: 'info',
           message: t('notifications.return_status_updated', {
-            orderNumber,
             status: t(`returns.${status}`),
             branchName: user?.branchId ? t('branches.current') : t('branches.unknown'),
           }),
-          data: { returnId, orderId: returnForm.orderId, eventId: crypto.randomUUID() },
+          data: { returnId, eventId: crypto.randomUUID() },
           read: false,
           createdAt: new Date().toISOString(),
           sound: '/sounds/notification.mp3',
@@ -581,7 +423,7 @@ export const BranchInventory: React.FC = () => {
       socket.off('returnCreated');
       socket.off('returnStatusUpdated');
     };
-  }, [socket, user, queryClient, addNotification, t, returnForm.orderId]);
+  }, [socket, user, queryClient, addNotification, t]);
 
   const debouncedSearch = useCallback(
     debounce((value: string) => setSearchQuery(value.trim()), 300),
@@ -603,6 +445,16 @@ export const BranchInventory: React.FC = () => {
     [isRtl]
   );
 
+  const returnStatusOptions = useMemo(
+    () => [
+      { value: '', label: isRtl ? 'كل الحالات' : 'All Statuses' },
+      { value: 'pending_approval', label: isRtl ? 'في انتظار الموافقة' : 'Pending Approval' },
+      { value: 'approved', label: isRtl ? 'معتمد' : 'Approved' },
+      { value: 'rejected', label: isRtl ? 'مرفوض' : 'Rejected' },
+    ],
+    [isRtl]
+  );
+
   const reasonOptions = useMemo(
     () => [
       { value: 'تالف', label: isRtl ? 'تالف' : 'Damaged' },
@@ -612,22 +464,6 @@ export const BranchInventory: React.FC = () => {
     ],
     [isRtl]
   );
-
-  const returnStatusOptions = useMemo(
-    () => [
-      { value: '', label: isRtl ? 'كل الحالات' : 'All Statuses' },
-      { value: 'pending_approval', label: isRtl ? 'قيد الموافقة' : 'Pending Approval' },
-      { value: 'approved', label: isRtl ? 'موافق عليه' : 'Approved' },
-      { value: 'rejected', label: isRtl ? 'مرفوض' : 'Rejected' },
-    ],
-    [isRtl]
-  );
-
-  const STATUS_COLORS = {
-    pending_approval: { bg: 'bg-amber-100', text: 'text-amber-800', icon: Clock },
-    approved: { bg: 'bg-green-100', text: 'text-green-800', icon: Check },
-    rejected: { bg: 'bg-red-100', text: 'text-red-800', icon: XCircle },
-  };
 
   const filteredInventory = useMemo(
     () =>
@@ -674,29 +510,22 @@ export const BranchInventory: React.FC = () => {
         (ret) =>
           (!filterStatus || ret.status === filterStatus) &&
           (ret.returnNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            ret.order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            ret.notes.toLowerCase().includes(searchQuery.toLowerCase()))
+            ret.items.some((item) => item.product.name?.toLowerCase().includes(searchQuery.toLowerCase()) || item.product.nameEn?.toLowerCase().includes(searchQuery.toLowerCase())))
       ),
     [returnsData, searchQuery, filterStatus]
   );
 
-  const sortedFilteredReturns = useMemo(
-    () => [...filteredReturns].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-    [filteredReturns]
-  );
-
   const paginatedReturns = useMemo(
-    () => sortedFilteredReturns.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
-    [sortedFilteredReturns, currentPage]
+    () => filteredReturns.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+    [filteredReturns, currentPage]
   );
 
-  const totalReturnsPages = Math.ceil(sortedFilteredReturns.length / ITEMS_PER_PAGE);
+  const totalReturnsPages = Math.ceil(filteredReturns.length / ITEMS_PER_PAGE);
 
   const handleOpenReturnModal = (item?: InventoryItem) => {
     setSelectedItem(item || null);
-    setReturnForm({ orderId: '', reason: '', notes: '', items: [] });
+    setReturnForm({ reason: '', notes: '', items: [] });
     setReturnErrors({});
-    setAvailableItems([]);
     setIsReturnModalOpen(true);
   };
 
@@ -707,15 +536,10 @@ export const BranchInventory: React.FC = () => {
     setIsEditModalOpen(true);
   };
 
-  const handleViewReturn = (ret: Return) => {
-    setSelectedReturn(ret);
-    setIsViewReturnModalOpen(true);
-  };
-
   const addItemToForm = () => {
     setReturnForm((prev) => ({
       ...prev,
-      items: [...prev.items, { itemId: '', productId: '', quantity: 1, reason: '', maxQuantity: 0 }],
+      items: [...prev.items, { productId: '', quantity: 1, reason: '', maxQuantity: 0 }],
     }));
   };
 
@@ -723,13 +547,11 @@ export const BranchInventory: React.FC = () => {
     setReturnForm((prev) => {
       const newItems = [...prev.items];
       newItems[index] = { ...newItems[index], [field]: value };
-      if (field === 'itemId') {
-        const sel = availableItems.find((a) => a.itemId === value);
+      if (field === 'productId') {
+        const sel = availableItems.find((a) => a.productId === value);
         if (sel) {
-          newItems[index].productId = sel.productId;
-          newItems[index].maxQuantity = Math.min(sel.available, sel.stock);
+          newItems[index].maxQuantity = sel.stock;
         } else {
-          newItems[index].productId = '';
           newItems[index].maxQuantity = 0;
         }
       }
@@ -746,11 +568,10 @@ export const BranchInventory: React.FC = () => {
 
   const validateReturnForm = useCallback(() => {
     const errors: Record<string, string> = {};
-    if (!returnForm.orderId) errors.orderId = t('errors.required', { field: t('returns.order') });
     if (!returnForm.reason) errors.reason = t('errors.required', { field: t('returns.reason') });
     if (returnForm.items.length === 0) errors.items = t('errors.required', { field: t('returns.items') });
     returnForm.items.forEach((item, index) => {
-      if (!item.itemId) errors[`item_${index}_itemId`] = t('errors.required', { field: t('returns.item') });
+      if (!item.productId) errors[`item_${index}_productId`] = t('errors.required', { field: t('returns.item') });
       if (!item.reason) errors[`item_${index}_reason`] = t('errors.required', { field: t('returns.reason') });
       if (item.quantity < 1 || item.quantity > (item.maxQuantity ?? 0) || isNaN(item.quantity)) {
         errors[`item_${index}_quantity`] = t('errors.invalid_quantity_max', { max: item.maxQuantity ?? 0 });
@@ -774,11 +595,10 @@ export const BranchInventory: React.FC = () => {
       if (!validateReturnForm()) throw new Error(t('errors.invalid_form'));
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
       await returnsAPI.createReturn({
-        orderId: returnForm.orderId,
+        branchId: user.branchId,
         reason: returnForm.reason,
         notes: returnForm.notes,
         items: returnForm.items.map((item) => ({
-          itemId: item.itemId,
           product: item.productId,
           quantity: item.quantity,
           reason: item.reason,
@@ -788,18 +608,14 @@ export const BranchInventory: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
-      queryClient.invalidateQueries({ queryKey: ['orders'] });
       queryClient.invalidateQueries({ queryKey: ['returns'] });
       setIsReturnModalOpen(false);
-      setReturnForm({ orderId: '', reason: '', notes: '', items: [] });
+      setReturnForm({ reason: '', notes: '', items: [] });
       setReturnErrors({});
-      setAvailableItems([]);
-      setSelectedItem(null);
       toast.success(t('returns.create_success'));
       socket?.emit('returnCreated', {
         branchId: user?.branchId,
-        returnId: crypto.randomUUID(),
-        orderNumber: ordersData?.find((o) => o._id === returnForm.orderId)?.orderNumber,
+        returnId: crypto.randomUUID(), // Backend should return this
         status: 'pending_approval',
         eventId: crypto.randomUUID(),
       });
@@ -841,49 +657,6 @@ export const BranchInventory: React.FC = () => {
       toast.error(err.message || t('errors.update_inventory'));
     },
   });
-
-  const exportReturnsToExcel = () => {
-    const exportData = sortedFilteredReturns.map((ret) => ({
-      [t('returns.return_number')]: ret.returnNumber,
-      [t('returns.order_number')]: ret.order.orderNumber,
-      [t('returns.status_label')]: t(`returns.${ret.status}`),
-      [t('returns.date')]: new Date(ret.createdAt).toLocaleDateString(),
-      [t('returns.items_count')]: ret.items.length,
-      [t('returns.notes_label')]: ret.notes || t('returns.no_notes'),
-      [t('returns.review_notes')]: ret.reviewNotes || t('returns.no_notes'),
-    }));
-    const ws = XLSX.utils.json_to_sheet(exportData);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Returns');
-    XLSX.writeFile(wb, `Returns_${new Date().toISOString().split('T')[0]}.xlsx`);
-  };
-
-  const exportReturnsToPDF = () => {
-    const doc = new jsPDF();
-    const headers = [
-      t('returns.return_number'),
-      t('returns.order_number'),
-      t('returns.status_label'),
-      t('returns.date'),
-      t('returns.items_count'),
-      t('returns.notes_label'),
-      t('returns.review_notes'),
-    ];
-    const data = sortedFilteredReturns.map((ret) => [
-      ret.returnNumber,
-      ret.order.orderNumber,
-      t(`returns.${ret.status}`),
-      new Date(ret.createdAt).toLocaleDateString(),
-      ret.items.length,
-      ret.notes || t('returns.no_notes'),
-      ret.reviewNotes || t('returns.no_notes'),
-    ]);
-    autoTable(doc, {
-      head: [headers],
-      body: data,
-    });
-    doc.save(`Returns_${new Date().toISOString().split('T')[0]}.pdf`);
-  };
 
   const errorMessage = inventoryError?.message || historyError?.message || returnsError?.message || '';
 
@@ -1124,65 +897,48 @@ export const BranchInventory: React.FC = () => {
             exit={{ opacity: 0, x: isRtl ? -50 : 50 }}
             transition={{ duration: 0.3 }}
           >
-            <div className="flex justify-end gap-2 mb-4">
-              <CustomButton onClick={exportReturnsToExcel} className="flex items-center gap-2">
-                <Download className="w-4 h-4" />
-                {isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
-              </CustomButton>
-              <CustomButton onClick={exportReturnsToPDF} className="flex items-center gap-2">
-                <Download className="w-4 h-4" />
-                {isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
-              </CustomButton>
-            </div>
             {returnsLoading ? (
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-amber-600 mx-auto"></div>
               </div>
             ) : paginatedReturns.length === 0 ? (
               <CustomCard className="p-8 text-center bg-white rounded-xl shadow-md">
-                <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600">{isRtl ? 'لا توجد مرتجعات' : 'No returns'}</p>
               </CustomCard>
             ) : (
               <div className="space-y-4">
                 <AnimatePresence>
-                  {paginatedReturns.map((ret) => {
-                    const statusStyle = STATUS_COLORS[ret.status];
-                    const StatusIcon = statusStyle.icon;
-                    return (
-                      <motion.div
-                        key={ret._id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        transition={{ duration: 0.3 }}
-                      >
-                        <CustomCard className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-shadow">
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1">
-                              <h3 className="font-semibold text-gray-900">{ret.returnNumber}</h3>
-                              <p className="text-sm text-gray-500">{isRtl ? 'رقم الطلب' : 'Order Number'}: {ret.order.orderNumber}</p>
-                              <p className="text-sm text-gray-600">{isRtl ? 'التاريخ' : 'Date'}: {new Date(ret.createdAt).toLocaleDateString()}</p>
-                              <p className="text-sm text-gray-600">{isRtl ? 'عدد العناصر' : 'Items Count'}: {ret.items.length}</p>
-                              <p className={`text-sm font-medium ${statusStyle.text}`}>
-                                {isRtl ? t(`returns.${ret.status}`) : ret.status}
-                              </p>
-                            </div>
-                            <div className="flex gap-2">
-                              <CustomButton
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => handleViewReturn(ret)}
-                                className="text-blue-600 hover:text-blue-800"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </CustomButton>
+                  {paginatedReturns.map((ret) => (
+                    <motion.div
+                      key={ret._id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <CustomCard className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-shadow">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-gray-900">{ret.returnNumber}</h3>
+                            <p className="text-sm text-gray-600">{isRtl ? 'التاريخ' : 'Date'}: {new Date(ret.createdAt).toLocaleString()}</p>
+                            <p className="text-sm text-gray-600">{isRtl ? 'الحالة' : 'Status'}: {isRtl ? t(`returns.${ret.status}`) : ret.status}</p>
+                            <p className="text-sm text-gray-600">{isRtl ? 'الملاحظات' : 'Notes'}: {ret.reviewNotes || t('none')}</p>
+                            <div className="mt-2">
+                              <p className="text-sm font-medium text-gray-700">{isRtl ? 'العناصر' : 'Items'}:</p>
+                              <ul className="list-disc pl-4">
+                                {ret.items.map((item, i) => (
+                                  <li key={i} className="text-sm text-gray-600">
+                                    {isRtl ? item.product.name : item.product.nameEn} - {item.quantity} ({item.reason})
+                                  </li>
+                                ))}
+                              </ul>
                             </div>
                           </div>
-                        </CustomCard>
-                      </motion.div>
-                    );
-                  })}
+                        </div>
+                      </CustomCard>
+                    </motion.div>
+                  ))}
                 </AnimatePresence>
                 <Pagination
                   totalPages={totalReturnsPages}
@@ -1200,9 +956,8 @@ export const BranchInventory: React.FC = () => {
         isOpen={isReturnModalOpen}
         onClose={() => {
           setIsReturnModalOpen(false);
-          setReturnForm({ orderId: '', reason: '', notes: '', items: [] });
+          setReturnForm({ reason: '', notes: '', items: [] });
           setReturnErrors({});
-          setAvailableItems([]);
           setSelectedItem(null);
         }}
         title={isRtl ? 'إنشاء مرتجع' : 'Create Return'}
@@ -1213,20 +968,6 @@ export const BranchInventory: React.FC = () => {
               {isRtl ? 'المنتج' : 'Product'}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
             </p>
           )}
-          <CustomSelect
-            label={isRtl ? 'الطلب' : 'Order'}
-            value={returnForm.orderId}
-            onChange={(e) => {
-              setReturnForm({ ...returnForm, orderId: e.target.value, items: [] });
-            }}
-            options={[{ value: '', label: isRtl ? 'اختر طلبًا' : 'Select Order' }].concat(
-              (ordersData || []).map((order) => ({
-                value: order._id,
-                label: `${order.orderNumber} (${isRtl ? 'تم التوصيل' : 'Delivered'})`,
-              }))
-            )}
-            error={returnErrors.orderId}
-          />
           <CustomSelect
             label={isRtl ? 'السبب' : 'Reason'}
             value={returnForm.reason}
@@ -1249,18 +990,17 @@ export const BranchInventory: React.FC = () => {
             {returnForm.items.map((item, index) => (
               <div key={index} className="flex gap-2 mb-2 items-center">
                 <CustomSelect
-                  value={item.itemId}
-                  onChange={(e) => updateItemInForm(index, 'itemId', e.target.value)}
-                  options={[{ value: '', label: isRtl ? 'اختر عنصرًا' : 'Select Item' }].concat(
+                  value={item.productId}
+                  onChange={(e) => updateItemInForm(index, 'productId', e.target.value)}
+                  options={[{ value: '', label: isRtl ? 'اختر منتجًا' : 'Select Product' }].concat(
                     availableItems
-                      .filter((a) => !returnForm.items.some((i, idx) => i.itemId === a.itemId && idx !== index))
+                      .filter((a) => !returnForm.items.some((i, idx) => i.productId === a.productId && idx !== index))
                       .map((a) => ({
-                        value: a.itemId,
-                        label: `${a.productName} (${a.available} ${isRtl ? 'متاح' : 'available'})`,
+                        value: a.productId,
+                        label: `${a.productName} (${a.stock} ${isRtl ? 'متاح' : 'available'})`,
                       }))
                   )}
-                  error={returnErrors[`item_${index}_itemId`]}
-                  disabled={!returnForm.orderId}
+                  error={returnErrors[`item_${index}_productId`]}
                 />
                 <CustomInput
                   type="number"
@@ -1303,9 +1043,8 @@ export const BranchInventory: React.FC = () => {
               variant="secondary"
               onClick={() => {
                 setIsReturnModalOpen(false);
-                setReturnForm({ orderId: '', reason: '', notes: '', items: [] });
+                setReturnForm({ reason: '', notes: '', items: [] });
                 setReturnErrors({});
-                setAvailableItems([]);
                 setSelectedItem(null);
               }}
               className="bg-gray-100 hover:bg-gray-200 text-gray-800"
@@ -1377,37 +1116,6 @@ export const BranchInventory: React.FC = () => {
             </CustomButton>
           </div>
         </div>
-      </CustomModal>
-
-      <CustomModal
-        isOpen={isViewReturnModalOpen}
-        onClose={() => setIsViewReturnModalOpen(false)}
-        title={isRtl ? `عرض المرتجع: ${selectedReturn?.returnNumber}` : `View Return: ${selectedReturn?.returnNumber}`}
-      >
-        {selectedReturn && (
-          <div className="flex flex-col gap-4">
-            <p className="text-sm text-gray-600">{isRtl ? 'رقم الطلب' : 'Order Number'}: {selectedReturn.order.orderNumber}</p>
-            <p className="text-sm text-gray-600">{isRtl ? 'التاريخ' : 'Date'}: {new Date(selectedReturn.createdAt).toLocaleString()}</p>
-            <p className="text-sm text-gray-600">{isRtl ? 'الحالة' : 'Status'}: {isRtl ? t(`returns.${selectedReturn.status}`) : selectedReturn.status}</p>
-            <p className="text-sm text-gray-600">{isRtl ? 'الملاحظات' : 'Notes'}: {selectedReturn.notes || (isRtl ? 'لا توجد' : 'None')}</p>
-            <p className="text-sm text-gray-600">{isRtl ? 'ملاحظات المراجعة' : 'Review Notes'}: {selectedReturn.reviewNotes || (isRtl ? 'لا توجد' : 'None')}</p>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'العناصر' : 'Items'}</label>
-              {selectedReturn.items.map((item, index) => (
-                <div key={index} className="mb-2 p-2 border border-gray-200 rounded">
-                  <p>{isRtl ? item.product.name : item.product.nameEn}</p>
-                  <p>{isRtl ? 'الكمية' : 'Quantity'}: {item.quantity}</p>
-                  <p>{isRtl ? 'السبب' : 'Reason'}: {item.reason}</p>
-                </div>
-              ))}
-            </div>
-            <div className="flex justify-end">
-              <CustomButton onClick={() => setIsViewReturnModalOpen(false)} variant="secondary">
-                {isRtl ? 'إغلاق' : 'Close'}
-              </CustomButton>
-            </div>
-          </div>
-        )}
       </CustomModal>
     </div>
   );
