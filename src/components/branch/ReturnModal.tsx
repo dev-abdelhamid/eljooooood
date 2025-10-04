@@ -1,4 +1,3 @@
-
 // Now, the corrected ReturnModal component
 import React, { memo, useCallback, useMemo, useState, useEffect } from 'react';
 import { Modal } from '../UI/Modal';
@@ -120,20 +119,23 @@ const ReturnModal: React.FC<Props> = memo(
             }));
           setInventoryItems(mappedItems);
 
-          // Initialize returnFormData based on order items
-          const initialFormData = order.items.map((orderItem) => {
-            const invItem = mappedItems.find((i) => i.productId === orderItem.productId);
-            return {
-              productId: orderItem.productId,
-              itemId: orderItem.itemId,
-              quantity: 0,  // Start with 0, user can set the return quantity
-              reason: '',
-              notes: '',
-              maxQuantity: Math.min(orderItem.quantity, invItem?.currentStock || 0),
-              productName: isRtl ? invItem?.name : invItem?.nameEn || invItem?.name,
-              unit: isRtl ? invItem?.unit : invItem?.unitEn || invItem?.unit,
-            };
-          });
+          // Initialize returnFormData based on order items that have matching inventory
+          const initialFormData = order.items
+            .map((orderItem) => {
+              const invItem = mappedItems.find((i) => i.productId === orderItem.productId);
+              if (!invItem) return null;
+              return {
+                productId: orderItem.productId,
+                itemId: orderItem.itemId,
+                quantity: 0,  // Start with 0, user can set the return quantity
+                reason: '',
+                notes: '',
+                maxQuantity: Math.min(orderItem.quantity, invItem.currentStock || 0),
+                productName: isRtl ? invItem.name : invItem.nameEn || invItem.name,
+                unit: isRtl ? invItem.unit : invItem.unitEn || invItem.unit,
+              };
+            })
+            .filter((item): item is ReturnFormItem & { maxQuantity: number; productName: string; unit: string } => item !== null);
           setReturnFormData(initialFormData);
         } catch (err: any) {
           setError(isRtl ? `فشل في جلب المخزون: ${err.message}` : `Failed to fetch inventory: ${err.message}`);
@@ -156,9 +158,13 @@ const ReturnModal: React.FC<Props> = memo(
 
     const isFormValid = useMemo(
       () =>
+        returnFormData.some((item) => item.quantity > 0) &&
         returnFormData.every(
           (item) =>
-            (item.quantity === 0 || (item.quantity > 0 && item.reason && item.quantity <= item.maxQuantity))
+            item.quantity === 0 ||
+            (item.quantity > 0 &&
+              item.reason &&
+              item.quantity <= (item.maxQuantity || 0))
         ),
       [returnFormData]
     );
@@ -178,6 +184,8 @@ const ReturnModal: React.FC<Props> = memo(
           <div className="text-center py-4">{isRtl ? 'جاري تحميل المخزون...' : 'Loading inventory...'}</div>
         ) : error ? (
           <div className="text-center text-red-600 py-4">{error}</div>
+        ) : returnFormData.length === 0 ? (
+          <div className="text-center py-4">{isRtl ? 'لا توجد عناصر قابلة للإرجاع في المخزون' : 'No returnable items in inventory'}</div>
         ) : (
           <form onSubmit={(e) => onSubmit(e, order, returnFormData.filter(item => item.quantity > 0))} className="space-y-6">  {/* Filter quantity > 0 on submit */}
             <div className="space-y-4">
@@ -185,7 +193,7 @@ const ReturnModal: React.FC<Props> = memo(
                 <ReturnItemRow
                   key={index}
                   index={index}
-                  item={item}
+                  item={item as ReturnFormItem & { maxQuantity: number; productName: string; unit: string }}
                   updateItem={updateItem}
                   t={t}
                   isRtl={isRtl}
