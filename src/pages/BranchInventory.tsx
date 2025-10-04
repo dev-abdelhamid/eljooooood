@@ -3,14 +3,14 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { inventoryAPI, returnsAPI } from '../services/api';
+import { inventoryAPI } from '../services/api';
 import { Package, AlertCircle, Search, RefreshCw, Edit, X, Plus } from 'lucide-react';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-// واجهات TypeScript (محافظ عليها، لكن أزل غير الضروري)
+// واجهات TypeScript
 interface InventoryItem {
   _id: string;
   product: {
@@ -33,16 +33,18 @@ interface ReturnItem {
   quantity: number;
   reason: string;
   maxQuantity: number;
-  itemId?: string;
+  orderId: string;
 }
 
 interface ReturnFormState {
+  orderId: string;
   reason: string;
   notes: string;
   items: ReturnItem[];
 }
 
 type ReturnFormAction =
+  | { type: 'SET_ORDER_ID'; payload: string }
   | { type: 'SET_REASON'; payload: string }
   | { type: 'SET_NOTES'; payload: string }
   | { type: 'ADD_ITEM'; payload: ReturnItem }
@@ -52,6 +54,8 @@ type ReturnFormAction =
 
 const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): ReturnFormState => {
   switch (action.type) {
+    case 'SET_ORDER_ID':
+      return { ...state, orderId: action.payload };
     case 'SET_REASON':
       return { ...state, reason: action.payload };
     case 'SET_NOTES':
@@ -66,7 +70,7 @@ const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): Re
     case 'REMOVE_ITEM':
       return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
     case 'RESET':
-      return { reason: '', notes: '', items: [] };
+      return { orderId: '', reason: '', notes: '', items: [] };
     default:
       return state;
   }
@@ -86,7 +90,7 @@ interface AvailableItem {
   stock: number;
 }
 
-// مكونات مخصصة (محافظ عليها)
+// مكونات مخصصة
 interface CustomCardProps {
   className?: string;
   children: React.ReactNode;
@@ -105,7 +109,7 @@ interface CustomInputProps {
 }
 
 interface CustomButtonProps {
-  variant?: 'primary' | 'secondary' | 'destructive' | 'danger';
+  variant?: 'primary' | 'secondary' | 'destructive';
   size?: 'sm' | 'md';
   onClick?: () => void;
   disabled?: boolean;
@@ -165,7 +169,7 @@ const CustomButton: React.FC<CustomButtonProps> = ({ variant = 'primary', size =
   const variantClass =
     variant === 'secondary'
       ? 'bg-gray-100 hover:bg-gray-200 text-gray-800'
-      : variant === 'destructive' || variant === 'danger'
+      : variant === 'destructive'
       ? 'text-red-600 hover:text-red-800'
       : 'bg-amber-600 text-white hover:bg-amber-700';
   const disabledClass = disabled ? 'opacity-50 cursor-not-allowed' : '';
@@ -272,7 +276,7 @@ export const BranchInventory: React.FC = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [returnForm, dispatchReturnForm] = useReducer(returnFormReducer, { reason: '', notes: '', items: [] });
+  const [returnForm, dispatchReturnForm] = useReducer(returnFormReducer, { orderId: '', reason: '', notes: '', items: [] });
   const [editForm, setEditForm] = useState<EditForm>({ minStockLevel: 0, maxStockLevel: 0 });
   const [returnErrors, setReturnErrors] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
@@ -286,19 +290,27 @@ export const BranchInventory: React.FC = () => {
     };
   }, [abortController]);
 
-  const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError, refetch: refetchInventory } = useQuery<
-    InventoryItem[],
-    Error
-  >({
-    queryKey: ['inventory', user?.branchId, language],
+  const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError, refetch: refetchInventory } = useQuery<{
+    inventory: InventoryItem[];
+    totalPages: number;
+    currentPage: number;
+  }>({
+    queryKey: ['inventory', user?.branchId, language, currentPage, searchQuery, filterStatus],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
-      return inventoryAPI.getByBranch(user.branchId, { signal: abortController.signal });
+      const response = await inventoryAPI.getByBranch(user.branchId, {
+        page: currentPage,
+        limit: ITEMS_PER_PAGE,
+        search: searchQuery,
+        lowStock: filterStatus === 'low' ? true : undefined,
+        lang: language,
+        signal: abortController.signal,
+      });
+      return response.data; // افتراض أن inventoryAPI.getByBranch ترجع { data: { inventory, totalPages, currentPage } }
     },
     enabled: !!user?.branchId,
-    select: (response) => {
-      const inventoryData = Array.isArray(response) ? response : response?.inventory || [];
-      return inventoryData.map((item: InventoryItem) => ({
+    select: (data) => ({
+      inventory: (data.inventory || []).map((item: InventoryItem) => ({
         ...item,
         product: item.product
           ? {
@@ -323,16 +335,19 @@ export const BranchInventory: React.FC = () => {
             : item.currentStock >= item.maxStockLevel
             ? 'full'
             : 'normal',
-      }));
-    },
-    onError: (err) => {
-      toast.error(err.message || t('errors.fetch_inventory'), { position: 'top-right', autoClose: 3000 });
+      })),
+      totalPages: data.totalPages || 1,
+      currentPage: data.currentPage || 1,
+    }),
+    onError: (err: any) => {
+      const message = err.response?.data?.message || err.message || t('errors.fetch_inventory');
+      toast.error(message, { position: 'top-right', autoClose: 3000 });
     },
   });
 
   useEffect(() => {
-    if (inventoryData) {
-      const items: AvailableItem[] = inventoryData
+    if (inventoryData?.inventory) {
+      const items: AvailableItem[] = inventoryData.inventory
         .filter((item) => item.currentStock > 0 && item.product)
         .map((item) => ({
           productId: item.product!._id,
@@ -417,27 +432,48 @@ export const BranchInventory: React.FC = () => {
     [t]
   );
 
-  const filteredInventory = useMemo(
-    () =>
-      (inventoryData || []).filter(
-        (item) =>
-          item.product &&
-          (!filterStatus || item.status === filterStatus) &&
-          (item.product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.product.nameEn?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.product.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.product.department?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.product.department?.nameEn?.toLowerCase().includes(searchQuery.toLowerCase()))
-      ),
-    [inventoryData, searchQuery, filterStatus]
-  );
+  const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 
-  const paginatedInventory = useMemo(
-    () => filteredInventory.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
-    [filteredInventory, currentPage]
-  );
+  const validateReturnForm = useCallback(() => {
+    const errors: Record<string, string> = {};
+    if (!returnForm.orderId || !isValidObjectId(returnForm.orderId)) {
+      errors.orderId = t('errors.invalid_order_id');
+    }
+    if (!returnForm.reason) {
+      errors.reason = t('errors.required', { field: t('returns.reason') });
+    }
+    if (returnForm.items.length === 0) {
+      errors.items = t('errors.required', { field: t('returns.items') });
+    }
+    returnForm.items.forEach((item, index) => {
+      if (!item.productId || !isValidObjectId(item.productId)) {
+        errors[`item_${index}_productId`] = t('errors.required', { field: t('returns.item') });
+      }
+      if (!item.reason) {
+        errors[`item_${index}_reason`] = t('errors.required', { field: t('returns.reason') });
+      }
+      if (item.quantity < 1 || item.quantity > (item.maxQuantity ?? 0) || isNaN(item.quantity)) {
+        errors[`item_${index}_quantity`] = t('errors.invalid_quantity_max', { max: item.maxQuantity ?? 0 });
+      }
+    });
+    setReturnErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [returnForm, t]);
 
-  const totalInventoryPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
+  const validateEditForm = useCallback(() => {
+    const errors: Record<string, string> = {};
+    if (editForm.minStockLevel < 0) {
+      errors.minStockLevel = t('errors.non_negative', { field: t('inventory.min_stock') });
+    }
+    if (editForm.maxStockLevel < 0) {
+      errors.maxStockLevel = t('errors.non_negative', { field: t('inventory.max_stock') });
+    }
+    if (editForm.maxStockLevel <= editForm.minStockLevel) {
+      errors.maxStockLevel = t('errors.max_greater_min');
+    }
+    setEditErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [editForm, t]);
 
   const handleOpenReturnModal = useCallback((item?: InventoryItem) => {
     setSelectedItem(item || null);
@@ -445,7 +481,7 @@ export const BranchInventory: React.FC = () => {
     if (item?.product) {
       dispatchReturnForm({
         type: 'ADD_ITEM',
-        payload: { productId: item.product._id, quantity: 1, reason: '', maxQuantity: item.currentStock },
+        payload: { productId: item.product._id, quantity: 1, reason: '', maxQuantity: item.currentStock, orderId: '' },
       });
     }
     setReturnErrors({});
@@ -462,9 +498,9 @@ export const BranchInventory: React.FC = () => {
   const addItemToForm = useCallback(() => {
     dispatchReturnForm({
       type: 'ADD_ITEM',
-      payload: { productId: '', quantity: 1, reason: '', maxQuantity: 0 },
+      payload: { productId: '', quantity: 1, reason: '', maxQuantity: 0, orderId: returnForm.orderId },
     });
-  }, []);
+  }, [returnForm.orderId]);
 
   const updateItemInForm = useCallback(
     (index: number, field: keyof ReturnItem, value: string | number) => {
@@ -486,48 +522,21 @@ export const BranchInventory: React.FC = () => {
     dispatchReturnForm({ type: 'REMOVE_ITEM', payload: index });
   }, []);
 
-  const validateReturnForm = useCallback(() => {
-    const errors: Record<string, string> = {};
-    if (!returnForm.reason) errors.reason = t('errors.required', { field: t('returns.reason') });
-    if (returnForm.items.length === 0) errors.items = t('errors.required', { field: t('returns.items') });
-    returnForm.items.forEach((item, index) => {
-      if (!item.productId) errors[`item_${index}_productId`] = t('errors.required', { field: t('returns.item') });
-      if (!item.reason) errors[`item_${index}_reason`] = t('errors.required', { field: t('returns.reason') });
-      if (item.quantity < 1 || item.quantity > (item.maxQuantity ?? 0) || isNaN(item.quantity)) {
-        errors[`item_${index}_quantity`] = t('errors.invalid_quantity_max', { max: item.maxQuantity ?? 0 });
-      }
-    });
-    setReturnErrors(errors);
-    return Object.keys(errors).length === 0;
-  }, [returnForm, t]);
-
-  const validateEditForm = useCallback(() => {
-    const errors: Record<string, string> = {};
-    if (editForm.minStockLevel < 0) errors.minStockLevel = t('errors.non_negative', { field: t('inventory.min_stock') });
-    if (editForm.maxStockLevel < 0) errors.maxStockLevel = t('errors.non_negative', { field: t('inventory.max_stock') });
-    if (editForm.maxStockLevel <= editForm.minStockLevel) errors.maxStockLevel = t('errors.max_greater_min');
-    setEditErrors(errors);
-    return Object.keys(errors).length === 0;
-  }, [editForm, t]);
-
   const createReturnMutation = useMutation<void, Error, void>({
     mutationFn: async () => {
       if (!validateReturnForm()) throw new Error(t('errors.invalid_form'));
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
-      await returnsAPI.createReturn(
-        {
-          branchId: user.branchId,
-          reason: returnForm.reason,
-          notes: returnForm.notes,
-          items: returnForm.items.map((item) => ({
-            product: item.productId,
-            quantity: item.quantity,
-            reason: item.reason,
-            itemId: item.itemId,
-          })),
-        },
-        { signal: abortController.signal }
-      );
+      await inventoryAPI.createReturn({
+        orderId: returnForm.orderId,
+        branchId: user.branchId,
+        reason: returnForm.reason,
+        notes: returnForm.notes,
+        items: returnForm.items.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          reason: item.reason,
+        })),
+      }, { signal: abortController.signal });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -543,12 +552,12 @@ export const BranchInventory: React.FC = () => {
         eventId: crypto.randomUUID(),
       });
     },
-    onError: (err) => {
+    onError: (err: any) => {
       if (err.name !== 'AbortError') {
-        console.error(`[${new Date().toISOString()}] Create return error:`, err);
-        toast.error(err.message || t('errors.create_return'), { position: 'top-right', autoClose: 3000 });
-        if (err.message.includes('Invalid')) {
-          setReturnErrors({ form: err.message });
+        const message = err.response?.data?.message || err.message || t('errors.create_return');
+        toast.error(message, { position: 'top-right', autoClose: 3000 });
+        if (message.includes('Invalid')) {
+          setReturnErrors({ form: message });
         }
       }
     },
@@ -558,16 +567,10 @@ export const BranchInventory: React.FC = () => {
     mutationFn: async () => {
       if (!validateEditForm()) throw new Error(t('errors.invalid_form'));
       if (!selectedItem) throw new Error(t('errors.no_item_selected'));
-      if (!user?._id) throw new Error('User ID is required'); // إضافة تحقق
-      await inventoryAPI.updateStock(
-        selectedItem._id,
-        {
-          minStockLevel: editForm.minStockLevel,
-          maxStockLevel: editForm.maxStockLevel,
-          userId: user._id, // إضافة userId لإصلاح الخطأ
-        },
-        { signal: abortController.signal }
-      );
+      await inventoryAPI.updateStockLimits(selectedItem._id, {
+        minStockLevel: editForm.minStockLevel,
+        maxStockLevel: editForm.maxStockLevel,
+      }, { signal: abortController.signal });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -583,15 +586,15 @@ export const BranchInventory: React.FC = () => {
         eventId: crypto.randomUUID(),
       });
     },
-    onError: (err) => {
+    onError: (err: any) => {
       if (err.name !== 'AbortError') {
-        console.error(`[${new Date().toISOString()}] Update inventory error:`, err);
-        toast.error(err.message || t('errors.update_inventory'), { position: 'top-right', autoClose: 3000 });
+        const message = err.response?.data?.message || err.message || t('errors.update_inventory');
+        toast.error(message, { position: 'top-right', autoClose: 3000 });
       }
     },
   });
 
-  const errorMessage = inventoryError?.message || '';
+  const errorMessage = inventoryError ? (inventoryError as any).response?.data?.message || inventoryError?.message || t('errors.fetch_inventory') : '';
 
   return (
     <div
@@ -667,7 +670,7 @@ export const BranchInventory: React.FC = () => {
               <InventoryCardSkeleton key={i} isRtl={isRtl} />
             ))}
           </div>
-        ) : paginatedInventory.length === 0 ? (
+        ) : !inventoryData?.inventory.length ? (
           <CustomCard className="p-8 text-center bg-white rounded-xl shadow-md">
             <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600">{t('inventory.no_items')}</p>
@@ -675,7 +678,7 @@ export const BranchInventory: React.FC = () => {
         ) : (
           <div className="space-y-4">
             <AnimatePresence>
-              {paginatedInventory.map((item) =>
+              {inventoryData.inventory.map((item) =>
                 item.product ? (
                   <motion.div
                     key={item._id}
@@ -729,7 +732,12 @@ export const BranchInventory: React.FC = () => {
                 ) : null
               )}
             </AnimatePresence>
-            <Pagination totalPages={totalInventoryPages} currentPage={currentPage} setCurrentPage={setCurrentPage} isRtl={isRtl} />
+            <Pagination
+              totalPages={inventoryData.totalPages}
+              currentPage={inventoryData.currentPage}
+              setCurrentPage={setCurrentPage}
+              isRtl={isRtl}
+            />
           </div>
         )}
       </motion.div>
@@ -750,6 +758,13 @@ export const BranchInventory: React.FC = () => {
               {t('products.title')}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
             </p>
           )}
+          <CustomInput
+            label={t('returns.order_id')}
+            value={returnForm.orderId}
+            onChange={(e) => dispatchReturnForm({ type: 'SET_ORDER_ID', payload: e.target.value })}
+            placeholder={t('returns.order_id_placeholder')}
+            error={returnErrors.orderId}
+          />
           <CustomSelect
             label={t('returns.reason')}
             value={returnForm.reason}
@@ -797,7 +812,7 @@ export const BranchInventory: React.FC = () => {
                   error={returnErrors[`item_${index}_reason`]}
                 />
                 <CustomButton
-                  variant="danger"
+                  variant="destructive"
                   size="sm"
                   onClick={() => removeItemFromForm(index)}
                   disabled={!!selectedItem}
