@@ -1,4 +1,3 @@
-// Finally, the corrected BranchOrders component
 import React, { useReducer, useEffect, useMemo, useCallback, lazy, Suspense, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -6,7 +5,7 @@ import { useSocket } from '../contexts/SocketContext';
 import { ordersAPI, inventoryAPI, returnsAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
-import Select from './Select';  // Using the new custom Select
+import { Select } from '../components/UI/Select';
 import SearchInput from '../components/UI/SearchInput';
 import { ShoppingCart, Download, Upload, Table2, Grid, AlertCircle } from 'lucide-react';
 import { debounce } from 'lodash';
@@ -74,7 +73,7 @@ const initialState: State = {
   isViewModalOpen: false,
   isConfirmDeliveryModalOpen: false,
   isReturnModalOpen: false,
-  returnFormData: [],
+  returnFormData: [{ itemId: '', quantity: 0, reason: '', notes: '' }],
   searchQuery: '',
   filterStatus: '',
   sortBy: 'date',
@@ -278,11 +277,6 @@ const BranchOrders: React.FC = () => {
   const stateRef = useRef(state);
   const cacheRef = useRef<Map<string, Order[]>>(new Map());
   const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
-
-  // Memoized setReturnFormData to prevent infinite loop
-  const setReturnFormData = useCallback((data: ReturnFormItem[]) => {
-    dispatch({ type: 'SET_RETURN_FORM', payload: data });
-  }, []);
 
   // Update stateRef when state changes
   useEffect(() => {
@@ -881,16 +875,21 @@ const BranchOrders: React.FC = () => {
     dispatch({ type: 'SET_MODAL', modal: 'confirmDelivery', isOpen: true });
   }, []);
 
-  const openReturnModal = useCallback((order: Order) => {
+  const openReturnModal = useCallback((order: Order, itemId: string) => {
+    const item = order.items.find(i => i.itemId === itemId);
     dispatch({ type: 'SET_SELECTED_ORDER', payload: order });
+    dispatch({
+      type: 'SET_RETURN_FORM',
+      payload: [{ itemId, quantity: item?.quantity || 1, reason: '', notes: '' }],
+    });
     dispatch({ type: 'SET_MODAL', modal: 'return', isOpen: true });
   }, []);
 
   const handleReturnItem = useCallback(
     async (e: React.FormEvent, order: Order | null, returnFormData: ReturnFormItem[]) => {
       e.preventDefault();
-      if (!order || !user?.branchId || returnFormData.some(item => item.quantity > 0 && !item.reason) || state.submitting) {
-        toast.error(isRtl ? 'يرجى ملء جميع الحقول للعناصر المرتجعة' : 'Please fill all fields for returned items', {
+      if (!order || !user?.branchId || returnFormData.some(item => !item.itemId || item.quantity < 1 || !item.reason) || state.submitting) {
+        toast.error(isRtl ? 'يرجى ملء جميع الحقول' : 'Please fill all fields', {
           position: isRtl ? 'top-left' : 'top-right',
           autoClose: 3000,
         });
@@ -931,7 +930,7 @@ const BranchOrders: React.FC = () => {
         };
         dispatch({ type: 'ADD_RETURN', orderId: order.id, returnData });
         dispatch({ type: 'SET_MODAL', modal: 'return', isOpen: false });
-        dispatch({ type: 'SET_RETURN_FORM', payload: [] });
+        dispatch({ type: 'SET_RETURN_FORM', payload: [{ itemId: '', quantity: 0, reason: '', notes: '' }] });
         playNotificationSound('/sounds/return-created.mp3', [200, 100, 200]);
         toast.success(isRtl ? 'تم تقديم طلب الإرجاع' : 'Return submitted successfully', {
           position: isRtl ? 'top-left' : 'top-right',
@@ -1303,16 +1302,15 @@ const BranchOrders: React.FC = () => {
             onClose={() => {
               dispatch({ type: 'SET_MODAL', modal: 'return', isOpen: false });
               dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
-              dispatch({ type: 'SET_RETURN_FORM', payload: [] });
+              dispatch({ type: 'SET_RETURN_FORM', payload: [{ itemId: '', quantity: 0, reason: '', notes: '' }] });
             }}
-            order={state.selectedOrder}  // Pass order directly
+            order={state.selectedOrder}
             returnFormData={state.returnFormData}
-            setReturnFormData={setReturnFormData}
+            setReturnFormData={(data) => dispatch({ type: 'SET_RETURN_FORM', payload: data })}
             t={t}
             isRtl={isRtl}
             onSubmit={handleReturnItem}
             submitting={state.submitting}
-            branchId={user?.branchId || ''}
           />
         </motion.div>
       </Suspense>
