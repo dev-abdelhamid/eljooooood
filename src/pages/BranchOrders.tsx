@@ -1,5 +1,3 @@
-
-
 // Finally, the corrected BranchOrders component
 import React, { useReducer, useEffect, useMemo, useCallback, lazy, Suspense, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -76,7 +74,7 @@ const initialState: State = {
   isViewModalOpen: false,
   isConfirmDeliveryModalOpen: false,
   isReturnModalOpen: false,
-  returnFormData: [{ itemId: '', quantity: 0, reason: '', notes: '' }],
+  returnFormData: [],
   searchQuery: '',
   filterStatus: '',
   sortBy: 'date',
@@ -280,6 +278,11 @@ const BranchOrders: React.FC = () => {
   const stateRef = useRef(state);
   const cacheRef = useRef<Map<string, Order[]>>(new Map());
   const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
+
+  // Memoized setReturnFormData to prevent infinite loop
+  const setReturnFormData = useCallback((data: ReturnFormItem[]) => {
+    dispatch({ type: 'SET_RETURN_FORM', payload: data });
+  }, []);
 
   // Update stateRef when state changes
   useEffect(() => {
@@ -569,7 +572,7 @@ const BranchOrders: React.FC = () => {
 
       dispatch({ type: 'SET_LOADING', payload: true });
       const cacheKey = `${user.branchId}-${state.filterStatus}-${state.currentPage}-${state.viewMode}`;
-      if (cacheRef.current.has(cacheKey) ) {
+      if (cacheRef.current.has(cacheKey)) {
         dispatch({ type: 'SET_ORDERS', payload: cacheRef.current.get(cacheKey)! });
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
@@ -928,7 +931,7 @@ const BranchOrders: React.FC = () => {
         };
         dispatch({ type: 'ADD_RETURN', orderId: order.id, returnData });
         dispatch({ type: 'SET_MODAL', modal: 'return', isOpen: false });
-        dispatch({ type: 'SET_RETURN_FORM', payload: [{ itemId: '', quantity: 0, reason: '', notes: '' }] });
+        dispatch({ type: 'SET_RETURN_FORM', payload: [] });
         playNotificationSound('/sounds/return-created.mp3', [200, 100, 200]);
         toast.success(isRtl ? 'تم تقديم طلب الإرجاع' : 'Return submitted successfully', {
           position: isRtl ? 'top-left' : 'top-right',
@@ -1300,11 +1303,11 @@ const BranchOrders: React.FC = () => {
             onClose={() => {
               dispatch({ type: 'SET_MODAL', modal: 'return', isOpen: false });
               dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
-              dispatch({ type: 'SET_RETURN_FORM', payload: [{ itemId: '', quantity: 0, reason: '', notes: '' }] });
+              dispatch({ type: 'SET_RETURN_FORM', payload: [] });
             }}
             order={state.selectedOrder}  // Pass order directly
             returnFormData={state.returnFormData}
-            setReturnFormData={(data) => dispatch({ type: 'SET_RETURN_FORM', payload: data })}
+            setReturnFormData={setReturnFormData}
             t={t}
             isRtl={isRtl}
             onSubmit={handleReturnItem}
