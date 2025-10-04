@@ -48,21 +48,30 @@ interface Return {
   returnNumber: string;
   orderId?: string;
   branchId: string;
+  branchName: string;
   items: Array<{
+    itemId?: string;
     product: {
       _id: string;
       name: string;
       nameEn: string;
+      unit: string;
+      unitEn: string;
+      department: { name: string; nameEn: string };
     };
+    productName: string;
     quantity: number;
     reason: string;
-    status?: 'approved' | 'rejected';
-    reviewNotes?: string;
+    unit: string;
+    departmentName: string;
   }>;
   status: 'pending_approval' | 'approved' | 'rejected';
   reason: string;
   notes?: string;
   createdAt: string;
+  createdByName: string;
+  reviewedByName?: string;
+  reviewedAt?: string;
 }
 
 interface ReturnItem {
@@ -70,6 +79,7 @@ interface ReturnItem {
   quantity: number;
   reason: string;
   maxQuantity: number;
+  itemId?: string;
 }
 
 interface EditForm {
@@ -176,9 +186,7 @@ interface PaginationProps {
 const ITEMS_PER_PAGE = 10;
 
 const CustomCard: React.FC<CustomCardProps> = ({ className, children }) => (
-  <div className={`bg-white shadow-md rounded-lg ${className}`}>
-    {children}
-  </div>
+  <div className={`bg-white shadow-md rounded-lg ${className}`}>{children}</div>
 );
 
 const CustomInput: React.FC<CustomInputProps> = ({ label, type = 'text', min, max, value, onChange, error, className, placeholder }) => (
@@ -290,8 +298,8 @@ const Pagination: React.FC<PaginationProps> = ({ totalPages, currentPage, setCur
 );
 
 export const BranchInventory: React.FC = () => {
-  const { t, language } = useLanguage();
-  const isRtl = language === 'ar';
+    const { t, language } = useLanguage();
+    const isRtl = language === 'ar';
   const { user } = useAuth();
   const { socket } = useSocket();
   const { addNotification } = useNotifications();
@@ -301,7 +309,9 @@ export const BranchInventory: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'inventory' | 'history' | 'returns'>('inventory');
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isReturnDetailsModalOpen, setIsReturnDetailsModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [selectedReturn, setSelectedReturn] = useState<Return | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [returnForm, dispatchReturnForm] = useReducer(returnFormReducer, { reason: '', notes: '', items: [] });
   const [editForm, setEditForm] = useState<EditForm>({ minStockLevel: 0, maxStockLevel: 0 });
@@ -310,7 +320,7 @@ export const BranchInventory: React.FC = () => {
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
 
   const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError, refetch: refetchInventory } = useQuery<InventoryItem[], Error>({
-    queryKey: ['inventory', user?.branchId, language],
+    queryKey: ['inventory', user?.branchId, i18n.language],
     queryFn: () => inventoryAPI.getByBranch(user?.branchId || ''),
     enabled: !!user?.branchId,
     select: (response) => {
@@ -345,7 +355,7 @@ export const BranchInventory: React.FC = () => {
   });
 
   const { data: historyData, isLoading: historyLoading, error: historyError } = useQuery<InventoryHistoryItem[], Error>({
-    queryKey: ['inventoryHistory', user?.branchId, language],
+    queryKey: ['inventoryHistory', user?.branchId, i18n.language],
     queryFn: () => inventoryAPI.getHistory({ branchId: user?.branchId }),
     enabled: activeTab === 'history' && !!user?.branchId,
     select: (response) => (response?.history || []).map((entry: InventoryHistoryItem) => ({
@@ -359,21 +369,35 @@ export const BranchInventory: React.FC = () => {
     })),
   });
 
-  const { data: returnsData, isLoading: returnsLoading, error: returnsError } = useQuery<Return[], Error>({
-    queryKey: ['returns', user?.branchId, language],
-    queryFn: () => returnsAPI.getByBranch(user?.branchId || '', filterStatus, currentPage, ITEMS_PER_PAGE),
+  const { data: returnsData, isLoading: returnsLoading, error: returnsError } = useQuery<{ returns: Return[]; total: number }, Error>({
+    queryKey: ['returns', user?.branchId, filterStatus, currentPage, i18n.language],
+    queryFn: () => returnsAPI.getAll({ branch: user?.branchId, status: filterStatus, page: currentPage, limit: ITEMS_PER_PAGE }),
     enabled: activeTab === 'returns' && !!user?.branchId,
-    select: (response) => (response || []).map((ret: Return) => ({
-      ...ret,
-      items: ret.items.map((item) => ({
-        ...item,
-        product: {
-          _id: item.product._id,
-          name: item.product.name || t('products.unknown'),
-          nameEn: item.product.nameEn || item.product.name || t('products.unknown'),
-        },
+    select: (response) => ({
+      returns: response.returns.map((ret: Return) => ({
+        ...ret,
+        items: ret.items.map((item) => ({
+          ...item,
+          product: {
+            _id: item.product._id,
+            name: item.product.name || t('products.unknown'),
+            nameEn: item.product.nameEn || item.product.name || t('products.unknown'),
+            unit: item.product.unit || t('products.unit_unknown'),
+            unitEn: item.product.unitEn || item.product.unit || 'N/A',
+            department: item.product.department
+              ? {
+                  name: item.product.department.name || t('departments.unknown'),
+                  nameEn: item.product.department.nameEn || item.product.department.name || t('departments.unknown'),
+                }
+              : { name: t('departments.unknown'), nameEn: t('departments.unknown') },
+          },
+          productName: isRtl ? item.product.name : item.product.nameEn,
+          unit: isRtl ? item.product.unit : item.product.unitEn,
+          departmentName: isRtl ? item.product.department.name : item.product.department.nameEn,
+        })),
       })),
-    })),
+      total: response.total,
+    }),
   });
 
   useEffect(() => {
@@ -395,8 +419,8 @@ export const BranchInventory: React.FC = () => {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('connect', () => console.log('Socket connected'));
-    socket.on('connect_error', (err) => console.error('Socket connect error:', err));
+    socket.on('connect', () => console.log(`[${new Date().toISOString()}] Socket connected`));
+    socket.on('connect_error', (err) => console.error(`[${new Date().toISOString()}] Socket connect error:`, err));
     socket.on('inventoryUpdated', ({ branchId, minStockLevel, maxStockLevel }: { branchId: string; minStockLevel?: number; maxStockLevel?: number }) => {
       if (branchId === user?.branchId) {
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -404,25 +428,6 @@ export const BranchInventory: React.FC = () => {
         if (minStockLevel !== undefined || maxStockLevel !== undefined) {
           toast.info(t('inventory.update_success'));
         }
-      }
-    });
-    socket.on('returnCreated', ({ branchId, returnId, status }: { branchId: string; returnId: string; status: string }) => {
-      if (branchId === user?.branchId) {
-        queryClient.invalidateQueries({ queryKey: ['inventory'] });
-        queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
-        queryClient.invalidateQueries({ queryKey: ['returns'] });
-        addNotification({
-          _id: crypto.randomUUID(),
-          type: 'success',
-          message: t('notifications.return_created', {
-            branchName: user?.branchId ? t('branches.current') : t('branches.unknown'),
-          }),
-          data: { returnId, eventId: crypto.randomUUID() },
-          read: false,
-          createdAt: new Date().toISOString(),
-          sound: '/sounds/notification.mp3',
-          vibrate: [400, 100, 400],
-        });
       }
     });
     socket.on('returnStatusUpdated', ({ branchId, returnId, status }: { branchId: string; returnId: string; status: string }) => {
@@ -450,7 +455,6 @@ export const BranchInventory: React.FC = () => {
       socket.off('connect');
       socket.off('connect_error');
       socket.off('inventoryUpdated');
-      socket.off('returnCreated');
       socket.off('returnStatusUpdated');
     };
   }, [socket, user, queryClient, addNotification, t]);
@@ -487,6 +491,7 @@ export const BranchInventory: React.FC = () => {
 
   const reasonOptions = useMemo(
     () => [
+      { value: '', label: isRtl ? 'اختر السبب' : 'Select Reason' },
       { value: 'تالف', label: isRtl ? 'تالف' : 'Damaged' },
       { value: 'منتج خاطئ', label: isRtl ? 'منتج خاطئ' : 'Wrong Item' },
       { value: 'كمية زائدة', label: isRtl ? 'كمية زائدة' : 'Excess Quantity' },
@@ -536,27 +541,7 @@ export const BranchInventory: React.FC = () => {
 
   const totalHistoryPages = Math.ceil(filteredHistory.length / ITEMS_PER_PAGE);
 
-  const filteredReturns = useMemo(
-    () =>
-      (returnsData || []).filter(
-        (ret) =>
-          (!filterStatus || ret.status === filterStatus) &&
-          (ret.returnNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            ret.items.some(
-              (item) =>
-                item.product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                item.product.nameEn?.toLowerCase().includes(searchQuery.toLowerCase())
-            ))
-      ),
-    [returnsData, searchQuery, filterStatus]
-  );
-
-  const paginatedReturns = useMemo(
-    () => filteredReturns.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
-    [filteredReturns, currentPage]
-  );
-
-  const totalReturnsPages = Math.ceil(filteredReturns.length / ITEMS_PER_PAGE);
+  const totalReturnsPages = Math.ceil((returnsData?.total || 0) / ITEMS_PER_PAGE);
 
   const handleOpenReturnModal = useCallback((item?: InventoryItem) => {
     setSelectedItem(item || null);
@@ -577,6 +562,16 @@ export const BranchInventory: React.FC = () => {
     setEditErrors({});
     setIsEditModalOpen(true);
   }, []);
+
+  const handleOpenReturnDetailsModal = useCallback(async (returnId: string) => {
+    try {
+      const response = await returnsAPI.getById(returnId);
+      setSelectedReturn(response.returnRequest);
+      setIsReturnDetailsModalOpen(true);
+    } catch (error: any) {
+      toast.error(error.message || t('errors.fetch_return'), { position: 'top-right', autoClose: 3000 });
+    }
+  }, [t]);
 
   const addItemToForm = useCallback(() => {
     dispatchReturnForm({
@@ -638,9 +633,10 @@ export const BranchInventory: React.FC = () => {
         reason: returnForm.reason,
         notes: returnForm.notes,
         items: returnForm.items.map((item) => ({
-          productId: item.productId,
+          product: item.productId,
           quantity: item.quantity,
           reason: item.reason,
+          itemId: item.itemId,
         })),
       });
     },
@@ -651,6 +647,7 @@ export const BranchInventory: React.FC = () => {
       setIsReturnModalOpen(false);
       dispatchReturnForm({ type: 'RESET' });
       setReturnErrors({});
+      setSelectedItem(null);
       toast.success(t('returns.create_success'));
       socket?.emit('returnCreated', {
         branchId: user?.branchId,
@@ -660,7 +657,7 @@ export const BranchInventory: React.FC = () => {
       });
     },
     onError: (err) => {
-      console.error('Create return error:', err);
+      console.error(`[${new Date().toISOString()}] Create return error:`, err);
       toast.error(err.message || t('errors.create_return'));
       if (err.message.includes('Invalid')) {
         setReturnErrors({ form: err.message });
@@ -692,8 +689,26 @@ export const BranchInventory: React.FC = () => {
       });
     },
     onError: (err) => {
-      console.error('Update inventory error:', err);
+      console.error(`[${new Date().toISOString()}] Update inventory error:`, err);
       toast.error(err.message || t('errors.update_inventory'));
+    },
+  });
+
+  const updateReturnStatusMutation = useMutation<void, Error, { returnId: string; status: 'approved' | 'rejected'; reviewNotes?: string }>({
+    mutationFn: async ({ returnId, status, reviewNotes }) => {
+      await returnsAPI.updateReturnStatus(returnId, { status, reviewNotes });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['returns'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
+      setIsReturnDetailsModalOpen(false);
+      setSelectedReturn(null);
+      toast.success(t('returns.update_success'));
+    },
+    onError: (err) => {
+      console.error(`[${new Date().toISOString()}] Update return status error:`, err);
+      toast.error(err.message || t('errors.update_return'));
     },
   });
 
@@ -709,18 +724,16 @@ export const BranchInventory: React.FC = () => {
           <div>
             <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
               <Package className="w-8 h-8 text-amber-600" />
-              {isRtl ? 'المخزون' : 'Inventory'}
+              {t('inventory.title')}
             </h1>
-            <p className="text-gray-600 mt-2">
-              {isRtl ? 'إدارة مخزون الفرع' : 'Manage branch inventory'}
-            </p>
+            <p className="text-gray-600 mt-2">{t('inventory.description')}</p>
           </div>
           <CustomButton
             onClick={() => handleOpenReturnModal()}
             className="bg-amber-600 text-white hover:bg-amber-700 flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
-            {isRtl ? 'إنشاء مرتجع' : 'Create Return'}
+            {t('returns.create')}
           </CustomButton>
         </div>
       </div>
@@ -734,7 +747,7 @@ export const BranchInventory: React.FC = () => {
             className="ml-4 bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
-            {isRtl ? 'إعادة المحاولة' : 'Retry'}
+            {t('common.retry')}
           </CustomButton>
         </div>
       )}
@@ -746,7 +759,7 @@ export const BranchInventory: React.FC = () => {
             activeTab === 'inventory' ? 'bg-amber-600 text-white' : 'text-gray-700'
           }`}
         >
-          {isRtl ? 'المخزون' : 'Inventory'}
+          {t('inventory.title')}
         </CustomButton>
         <CustomButton
           onClick={() => setActiveTab('history')}
@@ -755,7 +768,7 @@ export const BranchInventory: React.FC = () => {
           }`}
         >
           <HistoryIcon className="inline w-4 h-4 mr-2" />
-          {isRtl ? 'سجل الحركات' : 'Movement History'}
+          {t('history.title')}
         </CustomButton>
         <CustomButton
           onClick={() => setActiveTab('returns')}
@@ -763,7 +776,7 @@ export const BranchInventory: React.FC = () => {
             activeTab === 'returns' ? 'bg-amber-600 text-white' : 'text-gray-700'
           }`}
         >
-          {isRtl ? 'المرتجعات' : 'Returns'}
+          {t('returns.title')}
         </CustomButton>
       </div>
 
@@ -774,7 +787,7 @@ export const BranchInventory: React.FC = () => {
               className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 ${isRtl ? 'right-3' : 'left-3'}`}
             />
             <CustomInput
-              placeholder={isRtl ? 'ابحث...' : 'Search...'}
+              placeholder={t('common.search')}
               onChange={handleSearchChange}
               className={`pl-10 pr-4 py-2 border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 ${isRtl ? 'pr-10 pl-4' : ''}`}
               value={searchQuery}
@@ -787,7 +800,7 @@ export const BranchInventory: React.FC = () => {
               setCurrentPage(1);
             }}
             options={activeTab === 'returns' ? returnStatusOptions : statusOptions}
-            label={isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}
+            label={t('common.filter_by_status')}
           />
         </div>
       </CustomCard>
@@ -810,7 +823,7 @@ export const BranchInventory: React.FC = () => {
             ) : paginatedInventory.length === 0 ? (
               <CustomCard className="p-8 text-center bg-white rounded-xl shadow-md">
                 <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">{isRtl ? 'لا توجد عناصر' : 'No items'}</p>
+                <p className="text-gray-600">{t('inventory.no_items')}</p>
               </CustomCard>
             ) : (
               <div className="space-y-4">
@@ -828,12 +841,12 @@ export const BranchInventory: React.FC = () => {
                           <div className="flex items-start justify-between gap-4">
                             <div className="flex-1">
                               <h3 className="font-semibold text-gray-900">{isRtl ? item.product.name : item.product.nameEn}</h3>
-                              <p className="text-sm text-gray-500">{isRtl ? 'الكود' : 'Code'}: {item.product.code}</p>
-                              <p className="text-sm text-gray-600">{isRtl ? 'المخزون' : 'Stock'}: {item.currentStock}</p>
-                              <p className="text-sm text-gray-600">{isRtl ? 'الحد الأدنى' : 'Min'}: {item.minStockLevel}</p>
-                              <p className="text-sm text-gray-600">{isRtl ? 'الحد الأقصى' : 'Max'}: {item.maxStockLevel}</p>
-                              <p className="text-sm text-gray-600">{isRtl ? 'الوحدة' : 'Unit'}: {isRtl ? item.product.unit : item.product.unitEn}</p>
-                              <p className="text-sm text-gray-600 font-medium">{isRtl ? 'القسم' : 'Department'}: {isRtl ? item.product.department?.name : item.product.department?.nameEn}</p>
+                              <p className="text-sm text-gray-500">{t('products.code')}: {item.product.code}</p>
+                              <p className="text-sm text-gray-600">{t('inventory.stock')}: {item.currentStock}</p>
+                              <p className="text-sm text-gray-600">{t('inventory.min_stock')}: {item.minStockLevel}</p>
+                              <p className="text-sm text-gray-600">{t('inventory.max_stock')}: {item.maxStockLevel}</p>
+                              <p className="text-sm text-gray-600">{t('products.unit')}: {isRtl ? item.product.unit : item.product.unitEn}</p>
+                              <p className="text-sm text-gray-600 font-medium">{t('departments.title')}: {isRtl ? item.product.department?.name : item.product.department?.nameEn}</p>
                               <p
                                 className={`text-sm font-medium ${
                                   item.status === 'low' ? 'text-red-600' : item.status === 'full' ? 'text-yellow-600' : 'text-green-600'
@@ -864,7 +877,7 @@ export const BranchInventory: React.FC = () => {
                                 onClick={() => handleOpenReturnModal(item)}
                                 className="text-red-600 hover:text-red-800 disabled:opacity-50"
                               >
-                                {isRtl ? 'إرجاع' : 'Return'}
+                                {t('returns.create')}
                               </CustomButton>
                             </div>
                           </div>
@@ -897,18 +910,18 @@ export const BranchInventory: React.FC = () => {
             ) : paginatedHistory.length === 0 ? (
               <CustomCard className="p-8 text-center bg-white rounded-xl shadow-md">
                 <HistoryIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">{isRtl ? 'لا توجد حركات' : 'No history'}</p>
+                <p className="text-gray-600">{t('history.no_history')}</p>
               </CustomCard>
             ) : (
               <CustomCard className="p-4 bg-white rounded-xl shadow-md">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b">
-                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'التاريخ' : 'Date'}</th>
-                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'الإجراء' : 'Action'}</th>
-                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'الكمية' : 'Quantity'}</th>
-                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'المرجع' : 'Reference'}</th>
-                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{isRtl ? 'بواسطة' : 'By'}</th>
+                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{t('history.date')}</th>
+                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{t('history.action')}</th>
+                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{t('history.quantity')}</th>
+                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{t('history.reference')}</th>
+                      <th className={`p-2 text-left ${isRtl ? 'text-right' : ''}`}>{t('history.created_by')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -946,15 +959,15 @@ export const BranchInventory: React.FC = () => {
               <div className="text-center py-8">
                 <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-amber-600 mx-auto"></div>
               </div>
-            ) : paginatedReturns.length === 0 ? (
+            ) : (returnsData?.returns || []).length === 0 ? (
               <CustomCard className="p-8 text-center bg-white rounded-xl shadow-md">
                 <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">{isRtl ? 'لا توجد مرتجعات' : 'No returns'}</p>
+                <p className="text-gray-600">{t('returns.no_returns')}</p>
               </CustomCard>
             ) : (
               <div className="space-y-4">
                 <AnimatePresence>
-                  {paginatedReturns.map((ret) => (
+                  {(returnsData?.returns || []).map((ret) => (
                     <motion.div
                       key={ret._id}
                       initial={{ opacity: 0, y: 20 }}
@@ -966,23 +979,33 @@ export const BranchInventory: React.FC = () => {
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1">
                             <h3 className="font-semibold text-gray-900">{ret.returnNumber}</h3>
-                            <p className="text-sm text-gray-600">{isRtl ? 'التاريخ' : 'Date'}: {new Date(ret.createdAt).toLocaleString()}</p>
-                            <p className="text-sm text-gray-600">{isRtl ? 'الحالة' : 'Status'}: {isRtl ? t(`returns.${ret.status}`) : ret.status}</p>
-                            <p className="text-sm text-gray-600">{isRtl ? 'السبب' : 'Reason'}: {ret.reason}</p>
-                            <p className="text-sm text-gray-600">{isRtl ? 'الملاحظات' : 'Notes'}: {ret.notes || t('none')}</p>
+                            <p className="text-sm text-gray-600">{t('returns.date')}: {new Date(ret.createdAt).toLocaleString()}</p>
+                            <p className="text-sm text-gray-600">{t('returns.status')}: {t(`returns.${ret.status}`)}</p>
+                            <p className="text-sm text-gray-600">{t('returns.reason')}: {ret.reason}</p>
+                            <p className="text-sm text-gray-600">{t('returns.notes')}: {ret.notes || t('none')}</p>
+                            <p className="text-sm text-gray-600">{t('returns.created_by')}: {ret.createdByName}</p>
+                            {ret.reviewedByName && (
+                              <p className="text-sm text-gray-600">{t('returns.reviewed_by')}: {ret.reviewedByName}</p>
+                            )}
                             <div className="mt-2">
-                              <p className="text-sm font-medium text-gray-700">{isRtl ? 'العناصر' : 'Items'}:</p>
+                              <p className="text-sm font-medium text-gray-700">{t('returns.items')}:</p>
                               <ul className="list-disc pl-4">
                                 {ret.items.map((item, i) => (
                                   <li key={i} className="text-sm text-gray-600">
-                                    {isRtl ? item.product.name : item.product.nameEn} - {item.quantity} ({item.reason})
-                                    {item.status && ` - ${isRtl ? t(`returns.${item.status}`) : item.status}`}
-                                    {item.reviewNotes && ` (${item.reviewNotes})`}
+                                    {item.productName} - {item.quantity} {item.unit} ({item.reason})
                                   </li>
                                 ))}
                               </ul>
                             </div>
                           </div>
+                          <CustomButton
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleOpenReturnDetailsModal(ret._id)}
+                            className="text-blue-600 hover:text-blue-800"
+                          >
+                            {t('returns.view_details')}
+                          </CustomButton>
                         </div>
                       </CustomCard>
                     </motion.div>
@@ -1008,35 +1031,35 @@ export const BranchInventory: React.FC = () => {
           setReturnErrors({});
           setSelectedItem(null);
         }}
-        title={isRtl ? 'إنشاء مرتجع' : 'Create Return'}
+        title={t('returns.create')}
       >
         <div className="flex flex-col gap-4">
           {selectedItem?.product && (
             <p className="text-sm text-gray-600">
-              {isRtl ? 'المنتج' : 'Product'}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
+              {t('products.title')}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
             </p>
           )}
           <CustomSelect
-            label={isRtl ? 'السبب' : 'Reason'}
+            label={t('returns.reason')}
             value={returnForm.reason}
             onChange={(e) => dispatchReturnForm({ type: 'SET_REASON', payload: e.target.value })}
             options={reasonOptions}
             error={returnErrors.reason}
           />
           <CustomInput
-            label={isRtl ? 'ملاحظات' : 'Notes'}
+            label={t('returns.notes')}
             value={returnForm.notes}
             onChange={(e) => dispatchReturnForm({ type: 'SET_NOTES', payload: e.target.value })}
-            placeholder={isRtl ? 'أدخل ملاحظات إضافية' : 'Enter additional notes'}
+            placeholder={t('returns.notes_placeholder')}
           />
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'العناصر' : 'Items'}</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('returns.items')}</label>
             {returnForm.items.map((item, index) => (
               <div key={index} className="flex gap-2 mb-2 items-center">
                 <CustomSelect
                   value={item.productId}
                   onChange={(e) => updateItemInForm(index, 'productId', e.target.value)}
-                  options={[{ value: '', label: isRtl ? 'اختر منتجًا' : 'Select Product' }].concat(
+                  options={[{ value: '', label: t('products.select') }].concat(
                     availableItems
                       .filter((a) => !returnForm.items.some((i, idx) => i.productId === a.productId && idx !== index))
                       .map((a) => ({
@@ -1082,7 +1105,7 @@ export const BranchInventory: React.FC = () => {
                 disabled={availableItems.length === 0 || availableItems.length === returnForm.items.length}
               >
                 <Plus className="w-4 h-4 mr-2" />
-                {isRtl ? 'إضافة عنصر' : 'Add Item'}
+                {t('returns.add_item')}
               </CustomButton>
             )}
           </div>
@@ -1098,14 +1121,14 @@ export const BranchInventory: React.FC = () => {
               }}
               className="bg-gray-100 hover:bg-gray-200 text-gray-800"
             >
-              {isRtl ? 'إلغاء' : 'Cancel'}
+              {t('common.cancel')}
             </CustomButton>
             <CustomButton
               onClick={() => createReturnMutation.mutate()}
               disabled={createReturnMutation.isPending}
               className="bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
             >
-              {createReturnMutation.isPending ? (isRtl ? 'جاري...' : 'Submitting...') : isRtl ? 'إرسال' : 'Submit'}
+              {createReturnMutation.isPending ? t('common.submitting') : t('common.submit')}
             </CustomButton>
           </div>
         </div>
@@ -1119,16 +1142,16 @@ export const BranchInventory: React.FC = () => {
           setEditErrors({});
           setSelectedItem(null);
         }}
-        title={isRtl ? 'تعديل حدود المخزون' : 'Edit Stock Limits'}
+        title={t('inventory.edit_stock_limits')}
       >
         <div className="flex flex-col gap-4">
           {selectedItem?.product && (
             <p className="text-sm text-gray-600">
-              {isRtl ? 'المنتج' : 'Product'}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
+              {t('products.title')}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
             </p>
           )}
           <CustomInput
-            label={isRtl ? 'الحد الأدنى للمخزون' : 'Minimum Stock Level'}
+            label={t('inventory.min_stock')}
             type="number"
             min={0}
             value={editForm.minStockLevel}
@@ -1136,7 +1159,7 @@ export const BranchInventory: React.FC = () => {
             error={editErrors.minStockLevel}
           />
           <CustomInput
-            label={isRtl ? 'الحد الأقصى للمخزون' : 'Maximum Stock Level'}
+            label={t('inventory.max_stock')}
             type="number"
             min={0}
             value={editForm.maxStockLevel}
@@ -1154,17 +1177,92 @@ export const BranchInventory: React.FC = () => {
               }}
               className="bg-gray-100 hover:bg-gray-200 text-gray-800"
             >
-              {isRtl ? 'إلغاء' : 'Cancel'}
+              {t('common.cancel')}
             </CustomButton>
             <CustomButton
               onClick={() => updateInventoryMutation.mutate()}
               disabled={updateInventoryMutation.isPending}
               className="bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
             >
-              {updateInventoryMutation.isPending ? (isRtl ? 'جاري...' : 'Saving...') : isRtl ? 'حفظ' : 'Save'}
+              {updateInventoryMutation.isPending ? t('common.saving') : t('common.save')}
             </CustomButton>
           </div>
         </div>
+      </CustomModal>
+
+      <CustomModal
+        isOpen={isReturnDetailsModalOpen}
+        onClose={() => {
+          setIsReturnDetailsModalOpen(false);
+          setSelectedReturn(null);
+        }}
+        title={t('returns.details')}
+      >
+        {selectedReturn && (
+          <div className="flex flex-col gap-4">
+            <p className="text-sm text-gray-600">
+              <strong>{t('returns.return_number')}:</strong> {selectedReturn.returnNumber}
+            </p>
+            <p className="text-sm text-gray-600">
+              <strong>{t('returns.branch')}:</strong> {selectedReturn.branchName}
+            </p>
+            <p className="text-sm text-gray-600">
+              <strong>{t('returns.reason')}:</strong> {selectedReturn.reason}
+            </p>
+            <p className="text-sm text-gray-600">
+              <strong>{t('returns.status')}:</strong> {t(`returns.${selectedReturn.status}`)}
+            </p>
+            <p className="text-sm text-gray-600">
+              <strong>{t('returns.created_by')}:</strong> {selectedReturn.createdByName}
+            </p>
+            {selectedReturn.reviewedByName && (
+              <p className="text-sm text-gray-600">
+                <strong>{t('returns.reviewed_by')}:</strong> {selectedReturn.reviewedByName}
+              </p>
+            )}
+            <p className="text-sm text-gray-600">
+              <strong>{t('returns.notes')}:</strong> {selectedReturn.notes || t('none')}
+            </p>
+            <div>
+              <p className="text-sm font-medium text-gray-700">{t('returns.items')}:</p>
+              <ul className="list-disc pl-4">
+                {selectedReturn.items.map((item, i) => (
+                  <li key={i} className="text-sm text-gray-600">
+                    {item.productName} - {item.quantity} {item.unit} ({item.reason})
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {(user?.role === 'admin' || user?.role === 'production') && selectedReturn.status === 'pending_approval' && (
+              <div className="flex justify-end gap-2">
+                <CustomButton
+                  onClick={() => updateReturnStatusMutation.mutate({ returnId: selectedReturn._id, status: 'approved', reviewNotes: 'Approved by admin' })}
+                  className="bg-green-500 text-white hover:bg-green-600"
+                >
+                  {t('returns.approve')}
+                </CustomButton>
+                <CustomButton
+                  onClick={() => updateReturnStatusMutation.mutate({ returnId: selectedReturn._id, status: 'rejected', reviewNotes: 'Rejected by admin' })}
+                  className="bg-red-500 text-white hover:bg-red-600"
+                >
+                  {t('returns.reject')}
+                </CustomButton>
+              </div>
+            )}
+            <div className="flex justify-end">
+              <CustomButton
+                variant="secondary"
+                onClick={() => {
+                  setIsReturnDetailsModalOpen(false);
+                  setSelectedReturn(null);
+                }}
+                className="bg-gray-100 hover:bg-gray-200 text-gray-800"
+              >
+                {t('common.close')}
+              </CustomButton>
+            </div>
+          </div>
+        )}
       </CustomModal>
     </div>
   );
