@@ -90,7 +90,6 @@ interface AvailableItem {
   stock: number;
 }
 
-// مكونات مخصصة
 interface CustomCardProps {
   className?: string;
   children: React.ReactNode;
@@ -109,7 +108,7 @@ interface CustomInputProps {
 }
 
 interface CustomButtonProps {
-  variant?: 'primary' | 'secondary' | 'destructive';
+  variant?: 'primary' | 'secondary' | 'destructive' | 'danger';
   size?: 'sm' | 'md';
   onClick?: () => void;
   disabled?: boolean;
@@ -169,7 +168,7 @@ const CustomButton: React.FC<CustomButtonProps> = ({ variant = 'primary', size =
   const variantClass =
     variant === 'secondary'
       ? 'bg-gray-100 hover:bg-gray-200 text-gray-800'
-      : variant === 'destructive'
+      : variant === 'destructive' || variant === 'danger'
       ? 'text-red-600 hover:text-red-800'
       : 'bg-amber-600 text-white hover:bg-amber-700';
   const disabledClass = disabled ? 'opacity-50 cursor-not-allowed' : '';
@@ -298,50 +297,50 @@ export const BranchInventory: React.FC = () => {
     queryKey: ['inventory', user?.branchId, language, currentPage, searchQuery, filterStatus],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
-      const response = await inventoryAPI.getByBranch(user.branchId, {
+      return inventoryAPI.getByBranch(user.branchId, {
         page: currentPage,
         limit: ITEMS_PER_PAGE,
         search: searchQuery,
         lowStock: filterStatus === 'low' ? true : undefined,
         lang: language,
-        signal: abortController.signal,
       });
-      return response.data; // افتراض أن inventoryAPI.getByBranch ترجع { data: { inventory, totalPages, currentPage } }
     },
     enabled: !!user?.branchId,
-    select: (data) => ({
-      inventory: (data.inventory || []).map((item: InventoryItem) => ({
-        ...item,
-        product: item.product
-          ? {
-              _id: item.product._id || '',
-              name: item.product.name || t('products.unknown'),
-              nameEn: item.product.nameEn || item.product.name || t('products.unknown'),
-              code: item.product.code || 'N/A',
-              unit: item.product.unit || t('products.unit_unknown'),
-              unitEn: item.product.unitEn || item.product.unit || 'N/A',
-              department: item.product.department
-                ? {
-                    _id: item.product.department._id || '',
-                    name: item.product.department.name || t('departments.unknown'),
-                    nameEn: item.product.department.nameEn || item.product.department.name || t('departments.unknown'),
-                  }
-                : null,
-            }
-          : null,
-        status:
-          item.currentStock <= item.minStockLevel
-            ? 'low'
-            : item.currentStock >= item.maxStockLevel
-            ? 'full'
-            : 'normal',
-      })),
-      totalPages: data.totalPages || 1,
-      currentPage: data.currentPage || 1,
-    }),
-    onError: (err: any) => {
-      const message = err.response?.data?.message || err.message || t('errors.fetch_inventory');
-      toast.error(message, { position: 'top-right', autoClose: 3000 });
+    select: (response) => {
+      const inventoryData = Array.isArray(response.inventory) ? response.inventory : [];
+      return {
+        inventory: inventoryData.map((item: InventoryItem) => ({
+          ...item,
+          product: item.product
+            ? {
+                _id: item.product._id || '',
+                name: item.product.name || t('products.unknown'),
+                nameEn: item.product.nameEn || item.product.name || t('products.unknown'),
+                code: item.product.code || 'N/A',
+                unit: item.product.unit || t('products.unit_unknown'),
+                unitEn: item.product.unitEn || item.product.unit || 'N/A',
+                department: item.product.department
+                  ? {
+                      _id: item.product.department._id || '',
+                      name: item.product.department.name || t('departments.unknown'),
+                      nameEn: item.product.department.nameEn || item.product.department.name || t('departments.unknown'),
+                    }
+                  : null,
+              }
+            : null,
+          status:
+            item.currentStock <= item.minStockLevel
+              ? 'low'
+              : item.currentStock >= item.maxStockLevel
+              ? 'full'
+              : 'normal',
+        })),
+        totalPages: response.totalPages || 1,
+        currentPage: response.currentPage || 1,
+      };
+    },
+    onError: (err) => {
+      toast.error(err.message || t('errors.fetch_inventory'), { position: 'top-right', autoClose: 3000 });
     },
   });
 
@@ -437,7 +436,7 @@ export const BranchInventory: React.FC = () => {
   const validateReturnForm = useCallback(() => {
     const errors: Record<string, string> = {};
     if (!returnForm.orderId || !isValidObjectId(returnForm.orderId)) {
-      errors.orderId = t('errors.invalid_order_id');
+      errors.orderId = t('errors.required', { field: t('returns.order_id') });
     }
     if (!returnForm.reason) {
       errors.reason = t('errors.required', { field: t('returns.reason') });
@@ -536,7 +535,7 @@ export const BranchInventory: React.FC = () => {
           quantity: item.quantity,
           reason: item.reason,
         })),
-      }, { signal: abortController.signal });
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -552,12 +551,12 @@ export const BranchInventory: React.FC = () => {
         eventId: crypto.randomUUID(),
       });
     },
-    onError: (err: any) => {
+    onError: (err) => {
       if (err.name !== 'AbortError') {
-        const message = err.response?.data?.message || err.message || t('errors.create_return');
-        toast.error(message, { position: 'top-right', autoClose: 3000 });
-        if (message.includes('Invalid')) {
-          setReturnErrors({ form: message });
+        console.error(`[${new Date().toISOString()}] Create return error:`, err);
+        toast.error(err.message || t('errors.create_return'), { position: 'top-right', autoClose: 3000 });
+        if (err.message.includes('Invalid')) {
+          setReturnErrors({ form: err.message });
         }
       }
     },
@@ -570,7 +569,7 @@ export const BranchInventory: React.FC = () => {
       await inventoryAPI.updateStockLimits(selectedItem._id, {
         minStockLevel: editForm.minStockLevel,
         maxStockLevel: editForm.maxStockLevel,
-      }, { signal: abortController.signal });
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -586,15 +585,15 @@ export const BranchInventory: React.FC = () => {
         eventId: crypto.randomUUID(),
       });
     },
-    onError: (err: any) => {
+    onError: (err) => {
       if (err.name !== 'AbortError') {
-        const message = err.response?.data?.message || err.message || t('errors.update_inventory');
-        toast.error(message, { position: 'top-right', autoClose: 3000 });
+        console.error(`[${new Date().toISOString()}] Update inventory error:`, err);
+        toast.error(err.message || t('errors.update_inventory'), { position: 'top-right', autoClose: 3000 });
       }
     },
   });
 
-  const errorMessage = inventoryError ? (inventoryError as any).response?.data?.message || inventoryError?.message || t('errors.fetch_inventory') : '';
+  const errorMessage = inventoryError?.message || '';
 
   return (
     <div
@@ -670,7 +669,7 @@ export const BranchInventory: React.FC = () => {
               <InventoryCardSkeleton key={i} isRtl={isRtl} />
             ))}
           </div>
-        ) : !inventoryData?.inventory.length ? (
+        ) : inventoryData?.inventory.length === 0 ? (
           <CustomCard className="p-8 text-center bg-white rounded-xl shadow-md">
             <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600">{t('inventory.no_items')}</p>
@@ -678,7 +677,7 @@ export const BranchInventory: React.FC = () => {
         ) : (
           <div className="space-y-4">
             <AnimatePresence>
-              {inventoryData.inventory.map((item) =>
+              {inventoryData?.inventory.map((item) =>
                 item.product ? (
                   <motion.div
                     key={item._id}
@@ -733,8 +732,8 @@ export const BranchInventory: React.FC = () => {
               )}
             </AnimatePresence>
             <Pagination
-              totalPages={inventoryData.totalPages}
-              currentPage={inventoryData.currentPage}
+              totalPages={inventoryData?.totalPages || 1}
+              currentPage={inventoryData?.currentPage || 1}
               setCurrentPage={setCurrentPage}
               isRtl={isRtl}
             />
@@ -812,7 +811,7 @@ export const BranchInventory: React.FC = () => {
                   error={returnErrors[`item_${index}_reason`]}
                 />
                 <CustomButton
-                  variant="destructive"
+                  variant="danger"
                   size="sm"
                   onClick={() => removeItemFromForm(index)}
                   disabled={!!selectedItem}
