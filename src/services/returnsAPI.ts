@@ -46,12 +46,21 @@ returnsAxios.interceptors.response.use(
       message: error.message,
     });
 
-    let message = error.response?.data?.message || 'خطأ غير متوقع';
     const isRtl = localStorage.getItem('language') === 'ar';
-    if (error.response?.status === 400) message = error.response?.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
-    if (error.response?.status === 403) message = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
-    if (error.response?.status === 404) message = error.response?.data?.message || (isRtl ? 'الإرجاع غير موجود' : 'Return not found');
-    if (error.response?.status === 429) message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
+    let message = error.response?.data?.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
+
+    if (error.response?.status === 400) {
+      message = error.response?.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
+    }
+    if (error.response?.status === 403) {
+      message = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
+    }
+    if (error.response?.status === 404) {
+      message = error.response?.data?.message || (isRtl ? 'الإرجاع غير موجود' : 'Return not found');
+    }
+    if (error.response?.status === 429) {
+      message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
+    }
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
@@ -92,7 +101,7 @@ returnsAxios.interceptors.response.use(
       }
     }
 
-    toast.error(isRtl ? message : message, {
+    toast.error(message, {
       position: 'top-right',
       autoClose: 3000,
       pauseOnFocusLoss: true,
@@ -101,76 +110,95 @@ returnsAxios.interceptors.response.use(
   }
 );
 
-export const createReturn = async (orderId, items, reason, notes, branchId) => {
-  try {
-    const response = await returnsAxios.post('/returns', {
-      orderId,
-      items,
-      reason,
-      notes,
-      branchId,
-    });
-    console.log(`[${new Date().toISOString()}] Return created successfully:`, response);
-    return response.returnRequest;
-  } catch (error) {
-    console.error(`[${new Date().toISOString()}] Error creating return:`, error);
-    throw error;
-  }
+interface ReturnItem {
+  productId: string;
+  quantity: number;
+  reason: string;
+}
+
+interface CreateReturnData {
+  orderId?: string;
+  branchId: string;
+  reason: string;
+  items: ReturnItem[];
+  notes?: string;
+}
+
+export const returnsAPI = {
+  createReturn: async (data: CreateReturnData) => {
+    try {
+      const response = await returnsAxios.post('/inventory/returns', {
+        orderId: data.orderId,
+        branchId: data.branchId,
+        reason: data.reason.trim(),
+        items: data.items.map(item => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          reason: item.reason.trim(),
+        })),
+        notes: data.notes?.trim(),
+      });
+      console.log(`[${new Date().toISOString()}] Return created successfully:`, response);
+      return response.returnRequest;
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] Error creating return:`, error);
+      throw error;
+    }
+  },
+
+  getAll: async (params: { branchId?: string; status?: string; page?: number; limit?: number } = {}) => {
+    try {
+      const response = await returnsAxios.get('/inventory/returns', { params });
+      console.log(`[${new Date().toISOString()}] Returns fetched successfully:`, response);
+      return response.returns;
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] Error fetching returns:`, error);
+      throw error;
+    }
+  },
+
+  getByBranch: async (branchId: string, status?: string, page: number = 1, limit: number = 10) => {
+    try {
+      const params: { page: number; limit: number; status?: string } = { page, limit };
+      if (status) params.status = status;
+      const response = await returnsAxios.get(`/inventory/returns/branch/${branchId}`, { params });
+      console.log(`[${new Date().toISOString()}] Returns by branch fetched successfully:`, response);
+      return response.returns;
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] Error fetching returns by branch:`, error);
+      throw error;
+    }
+  },
+
+  updateReturnStatus: async (returnId: string, data: { branchId: string; items: Array<{ productId: string; quantity: number; status: 'approved' | 'rejected'; reviewNotes?: string }>; }) => {
+    try {
+      const response = await returnsAxios.patch(`/inventory/returns/${returnId}/process`, {
+        branchId: data.branchId,
+        items: data.items.map(item => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          status: item.status,
+          reviewNotes: item.reviewNotes?.trim(),
+        })),
+      });
+      console.log(`[${new Date().toISOString()}] Return status updated successfully:`, response);
+      return response.returnRequest;
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] Error updating return status:`, error);
+      throw error;
+    }
+  },
+
+  getReturnById: async (returnId: string) => {
+    try {
+      const response = await returnsAxios.get(`/inventory/returns/${returnId}`);
+      console.log(`[${new Date().toISOString()}] Return fetched by ID successfully:`, response);
+      return response.returnRequest;
+    } catch (error) {
+      console.error(`[${new Date().toISOString()}] Error fetching return by ID:`, error);
+      throw error;
+    }
+  },
 };
 
-export const getAll = async (branchId = null, status = null, page = 1, limit = 10) => {
-  try {
-    const params = { page, limit };
-    if (branchId) params.branchId = branchId;
-    if (status) params.status = status;
-
-    const response = await returnsAxios.get('/returns', { params });
-    console.log(`[${new Date().toISOString()}] Returns fetched successfully:`, response);
-    return response.returns;
-  } catch (error) {
-    console.error(`[${new Date().toISOString()}] Error fetching returns:`, error);
-    throw error;
-  }
-};
-
-export const getByBranch = async (branchId, status = null, page = 1, limit = 10) => {
-  try {
-    const params = { page, limit };
-    if (status) params.status = status;
-
-    const response = await returnsAxios.get(`/returns/branch/${branchId}`, { params });
-    console.log(`[${new Date().toISOString()}] Returns by branch fetched successfully:`, response);
-    return response.returns;
-  } catch (error) {
-    console.error(`[${new Date().toISOString()}] Error fetching returns by branch:`, error);
-    throw error;
-  }
-};
-
-export const updateReturnStatus = async (returnId, branchId, items, status, reviewNotes) => {
-  try {
-    const response = await returnsAxios.put(`/returns/${returnId}`, {
-      branchId,
-      items,
-      status,
-      reviewNotes,
-    });
-    console.log(`[${new Date().toISOString()}] Return status updated successfully:`, response);
-    return response.returnRequest;
-  } catch (error) {
-    console.error(`[${new Date().toISOString()}] Error updating return status:`, error);
-    throw error;
-  }
-};
-
-export const getReturnById = async (returnId) => {
-  try {
-    const response = await returnsAxios.get(`/returns/${returnId}`);
-    console.log(`[${new Date().toISOString()}] Return fetched by ID successfully:`, response);
-    return response.returnRequest;
-  } catch (error) {
-    console.error(`[${new Date().toISOString()}] Error fetching return by ID:`, error);
-    throw error;
-  }
-};
 export default returnsAPI;

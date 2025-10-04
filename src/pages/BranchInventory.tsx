@@ -46,6 +46,8 @@ interface InventoryHistoryItem {
 interface Return {
   _id: string;
   returnNumber: string;
+  orderId?: string;
+  branchId: string;
   items: Array<{
     product: {
       _id: string;
@@ -54,10 +56,13 @@ interface Return {
     };
     quantity: number;
     reason: string;
+    status?: 'approved' | 'rejected';
+    reviewNotes?: string;
   }>;
   status: 'pending_approval' | 'approved' | 'rejected';
+  reason: string;
+  notes?: string;
   createdAt: string;
-  reviewNotes?: string;
 }
 
 interface ReturnItem {
@@ -209,7 +214,7 @@ const CustomModal: React.FC<CustomModalProps> = ({ isOpen, onClose, title, child
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg shadow-xl max-w-2xl w-full">
+      <div className="bg-white p-6 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">{title}</h2>
           <CustomButton onClick={onClose}><X className="w-4 h-4" /></CustomButton>
@@ -356,7 +361,7 @@ export const BranchInventory: React.FC = () => {
 
   const { data: returnsData, isLoading: returnsLoading, error: returnsError } = useQuery<Return[], Error>({
     queryKey: ['returns', user?.branchId, language],
-    queryFn: () => returnsAPI.getAll({ branch: user?.branchId }),
+    queryFn: () => returnsAPI.getByBranch(user?.branchId || '', filterStatus, currentPage, ITEMS_PER_PAGE),
     enabled: activeTab === 'returns' && !!user?.branchId,
     select: (response) => (response || []).map((ret: Return) => ({
       ...ret,
@@ -537,7 +542,11 @@ export const BranchInventory: React.FC = () => {
         (ret) =>
           (!filterStatus || ret.status === filterStatus) &&
           (ret.returnNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            ret.items.some((item) => item.product.name?.toLowerCase().includes(searchQuery.toLowerCase()) || item.product.nameEn?.toLowerCase().includes(searchQuery.toLowerCase())))
+            ret.items.some(
+              (item) =>
+                item.product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                item.product.nameEn?.toLowerCase().includes(searchQuery.toLowerCase())
+            ))
       ),
     [returnsData, searchQuery, filterStatus]
   );
@@ -576,18 +585,21 @@ export const BranchInventory: React.FC = () => {
     });
   }, []);
 
-  const updateItemInForm = useCallback((index: number, field: keyof ReturnItem, value: string | number) => {
-    dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
-    if (field === 'productId') {
-      const sel = availableItems.find((a) => a.productId === value);
-      if (sel) {
-        dispatchReturnForm({
-          type: 'UPDATE_ITEM',
-          payload: { index, field: 'maxQuantity', value: sel.stock },
-        });
+  const updateItemInForm = useCallback(
+    (index: number, field: keyof ReturnItem, value: string | number) => {
+      dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
+      if (field === 'productId') {
+        const sel = availableItems.find((a) => a.productId === value);
+        if (sel) {
+          dispatchReturnForm({
+            type: 'UPDATE_ITEM',
+            payload: { index, field: 'maxQuantity', value: sel.stock },
+          });
+        }
       }
-    }
-  }, [availableItems]);
+    },
+    [availableItems]
+  );
 
   const removeItemFromForm = useCallback((index: number) => {
     dispatchReturnForm({ type: 'REMOVE_ITEM', payload: index });
@@ -626,7 +638,7 @@ export const BranchInventory: React.FC = () => {
         reason: returnForm.reason,
         notes: returnForm.notes,
         items: returnForm.items.map((item) => ({
-          product: item.productId,
+          productId: item.productId,
           quantity: item.quantity,
           reason: item.reason,
         })),
@@ -660,7 +672,7 @@ export const BranchInventory: React.FC = () => {
     mutationFn: async () => {
       if (!validateEditForm()) throw new Error(t('errors.invalid_form'));
       if (!selectedItem) throw new Error(t('errors.no_item_selected'));
-      await inventoryAPI.updateStockLevels(selectedItem._id, {
+      await inventoryAPI.updateStock(selectedItem._id, {
         minStockLevel: editForm.minStockLevel,
         maxStockLevel: editForm.maxStockLevel,
       });
@@ -822,11 +834,17 @@ export const BranchInventory: React.FC = () => {
                               <p className="text-sm text-gray-600">{isRtl ? 'الحد الأقصى' : 'Max'}: {item.maxStockLevel}</p>
                               <p className="text-sm text-gray-600">{isRtl ? 'الوحدة' : 'Unit'}: {isRtl ? item.product.unit : item.product.unitEn}</p>
                               <p className="text-sm text-gray-600 font-medium">{isRtl ? 'القسم' : 'Department'}: {isRtl ? item.product.department?.name : item.product.department?.nameEn}</p>
-                              <p className={`text-sm font-medium ${
-                                item.status === 'low' ? 'text-red-600' : item.status === 'full' ? 'text-yellow-600' : 'text-green-600'
-                              }`}>
+                              <p
+                                className={`text-sm font-medium ${
+                                  item.status === 'low' ? 'text-red-600' : item.status === 'full' ? 'text-yellow-600' : 'text-green-600'
+                                }`}
+                              >
                                 {isRtl
-                                  ? item.status === 'low' ? 'منخفض' : item.status === 'full' ? 'ممتلئ' : 'عادي'
+                                  ? item.status === 'low'
+                                    ? 'منخفض'
+                                    : item.status === 'full'
+                                    ? 'ممتلئ'
+                                    : 'عادي'
                                   : item.status}
                               </p>
                             </div>
@@ -950,13 +968,16 @@ export const BranchInventory: React.FC = () => {
                             <h3 className="font-semibold text-gray-900">{ret.returnNumber}</h3>
                             <p className="text-sm text-gray-600">{isRtl ? 'التاريخ' : 'Date'}: {new Date(ret.createdAt).toLocaleString()}</p>
                             <p className="text-sm text-gray-600">{isRtl ? 'الحالة' : 'Status'}: {isRtl ? t(`returns.${ret.status}`) : ret.status}</p>
-                            <p className="text-sm text-gray-600">{isRtl ? 'الملاحظات' : 'Notes'}: {ret.reviewNotes || t('none')}</p>
+                            <p className="text-sm text-gray-600">{isRtl ? 'السبب' : 'Reason'}: {ret.reason}</p>
+                            <p className="text-sm text-gray-600">{isRtl ? 'الملاحظات' : 'Notes'}: {ret.notes || t('none')}</p>
                             <div className="mt-2">
                               <p className="text-sm font-medium text-gray-700">{isRtl ? 'العناصر' : 'Items'}:</p>
                               <ul className="list-disc pl-4">
                                 {ret.items.map((item, i) => (
                                   <li key={i} className="text-sm text-gray-600">
                                     {isRtl ? item.product.name : item.product.nameEn} - {item.quantity} ({item.reason})
+                                    {item.status && ` - ${isRtl ? t(`returns.${item.status}`) : item.status}`}
+                                    {item.reviewNotes && ` (${item.reviewNotes})`}
                                   </li>
                                 ))}
                               </ul>
@@ -1065,6 +1086,7 @@ export const BranchInventory: React.FC = () => {
               </CustomButton>
             )}
           </div>
+          {returnErrors.form && <p className="text-red-500 text-sm">{returnErrors.form}</p>}
           <div className="flex justify-end gap-2">
             <CustomButton
               variant="secondary"
