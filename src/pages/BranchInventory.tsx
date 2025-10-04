@@ -337,7 +337,7 @@ const Pagination: React.FC<PaginationProps> = ({ totalPages, currentPage, setCur
 /**
  * مكون إدارة مخزون الفرع
  */
-const BranchInventory: React.FC = () => {
+export const BranchInventory: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
