@@ -1,3 +1,5 @@
+
+// Now, the corrected OrderCard component
 import React, { memo } from 'react';
 import { Button } from '../UI/Button';
 import { Eye, Truck, Clock, Package, Check, AlertCircle } from 'lucide-react';
@@ -28,7 +30,7 @@ interface Props {
   calculateTotalQuantity: (order: Order) => number;
   viewOrder: (order: Order) => void;
   openConfirmDeliveryModal: (order: Order) => void;
-  openReturnModal: (order: Order, itemId: string) => void;
+  openReturnModal: (order: Order) => void;  // Removed itemId parameter
   user: any;
   submitting: string | null;
 }
@@ -130,7 +132,7 @@ const OrderCard: React.FC<Props> = memo(
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => openReturnModal(order, order.items[0].itemId)}
+                  onClick={() => openReturnModal(order)}  // Removed itemId
                   className="bg-red-500 hover:bg-red-600 text-white rounded-full px-3 py-1 text-xs"
                   disabled={submitting === 'return'}
                   aria-label={t('orders.return_order', { orderNumber: order.orderNumber })}

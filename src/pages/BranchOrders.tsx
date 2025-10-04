@@ -1,3 +1,6 @@
+
+
+// Finally, the corrected BranchOrders component
 import React, { useReducer, useEffect, useMemo, useCallback, lazy, Suspense, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -5,7 +8,7 @@ import { useSocket } from '../contexts/SocketContext';
 import { ordersAPI, inventoryAPI, returnsAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
-import { Select } from '../components/UI/Select';
+import Select from './Select';  // Using the new custom Select
 import SearchInput from '../components/UI/SearchInput';
 import { ShoppingCart, Download, Upload, Table2, Grid, AlertCircle } from 'lucide-react';
 import { debounce } from 'lodash';
@@ -566,7 +569,7 @@ const BranchOrders: React.FC = () => {
 
       dispatch({ type: 'SET_LOADING', payload: true });
       const cacheKey = `${user.branchId}-${state.filterStatus}-${state.currentPage}-${state.viewMode}`;
-      if (cacheRef.current.has(cacheKey)) {
+      if (cacheRef.current.has(cacheKey) ) {
         dispatch({ type: 'SET_ORDERS', payload: cacheRef.current.get(cacheKey)! });
         dispatch({ type: 'SET_LOADING', payload: false });
         return;
@@ -875,21 +878,16 @@ const BranchOrders: React.FC = () => {
     dispatch({ type: 'SET_MODAL', modal: 'confirmDelivery', isOpen: true });
   }, []);
 
-  const openReturnModal = useCallback((order: Order, itemId: string) => {
-    const item = order.items.find(i => i.itemId === itemId);
+  const openReturnModal = useCallback((order: Order) => {
     dispatch({ type: 'SET_SELECTED_ORDER', payload: order });
-    dispatch({
-      type: 'SET_RETURN_FORM',
-      payload: [{ itemId, quantity: item?.quantity || 1, reason: '', notes: '' }],
-    });
     dispatch({ type: 'SET_MODAL', modal: 'return', isOpen: true });
   }, []);
 
   const handleReturnItem = useCallback(
     async (e: React.FormEvent, order: Order | null, returnFormData: ReturnFormItem[]) => {
       e.preventDefault();
-      if (!order || !user?.branchId || returnFormData.some(item => !item.itemId || item.quantity < 1 || !item.reason) || state.submitting) {
-        toast.error(isRtl ? 'يرجى ملء جميع الحقول' : 'Please fill all fields', {
+      if (!order || !user?.branchId || returnFormData.some(item => item.quantity > 0 && !item.reason) || state.submitting) {
+        toast.error(isRtl ? 'يرجى ملء جميع الحقول للعناصر المرتجعة' : 'Please fill all fields for returned items', {
           position: isRtl ? 'top-left' : 'top-right',
           autoClose: 3000,
         });
@@ -1304,13 +1302,14 @@ const BranchOrders: React.FC = () => {
               dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
               dispatch({ type: 'SET_RETURN_FORM', payload: [{ itemId: '', quantity: 0, reason: '', notes: '' }] });
             }}
-            order={state.selectedOrder}
+            order={state.selectedOrder}  // Pass order directly
             returnFormData={state.returnFormData}
             setReturnFormData={(data) => dispatch({ type: 'SET_RETURN_FORM', payload: data })}
             t={t}
             isRtl={isRtl}
             onSubmit={handleReturnItem}
             submitting={state.submitting}
+            branchId={user?.branchId || ''}
           />
         </motion.div>
       </Suspense>
