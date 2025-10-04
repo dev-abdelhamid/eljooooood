@@ -46,12 +46,13 @@ returnsAxios.interceptors.response.use(
       message: error.message,
     });
 
-    let message = error.response?.data?.message || 'Unexpected error';
     const isRtl = localStorage.getItem('language') === 'ar';
+    let message = error.response?.data?.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
     if (error.response?.status === 400) message = error.response?.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
     if (error.response?.status === 403) message = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
     if (error.response?.status === 404) message = error.response?.data?.message || (isRtl ? 'الإرجاع غير موجود' : 'Return not found');
     if (error.response?.status === 429) message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
+    if (error.response?.status === 500) message = isRtl ? 'خطأ داخلي في الخادم، حاول لاحقًا' : 'Internal server error, try again later';
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
@@ -118,8 +119,8 @@ export const returnsAPI = {
       console.log(`[${new Date().toISOString()}] returnsAPI.getAll - Response:`, response);
       return response;
     } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.getAll - Error:`, error);
-      throw error;
+      console.error(`[${new Date().toISOString()}] returnsAPI.getAll - Error:`, error.message);
+      throw new Error(`Failed to fetch returns: ${error.message}`);
     }
   },
 
@@ -130,13 +131,15 @@ export const returnsAPI = {
       console.log(`[${new Date().toISOString()}] returnsAPI.getBranches - Response:`, response);
       return response;
     } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.getBranches - Error:`, error);
-      throw error;
+      console.error(`[${new Date().toISOString()}] returnsAPI.getBranches - Error:`, error.message);
+      throw new Error(`Failed to fetch branches: ${error.message}`);
     }
   },
 
   createReturn: async (data: {
     orderId: string;
+    branchId: string;
+    userId: string;
     reason: string;
     items: Array<{
       itemId: string;
@@ -149,6 +152,8 @@ export const returnsAPI = {
     console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Sending:`, data);
     if (
       !isValidObjectId(data.orderId) ||
+      !isValidObjectId(data.branchId) ||
+      !isValidObjectId(data.userId) ||
       !data.reason ||
       !Array.isArray(data.items) ||
       data.items.length === 0 ||
@@ -157,15 +162,27 @@ export const returnsAPI = {
       )
     ) {
       console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Invalid data:`, data);
-      throw new Error('Invalid order ID, reason, or item data');
+      throw new Error('Invalid order ID, branch ID, user ID, reason, or item data');
     }
     try {
-      const response = await returnsAxios.post('/returns', data);
+      const response = await returnsAxios.post('/returns', {
+        orderId: data.orderId,
+        branchId: data.branchId,
+        userId: data.userId,
+        reason: data.reason.trim(),
+        items: data.items.map(item => ({
+          itemId: item.itemId,
+          productId: item.productId,
+          quantity: item.quantity,
+          reason: item.reason.trim(),
+        })),
+        notes: data.notes?.trim(),
+      });
       console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Response:`, response);
       return response;
     } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Error:`, error);
-      throw error;
+      console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Error:`, error.message);
+      throw new Error(`Failed to create return: ${error.message}`);
     }
   },
 
@@ -174,26 +191,32 @@ export const returnsAPI = {
     data: {
       status: 'approved' | 'rejected';
       reviewNotes?: string;
+      userId: string;
     }
   ) => {
     console.log(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Sending:`, { returnId, data });
     if (
       !isValidObjectId(returnId) ||
+      !isValidObjectId(data.userId) ||
       !['approved', 'rejected'].includes(data.status)
     ) {
       console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Invalid data:`, { returnId, data });
-      throw new Error('Invalid return ID or status');
+      throw new Error('Invalid return ID, user ID, or status');
     }
     try {
-      const response = await returnsAxios.put(`/returns/${returnId}`, data);
+      const response = await returnsAxios.put(`/returns/${returnId}`, {
+        status: data.status,
+        reviewNotes: data.reviewNotes?.trim(),
+        userId: data.userId,
+      });
       console.log(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Response:`, response);
       return response;
     } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Error:`, error);
+      console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Error:`, error.message);
       if (error.status === 404) {
         throw new Error('Return not found or invalid endpoint');
       }
-      throw error;
+      throw new Error(`Failed to update return status: ${error.message}`);
     }
   },
 };
