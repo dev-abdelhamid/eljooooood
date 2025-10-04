@@ -123,25 +123,6 @@ export const returnsAPI = {
     }
   },
 
-  getById: async (returnId: string) => {
-    console.log(`[${new Date().toISOString()}] returnsAPI.getById - Sending:`, returnId);
-    if (!isValidObjectId(returnId)) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.getById - Invalid return ID:`, returnId);
-      throw new Error('Invalid return ID');
-    }
-    try {
-      const response = await returnsAxios.get(`/returns/${returnId}`);
-      console.log(`[${new Date().toISOString()}] returnsAPI.getById - Response:`, response);
-      return response;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.getById - Error:`, error);
-      if (error.status === 404) {
-        throw new Error('Return not found');
-      }
-      throw error;
-    }
-  },
-
   getBranches: async () => {
     console.log(`[${new Date().toISOString()}] returnsAPI.getBranches - Sending`);
     try {
@@ -156,11 +137,10 @@ export const returnsAPI = {
 
   createReturn: async (data: {
     orderId: string;
-    branchId: string;
     reason: string;
     items: Array<{
-      itemId?: string;
-      product: string;
+      itemId: string;
+      productId: string;
       quantity: number;
       reason: string;
     }>;
@@ -169,16 +149,15 @@ export const returnsAPI = {
     console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Sending:`, data);
     if (
       !isValidObjectId(data.orderId) ||
-      !isValidObjectId(data.branchId) ||
       !data.reason ||
       !Array.isArray(data.items) ||
       data.items.length === 0 ||
       data.items.some(
-        (item) => (item.itemId && !isValidObjectId(item.itemId)) || !isValidObjectId(item.product) || item.quantity < 1 || !item.reason
+        (item) => !isValidObjectId(item.itemId) || !isValidObjectId(item.productId) || item.quantity < 1 || !item.reason
       )
     ) {
       console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Invalid data:`, data);
-      throw new Error('Invalid order ID, branch ID, reason, or item data');
+      throw new Error('Invalid order ID, reason, or item data');
     }
     try {
       const response = await returnsAxios.post('/returns', data);
