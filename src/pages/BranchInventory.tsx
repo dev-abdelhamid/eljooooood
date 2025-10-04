@@ -355,7 +355,7 @@ export const BranchInventory: React.FC = () => {
   });
 
   const { data: historyData, isLoading: historyLoading, error: historyError } = useQuery<InventoryHistoryItem[], Error>({
-    queryKey: ['inventoryHistory', user?.branchId, i18n.language],
+    queryKey: ['inventoryHistory', user?.branchId, language.language],
     queryFn: () => inventoryAPI.getHistory({ branchId: user?.branchId }),
     enabled: activeTab === 'history' && !!user?.branchId,
     select: (response) => (response?.history || []).map((entry: InventoryHistoryItem) => ({
