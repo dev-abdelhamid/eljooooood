@@ -2,13 +2,13 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { returnsAPI, inventoryAPI } from '../services/api';
+import { returnsAPI, inventoryAPI, ordersAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Input } from '../components/UI/Input';
 import { Select } from '../components/UI/Select';
 import { Modal } from '../components/UI/Modal';
-import { Package, Eye, Clock, Check, AlertCircle, Search, Download, Plus, X } from 'lucide-react';
+import { Package, AlertCircle, Search, Download, Plus, X } from 'lucide-react';
 import { io } from 'socket.io-client';
 import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
@@ -22,6 +22,20 @@ import 'tailwindcss/tailwind.css';
 
 const RETURNS_PER_PAGE = 10;
 
+interface ReturnItem {
+  productId: string;
+  quantity: number;
+  reason: string;
+  maxQuantity?: number;
+}
+
+interface FormData {
+  orderId: string;
+  reason: string;
+  notes: string;
+  items: ReturnItem[];
+}
+
 const BranchReturns = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
@@ -31,17 +45,14 @@ const BranchReturns = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [selectedReturn, setSelectedReturn] = useState(null);
-  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     orderId: '',
     reason: '',
     notes: '',
     items: [],
   });
-  const [formErrors, setFormErrors] = useState({});
-  const [submitting, setSubmitting] = useState(false);
-  const [availableItems, setAvailableItems] = useState([]);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [availableItems, setAvailableItems] = useState<any[]>([]);
 
   const toastOptions = useMemo(
     () => ({
@@ -57,7 +68,7 @@ const BranchReturns = () => {
     [isRtl]
   );
 
-  // Socket connection with language awareness
+  // Socket connection
   const socket = useMemo(() => {
     const apiUrl = import.meta.env.VITE_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
     try {
@@ -77,7 +88,7 @@ const BranchReturns = () => {
     }
   }, [t, toastOptions]);
 
-  // Language-dependent options memoized to avoid re-creation on every render
+  // Language-dependent options
   const statusOptions = useMemo(
     () => [
       { value: '', label: t('returns.status.all') },
@@ -108,20 +119,31 @@ const BranchReturns = () => {
   );
 
   const getStatusInfo = useCallback(
-    (status) => STATUS_COLORS[status] || { color: 'bg-gray-100 text-gray-800', icon: Clock, label: t(`returns.status.${status}`) },
+    (status: string) =>
+      STATUS_COLORS[status] || {
+        color: 'bg-gray-100 text-gray-800',
+        icon: Clock,
+        label: t(`returns.status.${status}`),
+      },
     [STATUS_COLORS, t]
   );
 
-  // Query for returns with language in key to refetch on language change
+  // Query for returns
   const { data: returnsData, isLoading: returnsLoading, error: returnsError } = useQuery({
     queryKey: ['returns', filterStatus, currentPage, user?.branchId, language],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch_associated'));
-      const query = { status: filterStatus, branch: user.branchId, page: currentPage, limit: RETURNS_PER_PAGE, lang: language };
+      const query = {
+        status: filterStatus,
+        branch: user.branchId,
+        page: currentPage,
+        limit: RETURNS_PER_PAGE,
+        lang: language,
+      };
       const { returns: returnsList, total } = await returnsAPI.getAll(query);
       if (!Array.isArray(returnsList)) throw new Error('Invalid returns data format');
       return {
-        returns: returnsList.map((ret) => ({
+        returns: returnsList.map((ret: any) => ({
           _id: ret._id || 'unknown',
           returnNumber: ret.returnNumber || t('returns.unknown'),
           order: {
@@ -131,8 +153,7 @@ const BranchReturns = () => {
             createdAt: ret.order?.createdAt || new Date().toISOString(),
           },
           items: Array.isArray(ret.items)
-            ? ret.items.map((item) => ({
-                itemId: item.itemId || item._id || 'unknown',
+            ? ret.items.map((item: any) => ({
                 product: {
                   _id: item.product?._id || 'unknown',
                   name: isRtl ? item.product?.name : item.product?.nameEn || t('products.unknown'),
@@ -143,33 +164,50 @@ const BranchReturns = () => {
             : [],
           status: ret.status || 'pending_approval',
           createdAt: ret.createdAt || new Date().toISOString(),
+          date: formatDate(ret.createdAt || new Date().toISOString(), language),
           notes: isRtl ? ret.notes : ret.notesEn || ret.notes || '',
           reviewNotes: isRtl ? ret.reviewNotes : ret.reviewNotesEn || ret.reviewNotes || '',
-          branch: { _id: ret.branch?._id || 'unknown', name: isRtl ? ret.branch?.name : ret.branch?.nameEn || t('branches.unknown') },
+          branch: {
+            _id: ret.branch?._id || 'unknown',
+            name: isRtl ? ret.branch?.name : ret.branch?.nameEn || t('branches.unknown'),
+          },
         })),
         total,
       };
     },
     staleTime: 5 * 60 * 1000,
-    onError: (err) => {
+    onError: (err: any) => {
       toast.error(err.message || t('errors.fetch_returns'), toastOptions);
     },
   });
 
-  // Inventory query for returns without order
+  // Query for inventory
   const { data: inventoryData } = useQuery({
     queryKey: ['inventory', user?.branchId, language],
     queryFn: async () => {
       if (!user?.branchId) return [];
       const response = await inventoryAPI.getByBranch(user.branchId);
-      return response.map((item) => ({
+      return response.map((item: any) => ({
         productId: item.product._id,
         productName: isRtl ? item.product.name : item.product.nameEn,
         available: item.currentStock,
-        unit: isRtl ? item.product.unit : item.product.unitEn,
-        departmentName: isRtl ? item.product.department.name : item.product.department.nameEn,
         stock: item.currentStock,
       }));
+    },
+    enabled: !!user?.branchId,
+    staleTime: 5 * 60 * 1000,
+    onSuccess: (data) => {
+      setAvailableItems(data);
+    },
+  });
+
+  // Query for orders
+  const { data: ordersData, isLoading: ordersLoading } = useQuery({
+    queryKey: ['orders', user?.branchId, language],
+    queryFn: async () => {
+      if (!user?.branchId) return [];
+      const response = await ordersAPI.getAll({ branch: user.branchId });
+      return response.data || [];
     },
     enabled: !!user?.branchId,
     staleTime: 5 * 60 * 1000,
@@ -182,15 +220,15 @@ const BranchReturns = () => {
       socket.emit('joinRoom', { role: user?.role, branchId: user?.branchId, userId: user?._id });
       toast.info(t('socket.connected'), toastOptions);
     });
-    socket.on('returnCreated', (data) => {
+    socket.on('returnCreated', (data: any) => {
       if (data.branchId === user?.branchId) {
-        queryClient.invalidateQueries(['returns']);
+        queryClient.invalidateQueries({ queryKey: ['returns'] });
         toast.success(t('returns.new_return_notification', { returnNumber: data.returnNumber }), toastOptions);
       }
     });
-    socket.on('returnStatusUpdated', (data) => {
+    socket.on('returnStatusUpdated', (data: any) => {
       if (data.branchId === user?.branchId) {
-        queryClient.invalidateQueries(['returns']);
+        queryClient.invalidateQueries({ queryKey: ['returns'] });
         toast.info(t('socket.return_status_updated', { status: t(`returns.status.${data.status}`) }), toastOptions);
       }
     });
@@ -201,10 +239,99 @@ const BranchReturns = () => {
     };
   }, [socket, user, queryClient, t, toastOptions]);
 
-  // Debounced search
-  const debouncedSetSearchQuery = useMemo(() => debounce((value) => setSearchQuery(value), 300), []);
+  // Form validation
+  const validateForm = useCallback(() => {
+    const errors: Record<string, string> = {};
+    if (!formData.orderId) errors.orderId = t('errors.required', { field: t('returns.order_id') });
+    if (!formData.reason) errors.reason = t('errors.required', { field: t('returns.reason') });
+    if (formData.items.length === 0) errors.items = t('errors.required', { field: t('returns.items') });
+    formData.items.forEach((item, index) => {
+      if (!item.productId) errors[`item_${index}_productId`] = t('errors.required', { field: t('returns.product') });
+      if (!item.reason) errors[`item_${index}_reason`] = t('errors.required', { field: t('returns.reason') });
+      if (item.quantity < 1 || item.quantity > (item.maxQuantity ?? 0) || isNaN(item.quantity)) {
+        errors[`item_${index}_quantity`] = t('errors.invalid_quantity_max', { max: item.maxQuantity ?? 0 });
+      }
+    });
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [formData, t]);
 
-  // Filtered and paginated returns
+  // Create return mutation
+  const createReturnMutation = useMutation({
+    mutationFn: async () => {
+      if (!validateForm()) throw new Error(t('errors.invalid_form'));
+      if (!user?.branchId) throw new Error(t('errors.no_branch'));
+      await returnsAPI.createReturn({
+        orderId: formData.orderId,
+        branchId: user.branchId,
+        reason: formData.reason,
+        notes: formData.notes,
+        items: formData.items.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          reason: item.reason,
+        })),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['returns'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      setIsCreateModalOpen(false);
+      setFormData({ orderId: '', reason: '', notes: '', items: [] });
+      setFormErrors({});
+      toast.success(t('returns.create_success'), toastOptions);
+      socket?.emit('returnCreated', {
+        branchId: user?.branchId,
+        returnId: crypto.randomUUID(),
+        status: 'pending_approval',
+        eventId: crypto.randomUUID(),
+      });
+    },
+    onError: (err: any) => {
+      console.error('Create return error:', err);
+      toast.error(err.message || t('errors.create_return'), toastOptions);
+      if (err.message.includes('Invalid')) {
+        setFormErrors({ form: err.message });
+      }
+    },
+  });
+
+  // Form handlers
+  const addItemToForm = useCallback(() => {
+    setFormData((prev) => ({
+      ...prev,
+      items: [...prev.items, { productId: '', quantity: 1, reason: '', maxQuantity: 0 }],
+    }));
+  }, []);
+
+  const updateItemInForm = useCallback(
+    (index: number, field: string, value: any) => {
+      setFormData((prev) => {
+        const newItems = [...prev.items];
+        newItems[index] = { ...newItems[index], [field]: field === 'quantity' ? parseInt(value) || 1 : value };
+        if (field === 'productId') {
+          const sel = availableItems.find((a) => a.productId === value);
+          if (sel) {
+            newItems[index].maxQuantity = sel.stock;
+          }
+        }
+        return { ...prev, items: newItems };
+      });
+    },
+    [availableItems]
+  );
+
+  const removeItemFromForm = useCallback((index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index),
+    }));
+  }, []);
+
+  // Debounced search
+  const debouncedSetSearchQuery = useMemo(() => debounce((value: string) => setSearchQuery(value), 300), []);
+
+  // Filtered and sorted returns
   const filteredReturns = useMemo(
     () =>
       (returnsData?.returns || []).filter(
@@ -222,52 +349,9 @@ const BranchReturns = () => {
     [filteredReturns]
   );
 
-  const paginatedReturns = useMemo(
-    () => sortedReturns.slice((currentPage - 1) * RETURNS_PER_PAGE, currentPage * RETURNS_PER_PAGE),
-    [sortedReturns, currentPage]
-  );
-
-  const totalPages = Math.ceil(sortedReturns.length / RETURNS_PER_PAGE);
-
-  // Form handlers
-  const handleCreateReturn = useCallback(() => {
-    setSubmitting(true);
-    createReturnMutation.mutate(formData, {
-      onSettled: () => setSubmitting(false),
-    });
-  }, [createReturnMutation, formData]);
-
-  const addItemToForm = useCallback(() => {
-    setFormData((prev) => ({
-      ...prev,
-      items: [...prev.items, { productId: '', quantity: 1, reason: '', maxQuantity: 0 }],
-    }));
-  }, []);
-
-  const updateItemInForm = useCallback((index: number, field: string, value: any) => {
-    setFormData((prev: any) => {
-      const newItems = [...prev.items];
-      newItems[index] = { ...newItems[index], [field]: value };
-      if (field === 'productId') {
-        const sel = availableItems.find((a: any) => a.productId === value);
-        if (sel) {
-          newItems[index].maxQuantity = sel.stock;
-        }
-      }
-      return { ...prev, items: newItems };
-    });
-  }, [availableItems]);
-
-  const removeItemFromForm = useCallback((index: number) => {
-    setFormData((prev: any) => ({
-      ...prev,
-      items: prev.items.filter((_: any, i: number) => i !== index),
-    }));
-  }, []);
-
   // Export functions
   const exportToExcel = useCallback(() => {
-    const exportData = sortedReturns.map((ret) => ({
+    const exportData = sortedReturns.map((ret: any) => ({
       [t('returns.return_number')]: ret.returnNumber,
       [t('returns.order_number')]: ret.order.orderNumber,
       [t('returns.status_label')]: getStatusInfo(ret.status).label,
@@ -283,12 +367,12 @@ const BranchReturns = () => {
     XLSX.utils.book_append_sheet(wb, ws, 'Returns');
     XLSX.writeFile(wb, `Returns_${new Date().toISOString().split('T')[0]}.xlsx`);
     toast.success(t('returns.export_success'), toastOptions);
-  }, [sortedReturns, isRtl, t, getStatusInfo]);
+  }, [sortedReturns, isRtl, t, getStatusInfo, toastOptions]);
 
   const exportToPDF = useCallback(async () => {
     try {
       const doc = new jsPDF({ orientation: 'landscape' });
-      doc.setFont('helvetica'); // Fallback
+      doc.setFont('helvetica');
       const headers = [
         t('returns.return_number'),
         t('returns.order_number'),
@@ -299,7 +383,7 @@ const BranchReturns = () => {
         t('returns.notes_label'),
         t('returns.review_notes'),
       ];
-      const data = sortedReturns.map((ret) => [
+      const data = sortedReturns.map((ret: any) => [
         ret.returnNumber,
         ret.order.orderNumber,
         getStatusInfo(ret.status).label,
@@ -327,123 +411,6 @@ const BranchReturns = () => {
       toast.error(t('errors.pdf_export'), toastOptions);
     }
   }, [sortedReturns, isRtl, t, getStatusInfo, toastOptions]);
-
-  // ReturnCard component (optimized)
-  const ReturnCard = useMemo(() => ({ ret }: any) => {
-    const statusInfo = getStatusInfo(ret.status);
-    const StatusIcon = statusInfo.icon;
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="flex flex-col"
-      >
-        <Card className="p-4 sm:p-5 bg-white shadow-md hover:shadow-xl transition-shadow duration-300 rounded-lg border border-gray-200">
-          <div className="flex flex-col gap-4">
-            <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${isRtl ? 'sm:flex-row-reverse' : ''}`}>
-              <h3 className="text-lg font-semibold text-gray-900">
-                {t('returns.return_number', { returnNumber: ret.returnNumber })}
-              </h3>
-              <span className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${statusInfo.color}`}>
-                <StatusIcon className="w-5 h-5" />
-                <span>{statusInfo.label}</span>
-              </span>
-            </div>
-            <div className="flex flex-col sm:grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.order_number')}</p>
-                <p className="text-base font-medium text-gray-900">{ret.order.orderNumber}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.items_count')}</p>
-                <p className="text-base font-medium text-gray-900">{ret.items.length} {t('returns.item')}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.date')}</p>
-                <p className="text-base font-medium text-gray-900">{ret.date}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.branch')}</p>
-                <p className="text-base font-medium text-gray-900">{ret.branch.name}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.total_amount')}</p>
-                <p className="text-base font-medium text-teal-600">{ret.items.reduce((sum: number, item: any) => sum + (item.price || 0) * item.quantity, 0)} {t('currency')}</p>
-              </div>
-            </div>
-            <div className="flex flex-col gap-2">
-              {ret.items.map((item: any, index: number) => (
-                <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100">
-                  <p className="text-base font-medium text-gray-900">{item.product.name}</p>
-                  <p className="text-sm text-gray-600">{t('returns.quantity', { quantity: item.quantity })}</p>
-                  <p className="text-sm text-gray-600">{t('returns.unit', { unit: item.unit })}</p>
-                  <p className="text-sm text-gray-600">{t('returns.department', { department: item.departmentName })}</p>
-                  <p className="text-sm text-gray-600">{t('returns.reason', { reason: item.reason })}</p>
-                  {item.price && (
-                    <p className="text-sm text-gray-600">{t('returns.price', { price: item.price })} {t('currency')}</p>
-                  )}
-                </div>
-              ))}
-            </div>
-            {ret.notes && (
-              <div className="p-3 bg-amber-50 rounded-md border border-amber-100">
-                <p className="text-sm text-amber-800"><strong>{t('returns.notes_label')}:</strong> {ret.notes}</p>
-              </div>
-            )}
-            {ret.reviewNotes && (
-              <div className="p-3 bg-blue-50 rounded-md border border-blue-100">
-                <p className="text-sm text-blue-800"><strong>{t('returns.review_notes')}:</strong> {ret.reviewNotes}</p>
-              </div>
-            )}
-            <div className="flex justify-end">
-              <Button
-                variant="primary"
-                size="md"
-                icon={Eye}
-                onClick={() => {
-                  setSelectedReturn(ret);
-                  setIsViewModalOpen(true);
-                }}
-                className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 py-2 transition-colors duration-200"
-                aria-label={t('returns.view_return', { returnNumber: ret.returnNumber })}
-              >
-                {t('returns.view')}
-              </Button>
-            </div>
-          </div>
-        </Card>
-      </motion.div>
-    );
-  }, [isRtl, t, getStatusInfo]);
-
-  const Pagination = () => (
-    sortedReturns.length > RETURNS_PER_PAGE && (
-      <div className={`flex items-center justify-center gap-3 mt-6 ${isRtl ? 'flex-row-reverse' : ''}`}>
-        <Button
-          variant="secondary"
-          size="md"
-          onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-          disabled={currentPage === 1}
-          className="disabled:opacity-50 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
-          aria-label={t('pagination.previous')}
-        >
-          {t('pagination.previous')}
-        </Button>
-        <span className="text-gray-700 font-medium">{t('pagination.page', { current: currentPage, total: totalPages })}</span>
-        <Button
-          variant="secondary"
-          size="md"
-          onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-          disabled={currentPage === totalPages}
-          className="disabled:opacity-50 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
-          aria-label={t('pagination.next')}
-        >
-          {t('pagination.next')}
-        </Button>
-      </div>
-    )
-  );
 
   return (
     <motion.div
@@ -477,7 +444,7 @@ const BranchReturns = () => {
               </div>
               <Button
                 variant="primary"
-                onClick={() => queryClient.invalidateQueries(['returns'])}
+                onClick={() => queryClient.invalidateQueries({ queryKey: ['returns'] })}
                 className="bg-amber-600 hover:bg-amber-700 text-white rounded-full px-6 py-2 transition-colors duration-200"
                 aria-label={t('common.retry')}
               >
@@ -563,16 +530,74 @@ const BranchReturns = () => {
               transition={{ duration: 0.5 }}
               className="grid gap-6"
             >
-              {paginatedReturns.length === 0 ? (
+              {sortedReturns.length === 0 ? (
                 <Card className="p-6 text-center bg-gray-100 shadow-md rounded-lg border border-gray-200">
                   <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                   <p className="text-lg font-semibold text-gray-600">{t('returns.no_returns')}</p>
                 </Card>
               ) : (
-                paginatedReturns.map((ret: any) => <ReturnCard key={ret.id} ret={ret} />)
+                sortedReturns.map((ret: any) => (
+                  <motion.div
+                    key={ret._id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="flex flex-col"
+                  >
+                    <Card className="p-4 sm:p-5 bg-white shadow-md hover:shadow-xl transition-shadow duration-300 rounded-lg border border-gray-200">
+                      <div className="flex flex-col gap-4">
+                        <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${isRtl ? 'sm:flex-row-reverse' : ''}`}>
+                          <h3 className="text-lg font-semibold text-gray-900">
+                            {t('returns.return_number', { returnNumber: ret.returnNumber })}
+                          </h3>
+                          <span className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${getStatusInfo(ret.status).color}`}>
+                            <getStatusInfo(ret.status).icon className="w-5 h-5" />
+                            <span>{getStatusInfo(ret.status).label}</span>
+                          </span>
+                        </div>
+                        <div className="flex flex-col sm:grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                          <div>
+                            <p className="text-sm text-gray-500">{t('returns.order_number')}</p>
+                            <p className="text-base font-medium text-gray-900">{ret.order.orderNumber}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">{t('returns.items_count')}</p>
+                            <p className="text-base font-medium text-gray-900">{ret.items.length} {t('returns.item')}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">{t('returns.date')}</p>
+                            <p className="text-base font-medium text-gray-900">{ret.date}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-gray-500">{t('returns.branch')}</p>
+                            <p className="text-base font-medium text-gray-900">{ret.branch.name}</p>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          {ret.items.map((item: any, index: number) => (
+                            <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100">
+                              <p className="text-base font-medium text-gray-900">{item.product.name}</p>
+                              <p className="text-sm text-gray-600">{t('returns.quantity', { quantity: item.quantity })}</p>
+                              <p className="text-sm text-gray-600">{t('returns.reason', { reason: item.reason })}</p>
+                            </div>
+                          ))}
+                        </div>
+                        {ret.notes && (
+                          <div className="p-3 bg-amber-50 rounded-md border border-amber-100">
+                            <p className="text-sm text-amber-800"><strong>{t('returns.notes_label')}:</strong> {ret.notes}</p>
+                          </div>
+                        )}
+                        {ret.reviewNotes && (
+                          <div className="p-3 bg-blue-50 rounded-md border border-blue-100">
+                            <p className="text-sm text-blue-800"><strong>{t('returns.review_notes')}:</strong> {ret.reviewNotes}</p>
+                          </div>
+                        )}
+                      </div>
+                    </Card>
+                  </motion.div>
+                ))
               )}
             </motion.div>
-            <Pagination />
           </div>
         )}
       </AnimatePresence>
@@ -584,7 +609,6 @@ const BranchReturns = () => {
           setIsCreateModalOpen(false);
           setFormData({ orderId: '', reason: '', notes: '', items: [] });
           setFormErrors({});
-          setAvailableItems([]);
         }}
         title={t('returns.create_return')}
         className="max-w-2xl"
@@ -598,13 +622,14 @@ const BranchReturns = () => {
                 onChange={(e) => setFormData({ ...formData, orderId: e.target.value, items: [] })}
                 options={[
                   { value: '', label: t('returns.select_order') },
-                  ...(deliveredOrders || []).map((order: any) => ({
+                  ...(ordersData || []).map((order: any) => ({
                     value: order._id,
-                    label: `${order.orderNumber} - ${formatDate(order.deliveredAt || order.createdAt, language)}`,
+                    label: `${order.orderNumber} - ${formatDate(order.createdAt, language)}`,
                   })),
                 ]}
-                className={`w-full rounded-full border ${formErrors.orderId ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent`}
+                className={`w-full rounded-full border ${formErrors.orderId ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent ${isRtl ? 'text-right' : 'text-left'}`}
                 aria-label={t('returns.order_id')}
+                disabled={ordersLoading}
               />
               {formErrors.orderId && <p className="text-red-500 text-sm mt-1">{formErrors.orderId}</p>}
             </div>
@@ -614,7 +639,7 @@ const BranchReturns = () => {
                 value={formData.reason}
                 onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
                 options={reasonOptions}
-                className={`w-full rounded-full border ${formErrors.reason ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent`}
+                className={`w-full rounded-full border ${formErrors.reason ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent ${isRtl ? 'text-right' : 'text-left'}`}
                 aria-label={t('returns.reason')}
               />
               {formErrors.reason && <p className="text-red-500 text-sm mt-1">{formErrors.reason}</p>}
@@ -625,15 +650,15 @@ const BranchReturns = () => {
                 type="text"
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                className="w-full rounded-full border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
                 placeholder={t('returns.notes_placeholder')}
+                className={`w-full rounded-full border ${formErrors.notes ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent ${isRtl ? 'text-right' : 'text-left'}`}
                 aria-label={t('returns.notes_label')}
               />
             </div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">{t('returns.items')}</label>
-            {formData.items.map((item: any, index: number) => (
+            {formData.items.map((item, index) => (
               <div key={index} className="flex flex-col sm:flex-row gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t('returns.product')}</label>
@@ -642,12 +667,14 @@ const BranchReturns = () => {
                     onChange={(e) => updateItemInForm(index, 'productId', e.target.value)}
                     options={[
                       { value: '', label: t('returns.select_product') },
-                      ...availableItems.map((a: any) => ({
-                        value: a.productId,
-                        label: `${a.productName} (available: ${a.available}, stock: ${a.stock})`,
-                      })),
+                      ...availableItems
+                        .filter((a) => !formData.items.some((i, idx) => i.productId === a.productId && idx !== index))
+                        .map((a) => ({
+                          value: a.productId,
+                          label: `${a.productName} (${t('returns.available')}: ${a.available})`,
+                        })),
                     ]}
-                    className={`w-full rounded-full border ${formErrors[`item_${index}_productId`] ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent`}
+                    className={`w-full rounded-full border ${formErrors[`item_${index}_productId`] ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent ${isRtl ? 'text-right' : 'text-left'}`}
                     aria-label={t('returns.product')}
                   />
                   {formErrors[`item_${index}_productId`] && (
@@ -661,8 +688,8 @@ const BranchReturns = () => {
                     min="1"
                     max={item.maxQuantity}
                     value={item.quantity}
-                    onChange={(e) => updateItemInForm(index, 'quantity', parseInt(e.target.value))}
-                    className={`w-full rounded-full border ${formErrors[`item_${index}_quantity`] ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent`}
+                    onChange={(e) => updateItemInForm(index, 'quantity', e.target.value)}
+                    className={`w-full rounded-full border ${formErrors[`item_${index}_quantity`] ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent ${isRtl ? 'text-right' : 'text-left'}`}
                     aria-label={t('returns.quantity')}
                   />
                   {formErrors[`item_${index}_quantity`] && (
@@ -675,7 +702,7 @@ const BranchReturns = () => {
                     value={item.reason}
                     onChange={(e) => updateItemInForm(index, 'reason', e.target.value)}
                     options={reasonOptions}
-                    className={`w-full rounded-full border ${formErrors[`item_${index}_reason`] ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent`}
+                    className={`w-full rounded-full border ${formErrors[`item_${index}_reason`] ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent ${isRtl ? 'text-right' : 'text-left'}`}
                     aria-label={t('returns.reason')}
                   />
                   {formErrors[`item_${index}_reason`] && (
@@ -699,7 +726,7 @@ const BranchReturns = () => {
               onClick={addItemToForm}
               className="mt-4 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
               aria-label={t('returns.add_item')}
-              disabled={availableItems.length === 0}
+              disabled={availableItems.length === 0 || availableItems.length === formData.items.length}
             >
               {t('returns.add_item')}
             </Button>
@@ -711,7 +738,6 @@ const BranchReturns = () => {
                 setIsCreateModalOpen(false);
                 setFormData({ orderId: '', reason: '', notes: '', items: [] });
                 setFormErrors({});
-                setAvailableItems([]);
               }}
               className="bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
               aria-label={t('common.cancel')}
@@ -720,84 +746,15 @@ const BranchReturns = () => {
             </Button>
             <Button
               variant="primary"
-              onClick={handleCreateReturn}
-              disabled={submitting || createReturnMutation.isPending}
+              onClick={() => createReturnMutation.mutate()}
+              disabled={createReturnMutation.isPending}
               className="bg-amber-600 hover:bg-amber-700 text-white rounded-full px-4 py-2 transition-colors duration-200 disabled:opacity-50"
               aria-label={t('returns.submit_return')}
             >
-              {submitting || createReturnMutation.isPending ? t('common.submitting') : t('returns.submit_return')}
+              {createReturnMutation.isPending ? t('common.submitting') : t('returns.submit_return')}
             </Button>
           </div>
         </div>
-      </Modal>
-
-      {/* View Return Modal */}
-      <Modal
-        isOpen={isViewModalOpen}
-        onClose={() => setIsViewModalOpen(false)}
-        title={t('returns.view_return', { returnNumber: selectedReturn?.returnNumber || '' })}
-        className="max-w-2xl"
-      >
-        {selectedReturn && (
-          <div className="flex flex-col gap-6">
-            <div className="grid gap-4">
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.return_number')}</p>
-                <p className="text-base font-medium text-gray-900">{selectedReturn.returnNumber}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.order_number')}</p>
-                <p className="text-base font-medium text-gray-900">{selectedReturn.order.orderNumber}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.status_label')}</p>
-                <span
-                  className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${getStatusInfo(selectedReturn.status).color}`}
-                >
-                  {getStatusInfo(selectedReturn.status).label}
-                </span>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.date')}</p>
-                <p className="text-base font-medium text-gray-900">{selectedReturn.date}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.branch')}</p>
-                <p className="text-base font-medium text-gray-900">{selectedReturn.branch.name}</p>
-              </div>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">{t('returns.items')}</p>
-              {selectedReturn.items.map((item: any, index: number) => (
-                <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100 mb-2">
-                  <p className="text-base font-medium text-gray-900">{item.product.name}</p>
-                  <p className="text-sm text-gray-600">{t('returns.quantity', { quantity: item.quantity })}</p>
-                  <p className="text-sm text-gray-600">{t('returns.reason', { reason: item.reason })}</p>
-                </div>
-              ))}
-            </div>
-            {selectedReturn.notes && (
-              <div className="p-3 bg-amber-50 rounded-md border border-amber-100">
-                <p className="text-sm text-amber-800"><strong>{t('returns.notes_label')}:</strong> {selectedReturn.notes}</p>
-              </div>
-            )}
-            {selectedReturn.reviewNotes && (
-              <div className="p-3 bg-blue-50 rounded-md border border-blue-100">
-                <p className="text-sm text-blue-800"><strong>{t('returns.review_notes')}:</strong> {selectedReturn.reviewNotes}</p>
-              </div>
-            )}
-            <div className="flex justify-end">
-              <Button
-                variant="secondary"
-                onClick={() => setIsViewModalOpen(false)}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
-                aria-label={t('common.close')}
-              >
-                {t('common.close')}
-              </Button>
-            </div>
-          </div>
-        )}
       </Modal>
     </motion.div>
   );
