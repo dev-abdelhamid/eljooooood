@@ -320,7 +320,7 @@ const Pagination: React.FC<{
 
 const ITEMS_PER_PAGE = 10;
 
-const BranchInventory: React.FC = () => {
+export const BranchInventory: React.FC = () => {
   const [language, setLanguage] = useState<'ar' | 'en'>('ar');
   const isRtl = language === 'ar';
   const t = (key: string, params?: Record<string, string>) => {
