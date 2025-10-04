@@ -1,27 +1,95 @@
 import React, { useState, useMemo, useCallback, useEffect, useReducer } from 'react';
-import { useLanguage } from '../contexts/LanguageContext';
-import { useAuth } from '../contexts/AuthContext';
-import { useSocket } from '../contexts/SocketContext';
-import { useNotifications } from '../contexts/NotificationContext';
-import { inventoryAPI, returnsAPI } from '../services/api';
-import { Package, AlertCircle, Search, RefreshCw, History as HistoryIcon, Edit, X, Plus } from 'lucide-react';
+import { Package, AlertCircle, Search, RefreshCw, History, Edit, X, Plus } from 'lucide-react';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
+
+// قاموس الترجمة
+const translations = {
+  'common.all_statuses': { ar: 'جميع الحالات', en: 'All Statuses' },
+  'common.search': { ar: 'بحث', en: 'Search' },
+  'common.retry': { ar: 'إعادة المحاولة', en: 'Retry' },
+  'common.cancel': { ar: 'إلغاء', en: 'Cancel' },
+  'common.submit': { ar: 'إرسال', en: 'Submit' },
+  'common.submitting': { ar: 'جاري الإرسال...', en: 'Submitting...' },
+  'common.saving': { ar: 'جاري الحفظ...', en: 'Saving...' },
+  'inventory.title': { ar: 'إدارة المخزون', en: 'Inventory Management' },
+  'inventory.description': { ar: 'إدارة مخزون الفرع بكفاءة', en: 'Manage branch inventory efficiently' },
+  'inventory.low_stock': { ar: 'مخزون منخفض', en: 'Low Stock' },
+  'inventory.normal': { ar: 'مخزون طبيعي', en: 'Normal Stock' },
+  'inventory.full': { ar: 'مخزون ممتلئ', en: 'Full Stock' },
+  'inventory.no_items': { ar: 'لا توجد عناصر في المخزون', en: 'No items in inventory' },
+  'inventory.min_stock': { ar: 'الحد الأدنى للمخزون', en: 'Minimum Stock' },
+  'inventory.max_stock': { ar: 'الحد الأقصى للمخزون', en: 'Maximum Stock' },
+  'inventory.edit_stock_limits': { ar: 'تعديل حدود المخزون', en: 'Edit Stock Limits' },
+  'inventory.update_success': { ar: 'تم تحديث المخزون بنجاح', en: 'Inventory updated successfully' },
+  'history.title': { ar: 'سجل المخزون', en: 'Inventory History' },
+  'history.no_history': { ar: 'لا يوجد سجل متاح', en: 'No history available' },
+  'history.date': { ar: 'التاريخ', en: 'Date' },
+  'history.action': { ar: 'الإجراء', en: 'Action' },
+  'history.quantity': { ar: 'الكمية', en: 'Quantity' },
+  'history.reference': { ar: 'المرجع', en: 'Reference' },
+  'history.created_by': { ar: 'تم الإنشاء بواسطة', en: 'Created By' },
+  'returns.title': { ar: 'طلبات الإرجاع', en: 'Return Requests' },
+  'returns.create': { ar: 'إنشاء طلب إرجاع', en: 'Create Return Request' },
+  'returns.no_returns': { ar: 'لا توجد طلبات إرجاع', en: 'No return requests' },
+  'returns.pending_approval': { ar: 'في انتظار الموافقة', en: 'Pending Approval' },
+  'returns.approved': { ar: 'تمت الموافقة', en: 'Approved' },
+  'returns.rejected': { ar: 'مرفوض', en: 'Rejected' },
+  'returns.reason': { ar: 'السبب', en: 'Reason' },
+  'returns.select_reason': { ar: 'اختر السبب', en: 'Select Reason' },
+  'returns.damaged': { ar: 'تالف', en: 'Damaged' },
+  'returns.wrong_item': { ar: 'منتج خاطئ', en: 'Wrong Item' },
+  'returns.excess_quantity': { ar: 'كمية زائدة', en: 'Excess Quantity' },
+  'returns.other': { ar: 'أخرى', en: 'Other' },
+  'returns.notes': { ar: 'ملاحظات', en: 'Notes' },
+  'returns.notes_placeholder': { ar: 'أدخل ملاحظات إضافية (اختياري)', en: 'Enter additional notes (optional)' },
+  'returns.items': { ar: 'العناصر', en: 'Items' },
+  'returns.add_item': { ar: 'إضافة عنصر', en: 'Add Item' },
+  'returns.create_success': { ar: 'تم إنشاء طلب الإرجاع بنجاح', en: 'Return request created successfully' },
+  'returns.view_details': { ar: 'عرض التفاصيل', en: 'View Details' },
+  'returns.update_success': { ar: 'تم تحديث حالة الإرجاع بنجاح', en: 'Return status updated successfully' },
+  'returns.approve': { ar: 'الموافقة', en: 'Approve' },
+  'returns.reject': { ar: 'رفض', en: 'Reject' },
+  'returns.details': { ar: 'تفاصيل الإرجاع', en: 'Return Details' },
+  'returns.return_number': { ar: 'رقم الإرجاع', en: 'Return Number' },
+  'returns.branch': { ar: 'الفرع', en: 'Branch' },
+  'returns.created_by': { ar: 'تم الإنشاء بواسطة', en: 'Created By' },
+  'returns.reviewed_by': { ar: 'تمت المراجعة بواسطة', en: 'Reviewed By' },
+  'products.title': { ar: 'المنتج', en: 'Product' },
+  'products.code': { ar: 'كود المنتج', en: 'Product Code' },
+  'products.unit': { ar: 'الوحدة', en: 'Unit' },
+  'products.select': { ar: 'اختر منتج', en: 'Select Product' },
+  'products.unknown': { ar: 'غير معروف', en: 'Unknown' },
+  'products.unit_unknown': { ar: 'وحدة غير معروفة', en: 'Unknown Unit' },
+  'departments.title': { ar: 'القسم', en: 'Department' },
+  'departments.unknown': { ar: 'قسم غير معروف', en: 'Unknown Department' },
+  'errors.no_branch': { ar: 'لم يتم العثور على معرف الفرع', en: 'Branch ID not found' },
+  'errors.fetch_inventory': { ar: 'فشل في جلب بيانات المخزون', en: 'Failed to fetch inventory data' },
+  'errors.fetch_history': { ar: 'فشل في جلب سجل المخزون', en: 'Failed to fetch inventory history' },
+  'errors.fetch_returns': { ar: 'فشل في جلب طلبات الإرجاع', en: 'Failed to fetch return requests' },
+  'errors.create_return': { ar: 'فشل في إنشاء طلب الإرجاع', en: 'Failed to create return request' },
+  'errors.update_inventory': { ar: 'فشل في تحديث المخزون', en: 'Failed to update inventory' },
+  'errors.update_return': { ar: 'فشل في تحديث حالة الإرجاع', en: 'Failed to update return status' },
+  'errors.no_item_selected': { ar: 'لم يتم اختيار عنصر', en: 'No item selected' },
+  'errors.required': { ar: '{field} مطلوب', en: '{field} is required' },
+  'errors.non_negative': { ar: '{field} يجب ألا يكون سالبًا', en: '{field} must not be negative' },
+  'errors.max_greater_min': { ar: 'الحد الأقصى يجب أن يكون أكبر من الحد الأدنى', en: 'Maximum must be greater than minimum' },
+  'errors.invalid_quantity_max': { ar: 'الكمية غير صالحة، الحد الأقصى {max}', en: 'Invalid quantity, maximum {max}' },
+  'errors.invalid_form': { ar: 'النموذج غير صالح، يرجى التحقق من الحقول', en: 'Invalid form, please check the fields' },
+  'common.available': { ar: 'متاح', en: 'Available' },
+  'notifications.return_status_updated': {
+    ar: 'تم تحديث حالة الإرجاع إلى {status} للفرع {branchName}',
+    en: 'Return status updated to {status} for branch {branchName}',
+  },
+};
 
 // واجهات TypeScript
 interface InventoryItem {
   _id: string;
-  product: {
-    _id: string;
-    name: string;
-    nameEn: string;
-    code: string;
-    unit: string;
-    unitEn: string;
-    department: { name: string; nameEn: string; _id: string } | null;
-  } | null;
+  product: { _id: string; name: string; nameEn: string; code: string; unit: string; unitEn: string; department: { name: string; nameEn: string } | null } | null;
   currentStock: number;
   minStockLevel: number;
   maxStockLevel: number;
@@ -30,35 +98,21 @@ interface InventoryItem {
 
 interface InventoryHistoryItem {
   _id: string;
-  product: {
-    name: string;
-    nameEn: string;
-  } | null;
+  product: { name: string; nameEn: string } | null;
   action: string;
   quantity: number;
   reference: string;
-  createdBy: {
-    username: string;
-  };
+  createdBy: { _id: string; username: string };
   createdAt: string;
 }
 
 interface Return {
   _id: string;
   returnNumber: string;
-  orderId?: string;
   branchId: string;
   branchName: string;
   items: Array<{
-    itemId?: string;
-    product: {
-      _id: string;
-      name: string;
-      nameEn: string;
-      unit: string;
-      unitEn: string;
-      department: { name: string; nameEn: string };
-    };
+    product: { _id: string; name: string; nameEn: string; unit: string; unitEn: string; department: { name: string; nameEn: string } };
     productName: string;
     quantity: number;
     reason: string;
@@ -69,9 +123,10 @@ interface Return {
   reason: string;
   notes?: string;
   createdAt: string;
+  createdBy: { _id: string; username: string };
   createdByName: string;
+  reviewedBy?: { _id: string; username: string };
   reviewedByName?: string;
-  reviewedAt?: string;
 }
 
 interface ReturnItem {
@@ -79,7 +134,6 @@ interface ReturnItem {
   quantity: number;
   reason: string;
   maxQuantity: number;
-  itemId?: string;
 }
 
 interface EditForm {
@@ -96,7 +150,6 @@ interface AvailableItem {
   stock: number;
 }
 
-// Reducer لنموذج الإرجاع
 interface ReturnFormState {
   reason: string;
   notes: string;
@@ -111,35 +164,29 @@ type ReturnFormAction =
   | { type: 'REMOVE_ITEM'; payload: number }
   | { type: 'RESET' };
 
+// Reducer لنموذج الإرجاع
 const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): ReturnFormState => {
   switch (action.type) {
-    case 'SET_REASON':
-      return { ...state, reason: action.payload };
-    case 'SET_NOTES':
-      return { ...state, notes: action.payload };
-    case 'ADD_ITEM':
-      return { ...state, items: [...state.items, action.payload] };
+    case 'SET_REASON': return { ...state, reason: action.payload };
+    case 'SET_NOTES': return { ...state, notes: action.payload };
+    case 'ADD_ITEM': return { ...state, items: [...state.items, action.payload] };
     case 'UPDATE_ITEM': {
       const newItems = [...state.items];
       newItems[action.payload.index] = { ...newItems[action.payload.index], [action.payload.field]: action.payload.value };
       return { ...state, items: newItems };
     }
-    case 'REMOVE_ITEM':
-      return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
-    case 'RESET':
-      return { reason: '', notes: '', items: [] };
-    default:
-      return state;
+    case 'REMOVE_ITEM': return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
+    case 'RESET': return { reason: '', notes: '', items: [] };
+    default: return state;
   }
 };
 
 // مكونات مخصصة
-interface CustomCardProps {
-  className?: string;
-  children: React.ReactNode;
-}
+const CustomCard: React.FC<{ className?: string; children: React.ReactNode }> = ({ className, children }) => (
+  <div className={`bg-white shadow-md rounded-lg ${className}`}>{children}</div>
+);
 
-interface CustomInputProps {
+const CustomInput: React.FC<{
   label?: string;
   type?: string;
   min?: number;
@@ -149,55 +196,7 @@ interface CustomInputProps {
   error?: string;
   className?: string;
   placeholder?: string;
-}
-
-interface CustomButtonProps {
-  variant?: 'primary' | 'secondary' | 'destructive' | 'danger';
-  size?: 'sm' | 'md';
-  onClick?: () => void;
-  disabled?: boolean;
-  className?: string;
-  children: React.ReactNode;
-}
-
-interface CustomModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  title: string;
-  children: React.ReactNode;
-}
-
-interface CustomSelectProps {
-  label?: string;
-  value: string;
-  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
-  options: Array<{ value: string; label: string }>;
-  error?: string;
-  disabled?: boolean;
-}
-
-interface PaginationProps {
-  totalPages: number;
-  currentPage: number;
-  setCurrentPage: (page: number) => void;
-  isRtl: boolean;
-}
-
-const ITEMS_PER_PAGE = 10;
-
-/**
- * مكون بطاقة مخصص
- * @param props - خصائص المكون
- */
-const CustomCard: React.FC<CustomCardProps> = ({ className, children }) => (
-  <div className={`bg-white shadow-md rounded-lg ${className}`}>{children}</div>
-);
-
-/**
- * مكون إدخال مخصص
- * @param props - خصائص المكون
- */
-const CustomInput: React.FC<CustomInputProps> = ({ label, type = 'text', min, max, value, onChange, error, className, placeholder }) => (
+}> = ({ label, type = 'text', min, max, value, onChange, error, className, placeholder }) => (
   <div className="flex flex-col">
     {label && <label className="text-sm font-medium text-gray-700 mb-1">{label}</label>}
     <input
@@ -213,18 +212,21 @@ const CustomInput: React.FC<CustomInputProps> = ({ label, type = 'text', min, ma
   </div>
 );
 
-/**
- * مكون زر مخصص
- * @param props - خصائص المكون
- */
-const CustomButton: React.FC<CustomButtonProps> = ({ variant = 'primary', size = 'md', onClick, disabled, className, children }) => {
+const CustomButton: React.FC<{
+  variant?: 'primary' | 'secondary' | 'destructive';
+  size?: 'sm' | 'md';
+  onClick?: () => void;
+  disabled?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}> = ({ variant = 'primary', size = 'md', onClick, disabled, className, children }) => {
   const baseClass = `px-4 py-2 rounded-lg transition-colors duration-200 text-sm font-medium ${
     size === 'sm' ? 'text-xs px-3 py-1' : ''
   }`;
   const variantClass =
     variant === 'secondary'
       ? 'bg-gray-100 hover:bg-gray-200 text-gray-800'
-      : variant === 'destructive' || variant === 'danger'
+      : variant === 'destructive'
       ? 'text-red-600 hover:text-red-800'
       : 'bg-amber-600 text-white hover:bg-amber-700';
   const disabledClass = disabled ? 'opacity-50 cursor-not-allowed' : '';
@@ -235,11 +237,12 @@ const CustomButton: React.FC<CustomButtonProps> = ({ variant = 'primary', size =
   );
 };
 
-/**
- * مكون نافذة منبثقة مخصصة
- * @param props - خصائص المكون
- */
-const CustomModal: React.FC<CustomModalProps> = ({ isOpen, onClose, title, children }) => {
+const CustomModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  title: string;
+  children: React.ReactNode;
+}> = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -256,11 +259,14 @@ const CustomModal: React.FC<CustomModalProps> = ({ isOpen, onClose, title, child
   );
 };
 
-/**
- * مكون قائمة اختيار مخصص
- * @param props - خصائص المكون
- */
-const CustomSelect: React.FC<CustomSelectProps> = ({ label, value, onChange, options, error, disabled }) => (
+const CustomSelect: React.FC<{
+  label?: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  options: Array<{ value: string; label: string }>;
+  error?: string;
+  disabled?: boolean;
+}> = ({ label, value, onChange, options, error, disabled }) => (
   <div className="flex flex-col">
     {label && <label className="text-sm font-medium text-gray-700 mb-1">{label}</label>}
     <select
@@ -281,34 +287,12 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ label, value, onChange, opt
   </div>
 );
 
-/**
- * مكون هيكل بطاقة المخزون
- * @param props - خصائص المكون
- */
-const InventoryCardSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.3 }}
-    className="p-4 mb-4 bg-white shadow-md rounded-lg border border-gray-200"
-  >
-    <div className="flex flex-col gap-3">
-      <div className={`flex items-center ${isRtl ? 'justify-between flex-row-reverse' : 'justify-between'}`}>
-        <div className="h-6 w-1/2 bg-gray-200 rounded animate-pulse" />
-        <div className="h-5 w-20 bg-gray-200 rounded-full animate-pulse" />
-      </div>
-      <div className="h-4 w-1/3 bg-gray-200 rounded animate-pulse" />
-      <div className="h-4 w-1/4 bg-gray-200 rounded animate-pulse" />
-      <div className="h-4 w-1/4 bg-gray-200 rounded animate-pulse" />
-    </div>
-  </motion.div>
-);
-
-/**
- * مكون التصفح
- * @param props - خصائص المكون
- */
-const Pagination: React.FC<PaginationProps> = ({ totalPages, currentPage, setCurrentPage, isRtl }) => (
+const Pagination: React.FC<{
+  totalPages: number;
+  currentPage: number;
+  setCurrentPage: (page: number) => void;
+  isRtl: boolean;
+}> = ({ totalPages, currentPage, setCurrentPage, isRtl }) => (
   totalPages > 1 && (
     <div className={`flex items-center justify-center gap-3 mt-6 ${isRtl ? 'flex-row-reverse' : ''}`}>
       <CustomButton
@@ -334,15 +318,19 @@ const Pagination: React.FC<PaginationProps> = ({ totalPages, currentPage, setCur
   )
 );
 
-/**
- * مكون إدارة مخزون الفرع
- */
-export const BranchInventory: React.FC = () => {
-  const { t, language } = useLanguage();
+const ITEMS_PER_PAGE = 10;
+
+const BranchInventory: React.FC = () => {
+  const [language, setLanguage] = useState<'ar' | 'en'>('ar');
   const isRtl = language === 'ar';
-  const { user } = useAuth();
-  const { socket } = useSocket();
-  const { addNotification } = useNotifications();
+  const t = (key: string, params?: Record<string, string>) => {
+    const text = translations[key]?.[language] || key;
+    return params ? Object.entries(params).reduce((acc, [k, v]) => acc.replace(`{${k}}`, v), text) : text;
+  };
+
+  // محاكاة بيانات المستخدم (يجب استبدالها بـ useAuth حقيقي)
+  const user = { _id: 'user123', branchId: 'branch123', role: 'admin', username: 'Admin User' };
+
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -359,29 +347,72 @@ export const BranchInventory: React.FC = () => {
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
 
-  // إعداد AbortController لإلغاء الطلبات
-  const abortController = useMemo(() => new AbortController(), []);
+  // إعداد WebSocket
+  const socket = useMemo(() => new WebSocket('wss://your-backend-api/socket'), []);
+  const [isConnected, setIsConnected] = useState(socket.readyState === WebSocket.OPEN);
 
   useEffect(() => {
-    return () => {
-      abortController.abort();
+    socket.onopen = () => {
+      setIsConnected(true);
+      if (user?.branchId) socket.send(JSON.stringify({ type: 'joinRoom', branchId: user.branchId }));
     };
-  }, [abortController]);
+    socket.onclose = () => setIsConnected(false);
+    socket.onerror = (err) => console.error('Socket error:', err);
+    socket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'inventoryUpdated' && data.branchId === user?.branchId) {
+        queryClient.invalidateQueries({ queryKey: ['inventory'] });
+        queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
+        toast.info(t('inventory.update_success'), { position: 'top-right', autoClose: 3000 });
+      }
+      if (data.type === 'returnStatusUpdated' && data.branchId === user?.branchId) {
+        queryClient.invalidateQueries({ queryKey: ['returns'] });
+        queryClient.invalidateQueries({ queryKey: ['inventory'] });
+        queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
+        toast.info(
+          t('notifications.return_status_updated', {
+            status: t(`returns.${data.status}`),
+            branchName: user?.branchId || t('branches.unknown'),
+          }),
+          { position: 'top-right', autoClose: 3000 }
+        );
+      }
+    };
+    return () => socket.close();
+  }, [socket, user?.branchId, queryClient, t]);
 
-  // استعلام جلب المخزون
-  const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError, refetch: refetchInventory } = useQuery<
-    InventoryItem[],
-    Error
-  >({
-    queryKey: ['inventory', user?.branchId, language],
+  // واجهات API
+  const inventoryAPI = {
+    getByBranch: (branchId: string) =>
+      axios.get(`/api/inventory?branchId=${branchId}`).then((res) => res.data.inventory),
+    getHistory: (params: { branchId: string }) =>
+      axios.get(`/api/inventory/history?branchId=${params.branchId}`).then((res) => res.data),
+    updateStock: (itemId: string, data: { minStockLevel: number; maxStockLevel: number; userId: string }) =>
+      axios.put(`/api/inventory/${itemId}`, { ...data }).then((res) => res.data),
+  };
+
+  const returnsAPI = {
+    getAll: (params: { branch: string; status?: string; page: number; limit: number }) =>
+      axios.get(`/api/returns`, { params }).then((res) => res.data),
+    getById: (returnId: string) => axios.get(`/api/returns/${returnId}`).then((res) => res.data),
+    createReturn: (data: {
+      branchId: string;
+      createdBy: string;
+      reason: string;
+      notes: string;
+      items: Array<{ product: string; quantity: number; reason: string }>;
+    }) => axios.post(`/api/returns`, data).then((res) => res.data),
+    updateReturnStatus: (returnId: string, data: { status: string; reviewNotes?: string; reviewedBy: string }) =>
+      axios.put(`/api/returns/${returnId}/status`, data).then((res) => res.data),
+  };
+
+  // استعلامات React Query
+  const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError } = useQuery<InventoryItem[], Error>({
+    queryKey: ['inventory', user?.branchId, isRtl],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
-      return inventoryAPI.getByBranch(user.branchId, { signal: abortController.signal });
-    },
-    enabled: !!user?.branchId,
-    select: (response) => {
-      const inventoryData = Array.isArray(response) ? response : response?.inventory || [];
-      return inventoryData.map((item: InventoryItem) => ({
+      const response = await inventoryAPI.getByBranch(user.branchId);
+      return response.map((item: InventoryItem) => ({
         ...item,
         product: item.product
           ? {
@@ -393,7 +424,6 @@ export const BranchInventory: React.FC = () => {
               unitEn: item.product.unitEn || item.product.unit || 'N/A',
               department: item.product.department
                 ? {
-                    _id: item.product.department._id || '',
                     name: item.product.department.name || t('departments.unknown'),
                     nameEn: item.product.department.nameEn || item.product.department.name || t('departments.unknown'),
                   }
@@ -408,45 +438,37 @@ export const BranchInventory: React.FC = () => {
             : 'normal',
       }));
     },
-    onError: (err) => {
-      toast.error(err.message || t('errors.fetch_inventory'), { position: 'top-right', autoClose: 3000 });
-    },
+    enabled: !!user?.branchId,
+    onError: (err) => toast.error(err.message || t('errors.fetch_inventory'), { position: 'top-right', autoClose: 3000 }),
   });
 
-  // استعلام جلب سجل المخزون
   const { data: historyData, isLoading: historyLoading, error: historyError } = useQuery<InventoryHistoryItem[], Error>({
-    queryKey: ['inventoryHistory', user?.branchId, language],
+    queryKey: ['inventoryHistory', user?.branchId, isRtl],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
-      return inventoryAPI.getHistory({ branchId: user.branchId }, { signal: abortController.signal });
+      const response = await inventoryAPI.getHistory({ branchId: user.branchId });
+      return response.history.map((entry: InventoryHistoryItem) => ({
+        ...entry,
+        product: entry.product
+          ? {
+              name: entry.product.name || t('products.unknown'),
+              nameEn: entry.product.nameEn || entry.product.name || t('products.unknown'),
+            }
+          : null,
+      }));
     },
     enabled: activeTab === 'history' && !!user?.branchId,
-    select: (response) => (response?.history || []).map((entry: InventoryHistoryItem) => ({
-      ...entry,
-      product: entry.product
-        ? {
-            name: entry.product.name || t('products.unknown'),
-            nameEn: entry.product.nameEn || entry.product.name || t('products.unknown'),
-          }
-        : null,
-    })),
-    onError: (err) => {
-      toast.error(err.message || t('errors.fetch_history'), { position: 'top-right', autoClose: 3000 });
-    },
+    onError: (err) => toast.error(err.message || t('errors.fetch_history'), { position: 'top-right', autoClose: 3000 }),
   });
 
-  // استعلام جلب طلبات الإرجاع
   const { data: returnsData, isLoading: returnsLoading, error: returnsError } = useQuery<
     { returns: Return[]; total: number },
     Error
   >({
-    queryKey: ['returns', user?.branchId, filterStatus, currentPage, language],
+    queryKey: ['returns', user?.branchId, filterStatus, currentPage, isRtl],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
-      return returnsAPI.getAll(
-        { branch: user.branchId, status: filterStatus, page: currentPage, limit: ITEMS_PER_PAGE },
-        { signal: abortController.signal }
-      );
+      return returnsAPI.getAll({ branch: user.branchId, status: filterStatus, page: currentPage, limit: ITEMS_PER_PAGE });
     },
     enabled: activeTab === 'returns' && !!user?.branchId,
     select: (response) => ({
@@ -474,80 +496,29 @@ export const BranchInventory: React.FC = () => {
       })),
       total: response.total,
     }),
-    onError: (err) => {
-      toast.error(err.message || t('errors.fetch_returns'), { position: 'top-right', autoClose: 3000 });
-    },
+    onError: (err) => toast.error(err.message || t('errors.fetch_returns'), { position: 'top-right', autoClose: 3000 }),
   });
 
-  // تحديث العناصر المتاحة بناءً على بيانات المخزون
+  // تحديث العناصر المتاحة
   useEffect(() => {
     if (inventoryData) {
-      const items: AvailableItem[] = inventoryData
-        .filter((item) => item.currentStock > 0 && item.product)
-        .map((item) => ({
-          productId: item.product!._id,
-          productName: isRtl ? item.product!.name : item.product!.nameEn || item.product!.name,
-          available: item.currentStock,
-          unit: isRtl ? item.product!.unit || t('products.unit_unknown') : item.product!.unitEn || item.product!.unit || 'N/A',
-          departmentName: isRtl
-            ? item.product!.department?.name || t('departments.unknown')
-            : item.product!.department?.nameEn || item.product!.department?.name || t('departments.unknown'),
-          stock: item.currentStock,
-        }));
-      setAvailableItems(items);
+      setAvailableItems(
+        inventoryData
+          .filter((item) => item.currentStock > 0 && item.product)
+          .map((item) => ({
+            productId: item.product!._id,
+            productName: isRtl ? item.product!.name : item.product!.nameEn || item.product!.name,
+            available: item.currentStock,
+            unit: isRtl ? item.product!.unit : item.product!.unitEn,
+            departmentName: isRtl
+              ? item.product!.department?.name || t('departments.unknown')
+              : item.product!.department?.nameEn || item.product!.department?.name || t('departments.unknown'),
+            stock: item.currentStock,
+          }))
+      );
     }
   }, [inventoryData, isRtl, t]);
 
-  // إعداد مستمعات Socket
-  useEffect(() => {
-    if (!socket || !user?.branchId) return;
-
-    const handleConnect = () => console.log(`[${new Date().toISOString()}] Socket connected`);
-    const handleConnectError = (err: Error) => console.error(`[${new Date().toISOString()}] Socket connect error:`, err);
-    const handleInventoryUpdated = ({ branchId, minStockLevel, maxStockLevel }: { branchId: string; minStockLevel?: number; maxStockLevel?: number }) => {
-      if (branchId === user.branchId) {
-        queryClient.invalidateQueries({ queryKey: ['inventory'] });
-        queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
-        if (minStockLevel !== undefined || maxStockLevel !== undefined) {
-          toast.info(t('inventory.update_success'), { position: 'top-right', autoClose: 3000 });
-        }
-      }
-    };
-    const handleReturnStatusUpdated = ({ branchId, returnId, status }: { branchId: string; returnId: string; status: string }) => {
-      if (branchId === user.branchId) {
-        queryClient.invalidateQueries({ queryKey: ['inventory'] });
-        queryClient.invalidateQueries({ queryKey: ['inventoryHistory'] });
-        queryClient.invalidateQueries({ queryKey: ['returns'] });
-        addNotification({
-          _id: crypto.randomUUID(),
-          type: 'info',
-          message: t('notifications.return_status_updated', {
-            status: t(`returns.${status}`),
-            branchName: user.branchId ? t('branches.current') : t('branches.unknown'),
-          }),
-          data: { returnId, eventId: crypto.randomUUID() },
-          read: false,
-          createdAt: new Date().toISOString(),
-          sound: '/sounds/notification.mp3',
-          vibrate: [200, 100, 200],
-        });
-      }
-    };
-
-    socket.on('connect', handleConnect);
-    socket.on('connect_error', handleConnectError);
-    socket.on('inventoryUpdated', handleInventoryUpdated);
-    socket.on('returnStatusUpdated', handleReturnStatusUpdated);
-
-    return () => {
-      socket.off('connect', handleConnect);
-      socket.off('connect_error', handleConnectError);
-      socket.off('inventoryUpdated', handleInventoryUpdated);
-      socket.off('returnStatusUpdated', handleReturnStatusUpdated);
-    };
-  }, [socket, user, queryClient, addNotification, t]);
-
-  // البحث المؤخر
   const debouncedSearch = useCallback(
     debounce((value: string) => {
       setSearchQuery(value.trim());
@@ -556,43 +527,30 @@ export const BranchInventory: React.FC = () => {
     []
   );
 
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    debouncedSearch(e.target.value);
-  };
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => debouncedSearch(e.target.value);
 
-  // خيارات الحالة
-  const statusOptions = useMemo(
-    () => [
-      { value: '', label: t('common.all_statuses') },
-      { value: 'low', label: t('inventory.low_stock') },
-      { value: 'normal', label: t('inventory.normal') },
-      { value: 'full', label: t('inventory.full') },
-    ],
-    [t]
-  );
+  const statusOptions = [
+    { value: '', label: t('common.all_statuses') },
+    { value: 'low', label: t('inventory.low_stock') },
+    { value: 'normal', label: t('inventory.normal') },
+    { value: 'full', label: t('inventory.full') },
+  ];
 
-  const returnStatusOptions = useMemo(
-    () => [
-      { value: '', label: t('common.all_statuses') },
-      { value: 'pending_approval', label: t('returns.pending_approval') },
-      { value: 'approved', label: t('returns.approved') },
-      { value: 'rejected', label: t('returns.rejected') },
-    ],
-    [t]
-  );
+  const returnStatusOptions = [
+    { value: '', label: t('common.all_statuses') },
+    { value: 'pending_approval', label: t('returns.pending_approval') },
+    { value: 'approved', label: t('returns.approved') },
+    { value: 'rejected', label: t('returns.rejected') },
+  ];
 
-  const reasonOptions = useMemo(
-    () => [
-      { value: '', label: t('returns.select_reason') },
-      { value: 'تالف', label: t('returns.damaged') },
-      { value: 'منتج خاطئ', label: t('returns.wrong_item') },
-      { value: 'كمية زائدة', label: t('returns.excess_quantity') },
-      { value: 'أخرى', label: t('returns.other') },
-    ],
-    [t]
-  );
+  const reasonOptions = [
+    { value: '', label: t('returns.select_reason') },
+    { value: 'تالف', label: t('returns.damaged') },
+    { value: 'منتج خاطئ', label: t('returns.wrong_item') },
+    { value: 'كمية زائدة', label: t('returns.excess_quantity') },
+    { value: 'أخرى', label: t('returns.other') },
+  ];
 
-  // تصفية المخزون
   const filteredInventory = useMemo(
     () =>
       (inventoryData || []).filter(
@@ -601,9 +559,7 @@ export const BranchInventory: React.FC = () => {
           (!filterStatus || item.status === filterStatus) &&
           (item.product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             item.product.nameEn?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.product.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.product.department?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.product.department?.nameEn?.toLowerCase().includes(searchQuery.toLowerCase()))
+            item.product.code?.toLowerCase().includes(searchQuery.toLowerCase()))
       ),
     [inventoryData, searchQuery, filterStatus]
   );
@@ -615,7 +571,6 @@ export const BranchInventory: React.FC = () => {
 
   const totalInventoryPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
 
-  // تصفية سجل المخزون
   const filteredHistory = useMemo(
     () =>
       (historyData || []).filter(
@@ -637,7 +592,6 @@ export const BranchInventory: React.FC = () => {
 
   const totalReturnsPages = Math.ceil((returnsData?.total || 0) / ITEMS_PER_PAGE);
 
-  // فتح نافذة الإرجاع
   const handleOpenReturnModal = useCallback((item?: InventoryItem) => {
     setSelectedItem(item || null);
     dispatchReturnForm({ type: 'RESET' });
@@ -651,7 +605,6 @@ export const BranchInventory: React.FC = () => {
     setIsReturnModalOpen(true);
   }, []);
 
-  // فتح نافذة التعديل
   const handleOpenEditModal = useCallback((item: InventoryItem) => {
     setSelectedItem(item);
     setEditForm({ minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
@@ -659,23 +612,16 @@ export const BranchInventory: React.FC = () => {
     setIsEditModalOpen(true);
   }, []);
 
-  // فتح نافذة تفاصيل الإرجاع
-  const handleOpenReturnDetailsModal = useCallback(
-    async (returnId: string) => {
-      try {
-        const response = await returnsAPI.getById(returnId, { signal: abortController.signal });
-        setSelectedReturn(response.returnRequest);
-        setIsReturnDetailsModalOpen(true);
-      } catch (error: any) {
-        if (error.name !== 'AbortError') {
-          toast.error(error.message || t('errors.fetch_return'), { position: 'top-right', autoClose: 3000 });
-        }
-      }
-    },
-    [t, abortController]
-  );
+  const handleOpenReturnDetailsModal = useCallback(async (returnId: string) => {
+    try {
+      const response = await returnsAPI.getById(returnId);
+      setSelectedReturn(response.returnRequest);
+      setIsReturnDetailsModalOpen(true);
+    } catch (error: any) {
+      toast.error(error.message || t('errors.fetch_returns'), { position: 'top-right', autoClose: 3000 });
+    }
+  }, [t]);
 
-  // إضافة عنصر إلى نموذج الإرجاع
   const addItemToForm = useCallback(() => {
     dispatchReturnForm({
       type: 'ADD_ITEM',
@@ -683,7 +629,6 @@ export const BranchInventory: React.FC = () => {
     });
   }, []);
 
-  // تحديث عنصر في نموذج الإرجاع
   const updateItemInForm = useCallback(
     (index: number, field: keyof ReturnItem, value: string | number) => {
       dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
@@ -700,12 +645,10 @@ export const BranchInventory: React.FC = () => {
     [availableItems]
   );
 
-  // إزالة عنصر من نموذج الإرجاع
   const removeItemFromForm = useCallback((index: number) => {
     dispatchReturnForm({ type: 'REMOVE_ITEM', payload: index });
   }, []);
 
-  // التحقق من صحة نموذج الإرجاع
   const validateReturnForm = useCallback(() => {
     const errors: Record<string, string> = {};
     if (!returnForm.reason) errors.reason = t('errors.required', { field: t('returns.reason') });
@@ -721,7 +664,6 @@ export const BranchInventory: React.FC = () => {
     return Object.keys(errors).length === 0;
   }, [returnForm, t]);
 
-  // التحقق من صحة نموذج التعديل
   const validateEditForm = useCallback(() => {
     const errors: Record<string, string> = {};
     if (editForm.minStockLevel < 0) errors.minStockLevel = t('errors.non_negative', { field: t('inventory.min_stock') });
@@ -731,25 +673,21 @@ export const BranchInventory: React.FC = () => {
     return Object.keys(errors).length === 0;
   }, [editForm, t]);
 
-  // Mutation لإنشاء طلب إرجاع
-  const createReturnMutation = useMutation<void, Error, void>({
+  const createReturnMutation = useMutation<void, Error>({
     mutationFn: async () => {
       if (!validateReturnForm()) throw new Error(t('errors.invalid_form'));
-      if (!user?.branchId) throw new Error(t('errors.no_branch'));
-      await returnsAPI.createReturn(
-        {
-          branchId: user.branchId,
-          reason: returnForm.reason,
-          notes: returnForm.notes,
-          items: returnForm.items.map((item) => ({
-            product: item.productId,
-            quantity: item.quantity,
-            reason: item.reason,
-            itemId: item.itemId,
-          })),
-        },
-        { signal: abortController.signal }
-      );
+      if (!user?.branchId || !user?._id) throw new Error(t('errors.no_branch'));
+      await returnsAPI.createReturn({
+        branchId: user.branchId,
+        createdBy: user._id,
+        reason: returnForm.reason,
+        notes: returnForm.notes,
+        items: returnForm.items.map((item) => ({
+          product: item.productId,
+          quantity: item.quantity,
+          reason: item.reason,
+        })),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -760,37 +698,32 @@ export const BranchInventory: React.FC = () => {
       setReturnErrors({});
       setSelectedItem(null);
       toast.success(t('returns.create_success'), { position: 'top-right', autoClose: 3000 });
-      socket?.emit('returnCreated', {
-        branchId: user?.branchId,
-        returnId: crypto.randomUUID(),
-        status: 'pending_approval',
-        eventId: crypto.randomUUID(),
-      });
+      if (isConnected) {
+        socket.send(
+          JSON.stringify({
+            type: 'returnCreated',
+            branchId: user?.branchId,
+            returnId: crypto.randomUUID(),
+            status: 'pending_approval',
+          })
+        );
+      }
     },
     onError: (err) => {
-      if (err.name !== 'AbortError') {
-        console.error(`[${new Date().toISOString()}] Create return error:`, err);
-        toast.error(err.message || t('errors.create_return'), { position: 'top-right', autoClose: 3000 });
-        if (err.message.includes('Invalid')) {
-          setReturnErrors({ form: err.message });
-        }
-      }
+      toast.error(err.message || t('errors.create_return'), { position: 'top-right', autoClose: 3000 });
+      if (err.message.includes('Invalid')) setReturnErrors({ form: err.message });
     },
   });
 
-  // Mutation لتحديث المخزون
-  const updateInventoryMutation = useMutation<void, Error, void>({
+  const updateInventoryMutation = useMutation<void, Error>({
     mutationFn: async () => {
       if (!validateEditForm()) throw new Error(t('errors.invalid_form'));
-      if (!selectedItem) throw new Error(t('errors.no_item_selected'));
-      await inventoryAPI.updateStock(
-        selectedItem._id,
-        {
-          minStockLevel: editForm.minStockLevel,
-          maxStockLevel: editForm.maxStockLevel,
-        },
-        { signal: abortController.signal }
-      );
+      if (!selectedItem || !user?._id) throw new Error(t('errors.no_item_selected'));
+      await inventoryAPI.updateStock(selectedItem._id, {
+        minStockLevel: editForm.minStockLevel,
+        maxStockLevel: editForm.maxStockLevel,
+        userId: user._id,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -799,29 +732,26 @@ export const BranchInventory: React.FC = () => {
       setEditErrors({});
       setSelectedItem(null);
       toast.success(t('inventory.update_success'), { position: 'top-right', autoClose: 3000 });
-      socket?.emit('inventoryUpdated', {
-        branchId: user?.branchId,
-        minStockLevel: editForm.minStockLevel,
-        maxStockLevel: editForm.maxStockLevel,
-        eventId: crypto.randomUUID(),
-      });
+      if (isConnected) {
+        socket.send(
+          JSON.stringify({
+            type: 'inventoryUpdated',
+            branchId: user?.branchId,
+            minStockLevel: editForm.minStockLevel,
+            maxStockLevel: editForm.maxStockLevel,
+          })
+        );
+      }
     },
     onError: (err) => {
-      if (err.name !== 'AbortError') {
-        console.error(`[${new Date().toISOString()}] Update inventory error:`, err);
-        toast.error(err.message || t('errors.update_inventory'), { position: 'top-right', autoClose: 3000 });
-      }
+      toast.error(err.message || t('errors.update_inventory'), { position: 'top-right', autoClose: 3000 });
     },
   });
 
-  // Mutation لتحديث حالة الإرجاع
-  const updateReturnStatusMutation = useMutation<
-    void,
-    Error,
-    { returnId: string; status: 'approved' | 'rejected'; reviewNotes?: string }
-  >({
+  const updateReturnStatusMutation = useMutation<void, Error, { returnId: string; status: 'approved' | 'rejected'; reviewNotes?: string }>({
     mutationFn: async ({ returnId, status, reviewNotes }) => {
-      await returnsAPI.updateReturnStatus(returnId, { status, reviewNotes }, { signal: abortController.signal });
+      if (!user?._id) throw new Error(t('errors.no_user'));
+      await returnsAPI.updateReturnStatus(returnId, { status, reviewNotes, reviewedBy: user._id });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['returns'] });
@@ -832,20 +762,14 @@ export const BranchInventory: React.FC = () => {
       toast.success(t('returns.update_success'), { position: 'top-right', autoClose: 3000 });
     },
     onError: (err) => {
-      if (err.name !== 'AbortError') {
-        console.error(`[${new Date().toISOString()}] Update return status error:`, err);
-        toast.error(err.message || t('errors.update_return'), { position: 'top-right', autoClose: 3000 });
-      }
+      toast.error(err.message || t('errors.update_return'), { position: 'top-right', autoClose: 3000 });
     },
   });
 
   const errorMessage = inventoryError?.message || historyError?.message || returnsError?.message || '';
 
   return (
-    <div
-      className="container mx-auto px-4 py-6 min-h-screen bg-gradient-to-br from-amber-50 to-teal-50"
-      dir={isRtl ? 'rtl' : 'ltr'}
-    >
+    <div className="container mx-auto px-4 py-6 min-h-screen bg-gradient-to-br from-amber-50 to-teal-50" dir={isRtl ? 'rtl' : 'ltr'}>
       <div className="mb-6">
         <div className="flex justify-between items-center">
           <div>
@@ -870,7 +794,7 @@ export const BranchInventory: React.FC = () => {
           <AlertCircle className="w-5 h-5 text-red-600" />
           <span className="text-red-600">{errorMessage}</span>
           <CustomButton
-            onClick={() => refetchInventory()}
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['inventory'] })}
             className="ml-4 bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
@@ -900,7 +824,7 @@ export const BranchInventory: React.FC = () => {
             activeTab === 'history' ? 'bg-amber-600 text-white' : 'text-gray-700'
           }`}
         >
-          <HistoryIcon className="inline w-4 h-4 mr-2" />
+          <History className="inline w-4 h-4 mr-2" />
           {t('history.title')}
         </CustomButton>
         <CustomButton
@@ -953,7 +877,17 @@ export const BranchInventory: React.FC = () => {
             {inventoryLoading ? (
               <div className="space-y-4">
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <InventoryCardSkeleton key={i} isRtl={isRtl} />
+                  <div key={i} className="p-4 mb-4 bg-white shadow-md rounded-lg border border-gray-200">
+                    <div className="flex flex-col gap-3">
+                      <div className={`flex items-center ${isRtl ? 'justify-between flex-row-reverse' : 'justify-between'}`}>
+                        <div className="h-6 w-1/2 bg-gray-200 rounded animate-pulse" />
+                        <div className="h-5 w-20 bg-gray-200 rounded-full animate-pulse" />
+                      </div>
+                      <div className="h-4 w-1/3 bg-gray-200 rounded animate-pulse" />
+                      <div className="h-4 w-1/4 bg-gray-200 rounded animate-pulse" />
+                      <div className="h-4 w-1/4 bg-gray-200 rounded animate-pulse" />
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : paginatedInventory.length === 0 ? (
@@ -1036,7 +970,7 @@ export const BranchInventory: React.FC = () => {
               </div>
             ) : paginatedHistory.length === 0 ? (
               <CustomCard className="p-8 text-center bg-white rounded-xl shadow-md">
-                <HistoryIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <History className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600">{t('history.no_history')}</p>
               </CustomCard>
             ) : (
@@ -1055,7 +989,7 @@ export const BranchInventory: React.FC = () => {
                     {paginatedHistory.map((entry) =>
                       entry.product ? (
                         <tr key={entry._id} className="border-b">
-                          <td className="p-2">{new Date(entry.createdAt).toLocaleString(language)}</td>
+                          <td className="p-2">{new Date(entry.createdAt).toLocaleString(isRtl ? 'ar' : 'en')}</td>
                           <td className="p-2">{t(`history.${entry.action}`)}</td>
                           <td className="p-2">{entry.quantity}</td>
                           <td className="p-2">{entry.reference}</td>
@@ -1101,10 +1035,10 @@ export const BranchInventory: React.FC = () => {
                         <div className={`flex items-start justify-between gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
                           <div className="flex-1">
                             <h3 className="font-semibold text-gray-900">{ret.returnNumber}</h3>
-                            <p className="text-sm text-gray-600">{t('returns.date')}: {new Date(ret.createdAt).toLocaleString(language)}</p>
+                            <p className="text-sm text-gray-600">{t('returns.date')}: {new Date(ret.createdAt).toLocaleString(isRtl ? 'ar' : 'en')}</p>
                             <p className="text-sm text-gray-600">{t('returns.status')}: {t(`returns.${ret.status}`)}</p>
                             <p className="text-sm text-gray-600">{t('returns.reason')}: {t(`returns.${ret.reason}`)}</p>
-                            <p className="text-sm text-gray-600">{t('returns.notes')}: {ret.notes || t('none')}</p>
+                            <p className="text-sm text-gray-600">{t('returns.notes')}: {ret.notes || 'لا يوجد'}</p>
                             <p className="text-sm text-gray-600">{t('returns.created_by')}: {ret.createdByName}</p>
                             {ret.reviewedByName && (
                               <p className="text-sm text-gray-600">{t('returns.reviewed_by')}: {ret.reviewedByName}</p>
@@ -1203,7 +1137,7 @@ export const BranchInventory: React.FC = () => {
                   error={returnErrors[`item_${index}_reason`]}
                 />
                 <CustomButton
-                  variant="danger"
+                  variant="destructive"
                   size="sm"
                   onClick={() => removeItemFromForm(index)}
                   disabled={!!selectedItem}
@@ -1298,7 +1232,7 @@ export const BranchInventory: React.FC = () => {
               disabled={updateInventoryMutation.isPending}
               className="disabled:opacity-50"
             >
-              {updateInventoryMutation.isPending ? t('common.saving') : t('common.save')}
+              {updateInventoryMutation.isPending ? t('common.saving') : t('common.submit')}
             </CustomButton>
           </div>
         </div>
@@ -1335,7 +1269,7 @@ export const BranchInventory: React.FC = () => {
               </p>
             )}
             <p className="text-sm text-gray-600">
-              <strong>{t('returns.notes')}:</strong> {selectedReturn.notes || t('none')}
+              <strong>{t('returns.notes')}:</strong> {selectedReturn.notes || 'لا يوجد'}
             </p>
             <div>
               <p className="text-sm font-medium text-gray-700">{t('returns.items')}:</p>
@@ -1354,7 +1288,7 @@ export const BranchInventory: React.FC = () => {
                     updateReturnStatusMutation.mutate({
                       returnId: selectedReturn._id,
                       status: 'approved',
-                      reviewNotes: t('returns.approved_by_admin'),
+                      reviewNotes: t('returns.approved'),
                     })
                   }
                   className="bg-green-500 text-white hover:bg-green-600"
@@ -1366,7 +1300,7 @@ export const BranchInventory: React.FC = () => {
                     updateReturnStatusMutation.mutate({
                       returnId: selectedReturn._id,
                       status: 'rejected',
-                      reviewNotes: t('returns.rejected_by_admin'),
+                      reviewNotes: t('returns.rejected'),
                     })
                   }
                   className="bg-red-500 text-white hover:bg-red-600"
@@ -1383,7 +1317,7 @@ export const BranchInventory: React.FC = () => {
                   setSelectedReturn(null);
                 }}
               >
-                {t('common.close')}
+                {t('common.cancel')}
               </CustomButton>
             </div>
           </div>
