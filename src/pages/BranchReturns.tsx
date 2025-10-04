@@ -1,9 +1,8 @@
-// src/pages/BranchReturns.tsx
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { returnsAPI, ordersAPI, inventoryAPI } from '../services/api';
+import { returnsAPI, inventoryAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Input } from '../components/UI/Input';
@@ -36,7 +35,6 @@ const BranchReturns = () => {
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     orderId: '',
-    branchId: user?.branchId || '',
     reason: '',
     notes: '',
     items: [],
@@ -115,19 +113,19 @@ const BranchReturns = () => {
   );
 
   // Query for returns with language in key to refetch on language change
-  const { data: returnsData, isLoading, error } = useQuery({
+  const { data: returnsData, isLoading: returnsLoading, error: returnsError } = useQuery({
     queryKey: ['returns', filterStatus, currentPage, user?.branchId, language],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch_associated'));
       const query = { status: filterStatus, branch: user.branchId, page: currentPage, limit: RETURNS_PER_PAGE, lang: language };
-      const { returns: returnsData, total } = await returnsAPI.getAll(query);
-      if (!Array.isArray(returnsData)) throw new Error('Invalid returns data format');
+      const { returns: returnsList, total } = await returnsAPI.getAll(query);
+      if (!Array.isArray(returnsList)) throw new Error('Invalid returns data format');
       return {
-        returns: returnsData.map((ret) => ({
-          id: ret._id || 'unknown',
+        returns: returnsList.map((ret) => ({
+          _id: ret._id || 'unknown',
           returnNumber: ret.returnNumber || t('returns.unknown'),
           order: {
-            id: ret.order?._id || 'unknown',
+            _id: ret.order?._id || 'unknown',
             orderNumber: ret.order?.orderNumber || t('orders.unknown'),
             totalAmount: ret.order?.totalAmount || 0,
             createdAt: ret.order?.createdAt || new Date().toISOString(),
@@ -135,33 +133,30 @@ const BranchReturns = () => {
           items: Array.isArray(ret.items)
             ? ret.items.map((item) => ({
                 itemId: item.itemId || item._id || 'unknown',
-                productId: item.product?._id || 'unknown',
-                productName: isRtl ? item.product?.name : item.product?.nameEn || t('products.unknown'),
+                product: {
+                  _id: item.product?._id || 'unknown',
+                  name: isRtl ? item.product?.name : item.product?.nameEn || t('products.unknown'),
+                },
                 quantity: item.quantity || 0,
-                price: item.product?.price || 0,
                 reason: isRtl ? item.reason : item.reasonEn || item.reason || 'unknown',
-                unit: isRtl ? item.product?.unit : item.product?.unitEn || 'N/A',
-                departmentName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || 'Unknown',
               }))
             : [],
           status: ret.status || 'pending_approval',
-          date: formatDate(ret.createdAt || new Date().toISOString(), language),
           createdAt: ret.createdAt || new Date().toISOString(),
           notes: isRtl ? ret.notes : ret.notesEn || ret.notes || '',
           reviewNotes: isRtl ? ret.reviewNotes : ret.reviewNotesEn || ret.reviewNotes || '',
           branch: { _id: ret.branch?._id || 'unknown', name: isRtl ? ret.branch?.name : ret.branch?.nameEn || t('branches.unknown') },
-          department: ret.order?.department || { _id: 'unknown', name: t('departments.unknown') },
         })),
         total,
       };
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes cache to reduce re-fetches on language change
+    staleTime: 5 * 60 * 1000,
     onError: (err) => {
       toast.error(err.message || t('errors.fetch_returns'), toastOptions);
     },
   });
 
-  // Inventory query with language in key
+  // Inventory query for returns without order
   const { data: inventoryData } = useQuery({
     queryKey: ['inventory', user?.branchId, language],
     queryFn: async () => {
@@ -170,120 +165,14 @@ const BranchReturns = () => {
       return response.map((item) => ({
         productId: item.product._id,
         productName: isRtl ? item.product.name : item.product.nameEn,
-        currentStock: item.currentStock,
+        available: item.currentStock,
         unit: isRtl ? item.product.unit : item.product.unitEn,
+        departmentName: isRtl ? item.product.department.name : item.product.department.nameEn,
+        stock: item.currentStock,
       }));
     },
     enabled: !!user?.branchId,
     staleTime: 5 * 60 * 1000,
-  });
-
-  // Delivered orders query
-  const { data: deliveredOrders } = useQuery({
-    queryKey: ['deliveredOrders', user?.branchId, language],
-    queryFn: async () => {
-      if (!user?.branchId) return [];
-      const { orders } = await ordersAPI.getAll({ branch: user.branchId, status: 'delivered' });
-      return orders || [];
-    },
-    enabled: !!user?.branchId,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  // Fetch selected order details or inventory if no order
-  useQuery({
-    queryKey: ['selectedOrderOrInventory', formData.orderId, language],
-    queryFn: async () => {
-      if (formData.orderId) {
-        const order = await ordersAPI.getById(formData.orderId);
-        const items = order.items.map((i: any) => {
-          const inv = inventoryData?.find((inv: any) => inv.productId === i.product._id) || { currentStock: 0 };
-          return {
-            itemId: i._id,
-            productId: i.product._id,
-            productName: isRtl ? i.product.name : i.product.nameEn || i.product.name,
-            available: i.quantity - (i.returnedQuantity || 0),
-            unit: isRtl ? i.product.unit : i.product.unitEn || i.product.unit,
-            departmentName: isRtl ? i.product.department.name : i.product.department.nameEn || i.product.department.name,
-            stock: inv.currentStock,
-          };
-        });
-        setAvailableItems(items);
-        return order;
-      } else {
-        const items = inventoryData?.map((inv: any) => ({
-          itemId: '',
-          productId: inv.productId,
-          productName: inv.productName,
-          available: inv.currentStock,
-          unit: inv.unit,
-          departmentName: '',
-          stock: inv.currentStock,
-        })) || [];
-        setAvailableItems(items);
-        return null;
-      }
-    },
-    enabled: !!formData.branchId,
-  });
-
-  // Form validation function
-  const validateFormData = useCallback(() => {
-    const errors: any = {};
-    if (!formData.reason.trim()) errors.reason = t('errors.required', { field: t('returns.reason') });
-    if (formData.items.length === 0) errors.items = t('errors.required', { field: t('returns.items') });
-    formData.items.forEach((item: any, index) => {
-      if (!item.productId) errors[`item_${index}_productId`] = t('errors.required', { field: t('returns.product') });
-      if (!item.reason.trim()) errors[`item_${index}_reason`] = t('errors.required', { field: t('returns.reason') });
-      const maxQty = item.maxQuantity || 0;
-      if (item.quantity < 1 || item.quantity > maxQty || isNaN(item.quantity)) {
-        errors[`item_${index}_quantity`] = t('errors.invalid_quantity_max', { max: maxQty });
-      }
-    });
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  }, [formData, t]);
-
-  const createReturnMutation = useMutation({
-    mutationFn: (data: any) => {
-      if (!validateFormData()) {
-        throw new Error(t('errors.invalid_form'));
-      }
-      // Map to backend format
-      const payload = {
-        orderId: data.orderId || null,
-        branchId: data.branchId,
-        reason: data.reason,
-        notes: data.notes,
-        items: data.items.map((item: any) => ({
-          itemId: item.itemId || null,
-          product: item.productId,
-          quantity: item.quantity,
-          reason: item.reason,
-        })),
-      };
-      return returnsAPI.createReturn(payload);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['returns']);
-      setIsCreateModalOpen(false);
-      setFormData({ orderId: '', branchId: user?.branchId || '', reason: '', notes: '', items: [] });
-      setFormErrors({});
-      setAvailableItems([]);
-      toast.success(t('returns.create_success'), toastOptions);
-    },
-    onError: (err: any) => {
-      const errorMessage = err.message || t('errors.create_return');
-      toast.error(errorMessage, toastOptions);
-      // Parse backend validation errors
-      if (err.response?.data?.errors) {
-        const backendErrors = err.response.data.errors.reduce((acc: any, error: any) => {
-          acc[error.path] = error.msg;
-          return acc;
-        }, {});
-        setFormErrors(backendErrors);
-      }
-    },
   });
 
   // Socket events
@@ -351,7 +240,7 @@ const BranchReturns = () => {
   const addItemToForm = useCallback(() => {
     setFormData((prev) => ({
       ...prev,
-      items: [...prev.items, { productId: '', itemId: '', quantity: 1, reason: '', maxQuantity: 0 }],
+      items: [...prev.items, { productId: '', quantity: 1, reason: '', maxQuantity: 0 }],
     }));
   }, []);
 
@@ -362,8 +251,7 @@ const BranchReturns = () => {
       if (field === 'productId') {
         const sel = availableItems.find((a: any) => a.productId === value);
         if (sel) {
-          newItems[index].itemId = sel.itemId;
-          newItems[index].maxQuantity = Math.min(sel.available, sel.stock);
+          newItems[index].maxQuantity = sel.stock;
         }
       }
       return { ...prev, items: newItems };
@@ -400,8 +288,6 @@ const BranchReturns = () => {
   const exportToPDF = useCallback(async () => {
     try {
       const doc = new jsPDF({ orientation: 'landscape' });
-      const fontName = 'Amiri';
-      // Simplified font loading for demo - in production, use proper font loading
       doc.setFont('helvetica'); // Fallback
       const headers = [
         t('returns.return_number'),
@@ -489,7 +375,7 @@ const BranchReturns = () => {
             <div className="flex flex-col gap-2">
               {ret.items.map((item: any, index: number) => (
                 <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100">
-                  <p className="text-base font-medium text-gray-900">{item.productName}</p>
+                  <p className="text-base font-medium text-gray-900">{item.product.name}</p>
                   <p className="text-sm text-gray-600">{t('returns.quantity', { quantity: item.quantity })}</p>
                   <p className="text-sm text-gray-600">{t('returns.unit', { unit: item.unit })}</p>
                   <p className="text-sm text-gray-600">{t('returns.department', { department: item.departmentName })}</p>
@@ -568,7 +454,7 @@ const BranchReturns = () => {
       dir={isRtl ? 'rtl' : 'ltr'}
     >
       <AnimatePresence>
-        {isLoading ? (
+        {returnsLoading ? (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -577,7 +463,7 @@ const BranchReturns = () => {
           >
             <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-amber-600"></div>
           </motion.div>
-        ) : error ? (
+        ) : returnsError ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -587,7 +473,7 @@ const BranchReturns = () => {
             <Card className="p-6 max-w-md text-center bg-red-50 shadow-lg rounded-lg border border-red-200">
               <div className={`flex items-center justify-center gap-3 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
                 <AlertCircle className="w-8 h-8 text-red-600" />
-                <p className="text-lg font-semibold text-red-600">{error.message}</p>
+                <p className="text-lg font-semibold text-red-600">{returnsError.message}</p>
               </div>
               <Button
                 variant="primary"
@@ -696,7 +582,7 @@ const BranchReturns = () => {
         isOpen={isCreateModalOpen}
         onClose={() => {
           setIsCreateModalOpen(false);
-          setFormData({ orderId: '', branchId: user?.branchId || '', reason: '', notes: '', items: [] });
+          setFormData({ orderId: '', reason: '', notes: '', items: [] });
           setFormErrors({});
           setAvailableItems([]);
         }}
@@ -823,7 +709,7 @@ const BranchReturns = () => {
               variant="secondary"
               onClick={() => {
                 setIsCreateModalOpen(false);
-                setFormData({ orderId: '', branchId: user?.branchId || '', reason: '', notes: '', items: [] });
+                setFormData({ orderId: '', reason: '', notes: '', items: [] });
                 setFormErrors({});
                 setAvailableItems([]);
               }}
@@ -884,14 +770,9 @@ const BranchReturns = () => {
               <p className="text-sm font-medium text-gray-700 mb-2">{t('returns.items')}</p>
               {selectedReturn.items.map((item: any, index: number) => (
                 <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100 mb-2">
-                  <p className="text-base font-medium text-gray-900">{item.productName}</p>
+                  <p className="text-base font-medium text-gray-900">{item.product.name}</p>
                   <p className="text-sm text-gray-600">{t('returns.quantity', { quantity: item.quantity })}</p>
-                  <p className="text-sm text-gray-600">{t('returns.unit', { unit: item.unit })}</p>
-                  <p className="text-sm text-gray-600">{t('returns.department', { department: item.departmentName })}</p>
                   <p className="text-sm text-gray-600">{t('returns.reason', { reason: item.reason })}</p>
-                  {item.price && (
-                    <p className="text-sm text-gray-600">{t('returns.price', { price: item.price })} {t('currency')}</p>
-                  )}
                 </div>
               ))}
             </div>
