@@ -551,7 +551,6 @@ const BranchReturns = () => {
                             {t('returns.return_number', { returnNumber: ret.returnNumber })}
                           </h3>
                           <span className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${getStatusInfo(ret.status).color}`}>
-                            <getStatusInfo(ret.status).icon className="w-5 h-5" />
                             <span>{getStatusInfo(ret.status).label}</span>
                           </span>
                         </div>
