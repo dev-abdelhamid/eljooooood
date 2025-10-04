@@ -4,7 +4,7 @@ import { Modal } from '../UI/Modal';
 import { Button } from '../UI/Button';
 import Input from '../../pages/Input';  // Using the new custom Input
 import Select from '../../pages/Select';  // Using the new custom Select
-import { ReturnFormItem } from '../../components/branch/types';
+import { ReturnFormItem } from '../../types/types';
 import { X } from 'lucide-react';
 import { inventoryAPI } from '../../services/api';
 

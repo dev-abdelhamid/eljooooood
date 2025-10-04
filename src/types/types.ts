@@ -23,6 +23,15 @@ export enum Priority {
   Low = 'low',
 }
 
+export interface ReturnForm {
+  itemId: string;
+  quantity: number;
+  reason: string;
+  reasonEn?: string;
+  notes: string;
+  notesEn?: string;
+}
+
 export enum ReturnStatus {
   PendingApproval = 'pending',
   Approved = 'approved',
@@ -230,6 +239,12 @@ export interface Product {
   displayName: string;
   displayUnit: string;
 }
+  export interface ReturnFormItem {
+  itemId: string;
+  quantity: number;
+  reason: string;
+  notes: string;
+}
 
 export interface Return {
   id: string;
@@ -244,7 +259,7 @@ export interface Return {
     branchNameEn?: string;
     displayBranchName: string; // Derived: branchName (isRtl=true) or branchNameEn (isRtl=false)
   };
-  items: ReturnItem[];
+  items: ReturnFormItem[];
   status: ReturnStatus;
   date: string;
   createdAt: string;
