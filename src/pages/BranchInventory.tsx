@@ -694,7 +694,7 @@ export const BranchInventory: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="relative">
             <Search
-              className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 ${isRtl ? 'right-3' : 'left-3'}`}
+              className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 ${isRtl ? 'right-3' : ''}`}
             />
             <CustomInput
               placeholder={t('common.search')}
@@ -744,7 +744,7 @@ export const BranchInventory: React.FC = () => {
                     transition={{ duration: 0.3 }}
                   >
                     <CustomCard className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-shadow">
-                      <div className={`flex items-start justify-between gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                      <div className={`flex items-start flex-col justify-between gap-4 `}>
                         <div className="flex-1">
                           <h3 className="font-semibold text-gray-900">{isRtl ? item.product.name : item.product.nameEn}</h3>
                           <p className="text-sm text-gray-500">{t('products.code')}: {item.product.code}</p>
@@ -893,7 +893,7 @@ export const BranchInventory: React.FC = () => {
             )}
           </div>
           {returnErrors.form && <p className="text-red-500 text-sm">{returnErrors.form}</p>}
-          <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row' : ''}`}>
             <CustomButton
               variant="secondary"
               onClick={() => {
