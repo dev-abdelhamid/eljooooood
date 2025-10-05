@@ -87,7 +87,7 @@ api.interceptors.response.use(
 );
 
 export const inventoryAPI = {
-  getInventory: async (params: { branch?: string; product?: string; page?: number; limit?: number } = {}) => {
+  getInventory: async (params: { branch?: string; product?: string } = {}) => {
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getInventory - Invalid branch ID:`, params.branch);
       throw new Error('Invalid branch ID');
@@ -98,18 +98,18 @@ export const inventoryAPI = {
     }
     const response = await api.get('/inventory', { params });
     console.log(`[${new Date().toISOString()}] inventoryAPI.getInventory - Response:`, response);
-    return response;
+    return response.inventory;
   },
-  getByBranch: async (branchId: string, params: { page?: number; limit?: number } = {}) => {
+  getByBranch: async (branchId: string) => {
     if (!isValidObjectId(branchId)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getByBranch - Invalid branch ID:`, branchId);
       throw new Error('Invalid branch ID');
     }
-    const response = await api.get(`/inventory/branch/${branchId}`, { params });
+    const response = await api.get(`/inventory/branch/${branchId}`);
     console.log(`[${new Date().toISOString()}] inventoryAPI.getByBranch - Response:`, response);
-    return response;
+    return response.inventory;
   },
-  getAll: async (params: { branch?: string; product?: string; page?: number; limit?: number } = {}) => {
+  getAll: async (params: { branch?: string; product?: string } = {}) => {
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getAll - Invalid branch ID:`, params.branch);
       throw new Error('Invalid branch ID');
@@ -120,7 +120,7 @@ export const inventoryAPI = {
     }
     const response = await api.get('/inventory', { params });
     console.log(`[${new Date().toISOString()}] inventoryAPI.getAll - Response:`, response);
-    return response;
+    return response.inventory;
   },
   create: async (data: {
     branchId: string;
@@ -216,22 +216,6 @@ export const inventoryAPI = {
     console.log(`[${new Date().toISOString()}] inventoryAPI.updateStock - Response:`, response);
     return response.inventory;
   },
-  updateStockLimits: async (id: string, data: { minStockLevel: number; maxStockLevel: number }) => {
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] inventoryAPI.updateStockLimits - Invalid inventory ID:`, id);
-      throw new Error('Invalid inventory ID');
-    }
-    if (data.minStockLevel < 0 || data.maxStockLevel < data.minStockLevel) {
-      console.error(`[${new Date().toISOString()}] inventoryAPI.updateStockLimits - Invalid stock limits:`, data);
-      throw new Error('Invalid stock limits');
-    }
-    const response = await api.put(`/inventory/${id}/limits`, {
-      minStockLevel: data.minStockLevel,
-      maxStockLevel: data.maxStockLevel,
-    });
-    console.log(`[${new Date().toISOString()}] inventoryAPI.updateStockLimits - Response:`, response);
-    return response.inventory;
-  },
   processReturnItems: async (returnId: string, data: {
     branchId: string;
     items: Array<{ productId: string; quantity: number; status: 'approved' | 'rejected'; reviewNotes?: string }>;
@@ -302,7 +286,7 @@ export const inventoryAPI = {
     console.log(`[${new Date().toISOString()}] inventoryAPI.approveRestockRequest - Response:`, response);
     return response.restockRequest;
   },
-  getHistory: async (params: { branchId?: string; productId?: string; page?: number; limit?: number } = {}) => {
+  getHistory: async (params: { branchId?: string; productId?: string } = {}) => {
     if (params.branchId && !isValidObjectId(params.branchId)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getHistory - Invalid branch ID:`, params.branchId);
       throw new Error('Invalid branch ID');
@@ -313,7 +297,7 @@ export const inventoryAPI = {
     }
     const response = await api.get('/inventory/history', { params });
     console.log(`[${new Date().toISOString()}] inventoryAPI.getHistory - Response:`, response);
-    return response;
+    return response.history;
   },
   createReturn: async (data: {
     orderId: string;
@@ -346,14 +330,5 @@ export const inventoryAPI = {
     });
     console.log(`[${new Date().toISOString()}] inventoryAPI.createReturn - Response:`, response);
     return response.returnRequest;
-  },
-  getProductDetails: async (productId: string, branchId: string, params: { page?: number; limit?: number } = {}) => {
-    if (!isValidObjectId(productId) || !isValidObjectId(branchId)) {
-      console.error(`[${new Date().toISOString()}] inventoryAPI.getProductDetails - Invalid product ID or branch ID:`, { productId, branchId });
-      throw new Error('Invalid product ID or branch ID');
-    }
-    const response = await api.get(`/inventory/product/${productId}/branch/${branchId}`, { params });
-    console.log(`[${new Date().toISOString()}] inventoryAPI.getProductDetails - Response:`, response);
-    return response;
   },
 };
