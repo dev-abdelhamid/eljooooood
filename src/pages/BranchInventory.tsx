@@ -110,7 +110,7 @@ const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): Re
       newItems[action.payload.index] = { ...newItems[action.payload.index], [action.payload.field]: action.payload.value };
       return { ...state, items: newItems };
     case 'REMOVE_ITEM':
-      return { ...state, items: state.items.filter((_, i) => i !== action.payload };
+      return { ...state, items: state.items.filter((_, i) => i !== action.payload )};
     case 'RESET':
       return { reason: '', notes: '', items: [] };
     default:
