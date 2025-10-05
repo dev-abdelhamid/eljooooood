@@ -116,7 +116,7 @@ export const returnsAPI = {
       }
       const response = await returnsAxios.get('/returns', { params: query });
       console.log(`[${new Date().toISOString()}] returnsAPI.getAll - Response:`, response);
-      return response;
+      return response.returns;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] returnsAPI.getAll - Error:`, error);
       throw error;
@@ -128,7 +128,7 @@ export const returnsAPI = {
     try {
       const response = await returnsAxios.get('/branches');
       console.log(`[${new Date().toISOString()}] returnsAPI.getBranches - Response:`, response);
-      return response;
+      return response.branches;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] returnsAPI.getBranches - Error:`, error);
       throw error;
@@ -147,22 +147,32 @@ export const returnsAPI = {
     notes?: string;
   }) => {
     console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Sending:`, data);
-    if (
-      !isValidObjectId(data.orderId) ||
-      !data.reason ||
-      !Array.isArray(data.items) ||
-      data.items.length === 0 ||
-      data.items.some(
-        (item) => !isValidObjectId(item.itemId) || !isValidObjectId(item.productId) || item.quantity < 1 || !item.reason
-      )
-    ) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Invalid data:`, data);
-      throw new Error('Invalid order ID, reason, or item data');
-    }
     try {
-      const response = await returnsAxios.post('/returns', data);
+      if (
+        !isValidObjectId(data.orderId) ||
+        !data.reason ||
+        !Array.isArray(data.items) ||
+        data.items.length === 0 ||
+        data.items.some(
+          (item) => !isValidObjectId(item.itemId) || !isValidObjectId(item.productId) || item.quantity < 1 || !item.reason
+        )
+      ) {
+        console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Invalid data:`, data);
+        throw new Error('Invalid order ID, reason, or item data');
+      }
+      const response = await returnsAxios.post('/returns', {
+        orderId: data.orderId,
+        reason: data.reason.trim(),
+        items: data.items.map(item => ({
+          itemId: item.itemId,
+          productId: item.productId,
+          quantity: item.quantity,
+          reason: item.reason.trim(),
+        })),
+        notes: data.notes?.trim(),
+      });
       console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Response:`, response);
-      return response;
+      return response.returnRequest;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Error:`, error);
       throw error;
@@ -177,22 +187,22 @@ export const returnsAPI = {
     }
   ) => {
     console.log(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Sending:`, { returnId, data });
-    if (
-      !isValidObjectId(returnId) ||
-      !['approved', 'rejected'].includes(data.status)
-    ) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Invalid data:`, { returnId, data });
-      throw new Error('Invalid return ID or status');
-    }
     try {
-      const response = await returnsAxios.put(`/returns/${returnId}`, data);
+      if (
+        !isValidObjectId(returnId) ||
+        !['approved', 'rejected'].includes(data.status)
+      ) {
+        console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Invalid data:`, { returnId, data });
+        throw new Error('Invalid return ID or status');
+      }
+      const response = await returnsAxios.put(`/returns/${returnId}`, {
+        status: data.status,
+        reviewNotes: data.reviewNotes?.trim(),
+      });
       console.log(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Response:`, response);
-      return response;
+      return response.returnRequest;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Error:`, error);
-      if (error.status === 404) {
-        throw new Error('Return not found or invalid endpoint');
-      }
       throw error;
     }
   },
