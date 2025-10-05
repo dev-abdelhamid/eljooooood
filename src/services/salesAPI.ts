@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import { inventoryAPI } from './api';
+import { inventoryAPI } from './inventoryAPI';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
 const isRtl = localStorage.getItem('language') === 'ar';
