@@ -3,14 +3,14 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { inventoryAPI, ordersAPI } from '../services/api';
+import { inventoryAPI } from '../services/inventoryAPI';
 import { Package, AlertCircle, Search, RefreshCw, Edit, X, Plus, Eye } from 'lucide-react';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-// TypeScript interfaces
+// واجهات TypeScript
 interface InventoryItem {
   _id: string;
   product: {
@@ -88,7 +88,7 @@ interface AvailableItem {
 
 interface ProductHistoryEntry {
   _id: string;
-  date: string;
+  date: Date;
   type: 'addition' | 'return' | 'sale' | 'adjustment';
   quantity: number;
   description: string;
@@ -96,6 +96,7 @@ interface ProductHistoryEntry {
   returnId?: string;
 }
 
+// مكونات مخصصة
 interface CustomCardProps {
   className?: string;
   children: React.ReactNode;
@@ -298,24 +299,19 @@ export const BranchInventory: React.FC = () => {
     };
   }, [abortController]);
 
-  const { data: inventoryResponse, isLoading: inventoryLoading, error: inventoryError, refetch: refetchInventory } = useQuery<{
-    inventory: InventoryItem[];
-    totalPages: number;
-    currentPage: number;
-  }>({
-    queryKey: ['inventory', user?.branchId, searchQuery, filterStatus, currentPage, language],
+  const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError, refetch: refetchInventory } = useQuery<
+    InventoryItem[],
+    Error
+  >({
+    queryKey: ['inventory', user?.branchId, language],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
-      return inventoryAPI.getByBranch(user.branchId, {
-        page: currentPage,
-        limit: ITEMS_PER_PAGE,
-        search: searchQuery,
-        lowStock: filterStatus === 'low' ? true : undefined,
-      });
+      return inventoryAPI.getByBranch(user.branchId);
     },
     enabled: !!user?.branchId,
-    select: (response) => ({
-      inventory: response.inventory.map((item: InventoryItem) => ({
+    select: (response) => {
+      const inventoryData = Array.isArray(response) ? response : response?.inventory || [];
+      return inventoryData.map((item: InventoryItem) => ({
         ...item,
         product: item.product
           ? {
@@ -340,30 +336,25 @@ export const BranchInventory: React.FC = () => {
             : item.currentStock >= item.maxStockLevel
             ? 'full'
             : 'normal',
-      })),
-      totalPages: response.totalPages,
-      currentPage: response.currentPage,
-    }),
+      }));
+    },
     onError: (err) => {
       toast.error(err.message || t('errors.fetch_inventory'), { position: 'top-right', autoClose: 3000 });
     },
   });
 
   const { data: productHistory, isLoading: historyLoading } = useQuery<ProductHistoryEntry[], Error>({
-    queryKey: ['productHistory', selectedProductId, user?.branchId, language],
+    queryKey: ['productHistory', selectedProductId, user?.branchId],
     queryFn: async () => {
       if (!selectedProductId || !user?.branchId) throw new Error(t('errors.no_branch'));
-      return inventoryAPI.getHistory({ productId: selectedProductId, branchId: user.branchId });
+      return inventoryAPI.getProductHistory(selectedProductId, user.branchId);
     },
     enabled: isDetailsModalOpen && !!selectedProductId && !!user?.branchId,
-    onError: (err) => {
-      toast.error(err.message || t('errors.fetch_history'), { position: 'top-right', autoClose: 3000 });
-    },
   });
 
   useEffect(() => {
-    if (inventoryResponse?.inventory) {
-      const items: AvailableItem[] = inventoryResponse.inventory
+    if (inventoryData) {
+      const items: AvailableItem[] = inventoryData
         .filter((item) => item.currentStock > 0 && item.product)
         .map((item) => ({
           productId: item.product!._id,
@@ -377,7 +368,7 @@ export const BranchInventory: React.FC = () => {
         }));
       setAvailableItems(items);
     }
-  }, [inventoryResponse, isRtl, t]);
+  }, [inventoryData, isRtl, t]);
 
   useEffect(() => {
     if (!socket || !user?.branchId) return;
@@ -390,7 +381,6 @@ export const BranchInventory: React.FC = () => {
         }
       }
     };
-
     const handleReturnStatusUpdated = ({ branchId, returnId, status }: { branchId: string; returnId: string; status: string }) => {
       if (branchId === user.branchId && status === 'approved') {
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -449,6 +439,28 @@ export const BranchInventory: React.FC = () => {
     [t]
   );
 
+  const filteredInventory = useMemo(
+    () =>
+      (inventoryData || []).filter(
+        (item) =>
+          item.product &&
+          (!filterStatus || item.status === filterStatus) &&
+          (item.product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.product.nameEn?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.product.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.product.department?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.product.department?.nameEn?.toLowerCase().includes(searchQuery.toLowerCase()))
+      ),
+    [inventoryData, searchQuery, filterStatus]
+  );
+
+  const paginatedInventory = useMemo(
+    () => filteredInventory.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
+    [filteredInventory, currentPage]
+  );
+
+  const totalInventoryPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
+
   const handleOpenReturnModal = useCallback((item?: InventoryItem) => {
     setSelectedItem(item || null);
     dispatchReturnForm({ type: 'RESET' });
@@ -483,56 +495,40 @@ export const BranchInventory: React.FC = () => {
     });
   }, []);
 
-  const handleProductChange = useCallback(
-    async (index: number, productId: string) => {
-      dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'productId', value: productId } });
-      dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'orderId', value: '' } });
+  const handleProductChange = useCallback(async (index: number, productId: string) => {
+    dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'productId', value: productId } });
+    dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'orderId', value: '' } });
+    dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'maxQuantity', value: 0 } });
+
+    if (productId && user?.branchId) {
+      if (!possibleOrders[productId]) {
+        try {
+          const orders = await inventoryAPI.getReturnableOrdersForProduct(productId, user.branchId);
+          const orderOptions = orders.map((o: any) => ({
+            value: o.orderId,
+            label: `${o.orderNumber} (${o.remainingQuantity} ${t('common.available')})`,
+            remaining: o.remainingQuantity,
+          }));
+          setPossibleOrders((prev) => ({ ...prev, [productId]: orderOptions }));
+        } catch (err) {
+          toast.error(t('errors.fetch_orders'), { position: 'top-right', autoClose: 3000 });
+        }
+      }
+    }
+  }, [possibleOrders, user, t]);
+
+  const handleOrderChange = useCallback((index: number, orderId: string) => {
+    dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'orderId', value: orderId } });
+    const productId = returnForm.items[index]?.productId;
+    if (productId && orderId) {
+      const selectedOrder = possibleOrders[productId]?.find((o) => o.value === orderId);
+      if (selectedOrder) {
+        dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'maxQuantity', value: selectedOrder.remaining } });
+      }
+    } else {
       dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'maxQuantity', value: 0 } });
-
-      if (productId && user?.branchId) {
-        if (!possibleOrders[productId]) {
-          try {
-            const orders = await ordersAPI.getAll({
-              branch: user.branchId,
-              status: 'completed',
-              search: productId,
-            });
-            const orderOptions = orders.orders
-              .filter((o: any) => o.items.some((item: any) => item.product === productId && item.quantity > 0))
-              .map((o: any) => {
-                const item = o.items.find((i: any) => i.product === productId);
-                return {
-                  value: o._id,
-                  label: `${o.orderNumber} (${item.quantity} ${t('common.available')})`,
-                  remaining: item.quantity,
-                };
-              });
-            setPossibleOrders((prev) => ({ ...prev, [productId]: orderOptions }));
-          } catch (err) {
-            toast.error(t('errors.fetch_orders'), { position: 'top-right', autoClose: 3000 });
-          }
-        }
-      }
-    },
-    [possibleOrders, user, t]
-  );
-
-  const handleOrderChange = useCallback(
-    (index: number, orderId: string) => {
-      dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'orderId', value: orderId } });
-      const productId = returnForm.items[index]?.productId;
-      if (productId && orderId) {
-        const selectedOrder = possibleOrders[productId]?.find((o) => o.value === orderId);
-        if (selectedOrder) {
-          dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'maxQuantity', value: selectedOrder.remaining } });
-          dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'quantity', value: Math.min(returnForm.items[index].quantity, selectedOrder.remaining) } });
-        }
-      } else {
-        dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'maxQuantity', value: 0 } });
-      }
-    },
-    [returnForm.items, possibleOrders]
-  );
+    }
+  }, [returnForm.items, possibleOrders]);
 
   const updateItemInForm = useCallback(
     (index: number, field: keyof ReturnItem, value: string | number) => {
@@ -545,6 +541,12 @@ export const BranchInventory: React.FC = () => {
     dispatchReturnForm({ type: 'REMOVE_ITEM', payload: index });
   }, []);
 
+  useEffect(() => {
+    if (isReturnModalOpen && selectedItem && returnForm.items.length === 1 && returnForm.items[0].productId) {
+      handleProductChange(0, returnForm.items[0].productId);
+    }
+  }, [isReturnModalOpen, selectedItem, returnForm.items, handleProductChange]);
+
   const validateReturnForm = useCallback(() => {
     const errors: Record<string, string> = {};
     if (!returnForm.reason) errors.reason = t('errors.required', { field: t('returns.reason') });
@@ -553,8 +555,8 @@ export const BranchInventory: React.FC = () => {
       if (!item.productId) errors[`item_${index}_productId`] = t('errors.required', { field: t('returns.item') });
       if (!item.orderId) errors[`item_${index}_orderId`] = t('errors.required', { field: t('returns.order') });
       if (!item.reason) errors[`item_${index}_reason`] = t('errors.required', { field: t('returns.reason') });
-      if (item.quantity < 1 || item.quantity > (item.maxQuantity || 0) || isNaN(item.quantity)) {
-        errors[`item_${index}_quantity`] = t('errors.invalid_quantity_max', { max: item.maxQuantity || 0 });
+      if (item.quantity < 1 || item.quantity > (item.maxQuantity ?? 0) || isNaN(item.quantity)) {
+        errors[`item_${index}_quantity`] = t('errors.invalid_quantity_max', { max: item.maxQuantity ?? 0 });
       }
     });
     setReturnErrors(errors);
@@ -604,14 +606,10 @@ export const BranchInventory: React.FC = () => {
     onError: (err) => {
       if (err.name !== 'AbortError') {
         console.error(`[${new Date().toISOString()}] Create return error:`, err);
-        let errorMessage = err.message || t('errors.create_return');
+        toast.error(err.message || t('errors.create_return'), { position: 'top-right', autoClose: 3000 });
         if (err.message.includes('Invalid')) {
-          errorMessage = t('errors.invalid_form');
-        } else if (err.message.includes('Insufficient stock')) {
-          errorMessage = t('errors.insufficient_stock');
+          setReturnErrors({ form: err.message });
         }
-        toast.error(errorMessage, { position: 'top-right', autoClose: 3000 });
-        setReturnErrors({ form: errorMessage });
       }
     },
   });
@@ -621,12 +619,14 @@ export const BranchInventory: React.FC = () => {
       if (!validateEditForm()) throw new Error(t('errors.invalid_form'));
       if (!selectedItem) throw new Error(t('errors.no_item_selected'));
       if (!user?._id) throw new Error(t('errors.no_user'));
-      await inventoryAPI.updateStock(selectedItem._id, {
-        minStockLevel: editForm.minStockLevel,
-        maxStockLevel: editForm.maxStockLevel,
-        branchId: user.branchId,
-        productId: selectedItem.product?._id,
-      });
+      await inventoryAPI.updateStock(
+        selectedItem._id,
+        {
+          minStockLevel: editForm.minStockLevel,
+          maxStockLevel: editForm.maxStockLevel,
+          userId: user._id,
+        }
+      );
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -639,7 +639,6 @@ export const BranchInventory: React.FC = () => {
         branchId: user?.branchId,
         minStockLevel: editForm.minStockLevel,
         maxStockLevel: editForm.maxStockLevel,
-        productId: selectedItem?.product?._id,
         eventId: crypto.randomUUID(),
       });
     },
@@ -647,7 +646,6 @@ export const BranchInventory: React.FC = () => {
       if (err.name !== 'AbortError') {
         console.error(`[${new Date().toISOString()}] Update inventory error:`, err);
         toast.error(err.message || t('errors.update_inventory'), { position: 'top-right', autoClose: 3000 });
-        setEditErrors({ form: err.message });
       }
     },
   });
@@ -668,22 +666,13 @@ export const BranchInventory: React.FC = () => {
             </h1>
             <p className="text-gray-600 mt-2">{t('inventory.description')}</p>
           </div>
-          <div className="flex gap-2">
-            <CustomButton
-              onClick={() => handleOpenReturnModal()}
-              className="bg-amber-600 text-white hover:bg-amber-700 flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              {t('returns.create')}
-            </CustomButton>
-            <CustomButton
-              onClick={() => refetchInventory()}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-800 flex items-center gap-2"
-            >
-              <RefreshCw className="w-4 h-4" />
-              {t('common.refresh')}
-            </CustomButton>
-          </div>
+          <CustomButton
+            onClick={() => handleOpenReturnModal()}
+            className="bg-amber-600 text-white hover:bg-amber-700 flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            {t('returns.create')}
+          </CustomButton>
         </div>
       </div>
 
@@ -737,7 +726,7 @@ export const BranchInventory: React.FC = () => {
               <InventoryCardSkeleton key={i} isRtl={isRtl} />
             ))}
           </div>
-        ) : !inventoryResponse || inventoryResponse.inventory.length === 0 ? (
+        ) : paginatedInventory.length === 0 ? (
           <CustomCard className="p-8 text-center bg-white rounded-xl shadow-md">
             <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600">{t('inventory.no_items')}</p>
@@ -745,7 +734,7 @@ export const BranchInventory: React.FC = () => {
         ) : (
           <div className="space-y-4">
             <AnimatePresence>
-              {inventoryResponse.inventory.map((item) =>
+              {paginatedInventory.map((item) =>
                 item.product ? (
                   <motion.div
                     key={item._id}
@@ -807,12 +796,7 @@ export const BranchInventory: React.FC = () => {
                 ) : null
               )}
             </AnimatePresence>
-            <Pagination
-              totalPages={inventoryResponse.totalPages}
-              currentPage={inventoryResponse.currentPage}
-              setCurrentPage={setCurrentPage}
-              isRtl={isRtl}
-            />
+            <Pagination totalPages={totalInventoryPages} currentPage={currentPage} setCurrentPage={setCurrentPage} isRtl={isRtl} />
           </div>
         )}
       </motion.div>
@@ -965,7 +949,6 @@ export const BranchInventory: React.FC = () => {
             onChange={(e) => setEditForm({ ...editForm, maxStockLevel: Number(e.target.value) })}
             error={editErrors.maxStockLevel}
           />
-          {editErrors.form && <p className="text-red-500 text-sm">{editErrors.form}</p>}
           <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <CustomButton
               variant="secondary"
@@ -1011,16 +994,14 @@ export const BranchInventory: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {productHistory
-                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                  .map((entry) => (
-                    <tr key={entry._id} className="border-b">
-                      <td className="p-2">{new Date(entry.date).toLocaleString(isRtl ? 'ar-EG' : 'en-US')}</td>
-                      <td className="p-2">{t(`inventory.${entry.type}`)}</td>
-                      <td className="p-2">{entry.quantity}</td>
-                      <td className="p-2">{entry.description}</td>
-                    </tr>
-                  ))}
+                {productHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((entry) => (
+                  <tr key={entry._id} className="border-b">
+                    <td className="p-2">{new Date(entry.date).toLocaleString()}</td>
+                    <td className="p-2">{t(`inventory.${entry.type}`)}</td>
+                    <td className="p-2">{entry.quantity}</td>
+                    <td className="p-2">{entry.description}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           ) : (
