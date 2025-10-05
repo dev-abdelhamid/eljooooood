@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { returnsAPI } from '../services/returnsAPI';
-import { ordersAPI,  inventoryAPI} from '../services/api';
+import { ordersAPI, inventoryAPI } from '../services/api';
 import { Package, AlertCircle, Search, RefreshCw, Edit, X, Plus, Eye } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -110,7 +110,7 @@ const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): Re
       newItems[action.payload.index] = { ...newItems[action.payload.index], [action.payload.field]: action.payload.value };
       return { ...state, items: newItems };
     case 'REMOVE_ITEM':
-      return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
+      return { ...state, items: state.items.filter((_, i) => i !== action.payload };
     case 'RESET':
       return { reason: '', notes: '', items: [] };
     default:
@@ -327,6 +327,7 @@ export const BranchInventory: React.FC = () => {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<InventoryStatus | ''>('');
+  const [filterDepartment, setFilterDepartment] = useState<string>(''); // جديد: فلتر حسب القسم
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -357,7 +358,7 @@ export const BranchInventory: React.FC = () => {
     InventoryItem[],
     Error
   >({
-    queryKey: ['inventory', user?.branchId, debouncedSearchQuery, filterStatus, currentPage, language],
+    queryKey: ['inventory', user?.branchId, debouncedSearchQuery, filterStatus, filterDepartment, currentPage, language],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
       return inventoryAPI.getByBranch(user.branchId);
@@ -398,6 +399,25 @@ export const BranchInventory: React.FC = () => {
       toast.error(err.message || t('errors.fetch_inventory'), { position: 'top-right', autoClose: 3000 });
     },
   });
+
+  // جديد: options للأقسام الفريدة
+  const departmentOptions = useMemo(() => {
+    const depts = new Set<string>();
+    inventoryData?.forEach((item) => {
+      if (item.product?.department?._id) {
+        const dept = {
+          _id: item.product.department._id,
+          name: isRtl ? item.product.department.name : item.product.department.nameEn,
+        };
+        depts.add(JSON.stringify(dept));
+      }
+    });
+    const uniqueDepts = Array.from(depts).map((d) => JSON.parse(d));
+    return [
+      { value: '', label: t('common.all_departments') },
+      ...uniqueDepts.map((dept) => ({ value: dept._id, label: dept.name })),
+    ];
+  }, [inventoryData, isRtl, t]);
 
   const { data: productHistory, isLoading: historyLoading } = useQuery<ProductHistoryEntry[], Error>({
     queryKey: ['productHistory', selectedProductId, user?.branchId],
@@ -526,13 +546,14 @@ export const BranchInventory: React.FC = () => {
         (item) =>
           item.product &&
           (!filterStatus || item.status === filterStatus) &&
+          (!filterDepartment || item.product.department?._id === filterDepartment) && // جديد: فلتر حسب القسم
           (item.product.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             item.product.nameEn.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             item.product.code.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             item.product.department?.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             item.product.department?.nameEn.toLowerCase().includes(debouncedSearchQuery.toLowerCase()))
       ),
-    [inventoryData, debouncedSearchQuery, filterStatus]
+    [inventoryData, debouncedSearchQuery, filterStatus, filterDepartment]
   );
 
   const paginatedInventory = useMemo(
@@ -636,7 +657,7 @@ export const BranchInventory: React.FC = () => {
     const errors: Record<string, string> = {};
     if (editForm.minStockLevel < 0) errors.minStockLevel = t('errors.non_negative', { field: t('inventory.min_stock') });
     if (editForm.maxStockLevel < 0) errors.maxStockLevel = t('errors.non_negative', { field: t('inventory.max_stock') });
-    if (editForm.maxStockLevel <= editForm.minStockLevel) errors.maxStockLevel = t('errors.max_greater_min');
+    if (editForm.maxStockLevel <= editForm.minStockLevel) errors.maxStockLevel = t('errors.max_greater_min'); // تحسين: تحقق max > min
     setEditErrors(errors);
     return Object.keys(errors).length === 0;
   }, [editForm, t]);
@@ -685,7 +706,7 @@ export const BranchInventory: React.FC = () => {
     mutationFn: async () => {
       if (!validateEditForm()) throw new Error(t('errors.invalid_form'));
       if (!selectedItem) throw new Error(t('errors.no_item_selected'));
-      if (!user?._id) throw new Error(t('errors.no_user'));
+      if (!user) throw new Error(t('errors.no_user')); // مصلح: غيرت التحقق إلى !user بدل !(n != null && n._id)
       await inventoryAPI.updateStock(selectedItem._id, {
         minStockLevel: editForm.minStockLevel,
         maxStockLevel: editForm.maxStockLevel,
@@ -769,7 +790,7 @@ export const BranchInventory: React.FC = () => {
       )}
 
       <CustomCard className="p-4 sm:p-6 mb-6 bg-white rounded-xl shadow-md">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">  {/* غيرت إلى 3 columns عشان الفلتر الجديد */}
           <div className="relative">
             <Search
               className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 ${isRtl ? 'right-3' : 'left-3'}`}
@@ -791,6 +812,16 @@ export const BranchInventory: React.FC = () => {
             options={statusOptions}
             label={t('common.filter_by_status')}
             ariaLabel={t('common.filter_by_status')}
+          />
+          <CustomSelect  // جديد: فلتر حسب القسم
+            value={filterDepartment}
+            onChange={(e) => {
+              setFilterDepartment(e.target.value);
+              setCurrentPage(1);
+            }}
+            options={departmentOptions}
+            label={t('common.filter_by_department')}
+            ariaLabel={t('common.filter_by_department')}
           />
         </div>
       </CustomCard>
@@ -834,8 +865,8 @@ export const BranchInventory: React.FC = () => {
                           <p className="text-sm text-gray-600">{t('inventory.min_stock')}: {item.minStockLevel}</p>
                           <p className="text-sm text-gray-600">{t('inventory.max_stock')}: {item.maxStockLevel}</p>
                           <p className="text-sm text-gray-600">{t('products.unit')}: {isRtl ? item.product.unit : item.product.unitEn}</p>
-                          <p className="text-sm text-gray-600 font-medium">
-                            {t('departments.title')}: {isRtl ? item.product.department?.name : item.product.department?.nameEn}
+                          <p className="text-sm text-gray-600 font-bold flex items-center gap-1">  {/* تحسين: bold و icon للقسم */}
+                            <span className="text-amber-600">📂</span> {t('departments.title')}: {isRtl ? item.product.department?.name : item.product.department?.nameEn}
                           </p>
                           <p
                             className={`text-sm font-medium ${
@@ -932,7 +963,7 @@ export const BranchInventory: React.FC = () => {
                   options={[{ value: '', label: t('products.select') }].concat(
                     availableItems.map((a) => ({
                       value: a.productId,
-                      label: `${a.productName} (${a.stock} ${t('common.available')}) - ${a.departmentName}`,
+                      label: `${a.productName} (${a.stock} ${t('common.available')}) - [${a.departmentName}]`, // تحسين: أضفت [] حول القسم عشان يبان أفضل
                     }))
                   )}
                   error={returnErrors[`item_${index}_productId`]}
