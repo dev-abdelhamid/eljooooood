@@ -322,7 +322,7 @@ const Pagination: React.FC<PaginationProps> = ({ totalPages, currentPage, setCur
 export const BranchInventory: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const { socket } = useSocket();
   const { addNotification } = useNotifications();
   const queryClient = useQueryClient();
@@ -353,6 +353,28 @@ export const BranchInventory: React.FC = () => {
   };
 
   const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
+
+  if (authLoading) {
+    return (
+      <div className="container mx-auto px-4 py-6 min-h-screen flex items-center justify-center">
+        <div className="flex items-center gap-2 text-gray-600">
+          <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+          {t('common.loading')}
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="container mx-auto px-4 py-6 min-h-screen flex items-center justify-center">
+        <p className="text-red-600">{t('errors.no_user')}</p>
+      </div>
+    );
+  }
 
   const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError, refetch: refetchInventory } = useQuery<
     InventoryItem[],
@@ -557,11 +579,12 @@ export const BranchInventory: React.FC = () => {
   }, []);
 
   const handleOpenEditModal = useCallback((item: InventoryItem) => {
+    console.log('Opening edit modal with user:', user);
     setSelectedItem(item);
     setEditForm({ minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
     setEditErrors({});
     setIsEditModalOpen(true);
-  }, []);
+  }, [user]);
 
   const handleOpenDetailsModal = useCallback((item: InventoryItem) => {
     if (item.product) {
@@ -686,7 +709,6 @@ export const BranchInventory: React.FC = () => {
     mutationFn: async () => {
       if (!validateEditForm()) throw new Error(t('errors.invalid_form'));
       if (!selectedItem) throw new Error(t('errors.no_item_selected'));
-      if (!user?._id) throw new Error(t('errors.no_user'));
       await inventoryAPI.updateStock(selectedItem._id, {
         minStockLevel: editForm.minStockLevel,
         maxStockLevel: editForm.maxStockLevel,
@@ -1076,7 +1098,7 @@ export const BranchInventory: React.FC = () => {
             </CustomButton>
             <CustomButton
               onClick={() => updateInventoryMutation.mutate()}
-              disabled={updateInventoryMutation.isPending}
+              disabled={updateInventoryMutation.isPending || !user?._id}
               className="relative disabled:opacity-50"
               ariaLabel={t('common.save')}
             >
