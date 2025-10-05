@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { inventoryAPI } from '../services/inventoryAPI';
-import { Package, AlertCircle, Search, RefreshCw, Edit, X, Plus } from 'lucide-react';
+import { Package, AlertCircle, Search, RefreshCw, Edit, X, Plus, Eye } from 'lucide-react';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -30,6 +30,7 @@ interface InventoryItem {
 
 interface ReturnItem {
   productId: string;
+  orderId: string;
   quantity: number;
   reason: string;
   maxQuantity: number;
@@ -83,6 +84,16 @@ interface AvailableItem {
   unit: string;
   departmentName: string;
   stock: number;
+}
+
+interface ProductHistoryEntry {
+  _id: string;
+  date: Date;
+  type: 'addition' | 'return' | 'sale' | 'adjustment';
+  quantity: number;
+  description: string;
+  orderId?: string;
+  returnId?: string;
 }
 
 // مكونات مخصصة
@@ -269,13 +280,16 @@ export const BranchInventory: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState('');
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
   const [returnForm, dispatchReturnForm] = useReducer(returnFormReducer, { reason: '', notes: '', items: [] });
   const [editForm, setEditForm] = useState<EditForm>({ minStockLevel: 0, maxStockLevel: 0 });
   const [returnErrors, setReturnErrors] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
+  const [possibleOrders, setPossibleOrders] = useState<Record<string, { value: string; label: string; remaining: number }[]>>({});
 
   const abortController = useMemo(() => new AbortController(), []);
 
@@ -327,6 +341,15 @@ export const BranchInventory: React.FC = () => {
     onError: (err) => {
       toast.error(err.message || t('errors.fetch_inventory'), { position: 'top-right', autoClose: 3000 });
     },
+  });
+
+  const { data: productHistory, isLoading: historyLoading } = useQuery<ProductHistoryEntry[], Error>({
+    queryKey: ['productHistory', selectedProductId, user?.branchId],
+    queryFn: async () => {
+      if (!selectedProductId || !user?.branchId) throw new Error(t('errors.no_branch'));
+      return inventoryAPI.getProductHistory(selectedProductId, user.branchId);
+    },
+    enabled: isDetailsModalOpen && !!selectedProductId && !!user?.branchId,
   });
 
   useEffect(() => {
@@ -408,10 +431,10 @@ export const BranchInventory: React.FC = () => {
   const reasonOptions = useMemo(
     () => [
       { value: '', label: t('returns.select_reason') },
-      { value: 'تالف', label: t('returns.damaged') },
-      { value: 'منتج خاطئ', label: t('returns.wrong_item') },
-      { value: 'كمية زائدة', label: t('returns.excess_quantity') },
-      { value: 'أخرى', label: t('returns.other') },
+      { value: 'quality_issue', label: t('returns.quality_issue') },
+      { value: 'wrong_item', label: t('returns.wrong_item') },
+      { value: 'excess_quantity', label: t('returns.excess_quantity') },
+      { value: 'other', label: t('returns.other') },
     ],
     [t]
   );
@@ -444,7 +467,7 @@ export const BranchInventory: React.FC = () => {
     if (item?.product) {
       dispatchReturnForm({
         type: 'ADD_ITEM',
-        payload: { productId: item.product._id, quantity: 1, reason: '', maxQuantity: item.currentStock },
+        payload: { productId: item.product._id, orderId: '', quantity: 1, reason: '', maxQuantity: 0 },
       });
     }
     setReturnErrors({});
@@ -458,32 +481,71 @@ export const BranchInventory: React.FC = () => {
     setIsEditModalOpen(true);
   }, []);
 
+  const handleOpenDetailsModal = useCallback((item: InventoryItem) => {
+    if (item.product) {
+      setSelectedProductId(item.product._id);
+      setIsDetailsModalOpen(true);
+    }
+  }, []);
+
   const addItemToForm = useCallback(() => {
     dispatchReturnForm({
       type: 'ADD_ITEM',
-      payload: { productId: '', quantity: 1, reason: '', maxQuantity: 0 },
+      payload: { productId: '', orderId: '', quantity: 1, reason: '', maxQuantity: 0 },
     });
   }, []);
+
+  const handleProductChange = useCallback(async (index: number, productId: string) => {
+    dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'productId', value: productId } });
+    dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'orderId', value: '' } });
+    dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'maxQuantity', value: 0 } });
+
+    if (productId && user?.branchId) {
+      if (!possibleOrders[productId]) {
+        try {
+          const orders = await inventoryAPI.getReturnableOrdersForProduct(productId, user.branchId);
+          const orderOptions = orders.map((o: any) => ({
+            value: o.orderId,
+            label: `${o.orderNumber} (${o.remainingQuantity} ${t('common.available')})`,
+            remaining: o.remainingQuantity,
+          }));
+          setPossibleOrders((prev) => ({ ...prev, [productId]: orderOptions }));
+        } catch (err) {
+          toast.error(t('errors.fetch_orders'), { position: 'top-right', autoClose: 3000 });
+        }
+      }
+    }
+  }, [possibleOrders, user, t]);
+
+  const handleOrderChange = useCallback((index: number, orderId: string) => {
+    dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'orderId', value: orderId } });
+    const productId = returnForm.items[index]?.productId;
+    if (productId && orderId) {
+      const selectedOrder = possibleOrders[productId]?.find((o) => o.value === orderId);
+      if (selectedOrder) {
+        dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'maxQuantity', value: selectedOrder.remaining } });
+      }
+    } else {
+      dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'maxQuantity', value: 0 } });
+    }
+  }, [returnForm.items, possibleOrders]);
 
   const updateItemInForm = useCallback(
     (index: number, field: keyof ReturnItem, value: string | number) => {
       dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
-      if (field === 'productId') {
-        const sel = availableItems.find((a) => a.productId === value);
-        if (sel) {
-          dispatchReturnForm({
-            type: 'UPDATE_ITEM',
-            payload: { index, field: 'maxQuantity', value: sel.stock },
-          });
-        }
-      }
     },
-    [availableItems]
+    []
   );
 
   const removeItemFromForm = useCallback((index: number) => {
     dispatchReturnForm({ type: 'REMOVE_ITEM', payload: index });
   }, []);
+
+  useEffect(() => {
+    if (isReturnModalOpen && selectedItem && returnForm.items.length === 1 && returnForm.items[0].productId) {
+      handleProductChange(0, returnForm.items[0].productId);
+    }
+  }, [isReturnModalOpen, selectedItem, returnForm.items, handleProductChange]);
 
   const validateReturnForm = useCallback(() => {
     const errors: Record<string, string> = {};
@@ -491,6 +553,7 @@ export const BranchInventory: React.FC = () => {
     if (returnForm.items.length === 0) errors.items = t('errors.required', { field: t('returns.items') });
     returnForm.items.forEach((item, index) => {
       if (!item.productId) errors[`item_${index}_productId`] = t('errors.required', { field: t('returns.item') });
+      if (!item.orderId) errors[`item_${index}_orderId`] = t('errors.required', { field: t('returns.order') });
       if (!item.reason) errors[`item_${index}_reason`] = t('errors.required', { field: t('returns.reason') });
       if (item.quantity < 1 || item.quantity > (item.maxQuantity ?? 0) || isNaN(item.quantity)) {
         errors[`item_${index}_quantity`] = t('errors.invalid_quantity_max', { max: item.maxQuantity ?? 0 });
@@ -519,6 +582,7 @@ export const BranchInventory: React.FC = () => {
         notes: returnForm.notes,
         items: returnForm.items.map((item) => ({
           productId: item.productId,
+          orderId: item.orderId,
           quantity: item.quantity,
           reason: item.reason,
         })),
@@ -530,6 +594,7 @@ export const BranchInventory: React.FC = () => {
       dispatchReturnForm({ type: 'RESET' });
       setReturnErrors({});
       setSelectedItem(null);
+      setPossibleOrders({});
       toast.success(t('returns.create_success'), { position: 'top-right', autoClose: 3000 });
       socket?.emit('returnCreated', {
         branchId: user?.branchId,
@@ -702,6 +767,14 @@ export const BranchInventory: React.FC = () => {
                           <CustomButton
                             variant="secondary"
                             size="sm"
+                            onClick={() => handleOpenDetailsModal(item)}
+                            className="text-green-600 hover:text-green-800"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </CustomButton>
+                          <CustomButton
+                            variant="secondary"
+                            size="sm"
                             onClick={() => handleOpenEditModal(item)}
                             className="text-blue-600 hover:text-blue-800"
                           >
@@ -735,6 +808,7 @@ export const BranchInventory: React.FC = () => {
           dispatchReturnForm({ type: 'RESET' });
           setReturnErrors({});
           setSelectedItem(null);
+          setPossibleOrders({});
         }}
         title={t('returns.create')}
       >
@@ -760,20 +834,25 @@ export const BranchInventory: React.FC = () => {
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">{t('returns.items')}</label>
             {returnForm.items.map((item, index) => (
-              <div key={index} className={`flex gap-2 mb-2 items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <div key={index} className={`flex gap-2 mb-2 items-center flex-wrap ${isRtl ? 'flex-row-reverse' : ''}`}>
                 <CustomSelect
                   value={item.productId}
-                  onChange={(e) => updateItemInForm(index, 'productId', e.target.value)}
+                  onChange={(e) => handleProductChange(index, e.target.value)}
                   options={[{ value: '', label: t('products.select') }].concat(
-                    availableItems
-                      .filter((a) => !returnForm.items.some((i, idx) => i.productId === a.productId && idx !== index))
-                      .map((a) => ({
-                        value: a.productId,
-                        label: `${a.productName} (${a.stock} ${t('common.available')}) - ${a.departmentName}`,
-                      }))
+                    availableItems.map((a) => ({
+                      value: a.productId,
+                      label: `${a.productName} (${a.stock} ${t('common.available')}) - ${a.departmentName}`,
+                    }))
                   )}
                   error={returnErrors[`item_${index}_productId`]}
                   disabled={!!selectedItem}
+                />
+                <CustomSelect
+                  value={item.orderId}
+                  onChange={(e) => handleOrderChange(index, e.target.value)}
+                  options={[{ value: '', label: t('returns.select_order') }].concat(possibleOrders[item.productId] || [])}
+                  error={returnErrors[`item_${index}_orderId`]}
+                  disabled={!item.productId}
                 />
                 <CustomInput
                   type="number"
@@ -794,7 +873,7 @@ export const BranchInventory: React.FC = () => {
                   variant="danger"
                   size="sm"
                   onClick={() => removeItemFromForm(index)}
-                  disabled={!!selectedItem}
+                  disabled={!!selectedItem && returnForm.items.length === 1}
                 >
                   <X className="w-4 h-4" />
                 </CustomButton>
@@ -805,7 +884,7 @@ export const BranchInventory: React.FC = () => {
               <CustomButton
                 variant="secondary"
                 onClick={addItemToForm}
-                disabled={availableItems.length === 0 || availableItems.length === returnForm.items.length}
+                disabled={availableItems.length === 0}
                 className="mt-2"
               >
                 <Plus className="w-4 h-4 mr-2" />
@@ -822,6 +901,7 @@ export const BranchInventory: React.FC = () => {
                 dispatchReturnForm({ type: 'RESET' });
                 setReturnErrors({});
                 setSelectedItem(null);
+                setPossibleOrders({});
               }}
             >
               {t('common.cancel')}
@@ -889,6 +969,44 @@ export const BranchInventory: React.FC = () => {
               {updateInventoryMutation.isPending ? t('common.saving') : t('common.save')}
             </CustomButton>
           </div>
+        </div>
+      </CustomModal>
+
+      <CustomModal
+        isOpen={isDetailsModalOpen}
+        onClose={() => {
+          setIsDetailsModalOpen(false);
+          setSelectedProductId('');
+        }}
+        title={t('inventory.product_details')}
+      >
+        <div className="flex flex-col gap-4">
+          {historyLoading ? (
+            <div className="text-center text-gray-600">{t('common.loading')}</div>
+          ) : productHistory && productHistory.length > 0 ? (
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-gray-200">
+                  <th className="p-2 text-left">{t('common.date')}</th>
+                  <th className="p-2 text-left">{t('common.type')}</th>
+                  <th className="p-2 text-left">{t('inventory.quantity')}</th>
+                  <th className="p-2 text-left">{t('common.description')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {productHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).map((entry) => (
+                  <tr key={entry._id} className="border-b">
+                    <td className="p-2">{new Date(entry.date).toLocaleString()}</td>
+                    <td className="p-2">{t(`inventory.${entry.type}`)}</td>
+                    <td className="p-2">{entry.quantity}</td>
+                    <td className="p-2">{entry.description}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="text-center text-gray-600">{t('inventory.no_history')}</p>
+          )}
         </div>
       </CustomModal>
     </div>
