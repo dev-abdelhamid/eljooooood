@@ -1,16 +1,16 @@
 import React, { useState, useMemo, useCallback, useEffect, useReducer } from 'react';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { toast } from 'react-toastify';
+import { debounce } from 'lodash';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Package, AlertCircle, Search, RefreshCw, Edit, X, Plus } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { inventoryAPI, returnsAPI } from '../services/api';
-import { Package, AlertCircle, Search, RefreshCw, Edit, X, Plus } from 'lucide-react';
-import { debounce } from 'lodash';
-import { motion, AnimatePresence } from 'framer-motion';
-import { toast } from 'react-toastify';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { inventoryAPI } from '../services/api';
 
-// واجهات TypeScript (محافظ عليها، لكن أزل غير الضروري)
+// TypeScript Interfaces
 interface InventoryItem {
   _id: string;
   product: {
@@ -22,10 +22,11 @@ interface InventoryItem {
     unitEn: string;
     department: { name: string; nameEn: string; _id: string } | null;
   } | null;
+  branch: { name: string; nameEn: string; _id: string } | null;
   currentStock: number;
   minStockLevel: number;
   maxStockLevel: number;
-  status?: string;
+  status?: 'low' | 'normal' | 'full';
 }
 
 interface ReturnItem {
@@ -33,44 +34,14 @@ interface ReturnItem {
   quantity: number;
   reason: string;
   maxQuantity: number;
-  itemId?: string;
 }
 
 interface ReturnFormState {
+  orderId: string;
   reason: string;
   notes: string;
   items: ReturnItem[];
 }
-
-type ReturnFormAction =
-  | { type: 'SET_REASON'; payload: string }
-  | { type: 'SET_NOTES'; payload: string }
-  | { type: 'ADD_ITEM'; payload: ReturnItem }
-  | { type: 'UPDATE_ITEM'; payload: { index: number; field: keyof ReturnItem; value: string | number } }
-  | { type: 'REMOVE_ITEM'; payload: number }
-  | { type: 'RESET' };
-
-const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): ReturnFormState => {
-  switch (action.type) {
-    case 'SET_REASON':
-      return { ...state, reason: action.payload };
-    case 'SET_NOTES':
-      return { ...state, notes: action.payload };
-    case 'ADD_ITEM':
-      return { ...state, items: [...state.items, action.payload] };
-    case 'UPDATE_ITEM': {
-      const newItems = [...state.items];
-      newItems[action.payload.index] = { ...newItems[action.payload.index], [action.payload.field]: action.payload.value };
-      return { ...state, items: newItems };
-    }
-    case 'REMOVE_ITEM':
-      return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
-    case 'RESET':
-      return { reason: '', notes: '', items: [] };
-    default:
-      return state;
-  }
-};
 
 interface EditForm {
   minStockLevel: number;
@@ -86,7 +57,44 @@ interface AvailableItem {
   stock: number;
 }
 
-// مكونات مخصصة (محافظ عليها)
+type ReturnFormAction =
+  | { type: 'SET_ORDER_ID'; payload: string }
+  | { type: 'SET_REASON'; payload: string }
+  | { type: 'SET_NOTES'; payload: string }
+  | { type: 'ADD_ITEM'; payload: ReturnItem }
+  | { type: 'UPDATE_ITEM'; payload: { index: number; field: keyof ReturnItem; value: string | number } }
+  | { type: 'REMOVE_ITEM'; payload: number }
+  | { type: 'RESET' };
+
+// Reducer for Return Form
+const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): ReturnFormState => {
+  switch (action.type) {
+    case 'SET_ORDER_ID':
+      return { ...state, orderId: action.payload };
+    case 'SET_REASON':
+      return { ...state, reason: action.payload };
+    case 'SET_NOTES':
+      return { ...state, notes: action.payload };
+    case 'ADD_ITEM':
+      return { ...state, items: [...state.items, action.payload] };
+    case 'UPDATE_ITEM': {
+      const newItems = [...state.items];
+      newItems[action.payload.index] = {
+        ...newItems[action.payload.index],
+        [action.payload.field]: action.payload.value,
+      };
+      return { ...state, items: newItems };
+    }
+    case 'REMOVE_ITEM':
+      return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
+    case 'RESET':
+      return { orderId: '', reason: '', notes: '', items: [] };
+    default:
+      return state;
+  }
+};
+
+// Component Props
 interface CustomCardProps {
   className?: string;
   children: React.ReactNode;
@@ -102,10 +110,11 @@ interface CustomInputProps {
   error?: string;
   className?: string;
   placeholder?: string;
+  disabled?: boolean;
 }
 
 interface CustomButtonProps {
-  variant?: 'primary' | 'secondary' | 'destructive' | 'danger';
+  variant?: 'primary' | 'secondary' | 'destructive';
   size?: 'sm' | 'md';
   onClick?: () => void;
   disabled?: boolean;
@@ -138,39 +147,75 @@ interface PaginationProps {
 
 const ITEMS_PER_PAGE = 10;
 
+// Custom Components
 const CustomCard: React.FC<CustomCardProps> = ({ className, children }) => (
-  <div className={`bg-white shadow-md rounded-lg ${className}`}>{children}</div>
+  <div className={`bg-white shadow-md rounded-lg p-6 ${className}`} role="region" aria-label="Card">
+    {children}
+  </div>
 );
 
-const CustomInput: React.FC<CustomInputProps> = ({ label, type = 'text', min, max, value, onChange, error, className, placeholder }) => (
+const CustomInput: React.FC<CustomInputProps> = ({
+  label,
+  type = 'text',
+  min,
+  max,
+  value,
+  onChange,
+  error,
+  className,
+  placeholder,
+  disabled,
+}) => (
   <div className="flex flex-col">
-    {label && <label className="text-sm font-medium text-gray-700 mb-1">{label}</label>}
+    {label && (
+      <label className="text-sm font-medium text-gray-700 mb-1" htmlFor={label}>
+        {label}
+      </label>
+    )}
     <input
+      id={label}
       type={type}
       min={min}
       max={max}
       value={value}
       onChange={onChange}
       placeholder={placeholder}
-      className={`px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 ${error ? 'border-red-500' : ''} ${className}`}
+      disabled={disabled}
+      className={`px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 disabled:opacity-50 ${error ? 'border-red-500' : ''} ${className}`}
+      aria-invalid={!!error}
+      aria-describedby={error ? `${label}-error` : undefined}
     />
-    {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+    {error && (
+      <p id={`${label}-error`} className="text-red-500 text-sm mt-1" role="alert">
+        {error}
+      </p>
+    )}
   </div>
 );
 
-const CustomButton: React.FC<CustomButtonProps> = ({ variant = 'primary', size = 'md', onClick, disabled, className, children }) => {
-  const baseClass = `px-4 py-2 rounded-lg transition-colors duration-200 text-sm font-medium ${
-    size === 'sm' ? 'text-xs px-3 py-1' : ''
-  }`;
+const CustomButton: React.FC<CustomButtonProps> = ({
+  variant = 'primary',
+  size = 'md',
+  onClick,
+  disabled,
+  className,
+  children,
+}) => {
+  const baseClass = `px-4 py-2 rounded-lg transition-colors duration-200 text-sm font-medium ${size === 'sm' ? 'text-xs px-3 py-1' : ''}`;
   const variantClass =
     variant === 'secondary'
       ? 'bg-gray-100 hover:bg-gray-200 text-gray-800'
-      : variant === 'destructive' || variant === 'danger'
+      : variant === 'destructive'
       ? 'text-red-600 hover:text-red-800'
       : 'bg-amber-600 text-white hover:bg-amber-700';
   const disabledClass = disabled ? 'opacity-50 cursor-not-allowed' : '';
   return (
-    <button onClick={onClick} disabled={disabled} className={`${baseClass} ${variantClass} ${disabledClass} ${className}`}>
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`${baseClass} ${variantClass} ${disabledClass} ${className}`}
+      aria-disabled={disabled}
+    >
       {children}
     </button>
   );
@@ -179,11 +224,11 @@ const CustomButton: React.FC<CustomButtonProps> = ({ variant = 'primary', size =
 const CustomModal: React.FC<CustomModalProps> = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" role="dialog" aria-modal="true">
+      <div className="bg-white p-6 rounded-lg shadow-xl max-w-2xl w-full modal-content">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold">{title}</h2>
-          <CustomButton onClick={onClose} variant="secondary">
+          <CustomButton onClick={onClose} variant="secondary" aria-label="Close modal">
             <X className="w-4 h-4" />
           </CustomButton>
         </div>
@@ -195,14 +240,19 @@ const CustomModal: React.FC<CustomModalProps> = ({ isOpen, onClose, title, child
 
 const CustomSelect: React.FC<CustomSelectProps> = ({ label, value, onChange, options, error, disabled }) => (
   <div className="flex flex-col">
-    {label && <label className="text-sm font-medium text-gray-700 mb-1">{label}</label>}
+    {label && (
+      <label className="text-sm font-medium text-gray-700 mb-1" htmlFor={label}>
+        {label}
+      </label>
+    )}
     <select
+      id={label}
       value={value}
       onChange={onChange}
       disabled={disabled}
-      className={`px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 ${
-        error ? 'border-red-500' : ''
-      } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+      className={`px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 ${error ? 'border-red-500' : ''} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+      aria-invalid={!!error}
+      aria-describedby={error ? `${label}-error` : undefined}
     >
       {options.map((opt) => (
         <option key={opt.value} value={opt.value}>
@@ -210,7 +260,11 @@ const CustomSelect: React.FC<CustomSelectProps> = ({ label, value, onChange, opt
         </option>
       ))}
     </select>
-    {error && <p className="text-red-500 text-sm mt-1">{error}</p>}
+    {error && (
+      <p id={`${label}-error`} className="text-red-500 text-sm mt-1" role="alert">
+        {error}
+      </p>
+    )}
   </div>
 );
 
@@ -220,6 +274,8 @@ const InventoryCardSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.3 }}
     className="p-4 mb-4 bg-white shadow-md rounded-lg border border-gray-200"
+    role="status"
+    aria-label="Loading inventory item"
   >
     <div className="flex flex-col gap-3">
       <div className={`flex items-center ${isRtl ? 'justify-between flex-row-reverse' : 'justify-between'}`}>
@@ -235,12 +291,13 @@ const InventoryCardSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
 
 const Pagination: React.FC<PaginationProps> = ({ totalPages, currentPage, setCurrentPage, isRtl }) => (
   totalPages > 1 && (
-    <div className={`flex items-center justify-center gap-3 mt-6 ${isRtl ? 'flex-row-reverse' : ''}`}>
+    <div className={`flex items-center justify-center gap-3 mt-6 ${isRtl ? 'flex-row-reverse' : ''}`} role="navigation" aria-label="Pagination">
       <CustomButton
         variant="secondary"
         size="md"
         onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
         disabled={currentPage === 1}
+        aria-label={isRtl ? 'الصفحة السابقة' : 'Previous page'}
       >
         {isRtl ? 'السابق' : 'Previous'}
       </CustomButton>
@@ -252,6 +309,7 @@ const Pagination: React.FC<PaginationProps> = ({ totalPages, currentPage, setCur
         size="md"
         onClick={() => setCurrentPage(Math.min(currentPage + 1, totalPages))}
         disabled={currentPage === totalPages}
+        aria-label={isRtl ? 'الصفحة التالية' : 'Next page'}
       >
         {isRtl ? 'التالي' : 'Next'}
       </CustomButton>
@@ -259,7 +317,7 @@ const Pagination: React.FC<PaginationProps> = ({ totalPages, currentPage, setCur
   )
 );
 
-export const BranchInventory: React.FC = () => {
+const BranchInventory: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
@@ -272,7 +330,7 @@ export const BranchInventory: React.FC = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [returnForm, dispatchReturnForm] = useReducer(returnFormReducer, { reason: '', notes: '', items: [] });
+  const [returnForm, dispatchReturnForm] = useReducer(returnFormReducer, { orderId: '', reason: '', notes: '', items: [] });
   const [editForm, setEditForm] = useState<EditForm>({ minStockLevel: 0, maxStockLevel: 0 });
   const [returnErrors, setReturnErrors] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
@@ -286,44 +344,56 @@ export const BranchInventory: React.FC = () => {
     };
   }, [abortController]);
 
-  const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError, refetch: refetchInventory } = useQuery<
-    InventoryItem[],
+  const { data: inventoryResponse, isLoading: inventoryLoading, error: inventoryError, refetch: refetchInventory } = useQuery<
+    { success: boolean; inventory: InventoryItem[]; totalPages: number; currentPage: number },
     Error
   >({
-    queryKey: ['inventory', user?.branchId, language],
+    queryKey: ['inventory', user?.branchId, language, currentPage, searchQuery, filterStatus],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
-      return inventoryAPI.getByBranch(user.branchId, { signal: abortController.signal });
+      return inventoryAPI.getByBranch(user.branchId, {
+        signal: abortController.signal,
+        params: {
+          page: currentPage,
+          limit: ITEMS_PER_PAGE,
+          search: searchQuery || undefined,
+          lowStock: filterStatus === 'low' ? 'true' : undefined,
+          lang: language,
+        },
+      });
     },
     enabled: !!user?.branchId,
     select: (response) => {
-      const inventoryData = Array.isArray(response) ? response : response?.inventory || [];
-      return inventoryData.map((item: InventoryItem) => ({
-        ...item,
-        product: item.product
-          ? {
-              _id: item.product._id || '',
-              name: item.product.name || t('products.unknown'),
-              nameEn: item.product.nameEn || item.product.name || t('products.unknown'),
-              code: item.product.code || 'N/A',
-              unit: item.product.unit || t('products.unit_unknown'),
-              unitEn: item.product.unitEn || item.product.unit || 'N/A',
-              department: item.product.department
-                ? {
-                    _id: item.product.department._id || '',
-                    name: item.product.department.name || t('departments.unknown'),
-                    nameEn: item.product.department.nameEn || item.product.department.name || t('departments.unknown'),
-                  }
-                : null,
-            }
-          : null,
-        status:
-          item.currentStock <= item.minStockLevel
-            ? 'low'
-            : item.currentStock >= item.maxStockLevel
-            ? 'full'
-            : 'normal',
-      }));
+      const inventoryData = response.success ? response.inventory : [];
+      return {
+        ...response,
+        inventory: inventoryData.map((item: InventoryItem) => ({
+          ...item,
+          product: item.product
+            ? {
+                _id: item.product._id || '',
+                name: item.product.name || t('products.unknown'),
+                nameEn: item.product.nameEn || item.product.name || t('products.unknown'),
+                code: item.product.code || 'N/A',
+                unit: item.product.unit || t('products.unit_unknown'),
+                unitEn: item.product.unitEn || item.product.unit || 'N/A',
+                department: item.product.department
+                  ? {
+                      _id: item.product.department._id || '',
+                      name: item.product.department.name || t('departments.unknown'),
+                      nameEn: item.product.department.nameEn || item.product.department.name || t('departments.unknown'),
+                    }
+                  : null,
+              }
+            : null,
+          status:
+            item.currentStock <= item.minStockLevel
+              ? 'low'
+              : item.currentStock >= item.maxStockLevel
+              ? 'full'
+              : 'normal',
+        })),
+      };
     },
     onError: (err) => {
       toast.error(err.message || t('errors.fetch_inventory'), { position: 'top-right', autoClose: 3000 });
@@ -331,8 +401,8 @@ export const BranchInventory: React.FC = () => {
   });
 
   useEffect(() => {
-    if (inventoryData) {
-      const items: AvailableItem[] = inventoryData
+    if (inventoryResponse?.inventory) {
+      const items: AvailableItem[] = inventoryResponse.inventory
         .filter((item) => item.currentStock > 0 && item.product)
         .map((item) => ({
           productId: item.product!._id,
@@ -346,19 +416,18 @@ export const BranchInventory: React.FC = () => {
         }));
       setAvailableItems(items);
     }
-  }, [inventoryData, isRtl, t]);
+  }, [inventoryResponse, isRtl, t]);
 
   useEffect(() => {
     if (!socket || !user?.branchId) return;
 
-    const handleInventoryUpdated = ({ branchId, minStockLevel, maxStockLevel }: { branchId: string; minStockLevel?: number; maxStockLevel?: number }) => {
+    const handleInventoryUpdated = ({ branchId }: { branchId: string }) => {
       if (branchId === user.branchId) {
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
-        if (minStockLevel !== undefined || maxStockLevel !== undefined) {
-          toast.info(t('inventory.update_success'), { position: 'top-right', autoClose: 3000 });
-        }
+        toast.info(t('inventory.update_success'), { position: 'top-right', autoClose: 3000 });
       }
     };
+
     const handleReturnStatusUpdated = ({ branchId, returnId, status }: { branchId: string; returnId: string; status: string }) => {
       if (branchId === user.branchId && status === 'approved') {
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -376,11 +445,11 @@ export const BranchInventory: React.FC = () => {
     };
 
     socket.on('inventoryUpdated', handleInventoryUpdated);
-    socket.on('returnStatusUpdated', handleReturnStatusUpdated);
+    socket.on('returnUpdated', handleReturnStatusUpdated);
 
     return () => {
       socket.off('inventoryUpdated', handleInventoryUpdated);
-      socket.off('returnStatusUpdated', handleReturnStatusUpdated);
+      socket.off('returnUpdated', handleReturnStatusUpdated);
     };
   }, [socket, user, queryClient, addNotification, t]);
 
@@ -417,27 +486,7 @@ export const BranchInventory: React.FC = () => {
     [t]
   );
 
-  const filteredInventory = useMemo(
-    () =>
-      (inventoryData || []).filter(
-        (item) =>
-          item.product &&
-          (!filterStatus || item.status === filterStatus) &&
-          (item.product.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.product.nameEn?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.product.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.product.department?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.product.department?.nameEn?.toLowerCase().includes(searchQuery.toLowerCase()))
-      ),
-    [inventoryData, searchQuery, filterStatus]
-  );
-
-  const paginatedInventory = useMemo(
-    () => filteredInventory.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
-    [filteredInventory, currentPage]
-  );
-
-  const totalInventoryPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
+  const filteredInventory = useMemo(() => inventoryResponse?.inventory || [], [inventoryResponse]);
 
   const handleOpenReturnModal = useCallback((item?: InventoryItem) => {
     setSelectedItem(item || null);
@@ -488,6 +537,7 @@ export const BranchInventory: React.FC = () => {
 
   const validateReturnForm = useCallback(() => {
     const errors: Record<string, string> = {};
+    if (!returnForm.orderId) errors.orderId = t('errors.required', { field: t('returns.order_id') });
     if (!returnForm.reason) errors.reason = t('errors.required', { field: t('returns.reason') });
     if (returnForm.items.length === 0) errors.items = t('errors.required', { field: t('returns.items') });
     returnForm.items.forEach((item, index) => {
@@ -514,16 +564,16 @@ export const BranchInventory: React.FC = () => {
     mutationFn: async () => {
       if (!validateReturnForm()) throw new Error(t('errors.invalid_form'));
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
-      await returnsAPI.createReturn(
+      await inventoryAPI.createReturn(
         {
+          orderId: returnForm.orderId,
           branchId: user.branchId,
           reason: returnForm.reason,
           notes: returnForm.notes,
           items: returnForm.items.map((item) => ({
-            product: item.productId,
+            productId: item.productId,
             quantity: item.quantity,
             reason: item.reason,
-            itemId: item.itemId,
           })),
         },
         { signal: abortController.signal }
@@ -554,17 +604,16 @@ export const BranchInventory: React.FC = () => {
     },
   });
 
-  const updateInventoryMutation = useMutation<void, Error, void>({
+  const updateStockLimitsMutation = useMutation<void, Error, void>({
     mutationFn: async () => {
       if (!validateEditForm()) throw new Error(t('errors.invalid_form'));
       if (!selectedItem) throw new Error(t('errors.no_item_selected'));
-      if (!user?._id) throw new Error('User ID is required'); // إضافة تحقق
-      await inventoryAPI.updateStock(
+      if (!user?._id) throw new Error('User ID is required');
+      await inventoryAPI.updateStockLimits(
         selectedItem._id,
         {
           minStockLevel: editForm.minStockLevel,
           maxStockLevel: editForm.maxStockLevel,
-          userId: user._id, // إضافة userId لإصلاح الخطأ
         },
         { signal: abortController.signal }
       );
@@ -585,7 +634,7 @@ export const BranchInventory: React.FC = () => {
     },
     onError: (err) => {
       if (err.name !== 'AbortError') {
-        console.error(`[${new Date().toISOString()}] Update inventory error:`, err);
+        console.error(`[${new Date().toISOString()}] Update stock limits error:`, err);
         toast.error(err.message || t('errors.update_inventory'), { position: 'top-right', autoClose: 3000 });
       }
     },
@@ -597,6 +646,8 @@ export const BranchInventory: React.FC = () => {
     <div
       className="container mx-auto px-4 py-6 min-h-screen bg-gradient-to-br from-amber-50 to-teal-50"
       dir={isRtl ? 'rtl' : 'ltr'}
+      role="main"
+      aria-label="Inventory Management"
     >
       <div className="mb-6">
         <div className="flex justify-between items-center">
@@ -610,6 +661,7 @@ export const BranchInventory: React.FC = () => {
           <CustomButton
             onClick={() => handleOpenReturnModal()}
             className="bg-amber-600 text-white hover:bg-amber-700 flex items-center gap-2"
+            aria-label={t('returns.create')}
           >
             <Plus className="w-4 h-4" />
             {t('returns.create')}
@@ -618,12 +670,13 @@ export const BranchInventory: React.FC = () => {
       </div>
 
       {errorMessage && (
-        <div className="mb-6 p-4 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3">
+        <div className="mb-6 p-4 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3" role="alert">
           <AlertCircle className="w-5 h-5 text-red-600" />
           <span className="text-red-600">{errorMessage}</span>
           <CustomButton
             onClick={() => refetchInventory()}
             className="ml-4 bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700"
+            aria-label={t('common.retry')}
           >
             <RefreshCw className="w-4 h-4 mr-2" />
             {t('common.retry')}
@@ -631,17 +684,19 @@ export const BranchInventory: React.FC = () => {
         </div>
       )}
 
-      <CustomCard className="p-6 mb-6 bg-white rounded-xl shadow-md">
+      <CustomCard className="mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="relative">
             <Search
               className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 ${isRtl ? 'right-3' : 'left-3'}`}
+              aria-hidden="true"
             />
             <CustomInput
               placeholder={t('common.search')}
               onChange={handleSearchChange}
-              className={`pl-10 pr-4 py-2 border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 ${isRtl ? 'pr-10 pl-4' : ''}`}
+              className={`pl-10 pr-4 py-2 ${isRtl ? 'pr-10 pl-4' : ''}`}
               value={searchQuery}
+              aria-label={t('common.search')}
             />
           </div>
           <CustomSelect
@@ -667,15 +722,15 @@ export const BranchInventory: React.FC = () => {
               <InventoryCardSkeleton key={i} isRtl={isRtl} />
             ))}
           </div>
-        ) : paginatedInventory.length === 0 ? (
-          <CustomCard className="p-8 text-center bg-white rounded-xl shadow-md">
-            <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+        ) : filteredInventory.length === 0 ? (
+          <CustomCard className="p-8 text-center">
+            <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" aria-hidden="true" />
             <p className="text-gray-600">{t('inventory.no_items')}</p>
           </CustomCard>
         ) : (
           <div className="space-y-4">
             <AnimatePresence>
-              {paginatedInventory.map((item) =>
+              {filteredInventory.map((item) =>
                 item.product ? (
                   <motion.div
                     key={item._id}
@@ -684,7 +739,7 @@ export const BranchInventory: React.FC = () => {
                     exit={{ opacity: 0, y: -20 }}
                     transition={{ duration: 0.3 }}
                   >
-                    <CustomCard className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-shadow">
+                    <CustomCard className="hover:shadow-lg transition-shadow">
                       <div className={`flex items-start justify-between gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
                         <div className="flex-1">
                           <h3 className="font-semibold text-gray-900">{isRtl ? item.product.name : item.product.nameEn}</h3>
@@ -710,6 +765,7 @@ export const BranchInventory: React.FC = () => {
                             size="sm"
                             onClick={() => handleOpenEditModal(item)}
                             className="text-blue-600 hover:text-blue-800"
+                            aria-label={t('inventory.edit_stock_limits')}
                           >
                             <Edit className="w-4 h-4" />
                           </CustomButton>
@@ -719,6 +775,7 @@ export const BranchInventory: React.FC = () => {
                             disabled={item.currentStock <= 0}
                             onClick={() => handleOpenReturnModal(item)}
                             className="text-red-600 hover:text-red-800 disabled:opacity-50"
+                            aria-label={t('returns.create')}
                           >
                             {t('returns.create')}
                           </CustomButton>
@@ -729,7 +786,12 @@ export const BranchInventory: React.FC = () => {
                 ) : null
               )}
             </AnimatePresence>
-            <Pagination totalPages={totalInventoryPages} currentPage={currentPage} setCurrentPage={setCurrentPage} isRtl={isRtl} />
+            <Pagination
+              totalPages={inventoryResponse?.totalPages || 1}
+              currentPage={currentPage}
+              setCurrentPage={setCurrentPage}
+              isRtl={isRtl}
+            />
           </div>
         )}
       </motion.div>
@@ -750,6 +812,13 @@ export const BranchInventory: React.FC = () => {
               {t('products.title')}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
             </p>
           )}
+          <CustomInput
+            label={t('returns.order_id')}
+            value={returnForm.orderId}
+            onChange={(e) => dispatchReturnForm({ type: 'SET_ORDER_ID', payload: e.target.value })}
+            placeholder={t('returns.order_id_placeholder')}
+            error={returnErrors.orderId}
+          />
           <CustomSelect
             label={t('returns.reason')}
             value={returnForm.reason}
@@ -797,29 +866,31 @@ export const BranchInventory: React.FC = () => {
                   error={returnErrors[`item_${index}_reason`]}
                 />
                 <CustomButton
-                  variant="danger"
+                  variant="destructive"
                   size="sm"
                   onClick={() => removeItemFromForm(index)}
                   disabled={!!selectedItem}
+                  aria-label="Remove item"
                 >
                   <X className="w-4 h-4" />
                 </CustomButton>
               </div>
             ))}
-            {returnErrors.items && <p className="text-red-500 text-sm mt-1">{returnErrors.items}</p>}
+            {returnErrors.items && <p className="text-red-500 text-sm mt-1" role="alert">{returnErrors.items}</p>}
             {!selectedItem && (
               <CustomButton
                 variant="secondary"
                 onClick={addItemToForm}
                 disabled={availableItems.length === 0 || availableItems.length === returnForm.items.length}
                 className="mt-2"
+                aria-label={t('returns.add_item')}
               >
                 <Plus className="w-4 h-4 mr-2" />
                 {t('returns.add_item')}
               </CustomButton>
             )}
           </div>
-          {returnErrors.form && <p className="text-red-500 text-sm">{returnErrors.form}</p>}
+          {returnErrors.form && <p className="text-red-500 text-sm" role="alert">{returnErrors.form}</p>}
           <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <CustomButton
               variant="secondary"
@@ -829,6 +900,7 @@ export const BranchInventory: React.FC = () => {
                 setReturnErrors({});
                 setSelectedItem(null);
               }}
+              aria-label={t('common.cancel')}
             >
               {t('common.cancel')}
             </CustomButton>
@@ -836,6 +908,7 @@ export const BranchInventory: React.FC = () => {
               onClick={() => createReturnMutation.mutate()}
               disabled={createReturnMutation.isPending}
               className="disabled:opacity-50"
+              aria-label={t('common.submit')}
             >
               {createReturnMutation.isPending ? t('common.submitting') : t('common.submit')}
             </CustomButton>
@@ -884,15 +957,17 @@ export const BranchInventory: React.FC = () => {
                 setEditErrors({});
                 setSelectedItem(null);
               }}
+              aria-label={t('common.cancel')}
             >
               {t('common.cancel')}
             </CustomButton>
             <CustomButton
-              onClick={() => updateInventoryMutation.mutate()}
-              disabled={updateInventoryMutation.isPending}
+              onClick={() => updateStockLimitsMutation.mutate()}
+              disabled={updateStockLimitsMutation.isPending}
               className="disabled:opacity-50"
+              aria-label={t('common.save')}
             >
-              {updateInventoryMutation.isPending ? t('common.saving') : t('common.save')}
+              {updateStockLimitsMutation.isPending ? t('common.saving') : t('common.save')}
             </CustomButton>
           </div>
         </div>
