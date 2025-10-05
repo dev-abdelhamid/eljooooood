@@ -952,9 +952,8 @@ export const inventoryAPI = {
   }>) => {
     if (
       !isValidObjectId(id) ||
-      (data.productId && !isValidObjectId(data.productId)) ||
-      (data.branchId && !isValidObjectId(data.branchId))
-    ) {
+      (data.productId && !isValidObjectId(data.productId)) 
+        ) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.updateStock - Invalid inventory ID, product ID, or branch ID:`, { id, data });
       throw new Error('Invalid inventory ID, product ID, or branch ID');
     }
