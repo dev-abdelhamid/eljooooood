@@ -1,5 +1,4 @@
-// src/services/api.ts
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { notificationsAPI } from './notifications';
 import { returnsAPI } from './returnsAPI';
 import { salesAPI } from './salesAPI';
@@ -20,13 +19,14 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    const language = localStorage.getItem('language') || 'en';
+    const language = localStorage.getItem('language') || 'ar';
     config.params = { ...config.params, lang: language };
     console.log(`[${new Date().toISOString()}] API request:`, {
       url: config.url,
       method: config.method,
       headers: config.headers,
       params: config.params,
+      data: config.data,
     });
     return config;
   },
@@ -38,7 +38,7 @@ api.interceptors.request.use(
 
 api.interceptors.response.use(
   (response) => response.data,
-  async (error) => {
+  async (error: AxiosError) => {
     const originalRequest = error.config;
     console.error(`[${new Date().toISOString()}] API response error:`, {
       url: error.config?.url,
@@ -48,17 +48,23 @@ api.interceptors.response.use(
       message: error.message,
     });
     const isRtl = localStorage.getItem('language') === 'ar';
-    let message = error.response?.data?.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
+    let message = (error.response?.data as any)?.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
     if (error.response?.status === 400) {
-      message = error.response?.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
-      if (error.response?.data?.field) {
-        message = `${message}: ${error.response.data.field} = ${error.response.data.value}`;
+      message = (error.response?.data as any)?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
+      if ((error.response?.data as any)?.errors) {
+        message = (error.response?.data as any).errors.map((e: any) => e.msg).join(', ');
       }
     }
-    if (error.response?.status === 403) message = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
-    if (error.response?.status === 404) message = error.response?.data?.message || (isRtl ? 'المورد غير موجود' : 'Resource not found');
-    if (error.response?.status === 429) message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 403) {
+      message = (error.response?.data as any)?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
+    }
+    if (error.response?.status === 404) {
+      message = (error.response?.data as any)?.message || (isRtl ? 'المورد غير موجود' : 'Resource not found');
+    }
+    if (error.response?.status === 429) {
+      message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
+    }
+    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
         const refreshToken = localStorage.getItem('refreshToken');
@@ -141,7 +147,7 @@ export const productsAPI = {
     }
     const response = await api.get('/products', { params });
     console.log(`[${new Date().toISOString()}] productsAPI.getAll - Response:`, response);
-    return response; // Returns { data: Product[], totalPages: number, currentPage: number, totalItems: number }
+    return response;
   },
   getById: async (id: string) => {
     if (!isValidObjectId(id)) {
@@ -452,6 +458,9 @@ const createErrorMessage = (errorType: string, isRtl: boolean): string => {
     invalidDepartmentId: { ar: 'معرف القسم غير صالح', en: 'Invalid department ID' },
     invalidOrderOrTaskId: { ar: 'معرف الطلب أو المهمة غير صالح', en: 'Invalid order or task ID' },
     invalidOrderOrItemOrChefId: { ar: 'معرف الطلب، العنصر، أو الشيف غير صالح', en: 'Invalid order, item, or chef ID' },
+    invalidProductId: { ar: 'معرف المنتج غير صالح', en: 'Invalid product ID' },
+    invalidQuantity: { ar: 'الكمية غير صالحة', en: 'Invalid quantity' },
+    insufficientStock: { ar: 'المخزون غير كافٍ', en: 'Insufficient stock' },
   };
   return isRtl ? messages[errorType].ar : messages[errorType].en;
 };
@@ -463,12 +472,21 @@ export const ordersAPI = {
       branchId: string;
       items: Array<{ product: string; quantity: number; price: number }>;
       status: string;
+      createdBy?: string;
     },
-    isRtl: boolean = false
+    isRtl: boolean = localStorage.getItem('language') === 'ar'
   ) => {
     if (!isValidObjectId(orderData.branchId)) {
       console.error(`[${new Date().toISOString()}] ordersAPI.create - Invalid branchId:`, orderData.branchId);
       throw new Error(createErrorMessage('invalidBranchId', isRtl));
+    }
+    if (
+      !Array.isArray(orderData.items) ||
+      orderData.items.length === 0 ||
+      orderData.items.some(item => !isValidObjectId(item.product) || item.quantity < 1 || item.price < 0)
+    ) {
+      console.error(`[${new Date().toISOString()}] ordersAPI.create - Invalid items:`, orderData.items);
+      throw new Error(createErrorMessage('invalidProductId', isRtl));
     }
     try {
       const response = await api.post('/orders', {
@@ -480,6 +498,7 @@ export const ordersAPI = {
           price: item.price,
         })),
         status: orderData.status.trim(),
+        createdBy: orderData.createdBy,
       });
       console.log(`[${new Date().toISOString()}] ordersAPI.create - Response:`, response);
       return response;
@@ -513,7 +532,7 @@ export const ordersAPI = {
   getById: async (orderId: string) => {
     if (!isValidObjectId(orderId)) {
       console.error(`[${new Date().toISOString()}] ordersAPI.getById - Invalid order ID:`, orderId);
-      throw new Error('Invalid order ID');
+      throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
     }
     try {
       const response = await api.get(`/orders/${orderId}`);
@@ -521,31 +540,32 @@ export const ordersAPI = {
       return response;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] ordersAPI.getById - Error:`, error.message);
-      throw new Error('Failed to fetch order: ' + error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في جلب الطلب: ${error.message}` : `Failed to fetch order: ${error.message}`);
     }
   },
 
-  updateStatus: async (orderId: string, data: { status: string }) => {
+  updateStatus: async (orderId: string, data: { status: string; cancellationReason?: string }) => {
     if (!isValidObjectId(orderId)) {
       console.error(`[${new Date().toISOString()}] ordersAPI.updateStatus - Invalid order ID:`, orderId);
-      throw new Error('Invalid order ID');
+      throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
     }
     try {
       const response = await api.patch(`/orders/${orderId}/status`, {
         status: data.status.trim(),
+        cancellationReason: data.cancellationReason?.trim(),
       });
       console.log(`[${new Date().toISOString()}] ordersAPI.updateStatus - Response:`, response);
       return response;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] ordersAPI.updateStatus - Error:`, error.message);
-      throw new Error('Failed to update order status: ' + error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في تحديث حالة الطلب: ${error.message}` : `Failed to update order status: ${error.message}`);
     }
   },
 
   updateChefItem: async (orderId: string, data: { taskId: string; status: string }) => {
     if (!isValidObjectId(orderId) || !isValidObjectId(data.taskId)) {
       console.error(`[${new Date().toISOString()}] ordersAPI.updateChefItem - Invalid order ID or task ID:`, { orderId, taskId: data.taskId });
-      throw new Error('Invalid order ID or task ID');
+      throw new Error(createErrorMessage('invalidOrderOrTaskId', localStorage.getItem('language') === 'ar'));
     }
     try {
       const response = await api.patch(`/orders/${orderId}/tasks/${data.taskId}/status`, {
@@ -555,7 +575,7 @@ export const ordersAPI = {
       return response;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] ordersAPI.updateChefItem - Error:`, error.message);
-      throw new Error('Failed to update item status: ' + error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في تحديث حالة العنصر: ${error.message}` : `Failed to update item status: ${error.message}`);
     }
   },
 
@@ -565,7 +585,7 @@ export const ordersAPI = {
   ) => {
     if (!isValidObjectId(orderId) || data.items.some(item => !isValidObjectId(item.itemId) || !isValidObjectId(item.assignedTo))) {
       console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - Invalid data:`, { orderId, data });
-      throw new Error('Invalid order ID, item ID, or assignedTo ID');
+      throw new Error(createErrorMessage('invalidOrderOrItemOrChefId', localStorage.getItem('language') === 'ar'));
     }
     try {
       const response = await api.patch(`/orders/${orderId}/assign`, {
@@ -576,14 +596,14 @@ export const ordersAPI = {
       return response;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - Error:`, error.message);
-      throw new Error('Failed to assign chefs: ' + error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في تعيين الشيفات: ${error.message}` : `Failed to assign chefs: ${error.message}`);
     }
   },
 
   confirmDelivery: async (orderId: string) => {
     if (!isValidObjectId(orderId)) {
       console.error(`[${new Date().toISOString()}] ordersAPI.confirmDelivery - Invalid order ID:`, orderId);
-      throw new Error('Invalid order ID');
+      throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
     }
     try {
       const response = await api.patch(`/orders/${orderId}/confirm-delivery`, {});
@@ -591,7 +611,7 @@ export const ordersAPI = {
       return response;
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] ordersAPI.confirmDelivery - Error:`, error.message);
-      throw new Error('Failed to confirm delivery: ' + error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في تأكيد التسليم: ${error.message}` : `Failed to confirm delivery: ${error.message}`);
     }
   },
 };
@@ -605,7 +625,7 @@ export const departmentAPI = {
   getById: async (id: string) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] departmentAPI.getById - Invalid department ID:`, id);
-      throw new Error('Invalid department ID');
+      throw new Error(createErrorMessage('invalidDepartmentId', localStorage.getItem('language') === 'ar'));
     }
     const response = await api.get(`/departments/${id}`);
     console.log(`[${new Date().toISOString()}] departmentAPI.getById - Response:`, response);
@@ -634,7 +654,7 @@ export const departmentAPI = {
   }>) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] departmentAPI.update - Invalid department ID:`, id);
-      throw new Error('Invalid department ID');
+      throw new Error(createErrorMessage('invalidDepartmentId', localStorage.getItem('language') === 'ar'));
     }
     const response = await api.put(`/departments/${id}`, {
       name: departmentData.name?.trim(),
@@ -648,7 +668,7 @@ export const departmentAPI = {
   delete: async (id: string) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] departmentAPI.delete - Invalid department ID:`, id);
-      throw new Error('Invalid department ID');
+      throw new Error(createErrorMessage('invalidDepartmentId', localStorage.getItem('language') === 'ar'));
     }
     const response = await api.delete(`/departments/${id}`);
     console.log(`[${new Date().toISOString()}] departmentAPI.delete - Response:`, response);
@@ -665,7 +685,7 @@ export const chefsAPI = {
   getById: async (id: string) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.getById - Invalid chef ID:`, id);
-      throw new Error('Invalid chef ID');
+      throw new Error(createErrorMessage('invalidOrderOrItemOrChefId', localStorage.getItem('language') === 'ar'));
     }
     const response = await api.get(`/chefs/${id}`);
     console.log(`[${new Date().toISOString()}] chefsAPI.getById - Response:`, response);
@@ -674,7 +694,7 @@ export const chefsAPI = {
   getByUserId: async (userId: string) => {
     if (!isValidObjectId(userId)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.getByUserId - Invalid user ID:`, userId);
-      throw new Error('Invalid user ID');
+      throw new Error(createErrorMessage('invalidOrderOrItemOrChefId', localStorage.getItem('language') === 'ar'));
     }
     const response = await api.get(`/chefs/by-user/${userId}`);
     console.log(`[${new Date().toISOString()}] chefsAPI.getByUserId - Response:`, response);
@@ -693,6 +713,10 @@ export const chefsAPI = {
     };
     department: string;
   }) => {
+    if (!isValidObjectId(chefData.department)) {
+      console.error(`[${new Date().toISOString()}] chefsAPI.create - Invalid department ID:`, chefData.department);
+      throw new Error(createErrorMessage('invalidDepartmentId', localStorage.getItem('language') === 'ar'));
+    }
     const response = await api.post('/chefs', {
       user: {
         name: chefData.user.name.trim(),
@@ -720,6 +744,14 @@ export const chefsAPI = {
     };
     department: string;
   }) => {
+    if (!isValidObjectId(id)) {
+      console.error(`[${new Date().toISOString()}] chefsAPI.update - Invalid chef ID:`, id);
+      throw new Error(createErrorMessage('invalidOrderOrItemOrChefId', localStorage.getItem('language') === 'ar'));
+    }
+    if (!isValidObjectId(chefData.department)) {
+      console.error(`[${new Date().toISOString()}] chefsAPI.update - Invalid department ID:`, chefData.department);
+      throw new Error(createErrorMessage('invalidDepartmentId', localStorage.getItem('language') === 'ar'));
+    }
     const response = await api.put(`/chefs/${id}`, {
       user: {
         name: chefData.user.name.trim(),
@@ -737,7 +769,7 @@ export const chefsAPI = {
   delete: async (id: string) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.delete - Invalid chef ID:`, id);
-      throw new Error('Invalid chef ID');
+      throw new Error(createErrorMessage('invalidOrderOrItemOrChefId', localStorage.getItem('language') === 'ar'));
     }
     const response = await api.delete(`/chefs/${id}`);
     console.log(`[${new Date().toISOString()}] chefsAPI.delete - Response:`, response);
@@ -746,15 +778,13 @@ export const chefsAPI = {
   resetPassword: async (id: string, password: string) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.resetPassword - Invalid chef ID:`, id);
-      throw new Error('Invalid chef ID');
+      throw new Error(createErrorMessage('invalidOrderOrItemOrChefId', localStorage.getItem('language') === 'ar'));
     }
     const response = await api.post(`/chefs/${id}/reset-password`, { password });
-    console.log(`[${new Date().toISOString()}] chefsAPI.resetPassword response:`, response);
+    console.log(`[${new Date().toISOString()}] chefsAPI.resetPassword - Response:`, response);
     return response;
   },
 };
-
-
 
 export const productionAssignmentsAPI = {
   create: async (assignmentData: {
@@ -764,12 +794,14 @@ export const productionAssignmentsAPI = {
     quantity: number;
     itemId: string;
   }) => {
-    if (!isValidObjectId(assignmentData.order) ||
-        !isValidObjectId(assignmentData.product) ||
-        !isValidObjectId(assignmentData.chef) ||
-        !isValidObjectId(assignmentData.itemId)) {
+    if (
+      !isValidObjectId(assignmentData.order) ||
+      !isValidObjectId(assignmentData.product) ||
+      !isValidObjectId(assignmentData.chef) ||
+      !isValidObjectId(assignmentData.itemId)
+    ) {
       console.error(`[${new Date().toISOString()}] productionAssignmentsAPI.create - Invalid data:`, assignmentData);
-      throw new Error('Invalid order ID, product ID, chef ID, or item ID');
+      throw new Error(createErrorMessage('invalidOrderOrItemOrChefId', localStorage.getItem('language') === 'ar'));
     }
     const response = await api.post('/orders/tasks', assignmentData);
     console.log(`[${new Date().toISOString()}] productionAssignmentsAPI.create - Response:`, response);
@@ -778,7 +810,7 @@ export const productionAssignmentsAPI = {
   getChefTasks: async (chefId: string, query: { page?: number; limit?: number; status?: string; search?: string } = {}) => {
     if (!isValidObjectId(chefId)) {
       console.error(`[${new Date().toISOString()}] productionAssignmentsAPI.getChefTasks - Invalid chefId:`, chefId);
-      throw new Error('Invalid chef ID');
+      throw new Error(createErrorMessage('invalidOrderOrItemOrChefId', localStorage.getItem('language') === 'ar'));
     }
     const response = await api.get(`/orders/tasks/chef/${chefId}`, { params: query });
     console.log(`[${new Date().toISOString()}] productionAssignmentsAPI.getChefTasks - Response:`, response);
@@ -787,7 +819,7 @@ export const productionAssignmentsAPI = {
   updateTaskStatus: async (orderId: string, taskId: string, data: { status: string }) => {
     if (!isValidObjectId(orderId) || !isValidObjectId(taskId)) {
       console.error(`[${new Date().toISOString()}] productionAssignmentsAPI.updateTaskStatus - Invalid orderId or taskId:`, { orderId, taskId });
-      throw new Error('Invalid order ID or task ID');
+      throw new Error(createErrorMessage('invalidOrderOrTaskId', localStorage.getItem('language') === 'ar'));
     }
     const response = await api.patch(`/orders/${orderId}/tasks/${taskId}/status`, data);
     console.log(`[${new Date().toISOString()}] productionAssignmentsAPI.updateTaskStatus - Response:`, response);
@@ -800,42 +832,106 @@ export const productionAssignmentsAPI = {
   },
 };
 
-
 export const inventoryAPI = {
-  getInventory: async (params: { branch?: string; product?: string } = {}) => {
+  getInventory: async (params: { branch?: string; product?: string; lowStock?: boolean; page?: number; limit?: number } = {}) => {
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getInventory - Invalid branch ID:`, params.branch);
-      throw new Error('Invalid branch ID');
+      throw new Error(createErrorMessage('invalidBranchId', localStorage.getItem('language') === 'ar'));
     }
     if (params.product && !isValidObjectId(params.product)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getInventory - Invalid product ID:`, params.product);
-      throw new Error('Invalid product ID');
+      throw new Error(createErrorMessage('invalidProductId', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.get('/inventory', { params });
-    console.log(`[${new Date().toISOString()}] inventoryAPI.getInventory - Response:`, response);
-    return response.inventory;
+    try {
+      const response = await api.get('/inventory', {
+        params: {
+          ...params,
+          page: params.page || 1,
+          limit: params.limit || 10,
+        },
+      });
+      // Filter products with currentStock > 0 for sales compatibility
+      const availableInventory = response.inventory.filter((item: any) => item.currentStock > 0);
+      console.log(`[${new Date().toISOString()}] inventoryAPI.getInventory - Response:`, {
+        count: availableInventory.length,
+        totalPages: response.totalPages,
+        currentPage: response.currentPage,
+      });
+      return {
+        inventory: availableInventory,
+        totalPages: response.totalPages,
+        currentPage: response.currentPage,
+      };
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] inventoryAPI.getInventory - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في جلب المخزون: ${error.message}` : `Failed to fetch inventory: ${error.message}`);
+    }
   },
-  getByBranch: async (branchId: string) => {
+  getByBranch: async (branchId: string, params: { page?: number; limit?: number; search?: string; lowStock?: boolean } = {}) => {
     if (!isValidObjectId(branchId)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getByBranch - Invalid branch ID:`, branchId);
-      throw new Error('Invalid branch ID');
+      throw new Error(createErrorMessage('invalidBranchId', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.get(`/inventory/branch/${branchId}`);
-    console.log(`[${new Date().toISOString()}] inventoryAPI.getByBranch - Response:`, response);
-    return response.inventory;
+    try {
+      const response = await api.get(`/inventory/branch/${branchId}`, {
+        params: {
+          ...params,
+          page: params.page || 1,
+          limit: params.limit || 10,
+          lowStock: params.lowStock ?? false,
+        },
+      });
+      // Filter products with currentStock > 0 for sales compatibility
+      const availableInventory = response.inventory.filter((item: any) => item.currentStock > 0);
+      console.log(`[${new Date().toISOString()}] inventoryAPI.getByBranch - Response:`, {
+        branchId,
+        count: availableInventory.length,
+        totalPages: response.totalPages,
+        currentPage: response.currentPage,
+      });
+      return {
+        inventory: availableInventory,
+        totalPages: response.totalPages,
+        currentPage: response.currentPage,
+      };
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] inventoryAPI.getByBranch - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في جلب مخزون الفرع: ${error.message}` : `Failed to fetch branch inventory: ${error.message}`);
+    }
   },
-  getAll: async (params: { branch?: string; product?: string } = {}) => {
+  getAll: async (params: { branch?: string; product?: string; lowStock?: boolean; page?: number; limit?: number } = {}) => {
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getAll - Invalid branch ID:`, params.branch);
-      throw new Error('Invalid branch ID');
+      throw new Error(createErrorMessage('invalidBranchId', localStorage.getItem('language') === 'ar'));
     }
     if (params.product && !isValidObjectId(params.product)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getAll - Invalid product ID:`, params.product);
-      throw new Error('Invalid product ID');
+      throw new Error(createErrorMessage('invalidProductId', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.get('/inventory', { params });
-    console.log(`[${new Date().toISOString()}] inventoryAPI.getAll - Response:`, response);
-    return response.inventory;
+    try {
+      const response = await api.get('/inventory', {
+        params: {
+          ...params,
+          page: params.page || 1,
+          limit: params.limit || 10,
+        },
+      });
+      // Filter products with currentStock > 0 for sales compatibility
+      const availableInventory = response.inventory.filter((item: any) => item.currentStock > 0);
+      console.log(`[${new Date().toISOString()}] inventoryAPI.getAll - Response:`, {
+        count: availableInventory.length,
+        totalPages: response.totalPages,
+        currentPage: response.currentPage,
+      });
+      return {
+        inventory: availableInventory,
+        totalPages: response.totalPages,
+        currentPage: response.currentPage,
+      };
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] inventoryAPI.getAll - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في جلب المخزون: ${error.message}` : `Failed to fetch inventory: ${error.message}`);
+    }
   },
   create: async (data: {
     branchId: string;
@@ -853,23 +949,28 @@ export const inventoryAPI = {
       (data.orderId && !isValidObjectId(data.orderId))
     ) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.create - Invalid data:`, data);
-      throw new Error('Invalid branch ID, product ID, user ID, or order ID');
+      throw new Error(createErrorMessage('invalidBranchId', localStorage.getItem('language') === 'ar'));
     }
     if (data.currentStock < 0) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.create - Invalid stock quantity:`, data.currentStock);
-      throw new Error('Stock quantity cannot be negative');
+      throw new Error(createErrorMessage('invalidQuantity', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.post('/inventory', {
-      branchId: data.branchId,
-      productId: data.productId,
-      currentStock: data.currentStock,
-      minStockLevel: data.minStockLevel ?? 0,
-      maxStockLevel: data.maxStockLevel ?? 1000,
-      userId: data.userId,
-      orderId: data.orderId,
-    });
-    console.log(`[${new Date().toISOString()}] inventoryAPI.create - Response:`, response);
-    return response.inventory;
+    try {
+      const response = await api.post('/inventory', {
+        branchId: data.branchId,
+        productId: data.productId,
+        currentStock: data.currentStock,
+        minStockLevel: data.minStockLevel ?? 0,
+        maxStockLevel: data.maxStockLevel ?? 1000,
+        userId: data.userId,
+        orderId: data.orderId,
+      });
+      console.log(`[${new Date().toISOString()}] inventoryAPI.create - Response:`, response);
+      return response.inventory;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] inventoryAPI.create - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في إنشاء المخزون: ${error.message}` : `Failed to create inventory: ${error.message}`);
+    }
   },
   bulkCreate: async (data: {
     branchId: string;
@@ -886,21 +987,26 @@ export const inventoryAPI = {
       data.items.some(item => !isValidObjectId(item.productId) || item.currentStock < 0)
     ) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.bulkCreate - Invalid data:`, data);
-      throw new Error('Invalid branch ID, user ID, order ID, or items');
+      throw new Error(createErrorMessage('invalidBranchId', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.post('/inventory/bulk', {
-      branchId: data.branchId,
-      userId: data.userId,
-      orderId: data.orderId,
-      items: data.items.map(item => ({
-        productId: item.productId,
-        currentStock: item.currentStock,
-        minStockLevel: item.minStockLevel ?? 0,
-        maxStockLevel: item.maxStockLevel ?? 1000,
-      })),
-    });
-    console.log(`[${new Date().toISOString()}] inventoryAPI.bulkCreate - Response:`, response);
-    return response.inventories;
+    try {
+      const response = await api.post('/inventory/bulk', {
+        branchId: data.branchId,
+        userId: data.userId,
+        orderId: data.orderId,
+        items: data.items.map(item => ({
+          productId: item.productId,
+          currentStock: item.currentStock,
+          minStockLevel: item.minStockLevel ?? 0,
+          maxStockLevel: item.maxStockLevel ?? 1000,
+        })),
+      });
+      console.log(`[${new Date().toISOString()}] inventoryAPI.bulkCreate - Response:`, response);
+      return response.inventories;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] inventoryAPI.bulkCreate - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في إنشاء المخزون بالجملة: ${error.message}` : `Failed to bulk create inventory: ${error.message}`);
+    }
   },
   updateStock: async (id: string, data: Partial<{
     currentStock: number;
@@ -915,21 +1021,26 @@ export const inventoryAPI = {
       (data.branchId && !isValidObjectId(data.branchId))
     ) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.updateStock - Invalid inventory ID, product ID, or branch ID:`, { id, data });
-      throw new Error('Invalid inventory ID, product ID, or branch ID');
+      throw new Error(createErrorMessage('invalidBranchId', localStorage.getItem('language') === 'ar'));
     }
     if (data.currentStock !== undefined && data.currentStock < 0) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.updateStock - Invalid stock quantity:`, data.currentStock);
-      throw new Error('Stock quantity cannot be negative');
+      throw new Error(createErrorMessage('invalidQuantity', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.put(`/inventory/${id}`, {
-      currentStock: data.currentStock,
-      minStockLevel: data.minStockLevel,
-      maxStockLevel: data.maxStockLevel,
-      productId: data.productId,
-      branchId: data.branchId,
-    });
-    console.log(`[${new Date().toISOString()}] inventoryAPI.updateStock - Response:`, response);
-    return response.inventory;
+    try {
+      const response = await api.put(`/inventory/${id}`, {
+        currentStock: data.currentStock,
+        minStockLevel: data.minStockLevel,
+        maxStockLevel: data.maxStockLevel,
+        productId: data.productId,
+        branchId: data.branchId,
+      });
+      console.log(`[${new Date().toISOString()}] inventoryAPI.updateStock - Response:`, response);
+      return response.inventory;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] inventoryAPI.updateStock - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في تحديث المخزون: ${error.message}` : `Failed to update stock: ${error.message}`);
+    }
   },
   processReturnItems: async (returnId: string, data: {
     branchId: string;
@@ -943,19 +1054,24 @@ export const inventoryAPI = {
       data.items.some(item => !isValidObjectId(item.productId) || item.quantity < 1 || !['approved', 'rejected'].includes(item.status))
     ) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.processReturnItems - Invalid data:`, { returnId, data });
-      throw new Error('Invalid return ID, branch ID, or items');
+      throw new Error(createErrorMessage('invalidBranchId', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.patch(`/inventory/returns/${returnId}/process`, {
-      branchId: data.branchId,
-      items: data.items.map(item => ({
-        productId: item.productId,
-        quantity: item.quantity,
-        status: item.status,
-        reviewNotes: item.reviewNotes?.trim(),
-      })),
-    });
-    console.log(`[${new Date().toISOString()}] inventoryAPI.processReturnItems - Response:`, response);
-    return response.returnRequest;
+    try {
+      const response = await api.patch(`/inventory/returns/${returnId}/process`, {
+        branchId: data.branchId,
+        items: data.items.map(item => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          status: item.status,
+          reviewNotes: item.reviewNotes?.trim(),
+        })),
+      });
+      console.log(`[${new Date().toISOString()}] inventoryAPI.processReturnItems - Response:`, response);
+      return response.returnRequest;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] inventoryAPI.processReturnItems - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في معالجة المرتجعات: ${error.message}` : `Failed to process return items: ${error.message}`);
+    }
   },
   createRestockRequest: async (data: {
     productId: string;
@@ -969,50 +1085,82 @@ export const inventoryAPI = {
       data.requestedQuantity < 1
     ) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.createRestockRequest - Invalid data:`, data);
-      throw new Error('Invalid product ID, branch ID, or requested quantity');
+      throw new Error(createErrorMessage('invalidProductId', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.post('/inventory/restock-requests', {
-      productId: data.productId,
-      branchId: data.branchId,
-      requestedQuantity: data.requestedQuantity,
-      notes: data.notes?.trim(),
-    });
-    console.log(`[${new Date().toISOString()}] inventoryAPI.createRestockRequest - Response:`, response);
-    return response.restockRequest;
+    try {
+      const response = await api.post('/inventory/restock-requests', {
+        productId: data.productId,
+        branchId: data.branchId,
+        requestedQuantity: data.requestedQuantity,
+        notes: data.notes?.trim(),
+      });
+      console.log(`[${new Date().toISOString()}] inventoryAPI.createRestockRequest - Response:`, response);
+      return response.restockRequest;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] inventoryAPI.createRestockRequest - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في إنشاء طلب إعادة التخزين: ${error.message}` : `Failed to create restock request: ${error.message}`);
+    }
   },
-  getRestockRequests: async (params: { branchId?: string } = {}) => {
+  getRestockRequests: async (params: { branchId?: string; page?: number; limit?: number } = {}) => {
     if (params.branchId && !isValidObjectId(params.branchId)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getRestockRequests - Invalid branch ID:`, params.branchId);
-      throw new Error('Invalid branch ID');
+      throw new Error(createErrorMessage('invalidBranchId', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.get('/inventory/restock-requests', { params });
-    console.log(`[${new Date().toISOString()}] inventoryAPI.getRestockRequests - Response:`, response);
-    return response.restockRequests;
+    try {
+      const response = await api.get('/inventory/restock-requests', {
+        params: {
+          ...params,
+          page: params.page || 1,
+          limit: params.limit || 10,
+        },
+      });
+      console.log(`[${new Date().toISOString()}] inventoryAPI.getRestockRequests - Response:`, response);
+      return response.restockRequests;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] inventoryAPI.getRestockRequests - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في جلب طلبات إعادة التخزين: ${error.message}` : `Failed to fetch restock requests: ${error.message}`);
+    }
   },
   approveRestockRequest: async (requestId: string, data: { approvedQuantity: number; userId: string }) => {
     if (!isValidObjectId(requestId) || !isValidObjectId(data.userId) || data.approvedQuantity < 1) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.approveRestockRequest - Invalid data:`, { requestId, data });
-      throw new Error('Invalid request ID, user ID, or approved quantity');
+      throw new Error(createErrorMessage('invalidBranchId', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.patch(`/inventory/restock-requests/${requestId}/approve`, {
-      approvedQuantity: data.approvedQuantity,
-      userId: data.userId,
-    });
-    console.log(`[${new Date().toISOString()}] inventoryAPI.approveRestockRequest - Response:`, response);
-    return response.restockRequest;
+    try {
+      const response = await api.patch(`/inventory/restock-requests/${requestId}/approve`, {
+        approvedQuantity: data.approvedQuantity,
+        userId: data.userId,
+      });
+      console.log(`[${new Date().toISOString()}] inventoryAPI.approveRestockRequest - Response:`, response);
+      return response.restockRequest;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] inventoryAPI.approveRestockRequest - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في الموافقة على طلب إعادة التخزين: ${error.message}` : `Failed to approve restock request: ${error.message}`);
+    }
   },
-  getHistory: async (params: { branchId?: string; productId?: string } = {}) => {
+  getHistory: async (params: { branchId?: string; productId?: string; page?: number; limit?: number } = {}) => {
     if (params.branchId && !isValidObjectId(params.branchId)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getHistory - Invalid branch ID:`, params.branchId);
-      throw new Error('Invalid branch ID');
+      throw new Error(createErrorMessage('invalidBranchId', localStorage.getItem('language') === 'ar'));
     }
     if (params.productId && !isValidObjectId(params.productId)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getHistory - Invalid product ID:`, params.productId);
-      throw new Error('Invalid product ID');
+      throw new Error(createErrorMessage('invalidProductId', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.get('/inventory/history', { params });
-    console.log(`[${new Date().toISOString()}] inventoryAPI.getHistory - Response:`, response);
-    return response.history;
+    try {
+      const response = await api.get('/inventory/history', {
+        params: {
+          ...params,
+          page: params.page || 1,
+          limit: params.limit || 10,
+        },
+      });
+      console.log(`[${new Date().toISOString()}] inventoryAPI.getHistory - Response:`, response);
+      return response.history;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] inventoryAPI.getHistory - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في جلب سجل المخزون: ${error.message}` : `Failed to fetch inventory history: ${error.message}`);
+    }
   },
   createReturn: async (data: {
     orderId: string;
@@ -1030,21 +1178,26 @@ export const inventoryAPI = {
       data.items.some(item => !isValidObjectId(item.productId) || item.quantity < 1 || !item.reason)
     ) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.createReturn - Invalid data:`, data);
-      throw new Error('Invalid order ID, branch ID, reason, or items');
+      throw new Error(createErrorMessage('invalidBranchId', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.post('/inventory/returns', {
-      orderId: data.orderId,
-      branchId: data.branchId,
-      reason: data.reason.trim(),
-      items: data.items.map(item => ({
-        productId: item.productId,
-        quantity: item.quantity,
-        reason: item.reason.trim(),
-      })),
-      notes: data.notes?.trim(),
-    });
-    console.log(`[${new Date().toISOString()}] inventoryAPI.createReturn - Response:`, response);
-    return response.returnRequest;
+    try {
+      const response = await api.post('/inventory/returns', {
+        orderId: data.orderId,
+        branchId: data.branchId,
+        reason: data.reason.trim(),
+        items: data.items.map(item => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          reason: item.reason.trim(),
+        })),
+        notes: data.notes?.trim(),
+      });
+      console.log(`[${new Date().toISOString()}] inventoryAPI.createReturn - Response:`, response);
+      return response.returnRequest;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] inventoryAPI.createReturn - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في إنشاء المرتجع: ${error.message}` : `Failed to create return: ${error.message}`);
+    }
   },
 };
 
@@ -1052,77 +1205,112 @@ export const factoryInventoryAPI = {
   getAll: async (params: { product?: string; department?: string; lowStock?: boolean } = {}) => {
     if (params.product && !isValidObjectId(params.product)) {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Invalid product ID:`, params.product);
-      throw new Error('Invalid product ID');
+      throw new Error(createErrorMessage('invalidProductId', localStorage.getItem('language') === 'ar'));
     }
     if (params.department && !isValidObjectId(params.department)) {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Invalid department ID:`, params.department);
-      throw new Error('Invalid department ID');
+      throw new Error(createErrorMessage('invalidDepartmentId', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.get('/factory-inventory', { params });
-    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Response:`, response);
-    return response;
+    try {
+      const response = await api.get('/factory-inventory', { params });
+      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Response:`, response);
+      return response;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في جلب مخزون المصنع: ${error.message}` : `Failed to fetch factory inventory: ${error.message}`);
+    }
   },
   addProductionBatch: async (data: { productId: string; quantity: number }) => {
     if (!isValidObjectId(data.productId)) {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.addProductionBatch - Invalid product ID:`, data.productId);
-      throw new Error('Invalid product ID');
+      throw new Error(createErrorMessage('invalidProductId', localStorage.getItem('language') === 'ar'));
     }
     if (data.quantity < 1) {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.addProductionBatch - Invalid quantity:`, data.quantity);
-      throw new Error('Invalid quantity');
+      throw new Error(createErrorMessage('invalidQuantity', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.post('/factory-inventory/production', data);
-    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.addProductionBatch - Response:`, response);
-    return response;
+    try {
+      const response = await api.post('/factory-inventory/production', data);
+      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.addProductionBatch - Response:`, response);
+      return response;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.addProductionBatch - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في إضافة دفعة إنتاج: ${error.message}` : `Failed to add production batch: ${error.message}`);
+    }
   },
   allocateToBranch: async (data: { requestId: string; productId: string; allocatedQuantity: number }) => {
     if (!isValidObjectId(data.requestId) || !isValidObjectId(data.productId)) {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.allocateToBranch - Invalid request ID or product ID:`, data);
-      throw new Error('Invalid request ID or product ID');
+      throw new Error(createErrorMessage('invalidProductId', localStorage.getItem('language') === 'ar'));
     }
     if (data.allocatedQuantity < 1) {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.allocateToBranch - Invalid quantity:`, data.allocatedQuantity);
-      throw new Error('Invalid allocated quantity');
+      throw new Error(createErrorMessage('invalidQuantity', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.post('/factory-inventory/allocate', data);
-    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.allocateToBranch - Response:`, response);
-    return response;
+    try {
+      const response = await api.post('/factory-inventory/allocate', data);
+      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.allocateToBranch - Response:`, response);
+      return response;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.allocateToBranch - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في تخصيص المخزون للفرع: ${error.message}` : `Failed to allocate to branch: ${error.message}`);
+    }
   },
   getRestockRequests: async () => {
-    const response = await api.get('/factory-inventory/restock-requests');
-    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getRestockRequests - Response:`, response);
-    return response;
+    try {
+      const response = await api.get('/factory-inventory/restock-requests');
+      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getRestockRequests - Response:`, response);
+      return response;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getRestockRequests - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في جلب طلبات إعادة التخزين: ${error.message}` : `Failed to fetch restock requests: ${error.message}`);
+    }
   },
   approveRestockRequest: async (requestId: string, data: { approvedQuantity: number }) => {
     if (!isValidObjectId(requestId)) {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.approveRestockRequest - Invalid request ID:`, requestId);
-      throw new Error('Invalid request ID');
+      throw new Error(createErrorMessage('invalidBranchId', localStorage.getItem('language') === 'ar'));
     }
     if (data.approvedQuantity < 1) {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.approveRestockRequest - Invalid approved quantity:`, data.approvedQuantity);
-      throw new Error('Invalid approved quantity');
+      throw new Error(createErrorMessage('invalidQuantity', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.patch(`/factory-inventory/restock-requests/${requestId}/approve`, data);
-    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.approveRestockRequest - Response:`, response);
-    return response;
+    try {
+      const response = await api.patch(`/factory-inventory/restock-requests/${requestId}/approve`, data);
+      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.approveRestockRequest - Response:`, response);
+      return response;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.approveRestockRequest - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في الموافقة على طلب إعادة التخزين: ${error.message}` : `Failed to approve restock request: ${error.message}`);
+    }
   },
   getHistory: async (params: { productId?: string } = {}) => {
     if (params.productId && !isValidObjectId(params.productId)) {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Invalid product ID:`, params.productId);
-      throw new Error('Invalid product ID');
+      throw new Error(createErrorMessage('invalidProductId', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.get('/factory-inventory/history', { params });
-    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Response:`, response);
-    return response;
+    try {
+      const response = await api.get('/factory-inventory/history', { params });
+      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Response:`, response);
+      return response;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في جلب سجل مخزون المصنع: ${error.message}` : `Failed to fetch factory inventory history: ${error.message}`);
+    }
   },
   getByBranch: async (branchId: string) => {
     if (!isValidObjectId(branchId)) {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getByBranch - Invalid branch ID:`, branchId);
-      throw new Error('Invalid branch ID');
+      throw new Error(createErrorMessage('invalidBranchId', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.get(`/inventory/branch/${branchId}`);
-    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getByBranch - Response:`, response);
-    return response;
+    try {
+      const response = await api.get(`/inventory/branch/${branchId}`);
+      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getByBranch - Response:`, response);
+      return response;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getByBranch - Error:`, error.message);
+      throw new Error(localStorage.getItem('language') === 'ar' ? `فشل في جلب مخزون الفرع: ${error.message}` : `Failed to fetch branch inventory: ${error.message}`);
+    }
   },
 };
 
