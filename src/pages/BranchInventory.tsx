@@ -36,7 +36,7 @@ interface InventoryItem {
     unitEn: string;
     department: { _id: string; name: string; nameEn: string } | null;
   } | null;
-  branchId: string;
+  branch: { _id: string; name: string; nameEn: string } | null;
   currentStock: number;
   minStockLevel: number;
   maxStockLevel: number;
@@ -327,7 +327,7 @@ export const BranchInventory: React.FC = () => {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<InventoryStatus | ''>('');
-  const [filterDepartment, setFilterDepartment] = useState<string>(''); // جديد: فلتر حسب القسم
+  const [filterDepartment, setFilterDepartment] = useState<string>('');
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
@@ -367,7 +367,7 @@ export const BranchInventory: React.FC = () => {
     staleTime: 5 * 60 * 1000, // 5 minutes
     cacheTime: 10 * 60 * 1000, // 10 minutes
     select: (response) => {
-      const inventoryData = Array.isArray(response) ? response : response?.inventory || [];
+      const inventoryData = Array.isArray(response) ? response : response?.data || [];
       return inventoryData.map((item: InventoryItem) => ({
         ...item,
         product: item.product
@@ -387,6 +387,13 @@ export const BranchInventory: React.FC = () => {
                 : null,
             }
           : null,
+        branch: item.branch
+          ? {
+              _id: item.branch._id || '',
+              name: item.branch.name || t('branches.unknown'),
+              nameEn: item.branch.nameEn || item.branch.name || t('branches.unknown'),
+            }
+          : null,
         status:
           item.currentStock <= item.minStockLevel
             ? InventoryStatus.LOW
@@ -400,7 +407,7 @@ export const BranchInventory: React.FC = () => {
     },
   });
 
-  // جديد: options للأقسام الفريدة
+  // Department options
   const departmentOptions = useMemo(() => {
     const depts = new Set<string>();
     inventoryData?.forEach((item) => {
@@ -546,7 +553,7 @@ export const BranchInventory: React.FC = () => {
         (item) =>
           item.product &&
           (!filterStatus || item.status === filterStatus) &&
-          (!filterDepartment || item.product.department?._id === filterDepartment) && // جديد: فلتر حسب القسم
+          (!filterDepartment || item.product.department?._id === filterDepartment) &&
           (item.product.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             item.product.nameEn.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             item.product.code.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
@@ -657,7 +664,7 @@ export const BranchInventory: React.FC = () => {
     const errors: Record<string, string> = {};
     if (editForm.minStockLevel < 0) errors.minStockLevel = t('errors.non_negative', { field: t('inventory.min_stock') });
     if (editForm.maxStockLevel < 0) errors.maxStockLevel = t('errors.non_negative', { field: t('inventory.max_stock') });
-    if (editForm.maxStockLevel <= editForm.minStockLevel) errors.maxStockLevel = t('errors.max_greater_min'); // تحسين: تحقق max > min
+    if (editForm.maxStockLevel <= editForm.minStockLevel) errors.maxStockLevel = t('errors.max_greater_min');
     setEditErrors(errors);
     return Object.keys(errors).length === 0;
   }, [editForm, t]);
@@ -695,9 +702,12 @@ export const BranchInventory: React.FC = () => {
     },
     onError: (err) => {
       console.error(`[${new Date().toISOString()}] Create return error:`, err);
-      toast.error(err.message || t('errors.create_return'), { position: 'top-right', autoClose: 3000 });
+      const errorMessage = err.message.includes('Request failed with status code 400') && err.response?.data?.errors?.length
+        ? err.response.data.errors.map((e: any) => e.msg).join(', ')
+        : err.message || t('errors.create_return');
+      toast.error(errorMessage, { position: 'top-right', autoClose: 3000 });
       if (err.message.includes('Invalid')) {
-        setReturnErrors({ form: err.message });
+        setReturnErrors({ form: errorMessage });
       }
     },
   });
@@ -706,10 +716,11 @@ export const BranchInventory: React.FC = () => {
     mutationFn: async () => {
       if (!validateEditForm()) throw new Error(t('errors.invalid_form'));
       if (!selectedItem) throw new Error(t('errors.no_item_selected'));
-      if (!user) throw new Error(t('errors.no_user')); // مصلح: غيرت التحقق إلى !user بدل !(n != null && n._id)
+      if (!user?.branchId && !selectedItem.branch?._id) throw new Error(t('errors.no_branch'));
       await inventoryAPI.updateStock(selectedItem._id, {
         minStockLevel: editForm.minStockLevel,
         maxStockLevel: editForm.maxStockLevel,
+        branchId: selectedItem.branch?._id || user?.branchId,
       });
     },
     onSuccess: () => {
@@ -720,7 +731,7 @@ export const BranchInventory: React.FC = () => {
       setSelectedItem(null);
       toast.success(t('inventory.update_success'), { position: 'top-right', autoClose: 3000 });
       socket?.emit('inventoryUpdated', {
-        branchId: user?.branchId,
+        branchId: selectedItem?.branch?._id || user?.branchId,
         minStockLevel: editForm.minStockLevel,
         maxStockLevel: editForm.maxStockLevel,
         eventId: crypto.randomUUID(),
@@ -728,7 +739,11 @@ export const BranchInventory: React.FC = () => {
     },
     onError: (err) => {
       console.error(`[${new Date().toISOString()}] Update inventory error:`, err);
-      toast.error(err.message || t('errors.update_inventory'), { position: 'top-right', autoClose: 3000 });
+      const errorMessage = err.response?.data?.errors?.length
+        ? err.response.data.errors.map((e: any) => e.msg).join(', ')
+        : err.message || t('errors.update_inventory');
+      toast.error(errorMessage, { position: 'top-right', autoClose: 3000 });
+      setEditErrors({ form: errorMessage });
     },
   });
 
@@ -790,7 +805,7 @@ export const BranchInventory: React.FC = () => {
       )}
 
       <CustomCard className="p-4 sm:p-6 mb-6 bg-white rounded-xl shadow-md">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">  {/* غيرت إلى 3 columns عشان الفلتر الجديد */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="relative">
             <Search
               className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 ${isRtl ? 'right-3' : 'left-3'}`}
@@ -813,7 +828,7 @@ export const BranchInventory: React.FC = () => {
             label={t('common.filter_by_status')}
             ariaLabel={t('common.filter_by_status')}
           />
-          <CustomSelect  // جديد: فلتر حسب القسم
+          <CustomSelect
             value={filterDepartment}
             onChange={(e) => {
               setFilterDepartment(e.target.value);
@@ -865,7 +880,7 @@ export const BranchInventory: React.FC = () => {
                           <p className="text-sm text-gray-600">{t('inventory.min_stock')}: {item.minStockLevel}</p>
                           <p className="text-sm text-gray-600">{t('inventory.max_stock')}: {item.maxStockLevel}</p>
                           <p className="text-sm text-gray-600">{t('products.unit')}: {isRtl ? item.product.unit : item.product.unitEn}</p>
-                          <p className="text-sm text-gray-600 font-bold flex items-center gap-1">  {/* تحسين: bold و icon للقسم */}
+                          <p className="text-sm text-gray-600 font-bold flex items-center gap-1">
                             <span className="text-amber-600">📂</span> {t('departments.title')}: {isRtl ? item.product.department?.name : item.product.department?.nameEn}
                           </p>
                           <p
@@ -963,7 +978,7 @@ export const BranchInventory: React.FC = () => {
                   options={[{ value: '', label: t('products.select') }].concat(
                     availableItems.map((a) => ({
                       value: a.productId,
-                      label: `${a.productName} (${a.stock} ${t('common.available')}) - [${a.departmentName}]`, // تحسين: أضفت [] حول القسم عشان يبان أفضل
+                      label: `${a.productName} (${a.stock} ${t('common.available')}) - [${a.departmentName}]`,
                     }))
                   )}
                   error={returnErrors[`item_${index}_productId`]}
@@ -1091,6 +1106,7 @@ export const BranchInventory: React.FC = () => {
             error={editErrors.maxStockLevel}
             ariaLabel={t('inventory.max_stock')}
           />
+          {editErrors.form && <p className="text-red-500 text-xs">{editErrors.form}</p>}
           <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <CustomButton
               variant="secondary"
