@@ -3,14 +3,14 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { inventoryAPI, returnsAPI } from '../services/api';
+import { inventoryAPI } from '../services/api';
 import { Package, AlertCircle, Search, RefreshCw, Edit, X, Plus } from 'lucide-react';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-// واجهات TypeScript (محافظ عليها، لكن أزل غير الضروري)
+// واجهات TypeScript
 interface InventoryItem {
   _id: string;
   product: {
@@ -33,7 +33,6 @@ interface ReturnItem {
   quantity: number;
   reason: string;
   maxQuantity: number;
-  itemId?: string;
 }
 
 interface ReturnFormState {
@@ -86,7 +85,7 @@ interface AvailableItem {
   stock: number;
 }
 
-// مكونات مخصصة (محافظ عليها)
+// مكونات مخصصة
 interface CustomCardProps {
   className?: string;
   children: React.ReactNode;
@@ -293,7 +292,7 @@ export const BranchInventory: React.FC = () => {
     queryKey: ['inventory', user?.branchId, language],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
-      return inventoryAPI.getByBranch(user.branchId, { signal: abortController.signal });
+      return inventoryAPI.getByBranch(user.branchId);
     },
     enabled: !!user?.branchId,
     select: (response) => {
@@ -514,20 +513,16 @@ export const BranchInventory: React.FC = () => {
     mutationFn: async () => {
       if (!validateReturnForm()) throw new Error(t('errors.invalid_form'));
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
-      await returnsAPI.createReturn(
-        {
-          branchId: user.branchId,
-          reason: returnForm.reason,
-          notes: returnForm.notes,
-          items: returnForm.items.map((item) => ({
-            product: item.productId,
-            quantity: item.quantity,
-            reason: item.reason,
-            itemId: item.itemId,
-          })),
-        },
-        { signal: abortController.signal }
-      );
+      await inventoryAPI.createReturn({
+        branchId: user.branchId,
+        reason: returnForm.reason,
+        notes: returnForm.notes,
+        items: returnForm.items.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          reason: item.reason,
+        })),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -558,15 +553,14 @@ export const BranchInventory: React.FC = () => {
     mutationFn: async () => {
       if (!validateEditForm()) throw new Error(t('errors.invalid_form'));
       if (!selectedItem) throw new Error(t('errors.no_item_selected'));
-      if (!user?._id) throw new Error('User ID is required'); // إضافة تحقق
+      if (!user?._id) throw new Error(t('errors.no_user'));
       await inventoryAPI.updateStock(
         selectedItem._id,
         {
           minStockLevel: editForm.minStockLevel,
           maxStockLevel: editForm.maxStockLevel,
-          userId: user._id, // إضافة userId لإصلاح الخطأ
-        },
-        { signal: abortController.signal }
+          userId: user._id,
+        }
       );
     },
     onSuccess: () => {
