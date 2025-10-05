@@ -427,3 +427,4 @@ export const inventoryAPI = {
     return response;
   },
 };
+export default inventoryAPI;
