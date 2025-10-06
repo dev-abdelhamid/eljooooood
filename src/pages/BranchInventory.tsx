@@ -339,6 +339,7 @@ export const BranchInventory: React.FC = () => {
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
   const [possibleOrders, setPossibleOrders] = useState<Record<string, { value: string; label: string; remaining: number; itemId: string }[]>>({});
+  const [retryCount, setRetryCount] = useState(0);
 
   // Custom debounce hook for search and filters
   const useDebouncedState = <T,>(initialValue: T, delay: number) => {
@@ -566,6 +567,7 @@ export const BranchInventory: React.FC = () => {
       (inventoryData || []).filter(
         (item) =>
           item.product &&
+          item.branch?._id === user?.branchId && // Ensure only authorized branch items are shown
           (!debouncedFilterStatusValue || item.status === debouncedFilterStatusValue) &&
           (!debouncedFilterDepartmentValue || item.product.department?._id === debouncedFilterDepartmentValue) &&
           (item.product.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
@@ -574,7 +576,7 @@ export const BranchInventory: React.FC = () => {
             item.product.department?.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             item.product.department?.nameEn.toLowerCase().includes(debouncedSearchQuery.toLowerCase()))
       ),
-    [inventoryData, debouncedSearchQuery, debouncedFilterStatusValue, debouncedFilterDepartmentValue]
+    [inventoryData, debouncedSearchQuery, debouncedFilterStatusValue, debouncedFilterDepartmentValue, user?.branchId]
   );
 
   const paginatedInventory = useMemo(
@@ -598,11 +600,16 @@ export const BranchInventory: React.FC = () => {
   }, []);
 
   const handleOpenEditModal = useCallback((item: InventoryItem) => {
+    if (!user?.branchId || item.branch?._id !== user.branchId) {
+      toast.error(t('errors.unauthorized_branch'), { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+      return;
+    }
     setSelectedItem(item);
     setEditForm({ minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
     setEditErrors({});
+    setRetryCount(0); // Reset retry count when opening edit modal
     setIsEditModalOpen(true);
-  }, []);
+  }, [user?.branchId, t, isRtl]);
 
   const handleOpenDetailsModal = useCallback((item: InventoryItem) => {
     if (item.product) {
@@ -735,6 +742,9 @@ export const BranchInventory: React.FC = () => {
     mutationFn: async () => {
       if (!validateEditForm()) throw new Error(t('errors.invalid_form'));
       if (!selectedItem) throw new Error(t('errors.no_item_selected'));
+      if (!user?.branchId || selectedItem.branch?._id !== user.branchId) {
+        throw new Error(t('errors.unauthorized_branch'));
+      }
       await inventoryAPI.updateStock(selectedItem._id, {
         minStockLevel: Number(editForm.minStockLevel),
         maxStockLevel: Number(editForm.maxStockLevel),
@@ -746,6 +756,7 @@ export const BranchInventory: React.FC = () => {
       setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
       setEditErrors({});
       setSelectedItem(null);
+      setRetryCount(0);
       toast.success(t('inventory.update_success'), { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       socket?.emit('inventoryUpdated', {
         branchId: selectedItem?.branch?._id || user?.branchId,
@@ -754,11 +765,28 @@ export const BranchInventory: React.FC = () => {
         eventId: crypto.randomUUID(),
       });
     },
-    onError: (err: any) => {
+    onError: async (err: any) => {
       console.error(`[${new Date().toISOString()}] Update inventory error:`, err);
-      const errorMessage = err.response?.data?.errors?.length
+      let errorMessage = err.response?.data?.errors?.length
         ? err.response.data.errors.map((e: any) => e.msg).join(', ')
-        : err.message || t('errors.update_inventory');
+        : err.response?.data?.message || err.message || t('errors.update_inventory');
+
+      if (err.response?.status === 403 && errorMessage.includes('غير مخول')) {
+        errorMessage = t('errors.unauthorized_branch');
+      } else if (err.response?.status === 500 && errorMessage.includes('transaction number')) {
+        if (retryCount < 2) {
+          setRetryCount(retryCount + 1);
+          toast.warn(t('errors.transaction_retry', { attempt: retryCount + 1 }), {
+            position: isRtl ? 'top-left' : 'top-right',
+            autoClose: 3000,
+          });
+          setTimeout(() => updateInventoryMutation.mutate(), 1000 * (retryCount + 1)); // Exponential backoff
+          return;
+        } else {
+          errorMessage = t('errors.transaction_failed');
+        }
+      }
+
       toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       setEditErrors({ form: errorMessage });
     },
@@ -922,6 +950,7 @@ export const BranchInventory: React.FC = () => {
                             onClick={() => handleOpenEditModal(item)}
                             className="text-blue-600 hover:text-blue-800"
                             ariaLabel={t('inventory.edit_stock_limits')}
+                            disabled={item.branch?._id !== user?.branchId}
                           >
                             <Edit className="w-4 h-4" />
                           </CustomButton>
@@ -1090,6 +1119,7 @@ export const BranchInventory: React.FC = () => {
           setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
           setEditErrors({});
           setSelectedItem(null);
+          setRetryCount(0);
         }}
         title={t('inventory.edit_stock_limits')}
       >
@@ -1128,6 +1158,7 @@ export const BranchInventory: React.FC = () => {
                 setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
                 setEditErrors({});
                 setSelectedItem(null);
+                setRetryCount(0);
               }}
               ariaLabel={t('common.cancel')}
             >
