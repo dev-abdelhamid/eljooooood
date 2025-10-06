@@ -3,12 +3,188 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { returnsAPI } from '../services/returnsAPI';
-import { ordersAPI, inventoryAPI } from '../services/api';
-import { Package, AlertCircle, Search, RefreshCw, Edit, X, Plus, Eye } from 'lucide-react';
+import { returnsAPI, ordersAPI, inventoryAPI } from '../services/api';
+import { Package, AlertCircle, Search, RefreshCw, Edit2, Trash2, X, Plus, Eye } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { AxiosError } from 'axios';
+
+// Translations object
+const translations = {
+  ar: {
+    inventory: {
+      title: 'مخزون الفرع',
+      description: 'إدارة مخزون الفرع وطلبات إعادة التخزين',
+      no_items: 'لا توجد عناصر مخزون متاحة',
+      no_history: 'لا يوجد سجل لهذا المنتج',
+      low_stock: 'مخزون منخفض',
+      normal: 'مخزون طبيعي',
+      full: 'مخزون ممتلئ',
+      stock: 'الكمية',
+      min_stock: 'الحد الأدنى للمخزون',
+      max_stock: 'الحد الأقصى للمخزون',
+      edit_stock_limits: 'تعديل حدود المخزون',
+      product_details: 'تفاصيل المنتج',
+      update_success: 'تم تحديث المخزون بنجاح',
+      adjustment: 'تعديل',
+      restock: 'إعادة تخزين',
+      settings_adjustment: 'تعديل الإعدادات',
+    },
+    products: {
+      title: 'المنتج',
+      code: 'رمز المنتج',
+      unit: 'الوحدة',
+      unit_unknown: 'غير معروف',
+      select: 'اختر المنتج',
+      unknown: 'غير معروف',
+    },
+    returns: {
+      create: 'إنشاء طلب إرجاع',
+      create_success: 'تم إنشاء طلب الإرجاع بنجاح',
+      reason: 'السبب',
+      select_reason: 'اختر السبب',
+      quality_issue: 'مشكلة جودة',
+      wrong_item: 'منتج خاطئ',
+      excess_quantity: 'كمية زائدة',
+      other: 'أخرى',
+      notes: 'الملاحظات',
+      notes_placeholder: 'أدخل ملاحظات إضافية (اختياري)',
+      items: 'العناصر',
+      add_item: 'إضافة عنصر',
+      remove_item: 'إزالة العنصر',
+      select_order: 'اختر الطلبية',
+      quantity: 'الكمية',
+    },
+    common: {
+      search: 'بحث',
+      refresh: 'تحديث',
+      retry: 'إعادة المحاولة',
+      cancel: 'إلغاء',
+      submit: 'إرسال',
+      save: 'حفظ',
+      submitting: 'جاري الإرسال...',
+      saving: 'جاري الحفظ...',
+      loading: 'جاري التحميل...',
+      all_statuses: 'كل الحالات',
+      all_departments: 'كل الأقسام',
+      filter_by_status: 'تصفية حسب الحالة',
+      filter_by_department: 'تصفية حسب القسم',
+      available: 'متوفر',
+      date: 'التاريخ',
+      type: 'النوع',
+      description: 'الوصف',
+    },
+    errors: {
+      no_branch: 'لم يتم العثور على معرف الفرع',
+      fetch_inventory: 'خطأ في جلب المخزون',
+      create_return: 'خطأ في إنشاء طلب الإرجاع',
+      update_inventory: 'خطأ في تحديث المخزون',
+      invalid_form: 'النموذج غير صالح، يرجى التحقق من الحقول',
+      required: '{field} مطلوب',
+      non_negative: '{field} يجب أن يكون غير سالب',
+      max_greater_min: 'الحد الأقصى يجب أن يكون أكبر من الحد الأدنى',
+      invalid_quantity_max: 'الكمية غير صالحة، الحد الأقصى هو {max}',
+      no_item_selected: 'لم يتم تحديد عنصر مخزون',
+    },
+    notifications: {
+      return_approved: 'تمت الموافقة على طلب الإرجاع الخاص بك',
+    },
+    departments: {
+      title: 'القسم',
+      unknown: 'غير معروف',
+    },
+    branches: {
+      unknown: 'فرع غير معروف',
+    },
+  },
+  en: {
+    inventory: {
+      title: 'Branch Inventory',
+      description: 'Manage branch inventory and restock requests',
+      no_items: 'No inventory items available',
+      no_history: 'No history available for this product',
+      low_stock: 'Low Stock',
+      normal: 'Normal',
+      full: 'Full',
+      stock: 'Stock',
+      min_stock: 'Minimum Stock',
+      max_stock: 'Maximum Stock',
+      edit_stock_limits: 'Edit Stock Limits',
+      product_details: 'Product Details',
+      update_success: 'Inventory updated successfully',
+      adjustment: 'Adjustment',
+      restock: 'Restock',
+      settings_adjustment: 'Settings Adjustment',
+    },
+    products: {
+      title: 'Product',
+      code: 'Product Code',
+      unit: 'Unit',
+      unit_unknown: 'Unknown',
+      select: 'Select Product',
+      unknown: 'Unknown',
+    },
+    returns: {
+      create: 'Create Return Request',
+      create_success: 'Return request created successfully',
+      reason: 'Reason',
+      select_reason: 'Select Reason',
+      quality_issue: 'Quality Issue',
+      wrong_item: 'Wrong Item',
+      excess_quantity: 'Excess Quantity',
+      other: 'Other',
+      notes: 'Notes',
+      notes_placeholder: 'Enter additional notes (optional)',
+      items: 'Items',
+      add_item: 'Add Item',
+      remove_item: 'Remove Item',
+      select_order: 'Select Order',
+      quantity: 'Quantity',
+    },
+    common: {
+      search: 'Search',
+      refresh: 'Refresh',
+      retry: 'Retry',
+      cancel: 'Cancel',
+      submit: 'Submit',
+      save: 'Save',
+      submitting: 'Submitting...',
+      saving: 'Saving...',
+      loading: 'Loading...',
+      all_statuses: 'All Statuses',
+      all_departments: 'All Departments',
+      filter_by_status: 'Filter by Status',
+      filter_by_department: 'Filter by Department',
+      available: 'Available',
+      date: 'Date',
+      type: 'Type',
+      description: 'Description',
+    },
+    errors: {
+      no_branch: 'No branch ID found',
+      fetch_inventory: 'Error fetching inventory',
+      create_return: 'Error creating return request',
+      update_inventory: 'Error updating inventory',
+      invalid_form: 'Form is invalid, please check the fields',
+      required: '{field} is required',
+      non_negative: '{field} must be non-negative',
+      max_greater_min: 'Maximum must be greater than minimum',
+      invalid_quantity_max: 'Invalid quantity, maximum is {max}',
+      no_item_selected: 'No inventory item selected',
+    },
+    notifications: {
+      return_approved: 'Your return request has been approved',
+    },
+    departments: {
+      title: 'Department',
+      unknown: 'Unknown',
+    },
+    branches: {
+      unknown: 'Unknown Branch',
+    },
+  },
+};
 
 // Enums for type safety
 enum InventoryStatus {
@@ -110,7 +286,7 @@ const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): Re
       newItems[action.payload.index] = { ...newItems[action.payload.index], [action.payload.field]: action.payload.value };
       return { ...state, items: newItems };
     case 'REMOVE_ITEM':
-      return { ...state, items: state.items.filter((_, i) => i !== action.payload )};
+      return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
     case 'RESET':
       return { reason: '', notes: '', items: [] };
     default:
@@ -179,22 +355,31 @@ const CustomCard: React.FC<CustomCardProps> = ({ className, children }) => (
   </div>
 );
 
-const CustomInput: React.FC<CustomInputProps> = ({ label, type = 'text', min, max, value, onChange, error, className, placeholder, ariaLabel }) => (
-  <div className="flex flex-col">
-    {label && <label className="text-sm font-medium text-gray-700 mb-1">{label}</label>}
-    <input
-      type={type}
-      min={min}
-      max={max}
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-      aria-label={ariaLabel || label || placeholder}
-      className={`px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm ${error ? 'border-red-500' : ''} ${className}`}
-    />
-    {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
-  </div>
-);
+const CustomInput: React.FC<CustomInputProps> = ({ label, type = 'text', min, max, value, onChange, error, className, placeholder, ariaLabel }) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="flex flex-col">
+      {label && <label className="text-sm font-medium text-gray-700 mb-1">{label}</label>}
+      <div className="relative">
+        <Search
+          className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 ${isRtl ? 'right-3' : 'left-3'}`}
+        />
+        <input
+          type={type}
+          min={min}
+          max={max}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          aria-label={ariaLabel || label || placeholder}
+          className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm ${error ? 'border-red-500' : ''} ${className} ${isRtl ? 'pr-10 pl-4' : 'pl-10 pr-4'}`}
+        />
+      </div>
+      {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+    </div>
+  );
+};
 
 const CustomButton: React.FC<CustomButtonProps> = ({ variant = 'primary', size = 'md', onClick, disabled, className, children, ariaLabel }) => {
   const baseClass = `px-4 py-2 rounded-lg transition-colors duration-200 font-medium ${
@@ -220,6 +405,8 @@ const CustomButton: React.FC<CustomButtonProps> = ({ variant = 'primary', size =
 };
 
 const CustomModal: React.FC<CustomModalProps> = ({ isOpen, onClose, title, children }) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
   if (!isOpen) return null;
   return (
     <motion.div
@@ -237,9 +424,9 @@ const CustomModal: React.FC<CustomModalProps> = ({ isOpen, onClose, title, child
         exit={{ scale: 0.95, y: 20 }}
         className="bg-white p-6 rounded-lg shadow-xl max-w-[90vw] sm:max-w-2xl w-full max-h-[80vh] overflow-y-auto"
       >
-        <div className="flex justify-between items-center mb-4">
+        <div className={`flex ${isRtl ? 'flex-row-reverse' : ''} justify-between items-center mb-4`}>
           <h2 className="text-xl font-bold text-gray-900">{title}</h2>
-          <CustomButton onClick={onClose} variant="secondary" size="sm" ariaLabel="Close modal">
+          <CustomButton onClick={onClose} variant="secondary" size="sm" ariaLabel={isRtl ? 'إغلاق النافذة' : 'Close modal'}>
             <X className="w-4 h-4" />
           </CustomButton>
         </div>
@@ -249,27 +436,32 @@ const CustomModal: React.FC<CustomModalProps> = ({ isOpen, onClose, title, child
   );
 };
 
-const CustomSelect: React.FC<CustomSelectProps> = ({ label, value, onChange, options, error, disabled, ariaLabel }) => (
-  <div className="flex flex-col">
-    {label && <label className="text-sm font-medium text-gray-700 mb-1">{label}</label>}
-    <select
-      value={value}
-      onChange={onChange}
-      disabled={disabled}
-      aria-label={ariaLabel || label}
-      className={`px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm ${
-        error ? 'border-red-500' : ''
-      } ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-    >
-      {options.map((opt) => (
-        <option key={opt.value} value={opt.value}>
-          {opt.label}
-        </option>
-      ))}
-    </select>
-    {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
-  </div>
-);
+const CustomSelect: React.FC<CustomSelectProps> = ({ label, value, onChange, options, error, disabled, ariaLabel }) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="flex flex-col">
+      {label && <label className="text-sm font-medium text-gray-700 mb-1">{label}</label>}
+      <div className="relative">
+        <select
+          value={value}
+          onChange={onChange}
+          disabled={disabled}
+          aria-label={ariaLabel || label}
+          className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500 text-sm appearance-none ${error ? 'border-red-500' : ''} ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${isRtl ? 'text-right' : 'text-left'}`}
+        >
+          {options.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 ${isRtl ? 'left-3' : 'right-3'}`} />
+      </div>
+      {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+    </div>
+  );
+};
 
 const InventoryCardSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
   <motion.div
@@ -356,18 +548,18 @@ export const BranchInventory: React.FC = () => {
 
   const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError, refetch: refetchInventory } = useQuery<
     InventoryItem[],
-    Error
+    AxiosError
   >({
     queryKey: ['inventory', user?.branchId, debouncedSearchQuery, filterStatus, filterDepartment, currentPage, language],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
-      return inventoryAPI.getByBranch(user.branchId);
+      return inventoryAPI.getByBranch(user.branchId, { department: filterDepartment, search: debouncedSearchQuery });
     },
     enabled: !!user?.branchId,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    cacheTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 5 * 60 * 1000,
+    cacheTime: 10 * 60 * 1000,
     select: (response) => {
-      const inventoryData = Array.isArray(response) ? response : response?.data || [];
+      const inventoryData = Array.isArray(response.inventory) ? response.inventory : response?.data?.inventory || [];
       return inventoryData.map((item: InventoryItem) => ({
         ...item,
         product: item.product
@@ -407,7 +599,6 @@ export const BranchInventory: React.FC = () => {
     },
   });
 
-  // Department options
   const departmentOptions = useMemo(() => {
     const depts = new Set<string>();
     inventoryData?.forEach((item) => {
@@ -426,7 +617,7 @@ export const BranchInventory: React.FC = () => {
     ];
   }, [inventoryData, isRtl, t]);
 
-  const { data: productHistory, isLoading: historyLoading } = useQuery<ProductHistoryEntry[], Error>({
+  const { data: productHistory, isLoading: historyLoading } = useQuery<ProductHistoryEntry[], AxiosError>({
     queryKey: ['productHistory', selectedProductId, user?.branchId],
     queryFn: async () => {
       if (!selectedProductId || !user?.branchId) throw new Error(t('errors.no_branch'));
@@ -436,7 +627,7 @@ export const BranchInventory: React.FC = () => {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: ordersData } = useQuery<Order[], Error>({
+  const { data: ordersData } = useQuery<Order[], AxiosError>({
     queryKey: ['orders', user?.branchId, language],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
@@ -571,89 +762,93 @@ export const BranchInventory: React.FC = () => {
   const totalInventoryPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
 
   const handleOpenReturnModal = useCallback((item?: InventoryItem) => {
-    setSelectedItem(item || null);
-    dispatchReturnForm({ type: 'RESET' });
-    if (item?.product) {
+    if (!user || user.role !== 'branch') {
+      toast.error(t('errors.no_branch'), { position: 'top-right', autoClose: 3000 });
+      return;
+    }
+    if (item) {
+      setSelectedItem(item);
       dispatchReturnForm({
         type: 'ADD_ITEM',
-        payload: { itemId: '', productId: item.product._id, orderId: '', quantity: 1, reason: '', maxQuantity: 0 },
+        payload: {
+          itemId: item._id,
+          productId: item.product?._id || '',
+          orderId: '',
+          quantity: 1,
+          reason: '',
+          maxQuantity: item.currentStock,
+        },
       });
+    } else {
+      dispatchReturnForm({ type: 'RESET' });
     }
-    setReturnErrors({});
     setIsReturnModalOpen(true);
+    setReturnErrors({});
+  }, [user, t]);
+
+  const handleCloseReturnModal = useCallback(() => {
+    setIsReturnModalOpen(false);
+    setSelectedItem(null);
+    dispatchReturnForm({ type: 'RESET' });
+    setReturnErrors({});
   }, []);
 
   const handleOpenEditModal = useCallback((item: InventoryItem) => {
+    if (!user || user.role !== 'branch') {
+      toast.error(t('errors.no_branch'), { position: 'top-right', autoClose: 3000 });
+      return;
+    }
     setSelectedItem(item);
-    setEditForm({ minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
-    setEditErrors({});
+    setEditForm({
+      minStockLevel: item.minStockLevel,
+      maxStockLevel: item.maxStockLevel,
+    });
     setIsEditModalOpen(true);
+    setEditErrors({});
+  }, [user, t]);
+
+  const handleCloseEditModal = useCallback(() => {
+    setIsEditModalOpen(false);
+    setSelectedItem(null);
+    setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
+    setEditErrors({});
   }, []);
 
   const handleOpenDetailsModal = useCallback((item: InventoryItem) => {
-    if (item.product) {
-      setSelectedProductId(item.product._id);
-      setIsDetailsModalOpen(true);
+    if (!user || user.role !== 'branch') {
+      toast.error(t('errors.no_branch'), { position: 'top-right', autoClose: 3000 });
+      return;
     }
-  }, []);
+    setSelectedItem(item);
+    setSelectedProductId(item.product?._id || '');
+    setIsDetailsModalOpen(true);
+  }, [user, t]);
 
-  const addItemToForm = useCallback(() => {
-    dispatchReturnForm({
-      type: 'ADD_ITEM',
-      payload: { itemId: '', productId: '', orderId: '', quantity: 1, reason: '', maxQuantity: 0 },
-    });
-  }, []);
-
-  const handleProductChange = useCallback(
-    (index: number, productId: string) => {
-      dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'productId', value: productId } });
-      dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'orderId', value: '' } });
-      dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'itemId', value: '' } });
-      dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'maxQuantity', value: 0 } });
-    },
-    []
-  );
-
-  const handleOrderChange = useCallback(
-    (index: number, orderId: string) => {
-      dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'orderId', value: orderId } });
-      const productId = returnForm.items[index]?.productId;
-      if (productId && orderId) {
-        const selectedOrder = possibleOrders[productId]?.find((o) => o.value === orderId);
-        if (selectedOrder) {
-          dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'maxQuantity', value: selectedOrder.remaining } });
-          dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'itemId', value: selectedOrder.itemId } });
-        }
-      } else {
-        dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'maxQuantity', value: 0 } });
-        dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'itemId', value: '' } });
-      }
-    },
-    [returnForm.items, possibleOrders]
-  );
-
-  const updateItemInForm = useCallback(
-    (index: number, field: keyof ReturnItem, value: string | number) => {
-      dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
-    },
-    []
-  );
-
-  const removeItemFromForm = useCallback((index: number) => {
-    dispatchReturnForm({ type: 'REMOVE_ITEM', payload: index });
+  const handleCloseDetailsModal = useCallback(() => {
+    setIsDetailsModalOpen(false);
+    setSelectedItem(null);
+    setSelectedProductId('');
   }, []);
 
   const validateReturnForm = useCallback(() => {
     const errors: Record<string, string> = {};
-    if (!returnForm.reason) errors.reason = t('errors.required', { field: t('returns.reason') });
-    if (returnForm.items.length === 0) errors.items = t('errors.required', { field: t('returns.items') });
+    if (!returnForm.reason) {
+      errors.reason = t('errors.required', { field: t('returns.reason') });
+    }
     returnForm.items.forEach((item, index) => {
-      if (!item.productId) errors[`item_${index}_productId`] = t('errors.required', { field: t('returns.item') });
-      if (!item.orderId) errors[`item_${index}_orderId`] = t('errors.required', { field: t('returns.order') });
-      if (!item.itemId) errors[`item_${index}_itemId`] = t('errors.required', { field: t('returns.item') });
-      if (!item.reason) errors[`item_${index}_reason`] = t('errors.required', { field: t('returns.reason') });
-      if (item.quantity < 1 || item.quantity > item.maxQuantity || isNaN(item.quantity)) {
-        errors[`item_${index}_quantity`] = t('errors.invalid_quantity_max', { max: item.maxQuantity });
+      if (!item.productId) {
+        errors[`items[${index}].productId`] = t('errors.required', { field: t('products.select') });
+      }
+      if (!item.orderId) {
+        errors[`items[${index}].orderId`] = t('errors.required', { field: t('returns.select_order') });
+      }
+      if (!item.quantity || item.quantity <= 0) {
+        errors[`items[${index}].quantity`] = t('errors.non_negative', { field: t('returns.quantity') });
+      } else if (item.quantity > item.maxQuantity) {
+        errors[`items[${index}].quantity`] = t('errors.invalid_quantity_max', { max: item.maxQuantity });
+      }
+      if (!item.reason) {
+        errors[`items[${index}].reason`] = t('errors.required', { field: t('returns.reason') });
       }
     });
     setReturnErrors(errors);
@@ -662,535 +857,479 @@ export const BranchInventory: React.FC = () => {
 
   const validateEditForm = useCallback(() => {
     const errors: Record<string, string> = {};
-    if (editForm.minStockLevel < 0) errors.minStockLevel = t('errors.non_negative', { field: t('inventory.min_stock') });
-    if (editForm.maxStockLevel < 0) errors.maxStockLevel = t('errors.non_negative', { field: t('inventory.max_stock') });
-    if (editForm.maxStockLevel <= editForm.minStockLevel) errors.maxStockLevel = t('errors.max_greater_min');
+    if (editForm.minStockLevel < 0) {
+      errors.minStockLevel = t('errors.non_negative', { field: t('inventory.min_stock') });
+    }
+    if (editForm.maxStockLevel < 0) {
+      errors.maxStockLevel = t('errors.non_negative', { field: t('inventory.max_stock') });
+    }
+    if (editForm.maxStockLevel <= editForm.minStockLevel) {
+      errors.maxStockLevel = t('errors.max_greater_min');
+    }
     setEditErrors(errors);
     return Object.keys(errors).length === 0;
   }, [editForm, t]);
 
-  const createReturnMutation = useMutation<void, Error, void>({
+  const createReturnMutation = useMutation({
     mutationFn: async () => {
-      if (!validateReturnForm()) throw new Error(t('errors.invalid_form'));
-      if (!user?.branchId) throw new Error(t('errors.no_branch'));
-      await returnsAPI.createReturn({
-        orderId: returnForm.items[0].orderId,
-        reason: returnForm.reason,
-        notes: returnForm.notes,
+      if (!user?.branchId || !selectedItem) {
+        throw new Error(t('errors.no_branch'));
+      }
+      return returnsAPI.create({
+        branchId: user.branchId,
         items: returnForm.items.map((item) => ({
-          itemId: item.itemId,
+          inventoryId: item.itemId,
           productId: item.productId,
+          orderId: item.orderId,
           quantity: item.quantity,
           reason: item.reason,
         })),
+        reason: returnForm.reason,
+        notes: returnForm.notes,
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      setIsReturnModalOpen(false);
-      dispatchReturnForm({ type: 'RESET' });
-      setReturnErrors({});
-      setSelectedItem(null);
-      setPossibleOrders({});
       toast.success(t('returns.create_success'), { position: 'top-right', autoClose: 3000 });
-      socket?.emit('returnCreated', {
-        branchId: user?.branchId,
-        returnId: crypto.randomUUID(),
-        status: 'pending_approval',
-        eventId: crypto.randomUUID(),
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      handleCloseReturnModal();
+    },
+    onError: (err: AxiosError) => {
+      toast.error(err.response?.data?.message || t('errors.create_return'), { position: 'top-right', autoClose: 3000 });
+    },
+  });
+
+  const updateInventoryMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedItem) {
+        throw new Error(t('errors.no_item_selected'));
+      }
+      return inventoryAPI.update(selectedItem._id, {
+        minStockLevel: editForm.minStockLevel,
+        maxStockLevel: editForm.maxStockLevel,
       });
     },
-    onError: (err) => {
-      console.error(`[${new Date().toISOString()}] Create return error:`, err);
-      const errorMessage = err.message.includes('Request failed with status code 400') && err.response?.data?.errors?.length
-        ? err.response.data.errors.map((e: any) => e.msg).join(', ')
-        : err.message || t('errors.create_return');
-      toast.error(errorMessage, { position: 'top-right', autoClose: 3000 });
-      if (err.message.includes('Invalid')) {
-        setReturnErrors({ form: errorMessage });
+    onSuccess: () => {
+      toast.success(t('inventory.update_success'), { position: 'top-right', autoClose: 3000 });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      handleCloseEditModal();
+    },
+    onError: (err: AxiosError) => {
+      toast.error(err.response?.data?.message || t('errors.update_inventory'), { position: 'top-right', autoClose: 3000 });
+    },
+  });
+
+  const handleAddReturnItem = useCallback(() => {
+    dispatchReturnForm({
+      type: 'ADD_ITEM',
+      payload: {
+        itemId: '',
+        productId: '',
+        orderId: '',
+        quantity: 1,
+        reason: '',
+        maxQuantity: 0,
+      },
+    });
+  }, []);
+
+  const handleSubmitReturn = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (validateReturnForm()) {
+        createReturnMutation.mutate();
+      } else {
+        toast.error(t('errors.invalid_form'), { position: 'top-right', autoClose: 3000 });
       }
     },
-  });
+    [validateReturnForm, createReturnMutation, t]
+  );
 
-  const updateInventoryMutation = useMutation<void, Error, void>({
-    mutationFn: async () => {
-      if (!validateEditForm()) throw new Error(t('errors.invalid_form'));
-      if (!selectedItem) throw new Error(t('errors.no_item_selected'));
-      if (!user?.branchId && !selectedItem.branch?._id) throw new Error(t('errors.no_branch'));
-      await inventoryAPI.updateStock(selectedItem._id, {
-        minStockLevel: editForm.minStockLevel,
-        maxStockLevel: editForm.maxStockLevel,
-        branchId: selectedItem.branch?._id || user?.branchId,
-      });
+  const handleSubmitEdit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (validateEditForm()) {
+        updateInventoryMutation.mutate();
+      } else {
+        toast.error(t('errors.invalid_form'), { position: 'top-right', autoClose: 3000 });
+      }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      setIsEditModalOpen(false);
-      setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
-      setEditErrors({});
-      setSelectedItem(null);
-      toast.success(t('inventory.update_success'), { position: 'top-right', autoClose: 3000 });
-      socket?.emit('inventoryUpdated', {
-        branchId: selectedItem?.branch?._id || user?.branchId,
-        minStockLevel: editForm.minStockLevel,
-        maxStockLevel: editForm.maxStockLevel,
-        eventId: crypto.randomUUID(),
-      });
-    },
-    onError: (err) => {
-      console.error(`[${new Date().toISOString()}] Update inventory error:`, err);
-      const errorMessage = err.response?.data?.errors?.length
-        ? err.response.data.errors.map((e: any) => e.msg).join(', ')
-        : err.message || t('errors.update_inventory');
-      toast.error(errorMessage, { position: 'top-right', autoClose: 3000 });
-      setEditErrors({ form: errorMessage });
-    },
-  });
+    [validateEditForm, updateInventoryMutation, t]
+  );
 
-  const errorMessage = inventoryError?.message || '';
+  const handleRefresh = useCallback(() => {
+    refetchInventory();
+    setSearchInput('');
+    setFilterStatus('');
+    setFilterDepartment('');
+    setCurrentPage(1);
+    toast.info(t('common.refresh'), { position: 'top-right', autoClose: 2000 });
+  }, [refetchInventory, t]);
 
   return (
-    <div
-      className="container mx-auto px-4 py-6 min-h-screen bg-gradient-to-br from-amber-50 to-teal-50"
-      dir={isRtl ? 'rtl' : 'ltr'}
-    >
-      <div className="mb-6">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 py-8 px-4 sm:px-6 lg:px-8" dir={isRtl ? 'rtl' : 'ltr'}>
+      <div className="max-w-7xl mx-auto">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-3">
-              <Package className="w-8 h-8 text-amber-600" />
-              {t('inventory.title')}
-            </h1>
-            <p className="text-gray-600 mt-2 text-sm sm:text-base">{t('inventory.description')}</p>
+            <h1 className="text-2xl font-bold text-gray-900">{t('inventory.title')}</h1>
+            <p className="text-sm text-gray-600">{t('inventory.description')}</p>
           </div>
-          <div className="flex gap-2">
-            <CustomButton
-              onClick={() => handleOpenReturnModal()}
-              className="bg-amber-600 text-white hover:bg-amber-700 flex items-center gap-2"
-              ariaLabel={t('returns.create')}
-            >
-              <Plus className="w-4 h-4" />
-              {t('returns.create')}
-            </CustomButton>
-            <CustomButton
-              onClick={() => refetchInventory()}
-              variant="secondary"
-              className="flex items-center gap-2"
-              ariaLabel={t('common.refresh')}
-            >
-              <RefreshCw className="w-4 h-4" />
+          <div className="mt-4 sm:mt-0 flex gap-2">
+            <CustomButton onClick={handleRefresh} variant="secondary" size="md" ariaLabel={t('common.refresh')}>
+              <RefreshCw className="w-4 h-4 mr-2" />
               {t('common.refresh')}
+            </CustomButton>
+            <CustomButton onClick={() => handleOpenReturnModal()} variant="primary" size="md" ariaLabel={t('returns.create')}>
+              <Plus className="w-4 h-4 mr-2" />
+              {t('returns.create')}
             </CustomButton>
           </div>
         </div>
-      </div>
 
-      {errorMessage && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-6 p-4 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3"
-        >
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <span className="text-red-600 text-sm">{errorMessage}</span>
-          <CustomButton
-            onClick={() => refetchInventory()}
-            className="ml-4 bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700"
-            ariaLabel={t('common.retry')}
-          >
-            <RefreshCw className="w-4 h-4 mr-2" />
-            {t('common.retry')}
-          </CustomButton>
-        </motion.div>
-      )}
-
-      <CustomCard className="p-4 sm:p-6 mb-6 bg-white rounded-xl shadow-md">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="relative">
-            <Search
-              className={`absolute top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 ${isRtl ? 'right-3' : 'left-3'}`}
-            />
-            <CustomInput
-              placeholder={t('common.search')}
-              value={searchInput}
-              onChange={handleSearchChange}
-              className={`pl-10 pr-4 py-2 border-gray-300 rounded-lg focus:ring-amber-500 focus:border-amber-500 ${isRtl ? 'pr-10 pl-4' : ''}`}
-              ariaLabel={t('common.search')}
-            />
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          <CustomInput
+            label={t('common.search')}
+            value={searchInput}
+            onChange={handleSearchChange}
+            placeholder={t('common.search')}
+            ariaLabel={t('common.search')}
+          />
           <CustomSelect
+            label={t('common.filter_by_status')}
             value={filterStatus}
             onChange={(e) => {
               setFilterStatus(e.target.value as InventoryStatus | '');
               setCurrentPage(1);
             }}
             options={statusOptions}
-            label={t('common.filter_by_status')}
             ariaLabel={t('common.filter_by_status')}
           />
           <CustomSelect
+            label={t('common.filter_by_department')}
             value={filterDepartment}
             onChange={(e) => {
               setFilterDepartment(e.target.value);
               setCurrentPage(1);
             }}
             options={departmentOptions}
-            label={t('common.filter_by_department')}
             ariaLabel={t('common.filter_by_department')}
           />
         </div>
-      </CustomCard>
 
-      <motion.div
-        initial={{ opacity: 0, x: isRtl ? -50 : 50 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.3 }}
-      >
+        {inventoryError && (
+          <div className="mb-6 p-4 bg-red-100 text-red-700 rounded-lg flex items-center">
+            <AlertCircle className="w-5 h-5 mr-2" />
+            <span>{inventoryError.message || t('errors.fetch_inventory')}</span>
+            <CustomButton
+              variant="secondary"
+              size="sm"
+              onClick={() => refetchInventory()}
+              className="ml-4"
+              ariaLabel={t('common.retry')}
+            >
+              {t('common.retry')}
+            </CustomButton>
+          </div>
+        )}
+
         {inventoryLoading ? (
-          <div className="space-y-4">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <InventoryCardSkeleton key={i} isRtl={isRtl} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <InventoryCardSkeleton key={index} isRtl={isRtl} />
             ))}
           </div>
         ) : paginatedInventory.length === 0 ? (
-          <CustomCard className="p-8 text-center bg-white rounded-xl shadow-md">
-            <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600 text-sm">{t('inventory.no_items')}</p>
-          </CustomCard>
+          <div className="text-center py-8">
+            <Package className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+            <p className="text-gray-600">{t('inventory.no_items')}</p>
+          </div>
         ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <AnimatePresence>
-              {paginatedInventory.map((item) =>
-                item.product ? (
-                  <motion.div
-                    key={item._id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <CustomCard className="p-4 sm:p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-shadow">
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
-                        <div className="sm:col-span-2">
-                          <h3 className="font-semibold text-gray-900 text-base sm:text-lg">
-                            {isRtl ? item.product.name : item.product.nameEn}
-                          </h3>
-                          <p className="text-sm text-gray-500">{t('products.code')}: {item.product.code}</p>
-                          <p className="text-sm text-gray-600">{t('inventory.stock')}: {item.currentStock}</p>
-                          <p className="text-sm text-gray-600">{t('inventory.min_stock')}: {item.minStockLevel}</p>
-                          <p className="text-sm text-gray-600">{t('inventory.max_stock')}: {item.maxStockLevel}</p>
-                          <p className="text-sm text-gray-600">{t('products.unit')}: {isRtl ? item.product.unit : item.product.unitEn}</p>
-                          <p className="text-sm text-gray-600 font-bold flex items-center gap-1">
-                            <span className="text-amber-600">📂</span> {t('departments.title')}: {isRtl ? item.product.department?.name : item.product.department?.nameEn}
-                          </p>
-                          <p
-                            className={`text-sm font-medium ${
-                              item.status === InventoryStatus.LOW
-                                ? 'text-red-600'
-                                : item.status === InventoryStatus.FULL
-                                ? 'text-yellow-600'
-                                : 'text-green-600'
-                            }`}
-                          >
-                            {t(`inventory.${item.status}`)}
-                          </p>
-                        </div>
-                        <div className="flex gap-2 justify-end sm:justify-start">
-                          <CustomButton
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => handleOpenDetailsModal(item)}
-                            className="text-green-600 hover:text-green-800"
-                            ariaLabel={t('inventory.view_details')}
-                          >
-                            <Eye className="w-4 h-4" />
-                          </CustomButton>
-                          <CustomButton
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => handleOpenEditModal(item)}
-                            className="text-blue-600 hover:text-blue-800"
-                            ariaLabel={t('inventory.edit_stock_limits')}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </CustomButton>
-                          <CustomButton
-                            variant="destructive"
-                            size="sm"
-                            disabled={item.currentStock <= 0}
-                            onClick={() => handleOpenReturnModal(item)}
-                            className="text-red-600 hover:text-red-800 disabled:opacity-50"
-                            ariaLabel={t('returns.create')}
-                          >
-                            {t('returns.create')}
-                          </CustomButton>
-                        </div>
-                      </div>
-                    </CustomCard>
-                  </motion.div>
-                ) : null
-              )}
+              {paginatedInventory.map((item) => (
+                <motion.div
+                  key={item._id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 20 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <CustomCard>
+                    <div className={`flex items-center ${isRtl ? 'justify-between flex-row-reverse' : 'justify-between'}`}>
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        {isRtl ? item.product?.name : item.product?.nameEn || item.product?.name}
+                      </h3>
+                      <span
+                        className={`text-xs font-medium px-2 py-1 rounded-full ${
+                          item.status === InventoryStatus.LOW
+                            ? 'bg-red-100 text-red-600'
+                            : item.status === InventoryStatus.FULL
+                            ? 'bg-green-100 text-green-600'
+                            : 'bg-blue-100 text-blue-600'
+                        }`}
+                      >
+                        {t(`inventory.${item.status}`)}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-2">{t('products.code')}: {item.product?.code || 'N/A'}</p>
+                    <p className="text-sm text-gray-600">
+                      {t('departments.title')}: {isRtl ? item.product?.department?.name : item.product?.department?.nameEn || t('departments.unknown')}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {t('inventory.stock')}: {item.currentStock} {isRtl ? item.product?.unit : item.product?.unitEn || 'N/A'}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {t('inventory.min_stock')}: {item.minStockLevel}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {t('inventory.max_stock')}: {item.maxStockLevel}
+                    </p>
+                    <div className={`flex gap-2 mt-4 ${isRtl ? 'justify-end' : ''}`}>
+                      <CustomButton
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleOpenDetailsModal(item)}
+                        ariaLabel={t('inventory.product_details')}
+                      >
+                        <Eye className="w-4 h-4" />
+                      </CustomButton>
+                      <CustomButton
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleOpenEditModal(item)}
+                        ariaLabel={t('inventory.edit_stock_limits')}
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </CustomButton>
+                      <CustomButton
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => handleOpenReturnModal(item)}
+                        ariaLabel={t('returns.create')}
+                      >
+                        <Plus className="w-4 h-4" />
+                      </CustomButton>
+                    </div>
+                  </CustomCard>
+                </motion.div>
+              ))}
             </AnimatePresence>
-            <Pagination totalPages={totalInventoryPages} currentPage={currentPage} setCurrentPage={setCurrentPage} isRtl={isRtl} />
           </div>
         )}
-      </motion.div>
 
-      <CustomModal
-        isOpen={isReturnModalOpen}
-        onClose={() => {
-          setIsReturnModalOpen(false);
-          dispatchReturnForm({ type: 'RESET' });
-          setReturnErrors({});
-          setSelectedItem(null);
-          setPossibleOrders({});
-        }}
-        title={t('returns.create')}
-      >
-        <div className="flex flex-col gap-4">
-          {selectedItem?.product && (
-            <p className="text-sm text-gray-600">
-              {t('products.title')}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
-            </p>
-          )}
-          <CustomSelect
-            label={t('returns.reason')}
-            value={returnForm.reason}
-            onChange={(e) => dispatchReturnForm({ type: 'SET_REASON', payload: e.target.value })}
-            options={reasonOptions}
-            error={returnErrors.reason}
-            ariaLabel={t('returns.reason')}
-          />
-          <CustomInput
-            label={t('returns.notes')}
-            value={returnForm.notes}
-            onChange={(e) => dispatchReturnForm({ type: 'SET_NOTES', payload: e.target.value })}
-            placeholder={t('returns.notes_placeholder')}
-            ariaLabel={t('returns.notes')}
-          />
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('returns.items')}</label>
-            {returnForm.items.map((item, index) => (
-              <div key={index} className={`flex flex-col sm:flex-row gap-2 mb-3 items-start sm:items-center flex-wrap ${isRtl ? 'sm:flex-row-reverse' : ''}`}>
-                <CustomSelect
-                  value={item.productId}
-                  onChange={(e) => handleProductChange(index, e.target.value)}
-                  options={[{ value: '', label: t('products.select') }].concat(
-                    availableItems.map((a) => ({
-                      value: a.productId,
-                      label: `${a.productName} (${a.stock} ${t('common.available')}) - [${a.departmentName}]`,
-                    }))
+        <Pagination
+          totalPages={totalInventoryPages}
+          currentPage={currentPage}
+          setCurrentPage={setCurrentPage}
+          isRtl={isRtl}
+        />
+
+        <CustomModal isOpen={isReturnModalOpen} onClose={handleCloseReturnModal} title={t('returns.create')}>
+          <form onSubmit={handleSubmitReturn} className="space-y-6">
+            <CustomSelect
+              label={t('returns.reason')}
+              value={returnForm.reason}
+              onChange={(e) => dispatchReturnForm({ type: 'SET_REASON', payload: e.target.value })}
+              options={reasonOptions}
+              error={returnErrors.reason}
+              ariaLabel={t('returns.reason')}
+            />
+            <CustomInput
+              label={t('returns.notes')}
+              value={returnForm.notes}
+              onChange={(e) => dispatchReturnForm({ type: 'SET_NOTES', payload: e.target.value })}
+              placeholder={t('returns.notes_placeholder')}
+              ariaLabel={t('returns.notes')}
+            />
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">{t('returns.items')}</h3>
+              {returnForm.items.map((item, index) => (
+                <div key={index} className="border p-4 rounded-lg mb-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <CustomSelect
+                      label={t('products.select')}
+                      value={item.productId}
+                      onChange={(e) => {
+                        const productId = e.target.value;
+                        const maxQuantity = availableItems.find((ai) => ai.productId === productId)?.available || 0;
+                        dispatchReturnForm({
+                          type: 'UPDATE_ITEM',
+                          payload: { index, field: 'productId', value: productId },
+                        });
+                        dispatchReturnForm({
+                          type: 'UPDATE_ITEM',
+                          payload: { index, field: 'maxQuantity', value: maxQuantity },
+                        });
+                        dispatchReturnForm({
+                          type: 'UPDATE_ITEM',
+                          payload: { index, field: 'orderId', value: '' },
+                        });
+                      }}
+                      options={[
+                        { value: '', label: t('products.select') },
+                        ...availableItems.map((ai) => ({ value: ai.productId, label: `${ai.productName} (${ai.departmentName})` })),
+                      ]}
+                      error={returnErrors[`items[${index}].productId`]}
+                      ariaLabel={t('products.select')}
+                    />
+                    <CustomSelect
+                      label={t('returns.select_order')}
+                      value={item.orderId}
+                      onChange={(e) =>
+                        dispatchReturnForm({
+                          type: 'UPDATE_ITEM',
+                          payload: { index, field: 'orderId', value: e.target.value },
+                        })
+                      }
+                      options={[{ value: '', label: t('returns.select_order') }, ...(possibleOrders[item.productId] || [])]}
+                      error={returnErrors[`items[${index}].orderId`]}
+                      disabled={!item.productId}
+                      ariaLabel={t('returns.select_order')}
+                    />
+                    <CustomInput
+                      label={t('returns.quantity')}
+                      type="number"
+                      min={1}
+                      value={item.quantity}
+                      onChange={(e) =>
+                        dispatchReturnForm({
+                          type: 'UPDATE_ITEM',
+                          payload: { index, field: 'quantity', value: Number(e.target.value) },
+                        })
+                      }
+                      error={returnErrors[`items[${index}].quantity`]}
+                      ariaLabel={t('returns.quantity')}
+                    />
+                    <CustomSelect
+                      label={t('returns.reason')}
+                      value={item.reason}
+                      onChange={(e) =>
+                        dispatchReturnForm({
+                          type: 'UPDATE_ITEM',
+                          payload: { index, field: 'reason', value: e.target.value },
+                        })
+                      }
+                      options={reasonOptions}
+                      error={returnErrors[`items[${index}].reason`]}
+                      ariaLabel={t('returns.reason')}
+                    />
+                  </div>
+                  {returnForm.items.length > 1 && (
+                    <CustomButton
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => dispatchReturnForm({ type: 'REMOVE_ITEM', payload: index })}
+                      className="mt-2"
+                      ariaLabel={t('returns.remove_item')}
+                    >
+                      {t('returns.remove_item')}
+                    </CustomButton>
                   )}
-                  error={returnErrors[`item_${index}_productId`]}
-                  disabled={!!selectedItem}
-                  ariaLabel={t('products.select')}
-                />
-                <CustomSelect
-                  value={item.orderId}
-                  onChange={(e) => handleOrderChange(index, e.target.value)}
-                  options={[{ value: '', label: t('returns.select_order') }].concat(possibleOrders[item.productId] || [])}
-                  error={returnErrors[`item_${index}_orderId`]}
-                  disabled={!item.productId}
-                  ariaLabel={t('returns.select_order')}
-                />
-                <CustomInput
-                  type="number"
-                  min={1}
-                  max={item.maxQuantity}
-                  value={item.quantity}
-                  onChange={(e) => updateItemInForm(index, 'quantity', Number(e.target.value))}
-                  error={returnErrors[`item_${index}_quantity`]}
-                  className="w-20 sm:w-24"
-                  ariaLabel={t('returns.quantity')}
-                />
-                <CustomSelect
-                  value={item.reason}
-                  onChange={(e) => updateItemInForm(index, 'reason', e.target.value)}
-                  options={reasonOptions}
-                  error={returnErrors[`item_${index}_reason`]}
-                  ariaLabel={t('returns.reason')}
-                />
-                <CustomButton
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => removeItemFromForm(index)}
-                  disabled={!!selectedItem && returnForm.items.length === 1}
-                  ariaLabel={t('returns.remove_item')}
-                >
-                  <X className="w-4 h-4" />
-                </CustomButton>
-              </div>
-            ))}
-            {returnErrors.items && <p className="text-red-500 text-xs mt-1">{returnErrors.items}</p>}
-            {!selectedItem && (
+                </div>
+              ))}
               <CustomButton
                 variant="secondary"
-                onClick={addItemToForm}
-                disabled={availableItems.length === 0}
+                size="sm"
+                onClick={handleAddReturnItem}
                 className="mt-2"
                 ariaLabel={t('returns.add_item')}
               >
-                <Plus className="w-4 h-4 mr-2" />
                 {t('returns.add_item')}
               </CustomButton>
-            )}
-          </div>
-          {returnErrors.form && <p className="text-red-500 text-xs">{returnErrors.form}</p>}
-          <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <CustomButton
-              variant="secondary"
-              onClick={() => {
-                setIsReturnModalOpen(false);
-                dispatchReturnForm({ type: 'RESET' });
-                setReturnErrors({});
-                setSelectedItem(null);
-                setPossibleOrders({});
-              }}
-              ariaLabel={t('common.cancel')}
-            >
-              {t('common.cancel')}
-            </CustomButton>
-            <CustomButton
-              onClick={() => createReturnMutation.mutate()}
-              disabled={createReturnMutation.isPending}
-              className="relative disabled:opacity-50"
-              ariaLabel={t('common.submit')}
-            >
-              {createReturnMutation.isPending ? (
-                <span className="flex items-center gap-2">
-                  <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  {t('common.submitting')}
-                </span>
-              ) : (
-                t('common.submit')
-              )}
-            </CustomButton>
-          </div>
-        </div>
-      </CustomModal>
+            </div>
+            <div className={`flex gap-2 ${isRtl ? 'justify-end' : ''}`}>
+              <CustomButton
+                variant="secondary"
+                onClick={handleCloseReturnModal}
+                ariaLabel={t('common.cancel')}
+              >
+                {t('common.cancel')}
+              </CustomButton>
+              <CustomButton
+                type="submit"
+                disabled={createReturnMutation.isLoading}
+                ariaLabel={t('common.submit')}
+              >
+                {createReturnMutation.isLoading ? t('common.submitting') : t('common.submit')}
+              </CustomButton>
+            </div>
+          </form>
+        </CustomModal>
 
-      <CustomModal
-        isOpen={isEditModalOpen}
-        onClose={() => {
-          setIsEditModalOpen(false);
-          setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
-          setEditErrors({});
-          setSelectedItem(null);
-        }}
-        title={t('inventory.edit_stock_limits')}
-      >
-        <div className="flex flex-col gap-4">
-          {selectedItem?.product && (
-            <p className="text-sm text-gray-600">
-              {t('products.title')}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
-            </p>
-          )}
-          <CustomInput
-            label={t('inventory.min_stock')}
-            type="number"
-            min={0}
-            value={editForm.minStockLevel}
-            onChange={(e) => setEditForm({ ...editForm, minStockLevel: Number(e.target.value) })}
-            error={editErrors.minStockLevel}
-            ariaLabel={t('inventory.min_stock')}
-          />
-          <CustomInput
-            label={t('inventory.max_stock')}
-            type="number"
-            min={0}
-            value={editForm.maxStockLevel}
-            onChange={(e) => setEditForm({ ...editForm, maxStockLevel: Number(e.target.value) })}
-            error={editErrors.maxStockLevel}
-            ariaLabel={t('inventory.max_stock')}
-          />
-          {editErrors.form && <p className="text-red-500 text-xs">{editErrors.form}</p>}
-          <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <CustomButton
-              variant="secondary"
-              onClick={() => {
-                setIsEditModalOpen(false);
-                setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
-                setEditErrors({});
-                setSelectedItem(null);
-              }}
-              ariaLabel={t('common.cancel')}
-            >
-              {t('common.cancel')}
-            </CustomButton>
-            <CustomButton
-              onClick={() => updateInventoryMutation.mutate()}
-              disabled={updateInventoryMutation.isPending}
-              className="relative disabled:opacity-50"
-              ariaLabel={t('common.save')}
-            >
-              {updateInventoryMutation.isPending ? (
-                <span className="flex items-center gap-2">
-                  <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  {t('common.saving')}
-                </span>
-              ) : (
-                t('common.save')
-              )}
-            </CustomButton>
-          </div>
-        </div>
-      </CustomModal>
+        <CustomModal isOpen={isEditModalOpen} onClose={handleCloseEditModal} title={t('inventory.edit_stock_limits')}>
+          <form onSubmit={handleSubmitEdit} className="space-y-6">
+            <CustomInput
+              label={t('inventory.min_stock')}
+              type="number"
+              min={0}
+              value={editForm.minStockLevel}
+              onChange={(e) => setEditForm({ ...editForm, minStockLevel: Number(e.target.value) })}
+              error={editErrors.minStockLevel}
+              ariaLabel={t('inventory.min_stock')}
+            />
+            <CustomInput
+              label={t('inventory.max_stock')}
+              type="number"
+              min={0}
+              value={editForm.maxStockLevel}
+              onChange={(e) => setEditForm({ ...editForm, maxStockLevel: Number(e.target.value) })}
+              error={editErrors.maxStockLevel}
+              ariaLabel={t('inventory.max_stock')}
+            />
+            <div className={`flex gap-2 ${isRtl ? 'justify-end' : ''}`}>
+              <CustomButton
+                variant="secondary"
+                onClick={handleCloseEditModal}
+                ariaLabel={t('common.cancel')}
+              >
+                {t('common.cancel')}
+              </CustomButton>
+              <CustomButton
+                type="submit"
+                disabled={updateInventoryMutation.isLoading}
+                ariaLabel={t('common.save')}
+              >
+                {updateInventoryMutation.isLoading ? t('common.saving') : t('common.save')}
+              </CustomButton>
+            </div>
+          </form>
+        </CustomModal>
 
-      <CustomModal
-        isOpen={isDetailsModalOpen}
-        onClose={() => {
-          setIsDetailsModalOpen(false);
-          setSelectedProductId('');
-        }}
-        title={t('inventory.product_details')}
-      >
-        <div className="flex flex-col gap-4">
+        <CustomModal isOpen={isDetailsModalOpen} onClose={handleCloseDetailsModal} title={t('inventory.product_details')}>
           {historyLoading ? (
-            <div className="text-center text-gray-600 flex items-center justify-center gap-2">
-              <svg className="animate-spin h-5 w-5 text-gray-600" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-              {t('common.loading')}
-            </div>
-          ) : productHistory && productHistory.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="p-2 text-left font-medium">{t('common.date')}</th>
-                    <th className="p-2 text-left font-medium">{t('common.type')}</th>
-                    <th className="p-2 text-left font-medium">{t('inventory.quantity')}</th>
-                    <th className="p-2 text-left font-medium">{t('common.description')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {productHistory
-                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                    .map((entry) => (
-                      <tr key={entry._id} className="border-b hover:bg-gray-50">
-                        <td className="p-2">{new Date(entry.date).toLocaleString()}</td>
-                        <td className="p-2">{t(`inventory.${entry.type}`)}</td>
-                        <td className="p-2">{entry.quantity}</td>
-                        <td className="p-2">{entry.description}</td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
+            <div className="text-center py-4">{t('common.loading')}</div>
+          ) : !productHistory || productHistory.length === 0 ? (
+            <div className="text-center py-4">{t('inventory.no_history')}</div>
           ) : (
-            <p className="text-center text-gray-600 text-sm">{t('inventory.no_history')}</p>
+            <div className="space-y-4">
+              {productHistory.map((entry) => (
+                <CustomCard key={entry._id}>
+                  <p className="text-sm text-gray-600">
+                    {t('common.date')}: {new Date(entry.date).toLocaleDateString(language)}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {t('common.type')}: {t(`inventory.${entry.type}`)}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {t('returns.quantity')}: {entry.quantity}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {t('common.description')}: {entry.description}
+                  </p>
+                </CustomCard>
+              ))}
+            </div>
           )}
-        </div>
-      </CustomModal>
+          <div className={`flex justify-end mt-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <CustomButton
+              variant="secondary"
+              onClick={handleCloseDetailsModal}
+              ariaLabel={t('common.cancel')}
+            >
+              {t('common.cancel')}
+            </CustomButton>
+          </div>
+        </CustomModal>
+      </div>
     </div>
   );
 };
-
-export default BranchInventory;
