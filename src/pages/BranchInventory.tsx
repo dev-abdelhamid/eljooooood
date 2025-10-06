@@ -243,7 +243,7 @@ const Pagination: React.FC<PaginationProps> = ({ totalPages, currentPage, setCur
   )
 );
 
-const BranchInventory: React.FC = () => {
+export const BranchInventory: React.FC = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { socket } = useSocket();
