@@ -3,7 +3,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { returnsAPI, inventoryAPI ,ordersAPI } from '../services/api';
+import { returnsAPI, inventoryAPI, ordersAPI } from '../services/api';
 import { Package, AlertCircle, Search, RefreshCw, Edit, X, Plus, Eye } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -109,7 +109,7 @@ const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): Re
       newItems[action.payload.index] = { ...newItems[action.payload.index], [action.payload.field]: action.payload.value };
       return { ...state, items: newItems };
     case 'REMOVE_ITEM':
-      return { ...state, items: state.items.filter((_, i) => i !== action.payload )};
+      return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
     case 'RESET':
       return { reason: '', notes: '', items: [] };
     default:
@@ -353,6 +353,16 @@ export const BranchInventory: React.FC = () => {
 
   const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
 
+  // Log user and branchId for debugging
+  useEffect(() => {
+    if (!user?.branchId) {
+      console.error('No branchId found for user:', user);
+      toast.error(t('errors.no_branch'), { position: 'top-right', autoClose: 3000 });
+    } else {
+      console.log('User branchId:', user.branchId);
+    }
+  }, [user, t]);
+
   const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError, refetch: refetchInventory } = useQuery<
     InventoryItem[],
     Error
@@ -360,13 +370,22 @@ export const BranchInventory: React.FC = () => {
     queryKey: ['inventory', user?.branchId, debouncedSearchQuery, filterStatus, filterDepartment, currentPage, language],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
-      return inventoryAPI.getByBranch(user.branchId);
+      const response = await inventoryAPI.getByBranch(user.branchId);
+      console.log('Inventory API response:', response);
+      return response;
     },
     enabled: !!user?.branchId,
     staleTime: 5 * 60 * 1000, // 5 minutes
     cacheTime: 10 * 60 * 1000, // 10 minutes
     select: (response) => {
-      const inventoryData = Array.isArray(response) ? response : response?.data || [];
+      const inventoryData = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.data)
+        ? response.data
+        : response?.data?.inventory || [];
+      if (!inventoryData.length) {
+        console.warn('No inventory data received');
+      }
       return inventoryData.map((item: InventoryItem) => ({
         ...item,
         product: item.product
@@ -402,9 +421,17 @@ export const BranchInventory: React.FC = () => {
       }));
     },
     onError: (err) => {
+      console.error('Inventory fetch error:', err);
       toast.error(err.message || t('errors.fetch_inventory'), { position: 'top-right', autoClose: 3000 });
     },
   });
+
+  // Log inventory data for debugging
+  useEffect(() => {
+    console.log('Inventory data:', inventoryData);
+    console.log('Loading:', inventoryLoading);
+    console.log('Error:', inventoryError);
+  }, [inventoryData, inventoryLoading, inventoryError]);
 
   // Department options
   const departmentOptions = useMemo(() => {
@@ -429,7 +456,9 @@ export const BranchInventory: React.FC = () => {
     queryKey: ['productHistory', selectedProductId, user?.branchId],
     queryFn: async () => {
       if (!selectedProductId || !user?.branchId) throw new Error(t('errors.no_branch'));
-      return inventoryAPI.getHistory({ productId: selectedProductId, branchId: user.branchId });
+      const response = await inventoryAPI.getHistory({ productId: selectedProductId, branchId: user.branchId });
+      console.log('Product history response:', response);
+      return response;
     },
     enabled: isDetailsModalOpen && !!selectedProductId && !!user?.branchId,
     staleTime: 5 * 60 * 1000,
@@ -439,7 +468,9 @@ export const BranchInventory: React.FC = () => {
     queryKey: ['orders', user?.branchId, language],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
-      return ordersAPI.getAll({ branch: user.branchId, status: 'completed' });
+      const response = await ordersAPI.getAll({ branch: user.branchId, status: 'completed' });
+      console.log('Orders response:', response);
+      return response;
     },
     enabled: isReturnModalOpen && !!user?.branchId,
     select: (response) => response.orders || [],
@@ -460,6 +491,7 @@ export const BranchInventory: React.FC = () => {
           stock: item.currentStock,
         }));
       setAvailableItems(items);
+      console.log('Available items:', items);
     }
   }, [inventoryData, isRtl, t]);
 
@@ -482,6 +514,7 @@ export const BranchInventory: React.FC = () => {
         });
       });
       setPossibleOrders(newPossibleOrders);
+      console.log('Possible orders:', newPossibleOrders);
     }
   }, [ordersData, isReturnModalOpen, t]);
 
@@ -701,7 +734,7 @@ export const BranchInventory: React.FC = () => {
     },
     onError: (err) => {
       console.error(`[${new Date().toISOString()}] Create return error:`, err);
-      const errorMessage = err.message.includes('Request failed with status code 400') && err.response?.data?.errors?.length
+      const errorMessage = err.response?.data?.errors?.length
         ? err.response.data.errors.map((e: any) => e.msg).join(', ')
         : err.message || t('errors.create_return');
       toast.error(errorMessage, { position: 'top-right', autoClose: 3000 });
@@ -731,6 +764,7 @@ export const BranchInventory: React.FC = () => {
       toast.success(t('inventory.update_success'), { position: 'top-right', autoClose: 3000 });
       socket?.emit('inventoryUpdated', {
         branchId: selectedItem?.branch?._id || user?.branchId,
+        productId: selectedItem?.product?._id,
         minStockLevel: editForm.minStockLevel,
         maxStockLevel: editForm.maxStockLevel,
         eventId: crypto.randomUUID(),
@@ -855,6 +889,13 @@ export const BranchInventory: React.FC = () => {
           <CustomCard className="p-8 text-center bg-white rounded-xl shadow-md">
             <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600 text-sm">{t('inventory.no_items')}</p>
+            <CustomButton
+              onClick={() => handleOpenReturnModal()}
+              className="mt-4 bg-amber-600 text-white"
+              ariaLabel={t('returns.create')}
+            >
+              {t('returns.create')}
+            </CustomButton>
           </CustomCard>
         ) : (
           <div className="space-y-4">
