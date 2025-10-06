@@ -109,7 +109,7 @@ const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): Re
       newItems[action.payload.index] = { ...newItems[action.payload.index], [action.payload.field]: action.payload.value };
       return { ...state, items: newItems };
     case 'REMOVE_ITEM':
-      return { ...state, items: state.items.filter((_, i) => i !== action.payload )};
+      return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
     case 'RESET':
       return { reason: '', notes: '', items: [] };
     default:
@@ -340,7 +340,7 @@ export const BranchInventory: React.FC = () => {
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
   const [possibleOrders, setPossibleOrders] = useState<Record<string, { value: string; label: string; remaining: number; itemId: string }[]>>({});
 
-  // Custom debounce hook for search
+  // Custom debounce hook for search and filters
   const useDebouncedState = <T,>(initialValue: T, delay: number) => {
     const [value, setValue] = useState<T>(initialValue);
     const [debouncedValue, setDebouncedValue] = useState<T>(initialValue);
@@ -352,19 +352,21 @@ export const BranchInventory: React.FC = () => {
   };
 
   const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
+  const [debouncedFilterStatus, , debouncedFilterStatusValue] = useDebouncedState<InventoryStatus | ''>('', 300);
+  const [debouncedFilterDepartment, , debouncedFilterDepartmentValue] = useDebouncedState<string>('', 300);
 
   const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError, refetch: refetchInventory } = useQuery<
     InventoryItem[],
     Error
   >({
-    queryKey: ['inventory', user?.branchId, debouncedSearchQuery, filterStatus, filterDepartment, currentPage, language],
+    queryKey: ['inventory', user?.branchId, debouncedSearchQuery, debouncedFilterStatusValue, debouncedFilterDepartmentValue, currentPage, language],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
       return inventoryAPI.getByBranch(user.branchId);
     },
     enabled: !!user?.branchId,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    cacheTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 10 * 60 * 1000, // 10 minutes
+    cacheTime: 15 * 60 * 1000, // 15 minutes
     select: (response) => {
       const inventoryData = Array.isArray(response) ? response : response?.data || [];
       return inventoryData.map((item: InventoryItem) => ({
@@ -402,8 +404,10 @@ export const BranchInventory: React.FC = () => {
       }));
     },
     onError: (err) => {
-      toast.error(err.message || t('errors.fetch_inventory'), { position: 'top-right', autoClose: 3000 });
+      toast.error(err.message || t('errors.fetch_inventory'), { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
     },
+    retry: 2,
+    refetchOnWindowFocus: false,
   });
 
   // Department options
@@ -432,7 +436,7 @@ export const BranchInventory: React.FC = () => {
       return inventoryAPI.getHistory({ productId: selectedProductId, branchId: user.branchId });
     },
     enabled: isDetailsModalOpen && !!selectedProductId && !!user?.branchId,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 10 * 60 * 1000,
   });
 
   const { data: ordersData } = useQuery<Order[], Error>({
@@ -443,6 +447,7 @@ export const BranchInventory: React.FC = () => {
     },
     enabled: isReturnModalOpen && !!user?.branchId,
     select: (response) => response.orders || [],
+    staleTime: 10 * 60 * 1000,
   });
 
   useEffect(() => {
@@ -491,7 +496,7 @@ export const BranchInventory: React.FC = () => {
     const handleInventoryUpdated = ({ branchId }: { branchId: string }) => {
       if (branchId === user.branchId) {
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
-        toast.info(t('inventory.update_success'), { position: 'top-right', autoClose: 3000 });
+        toast.info(t('inventory.update_success'), { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       }
     };
 
@@ -518,10 +523,20 @@ export const BranchInventory: React.FC = () => {
       socket.off('inventoryUpdated', handleInventoryUpdated);
       socket.off('returnStatusUpdated', handleReturnStatusUpdated);
     };
-  }, [socket, user, queryClient, addNotification, t]);
+  }, [socket, user, queryClient, addNotification, t, isRtl]);
 
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchInput(e.target.value);
+    setCurrentPage(1);
+  }, []);
+
+  const handleFilterStatusChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setFilterStatus(e.target.value as InventoryStatus | '');
+    setCurrentPage(1);
+  }, []);
+
+  const handleFilterDepartmentChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
+    setFilterDepartment(e.target.value);
     setCurrentPage(1);
   }, []);
 
@@ -551,15 +566,15 @@ export const BranchInventory: React.FC = () => {
       (inventoryData || []).filter(
         (item) =>
           item.product &&
-          (!filterStatus || item.status === filterStatus) &&
-          (!filterDepartment || item.product.department?._id === filterDepartment) &&
+          (!debouncedFilterStatusValue || item.status === debouncedFilterStatusValue) &&
+          (!debouncedFilterDepartmentValue || item.product.department?._id === debouncedFilterDepartmentValue) &&
           (item.product.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             item.product.nameEn.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             item.product.code.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             item.product.department?.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             item.product.department?.nameEn.toLowerCase().includes(debouncedSearchQuery.toLowerCase()))
       ),
-    [inventoryData, debouncedSearchQuery, filterStatus, filterDepartment]
+    [inventoryData, debouncedSearchQuery, debouncedFilterStatusValue, debouncedFilterDepartmentValue]
   );
 
   const paginatedInventory = useMemo(
@@ -680,6 +695,7 @@ export const BranchInventory: React.FC = () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
       await returnsAPI.createReturn({
         orderId: returnForm.items[0].orderId,
+        branchId: user.branchId,
         reason: returnForm.reason,
         notes: returnForm.notes,
         items: returnForm.items.map((item) => ({
@@ -697,7 +713,7 @@ export const BranchInventory: React.FC = () => {
       setReturnErrors({});
       setSelectedItem(null);
       setPossibleOrders({});
-      toast.success(t('returns.create_success'), { position: 'top-right', autoClose: 3000 });
+      toast.success(t('returns.create_success'), { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       socket?.emit('returnCreated', {
         branchId: user?.branchId,
         returnId: crypto.randomUUID(),
@@ -705,15 +721,13 @@ export const BranchInventory: React.FC = () => {
         eventId: crypto.randomUUID(),
       });
     },
-    onError: (err) => {
+    onError: (err: any) => {
       console.error(`[${new Date().toISOString()}] Create return error:`, err);
-      const errorMessage = err.message.includes('Request failed with status code 400') && err.response?.data?.errors?.length
+      const errorMessage = err.response?.data?.errors?.length
         ? err.response.data.errors.map((e: any) => e.msg).join(', ')
         : err.message || t('errors.create_return');
-      toast.error(errorMessage, { position: 'top-right', autoClose: 3000 });
-      if (err.message.includes('Invalid')) {
-        setReturnErrors({ form: errorMessage });
-      }
+      toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+      setReturnErrors({ form: errorMessage });
     },
   });
 
@@ -721,11 +735,9 @@ export const BranchInventory: React.FC = () => {
     mutationFn: async () => {
       if (!validateEditForm()) throw new Error(t('errors.invalid_form'));
       if (!selectedItem) throw new Error(t('errors.no_item_selected'));
-      if (!user?.branchId && !selectedItem.branch?._id) throw new Error(t('errors.no_branch'));
       await inventoryAPI.updateStock(selectedItem._id, {
         minStockLevel: Number(editForm.minStockLevel),
         maxStockLevel: Number(editForm.maxStockLevel),
-        branchId: selectedItem.branch?._id || user?.branchId,
       });
     },
     onSuccess: () => {
@@ -734,7 +746,7 @@ export const BranchInventory: React.FC = () => {
       setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
       setEditErrors({});
       setSelectedItem(null);
-      toast.success(t('inventory.update_success'), { position: 'top-right', autoClose: 3000 });
+      toast.success(t('inventory.update_success'), { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       socket?.emit('inventoryUpdated', {
         branchId: selectedItem?.branch?._id || user?.branchId,
         minStockLevel: Number(editForm.minStockLevel),
@@ -742,12 +754,12 @@ export const BranchInventory: React.FC = () => {
         eventId: crypto.randomUUID(),
       });
     },
-    onError: (err) => {
+    onError: (err: any) => {
       console.error(`[${new Date().toISOString()}] Update inventory error:`, err);
       const errorMessage = err.response?.data?.errors?.length
         ? err.response.data.errors.map((e: any) => e.msg).join(', ')
         : err.message || t('errors.update_inventory');
-      toast.error(errorMessage, { position: 'top-right', autoClose: 3000 });
+      toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       setEditErrors({ form: errorMessage });
     },
   });
@@ -825,20 +837,14 @@ export const BranchInventory: React.FC = () => {
           </div>
           <CustomSelect
             value={filterStatus}
-            onChange={(e) => {
-              setFilterStatus(e.target.value as InventoryStatus | '');
-              setCurrentPage(1);
-            }}
+            onChange={handleFilterStatusChange}
             options={statusOptions}
             label={t('common.filter_by_status')}
             ariaLabel={t('common.filter_by_status')}
           />
           <CustomSelect
             value={filterDepartment}
-            onChange={(e) => {
-              setFilterDepartment(e.target.value);
-              setCurrentPage(1);
-            }}
+            onChange={handleFilterDepartmentChange}
             options={departmentOptions}
             label={t('common.filter_by_department')}
             ariaLabel={t('common.filter_by_department')}
