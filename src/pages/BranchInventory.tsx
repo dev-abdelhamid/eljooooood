@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { language } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
@@ -244,13 +244,15 @@ const Pagination: React.FC<PaginationProps> = ({ totalPages, currentPage, setCur
 );
 
 export const BranchInventory: React.FC = () => {
-  const { t } = useTranslation();
+ 
   const { user } = useAuth();
   const { socket } = useSocket();
   const { addNotification } = useNotifications();
   const queryClient = useQueryClient();
-  const isRtl = t('i18n.language') === 'ar';
-  const [searchQuery, setSearchQuery] = useState('');
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+   const { t } = language();
+    const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterDepartment, setFilterDepartment] = useState<string>('');
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
