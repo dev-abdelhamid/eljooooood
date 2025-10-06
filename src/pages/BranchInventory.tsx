@@ -13,7 +13,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 enum InventoryStatus {
   LOW = 'low',
   NORMAL = 'normal',
-  FULL = 'full',
+  HIGH = 'high',
 }
 
 enum ReturnReason {
@@ -39,7 +39,7 @@ interface InventoryItem {
   currentStock: number;
   minStockLevel: number;
   maxStockLevel: number;
-  status: InventoryStatus;
+  stockStatus: InventoryStatus;
 }
 
 interface ReturnItem {
@@ -59,12 +59,11 @@ interface ReturnFormState {
 
 interface ProductHistoryEntry {
   _id: string;
-  date: string;
-  type: 'addition' | 'return' | 'sale' | 'adjustment';
+  createdAt: string;
+  action: 'restock' | 'adjustment' | 'settings_adjustment';
   quantity: number;
-  description: string;
-  orderId?: string;
-  returnId?: string;
+  reference: string;
+  product: { _id: string; name: string; nameEn: string };
 }
 
 interface EditForm {
@@ -317,7 +316,7 @@ const Pagination: React.FC<PaginationProps> = ({ totalPages, currentPage, setCur
   )
 );
 
-export const BranchInventory: React.FC = () => {
+const BranchInventory: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
@@ -339,7 +338,6 @@ export const BranchInventory: React.FC = () => {
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
   const [possibleOrders, setPossibleOrders] = useState<Record<string, { value: string; label: string; remaining: number; itemId: string }[]>>({});
-  const [retryCount, setRetryCount] = useState(0);
 
   // Custom debounce hook for search and filters
   const useDebouncedState = <T,>(initialValue: T, delay: number) => {
@@ -356,20 +354,34 @@ export const BranchInventory: React.FC = () => {
   const [debouncedFilterStatus, , debouncedFilterStatusValue] = useDebouncedState<InventoryStatus | ''>('', 300);
   const [debouncedFilterDepartment, , debouncedFilterDepartmentValue] = useDebouncedState<string>('', 300);
 
+  // Fetch inventory data with stockStatus filter
   const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError, refetch: refetchInventory } = useQuery<
-    InventoryItem[],
+    { success: boolean; inventory: InventoryItem[] },
     Error
   >({
     queryKey: ['inventory', user?.branchId, debouncedSearchQuery, debouncedFilterStatusValue, debouncedFilterDepartmentValue, currentPage, language],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t('errors.no_branch'));
-      return inventoryAPI.getByBranch(user.branchId);
+      return inventoryAPI.getByBranch(user.branchId, {
+        stockStatus: debouncedFilterStatusValue || undefined,
+        department: debouncedFilterDepartmentValue || undefined,
+        lang: language,
+      });
     },
     enabled: !!user?.branchId,
     staleTime: 10 * 60 * 1000, // 10 minutes
-    cacheTime: 15 * 60 * 1000, // 15 minutes
+    gcTime: 15 * 60 * 1000, // 15 minutes
     select: (response) => {
-      const inventoryData = Array.isArray(response) ? response : response?.data || [];
+      const inventoryData = response.success && Array.isArray(response.inventory) ? response.inventory : [];
+      console.log(`[${new Date().toISOString()}] Inventory data fetched:`, {
+        count: inventoryData.length,
+        branchId: user?.branchId,
+        items: inventoryData.map((item) => ({
+          id: item._id,
+          branchId: item.branch?._id,
+          productName: item.product?.name,
+        })),
+      });
       return inventoryData.map((item: InventoryItem) => ({
         ...item,
         product: item.product
@@ -396,15 +408,16 @@ export const BranchInventory: React.FC = () => {
               nameEn: item.branch.nameEn || item.branch.name || t('branches.unknown'),
             }
           : null,
-        status:
-          item.currentStock <= item.minStockLevel
+        stockStatus: item.stockStatus || // Use backend-provided stockStatus
+          (item.currentStock <= item.minStockLevel
             ? InventoryStatus.LOW
             : item.currentStock >= item.maxStockLevel
-            ? InventoryStatus.FULL
-            : InventoryStatus.NORMAL,
+            ? InventoryStatus.HIGH
+            : InventoryStatus.NORMAL),
       }));
     },
     onError: (err) => {
+      console.error(`[${new Date().toISOString()}] Fetch inventory error:`, err);
       toast.error(err.message || t('errors.fetch_inventory'), { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
     },
     retry: 2,
@@ -414,7 +427,7 @@ export const BranchInventory: React.FC = () => {
   // Department options
   const departmentOptions = useMemo(() => {
     const depts = new Set<string>();
-    inventoryData?.forEach((item) => {
+    inventoryData?.inventory?.forEach((item) => {
       if (item.product?.department?._id) {
         const dept = {
           _id: item.product.department._id,
@@ -430,16 +443,18 @@ export const BranchInventory: React.FC = () => {
     ];
   }, [inventoryData, isRtl, t]);
 
+  // Fetch product history
   const { data: productHistory, isLoading: historyLoading } = useQuery<ProductHistoryEntry[], Error>({
-    queryKey: ['productHistory', selectedProductId, user?.branchId],
+    queryKey: ['productHistory', selectedProductId, user?.branchId, language],
     queryFn: async () => {
       if (!selectedProductId || !user?.branchId) throw new Error(t('errors.no_branch'));
-      return inventoryAPI.getHistory({ productId: selectedProductId, branchId: user.branchId });
+      return inventoryAPI.getHistory({ productId: selectedProductId, branchId: user.branchId, lang: language });
     },
     enabled: isDetailsModalOpen && !!selectedProductId && !!user?.branchId,
     staleTime: 10 * 60 * 1000,
   });
 
+  // Fetch orders for returns
   const { data: ordersData } = useQuery<Order[], Error>({
     queryKey: ['orders', user?.branchId, language],
     queryFn: async () => {
@@ -451,10 +466,11 @@ export const BranchInventory: React.FC = () => {
     staleTime: 10 * 60 * 1000,
   });
 
+  // Update available items for return form
   useEffect(() => {
-    if (inventoryData) {
-      const items: AvailableItem[] = inventoryData
-        .filter((item) => item.currentStock > 0 && item.product)
+    if (inventoryData?.inventory) {
+      const items: AvailableItem[] = inventoryData.inventory
+        .filter((item) => item.currentStock > 0 && item.product && item.branch?._id === user?.branchId)
         .map((item) => ({
           productId: item.product!._id,
           productName: isRtl ? item.product!.name : item.product!.nameEn || item.product!.name,
@@ -467,8 +483,9 @@ export const BranchInventory: React.FC = () => {
         }));
       setAvailableItems(items);
     }
-  }, [inventoryData, isRtl, t]);
+  }, [inventoryData, isRtl, t, user?.branchId]);
 
+  // Update possible orders for return form
   useEffect(() => {
     if (ordersData && isReturnModalOpen) {
       const newPossibleOrders: Record<string, { value: string; label: string; remaining: number; itemId: string }[]> = {};
@@ -491,6 +508,7 @@ export const BranchInventory: React.FC = () => {
     }
   }, [ordersData, isReturnModalOpen, t]);
 
+  // Socket.IO listeners for real-time updates
   useEffect(() => {
     if (!socket || !user?.branchId) return;
 
@@ -498,6 +516,39 @@ export const BranchInventory: React.FC = () => {
       if (branchId === user.branchId) {
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
         toast.info(t('inventory.update_success'), { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+      }
+    };
+
+    const handleLowStockWarning = ({
+      branchId,
+      productName,
+      currentStock,
+      minStockLevel,
+    }: {
+      branchId: string;
+      productName: string;
+      currentStock: number;
+      minStockLevel: number;
+    }) => {
+      if (branchId === user.branchId) {
+        toast.warn(
+          t('warnings.low_stock', {
+            product: productName,
+            currentStock,
+            minStockLevel,
+          }),
+          { position: isRtl ? 'top-left' : 'top-right', autoClose: 5000 }
+        );
+        addNotification({
+          _id: crypto.randomUUID(),
+          type: 'warning',
+          message: t('warnings.low_stock', { product: productName, currentStock, minStockLevel }),
+          data: { branchId, eventId: crypto.randomUUID() },
+          read: false,
+          createdAt: new Date().toISOString(),
+          sound: '/sounds/low_stock.mp3',
+          vibrate: [200, 100, 200],
+        });
       }
     };
 
@@ -518,10 +569,12 @@ export const BranchInventory: React.FC = () => {
     };
 
     socket.on('inventoryUpdated', handleInventoryUpdated);
+    socket.on('lowStockWarning', handleLowStockWarning);
     socket.on('returnStatusUpdated', handleReturnStatusUpdated);
 
     return () => {
       socket.off('inventoryUpdated', handleInventoryUpdated);
+      socket.off('lowStockWarning', handleLowStockWarning);
       socket.off('returnStatusUpdated', handleReturnStatusUpdated);
     };
   }, [socket, user, queryClient, addNotification, t, isRtl]);
@@ -544,9 +597,9 @@ export const BranchInventory: React.FC = () => {
   const statusOptions = useMemo(
     () => [
       { value: '', label: t('common.all_statuses') },
-      { value: InventoryStatus.LOW, label: t('inventory.low_stock') },
+      { value: InventoryStatus.LOW, label: t('inventory.low') },
       { value: InventoryStatus.NORMAL, label: t('inventory.normal') },
-      { value: InventoryStatus.FULL, label: t('inventory.full') },
+      { value: InventoryStatus.HIGH, label: t('inventory.high') },
     ],
     [t]
   );
@@ -564,11 +617,11 @@ export const BranchInventory: React.FC = () => {
 
   const filteredInventory = useMemo(
     () =>
-      (inventoryData || []).filter(
+      (inventoryData?.inventory || []).filter(
         (item) =>
           item.product &&
-          item.branch?._id === user?.branchId && // Ensure only authorized branch items are shown
-          (!debouncedFilterStatusValue || item.status === debouncedFilterStatusValue) &&
+          item.branch?._id === user?.branchId && // Ensure only authorized branch items
+          (!debouncedFilterStatusValue || item.stockStatus === debouncedFilterStatusValue) &&
           (!debouncedFilterDepartmentValue || item.product.department?._id === debouncedFilterDepartmentValue) &&
           (item.product.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             item.product.nameEn.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
@@ -599,17 +652,24 @@ export const BranchInventory: React.FC = () => {
     setIsReturnModalOpen(true);
   }, []);
 
-  const handleOpenEditModal = useCallback((item: InventoryItem) => {
-    if (!user?.branchId || item.branch?._id !== user.branchId) {
-      toast.error(t('errors.unauthorized_branch'), { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
-      return;
-    }
-    setSelectedItem(item);
-    setEditForm({ minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
-    setEditErrors({});
-    setRetryCount(0); // Reset retry count when opening edit modal
-    setIsEditModalOpen(true);
-  }, [user?.branchId, t, isRtl]);
+  const handleOpenEditModal = useCallback(
+    (item: InventoryItem) => {
+      if (!user?.branchId || item.branch?._id !== user.branchId) {
+        console.error(`[${new Date().toISOString()}] Unauthorized branch access attempt:`, {
+          inventoryId: item._id,
+          branchId: item.branch?._id,
+          userBranchId: user?.branchId,
+        });
+        toast.error(t('errors.unauthorized_branch'), { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+        return;
+      }
+      setSelectedItem(item);
+      setEditForm({ minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
+      setEditErrors({});
+      setIsEditModalOpen(true);
+    },
+    [user?.branchId, t, isRtl]
+  );
 
   const handleOpenDetailsModal = useCallback((item: InventoryItem) => {
     if (item.product) {
@@ -732,19 +792,30 @@ export const BranchInventory: React.FC = () => {
       console.error(`[${new Date().toISOString()}] Create return error:`, err);
       const errorMessage = err.response?.data?.errors?.length
         ? err.response.data.errors.map((e: any) => e.msg).join(', ')
-        : err.message || t('errors.create_return');
+        : err.response?.data?.message || err.message || t('errors.create_return');
       toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       setReturnErrors({ form: errorMessage });
     },
   });
 
-  const updateInventoryMutation = useMutation<void, Error, void>({
-    mutationFn: async () => {
+  const updateInventoryMutation = useMutation<void, Error, { retryCount: number }>({
+    mutationFn: async ({ retryCount }) => {
       if (!validateEditForm()) throw new Error(t('errors.invalid_form'));
       if (!selectedItem) throw new Error(t('errors.no_item_selected'));
       if (!user?.branchId || selectedItem.branch?._id !== user.branchId) {
+        console.error(`[${new Date().toISOString()}] Unauthorized update attempt:`, {
+          inventoryId: selectedItem._id,
+          branchId: selectedItem.branch?._id,
+          userBranchId: user?.branchId,
+        });
         throw new Error(t('errors.unauthorized_branch'));
       }
+      console.log(`[${new Date().toISOString()}] Attempting inventory update:`, {
+        inventoryId: selectedItem._id,
+        minStockLevel: editForm.minStockLevel,
+        maxStockLevel: editForm.maxStockLevel,
+        retryCount,
+      });
       await inventoryAPI.updateStock(selectedItem._id, {
         minStockLevel: Number(editForm.minStockLevel),
         maxStockLevel: Number(editForm.maxStockLevel),
@@ -756,16 +827,15 @@ export const BranchInventory: React.FC = () => {
       setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
       setEditErrors({});
       setSelectedItem(null);
-      setRetryCount(0);
       toast.success(t('inventory.update_success'), { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       socket?.emit('inventoryUpdated', {
-        branchId: selectedItem?.branch?._id || user?.branchId,
+        branchId: user?.branchId,
         minStockLevel: Number(editForm.minStockLevel),
         maxStockLevel: Number(editForm.maxStockLevel),
         eventId: crypto.randomUUID(),
       });
     },
-    onError: async (err: any) => {
+    onError: async (err: any, variables) => {
       console.error(`[${new Date().toISOString()}] Update inventory error:`, err);
       let errorMessage = err.response?.data?.errors?.length
         ? err.response.data.errors.map((e: any) => e.msg).join(', ')
@@ -773,18 +843,16 @@ export const BranchInventory: React.FC = () => {
 
       if (err.response?.status === 403 && errorMessage.includes('غير مخول')) {
         errorMessage = t('errors.unauthorized_branch');
+      } else if (err.response?.status === 500 && errorMessage.includes('transaction number') && variables.retryCount < 2) {
+        toast.warn(t('errors.transaction_retry', { attempt: variables.retryCount + 1 }), {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 3000,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 1000 * (variables.retryCount + 1)));
+        updateInventoryMutation.mutate({ retryCount: variables.retryCount + 1 });
+        return;
       } else if (err.response?.status === 500 && errorMessage.includes('transaction number')) {
-        if (retryCount < 2) {
-          setRetryCount(retryCount + 1);
-          toast.warn(t('errors.transaction_retry', { attempt: retryCount + 1 }), {
-            position: isRtl ? 'top-left' : 'top-right',
-            autoClose: 3000,
-          });
-          setTimeout(() => updateInventoryMutation.mutate(), 1000 * (retryCount + 1)); // Exponential backoff
-          return;
-        } else {
-          errorMessage = t('errors.transaction_failed');
-        }
+        errorMessage = t('errors.transaction_failed');
       }
 
       toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
@@ -924,14 +992,14 @@ export const BranchInventory: React.FC = () => {
                           </p>
                           <p
                             className={`text-sm font-medium ${
-                              item.status === InventoryStatus.LOW
+                              item.stockStatus === InventoryStatus.LOW
                                 ? 'text-red-600'
-                                : item.status === InventoryStatus.FULL
+                                : item.stockStatus === InventoryStatus.HIGH
                                 ? 'text-yellow-600'
                                 : 'text-green-600'
                             }`}
                           >
-                            {t(`inventory.${item.status}`)}
+                            {t(`inventory.${item.stockStatus}`)}
                           </p>
                         </div>
                         <div className="flex gap-2 justify-end sm:justify-start">
@@ -1119,7 +1187,6 @@ export const BranchInventory: React.FC = () => {
           setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
           setEditErrors({});
           setSelectedItem(null);
-          setRetryCount(0);
         }}
         title={t('inventory.edit_stock_limits')}
       >
@@ -1158,14 +1225,13 @@ export const BranchInventory: React.FC = () => {
                 setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
                 setEditErrors({});
                 setSelectedItem(null);
-                setRetryCount(0);
               }}
               ariaLabel={t('common.cancel')}
             >
               {t('common.cancel')}
             </CustomButton>
             <CustomButton
-              onClick={() => updateInventoryMutation.mutate()}
+              onClick={() => updateInventoryMutation.mutate({ retryCount: 0 })}
               disabled={updateInventoryMutation.isPending}
               className="relative disabled:opacity-50"
               ariaLabel={t('common.save')}
@@ -1216,13 +1282,13 @@ export const BranchInventory: React.FC = () => {
                 </thead>
                 <tbody>
                   {productHistory
-                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                     .map((entry) => (
                       <tr key={entry._id} className="border-b hover:bg-gray-50">
-                        <td className="p-2">{new Date(entry.date).toLocaleString()}</td>
-                        <td className="p-2">{t(`inventory.${entry.type}`)}</td>
+                        <td className="p-2">{new Date(entry.createdAt).toLocaleString()}</td>
+                        <td className="p-2">{t(`inventory.${entry.action}`)}</td>
                         <td className="p-2">{entry.quantity}</td>
-                        <td className="p-2">{entry.description}</td>
+                        <td className="p-2">{entry.reference}</td>
                       </tr>
                     ))}
                 </tbody>
