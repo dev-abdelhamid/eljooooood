@@ -10,12 +10,29 @@ import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 import { AlertCircle, DollarSign } from 'lucide-react';
 
 interface Sale {
-  id: string;
-  branch: { _id: string; name: string; nameEn: string };
-  items: Array<{ product: { _id: string; name: string; nameEn: string; unit: string; unitEn: string; department: { name: string; nameEn: string } }; quantity: number; unitPrice: number }>;
+  _id: string;
+  saleNumber: string;
+  branch: { _id: string; name: string; nameEn: string; displayName: string };
+  items: Array<{
+    product: { _id: string; name: string; nameEn: string; unit: string; unitEn: string; department: { name: string; nameEn: string; displayName: string } | undefined };
+    quantity: number;
+    unitPrice: number;
+    productName: string;
+    productNameEn: string;
+    displayName: string;
+    displayUnit: string;
+  }>;
   totalAmount: number;
   createdAt: string;
   notes?: string;
+  returns: Array<{
+    _id: string;
+    returnNumber: string;
+    status: string;
+    items: Array<{ product: string; productName: string; productNameEn: string; quantity: number; reason: string }>;
+    reason: string;
+    createdAt: string;
+  }>;
 }
 
 interface Branch {
@@ -25,6 +42,7 @@ interface Branch {
 }
 
 interface InventoryItem {
+  _id: string;
   product: { _id: string; name: string; nameEn: string };
   currentStock: number;
   branch: { _id: string };
@@ -71,7 +89,6 @@ export const SalesReport: React.FC = () => {
       if (filterProduct) {
         params.product = filterProduct;
       }
-      console.log('fetchData - API params:', params);
 
       const [salesResponse, branchesResponse, inventoryResponse, productsResponse] = await Promise.all([
         salesAPI.getAll(params),
@@ -80,90 +97,16 @@ export const SalesReport: React.FC = () => {
         productsAPI.getAll(),
       ]);
 
-      console.log('fetchData - Responses:', { salesResponse, branchesResponse, inventoryResponse, productsResponse });
+      setSales(salesResponse.sales || []);
+      setBranches(branchesResponse.branches || []);
+      setInventory(inventoryResponse || []);
+      setProducts(productsResponse || []);
 
-      if (!salesResponse || !Array.isArray(salesResponse.sales)) {
-        console.error('fetchData - Invalid sales response:', salesResponse);
-        setSales([]);
-        setError(t('errors.invalid_sales_response'));
-        setLoading(false);
-        return;
-      }
-
-      setSales(
-        salesResponse.sales.map((sale: any) => ({
-          id: sale._id,
-          branch: sale.branch || { _id: 'unknown', name: t('branches.unknown'), nameEn: t('branches.unknown') },
-          items: Array.isArray(sale.items)
-            ? sale.items.map((item: any) => ({
-                product: {
-                  _id: item.product?._id || item.productId,
-                  name: item.product?.name || item.productName || t('products.unknown'),
-                  nameEn: item.product?.nameEn || item.product?.name || t('products.unknown'),
-                  unit: item.product?.unit || 'غير محدد',
-                  unitEn: item.product?.unitEn || item.product?.unit || 'N/A',
-                  department: {
-                    name: item.product?.department?.name || 'غير معروف',
-                    nameEn: item.product?.department?.nameEn || item.product?.department?.name || 'Unknown',
-                  },
-                },
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-              }))
-            : [],
-          totalAmount: sale.totalAmount || (Array.isArray(sale.items) ? sale.items.reduce((sum: number, item: any) => sum + item.quantity * item.unitPrice, 0) : 0),
-          createdAt: new Date(sale.createdAt).toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-          }),
-          notes: sale.notes,
-        }))
-      );
-
-      const branchesData = Array.isArray(branchesResponse.branches)
-        ? branchesResponse.branches.map((branch: any) => ({
-            _id: branch._id,
-            name: branch.name,
-            nameEn: branch.nameEn || branch.name,
-          }))
-        : [];
-      setBranches(branchesData);
-
-      setInventory(
-        Array.isArray(inventoryResponse)
-          ? inventoryResponse.map((item: any) => ({
-              product: {
-                _id: item.product?._id || item.productId,
-                name: item.product?.name || item.productName || t('products.unknown'),
-                nameEn: item.product?.nameEn || item.product?.name || t('products.unknown'),
-              },
-              currentStock: item.currentStock,
-              branch: {
-                _id: item.branch?._id || item.branchId,
-              },
-            }))
-          : []
-      );
-
-      const productsData = Array.isArray(productsResponse)
-        ? productsResponse.map((product: any) => ({
-            _id: product._id,
-            name: isRtl ? product.name : product.nameEn || product.name,
-            price: product.price,
-          }))
-        : [];
-      setProducts(productsData);
-
-      // إعادة تعيين filterBranch إذا كان غير صالح
-      if (filterBranch && !branchesData.find((b) => b._id === filterBranch)) {
-        console.warn('fetchData - Invalid filterBranch:', filterBranch);
+      // Reset filters if invalid
+      if (filterBranch && !branchesResponse.branches.find((b: Branch) => b._id === filterBranch)) {
         setFilterBranch('');
       }
-
-      // إعادة تعيين filterProduct إذا كان غير صالح
-      if (filterProduct && !productsData.find((p) => p._id === filterProduct)) {
-        console.warn('fetchData - Invalid filterProduct:', filterProduct);
+      if (filterProduct && !productsResponse.find((p: Product) => p._id === filterProduct)) {
         setFilterProduct('');
       }
 
@@ -265,12 +208,12 @@ export const SalesReport: React.FC = () => {
         ) : (
           sales.map((sale) => (
             <Card
-              key={sale.id}
+              key={sale._id}
               className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-shadow duration-200"
             >
               <div className="flex items-center justify-between gap-4">
                 <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">{isRtl ? sale.branch.name : sale.branch.nameEn || sale.branch.name}</h3>
+                  <h3 className="font-semibold text-gray-900">{sale.branch.displayName}</h3>
                   <p className="text-sm text-gray-600">{t('salesReport.date')}: {sale.createdAt}</p>
                   <p className="text-sm text-gray-600">{t('salesReport.total')}: {sale.totalAmount}</p>
                   {sale.notes && <p className="text-sm text-gray-500">{t('salesReport.notes')}: {sale.notes}</p>}
@@ -279,7 +222,7 @@ export const SalesReport: React.FC = () => {
                     <ul className="list-disc list-inside text-sm text-gray-600">
                       {sale.items.map((item, index) => (
                         <li key={index}>
-                          {isRtl ? item.product.name : item.product.nameEn || item.product.name} - {t('salesReport.quantity')}: {item.quantity}, {t('salesReport.unitPrice')}: {item.unitPrice}
+                          {item.displayName} - {t('salesReport.quantity')}: {item.quantity}, {t('salesReport.unitPrice')}: {item.unitPrice}
                         </li>
                       ))}
                     </ul>

@@ -1,6 +1,6 @@
+// src/services/salesAPI.ts
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import { inventoryAPI } from './api';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
 const isRtl = localStorage.getItem('language') === 'ar';
@@ -106,12 +106,6 @@ const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7
 const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'credit_card', 'bank_transfer'].includes(method);
 const isValidPaymentStatus = (status: string | undefined): boolean => !status || ['pending', 'completed', 'failed'].includes(status);
 
-const formatDateForAPI = (date: Date): string => {
-  const offset = date.getTimezoneOffset();
-  const adjustedDate = new Date(date.getTime() - offset * 60 * 1000);
-  return adjustedDate.toISOString().split('T')[0];
-};
-
 export const salesAPI = {
   create: async (saleData: {
     items: Array<{ productId: string; quantity: number; unitPrice: number }>;
@@ -144,25 +138,8 @@ export const salesAPI = {
       throw new Error(isRtl ? 'حالة الدفع غير صالحة' : 'Invalid payment status');
     }
     try {
-      for (const item of saleData.items) {
-        const inventory = await inventoryAPI.getInventory({ branch: saleData.branch, product: item.productId });
-        if (!inventory?.length || inventory[0].currentStock < item.quantity) {
-          console.error(`[${new Date().toISOString()}] salesAPI.create - Insufficient stock for product:`, item.productId);
-          throw new Error(isRtl ? `المخزون غير كافٍ للمنتج ${item.productId}` : `Insufficient stock for product ${item.productId}`);
-        }
-      }
       const response = await salesAxios.post('/sales', {
-        items: saleData.items.map(item => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-        })),
-        branch: saleData.branch,
-        notes: saleData.notes?.trim(),
-        paymentMethod: saleData.paymentMethod?.trim() || 'cash',
-        paymentStatus: saleData.paymentStatus?.trim() || 'pending',
-        customerName: saleData.customerName?.trim(),
-        customerPhone: saleData.customerPhone?.trim(),
+        ...saleData,
         lang: isRtl ? 'ar' : 'en',
       });
       console.log(`[${new Date().toISOString()}] salesAPI.create - Response:`, response);
@@ -193,10 +170,6 @@ export const salesAPI = {
       };
       const response = await salesAxios.get('/sales', { params: cleanedParams });
       console.log(`[${new Date().toISOString()}] salesAPI.getAll - Response:`, response);
-      if (!response || !Array.isArray(response.sales)) {
-        console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid sales response:`, response);
-        return { sales: [], total: 0, returns: [] };
-      }
       return {
         sales: response.sales || [],
         total: response.total || 0,
@@ -217,7 +190,7 @@ export const salesAPI = {
     try {
       const response = await salesAxios.get(`/sales/${id}`, { params: { lang: isRtl ? 'ar' : 'en' } });
       console.log(`[${new Date().toISOString()}] salesAPI.getById - Response:`, response);
-      return response || {};
+      return response.sale || {};
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.getById - Error:`, err);
       throw err;
@@ -240,7 +213,7 @@ export const salesAPI = {
       };
       const response = await salesAxios.get('/sales/analytics', { params: cleanedParams });
       console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Response:`, response);
-      return response || {};
+      return response;
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Error:`, err);
       throw err;
