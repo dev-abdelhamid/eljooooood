@@ -8,7 +8,7 @@ import { AxiosError } from 'axios';
 import { Package, AlertCircle, Search, RefreshCw, Edit, X, Plus, Eye } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { inventoryAPI, returnAPI } from '../api';
+import { inventoryAPI, returnAPI } from '../services/inventoryAPI';
 import { isValidObjectId } from '../utils';
 
 // واجهات البيانات
@@ -243,7 +243,7 @@ const Pagination: React.FC<PaginationProps> = ({ totalPages, currentPage, setCur
   )
 );
 
-const BranchInventory: React.FC = () => {
+export const BranchInventory: React.FC = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
   const { socket } = useSocket();
