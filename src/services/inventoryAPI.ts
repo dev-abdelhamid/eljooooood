@@ -21,7 +21,7 @@ api.interceptors.request.use(
     }
     const language = localStorage.getItem('language') || 'en';
     config.params = { ...config.params, lang: language };
-    console.log(`[${new Date().to aeruginosa()}] API request:`, {
+    console.log(`[${new Date().toISOString()}] API request:`, {
       url: config.url,
       method: config.method,
       headers: config.headers,
