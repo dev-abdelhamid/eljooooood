@@ -3,7 +3,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { returnsAPI, inventoryAPI ,ordersAPI } from '../services/api';
+import { returnsAPI, inventoryAPI, ordersAPI } from '../services/api';
 import { Package, AlertCircle, Search, RefreshCw, Edit, X, Plus, Eye } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -661,9 +661,15 @@ export const BranchInventory: React.FC = () => {
 
   const validateEditForm = useCallback(() => {
     const errors: Record<string, string> = {};
-    if (editForm.minStockLevel < 0) errors.minStockLevel = t('errors.non_negative', { field: t('inventory.min_stock') });
-    if (editForm.maxStockLevel < 0) errors.maxStockLevel = t('errors.non_negative', { field: t('inventory.max_stock') });
-    if (editForm.maxStockLevel <= editForm.minStockLevel) errors.maxStockLevel = t('errors.max_greater_min');
+    if (editForm.minStockLevel < 0 || !Number.isInteger(Number(editForm.minStockLevel))) {
+      errors.minStockLevel = t('errors.non_negative_integer', { field: t('inventory.min_stock') });
+    }
+    if (editForm.maxStockLevel < 0 || !Number.isInteger(Number(editForm.maxStockLevel))) {
+      errors.maxStockLevel = t('errors.non_negative_integer', { field: t('inventory.max_stock') });
+    }
+    if (editForm.maxStockLevel <= editForm.minStockLevel) {
+      errors.maxStockLevel = t('errors.max_greater_min');
+    }
     setEditErrors(errors);
     return Object.keys(errors).length === 0;
   }, [editForm, t]);
@@ -717,8 +723,8 @@ export const BranchInventory: React.FC = () => {
       if (!selectedItem) throw new Error(t('errors.no_item_selected'));
       if (!user?.branchId && !selectedItem.branch?._id) throw new Error(t('errors.no_branch'));
       await inventoryAPI.updateStock(selectedItem._id, {
-        minStockLevel: editForm.minStockLevel,
-        maxStockLevel: editForm.maxStockLevel,
+        minStockLevel: Number(editForm.minStockLevel),
+        maxStockLevel: Number(editForm.maxStockLevel),
         branchId: selectedItem.branch?._id || user?.branchId,
       });
     },
@@ -731,8 +737,8 @@ export const BranchInventory: React.FC = () => {
       toast.success(t('inventory.update_success'), { position: 'top-right', autoClose: 3000 });
       socket?.emit('inventoryUpdated', {
         branchId: selectedItem?.branch?._id || user?.branchId,
-        minStockLevel: editForm.minStockLevel,
-        maxStockLevel: editForm.maxStockLevel,
+        minStockLevel: Number(editForm.minStockLevel),
+        maxStockLevel: Number(editForm.maxStockLevel),
         eventId: crypto.randomUUID(),
       });
     },
@@ -1091,6 +1097,7 @@ export const BranchInventory: React.FC = () => {
             label={t('inventory.min_stock')}
             type="number"
             min={0}
+            step={1}
             value={editForm.minStockLevel}
             onChange={(e) => setEditForm({ ...editForm, minStockLevel: Number(e.target.value) })}
             error={editErrors.minStockLevel}
@@ -1100,6 +1107,7 @@ export const BranchInventory: React.FC = () => {
             label={t('inventory.max_stock')}
             type="number"
             min={0}
+            step={1}
             value={editForm.maxStockLevel}
             onChange={(e) => setEditForm({ ...editForm, maxStockLevel: Number(e.target.value) })}
             error={editErrors.maxStockLevel}
