@@ -7,7 +7,7 @@ import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, Chevr
 import { toast } from 'react-toastify';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { debounce } from 'lodash';
-import { useSocket } from '../contexts/SocketContext';
+import io from 'socket.io-client';
 
 interface Sale {
   _id: string;
@@ -77,19 +77,31 @@ interface CartItem {
 }
 
 interface BranchAnalytics {
-  totalSales: number;
-  totalCount: number;
-  averageOrderValue: number;
-  returnRate: number;
-  topProduct: {
-    productId: string | null;
+  branchSales: Array<{
+    branchId: string;
+    branchName: string;
+    branchNameEn?: string;
+    displayName: string;
+    totalSales: number;
+    saleCount: number;
+  }>;
+  leastBranchSales: Array<{
+    branchId: string;
+    branchName: string;
+    branchNameEn?: string;
+    displayName: string;
+    totalSales: number;
+    saleCount: number;
+  }>;
+  productSales: Array<{
+    productId: string;
     productName: string;
     productNameEn?: string;
     displayName: string;
     totalQuantity: number;
     totalRevenue: number;
-  };
-  productSales: Array<{
+  }>;
+  leastProductSales: Array<{
     productId: string;
     productName: string;
     productNameEn?: string;
@@ -105,7 +117,28 @@ interface BranchAnalytics {
     totalRevenue: number;
     totalQuantity: number;
   }>;
+  leastDepartmentSales: Array<{
+    departmentId: string;
+    departmentName: string;
+    departmentNameEn?: string;
+    displayName: string;
+    totalRevenue: number;
+    totalQuantity: number;
+  }>;
+  totalSales: number;
+  totalCount: number;
+  averageOrderValue: number;
+  returnRate: number;
+  topProduct: {
+    productId: string | null;
+    productName: string;
+    productNameEn?: string;
+    displayName: string;
+    totalQuantity: number;
+    totalRevenue: number;
+  };
   salesTrends: Array<{ period: string; totalSales: number; saleCount: number }>;
+  topCustomers: Array<{ customerName: string; customerPhone: string; totalSpent: number; purchaseCount: number }>;
   returnStats: Array<{ status: string; count: number; totalQuantity: number }>;
 }
 
@@ -129,6 +162,7 @@ const translations = {
     submitSale: 'إرسال المبيعة',
     newSale: 'مبيعة جديدة',
     previousSales: 'المبيعات السابقة',
+    analytics: 'إحصائيات المبيعات',
     noSales: 'لا توجد مبيعات',
     date: 'التاريخ',
     returns: 'المرتجعات',
@@ -140,12 +174,18 @@ const translations = {
     filterBy: 'تصفية حسب',
     customRange: 'نطاق مخصص',
     branchStats: 'إحصائيات الفرع',
+    branchSales: 'مبيعات الفروع',
+    leastBranchSales: 'أقل الفروع مبيعًا',
+    productSales: 'مبيعات المنتجات',
+    leastProductSales: 'أقل المنتجات مبيعًا',
+    departmentSales: 'مبيعات الأقسام',
+    leastDepartmentSales: 'أقل الأقسام مبيعًا',
     totalSales: 'إجمالي المبيعات',
     totalCount: 'عدد المبيعات',
     averageOrderValue: 'متوسط قيمة المبيعة',
     returnRate: 'نسبة المرتجعات',
     topProduct: 'أكثر المنتجات مبيعًا',
-    topDepartment: 'أكثر الأقسام مبيعًا',
+    topCustomers: 'أفضل العملاء',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       no_branch_assigned: 'لم يتم تعيين فرع',
@@ -188,6 +228,7 @@ const translations = {
     submitSale: 'Submit Sale',
     newSale: 'New Sale',
     previousSales: 'Previous Sales',
+    analytics: 'Sales Analytics',
     noSales: 'No sales found',
     date: 'Date',
     returns: 'Returns',
@@ -199,12 +240,18 @@ const translations = {
     filterBy: 'Filter By',
     customRange: 'Custom Range',
     branchStats: 'Branch Statistics',
+    branchSales: 'Branch Sales',
+    leastBranchSales: 'Least Sold Branches',
+    productSales: 'Product Sales',
+    leastProductSales: 'Least Sold Products',
+    departmentSales: 'Department Sales',
+    leastDepartmentSales: 'Least Sold Departments',
     totalSales: 'Total Sales',
     totalCount: 'Total Sales Count',
     averageOrderValue: 'Average Order Value',
     returnRate: 'Return Rate',
     topProduct: 'Top Selling Product',
-    topDepartment: 'Top Selling Department',
+    topCustomers: 'Top Customers',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       no_branch_assigned: 'No branch assigned',
@@ -235,21 +282,20 @@ const ProductSearchInput = React.memo<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder: string;
-}>(({ value, onChange, placeholder }) => {
+  ariaLabel: string;
+}>(({ value, onChange, placeholder, ariaLabel }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
     <div className="relative group">
-      <Search
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
-      />
+      <Search className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`} />
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
         className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
-        aria-label={placeholder}
+        aria-label={ariaLabel}
       />
       {value && (
         <button
@@ -414,7 +460,7 @@ const SaleCard = React.memo<{ sale: Sale }>(({ sale }) => {
               <span className="truncate max-w-[60%]">
                 {item.quantity} {item.displayUnit || t.units.default} {item.displayName || t.errors.deleted_product}
               </span>
-              <span className={`font-semibold text-amber-600 ${isRtl ? 'mr-2 flex-row-reverse' : 'ml-2'}`}>
+              <span className="font-semibold text-amber-600">
                 {item.quantity}x{item.unitPrice} = {(item.quantity * item.unitPrice).toFixed(2)} {t.currency}
               </span>
             </div>
@@ -511,10 +557,9 @@ const StatsSkeletonCard = React.memo(() => (
   </div>
 ));
 
-export const BranchSalesReport: React.FC = () => {
+const BranchSalesReport: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
-  const { socket, emit, isConnected } = useSocket(); // Use SocketProvider's socket
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   const [activeTab, setActiveTab] = useState<'new' | 'previous'>('new');
@@ -522,14 +567,19 @@ export const BranchSalesReport: React.FC = () => {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [analytics, setAnalytics] = useState<BranchAnalytics>({
+    branchSales: [],
+    leastBranchSales: [],
+    productSales: [],
+    leastProductSales: [],
+    departmentSales: [],
+    leastDepartmentSales: [],
     totalSales: 0,
     totalCount: 0,
     averageOrderValue: 0,
     returnRate: 0,
     topProduct: { productId: null, productName: '', displayName: '', totalQuantity: 0, totalRevenue: 0 },
-    productSales: [],
-    departmentSales: [],
     salesTrends: [],
+    topCustomers: [],
     returnStats: [],
   });
   const [filterPeriod, setFilterPeriod] = useState('all');
@@ -548,6 +598,7 @@ export const BranchSalesReport: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState(user?.role === 'branch' && user?.branchId ? user.branchId : '');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const socket = useMemo(() => io('https://eljoodia-server-production.up.railway.app'), []);
 
   const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim()), 300), []);
 
@@ -717,6 +768,30 @@ export const BranchSalesReport: React.FC = () => {
         );
 
         setAnalytics({
+          branchSales: (analyticsResponse.branchSales || []).map((bs: any) => ({
+            ...bs,
+            displayName: isRtl ? bs.branchName : (bs.branchNameEn || bs.branchName || t.branches.unknown),
+          })),
+          leastBranchSales: (analyticsResponse.leastBranchSales || []).map((bs: any) => ({
+            ...bs,
+            displayName: isRtl ? bs.branchName : (bs.branchNameEn || bs.branchName || t.branches.unknown),
+          })),
+          productSales: (analyticsResponse.productSales || []).map((ps: any) => ({
+            ...ps,
+            displayName: isRtl ? (ps.productName || t.errors.deleted_product) : (ps.productNameEn || ps.productName || t.errors.deleted_product),
+          })),
+          leastProductSales: (analyticsResponse.leastProductSales || []).map((ps: any) => ({
+            ...ps,
+            displayName: isRtl ? (ps.productName || t.errors.deleted_product) : (ps.productNameEn || ps.productName || t.errors.deleted_product),
+          })),
+          departmentSales: (analyticsResponse.departmentSales || []).map((ds: any) => ({
+            ...ds,
+            displayName: isRtl ? (ds.departmentName || t.departments.unknown) : (ds.departmentNameEn || ds.departmentName || t.departments.unknown),
+          })),
+          leastDepartmentSales: (analyticsResponse.leastDepartmentSales || []).map((ds: any) => ({
+            ...ds,
+            displayName: isRtl ? (ds.departmentName || t.departments.unknown) : (ds.departmentNameEn || ds.departmentName || t.departments.unknown),
+          })),
           totalSales: analyticsResponse.totalSales || 0,
           totalCount: analyticsResponse.totalCount || 0,
           averageOrderValue: analyticsResponse.averageOrderValue || 0,
@@ -729,17 +804,14 @@ export const BranchSalesReport: React.FC = () => {
                   : analyticsResponse.topProduct.productNameEn || analyticsResponse.topProduct.productName || t.errors.deleted_product,
               }
             : { productId: null, productName: '', displayName: '', totalQuantity: 0, totalRevenue: 0 },
-          productSales: (analyticsResponse.productSales || []).map((ps: any) => ({
-            ...ps,
-            displayName: isRtl ? (ps.productName || t.errors.deleted_product) : (ps.productNameEn || ps.productName || t.errors.deleted_product),
-          })),
-          departmentSales: (analyticsResponse.departmentSales || []).map((ds: any) => ({
-            ...ds,
-            displayName: isRtl ? (ds.departmentName || t.departments.unknown) : (ds.departmentNameEn || ds.departmentName || t.departments.unknown),
-          })),
           salesTrends: (analyticsResponse.salesTrends || []).map((trend: any) => ({
             ...trend,
-            period: formatDate(trend.period, language) || t.errors.unknown,
+            period: formatDate(trend.period, language, 'month') || t.errors.unknown,
+          })),
+          topCustomers: (analyticsResponse.topCustomers || []).map((tc: any) => ({
+            ...tc,
+            customerName: tc.customerName || t.errors.unknown,
+            customerPhone: tc.customerPhone || t.errors.unknown,
           })),
           returnStats: (analyticsResponse.returnStats || []).map((rs: any) => ({
             ...rs,
@@ -768,8 +840,6 @@ export const BranchSalesReport: React.FC = () => {
   }, [fetchData]);
 
   useEffect(() => {
-    if (!socket || !isConnected) return;
-
     socket.on('saleCreated', (data: any) => {
       if (data.branchId === selectedBranch) {
         toast.info(isRtl ? `تم إنشاء مبيعة جديدة: ${data.saleNumber}` : `New sale created: ${data.saleNumber}`, {
@@ -790,7 +860,7 @@ export const BranchSalesReport: React.FC = () => {
       socket.off('saleCreated');
       socket.off('saleDeleted');
     };
-  }, [socket, isConnected, fetchData, selectedBranch, isRtl]);
+  }, [socket, fetchData, selectedBranch, isRtl]);
 
   const loadMoreSales = useCallback(() => {
     setPage((prev) => prev + 1);
@@ -915,7 +985,7 @@ export const BranchSalesReport: React.FC = () => {
     };
 
     try {
-      const response = await salesAPI.create(saleData);
+      await salesAPI.create(saleData);
       toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
       setCart([]);
       setNotes('');
@@ -969,7 +1039,25 @@ export const BranchSalesReport: React.FC = () => {
     return null;
   };
 
+  const branchSalesChartData = analytics.branchSales.slice(0, 5).map((bs) => ({
+    name: bs.displayName,
+    [t.totalSales]: bs.totalSales,
+    [t.totalCount]: bs.saleCount,
+  }));
+
+  const leastBranchSalesChartData = analytics.leastBranchSales.slice(0, 5).map((bs) => ({
+    name: bs.displayName,
+    [t.totalSales]: bs.totalSales,
+    [t.totalCount]: bs.saleCount,
+  }));
+
   const productSalesChartData = analytics.productSales.slice(0, 5).map((ps) => ({
+    name: ps.displayName,
+    [t.totalSales]: ps.totalRevenue,
+    [t.quantity]: ps.totalQuantity,
+  }));
+
+  const leastProductSalesChartData = analytics.leastProductSales.slice(0, 5).map((ps) => ({
     name: ps.displayName,
     [t.totalSales]: ps.totalRevenue,
     [t.quantity]: ps.totalQuantity,
@@ -981,10 +1069,22 @@ export const BranchSalesReport: React.FC = () => {
     [t.quantity]: ds.totalQuantity,
   }));
 
+  const leastDepartmentSalesChartData = analytics.leastDepartmentSales.slice(0, 5).map((ds) => ({
+    name: ds.displayName,
+    [t.totalSales]: ds.totalRevenue,
+    [t.quantity]: ds.totalQuantity,
+  }));
+
   const salesTrendsChartData = analytics.salesTrends.map((trend) => ({
     period: trend.period,
     [t.totalSales]: trend.totalSales,
     [t.totalCount]: trend.saleCount,
+  }));
+
+  const topCustomersChartData = analytics.topCustomers.slice(0, 5).map((tc) => ({
+    name: tc.customerName,
+    [t.totalSales]: tc.totalSpent,
+    [t.totalCount]: tc.purchaseCount,
   }));
 
   const returnStatsChartData = analytics.returnStats.map((rs) => ({
@@ -1201,7 +1301,7 @@ export const BranchSalesReport: React.FC = () => {
           </div>
 
           <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-6">{t.branchStats}</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-6">{t.analytics}</h2>
             {analyticsLoading ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {[...Array(6)].map((_, index) => (
@@ -1238,19 +1338,47 @@ export const BranchSalesReport: React.FC = () => {
                   <StatsCard
                     title={t.topProduct}
                     value={analytics.topProduct.displayName || t.errors.deleted_product}
-                    icon=<Package className="w-5 h-5 text-white" />
+                    icon={<Package className="w-5 h-5 text-white" />}
                     color="bg-purple-600"
                   />
                   <StatsCard
-                    title={t.topDepartment}
-                    value={analytics.departmentSales[0]?.displayName || t.departments.unknown}
-                    icon=<Package className="w-5 h-5 text-white" />
+                    title={t.topCustomers}
+                    value={analytics.topCustomers[0]?.customerName || t.errors.unknown}
+                    icon={<Package className="w-5 h-5 text-white" />}
                     color="bg-teal-600"
                   />
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4">{t.topProduct}</h3>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4">{t.branchSales}</h3>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={branchSalesChartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" fontSize={10} angle={45} textAnchor="end" height={60} />
+                        <YAxis fontSize={10} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend verticalAlign="bottom" />
+                        <Bar dataKey={t.totalSales} fill={chartColors[0]} radius={[4, 4, 0, 0]} />
+                        <Bar dataKey={t.totalCount} fill={chartColors[1]} radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4">{t.leastBranchSales}</h3>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={leastBranchSalesChartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" fontSize={10} angle={45} textAnchor="end" height={60} />
+                        <YAxis fontSize={10} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend verticalAlign="bottom" />
+                        <Bar dataKey={t.totalSales} fill={chartColors[2]} radius={[4, 4, 0, 0]} />
+                        <Bar dataKey={t.totalCount} fill={chartColors[3]} radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4">{t.productSales}</h3>
                     <ResponsiveContainer width="100%" height={200}>
                       <BarChart data={productSalesChartData}>
                         <CartesianGrid strokeDasharray="3 3" />
@@ -1264,9 +1392,37 @@ export const BranchSalesReport: React.FC = () => {
                     </ResponsiveContainer>
                   </div>
                   <div className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4">{t.topDepartment}</h3>
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4">{t.leastProductSales}</h3>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={leastProductSalesChartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" fontSize={10} angle={45} textAnchor="end" height={60} />
+                        <YAxis fontSize={10} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend verticalAlign="bottom" />
+                        <Bar dataKey={t.totalSales} fill={chartColors[2]} radius={[4, 4, 0, 0]} />
+                        <Bar dataKey={t.quantity} fill={chartColors[3]} radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4">{t.departmentSales}</h3>
                     <ResponsiveContainer width="100%" height={200}>
                       <BarChart data={departmentSalesChartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" fontSize={10} angle={45} textAnchor="end" height={60} />
+                        <YAxis fontSize={10} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend verticalAlign="bottom" />
+                        <Bar dataKey={t.totalSales} fill={chartColors[0]} radius={[4, 4, 0, 0]} />
+                        <Bar dataKey={t.quantity} fill={chartColors[1]} radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4">{t.leastDepartmentSales}</h3>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={leastDepartmentSalesChartData}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="name" fontSize={10} angle={45} textAnchor="end" height={60} />
                         <YAxis fontSize={10} />
@@ -1292,6 +1448,20 @@ export const BranchSalesReport: React.FC = () => {
                     </ResponsiveContainer>
                   </div>
                   <div className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-4">{t.topCustomers}</h3>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={topCustomersChartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" fontSize={10} angle={45} textAnchor="end" height={60} />
+                        <YAxis fontSize={10} />
+                        <Tooltip content={<CustomTooltip />} />
+                        <Legend verticalAlign="bottom" />
+                        <Bar dataKey={t.totalSales} fill={chartColors[2]} radius={[4, 4, 0, 0]} />
+                        <Bar dataKey={t.totalCount} fill={chartColors[3]} radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
                     <h3 className="text-sm font-semibold text-gray-900 mb-4">{t.returns}</h3>
                     <ResponsiveContainer width="100%" height={200}>
                       <PieChart>
@@ -1302,10 +1472,9 @@ export const BranchSalesReport: React.FC = () => {
                           cx="50%"
                           cy="50%"
                           outerRadius={80}
-                          label={({ name, percent }) => `${name} (${(percent * 100).toFixed(1)}%)`}
-                          labelLine={false}
+                          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                         >
-                          {returnStatsChartData.map((_, index) => (
+                          {returnStatsChartData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
                           ))}
                         </Pie>
@@ -1321,43 +1490,35 @@ export const BranchSalesReport: React.FC = () => {
 
           <div>
             <h2 className="text-lg font-bold text-gray-900 mb-6">{t.previousSales}</h2>
-            {loading ? (
-              <div className="space-y-6">
-                {[...Array(3)].map((_, index) => (
+            {loading || salesLoading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[...Array(6)].map((_, index) => (
                   <SaleSkeletonCard key={index} />
                 ))}
               </div>
             ) : sales.length === 0 ? (
               <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
-                <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600 text-sm font-medium">{t.noSales}</p>
               </div>
             ) : (
-              <>
-                <div className="space-y-6">
-                  {sales.map((sale) => (
-                    <SaleCard key={sale._id} sale={sale} />
-                  ))}
-                </div>
-                {hasMore && (
-                  <div className="flex justify-center mt-6">
-                    <button
-                      onClick={loadMoreSales}
-                      className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                      disabled={salesLoading}
-                    >
-                      {salesLoading ? (
-                        <svg className="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                      ) : (
-                        t.loadMore
-                      )}
-                    </button>
-                  </div>
-                )}
-              </>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {sales.map((sale) => (
+                  <SaleCard key={sale._id} sale={sale} />
+                ))}
+              </div>
+            )}
+            {hasMore && (
+              <div className="mt-6 text-center">
+                <button
+                  onClick={loadMoreSales}
+                  className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                  disabled={salesLoading || !hasMore}
+                  aria-label={t.loadMore}
+                >
+                  {salesLoading ? (isRtl ? 'جاري التحميل...' : 'Loading...') : t.loadMore}
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -1366,4 +1527,4 @@ export const BranchSalesReport: React.FC = () => {
   );
 };
 
-export default React.memo(BranchSalesReport);
+export default BranchSalesReport;
