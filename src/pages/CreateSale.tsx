@@ -153,7 +153,8 @@ type CartAction =
   | { type: 'SET_CUSTOMER_NAME'; payload: string }
   | { type: 'SET_CUSTOMER_PHONE'; payload: string | undefined }
   | { type: 'RESET' }
-  | { type: 'LOAD_SALE'; payload: CartState };
+  | { type: 'LOAD_SALE'; payload: CartState }
+  | { type: 'UPDATE_DISPLAY'; payload: { productId: string; displayName: string; displayUnit: string } };
 
 const cartReducer = (state: CartState, action: CartAction): CartState => {
   switch (action.type) {
@@ -193,12 +194,21 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
       return { items: [], notes: '', paymentMethod: 'cash', customerName: '', customerPhone: undefined };
     case 'LOAD_SALE':
       return action.payload;
+    case 'UPDATE_DISPLAY':
+      return {
+        ...state,
+        items: state.items.map((item) =>
+          item.productId === action.payload.productId
+            ? { ...item, displayName: action.payload.displayName, displayUnit: action.payload.displayUnit }
+            : item
+        ),
+      };
     default:
       return state;
   }
 };
 
-// مكونات فرعية
+// مكونات فرعية (بدون تغيير، بس ضمنت memoization للperformance)
 const ProductSearchInput = React.memo<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -382,7 +392,6 @@ export const CreateSale: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const { id } = useParams<{ id?: string }>(); // للتعديل إذا كان id موجود
-  const navigate = useNavigate();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'] || translations.en;
 
@@ -407,9 +416,8 @@ export const CreateSale: React.FC = () => {
     if (!user?.role || user.role !== 'branch') {
       setError(t.errors.unauthorized_access);
       toast.error(t.errors.unauthorized_access, { position: isRtl ? 'top-right' : 'top-left' });
-      navigate('/unauthorized');
     }
-  }, [user, t, isRtl, navigate]);
+  }, [user, t, isRtl]);
 
   // البحث المؤخر
   const debouncedSearch = useCallback(
@@ -433,7 +441,7 @@ export const CreateSale: React.FC = () => {
     });
   }, [inventory, searchTerm, selectedDepartment]);
 
-  // جلب المخزون
+  // جلب المخزون (بدون تغيير display هنا، هيحصل في useEffect)
   const fetchInventory = useCallback(async () => {
     if (!user?.branchId) {
       setError(t.errors.no_branch_assigned);
@@ -445,11 +453,7 @@ export const CreateSale: React.FC = () => {
 
     try {
       const inventoryParams: any = { lowStock: false, branch: user.branchId };
-      const inventoryResponse = await inventoryAPI.getInventory(inventoryParams).catch((err) => {
-        console.error(`[${new Date().toISOString()}] Inventory fetch error:`, err);
-        toast.error(t.errors.fetch_inventory, { position: isRtl ? 'top-right' : 'top-left' });
-        return [];
-      });
+      const inventoryResponse = await inventoryAPI.getInventory(inventoryParams);
 
       const newInventory = Array.isArray(inventoryResponse)
         ? inventoryResponse
@@ -468,13 +472,13 @@ export const CreateSale: React.FC = () => {
                       _id: item.product.department._id || 'unknown',
                       name: item.product.department.name || t.departments.unknown,
                       nameEn: item.product.department.nameEn,
-                      displayName: isRtl ? (item.product.department.name || t.departments.unknown) : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
+                      displayName: '', // سنحدثها لاحقًا
                     }
                   : undefined,
               },
               currentStock: item.currentStock || 0,
-              displayName: isRtl ? (item.product?.name || t.departments.unknown) : (item.product?.nameEn || item.product?.name || t.departments.unknown),
-              displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
+              displayName: '', // سنحدثها لاحقًا
+              displayUnit: '', // سنحدثها لاحقًا
             }))
         : [];
 
@@ -490,7 +494,7 @@ export const CreateSale: React.FC = () => {
                 _id: item.product.department!._id,
                 name: item.product.department!.name,
                 nameEn: item.product.department!.nameEn,
-                displayName: item.product.department!.displayName,
+                displayName: '', // سنحدثها لاحقًا
               },
             ])
         ).values()
@@ -518,26 +522,48 @@ export const CreateSale: React.FC = () => {
     fetchInventory();
   }, [fetchInventory]);
 
+  // تحديث display لـ inventory وdepartments عند تغيير اللغة
+  useEffect(() => {
+    setInventory((prev) => prev.map((item) => ({
+      ...item,
+      displayName: isRtl ? (item.product.name || t.departments.unknown) : (item.product.nameEn || item.product.name || t.departments.unknown),
+      displayUnit: isRtl ? (item.product.unit || t.units.default) : (item.product.unitEn || item.product.unit || t.units.default),
+      product: {
+        ...item.product,
+        department: item.product.department ? {
+          ...item.product.department,
+          displayName: isRtl ? (item.product.department.name || t.departments.unknown) : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
+        } : undefined,
+      },
+    })));
+
+    setDepartments((prev) => prev.map((dept) => ({
+      ...dept,
+      displayName: isRtl ? (dept.name || t.departments.unknown) : (dept.nameEn || dept.name || t.departments.unknown),
+    })));
+  }, [language, isRtl, t]);
+
   // جلب بيانات المبيعة للتعديل إذا كان id موجود
   useEffect(() => {
     if (id) {
       const fetchSale = async () => {
         try {
           const sale = await salesAPI.getById(id);
+          const loadedItems = sale.items.map((item: any) => ({
+            productId: item.product?._id || item.productId,
+            productName: item.product?.name,
+            productNameEn: item.product?.nameEn,
+            unit: item.product?.unit,
+            unitEn: item.product?.unitEn,
+            displayName: isRtl ? (item.product?.name || t.departments.unknown) : (item.product?.nameEn || item.product?.name || t.departments.unknown),
+            displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+          }));
           dispatchCart({
             type: 'LOAD_SALE',
             payload: {
-              items: sale.items.map((item: any) => ({
-                productId: item.product?._id || item.productId,
-                productName: item.product?.name,
-                productNameEn: item.product?.nameEn,
-                unit: item.product?.unit,
-                unitEn: item.product?.unitEn,
-                displayName: isRtl ? (item.product?.name || t.departments.unknown) : (item.product?.nameEn || item.product?.name || t.departments.unknown),
-                displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-              })),
+              items: loadedItems,
               notes: sale.notes || '',
               paymentMethod: sale.paymentMethod || 'cash',
               customerName: sale.customerName || '',
@@ -551,6 +577,24 @@ export const CreateSale: React.FC = () => {
       fetchSale();
     }
   }, [id, t, isRtl]);
+
+  // تحديث display للitems في السلة عند تغيير اللغة
+  useEffect(() => {
+    cartState.items.forEach((item) => {
+      const newDisplayName = isRtl ? (item.productName || t.errors.deleted_product) : (item.productNameEn || item.productName || t.errors.deleted_product);
+      const newDisplayUnit = isRtl ? (item.unit || t.units.default) : (item.unitEn || item.unit || t.units.default);
+      if (item.displayName !== newDisplayName || item.displayUnit !== newDisplayUnit) {
+        dispatchCart({
+          type: 'UPDATE_DISPLAY',
+          payload: {
+            productId: item.productId,
+            displayName: newDisplayName,
+            displayUnit: newDisplayUnit,
+          },
+        });
+      }
+    });
+  }, [language, cartState.items, isRtl, t, dispatchCart]);
 
   // إضافة إلى السلة
   const addToCart = useCallback(
@@ -572,8 +616,8 @@ export const CreateSale: React.FC = () => {
           productNameEn: product.product.nameEn,
           unit: product.product.unit,
           unitEn: product.product.unitEn,
-          displayName: isRtl ? (product.product.name || t.departments.unknown) : (product.product.nameEn || product.product.name || t.departments.unknown),
-          displayUnit: isRtl ? (product.product.unit || t.units.default) : (product.product.unitEn || product.product.unit || t.units.default),
+          displayName: product.displayName,
+          displayUnit: product.displayUnit,
           quantity: 1,
           unitPrice: product.product.price,
         },
@@ -607,7 +651,7 @@ export const CreateSale: React.FC = () => {
     dispatchCart({ type: 'REMOVE_ITEM', payload: productId });
   }, []);
 
-  // إرسال أو تحديث المبيعة
+  // إرسال أو تحديث المبيعة (بدون navigate، بس reset وtoast)
   const handleSubmitSale = useCallback(async () => {
     if (cartState.items.length === 0) {
       toast.error(t.errors.empty_cart, { position: isRtl ? 'top-right' : 'top-left' });
@@ -644,13 +688,13 @@ export const CreateSale: React.FC = () => {
         toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
       }
       dispatchCart({ type: 'RESET' });
-      navigate('/sales'); // العودة إلى صفحة المبيعات الرئيسية
+      // لا navigate هنا، الصفحة بتنظف (reset) وtoast يظهر بس
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Sale ${id ? 'update' : 'submission'} error:`, err);
       const errorMessage = err.response?.status === 403 ? t.errors.unauthorized_access : (id ? t.errors.update_sale_failed : t.errors.create_sale_failed);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
     }
-  }, [cartState, user, t, isRtl, id, navigate]);
+  }, [cartState, user, t, isRtl, id]);
 
   // خيارات الأقسام
   const departmentOptions = useMemo(
@@ -671,7 +715,7 @@ export const CreateSale: React.FC = () => {
     [t.paymentMethods]
   );
 
-  // إجمالي السلة
+  // إجمالي السلة (useMemo للأداء)
   const totalCartAmount = useMemo(() => {
     return cartState.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0).toFixed(2);
   }, [cartState.items]);
