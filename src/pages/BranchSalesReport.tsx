@@ -4,7 +4,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
-import { AlertCircle, DollarSign, Trash2, Search, X, ChevronDown, Eye } from 'lucide-react';
+import { AlertCircle, DollarSign, Trash2, Search, X, ChevronDown, Eye  , Download} from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 
@@ -60,6 +60,7 @@ const translations = {
     return: 'مرتجع',
     reason: 'السبب',
     quantity: 'الكمية',
+      unitPrice: 'سعر الوحدة',
     searchPlaceholder: 'ابحث عن المبيعات أو العملاء أو المنتجات...',
     loadMore: 'تحميل المزيد',
     filterBy: 'تصفية حسب',
@@ -101,6 +102,7 @@ const translations = {
     returns: 'Returns',
     return: 'Return',
     reason: 'Reason',
+    unitPrice: 'Unit Price',
     quantity: 'Quantity',
     searchPlaceholder: 'Search sales, customers, or products...',
     loadMore: 'Load More',
@@ -559,7 +561,7 @@ export const BranchSalesReport: React.FC = () => {
   );
 
   return (
-    <div className={`mx-auto px-4 sm:px-6 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`mx-auto px-4  py-8 min-h-screen `} dir={isRtl ? 'rtl' : 'ltr'}>
       <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <DollarSign className="w-7 h-7 text-amber-600" />
