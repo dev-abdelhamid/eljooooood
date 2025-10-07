@@ -433,22 +433,36 @@ export const BranchInventory: React.FC = () => {
     console.log('Error:', inventoryError);
   }, [inventoryData, inventoryLoading, inventoryError]);
 
-  // Department options
+  // Department options (Fixed)
   const departmentOptions = useMemo(() => {
     const depts = new Set<string>();
+    const deptMap: Record<string, { _id: string; name: string }> = {};
+    
+    // Collect departments from inventory data
     inventoryData?.forEach((item) => {
       if (item.product?.department?._id) {
-        const dept = {
-          _id: item.product.department._id,
-          name: isRtl ? item.product.department.name : item.product.department.nameEn,
-        };
-        depts.add(JSON.stringify(dept));
+        const deptKey = item.product.department._id;
+        if (!deptMap[deptKey]) {
+          deptMap[deptKey] = {
+            _id: deptKey,
+            name: isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name,
+          };
+          depts.add(deptKey);
+        }
       }
     });
-    const uniqueDepts = Array.from(depts).map((d) => JSON.parse(d));
+
+    // Log departments for debugging
+    console.log('Departments collected:', Object.values(deptMap));
+
+    // Create options, ensuring no duplicates
+    const uniqueDepts = Array.from(depts).map((deptId) => deptMap[deptId]);
     return [
       { value: '', label: t('common.all_departments') },
-      ...uniqueDepts.map((dept) => ({ value: dept._id, label: dept.name })),
+      ...uniqueDepts.map((dept) => ({
+        value: dept._id,
+        label: dept.name || t('departments.unknown'),
+      })),
     ];
   }, [inventoryData, isRtl, t]);
 
@@ -589,8 +603,8 @@ export const BranchInventory: React.FC = () => {
           (item.product.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             item.product.nameEn.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             item.product.code.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-            item.product.department?.name.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-            item.product.department?.nameEn.toLowerCase().includes(debouncedSearchQuery.toLowerCase()))
+            (item.product.department?.name?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ?? false) ||
+            (item.product.department?.nameEn?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ?? false))
       ),
     [inventoryData, debouncedSearchQuery, filterStatus, filterDepartment]
   );
@@ -864,6 +878,7 @@ export const BranchInventory: React.FC = () => {
           <CustomSelect
             value={filterDepartment}
             onChange={(e) => {
+              console.log('Department filter changed:', e.target.value);
               setFilterDepartment(e.target.value);
               setCurrentPage(1);
             }}
@@ -921,7 +936,7 @@ export const BranchInventory: React.FC = () => {
                           <p className="text-sm text-gray-600">{t('inventory.max_stock')}: {item.maxStockLevel}</p>
                           <p className="text-sm text-gray-600">{t('products.unit')}: {isRtl ? item.product.unit : item.product.unitEn}</p>
                           <p className="text-sm text-gray-600 font-bold flex items-center gap-1">
-                            <span className="text-amber-600">📂</span> {t('departments.title')}: {isRtl ? item.product.department?.name : item.product.department?.nameEn}
+                            <span className="text-amber-600">📂</span> {t('departments.title')}: {isRtl ? item.product.department?.name : item.product.department?.nameEn || t('departments.unknown')}
                           </p>
                           <p
                             className={`text-sm font-medium ${
