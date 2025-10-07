@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useReducer } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useLanguage, Language } from '../contexts/LanguageContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { inventoryAPI, salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
@@ -8,89 +8,7 @@ import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, Chevr
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 
-// واجهات TypeScript
-interface Sale {
-  _id: string;
-  saleNumber: string;
-  branch: { _id: string; name: string; nameEn?: string; displayName: string };
-  items: Array<{
-    productId: string;
-    productName: string;
-    productNameEn?: string;
-    unit?: string;
-    unitEn?: string;
-    quantity: number;
-    unitPrice: number;
-    displayName: string;
-    displayUnit: string;
-    department?: { _id: string; name: string; nameEn?: string; displayName: string };
-  }>;
-  totalAmount: number;
-  createdAt: string;
-  notes?: string;
-  paymentMethod?: string;
-  customerName?: string;
-  customerPhone?: string;
-  returns?: Array<{
-    _id: string;
-    returnNumber: string;
-    status: string;
-    items: Array<{ productId: string; productName: string; productNameEn?: string; quantity: number; reason: string }>;
-    reason: string;
-    createdAt: string;
-  }>;
-}
 
-interface Branch {
-  _id: string;
-  name: string;
-  nameEn?: string;
-  displayName: string;
-}
-
-interface InventoryItem {
-  _id: string;
-  product: {
-    _id: string;
-    name: string;
-    nameEn?: string;
-    unit?: string;
-    unitEn?: string;
-    price: number;
-    department?: { _id: string; name: string; nameEn?: string; displayName: string };
-  };
-  currentStock: number;
-  displayName: string;
-  displayUnit: string;
-}
-
-interface CartItem {
-  productId: string;
-  productName: string;
-  productNameEn?: string;
-  unit?: string;
-  unitEn?: string;
-  displayName: string;
-  displayUnit: string;
-  quantity: number;
-  unitPrice: number;
-}
-
-interface Department {
-  _id: string;
-  name: string;
-  nameEn?: string;
-  displayName: string;
-}
-
-// واجهة لحالة السلة
-interface CartState {
-  items: CartItem[];
-  notes: string;
-  paymentMethod: string;
-  customerName: string;
-  customerPhone?: string;
-}
 
 
 
@@ -220,6 +138,90 @@ const translations = {
     },
   },
 };
+
+// واجهات TypeScript
+interface Sale {
+  _id: string;
+  saleNumber: string;
+  branch: { _id: string; name: string; nameEn?: string; displayName: string };
+  items: Array<{
+    productId: string;
+    productName: string;
+    productNameEn?: string;
+    unit?: string;
+    unitEn?: string;
+    quantity: number;
+    unitPrice: number;
+    displayName: string;
+    displayUnit: string;
+    department?: { _id: string; name: string; nameEn?: string; displayName: string };
+  }>;
+  totalAmount: number;
+  createdAt: string;
+  notes?: string;
+  paymentMethod?: string;
+  customerName?: string;
+  customerPhone?: string;
+  returns?: Array<{
+    _id: string;
+    returnNumber: string;
+    status: string;
+    items: Array<{ productId: string; productName: string; productNameEn?: string; quantity: number; reason: string }>;
+    reason: string;
+    createdAt: string;
+  }>;
+}
+
+interface Branch {
+  _id: string;
+  name: string;
+  nameEn?: string;
+  displayName: string;
+}
+
+interface InventoryItem {
+  _id: string;
+  product: {
+    _id: string;
+    name: string;
+    nameEn?: string;
+    unit?: string;
+    unitEn?: string;
+    price: number;
+    department?: { _id: string; name: string; nameEn?: string; displayName: string };
+  };
+  currentStock: number;
+  displayName: string;
+  displayUnit: string;
+}
+
+interface CartItem {
+  productId: string;
+  productName: string;
+  productNameEn?: string;
+  unit?: string;
+  unitEn?: string;
+  displayName: string;
+  displayUnit: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+interface Department {
+  _id: string;
+  name: string;
+  nameEn?: string;
+  displayName: string;
+}
+
+// واجهة لحالة السلة
+interface CartState {
+  items: CartItem[];
+  notes: string;
+  paymentMethod: string;
+  customerName: string;
+  customerPhone?: string;
+}
 
 // إجراءات السلة
 type CartAction =
@@ -800,7 +802,7 @@ export const BranchSalesReport: React.FC = () => {
         }
       } catch (err: any) {
         console.error(`[${new Date().toISOString()}] Fetch error:`, err);
-        const errorMessage = err.response?.status === 403 ? t.errors.unauthorized_access : err.message || t.errors.fetch_sales;
+        const errorMessage = err.status === 403 ? t.errors.unauthorized_access : err.message || t.errors.fetch_sales;
         setError(errorMessage);
         toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
         setSales([]);
@@ -922,7 +924,7 @@ export const BranchSalesReport: React.FC = () => {
       fetchData();
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Sale ${editingSaleId ? 'update' : 'submission'} error:`, err);
-      const errorMessage = err.response?.status === 403 ? t.errors.unauthorized_access : (editingSaleId ? t.errors.update_sale_failed : t.errors.create_sale_failed);
+      const errorMessage = err.status === 403 ? t.errors.unauthorized_access : (editingSaleId ? t.errors.update_sale_failed : t.errors.create_sale_failed);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
     }
   }, [cartState, user, t, isRtl, fetchData, editingSaleId]);
@@ -957,19 +959,28 @@ export const BranchSalesReport: React.FC = () => {
   // حذف المبيعة
   const handleDeleteSale = useCallback(
     async (id: string) => {
-      if (window.confirm(isRtl ? 'هل أنت متأكد من حذف هذه المبيعة؟' : 'Are you sure you want to delete this sale?')) {
-        try {
+      try {
+        const sale = await salesAPI.getById(id);
+        if (!sale) {
+          toast.error(t.errors.sale_not_found, { position: isRtl ? 'top-right' : 'top-left' });
+          return;
+        }
+        if (user?.role === 'branch' && sale.branch._id !== user.branchId) {
+          toast.error(t.errors.unauthorized_access, { position: isRtl ? 'top-right' : 'top-left' });
+          return;
+        }
+        if (window.confirm(isRtl ? 'هل أنت متأكد من حذف هذه المبيعة؟' : 'Are you sure you want to delete this sale?')) {
           await salesAPI.delete(id);
           toast.success(t.deleteSale, { position: isRtl ? 'top-right' : 'top-left' });
           fetchData();
-        } catch (err: any) {
-          console.error(`[${new Date().toISOString()}] Sale deletion error:`, err);
-          const errorMessage = err.response?.status === 403 ? t.errors.unauthorized_access : t.errors.delete_sale_failed;
-          toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
         }
+      } catch (err: any) {
+        console.error(`[${new Date().toISOString()}] Sale deletion error:`, err);
+        const errorMessage = err.status === 403 ? t.errors.unauthorized_access : t.errors.delete_sale_failed;
+        toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       }
     },
-    [fetchData, t, isRtl]
+    [fetchData, t, isRtl, user]
   );
 
   // خيارات الفروع
