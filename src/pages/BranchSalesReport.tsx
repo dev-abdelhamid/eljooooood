@@ -557,7 +557,7 @@ const StatsSkeletonCard = React.memo(() => (
   </div>
 ));
 
-const BranchSalesReport: React.FC = () => {
+export const BranchSalesReport: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
