@@ -103,7 +103,7 @@ salesAxios.interceptors.response.use(
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7,15}$/.test(phone);
 const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'card', 'credit'].includes(method);
-const isValidPaymentStatus = (status: string | undefined): boolean => !status || ['pending', 'completed', 'canceled'].includes(status);
+const isValidPaymentStatus = (status: string | undefined): boolean => !method || ['pending', 'completed', 'canceled'].includes(status);
 
 export const salesAPI = {
   create: async (saleData: {
@@ -212,7 +212,23 @@ export const salesAPI = {
       };
       const response = await salesAxios.get('/sales/analytics', { params: cleanedParams });
       console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Response:`, response);
-      return response;
+      return {
+        branchSales: response.branchSales || [],
+        leastBranchSales: response.leastBranchSales || [],
+        productSales: response.productSales || [],
+        leastProductSales: response.leastProductSales || [],
+        departmentSales: response.departmentSales || [],
+        leastDepartmentSales: response.leastDepartmentSales || [],
+        totalSales: response.totalSales || 0,
+        totalCount: response.totalCount || 0,
+        averageOrderValue: response.averageOrderValue || 0,
+        returnRate: response.returnRate || 0,
+        topProduct: response.topProduct || { productId: null, productName: isRtl ? 'غير معروف' : 'Unknown', displayName: isRtl ? 'غير معروف' : 'Unknown', totalQuantity: 0, totalRevenue: 0 },
+        salesTrends: response.salesTrends || [],
+        topCustomers: response.topCustomers || [],
+        paymentMethods: response.paymentMethods || [],
+        returnStats: response.returnStats || [],
+      };
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Error:`, err);
       throw err;
