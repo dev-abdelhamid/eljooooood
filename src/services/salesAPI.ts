@@ -1,7 +1,8 @@
-import axios, { AxiosRequestConfig } from 'axios';
+import axios from 'axios';
 import { toast } from 'react-toastify';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
+
 const isRtl = localStorage.getItem('language') === 'ar';
 
 const salesAxios = axios.create({
@@ -10,7 +11,7 @@ const salesAxios = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-const handleError = async (error: any, originalRequest: AxiosRequestConfig): Promise<never> => {
+const handleError = async (error: any, originalRequest: any): Promise<never> => {
   console.error(`[${new Date().toISOString()}] Sales API response error:`, {
     url: error.config?.url,
     method: error.config?.method,
@@ -20,6 +21,7 @@ const handleError = async (error: any, originalRequest: AxiosRequestConfig): Pro
   });
 
   let message = error.response?.data?.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
+
   if (error.response?.status === 400) message = error.response?.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
   if (error.response?.status === 403) message = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
   if (error.response?.status === 404) message = error.response?.data?.message || (isRtl ? 'المبيعة غير موجودة' : 'Sale not found');
@@ -47,9 +49,9 @@ const handleError = async (error: any, originalRequest: AxiosRequestConfig): Pro
       localStorage.setItem('token', accessToken);
       if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
       console.log(`[${new Date().toISOString()}] Token refreshed successfully`);
-      originalRequest.headers = { ...originalRequest.headers, Authorization: `Bearer ${accessToken}` };
+      originalRequest.headers.Authorization = `Bearer ${accessToken}`;
       return salesAxios(originalRequest);
-    } catch (refreshError: any) {
+    } catch (refreshError) {
       console.error(`[${new Date().toISOString()}] Refresh token failed:`, refreshError);
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -101,9 +103,12 @@ salesAxios.interceptors.response.use(
 );
 
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
+
 const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7,15}$/.test(phone);
+
 const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'card', 'credit'].includes(method);
-const isValidPaymentStatus = (status: string | undefined): boolean => !method || ['pending', 'completed', 'canceled'].includes(status);
+
+const isValidPaymentStatus = (status: string | undefined): boolean => !status || ['pending', 'completed', 'canceled'].includes(status);
 
 export const salesAPI = {
   create: async (saleData: {
@@ -140,6 +145,7 @@ export const salesAPI = {
     console.log(`[${new Date().toISOString()}] salesAPI.create - Success:`, response);
     return response;
   },
+
   getAll: async (params: {
     page?: number;
     limit?: number;
@@ -168,6 +174,7 @@ export const salesAPI = {
     });
     return response;
   },
+
   getById: async (id: string) => {
     console.log(`[${new Date().toISOString()}] salesAPI.getById - Sending:`, { id });
     if (!isValidObjectId(id)) {
@@ -178,18 +185,16 @@ export const salesAPI = {
     console.log(`[${new Date().toISOString()}] salesAPI.getById - Success:`, response);
     return response.sale;
   },
-  update: async (
-    id: string,
-    saleData: {
-      items?: Array<{ productId: string; quantity: number; unitPrice: number }>;
-      branch?: string;
-      notes?: string;
-      paymentMethod?: string;
-      paymentStatus?: string;
-      customerName?: string;
-      customerPhone?: string;
-    }
-  ) => {
+
+  update: async (id: string, saleData: {
+    items?: Array<{ productId: string; quantity: number; unitPrice: number }>;
+    branch?: string;
+    notes?: string;
+    paymentMethod?: string;
+    paymentStatus?: string;
+    customerName?: string;
+    customerPhone?: string;
+  }) => {
     console.log(`[${new Date().toISOString()}] salesAPI.update - Sending:`, { id, saleData });
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid sale ID:`, id);
@@ -219,6 +224,7 @@ export const salesAPI = {
     console.log(`[${new Date().toISOString()}] salesAPI.update - Success:`, response);
     return response;
   },
+
   delete: async (id: string) => {
     console.log(`[${new Date().toISOString()}] salesAPI.delete - Sending:`, { id });
     if (!isValidObjectId(id)) {
@@ -229,6 +235,7 @@ export const salesAPI = {
     console.log(`[${new Date().toISOString()}] salesAPI.delete - Success:`, response);
     return response;
   },
+
   getAnalytics: async (params: {
     branch?: string;
     startDate?: string;
