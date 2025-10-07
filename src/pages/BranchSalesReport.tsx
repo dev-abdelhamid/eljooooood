@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useLanguage, Language } from '../contexts/LanguageContext';
+import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI, inventoryAPI, salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
@@ -189,12 +189,12 @@ const translations = {
   },
 };
 
-const ProductSearchInput = React.memo<{
+const ProductSearchInput: React.FC<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder: string;
   ariaLabel: string;
-}>(({ value, onChange, placeholder, ariaLabel }) => {
+}> = React.memo(({ value, onChange, placeholder, ariaLabel }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
@@ -221,14 +221,14 @@ const ProductSearchInput = React.memo<{
   );
 });
 
-const ProductDropdown = React.memo<{
+const ProductDropdown: React.FC<{
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
   ariaLabel: string;
   disabled?: boolean;
   className?: string;
-}>(({ value, onChange, options, ariaLabel, disabled = false, className }) => {
+}> = React.memo(({ value, onChange, options, ariaLabel, disabled = false, className }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
@@ -268,12 +268,12 @@ const ProductDropdown = React.memo<{
   );
 });
 
-const QuantityInput = React.memo<{
+const QuantityInput: React.FC<{
   value: number;
   onChange: (val: string) => void;
   onIncrement: () => void;
   onDecrement: () => void;
-}>(({ value, onChange, onIncrement, onDecrement }) => {
+}> = React.memo(({ value, onChange, onIncrement, onDecrement }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
@@ -304,13 +304,13 @@ const QuantityInput = React.memo<{
   );
 });
 
-const ProductCard = React.memo<{
+const ProductCard: React.FC<{
   product: InventoryItem;
   cartItem?: CartItem;
   onAdd: () => void;
   onUpdate: (quantity: number) => void;
   onRemove: () => void;
-}>(({ product, cartItem, onAdd, onUpdate, onRemove }) => {
+}> = React.memo(({ product, cartItem, onAdd, onUpdate, onRemove }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
@@ -355,7 +355,7 @@ const ProductCard = React.memo<{
   );
 });
 
-const SaleCard = React.memo<{ sale: Sale }>(({ sale }) => {
+const SaleCard: React.FC<{ sale: Sale }> = React.memo(({ sale }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
@@ -397,7 +397,7 @@ const SaleCard = React.memo<{ sale: Sale }>(({ sale }) => {
             <ul className="list-disc list-inside text-sm text-gray-600">
               {sale.returns.map((ret, index) => (
                 <li key={index}>
-                  {t.return} #{ret.returnNumber} ({t.returns.status[ret.status as keyof typeof t.returns.status]}) - {t.reason}: {ret.reason} ({t.date}: {formatDate(ret.createdAt, language)})
+                  {t.return} #{ret.returnNumber} ({ret.status}) - {t.reason}: {ret.reason} ({t.date}: {formatDate(ret.createdAt, language)})
                   <ul className="list-circle list-inside ml-4">
                     {ret.items.map((item, i) => (
                       <li key={i}>
@@ -415,7 +415,7 @@ const SaleCard = React.memo<{ sale: Sale }>(({ sale }) => {
   );
 });
 
-const ProductSkeletonCard = React.memo(() => (
+const ProductSkeletonCard: React.FC = React.memo(() => (
   <div className="h-[200px] p-5 bg-white rounded-xl shadow-sm border border-gray-100">
     <div className="space-y-3 animate-pulse">
       <div className="h-4 bg-gray-200 rounded w-3/4"></div>
@@ -428,7 +428,7 @@ const ProductSkeletonCard = React.memo(() => (
   </div>
 ));
 
-const SaleSkeletonCard = React.memo(() => (
+const SaleSkeletonCard: React.FC = React.memo(() => (
   <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
     <div className="space-y-3 animate-pulse">
       <div className="h-4 bg-gray-200 rounded w-3/4"></div>
@@ -438,11 +438,126 @@ const SaleSkeletonCard = React.memo(() => (
   </div>
 ));
 
-export const BranchSalesReport: React.FC = () => {
-  const { t: languageT, language } = useLanguage();
+const CartSection: React.FC<{
+  cart: CartItem[];
+  inventory: InventoryItem[];
+  notes: string;
+  setNotes: (value: string) => void;
+  paymentMethod: string;
+  setPaymentMethod: (value: string) => void;
+  customerName: string;
+  setCustomerName: (value: string) => void;
+  customerPhone: string | undefined;
+  setCustomerPhone: (value: string | undefined) => void;
+  updateCartQuantity: (productId: string, quantity: number) => void;
+  removeFromCart: (productId: string) => void;
+  handleSubmitSale: () => void;
+  totalCartAmount: string;
+  isRtl: boolean;
+  t: typeof translations.ar;
+}> = React.memo(({ cart, inventory, notes, setNotes, paymentMethod, setPaymentMethod, customerName, setCustomerName, customerPhone, setCustomerPhone, updateCartQuantity, removeFromCart, handleSubmitSale, totalCartAmount, isRtl, t }) => {
+  const paymentMethodOptions = useMemo(
+    () => [
+      { value: 'cash', label: t.paymentMethods.cash },
+      { value: 'credit_card', label: t.paymentMethods.credit_card },
+      { value: 'bank_transfer', label: t.paymentMethods.bank_transfer },
+    ],
+    [t.paymentMethods]
+  );
+
+  return (
+    <aside className="lg:col-span-1 lg:sticky lg:top-8 space-y-6 max-h-[calc(100vh-12rem)] overflow-y-auto scrollbar-none">
+      <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+        <h3 className="text-xl font-bold text-gray-900 mb-6">{t.cart}</h3>
+        <div className="space-y-4">
+          {cart.length === 0 ? (
+            <p className="text-gray-600 text-sm text-center">{t.emptyCart}</p>
+          ) : (
+            <>
+              {cart.map((item) => (
+                <div key={item.productId} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
+                  <div className="flex-1">
+                    <p className="font-semibold text-gray-900 text-sm">{item.displayName || t.errors.deleted_product}</p>
+                    <p className="text-sm text-gray-600">
+                      {item.quantity} {item.displayUnit || t.units.default} | {item.unitPrice} {t.currency} = {(item.quantity * item.unitPrice).toFixed(2)} {t.currency}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <QuantityInput
+                      value={item.quantity}
+                      onChange={(val) => updateCartQuantity(item.productId, parseInt(val) || 0)}
+                      onIncrement={() => updateCartQuantity(item.productId, item.quantity + 1)}
+                      onDecrement={() => updateCartQuantity(item.productId, item.quantity - 1)}
+                    />
+                    <button
+                      onClick={() => removeFromCart(item.productId)}
+                      className="w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
+                      aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <div className="border-t pt-4">
+                <div className="flex justify-between font-bold text-gray-900 text-sm">
+                  <span>{t.total}:</span>
+                  <span className="text-amber-600">{totalCartAmount} {t.currency}</span>
+                </div>
+              </div>
+              <div className="mt-4 space-y-4">
+                <input
+                  type="text"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder={t.customerName}
+                  className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                  aria-label={t.customerName}
+                />
+                <input
+                  type="text"
+                  value={customerPhone || ''}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  placeholder={t.customerPhone}
+                  className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                  aria-label={t.customerPhone}
+                />
+                <ProductDropdown
+                  value={paymentMethod}
+                  onChange={setPaymentMethod}
+                  options={paymentMethodOptions}
+                  ariaLabel={t.paymentMethod}
+                />
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder={t.notes}
+                  className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm resize-none h-24 ${isRtl ? 'text-right' : 'text-left'}`}
+                  aria-label={t.notes}
+                />
+              </div>
+              <button
+                onClick={handleSubmitSale}
+                className="w-full mt-4 px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                disabled={cart.length === 0}
+                aria-label={t.submitSale}
+              >
+                {t.submitSale}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </aside>
+  );
+});
+
+const BranchSalesReport: React.FC = () => {
+  const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'] || translations.en;
+
   const [activeTab, setActiveTab] = useState<'new' | 'previous'>('new');
   const [sales, setSales] = useState<Sale[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -480,26 +595,28 @@ export const BranchSalesReport: React.FC = () => {
     return inventory.filter((item) => item.displayName.toLowerCase().includes(lowerSearchTerm));
   }, [inventory, searchTerm]);
 
-  useEffect(() => {
-    setCart((prevCart) =>
-      prevCart.map((item) => {
-        const product = inventory.find((inv) => inv.product._id === item.productId);
-        return {
-          ...item,
-          displayName: product
-            ? isRtl
-              ? product.product.name || t.departments.unknown
-              : product.product.nameEn || product.product.name || t.departments.unknown
-            : item.displayName,
-          displayUnit: product
-            ? isRtl
-              ? product.product.unit || t.units.default
-              : product.product.unitEn || product.product.unit || t.units.default
-            : item.displayUnit,
-        };
-      })
-    );
-  }, [language, inventory, isRtl, t]);
+  const totalCartAmount = useMemo(() => {
+    return cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0).toFixed(2);
+  }, [cart]);
+
+  const branchOptions = useMemo(() => {
+    if (user?.role === 'branch' && user?.branchId) {
+      const branch = branches.find((b) => b._id === user.branchId);
+      return branch ? [{ value: branch._id, label: branch.displayName }] : [];
+    }
+    return [
+      { value: '', label: t.branches.select_branch },
+      ...branches.map((branch) => ({ value: branch._id, label: branch.displayName })),
+    ];
+  }, [branches, t.branches, user]);
+
+  const periodOptions = useMemo(
+    () => [
+      { value: 'all', label: isRtl ? 'الكل' : 'All' },
+      { value: 'custom', label: t.customRange },
+    ],
+    [t, isRtl]
+  );
 
   const fetchData = useCallback(
     async (pageNum: number = 1, append: boolean = false) => {
@@ -509,7 +626,6 @@ export const BranchSalesReport: React.FC = () => {
         setLoading(false);
         return;
       }
-
       const effectiveBranch = user.branchId || selectedBranch;
       if (!effectiveBranch) {
         setError(t.errors.no_branch_assigned);
@@ -517,7 +633,6 @@ export const BranchSalesReport: React.FC = () => {
         setLoading(false);
         return;
       }
-
       setLoading(pageNum === 1);
       setSalesLoading(pageNum > 1);
       try {
@@ -526,31 +641,21 @@ export const BranchSalesReport: React.FC = () => {
           salesParams.startDate = startDate;
           salesParams.endDate = endDate;
         }
-
-        const inventoryParams: any = { lowStock: false };
-        if (effectiveBranch) {
-          inventoryParams.branch = effectiveBranch;
-        }
-
+        const inventoryParams: any = { lowStock: false, branch: effectiveBranch };
         const [salesResponse, branchesResponse, inventoryResponse] = await Promise.all([
           salesAPI.getAll(salesParams).catch((err) => {
-            console.error(`[${new Date().toISOString()}] Sales fetch error:`, err);
             toast.error(t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left' });
             return { sales: [], total: 0, returns: [] };
           }),
           branchesAPI.getAll().catch((err) => {
-            console.error(`[${new Date().toISOString()}] Branch fetch error:`, err);
             toast.error(t.errors.fetch_branches, { position: isRtl ? 'top-right' : 'top-left' });
             return { branches: [] };
           }),
           inventoryAPI.getInventory(inventoryParams).catch((err) => {
-            console.error(`[${new Date().toISOString()}] Inventory fetch error:`, err, { params: inventoryParams });
             toast.error(t.errors.fetch_inventory, { position: isRtl ? 'top-right' : 'top-left' });
             return [];
           }),
         ]);
-
-        console.log(`[${new Date().toISOString()}] Inventory response:`, inventoryResponse);
 
         const returnsMap = new Map<string, Sale['returns']>();
         if (Array.isArray(salesResponse.returns)) {
@@ -628,11 +733,6 @@ export const BranchSalesReport: React.FC = () => {
           : [];
         setBranches(fetchedBranches);
 
-        if (fetchedBranches.length === 0) {
-          setError(t.errors.no_branches_available);
-          toast.warn(t.errors.no_branches_available, { position: isRtl ? 'top-right' : 'top-left' });
-        }
-
         const newInventory = Array.isArray(inventoryResponse)
           ? inventoryResponse
               .filter((item: any) => item.currentStock > 0 && item.product?._id)
@@ -659,7 +759,6 @@ export const BranchSalesReport: React.FC = () => {
                 displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
               }))
           : [];
-        console.log(`[${new Date().toISOString()}] Processed inventory:`, newInventory);
         setInventory(newInventory);
 
         if (newInventory.length === 0) {
@@ -669,7 +768,6 @@ export const BranchSalesReport: React.FC = () => {
           setError('');
         }
       } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Fetch error:`, err);
         setError(err.message || t.errors.fetch_sales);
         toast.error(err.message || t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left' });
         setSales([]);
@@ -769,23 +867,19 @@ export const BranchSalesReport: React.FC = () => {
       toast.error(t.errors.empty_cart, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
-
     if (customerPhone && !/^\+?\d{7,15}$/.test(customerPhone)) {
       toast.error(t.errors.invalid_customer_phone, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
-
     if (paymentMethod && !['cash', 'credit_card', 'bank_transfer'].includes(paymentMethod)) {
       toast.error(t.errors.invalid_payment_method, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
-
     const effectiveBranch = user?.branchId || selectedBranch;
     if (!effectiveBranch) {
       toast.error(t.errors.no_branch_assigned, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
-
     for (const item of cart) {
       const product = inventory.find((inv) => inv.product._id === item.productId);
       if (!product) {
@@ -801,7 +895,6 @@ export const BranchSalesReport: React.FC = () => {
         return;
       }
     }
-
     const saleData = {
       branch: effectiveBranch,
       items: cart.map((item) => ({
@@ -814,7 +907,6 @@ export const BranchSalesReport: React.FC = () => {
       customerName: customerName.trim() || undefined,
       customerPhone: customerPhone?.trim() || undefined,
     };
-
     try {
       await salesAPI.create(saleData);
       toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
@@ -825,42 +917,9 @@ export const BranchSalesReport: React.FC = () => {
       setPaymentMethod('cash');
       fetchData();
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Sale submission error:`, err);
       toast.error(t.errors.create_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
     }
   }, [cart, notes, paymentMethod, customerName, customerPhone, user, selectedBranch, inventory, t, isRtl, fetchData]);
-
-  const branchOptions = useMemo(() => {
-    if (user?.role === 'branch' && user?.branchId) {
-      const branch = branches.find((b) => b._id === user.branchId);
-      return branch ? [{ value: branch._id, label: branch.displayName }] : [];
-    }
-    return [
-      { value: '', label: t.branches.select_branch },
-      ...branches.map((branch) => ({ value: branch._id, label: branch.displayName })),
-    ];
-  }, [branches, t.branches, user]);
-
-  const paymentMethodOptions = useMemo(
-    () => [
-      { value: 'cash', label: t.paymentMethods.cash },
-      { value: 'credit_card', label: t.paymentMethods.credit_card },
-      { value: 'bank_transfer', label: t.paymentMethods.bank_transfer },
-    ],
-    [t.paymentMethods]
-  );
-
-  const periodOptions = useMemo(
-    () => [
-      { value: 'all', label: isRtl ? 'الكل' : 'All' },
-      { value: 'custom', label: t.customRange },
-    ],
-    [t, isRtl]
-  );
-
-  const totalCartAmount = useMemo(() => {
-    return cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0).toFixed(2);
-  }, [cart]);
 
   return (
     <div className={`mx-auto px-4 sm:px-6 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
@@ -873,14 +932,12 @@ export const BranchSalesReport: React.FC = () => {
           </div>
         </div>
       </header>
-
       {error && (
         <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-red-600" />
           <span className="text-red-600 text-sm font-medium">{error}</span>
         </div>
       )}
-
       <div className="mb-8">
         <div className="flex border-b border-gray-200">
           <button
@@ -897,7 +954,6 @@ export const BranchSalesReport: React.FC = () => {
           </button>
         </div>
       </div>
-
       {activeTab === 'new' && (
         <div className={`space-y-8 ${cart.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-8 lg:space-y-0' : ''}`}>
           <section className={`${cart.length > 0 ? 'lg:col-span-2 lg:overflow-y-auto lg:max-h-[calc(100vh-12rem)] scrollbar-none' : ''}`}>
@@ -949,89 +1005,28 @@ export const BranchSalesReport: React.FC = () => {
               </div>
             )}
           </section>
-
           {cart.length > 0 && (
-            <aside className="lg:col-span-1 lg:sticky lg:top-8 space-y-6 max-h-[calc(100vh-12rem)] overflow-y-auto scrollbar-none">
-              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-xl font-bold text-gray-900 mb-6">{t.cart}</h3>
-                <div className="space-y-4">
-                  {cart.map((item) => (
-                    <div key={item.productId} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
-                      <div className="flex-1">
-                        <p className="font-semibold text-gray-900 text-sm">{item.displayName || t.errors.deleted_product}</p>
-                        <p className="text-sm text-gray-600">
-                          {item.quantity} {item.displayUnit || t.units.default} | {item.unitPrice} {t.currency} = {(item.quantity * item.unitPrice).toFixed(2)} {t.currency}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <QuantityInput
-                          value={item.quantity}
-                          onChange={(val) => updateCartQuantity(item.productId, parseInt(val) || 0)}
-                          onIncrement={() => updateCartQuantity(item.productId, item.quantity + 1)}
-                          onDecrement={() => updateCartQuantity(item.productId, item.quantity - 1)}
-                        />
-                        <button
-                          onClick={() => removeFromCart(item.productId)}
-                          className="w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
-                          aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  <div className="border-t pt-4">
-                    <div className="flex justify-between font-bold text-gray-900 text-sm">
-                      <span>{t.total}:</span>
-                      <span className="text-amber-600">{totalCartAmount} {t.currency}</span>
-                    </div>
-                  </div>
-                  <div className="mt-4 space-y-4">
-                    <input
-                      type="text"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      placeholder={t.customerName}
-                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-                      aria-label={t.customerName}
-                    />
-                    <input
-                      type="text"
-                      value={customerPhone || ''}
-                      onChange={(e) => setCustomerPhone(e.target.value)}
-                      placeholder={t.customerPhone}
-                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-                      aria-label={t.customerPhone}
-                    />
-                    <ProductDropdown
-                      value={paymentMethod}
-                      onChange={setPaymentMethod}
-                      options={paymentMethodOptions}
-                      ariaLabel={t.paymentMethod}
-                    />
-                    <textarea
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      placeholder={t.notes}
-                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm resize-none h-24 ${isRtl ? 'text-right' : 'text-left'}`}
-                      aria-label={t.notes}
-                    />
-                  </div>
-                  <button
-                    onClick={handleSubmitSale}
-                    className="w-full mt-4 px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                    disabled={cart.length === 0 || !selectedBranch}
-                    aria-label={t.submitSale}
-                  >
-                    {t.submitSale}
-                  </button>
-                </div>
-              </div>
-            </aside>
+            <CartSection
+              cart={cart}
+              inventory={inventory}
+              notes={notes}
+              setNotes={setNotes}
+              paymentMethod={paymentMethod}
+              setPaymentMethod={setPaymentMethod}
+              customerName={customerName}
+              setCustomerName={setCustomerName}
+              customerPhone={customerPhone}
+              setCustomerPhone={setCustomerPhone}
+              updateCartQuantity={updateCartQuantity}
+              removeFromCart={removeFromCart}
+              handleSubmitSale={handleSubmitSale}
+              totalCartAmount={totalCartAmount}
+              isRtl={isRtl}
+              t={t}
+            />
           )}
         </div>
       )}
-
       {activeTab === 'previous' && (
         <div className="mt-8">
           <h2 className="text-xl font-bold text-gray-900 mb-6">{t.previousSales}</h2>
@@ -1094,7 +1089,7 @@ export const BranchSalesReport: React.FC = () => {
                     disabled={salesLoading}
                   >
                     {salesLoading ? (
-                      <svg className="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 24">
+                      <svg className="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
