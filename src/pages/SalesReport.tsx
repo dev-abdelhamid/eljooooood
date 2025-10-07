@@ -448,6 +448,8 @@ export const SalesReport: React.FC = () => {
           salesAPI.getAll(salesParams),
           salesAPI.getAnalytics(analyticsParams),
         ]);
+        console.log('Sales Response:', salesResponse);
+        console.log('Analytics Response:', analyticsResponse);
         const newSales = (salesResponse.sales || []).map((sale: any) => ({
           _id: sale._id,
           orderNumber: sale.saleNumber || sale.orderNumber || 'N/A',
@@ -521,7 +523,7 @@ export const SalesReport: React.FC = () => {
               : ds.departmentNameEn || ds.departmentName || t.errors.departments.unknown,
           })),
           leastDepartmentSales: (analyticsResponse.leastDepartmentSales || []).map((ds: any) => ({
-            ...bs,
+            ...ds,
             displayName: isRtl
               ? ds.departmentName
               : ds.departmentNameEn || ds.departmentName || t.errors.departments.unknown,
@@ -547,9 +549,14 @@ export const SalesReport: React.FC = () => {
         });
         setError('');
       } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Fetch error:`, err.message, err.stack);
-        setError(t.errors.fetch_sales);
-        toast.error(t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left' });
+        console.error(`[${new Date().toISOString()}] Fetch error:`, {
+          message: err.message,
+          stack: err.stack,
+          response: err.response?.data,
+          status: err.response?.status,
+        });
+        setError(`${t.errors.fetch_sales}: ${err.message}`);
+        toast.error(`${t.errors.fetch_sales}: ${err.message}`, { position: isRtl ? 'top-right' : 'top-left' });
         setSales([]);
       } finally {
         setLoading(false);
@@ -744,7 +751,7 @@ export const SalesReport: React.FC = () => {
       bar: {
         borderRadius: 6,
         borderSkipped: false,
-        barThickness: 10, // عرض أصغر للأعمدة
+        barThickness: 10,
       },
       line: {
         tension: 0.5,
@@ -827,7 +834,7 @@ export const SalesReport: React.FC = () => {
         backgroundColor: (ctx: any) => createGradient(ctx.chart.ctx, chartColors[4]),
         borderColor: chartColors[4],
         borderWidth: 1,
-        barThickness: 8, // عرض أصغر للفروع
+        barThickness: 8,
       },
     ],
   }), [analytics.branchSales, t]);
