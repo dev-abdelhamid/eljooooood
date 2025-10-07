@@ -599,7 +599,6 @@ export const BranchSalesReport: React.FC = () => {
           </>
         )}
       </div>
-      <SaleModal sale={selectedSale} onClose={() => setSelectedSale(null)} />
     </div>
   );
 };
