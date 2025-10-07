@@ -1,21 +1,17 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useSocket } from '../contexts/SocketContext';
+import { useSocket } from '../contexts/SocketContext'; // استخدام useSocket للسوكت
 import salesAPI from '../services/salesAPI';
 import { branchesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, DollarSign, Search, X, ChevronDown, Edit, Trash } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { Bar, Line } from 'react-chartjs-2';
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend } from 'chart.js';
+import ReactECharts from 'echarts-for-react';
 import { debounce } from 'lodash';
 import Papa from 'papaparse';
 
-// تسجيل مكونات Chart.js
-ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend);
-
-// تعريف الأنواع
+// تعريف الأنواع باستخدام TypeScript (شيلنا الـ returns)
 interface Sale {
   _id: string;
   orderNumber: string;
@@ -99,6 +95,7 @@ interface SalesAnalytics {
   totalSales: number;
   totalCount: number;
   averageOrderValue: number;
+  returnRate: number;
   topProduct: {
     productId: string | null;
     productName: string;
@@ -109,10 +106,10 @@ interface SalesAnalytics {
   };
   salesTrends: Array<{ period: string; totalSales: number; saleCount: number }>;
   topCustomers: Array<{ customerName: string; customerPhone: string; totalSpent: number; purchaseCount: number }>;
-  unknownCustomers: Array<{ customerName: string; customerPhone: string; totalSpent: number; purchaseCount: number }>;
+  paymentMethods: Array<{ paymentMethod: string; totalAmount: number; count: number }>;
 }
 
-// الترجمات
+// الترجمات (نظفتها وشيلنا ما يتعلق بالمرتجعات)
 const translations = {
   ar: {
     title: 'تقرير المبيعات',
@@ -127,24 +124,22 @@ const translations = {
     totalSales: 'إجمالي المبيعات',
     totalCount: 'عدد المبيعات',
     averageOrderValue: 'متوسط قيمة الطلب',
+    returnRate: 'نسبة المرتجعات',
     topProduct: 'المنتج الأكثر مبيعًا',
     salesTrends: 'اتجاهات المبيعات',
     topCustomers: 'أفضل العملاء',
-    unknownCustomers: 'عملاء غير معروفين',
+    paymentMethodsLabel: 'طرق الدفع',
     noSales: 'لا توجد مبيعات',
     date: 'التاريخ',
     quantity: 'الكمية',
     branchFilter: 'اختر فرعًا',
     allBranches: 'جميع الفروع',
-    searchPlaceholder: 'ابحث باسم العميل، رقم الهاتف، أو المنتج...',
+    searchPlaceholder: 'ابحث عن المبيعات...',
     loadMore: 'تحميل المزيد',
     editSale: 'تعديل المبيعة',
     deleteSale: 'حذف المبيعة',
     confirmDelete: 'هل أنت متأكد من حذف هذه المبيعة؟',
     export: 'تصدير',
-    customerNameLabel: 'اسم العميل',
-    customerPhoneLabel: 'رقم الهاتف',
-    paymentMethodsLabel: 'طريقة الدفع',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       fetch_sales: 'خطأ أثناء جلب المبيعات',
@@ -160,6 +155,7 @@ const translations = {
     paymentMethods: {
       cash: 'نقدي',
       card: 'بطاقة ائتمان',
+      credit: 'ائتمان',
     },
     paymentStatus: {
       pending: 'معلق',
@@ -180,24 +176,22 @@ const translations = {
     totalSales: 'Total Sales',
     totalCount: 'Total Sale Count',
     averageOrderValue: 'Average Order Value',
+    returnRate: 'Return Rate',
     topProduct: 'Top Selling Product',
     salesTrends: 'Sales Trends',
     topCustomers: 'Top Customers',
-    unknownCustomers: 'Unknown Customers',
+    paymentMethodsLabel: 'Payment Methods',
     noSales: 'No sales found',
     date: 'Date',
     quantity: 'Quantity',
     branchFilter: 'Select Branch',
     allBranches: 'All Branches',
-    searchPlaceholder: 'Search by customer name, phone, or product...',
+    searchPlaceholder: 'Search sales...',
     loadMore: 'Load More',
     editSale: 'Edit Sale',
     deleteSale: 'Delete Sale',
     confirmDelete: 'Are you sure you want to delete this sale?',
     export: 'Export',
-    customerNameLabel: 'Customer Name',
-    customerPhoneLabel: 'Phone Number',
-    paymentMethodsLabel: 'Payment Method',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       fetch_sales: 'Error fetching sales',
@@ -213,6 +207,7 @@ const translations = {
     paymentMethods: {
       cash: 'Cash',
       card: 'Credit Card',
+      credit: 'Credit',
     },
     paymentStatus: {
       pending: 'Pending',
@@ -222,7 +217,7 @@ const translations = {
   },
 };
 
-// مكون البحث
+// مكون البحث (محسن للتنسيق)
 const SearchInput = React.memo<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -240,7 +235,7 @@ const SearchInput = React.memo<{
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}
+        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={placeholder}
       />
       {value && (
@@ -256,7 +251,7 @@ const SearchInput = React.memo<{
   );
 });
 
-// مكون فلتر الفروع
+// مكون فلتر الفروع (محسن)
 const BranchFilter = React.memo<{
   branches: Branch[];
   selectedBranch: string;
@@ -271,7 +266,7 @@ const BranchFilter = React.memo<{
       <select
         value={selectedBranch}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-full ${isRtl ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm appearance-none ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}
+        className={`w-full ${isRtl ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm appearance-none ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={placeholder}
       >
         <option value="">{allBranchesLabel}</option>
@@ -288,50 +283,42 @@ const BranchFilter = React.memo<{
   );
 });
 
-// مكون بطاقة المبيعة
+// مكون بطاقة المبيعة (محسن: تنسيق هادئ، عرض شرطي لبيانات العميل وطريقة الدفع، padding أكبر)
 const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete: (id: string) => void }>(
   ({ sale, onEdit, onDelete }) => {
     const { language } = useLanguage();
     const isRtl = language === 'ar';
     const t = translations[isRtl ? 'ar' : 'en'];
     return (
-      <div className="p-3 sm:p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100">
-        <div className="flex flex-col sm:flex-row items-start justify-between space-y-3 sm:space-y-0 sm:space-x-4">
-          <div className="space-y-2 w-full">
-            <h3 className="font-semibold text-gray-800 text-base sm:text-lg font-alexandria">{sale.orderNumber}</h3>
-            <p className="text-xs text-gray-500 font-alexandria">{t.date}: {sale.createdAt}</p>
-            <p className="text-xs text-gray-500 font-alexandria">{t.branchSales}: {sale.branch?.displayName || t.errors.departments.unknown}</p>
-            <p className="text-xs text-gray-500 font-alexandria">{t.totalSales}: {sale.totalAmount} {t.currency}</p>
+      <div className="p-6 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100">
+        <div className="flex items-start justify-between space-x-4">
+          <div className="space-y-2">
+            <h3 className="font-semibold text-gray-800 text-lg">{sale.orderNumber}</h3>
+            <p className="text-sm text-gray-500">{t.date}: {sale.createdAt}</p>
+            <p className="text-sm text-gray-500">{t.branchSales}: {sale.branch?.displayName || t.errors.departments.unknown}</p>
+            <p className="text-sm text-gray-500">{t.totalSales}: {sale.totalAmount} {t.currency}</p>
             {sale.paymentMethod && (
-              <p className="text-xs text-gray-500 font-alexandria">
+              <p className="text-sm text-gray-500">
                 {t.paymentMethodsLabel}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] || 'N/A'}
               </p>
             )}
-            {sale.customerName && (
-              <p className="text-xs text-gray-500 font-alexandria">
-                <span className="font-medium">{t.customerNameLabel}: </span>{sale.customerName}
-              </p>
-            )}
-            {sale.customerPhone && (
-              <p className="text-xs text-gray-500 font-alexandria">
-                <span className="font-medium">{t.customerPhoneLabel}: </span>{sale.customerPhone}
-              </p>
-            )}
-            {sale.notes && <p className="text-xs text-gray-400 italic font-alexandria">{t.notes}: {sale.notes}</p>}
-            <ul className="space-y-1 text-xs text-gray-600">
+            {sale.customerName && <p className="text-sm text-gray-500">{t.customerName}: {sale.customerName}</p>}
+            {sale.customerPhone && <p className="text-sm text-gray-500">{t.customerPhone}: {sale.customerPhone}</p>}
+            {sale.notes && <p className="text-sm text-gray-400 italic">{t.notes}: {sale.notes}</p>}
+            <ul className="space-y-1 text-sm text-gray-600">
               {sale.items.map((item, index) => (
-                <li key={index} className="border-t border-gray-100 pt-1 font-alexandria">
+                <li key={index} className="border-t border-gray-100 pt-1">
                   {item.displayName || t.errors.deleted_product} ({item.department?.displayName || t.errors.departments.unknown}) - {t.quantity}: {item.quantity} {item.displayUnit || t.units.default}, {t.totalSales}: {item.unitPrice} {t.currency}
                 </li>
               ))}
             </ul>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-3">
             <button onClick={() => onEdit(sale)} aria-label={t.editSale}>
-              <Edit className="w-4 h-4 text-blue-500 hover:text-blue-700 transition-colors" />
+              <Edit className="w-5 h-5 text-blue-500 hover:text-blue-700 transition-colors" />
             </button>
             <button onClick={() => onDelete(sale._id)} aria-label={t.deleteSale}>
-              <Trash className="w-4 h-4 text-red-500 hover:text-red-700 transition-colors" />
+              <Trash className="w-5 h-5 text-red-500 hover:text-red-700 transition-colors" />
             </button>
           </div>
         </div>
@@ -344,9 +331,10 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
 const SalesReport: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
-  const { socket, emit, isConnected } = useSocket();
+  const { socket, emit, isConnected } = useSocket(); // استخدام useSocket بدلاً من io
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
+
   const [sales, setSales] = useState<Sale[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [analytics, setAnalytics] = useState<SalesAnalytics>({
@@ -356,18 +344,14 @@ const SalesReport: React.FC = () => {
     leastProductSales: [],
     departmentSales: [],
     leastDepartmentSales: [],
-    totalSales: 77042,
-    totalCount: 140,
-    averageOrderValue: 550.3,
-    topProduct: { productId: '1', productName: 'أصابع كاجو', displayName: 'أصابع كاجو', totalQuantity: 549, totalRevenue: 0 },
+    totalSales: 0,
+    totalCount: 0,
+    averageOrderValue: 0,
+    returnRate: 0,
+    topProduct: { productId: null, productName: '', displayName: '', totalQuantity: 0, totalRevenue: 0 },
     salesTrends: [],
-    topCustomers: [
-      { customerName: 'محمد', customerPhone: '01026864764', totalSpent: 14313, purchaseCount: 5 },
-      { customerName: 'جديد', customerPhone: '01013303303', totalSpent: 800, purchaseCount: 1 },
-      { customerName: 'محمد ياسر', customerPhone: '01010101111', totalSpent: 204, purchaseCount: 1 },
-      { customerName: 'ندا', customerPhone: '0101010101', totalSpent: 200, purchaseCount: 1 },
-    ],
-    unknownCustomers: [{ customerName: '', customerPhone: '', totalSpent: 61515, purchaseCount: 131 }],
+    topCustomers: [],
+    paymentMethods: [],
   });
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
@@ -382,7 +366,7 @@ const SalesReport: React.FC = () => {
   const [hasMore, setHasMore] = useState(true);
   const [tabValue, setTabValue] = useState(0);
 
-  const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim().toLowerCase()), 300), []);
+  const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim()), 300), []);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -420,19 +404,23 @@ const SalesReport: React.FC = () => {
         setLoading(false);
         return;
       }
+
       setLoading(pageNum === 1);
       setSalesLoading(pageNum > 1);
       try {
         const salesParams: any = { page: pageNum, limit: 20, sort: '-createdAt', branch: filterBranch };
         if (filterStartDate) salesParams.startDate = filterStartDate;
         if (filterEndDate) salesParams.endDate = filterEndDate;
+
         const analyticsParams: any = { branch: filterBranch };
         if (filterStartDate) analyticsParams.startDate = filterStartDate;
         if (filterEndDate) analyticsParams.endDate = filterEndDate;
+
         const [salesResponse, analyticsResponse] = await Promise.all([
           salesAPI.getAll(salesParams),
           salesAPI.getAnalytics(analyticsParams),
         ]);
+
         const newSales = (salesResponse.sales || []).map((sale: any) => ({
           _id: sale._id,
           orderNumber: sale.saleNumber || sale.orderNumber || 'N/A',
@@ -476,8 +464,10 @@ const SalesReport: React.FC = () => {
           customerName: sale.customerName,
           customerPhone: sale.customerPhone,
         }));
+
         setSales((prev) => (append ? [...prev, ...newSales] : newSales));
         setHasMore(salesResponse.total > pageNum * 20);
+
         setAnalytics({
           branchSales: (analyticsResponse.branchSales || []).map((bs: any) => ({
             ...bs,
@@ -511,28 +501,31 @@ const SalesReport: React.FC = () => {
               ? ds.departmentName
               : ds.departmentNameEn || ds.departmentName || t.errors.departments.unknown,
           })),
-          totalSales: 77042,
-          totalCount: 140,
-          averageOrderValue: 550.3,
-          topProduct: {
-            productId: '1',
-            productName: 'أصابع كاجو',
-            displayName: 'أصابع كاجو',
-            totalQuantity: 549,
-            totalRevenue: 0,
-          },
+          totalSales: analyticsResponse.totalSales || 0,
+          totalCount: analyticsResponse.totalCount || 0,
+          averageOrderValue: analyticsResponse.averageOrderValue || 0,
+          returnRate: analyticsResponse.returnRate || 0,
+          topProduct: analyticsResponse.topProduct
+            ? {
+                ...analyticsResponse.topProduct,
+                displayName: isRtl
+                  ? analyticsResponse.topProduct.productName || t.errors.deleted_product
+                  : analyticsResponse.topProduct.productNameEn ||
+                    analyticsResponse.topProduct.productName ||
+                    t.errors.deleted_product,
+              }
+            : { productId: null, productName: '', displayName: '', totalQuantity: 0, totalRevenue: 0 },
           salesTrends: (analyticsResponse.salesTrends || []).map((trend: any) => ({
             ...trend,
-            period: new Date(trend.period).toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', { day: '2-digit', month: '2-digit' }),
+            period: formatDate(trend.period, language),
           })),
-          topCustomers: [
-            { customerName: 'محمد', customerPhone: '01026864764', totalSpent: 14313, purchaseCount: 5 },
-            { customerName: 'جديد', customerPhone: '01013303303', totalSpent: 800, purchaseCount: 1 },
-            { customerName: 'محمد ياسر', customerPhone: '01010101111', totalSpent: 204, purchaseCount: 1 },
-            { customerName: 'ندا', customerPhone: '0101010101', totalSpent: 200, purchaseCount: 1 },
-          ],
-          unknownCustomers: [{ customerName: '', customerPhone: '', totalSpent: 61515, purchaseCount: 131 }],
+          topCustomers: analyticsResponse.topCustomers || [],
+          paymentMethods: (analyticsResponse.paymentMethods || []).map((pm: any) => ({
+            ...pm,
+            paymentMethod: t.paymentMethods[pm.paymentMethod as keyof typeof t.paymentMethods] || pm.paymentMethod || 'N/A',
+          })),
         });
+
         setError('');
       } catch (err: any) {
         console.error(`[${new Date().toISOString()}] Fetch error:`, err.message, err.stack);
@@ -550,10 +543,11 @@ const SalesReport: React.FC = () => {
   useEffect(() => {
     fetchBranches();
     fetchData();
-  }, [fetchBranches, fetchData, filterBranch]);
+  }, [fetchBranches, fetchData, filterBranch]); // أضفت filterBranch عشان يتحدث عند التغيير
 
   useEffect(() => {
     if (!socket || !isConnected) return;
+
     socket.on('saleCreated', (data: any) => {
       toast.info(isRtl ? `تم إنشاء مبيعة جديدة: ${data.saleNumber}` : `New sale created: ${data.saleNumber}`, {
         position: isRtl ? 'top-right' : 'top-left',
@@ -562,6 +556,7 @@ const SalesReport: React.FC = () => {
         fetchData();
       }
     });
+
     socket.on('saleDeleted', (data: any) => {
       toast.info(isRtl ? `تم حذف مبيعة: ${data.saleId}` : `Sale deleted: ${data.saleId}`, {
         position: isRtl ? 'top-right' : 'top-left',
@@ -570,6 +565,7 @@ const SalesReport: React.FC = () => {
         fetchData();
       }
     });
+
     return () => {
       socket.off('saleCreated');
       socket.off('saleDeleted');
@@ -604,14 +600,14 @@ const SalesReport: React.FC = () => {
   );
 
   const handleExport = useCallback(() => {
-    const csvData = filteredSales.map((sale) => ({
-      [t.orderNumber]: sale.orderNumber,
-      [t.branchSales]: sale.branch?.displayName || t.errors.departments.unknown,
-      [t.totalSales]: `${sale.totalAmount} ${t.currency}`,
-      [t.date]: sale.createdAt,
-      [t.paymentMethodsLabel]: sale.paymentMethod ? t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] : 'N/A',
-      [t.customerNameLabel]: sale.customerName || 'N/A',
-      [t.customerPhoneLabel]: sale.customerPhone || 'N/A',
+    const csvData = sales.map((sale) => ({
+      OrderNumber: sale.orderNumber,
+      Branch: sale.branch?.displayName || t.errors.departments.unknown,
+      TotalAmount: sale.totalAmount,
+      CreatedAt: sale.createdAt,
+      PaymentMethod: sale.paymentMethod ? t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] : 'N/A',
+      CustomerName: sale.customerName || 'N/A',
+      CustomerPhone: sale.customerPhone || 'N/A',
       Items: sale.items
         .map((item) => `${item.displayName} (${item.quantity} x ${item.unitPrice} ${t.currency})`)
         .join('; '),
@@ -620,270 +616,596 @@ const SalesReport: React.FC = () => {
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `sales_report_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = 'sales_report.csv';
     link.click();
-    URL.revokeObjectURL(link.href);
-  }, [filteredSales, t]);
+  }, [sales, t]);
 
-  const filteredSales = useMemo(() => {
-    if (!searchTerm) return sales;
-    return sales.filter((sale) =>
-      [sale.customerName, sale.customerPhone, ...sale.items.map((item) => item.displayName)]
-        .filter((v): v is string => !!v)
-        .some((value) => value.toLowerCase().includes(searchTerm))
-    );
-  }, [sales, searchTerm]);
+  const filteredSales = useMemo(
+    () => sales.filter((sale) => sale.orderNumber.toLowerCase().includes(searchTerm.toLowerCase())),
+    [sales, searchTerm]
+  );
 
-  // ألوان الرسوم
+  // ألوان الرسوم (لم تغير)
   const chartColors = ['#FBBF24', '#3B82F6', '#FF6384', '#4BC0C0', '#9966FF'];
 
-  // خيارات الرسوم البيانية
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        display: false, // إخفاء الـ legend لأن العنوان سيظهر في الأعلى
-      },
-      tooltip: {
-        backgroundColor: '#1F2937',
-        titleColor: '#FFFFFF',
-        bodyColor: '#FFFFFF',
-        borderColor: '#4B5563',
-        borderWidth: 1,
-        titleFont: { size: 12, family: 'Alexandria', weight: '500' },
-        bodyFont: { size: 12, family: 'Alexandria' },
-        padding: 10,
-      },
-      title: {
-        display: true,
-        font: { size: 16, family: 'Alexandria', weight: '600' },
-        color: '#1F2937',
-        padding: { top: 10, bottom: 20 },
-      },
+  // خيارات الرسوم محسنة: خطوط أصغر، تنسيق RTL، مسافات أكبر في pies، تصميم هادئ
+  const productSalesOption = {
+    title: {
+      text: t.productSales,
+      left: 'center',
+      textStyle: { fontSize: 14, fontWeight: 'normal', color: '#4B5563' }, // خط أصغر، هادئ
     },
-    scales: {
-      x: {
-        title: {
-          display: true,
-          text: t.productSales, // عنوان المحور X
-          font: { size: 12, family: 'Alexandria', weight: '500' },
-          color: '#1F2937',
-        },
-        ticks: {
-          font: { size: 10, family: 'Alexandria', weight: '400' },
-          color: '#1F2937',
-          maxRotation: isRtl ? -45 : 45,
-          minRotation: isRtl ? -45 : 45,
-          autoSkip: false, // منع التخطي لضمان عرض جميع الأسماء
-        },
-        grid: { display: false },
-      },
-      y: {
-        title: {
-          display: true,
-          text: `${t.totalSales} (${t.currency})`,
-          font: { size: 12, family: 'Alexandria', weight: '500' },
-          color: '#1F2937',
-        },
-        ticks: {
-          font: { size: 10, family: 'Alexandria', weight: '400' },
-          color: '#1F2937',
-        },
-        grid: { color: '#E5E7EB' },
-      },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(251, 191, 36, 0.1)', shadowBlur: 5 } },
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#E5E7EB',
+      borderWidth: 1,
+      padding: 8,
+      textStyle: { color: '#6B7280', fontSize: 10 },
     },
-    barPercentage: 0.4, // تقليل عرض الأعمدة
-    categoryPercentage: 0.45, // تقليل المسافة بين الأعمدة
+    legend: { top: 'bottom', itemGap: 8, textStyle: { fontSize: 10, color: '#6B7280' } },
+    grid: { left: '5%', right: '5%', bottom: '20%', containLabel: true },
+    xAxis: [
+      {
+        type: 'category',
+        data: analytics.productSales.slice(0, 5).map((p) => p.displayName),
+        axisTick: { alignWithLabel: true },
+        axisLabel: { rotate: isRtl ? -45 : 45, fontSize: 9, color: '#6B7280' },
+        axisLine: { lineStyle: { color: '#E5E7EB' } },
+      },
+    ],
+    yAxis: [{ type: 'value', axisLabel: { fontSize: 9, color: '#6B7280' }, axisLine: { lineStyle: { color: '#E5E7EB' } } }],
+    series: [
+      {
+        name: `${t.totalSales} (${t.currency})`,
+        type: 'bar',
+        barWidth: '30%',
+        data: analytics.productSales.slice(0, 5).map((p) => p.totalRevenue),
+        itemStyle: {
+          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#FBBF24' }, { offset: 1, color: '#D97706' }] },
+          shadowColor: 'rgba(0,0,0,0.1)',
+          shadowBlur: 3,
+          shadowOffsetY: 1,
+          barBorderRadius: [3, 3, 0, 0],
+        },
+      },
+      {
+        name: t.quantity,
+        type: 'bar',
+        barWidth: '30%',
+        data: analytics.productSales.slice(0, 5).map((p) => p.totalQuantity),
+        itemStyle: {
+          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#3B82F6' }, { offset: 1, color: '#1D4ED8' }] },
+          shadowColor: 'rgba(0,0,0,0.1)',
+          shadowBlur: 3,
+          shadowOffsetY: 1,
+          barBorderRadius: [3, 3, 0, 0],
+        },
+      },
+    ],
+    media: [
+      {
+        query: { maxWidth: 600 },
+        option: {
+          legend: { orient: 'horizontal', bottom: 0, itemGap: 5, textStyle: { fontSize: 9 } },
+          grid: { bottom: '25%', containLabel: true },
+          xAxis: [{ axisLabel: { rotate: isRtl ? -60 : 60, fontSize: 8 } }],
+          yAxis: [{ axisLabel: { fontSize: 8 } }],
+          series: [{ barWidth: '25%' }, { barWidth: '25%' }],
+        },
+      },
+    ],
   };
 
-  const salesTrendsOptions = {
-    ...chartOptions,
-    plugins: {
-      ...chartOptions.plugins,
-      title: { ...chartOptions.plugins.title, text: t.salesTrends },
+  const leastProductSalesOption = {
+    title: {
+      text: t.leastProductSales,
+      left: 'center',
+      textStyle: { fontSize: 14, fontWeight: 'normal', color: '#4B5563' },
     },
-    scales: {
-      x: {
-        title: {
-          display: true,
-          text: t.date,
-          font: { size: 12, family: 'Alexandria', weight: '500' },
-          color: '#1F2937',
-        },
-        ticks: {
-          font: { size: 10, family: 'Alexandria', weight: '400' },
-          color: '#1F2937',
-          maxRotation: isRtl ? -45 : 45,
-          minRotation: isRtl ? -45 : 45,
-          autoSkip: false,
-        },
-        grid: { display: false },
-      },
-      y: {
-        title: {
-          display: true,
-          text: t.totalCount,
-          font: { size: 12, family: 'Alexandria', weight: '500' },
-          color: '#1F2937',
-        },
-        ticks: {
-          font: { size: 10, family: 'Alexandria', weight: '400' },
-          color: '#1F2937',
-        },
-        grid: { color: '#E5E7EB' },
-      },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(251, 191, 36, 0.1)', shadowBlur: 5 } },
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#E5E7EB',
+      borderWidth: 1,
+      padding: 8,
+      textStyle: { color: '#6B7280', fontSize: 10 },
     },
-  };
-
-  // بيانات الرسوم البيانية
-  const productSalesData = {
-    labels: analytics.productSales.slice(0, 10).map((p) => p.displayName),
-    datasets: [
+    legend: { top: 'bottom', itemGap: 8, textStyle: { fontSize: 10, color: '#6B7280' } },
+    grid: { left: '5%', right: '5%', bottom: '20%', containLabel: true },
+    xAxis: [
       {
-        label: t.productSales,
-        data: analytics.productSales.slice(0, 10).map((p) => p.totalRevenue),
-        backgroundColor: chartColors[0],
-        borderWidth: 0,
+        type: 'category',
+        data: analytics.leastProductSales.slice(0, 5).map((p) => p.displayName),
+        axisTick: { alignWithLabel: true },
+        axisLabel: { rotate: isRtl ? -45 : 45, fontSize: 9, color: '#6B7280' },
+        axisLine: { lineStyle: { color: '#E5E7EB' } },
+      },
+    ],
+    yAxis: [{ type: 'value', axisLabel: { fontSize: 9, color: '#6B7280' }, axisLine: { lineStyle: { color: '#E5E7EB' } } }],
+    series: [
+      {
+        name: `${t.totalSales} (${t.currency})`,
+        type: 'bar',
+        barWidth: '30%',
+        data: analytics.leastProductSales.slice(0, 5).map((p) => p.totalRevenue),
+        itemStyle: {
+          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#FF6384' }, { offset: 1, color: '#E11D48' }] },
+          shadowColor: 'rgba(0,0,0,0.1)',
+          shadowBlur: 3,
+          shadowOffsetY: 1,
+          barBorderRadius: [3, 3, 0, 0],
+        },
+      },
+      {
+        name: t.quantity,
+        type: 'bar',
+        barWidth: '30%',
+        data: analytics.leastProductSales.slice(0, 5).map((p) => p.totalQuantity),
+        itemStyle: {
+          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#4BC0C0' }, { offset: 1, color: '#0E7490' }] },
+          shadowColor: 'rgba(0,0,0,0.1)',
+          shadowBlur: 3,
+          shadowOffsetY: 1,
+          barBorderRadius: [3, 3, 0, 0],
+        },
+      },
+    ],
+    media: [
+      {
+        query: { maxWidth: 600 },
+        option: {
+          legend: { orient: 'horizontal', bottom: 0, itemGap: 5, textStyle: { fontSize: 9 } },
+          grid: { bottom: '25%', containLabel: true },
+          xAxis: [{ axisLabel: { rotate: isRtl ? -60 : 60, fontSize: 8 } }],
+          yAxis: [{ axisLabel: { fontSize: 8 } }],
+          series: [{ barWidth: '25%' }, { barWidth: '25%' }],
+        },
       },
     ],
   };
 
-  const leastProductSalesData = {
-    labels: analytics.leastProductSales.slice(0, 10).map((p) => p.displayName),
-    datasets: [
+  const departmentSalesOption = {
+    title: {
+      text: t.departmentSales,
+      left: 'center',
+      textStyle: { fontSize: 14, fontWeight: 'normal', color: '#4B5563' },
+    },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(251, 191, 36, 0.1)', shadowBlur: 5 } },
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#E5E7EB',
+      borderWidth: 1,
+      padding: 8,
+      textStyle: { color: '#6B7280', fontSize: 10 },
+    },
+    legend: { top: 'bottom', itemGap: 8, textStyle: { fontSize: 10, color: '#6B7280' } },
+    grid: { left: '5%', right: '5%', bottom: '20%', containLabel: true },
+    xAxis: [
       {
-        label: t.leastProductSales,
-        data: analytics.leastProductSales.slice(0, 10).map((p) => p.totalRevenue),
-        backgroundColor: chartColors[1],
-        borderWidth: 0,
+        type: 'category',
+        data: analytics.departmentSales.slice(0, 5).map((d) => d.displayName),
+        axisTick: { alignWithLabel: true },
+        axisLabel: { rotate: isRtl ? -45 : 45, fontSize: 9, color: '#6B7280' },
+        axisLine: { lineStyle: { color: '#E5E7EB' } },
+      },
+    ],
+    yAxis: [{ type: 'value', axisLabel: { fontSize: 9, color: '#6B7280' }, axisLine: { lineStyle: { color: '#E5E7EB' } } }],
+    series: [
+      {
+        name: `${t.totalSales} (${t.currency})`,
+        type: 'bar',
+        barWidth: '30%',
+        data: analytics.departmentSales.slice(0, 5).map((d) => d.totalRevenue),
+        itemStyle: {
+          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#9966FF' }, { offset: 1, color: '#7C3AED' }] },
+          shadowColor: 'rgba(0,0,0,0.1)',
+          shadowBlur: 3,
+          shadowOffsetY: 1,
+          barBorderRadius: [3, 3, 0, 0],
+        },
+      },
+      {
+        name: t.quantity,
+        type: 'bar',
+        barWidth: '30%',
+        data: analytics.departmentSales.slice(0, 5).map((d) => d.totalQuantity),
+        itemStyle: {
+          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#FBBF24' }, { offset: 1, color: '#D97706' }] },
+          shadowColor: 'rgba(0,0,0,0.1)',
+          shadowBlur: 3,
+          shadowOffsetY: 1,
+          barBorderRadius: [3, 3, 0, 0],
+        },
+      },
+    ],
+    media: [
+      {
+        query: { maxWidth: 600 },
+        option: {
+          legend: { orient: 'horizontal', bottom: 0, itemGap: 5, textStyle: { fontSize: 9 } },
+          grid: { bottom: '25%', containLabel: true },
+          xAxis: [{ axisLabel: { rotate: isRtl ? -60 : 60, fontSize: 8 } }],
+          yAxis: [{ axisLabel: { fontSize: 8 } }],
+          series: [{ barWidth: '25%' }, { barWidth: '25%' }],
+        },
       },
     ],
   };
 
-  const departmentSalesData = {
-    labels: analytics.departmentSales.slice(0, 10).map((d) => d.displayName),
-    datasets: [
+  const leastDepartmentSalesOption = {
+    title: {
+      text: t.leastDepartmentSales,
+      left: 'center',
+      textStyle: { fontSize: 14, fontWeight: 'normal', color: '#4B5563' },
+    },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(251, 191, 36, 0.1)', shadowBlur: 5 } },
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#E5E7EB',
+      borderWidth: 1,
+      padding: 8,
+      textStyle: { color: '#6B7280', fontSize: 10 },
+    },
+    legend: { top: 'bottom', itemGap: 8, textStyle: { fontSize: 10, color: '#6B7280' } },
+    grid: { left: '5%', right: '5%', bottom: '20%', containLabel: true },
+    xAxis: [
       {
-        label: t.departmentSales,
-        data: analytics.departmentSales.slice(0, 10).map((d) => d.totalRevenue),
-        backgroundColor: chartColors[2],
-        borderWidth: 0,
+        type: 'category',
+        data: analytics.leastDepartmentSales.slice(0, 5).map((d) => d.displayName),
+        axisTick: { alignWithLabel: true },
+        axisLabel: { rotate: isRtl ? -45 : 45, fontSize: 9, color: '#6B7280' },
+        axisLine: { lineStyle: { color: '#E5E7EB' } },
+      },
+    ],
+    yAxis: [{ type: 'value', axisLabel: { fontSize: 9, color: '#6B7280' }, axisLine: { lineStyle: { color: '#E5E7EB' } } }],
+    series: [
+      {
+        name: `${t.totalSales} (${t.currency})`,
+        type: 'bar',
+        barWidth: '30%',
+        data: analytics.leastDepartmentSales.slice(0, 5).map((d) => d.totalRevenue),
+        itemStyle: {
+          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#FF6384' }, { offset: 1, color: '#E11D48' }] },
+          shadowColor: 'rgba(0,0,0,0.1)',
+          shadowBlur: 3,
+          shadowOffsetY: 1,
+          barBorderRadius: [3, 3, 0, 0],
+        },
+      },
+      {
+        name: t.quantity,
+        type: 'bar',
+        barWidth: '30%',
+        data: analytics.leastDepartmentSales.slice(0, 5).map((d) => d.totalQuantity),
+        itemStyle: {
+          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#4BC0C0' }, { offset: 1, color: '#0E7490' }] },
+          shadowColor: 'rgba(0,0,0,0.1)',
+          shadowBlur: 3,
+          shadowOffsetY: 1,
+          barBorderRadius: [3, 3, 0, 0],
+        },
+      },
+    ],
+    media: [
+      {
+        query: { maxWidth: 600 },
+        option: {
+          legend: { orient: 'horizontal', bottom: 0, itemGap: 5, textStyle: { fontSize: 9 } },
+          grid: { bottom: '25%', containLabel: true },
+          xAxis: [{ axisLabel: { rotate: isRtl ? -60 : 60, fontSize: 8 } }],
+          yAxis: [{ axisLabel: { fontSize: 8 } }],
+          series: [{ barWidth: '25%' }, { barWidth: '25%' }],
+        },
       },
     ],
   };
 
-  const leastDepartmentSalesData = {
-    labels: analytics.leastDepartmentSales.slice(0, 10).map((d) => d.displayName),
-    datasets: [
+  const branchSalesOption = {
+    title: {
+      text: t.branchSales,
+      left: 'center',
+      textStyle: { fontSize: 14, fontWeight: 'normal', color: '#4B5563' },
+    },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(251, 191, 36, 0.1)', shadowBlur: 5 } },
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#E5E7EB',
+      borderWidth: 1,
+      padding: 8,
+      textStyle: { color: '#6B7280', fontSize: 10 },
+    },
+    legend: { top: 'bottom', itemGap: 8, textStyle: { fontSize: 10, color: '#6B7280' } },
+    grid: { left: '5%', right: '5%', bottom: '20%', containLabel: true },
+    xAxis: [
       {
-        label: t.leastDepartmentSales,
-        data: analytics.leastDepartmentSales.slice(0, 10).map((d) => d.totalRevenue),
-        backgroundColor: chartColors[3],
-        borderWidth: 0,
+        type: 'category',
+        data: analytics.branchSales.slice(0, 5).map((b) => b.displayName),
+        axisTick: { alignWithLabel: true },
+        axisLabel: { rotate: isRtl ? -45 : 45, fontSize: 9, color: '#6B7280' },
+        axisLine: { lineStyle: { color: '#E5E7EB' } },
+      },
+    ],
+    yAxis: [{ type: 'value', axisLabel: { fontSize: 9, color: '#6B7280' }, axisLine: { lineStyle: { color: '#E5E7EB' } } }],
+    series: [
+      {
+        name: `${t.totalSales} (${t.currency})`,
+        type: 'bar',
+        barWidth: '30%',
+        data: analytics.branchSales.slice(0, 5).map((b) => b.totalSales),
+        itemStyle: {
+          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#FBBF24' }, { offset: 1, color: '#D97706' }] },
+          shadowColor: 'rgba(0,0,0,0.1)',
+          shadowBlur: 3,
+          shadowOffsetY: 1,
+          barBorderRadius: [3, 3, 0, 0],
+        },
+      },
+      {
+        name: t.totalCount,
+        type: 'bar',
+        barWidth: '30%',
+        data: analytics.branchSales.slice(0, 5).map((b) => b.saleCount),
+        itemStyle: {
+          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#3B82F6' }, { offset: 1, color: '#1D4ED8' }] },
+          shadowColor: 'rgba(0,0,0,0.1)',
+          shadowBlur: 3,
+          shadowOffsetY: 1,
+          barBorderRadius: [3, 3, 0, 0],
+        },
+      },
+    ],
+    media: [
+      {
+        query: { maxWidth: 600 },
+        option: {
+          legend: { orient: 'horizontal', bottom: 0, itemGap: 5, textStyle: { fontSize: 9 } },
+          grid: { bottom: '25%', containLabel: true },
+          xAxis: [{ axisLabel: { rotate: isRtl ? -60 : 60, fontSize: 8 } }],
+          yAxis: [{ axisLabel: { fontSize: 8 } }],
+          series: [{ barWidth: '25%' }, { barWidth: '25%' }],
+        },
       },
     ],
   };
 
-  const branchSalesData = {
-    labels: analytics.branchSales.slice(0, 10).map((b) => b.displayName),
-    datasets: [
+  const leastBranchSalesOption = {
+    title: {
+      text: t.leastBranchSales,
+      left: 'center',
+      textStyle: { fontSize: 14, fontWeight: 'normal', color: '#4B5563' },
+    },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(251, 191, 36, 0.1)', shadowBlur: 5 } },
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#E5E7EB',
+      borderWidth: 1,
+      padding: 8,
+      textStyle: { color: '#6B7280', fontSize: 10 },
+    },
+    legend: { top: 'bottom', itemGap: 8, textStyle: { fontSize: 10, color: '#6B7280' } },
+    grid: { left: '5%', right: '5%', bottom: '20%', containLabel: true },
+    xAxis: [
       {
-        label: t.branchSales,
-        data: analytics.branchSales.slice(0, 10).map((b) => b.totalSales),
-        backgroundColor: chartColors[4],
-        borderWidth: 0,
+        type: 'category',
+        data: analytics.leastBranchSales.slice(0, 5).map((b) => b.displayName),
+        axisTick: { alignWithLabel: true },
+        axisLabel: { rotate: isRtl ? -45 : 45, fontSize: 9, color: '#6B7280' },
+        axisLine: { lineStyle: { color: '#E5E7EB' } },
+      },
+    ],
+    yAxis: [{ type: 'value', axisLabel: { fontSize: 9, color: '#6B7280' }, axisLine: { lineStyle: { color: '#E5E7EB' } } }],
+    series: [
+      {
+        name: `${t.totalSales} (${t.currency})`,
+        type: 'bar',
+        barWidth: '30%',
+        data: analytics.leastBranchSales.slice(0, 5).map((b) => b.totalSales),
+        itemStyle: {
+          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#FF6384' }, { offset: 1, color: '#E11D48' }] },
+          shadowColor: 'rgba(0,0,0,0.1)',
+          shadowBlur: 3,
+          shadowOffsetY: 1,
+          barBorderRadius: [3, 3, 0, 0],
+        },
+      },
+      {
+        name: t.totalCount,
+        type: 'bar',
+        barWidth: '30%',
+        data: analytics.leastBranchSales.slice(0, 5).map((b) => b.saleCount),
+        itemStyle: {
+          color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#4BC0C0' }, { offset: 1, color: '#0E7490' }] },
+          shadowColor: 'rgba(0,0,0,0.1)',
+          shadowBlur: 3,
+          shadowOffsetY: 1,
+          barBorderRadius: [3, 3, 0, 0],
+        },
+      },
+    ],
+    media: [
+      {
+        query: { maxWidth: 600 },
+        option: {
+          legend: { orient: 'horizontal', bottom: 0, itemGap: 5, textStyle: { fontSize: 9 } },
+          grid: { bottom: '25%', containLabel: true },
+          xAxis: [{ axisLabel: { rotate: isRtl ? -60 : 60, fontSize: 8 } }],
+          yAxis: [{ axisLabel: { fontSize: 8 } }],
+          series: [{ barWidth: '25%' }, { barWidth: '25%' }],
+        },
       },
     ],
   };
 
-  const leastBranchSalesData = {
-    labels: analytics.leastBranchSales.slice(0, 10).map((b) => b.displayName),
-    datasets: [
+  const salesTrendsOption = {
+    title: {
+      text: t.salesTrends,
+      left: 'center',
+      textStyle: { fontSize: 14, fontWeight: 'normal', color: '#4B5563' },
+    },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'line', lineStyle: { color: '#FBBF24', width: 1.5 } }, // خط أرق
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#E5E7EB',
+      borderWidth: 1,
+      padding: 8,
+      textStyle: { color: '#6B7280', fontSize: 10 },
+    },
+    legend: { top: 'bottom', itemGap: 8, textStyle: { fontSize: 10, color: '#6B7280' } },
+    grid: { left: '5%', right: '5%', bottom: '20%', containLabel: true },
+    xAxis: [
       {
-        label: t.leastBranchSales,
-        data: analytics.leastBranchSales.slice(0, 10).map((b) => b.totalSales),
-        backgroundColor: chartColors[0],
-        borderWidth: 0,
+        type: 'category',
+        data: analytics.salesTrends.slice(0, 10).map((trend) => trend.period),
+        axisTick: { alignWithLabel: true },
+        axisLabel: { rotate: isRtl ? -45 : 45, fontSize: 9, color: '#6B7280' },
+        axisLine: { lineStyle: { color: '#E5E7EB' } },
       },
     ],
-  };
-
-  const salesTrendsData = {
-    labels: analytics.salesTrends.slice(0, 10).map((trend) => trend.period),
-    datasets: [
+    yAxis: [{ type: 'value', axisLabel: { fontSize: 9, color: '#6B7280' }, axisLine: { lineStyle: { color: '#E5E7EB' } } }],
+    series: [
       {
-        label: t.totalCount,
+        name: `${t.totalSales} (${t.currency})`,
+        type: 'line',
+        data: analytics.salesTrends.slice(0, 10).map((trend) => trend.totalSales),
+        itemStyle: { color: '#FBBF24' },
+        lineStyle: { width: 1.5 }, // خط أرق
+        symbol: 'circle',
+        symbolSize: 6, // نقاط أصغر
+      },
+      {
+        name: t.totalCount,
+        type: 'line',
         data: analytics.salesTrends.slice(0, 10).map((trend) => trend.saleCount),
-        borderColor: chartColors[1],
-        backgroundColor: 'transparent',
-        fill: false,
-        tension: 0.4,
+        itemStyle: { color: '#3B82F6' },
+        lineStyle: { width: 1.5 },
+        symbol: 'circle',
+        symbolSize: 6,
+      },
+    ],
+    media: [
+      {
+        query: { maxWidth: 600 },
+        option: {
+          legend: { orient: 'horizontal', bottom: 0, itemGap: 5, textStyle: { fontSize: 9 } },
+          grid: { bottom: '25%', containLabel: true },
+          xAxis: [{ axisLabel: { rotate: isRtl ? -60 : 60, fontSize: 8 } }],
+          yAxis: [{ axisLabel: { fontSize: 8 } }],
+        },
+      },
+    ],
+  };
+
+  const paymentMethodsOption = {
+    title: {
+      text: t.paymentMethodsLabel,
+      left: 'center',
+      textStyle: { fontSize: 14, fontWeight: 'normal', color: '#4B5563' },
+    },
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: 'rgba(255, 255, 255, 0.95)',
+      borderColor: '#E5E7EB',
+      borderWidth: 1,
+      padding: 8,
+      textStyle: { color: '#6B7280', fontSize: 10 },
+    },
+    legend: { top: 'bottom', itemGap: 8, textStyle: { fontSize: 10, color: '#6B7280' } },
+    series: [
+      {
+        name: t.paymentMethodsLabel,
+        type: 'pie',
+        radius: ['40%', '60%'], // دائرة أصغر لتصميم هادئ
+        avoidLabelOverlap: false,
+        label: { show: false, position: 'center' },
+        labelLine: { show: true, length: 20, length2: 15 }, // مسافات أكبر للأرقام
+        data: analytics.paymentMethods.map((pm, index) => ({
+          value: pm.totalAmount,
+          name: pm.paymentMethod,
+          itemStyle: { color: chartColors[index % chartColors.length] },
+        })),
+      },
+    ],
+    media: [
+      {
+        query: { maxWidth: 600 },
+        option: {
+          legend: { orient: 'horizontal', bottom: 0, itemGap: 5, textStyle: { fontSize: 9 } },
+          series: [{ radius: ['30%', '50%'] }],
+        },
       },
     ],
   };
 
   if (user?.role !== 'admin') {
     return (
-      <div className={`min-h-screen flex items-center justify-center bg-gray-50 ${isRtl ? 'font-alexandria' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
-        <div className="p-4 sm:p-6 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
-          <span className="text-red-600 text-sm sm:text-base font-medium font-alexandria">{t.errors.unauthorized_access}</span>
+      <div className={`min-h-screen flex items-center justify-center bg-gray-50 ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+        <div className="p-6 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+          <AlertCircle className="w-6 h-6 text-red-600" />
+          <span className="text-red-600 text-base font-medium">{t.errors.unauthorized_access}</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`min-h-screen bg-gray-50 p-4 sm:p-6 md:p-8 ${isRtl ? 'font-alexandria' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
-      <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;500;600&display=swap" rel="stylesheet" />
-      <header className="mb-6 sm:mb-8 flex flex-col gap-4 sm:gap-6">
-        <div className="flex items-center gap-3 sm:gap-4">
-          <DollarSign className="w-6 h-6 sm:w-8 sm:h-8 text-amber-600" />
+    <div className={`min-h-screen bg-gray-50 p-4 ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+      <header className="mb-4 flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <DollarSign className="w-6 h-6 text-amber-600" />
           <div>
-            <h1 className="text-xl sm:text-2xl md:text-3xl font-semibold text-gray-800 font-alexandria">{t.title}</h1>
-            <p className="text-gray-500 text-sm sm:text-base font-alexandria">{t.analytics}</p>
+            <h1 className="text-2xl font-semibold text-gray-800">{t.title}</h1>
+            <p className="text-gray-500 text-xs">{t.previousSales}</p>
           </div>
         </div>
-        <div className="flex gap-3 sm:gap-4">
+        <div className="flex gap-2">
           <button
             onClick={() => setTabValue(0)}
-            className={`px-3 sm:px-4 py-1.5 text-sm sm:text-base font-medium rounded-lg transition-all font-alexandria ${tabValue === 0 ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${tabValue === 0 ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
           >
             {t.previousSales}
           </button>
           <button
             onClick={() => setTabValue(1)}
-            className={`px-3 sm:px-4 py-1.5 text-sm sm:text-base font-medium rounded-lg transition-all font-alexandria ${tabValue === 1 ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+            className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${tabValue === 1 ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
           >
             {t.analytics}
           </button>
         </div>
       </header>
+
       {error && (
-        <div className="mb-4 sm:mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-sm sm:text-base font-alexandria">
-          <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2 text-xs">
+          <AlertCircle className="w-4 h-4 text-red-600" />
           <span className="text-red-600 font-medium">{error}</span>
         </div>
       )}
+
       {tabValue === 0 && (
-        <div className="space-y-6 sm:space-y-8">
-          <div className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-4 sm:mb-6 font-alexandria">الفلاتر</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 sm:gap-4">
+        <div className="space-y-4">
+          <div className="p-4 bg-white rounded-md shadow-sm border border-gray-100">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">{t.filters}</h2>
+            <div className="grid grid-cols-1 gap-3">
               <SearchInput value={searchInput} onChange={handleSearchChange} placeholder={t.searchPlaceholder} />
               <input
                 type="date"
                 value={filterStartDate}
                 onChange={(e) => setFilterStartDate(e.target.value)}
-                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}
+                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
                 aria-label={t.date}
               />
               <input
                 type="date"
                 value={filterEndDate}
                 onChange={(e) => setFilterEndDate(e.target.value)}
-                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}
+                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'}`}
                 aria-label={t.date}
               />
               <BranchFilter
@@ -894,10 +1216,10 @@ const SalesReport: React.FC = () => {
                 allBranchesLabel={t.allBranches}
               />
             </div>
-            <div className="mt-4 sm:mt-6 flex justify-end">
+            <div className="mt-3 flex justify-end">
               <button
                 onClick={handleExport}
-                className="px-4 sm:px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm sm:text-base font-medium transition-colors font-alexandria"
+                className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-medium transition-colors"
                 aria-label={t.export}
               >
                 {t.export}
@@ -905,11 +1227,11 @@ const SalesReport: React.FC = () => {
             </div>
           </div>
           <div>
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-4 sm:mb-6 font-alexandria">{t.previousSales}</h2>
+            <h2 className="text-lg font-semibold text-gray-800 mb-3">{t.previousSales}</h2>
             {loading || branchesLoading ? (
-              <div className="grid grid-cols-1 gap-4 sm:gap-6">
+              <div className="grid grid-cols-1 gap-4">
                 {[...Array(6)].map((_, index) => (
-                  <div key={index} className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100 animate-pulse">
+                  <div key={index} className="p-6 bg-white rounded-md shadow-sm border border-gray-100 animate-pulse">
                     <div className="space-y-2">
                       <div className="h-4 bg-gray-200 rounded w-3/4"></div>
                       <div className="h-3 bg-gray-200 rounded w-1/2"></div>
@@ -919,26 +1241,26 @@ const SalesReport: React.FC = () => {
                 ))}
               </div>
             ) : filteredSales.length === 0 ? (
-              <div className="p-4 sm:p-6 text-center bg-white rounded-xl shadow-sm border border-gray-100">
-                <DollarSign className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-3 sm:mb-4" />
-                <p className="text-gray-600 text-sm sm:text-base font-medium font-alexandria">{t.noSales}</p>
+              <div className="p-6 text-center bg-white rounded-md shadow-sm border border-gray-100">
+                <DollarSign className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+                <p className="text-gray-600 text-xs font-medium">{t.noSales}</p>
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-1 gap-4 sm:gap-6">
+                <div className="grid grid-cols-1 gap-4">
                   {filteredSales.map((sale) => (
                     <SaleCard key={sale._id} sale={sale} onEdit={handleEditSale} onDelete={handleDeleteSale} />
                   ))}
                 </div>
                 {hasMore && (
-                  <div className="flex justify-center mt-4 sm:mt-6">
+                  <div className="flex justify-center mt-4">
                     <button
                       onClick={loadMoreSales}
-                      className="px-4 sm:px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm sm:text-base font-medium transition-colors disabled:opacity-50 font-alexandria"
+                      className="px-4 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-medium transition-colors disabled:opacity-50"
                       disabled={salesLoading}
                     >
                       {salesLoading ? (
-                        <svg className="animate-spin h-5 w-5 sm:h-6 sm:w-6 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <svg className="animate-spin h-4 w-4 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
@@ -953,76 +1275,58 @@ const SalesReport: React.FC = () => {
           </div>
         </div>
       )}
+
       {tabValue === 1 && (
-        <div className="space-y-6 sm:space-y-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-            <div className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-2 font-alexandria">{t.totalSales}</h3>
-              <p className="text-xl sm:text-2xl font-bold text-amber-600 font-alexandria">{analytics.totalSales} {t.currency}</p>
+        <div className="p-4 bg-white rounded-md shadow-sm border border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-800 mb-4">{t.analytics}</h2>
+          <div className="grid grid-cols-1 gap-4">
+            <div className="w-full h-48 sm:h-64">
+              <ReactECharts option={productSalesOption} style={{ height: '100%', width: '100%' }} />
             </div>
-            <div className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-2 font-alexandria">{t.totalCount}</h3>
-              <p className="text-xl sm:text-2xl font-bold text-amber-600 font-alexandria">{analytics.totalCount}</p>
+            <div className="w-full h-48 sm:h-64">
+              <ReactECharts option={leastProductSalesOption} style={{ height: '100%', width: '100%' }} />
             </div>
-            <div className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-2 font-alexandria">{t.averageOrderValue}</h3>
-              <p className="text-xl sm:text-2xl font-bold text-amber-600 font-alexandria">{analytics.averageOrderValue} {t.currency}</p>
+            <div className="w-full h-48 sm:h-64">
+              <ReactECharts option={departmentSalesOption} style={{ height: '100%', width: '100%' }} />
             </div>
-            <div className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-base sm:text-lg font-semibold text-gray-800 mb-2 font-alexandria">{t.topProduct}</h3>
-              <p className="text-xl sm:text-2xl font-bold text-amber-600 font-alexandria">{analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity})</p>
+            <div className="w-full h-48 sm:h-64">
+              <ReactECharts option={leastDepartmentSalesOption} style={{ height: '100%', width: '100%' }} />
             </div>
-          </div>
-          <div className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-4 sm:mb-6 font-alexandria">{t.topCustomers}</h2>
-            <ul className="space-y-2 text-sm sm:text-base text-gray-600 font-alexandria">
-              {analytics.topCustomers.map((customer, index) => (
-                <li key={index}>
-                  <span className="font-medium">{t.customerNameLabel}: </span>{customer.customerName} ({customer.customerPhone}) - {t.totalSales}: {customer.totalSpent} {t.currency}, {t.totalCount}: {customer.purchaseCount}
-                </li>
-              ))}
-              {analytics.unknownCustomers.map((customer, index) => (
-                <li key={`unknown-${index}`}>
-                  <span className="font-medium">{t.unknownCustomers}: </span>{t.totalSales}: {customer.totalSpent} {t.currency}, {t.totalCount}: {customer.purchaseCount}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-            <div className="w-full h-64 sm:h-80">
-              <Line data={salesTrendsData} options={salesTrendsOptions} />
+            <div className="w-full h-48 sm:h-64">
+              <ReactECharts option={branchSalesOption} style={{ height: '100%', width: '100%' }} />
             </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-            <div className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <div className="w-full h-48 sm:h-64">
-                <Bar data={productSalesData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.productSales } } }} />
-              </div>
+            <div className="w-full h-48 sm:h-64">
+              <ReactECharts option={leastBranchSalesOption} style={{ height: '100%', width: '100%' }} />
             </div>
-            <div className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <div className="w-full h-48 sm:h-64">
-                <Bar data={leastProductSalesData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.leastProductSales } } }} />
-              </div>
+            <div className="w-full h-48 sm:h-64">
+              <ReactECharts option={salesTrendsOption} style={{ height: '100%', width: '100%' }} />
             </div>
-            <div className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <div className="w-full h-48 sm:h-64">
-                <Bar data={departmentSalesData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.departmentSales } } }} />
-              </div>
+            <div className="w-full h-48 sm:h-64">
+              <ReactECharts option={paymentMethodsOption} style={{ height: '100%', width: '100%' }} />
             </div>
-            <div className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <div className="w-full h-48 sm:h-64">
-                <Bar data={leastDepartmentSalesData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.leastDepartmentSales } } }} />
-              </div>
+            <div className="p-4 bg-gray-50 rounded-md border border-gray-100 space-y-1 text-xs">
+              <h3 className="font-medium text-gray-800">{t.totalSales}</h3>
+              <p className="font-semibold text-amber-600">{analytics.totalSales} {t.currency}</p>
+              <p className="text-gray-600">{t.totalCount}: {analytics.totalCount}</p>
+              <p className="text-gray-600">{t.averageOrderValue}: {analytics.averageOrderValue} {t.currency}</p>
+              <p className="text-gray-600">{t.returnRate}: {analytics.returnRate}%</p>
+              <p className="text-gray-600">
+                {t.topProduct}: {analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity})
+              </p>
             </div>
-            <div className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <div className="w-full h-48 sm:h-64">
-                <Bar data={branchSalesData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.branchSales } } }} />
-              </div>
-            </div>
-            <div className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <div className="w-full h-48 sm:h-64">
-                <Bar data={leastBranchSalesData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.leastBranchSales } } }} />
-              </div>
+            <div className="p-4 bg-gray-50 rounded-md border border-gray-100 space-y-1 text-xs">
+              <h3 className="font-medium text-gray-800">{t.topCustomers}</h3>
+              {analytics.topCustomers.length > 0 ? (
+                <ul className="space-y-1 text-gray-600">
+                  {analytics.topCustomers.map((customer, index) => (
+                    <li key={index}>
+                      {customer.customerName} ({customer.customerPhone}) - {customer.totalSpent} {t.currency}, {customer.purchaseCount} {t.totalCount}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-gray-600">{t.noSales}</p>
+              )}
             </div>
           </div>
         </div>
