@@ -323,7 +323,7 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
   }
 );
 
-const SalesReport: React.FC = () => {
+export const SalesReport: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
