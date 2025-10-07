@@ -1,13 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useLanguage } from '../contexts/LanguageContext';
+import { useLanguage, Language } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { branchesAPI, inventoryAPI, salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { debounce } from 'lodash';
-import { useSocket } from '../contexts/SocketContext';
 
 interface Sale {
   _id: string;
@@ -76,39 +74,6 @@ interface CartItem {
   unitPrice: number;
 }
 
-interface BranchAnalytics {
-  totalSales: number;
-  totalCount: number;
-  averageOrderValue: number;
-  returnRate: number;
-  topProduct: {
-    productId: string | null;
-    productName: string;
-    productNameEn?: string;
-    displayName: string;
-    totalQuantity: number;
-    totalRevenue: number;
-  };
-  productSales: Array<{
-    productId: string;
-    productName: string;
-    productNameEn?: string;
-    displayName: string;
-    totalQuantity: number;
-    totalRevenue: number;
-  }>;
-  departmentSales: Array<{
-    departmentId: string;
-    departmentName: string;
-    departmentNameEn?: string;
-    displayName: string;
-    totalRevenue: number;
-    totalQuantity: number;
-  }>;
-  salesTrends: Array<{ period: string; totalSales: number; saleCount: number }>;
-  returnStats: Array<{ status: string; count: number; totalQuantity: number }>;
-}
-
 const translations = {
   ar: {
     title: 'تقرير المبيعات',
@@ -124,6 +89,7 @@ const translations = {
     emptyCart: 'السلة فارغة',
     total: 'الإجمالي',
     notes: 'ملاحظات',
+    paymentMethod: 'طريقة الدفع',
     customerName: 'اسم العميل',
     customerPhone: 'هاتف العميل',
     submitSale: 'إرسال المبيعة',
@@ -139,20 +105,12 @@ const translations = {
     loadMore: 'تحميل المزيد',
     filterBy: 'تصفية حسب',
     customRange: 'نطاق مخصص',
-    branchStats: 'إحصائيات الفرع',
-    totalSales: 'إجمالي المبيعات',
-    totalCount: 'عدد المبيعات',
-    averageOrderValue: 'متوسط قيمة المبيعة',
-    returnRate: 'نسبة المرتجعات',
-    topProduct: 'أكثر المنتجات مبيعًا',
-    topDepartment: 'أكثر الأقسام مبيعًا',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       no_branch_assigned: 'لم يتم تعيين فرع',
       fetch_sales: 'خطأ أثناء جلب المبيعات',
       fetch_branches: 'خطأ أثناء جلب الفروع',
       fetch_inventory: 'خطأ أثناء جلب المخزون',
-      fetch_analytics: 'خطأ أثناء جلب الإحصائيات',
       create_sale_failed: 'فشل إنشاء المبيعة',
       insufficient_stock: 'المخزون غير كافٍ',
       exceeds_max_quantity: 'الكمية تتجاوز الحد الأقصى',
@@ -160,14 +118,18 @@ const translations = {
       empty_cart: 'السلة فارغة',
       deleted_product: 'منتج محذوف',
       invalid_customer_phone: 'رقم هاتف العميل غير صالح',
+      invalid_payment_method: 'طريقة الدفع غير صالحة',
       no_branches_available: 'لا توجد فروع متاحة',
     },
     currency: 'ريال',
     units: { default: 'غير محدد' },
     branches: { all_branches: 'كل الفروع', select_branch: 'اختر الفرع', unknown: 'غير معروف' },
     departments: { unknown: 'غير معروف' },
-    paymentMethods: { cash: 'نقدي' },
-    returns: { status: { pending: 'معلق', approved: 'مقبول', rejected: 'مرفوض' } },
+    paymentMethods: {
+      cash: 'نقدي',
+      credit_card: 'بطاقة ائتمان',
+      bank_transfer: 'تحويل بنكي',
+    },
   },
   en: {
     title: 'Sales Report',
@@ -183,6 +145,7 @@ const translations = {
     emptyCart: 'Cart is empty',
     total: 'Total',
     notes: 'Notes',
+    paymentMethod: 'Payment Method',
     customerName: 'Customer Name',
     customerPhone: 'Customer Phone',
     submitSale: 'Submit Sale',
@@ -198,20 +161,12 @@ const translations = {
     loadMore: 'Load More',
     filterBy: 'Filter By',
     customRange: 'Custom Range',
-    branchStats: 'Branch Statistics',
-    totalSales: 'Total Sales',
-    totalCount: 'Total Sales Count',
-    averageOrderValue: 'Average Order Value',
-    returnRate: 'Return Rate',
-    topProduct: 'Top Selling Product',
-    topDepartment: 'Top Selling Department',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       no_branch_assigned: 'No branch assigned',
       fetch_sales: 'Error fetching sales',
       fetch_branches: 'Error fetching branches',
       fetch_inventory: 'Error fetching inventory',
-      fetch_analytics: 'Error fetching analytics',
       create_sale_failed: 'Failed to create sale',
       insufficient_stock: 'Insufficient stock',
       exceeds_max_quantity: 'Quantity exceeds maximum available',
@@ -219,37 +174,39 @@ const translations = {
       empty_cart: 'Cart is empty',
       deleted_product: 'Deleted Product',
       invalid_customer_phone: 'Invalid customer phone',
+      invalid_payment_method: 'Invalid payment method',
       no_branches_available: 'No branches available',
     },
     currency: 'SAR',
     units: { default: 'N/A' },
     branches: { all_branches: 'All Branches', select_branch: 'Select Branch', unknown: 'Unknown' },
     departments: { unknown: 'Unknown' },
-    paymentMethods: { cash: 'Cash' },
-    returns: { status: { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' } },
+    paymentMethods: {
+      cash: 'Cash',
+      credit_card: 'Credit Card',
+      bank_transfer: 'Bank Transfer',
+    },
   },
 };
 
-// Memoized Components
 const ProductSearchInput = React.memo<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder: string;
-}>(({ value, onChange, placeholder }) => {
+  ariaLabel: string;
+}>(({ value, onChange, placeholder, ariaLabel }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
     <div className="relative group">
-      <Search
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
-      />
+      <Search className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`} />
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
-        aria-label={placeholder}
+        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={ariaLabel}
       />
       {value && (
         <button
@@ -270,17 +227,18 @@ const ProductDropdown = React.memo<{
   options: { value: string; label: string }[];
   ariaLabel: string;
   disabled?: boolean;
-}>(({ value, onChange, options, ariaLabel, disabled = false }) => {
+  className?: string;
+}>(({ value, onChange, options, ariaLabel, disabled = false, className }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
   const selectedOption = options.find((opt) => opt.value === value) || options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
 
   return (
-    <div className="relative group">
+    <div className={`relative group ${className || ''}`}>
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         aria-label={ariaLabel}
       >
         <span className="truncate">{selectedOption.label}</span>
@@ -296,13 +254,13 @@ const ProductDropdown = React.memo<{
                   onChange(option.value);
                   setIsOpen(false);
                 }}
-                className="px-4 py-2 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
+                className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
               >
                 {option.label}
               </div>
             ))
           ) : (
-            <div className="px-4 py-2 text-sm text-gray-500">{isRtl ? 'لا توجد خيارات متاحة' : 'No options available'}</div>
+            <div className="px-4 py-2.5 text-sm text-gray-500">{isRtl ? 'لا توجد خيارات متاحة' : 'No options available'}</div>
           )}
         </div>
       )}
@@ -322,7 +280,7 @@ const QuantityInput = React.memo<{
     <div className="flex items-center gap-2">
       <button
         onClick={onDecrement}
-        className="w-7 h-7 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center"
+        className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center"
         aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
       >
         <Minus className="w-4 h-4" />
@@ -331,13 +289,13 @@ const QuantityInput = React.memo<{
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-10 h-7 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
+        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
         style={{ appearance: 'none' }}
         aria-label={isRtl ? 'الكمية' : 'Quantity'}
       />
       <button
         onClick={onIncrement}
-        className="w-7 h-7 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center"
+        className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center"
         aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
       >
         <Plus className="w-4 h-4 text-white" />
@@ -357,14 +315,14 @@ const ProductCard = React.memo<{
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   return (
-    <div className="h-[180px] p-4 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200">
+    <div className="h-[200px] p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200">
       <div className="space-y-2">
-        <h3 className="font-bold text-gray-900 text-sm truncate">{product.displayName}</h3>
-        <p className="text-xs text-amber-600">{t.department}: {product.product.department?.displayName || t.departments.unknown}</p>
-        <p className="text-xs text-gray-600">{t.availableStock}: {product.currentStock} {product.displayUnit || t.units.default}</p>
+        <h3 className="font-bold text-gray-900 text-base truncate">{product.displayName}</h3>
+        <p className="text-sm text-amber-600">{t.department}: {product.product.department?.displayName || t.departments.unknown}</p>
+        <p className="text-sm text-gray-600">{t.availableStock}: {product.currentStock} {product.displayUnit || t.units.default}</p>
         <p className="font-semibold text-gray-900 text-sm">{t.unitPrice}: {product.product.price} {t.currency}</p>
       </div>
-      <div className="mt-3 flex justify-end">
+      <div className="mt-4 flex justify-end">
         {cartItem ? (
           <div className="flex items-center gap-2">
             <QuantityInput
@@ -375,7 +333,7 @@ const ProductCard = React.memo<{
             />
             <button
               onClick={onRemove}
-              className="w-7 h-7 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
+              className="w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
               aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
             >
               <Trash2 className="w-4 h-4" />
@@ -384,7 +342,7 @@ const ProductCard = React.memo<{
         ) : (
           <button
             onClick={onAdd}
-            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs transition-colors duration-200 flex items-center justify-center gap-1 shadow-sm"
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors duration-200 flex items-center justify-center gap-2 shadow-sm"
             aria-label={t.addToCart}
             disabled={product.currentStock < 1}
           >
@@ -402,42 +360,44 @@ const SaleCard = React.memo<{ sale: Sale }>(({ sale }) => {
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   return (
-    <div className="p-4 bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 hover:border-amber-200">
-      <div className="space-y-3">
+    <div className="p-6 bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 hover:border-amber-200">
+      <div className="space-y-4">
         <div className="flex items-center gap-2">
-          <h3 className="font-bold text-gray-900 text-base">{sale.saleNumber}</h3>
-          <span className="text-xs text-gray-500">({sale.branch.displayName})</span>
+          <h3 className="font-bold text-gray-900 text-xl">{sale.saleNumber}</h3>
+          <span className="text-sm text-gray-500">({sale.branch.displayName})</span>
         </div>
         <div className="space-y-2">
           {sale.items.map((item, index) => (
-            <div key={index} className="flex justify-between items-center text-xs text-gray-700">
+            <div key={index} className="flex justify-between items-center text-sm text-gray-700">
               <span className="truncate max-w-[60%]">
                 {item.quantity} {item.displayUnit || t.units.default} {item.displayName || t.errors.deleted_product}
               </span>
-              <span className={`font-semibold text-amber-600 ${isRtl ? 'mr-2 flex-row-reverse' : 'ml-2'}`}>
+              <span className="font-semibold text-amber-600">
                 {item.quantity}x{item.unitPrice} = {(item.quantity * item.unitPrice).toFixed(2)} {t.currency}
               </span>
             </div>
           ))}
-          <div className="flex justify-between items-center font-bold text-gray-900 text-sm border-t pt-2 mt-2">
+          <div className="flex justify-between items-center font-bold text-gray-900 text-base border-t pt-2 mt-2">
             <span>{t.total}:</span>
             <span className="text-amber-600">{sale.totalAmount.toFixed(2)} {t.currency}</span>
           </div>
         </div>
-        <div className="space-y-1 text-xs text-gray-600">
-          <p>{t.date}: {sale.createdAt || t.errors.unknown}</p>
-          <p>{t.paymentMethod}: {t.paymentMethods.cash}</p>
+        <div className="space-y-2 text-sm text-gray-600">
+          <p>{t.date}: {formatDate(sale.createdAt, language)}</p>
+          {sale.paymentMethod && (
+            <p>{t.paymentMethod}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] || t.paymentMethods.cash}</p>
+          )}
           {sale.customerName && <p>{t.customerName}: {sale.customerName}</p>}
           {sale.customerPhone && <p>{t.customerPhone}: {sale.customerPhone}</p>}
           {sale.notes && <p className="italic">{t.notes}: {sale.notes}</p>}
         </div>
         {sale.returns && sale.returns.length > 0 && (
-          <div className="mt-3">
-            <p className="text-xs font-medium text-gray-700">{t.returns}:</p>
-            <ul className="list-disc list-inside text-xs text-gray-600">
+          <div className="mt-4">
+            <p className="text-sm font-medium text-gray-700">{t.returns}:</p>
+            <ul className="list-disc list-inside text-sm text-gray-600">
               {sale.returns.map((ret, index) => (
                 <li key={index}>
-                  {t.return} #{ret.returnNumber} ({t.returns.status[ret.status as keyof typeof t.returns.status]}) - {t.reason}: {ret.reason} ({t.date}: {ret.createdAt || t.errors.unknown})
+                  {t.return} #{ret.returnNumber} ({t.returns.status[ret.status as keyof typeof t.returns.status]}) - {t.reason}: {ret.reason} ({t.date}: {formatDate(ret.createdAt, language)})
                   <ul className="list-circle list-inside ml-4">
                     {ret.items.map((item, i) => (
                       <li key={i}>
@@ -455,83 +415,38 @@ const SaleCard = React.memo<{ sale: Sale }>(({ sale }) => {
   );
 });
 
-const StatsCard = React.memo<{
-  title: string;
-  value: string | number;
-  icon: React.ReactNode;
-  color: string;
-}>(({ title, value, icon, color }) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  return (
-    <div className="p-4 bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-lg transition-all duration-300">
-      <div className="flex items-center gap-3">
-        <div className={`p-2 rounded-full ${color}`}>{icon}</div>
-        <div>
-          <p className="text-xs text-gray-600">{title}</p>
-          <p className="text-sm font-bold text-gray-900">{value}</p>
-        </div>
-      </div>
-    </div>
-  );
-});
-
 const ProductSkeletonCard = React.memo(() => (
-  <div className="h-[180px] p-4 bg-white rounded-xl shadow-sm border border-gray-100 animate-pulse">
-    <div className="space-y-2">
-      <div className="h-3 bg-gray-200 rounded w-3/4"></div>
-      <div className="h-2 bg-gray-200 rounded w-1/2"></div>
-      <div className="h-2 bg-gray-200 rounded w-1/3"></div>
-      <div className="mt-3 flex justify-end">
-        <div className="h-7 bg-gray-200 rounded-lg w-20"></div>
+  <div className="h-[200px] p-5 bg-white rounded-xl shadow-sm border border-gray-100">
+    <div className="space-y-3 animate-pulse">
+      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+      <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+      <div className="mt-4 flex justify-end">
+        <div className="h-8 bg-gray-200 rounded-lg w-24"></div>
       </div>
     </div>
   </div>
 ));
 
 const SaleSkeletonCard = React.memo(() => (
-  <div className="p-4 bg-white rounded-xl shadow-sm border border-gray-100 animate-pulse">
-    <div className="space-y-2">
-      <div className="h-3 bg-gray-200 rounded w-3/4"></div>
-      <div className="h-2 bg-gray-200 rounded w-1/2"></div>
-      <div className="h-2 bg-gray-200 rounded w-1/3"></div>
+  <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+    <div className="space-y-3 animate-pulse">
+      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+      <div className="h-3 bg-gray-200 rounded w-1/3"></div>
     </div>
   </div>
 ));
 
-const StatsSkeletonCard = React.memo(() => (
-  <div className="p-4 bg-white rounded-xl shadow-sm border border-gray-100 animate-pulse">
-    <div className="flex items-center gap-3">
-      <div className="p-2 rounded-full bg-gray-200 w-10 h-10"></div>
-      <div className="space-y-2">
-        <div className="h-2 bg-gray-200 rounded w-20"></div>
-        <div className="h-3 bg-gray-200 rounded w-16"></div>
-      </div>
-    </div>
-  </div>
-));
-
-export const BranchSalesReport: React.FC = () => {
-  const { language } = useLanguage();
+const BranchSalesReport: React.FC = () => {
+  const { t: languageT, language } = useLanguage();
   const { user } = useAuth();
-  const { socket, emit, isConnected } = useSocket(); // Use SocketProvider's socket
   const isRtl = language === 'ar';
-  const t = translations[isRtl ? 'ar' : 'en'];
+  const t = translations[isRtl ? 'ar' : 'en'] || translations.en;
   const [activeTab, setActiveTab] = useState<'new' | 'previous'>('new');
   const [sales, setSales] = useState<Sale[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [analytics, setAnalytics] = useState<BranchAnalytics>({
-    totalSales: 0,
-    totalCount: 0,
-    averageOrderValue: 0,
-    returnRate: 0,
-    topProduct: { productId: null, productName: '', displayName: '', totalQuantity: 0, totalRevenue: 0 },
-    productSales: [],
-    departmentSales: [],
-    salesTrends: [],
-    returnStats: [],
-  });
   const [filterPeriod, setFilterPeriod] = useState('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -539,17 +454,20 @@ export const BranchSalesReport: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [salesLoading, setSalesLoading] = useState(false);
-  const [analyticsLoading, setAnalyticsLoading] = useState(true);
   const [error, setError] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [notes, setNotes] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<string>('cash');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState<string | undefined>(undefined);
   const [selectedBranch, setSelectedBranch] = useState(user?.role === 'branch' && user?.branchId ? user.branchId : '');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
-  const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim()), 300), []);
+  const debouncedSearch = useCallback(
+    debounce((value: string) => setSearchTerm(value.trim()), 300),
+    []
+  );
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -561,6 +479,27 @@ export const BranchSalesReport: React.FC = () => {
     const lowerSearchTerm = searchTerm.toLowerCase();
     return inventory.filter((item) => item.displayName.toLowerCase().includes(lowerSearchTerm));
   }, [inventory, searchTerm]);
+
+  useEffect(() => {
+    setCart((prevCart) =>
+      prevCart.map((item) => {
+        const product = inventory.find((inv) => inv.product._id === item.productId);
+        return {
+          ...item,
+          displayName: product
+            ? isRtl
+              ? product.product.name || t.departments.unknown
+              : product.product.nameEn || product.product.name || t.departments.unknown
+            : item.displayName,
+          displayUnit: product
+            ? isRtl
+              ? product.product.unit || t.units.default
+              : product.product.unitEn || product.product.unit || t.units.default
+            : item.displayUnit,
+        };
+      })
+    );
+  }, [language, inventory, isRtl, t]);
 
   const fetchData = useCallback(
     async (pageNum: number = 1, append: boolean = false) => {
@@ -581,7 +520,6 @@ export const BranchSalesReport: React.FC = () => {
 
       setLoading(pageNum === 1);
       setSalesLoading(pageNum > 1);
-      setAnalyticsLoading(true);
       try {
         const salesParams: any = { page: pageNum, limit: 20, sort: '-createdAt', branch: effectiveBranch };
         if (filterPeriod === 'custom' && startDate && endDate) {
@@ -589,15 +527,12 @@ export const BranchSalesReport: React.FC = () => {
           salesParams.endDate = endDate;
         }
 
-        const analyticsParams: any = { branch: effectiveBranch };
-        if (filterPeriod === 'custom' && startDate && endDate) {
-          analyticsParams.startDate = startDate;
-          analyticsParams.endDate = endDate;
+        const inventoryParams: any = { lowStock: false };
+        if (effectiveBranch) {
+          inventoryParams.branch = effectiveBranch;
         }
 
-        const inventoryParams: any = { lowStock: false, branch: effectiveBranch };
-
-        const [salesResponse, branchesResponse, inventoryResponse, analyticsResponse] = await Promise.all([
+        const [salesResponse, branchesResponse, inventoryResponse] = await Promise.all([
           salesAPI.getAll(salesParams).catch((err) => {
             console.error(`[${new Date().toISOString()}] Sales fetch error:`, err);
             toast.error(t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left' });
@@ -609,38 +544,39 @@ export const BranchSalesReport: React.FC = () => {
             return { branches: [] };
           }),
           inventoryAPI.getInventory(inventoryParams).catch((err) => {
-            console.error(`[${new Date().toISOString()}] Inventory fetch error:`, err);
+            console.error(`[${new Date().toISOString()}] Inventory fetch error:`, err, { params: inventoryParams });
             toast.error(t.errors.fetch_inventory, { position: isRtl ? 'top-right' : 'top-left' });
             return [];
           }),
-          salesAPI.getAnalytics(analyticsParams).catch((err) => {
-            console.error(`[${new Date().toISOString()}] Analytics fetch error:`, err);
-            toast.error(t.errors.fetch_analytics, { position: isRtl ? 'top-right' : 'top-left' });
-            return {};
-          }),
         ]);
 
-        const returnsMap = new Map<string, Sale['returns']>();
-        (salesResponse.returns || []).forEach((ret: any) => {
-          const saleId = ret.sale?._id || ret.sale;
-          if (!returnsMap.has(saleId)) returnsMap.set(saleId, []);
-          returnsMap.get(saleId)!.push({
-            _id: ret._id,
-            returnNumber: ret.returnNumber,
-            status: ret.status,
-            items: (ret.items || []).map((item: any) => ({
-              productId: item.product?._id || item.productId,
-              productName: item.product?.name || t.errors.deleted_product,
-              productNameEn: item.product?.nameEn,
-              quantity: item.quantity,
-              reason: item.reason,
-            })),
-            reason: ret.reason,
-            createdAt: formatDate(ret.createdAt, language) || t.errors.unknown,
-          });
-        });
+        console.log(`[${new Date().toISOString()}] Inventory response:`, inventoryResponse);
 
-        const newSales = (salesResponse.sales || []).map((sale: any) => ({
+        const returnsMap = new Map<string, Sale['returns']>();
+        if (Array.isArray(salesResponse.returns)) {
+          salesResponse.returns.forEach((ret: any) => {
+            const saleId = ret.sale?._id || ret.sale;
+            if (!returnsMap.has(saleId)) returnsMap.set(saleId, []);
+            returnsMap.get(saleId)!.push({
+              _id: ret._id,
+              returnNumber: ret.returnNumber,
+              status: ret.status,
+              items: Array.isArray(ret.items)
+                ? ret.items.map((item: any) => ({
+                    productId: item.product?._id || item.productId,
+                    productName: item.product?.name || t.departments.unknown,
+                    productNameEn: item.product?.nameEn,
+                    quantity: item.quantity,
+                    reason: item.reason,
+                  }))
+                : [],
+              reason: ret.reason,
+              createdAt: formatDate(ret.createdAt, language),
+            });
+          });
+        }
+
+        const newSales = salesResponse.sales.map((sale: any) => ({
           _id: sale._id,
           saleNumber: sale.saleNumber || 'N/A',
           branch: {
@@ -649,29 +585,31 @@ export const BranchSalesReport: React.FC = () => {
             nameEn: sale.branch?.nameEn,
             displayName: isRtl ? sale.branch?.name : (sale.branch?.nameEn || sale.branch?.name || t.branches.unknown),
           },
-          items: (sale.items || []).map((item: any) => ({
-            productId: item.product?._id || item.productId,
-            productName: item.product?.name || t.errors.deleted_product,
-            productNameEn: item.product?.nameEn,
-            unit: item.product?.unit,
-            unitEn: item.product?.unitEn,
-            displayName: isRtl ? (item.product?.name || t.errors.deleted_product) : (item.product?.nameEn || item.product?.name || t.errors.deleted_product),
-            displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            department: item.product?.department
-              ? {
-                  _id: item.product.department._id,
-                  name: item.product.department.name,
-                  nameEn: item.product.department.nameEn,
-                  displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
-                }
-              : undefined,
-          })),
+          items: Array.isArray(sale.items)
+            ? sale.items.map((item: any) => ({
+                productId: item.product?._id || item.productId,
+                productName: item.product?.name || t.departments.unknown,
+                productNameEn: item.product?.nameEn,
+                unit: item.product?.unit,
+                unitEn: item.product?.unitEn,
+                displayName: isRtl ? (item.product?.name || t.departments.unknown) : (item.product?.nameEn || item.product?.name || t.departments.unknown),
+                displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                department: item.product?.department
+                  ? {
+                      _id: item.product.department._id,
+                      name: item.product.department.name,
+                      nameEn: item.product.department.nameEn,
+                      displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
+                    }
+                  : undefined,
+              }))
+            : [],
           totalAmount: sale.totalAmount || 0,
-          createdAt: formatDate(sale.createdAt, language) || t.errors.unknown,
+          createdAt: formatDate(sale.createdAt, language),
           notes: sale.notes,
-          paymentMethod: sale.paymentMethod || 'cash',
+          paymentMethod: sale.paymentMethod,
           customerName: sale.customerName,
           customerPhone: sale.customerPhone,
           returns: returnsMap.get(sale._id) || [],
@@ -680,74 +618,56 @@ export const BranchSalesReport: React.FC = () => {
         setSales((prev) => (append ? [...prev, ...newSales] : newSales));
         setHasMore(salesResponse.total > pageNum * 20);
 
-        setBranches(
-          (branchesResponse.branches || []).map((branch: any) => ({
-            _id: branch._id,
-            name: branch.name || t.branches.unknown,
-            nameEn: branch.nameEn,
-            displayName: isRtl ? branch.name : (branch.nameEn || branch.name || t.branches.unknown),
-          }))
-        );
-
-        setInventory(
-          (inventoryResponse || [])
-            .filter((item: any) => item.currentStock > 0 && item.product?._id)
-            .map((item: any) => ({
-              _id: item._id,
-              product: {
-                _id: item.product?._id || 'unknown',
-                name: item.product?.name || t.errors.deleted_product,
-                nameEn: item.product?.nameEn,
-                unit: item.product?.unit,
-                unitEn: item.product?.unitEn,
-                price: item.product?.price || 0,
-                department: item.product?.department
-                  ? {
-                      _id: item.product.department._id || 'unknown',
-                      name: item.product.department.name || t.departments.unknown,
-                      nameEn: item.product.department.nameEn,
-                      displayName: isRtl ? (item.product.department.name || t.departments.unknown) : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
-                    }
-                  : undefined,
-              },
-              currentStock: item.currentStock || 0,
-              displayName: isRtl ? (item.product?.name || t.errors.deleted_product) : (item.product?.nameEn || item.product?.name || t.errors.deleted_product),
-              displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
+        const fetchedBranches = Array.isArray(branchesResponse.branches)
+          ? branchesResponse.branches.map((branch: any) => ({
+              _id: branch._id,
+              name: branch.name || t.branches.unknown,
+              nameEn: branch.nameEn,
+              displayName: isRtl ? branch.name : (branch.nameEn || branch.name || t.branches.unknown),
             }))
-        );
+          : [];
+        setBranches(fetchedBranches);
 
-        setAnalytics({
-          totalSales: analyticsResponse.totalSales || 0,
-          totalCount: analyticsResponse.totalCount || 0,
-          averageOrderValue: analyticsResponse.averageOrderValue || 0,
-          returnRate: analyticsResponse.returnRate || 0,
-          topProduct: analyticsResponse.topProduct
-            ? {
-                ...analyticsResponse.topProduct,
-                displayName: isRtl
-                  ? analyticsResponse.topProduct.productName || t.errors.deleted_product
-                  : analyticsResponse.topProduct.productNameEn || analyticsResponse.topProduct.productName || t.errors.deleted_product,
-              }
-            : { productId: null, productName: '', displayName: '', totalQuantity: 0, totalRevenue: 0 },
-          productSales: (analyticsResponse.productSales || []).map((ps: any) => ({
-            ...ps,
-            displayName: isRtl ? (ps.productName || t.errors.deleted_product) : (ps.productNameEn || ps.productName || t.errors.deleted_product),
-          })),
-          departmentSales: (analyticsResponse.departmentSales || []).map((ds: any) => ({
-            ...ds,
-            displayName: isRtl ? (ds.departmentName || t.departments.unknown) : (ds.departmentNameEn || ds.departmentName || t.departments.unknown),
-          })),
-          salesTrends: (analyticsResponse.salesTrends || []).map((trend: any) => ({
-            ...trend,
-            period: formatDate(trend.period, language) || t.errors.unknown,
-          })),
-          returnStats: (analyticsResponse.returnStats || []).map((rs: any) => ({
-            ...rs,
-            status: t.returns.status[rs.status as keyof typeof t.returns.status] || rs.status,
-          })),
-        });
+        if (fetchedBranches.length === 0) {
+          setError(t.errors.no_branches_available);
+          toast.warn(t.errors.no_branches_available, { position: isRtl ? 'top-right' : 'top-left' });
+        }
 
-        setError('');
+        const newInventory = Array.isArray(inventoryResponse)
+          ? inventoryResponse
+              .filter((item: any) => item.currentStock > 0 && item.product?._id)
+              .map((item: any) => ({
+                _id: item._id,
+                product: {
+                  _id: item.product?._id || 'unknown',
+                  name: item.product?.name || t.departments.unknown,
+                  nameEn: item.product?.nameEn,
+                  unit: item.product?.unit,
+                  unitEn: item.product?.unitEn,
+                  price: item.product?.price || 0,
+                  department: item.product?.department
+                    ? {
+                        _id: item.product.department._id || 'unknown',
+                        name: item.product.department.name || t.departments.unknown,
+                        nameEn: item.product.department.nameEn,
+                        displayName: isRtl ? (item.product.department.name || t.departments.unknown) : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
+                      }
+                    : undefined,
+                },
+                currentStock: item.currentStock || 0,
+                displayName: isRtl ? (item.product?.name || t.departments.unknown) : (item.product?.nameEn || item.product?.name || t.departments.unknown),
+                displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
+              }))
+          : [];
+        console.log(`[${new Date().toISOString()}] Processed inventory:`, newInventory);
+        setInventory(newInventory);
+
+        if (newInventory.length === 0) {
+          setError(t.noProducts);
+          toast.warn(t.noProducts, { position: isRtl ? 'top-right' : 'top-left' });
+        } else {
+          setError('');
+        }
       } catch (err: any) {
         console.error(`[${new Date().toISOString()}] Fetch error:`, err);
         setError(err.message || t.errors.fetch_sales);
@@ -757,40 +677,16 @@ export const BranchSalesReport: React.FC = () => {
       } finally {
         setLoading(false);
         setSalesLoading(false);
-        setAnalyticsLoading(false);
       }
     },
-    [user, t, isRtl, language, selectedBranch, filterPeriod, startDate, endDate]
+    [filterPeriod, startDate, endDate, user, t, isRtl, language, selectedBranch]
   );
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  useEffect(() => {
-    if (!socket || !isConnected) return;
-
-    socket.on('saleCreated', (data: any) => {
-      if (data.branchId === selectedBranch) {
-        toast.info(isRtl ? `تم إنشاء مبيعة جديدة: ${data.saleNumber}` : `New sale created: ${data.saleNumber}`, {
-          position: isRtl ? 'top-right' : 'top-left',
-        });
-        fetchData();
-      }
-    });
-    socket.on('saleDeleted', (data: any) => {
-      if (data.branchId === selectedBranch) {
-        toast.info(isRtl ? `تم حذف مبيعة: ${data.saleId}` : `Sale deleted: ${data.saleId}`, {
-          position: isRtl ? 'top-right' : 'top-left',
-        });
-        fetchData();
-      }
-    });
-    return () => {
-      socket.off('saleCreated');
-      socket.off('saleDeleted');
-    };
-  }, [socket, isConnected, fetchData, selectedBranch, isRtl]);
+    if (!inventory.length && !error) {
+      fetchData();
+    }
+  }, [fetchData, inventory, error]);
 
   const loadMoreSales = useCallback(() => {
     setPage((prev) => prev + 1);
@@ -822,7 +718,7 @@ export const BranchSalesReport: React.FC = () => {
             productNameEn: product.product.nameEn,
             unit: product.product.unit,
             unitEn: product.product.unitEn,
-            displayName: isRtl ? (product.product.name || t.errors.deleted_product) : (product.product.nameEn || product.product.name || t.errors.deleted_product),
+            displayName: isRtl ? (product.product.name || t.departments.unknown) : (product.product.nameEn || product.product.name || t.departments.unknown),
             displayUnit: isRtl ? (product.product.unit || t.units.default) : (product.product.unitEn || product.product.unit || t.units.default),
             quantity: 1,
             unitPrice: product.product.price,
@@ -854,7 +750,7 @@ export const BranchSalesReport: React.FC = () => {
             ? {
                 ...item,
                 quantity,
-                displayName: isRtl ? (product.product.name || t.errors.deleted_product) : (product.product.nameEn || product.product.name || t.errors.deleted_product),
+                displayName: isRtl ? (product.product.name || t.departments.unknown) : (product.product.nameEn || product.product.name || t.departments.unknown),
                 displayUnit: isRtl ? (product.product.unit || t.units.default) : (product.product.unitEn || product.product.unit || t.units.default),
               }
             : item
@@ -876,6 +772,11 @@ export const BranchSalesReport: React.FC = () => {
 
     if (customerPhone && !/^\+?\d{7,15}$/.test(customerPhone)) {
       toast.error(t.errors.invalid_customer_phone, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+
+    if (paymentMethod && !['cash', 'credit_card', 'bank_transfer'].includes(paymentMethod)) {
+      toast.error(t.errors.invalid_payment_method, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
 
@@ -909,24 +810,25 @@ export const BranchSalesReport: React.FC = () => {
         unitPrice: item.unitPrice,
       })),
       notes: notes.trim() || undefined,
-      paymentMethod: 'cash',
+      paymentMethod: paymentMethod || undefined,
       customerName: customerName.trim() || undefined,
       customerPhone: customerPhone?.trim() || undefined,
     };
 
     try {
-      const response = await salesAPI.create(saleData);
+      await salesAPI.create(saleData);
       toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
       setCart([]);
       setNotes('');
       setCustomerName('');
       setCustomerPhone(undefined);
+      setPaymentMethod('cash');
       fetchData();
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Sale submission error:`, err);
       toast.error(t.errors.create_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
     }
-  }, [cart, notes, customerName, customerPhone, user, selectedBranch, inventory, t, isRtl, fetchData]);
+  }, [cart, notes, paymentMethod, customerName, customerPhone, user, selectedBranch, inventory, t, isRtl, fetchData]);
 
   const branchOptions = useMemo(() => {
     if (user?.role === 'branch' && user?.branchId) {
@@ -938,6 +840,15 @@ export const BranchSalesReport: React.FC = () => {
       ...branches.map((branch) => ({ value: branch._id, label: branch.displayName })),
     ];
   }, [branches, t.branches, user]);
+
+  const paymentMethodOptions = useMemo(
+    () => [
+      { value: 'cash', label: t.paymentMethods.cash },
+      { value: 'credit_card', label: t.paymentMethods.credit_card },
+      { value: 'bank_transfer', label: t.paymentMethods.bank_transfer },
+    ],
+    [t.paymentMethods]
+  );
 
   const periodOptions = useMemo(
     () => [
@@ -951,58 +862,6 @@ export const BranchSalesReport: React.FC = () => {
     return cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0).toFixed(2);
   }, [cart]);
 
-  const chartColors = ['#FBBF24', '#3B82F6', '#FF6384', '#4BC0C0', '#9966FF'];
-
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-gray-900 text-white p-2 rounded-lg shadow-lg opacity-90">
-          <p className="font-bold text-xs">{label}</p>
-          {payload.map((entry: any, index: number) => (
-            <p key={index} className="text-xs" style={{ color: entry.color }}>
-              {entry.name}: {entry.value} {entry.name.includes(t.currency) ? t.currency : ''}
-            </p>
-          ))}
-        </div>
-      );
-    }
-    return null;
-  };
-
-  const productSalesChartData = analytics.productSales.slice(0, 5).map((ps) => ({
-    name: ps.displayName,
-    [t.totalSales]: ps.totalRevenue,
-    [t.quantity]: ps.totalQuantity,
-  }));
-
-  const departmentSalesChartData = analytics.departmentSales.slice(0, 5).map((ds) => ({
-    name: ds.displayName,
-    [t.totalSales]: ds.totalRevenue,
-    [t.quantity]: ds.totalQuantity,
-  }));
-
-  const salesTrendsChartData = analytics.salesTrends.map((trend) => ({
-    period: trend.period,
-    [t.totalSales]: trend.totalSales,
-    [t.totalCount]: trend.saleCount,
-  }));
-
-  const returnStatsChartData = analytics.returnStats.map((rs) => ({
-    name: rs.status,
-    value: rs.count,
-  }));
-
-  if (user?.role !== 'branch') {
-    return (
-      <div className={`min-h-screen flex items-center justify-center bg-gray-50 ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
-        <div className="p-6 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
-          <AlertCircle className="w-6 h-6 text-red-600" />
-          <span className="text-red-600 text-base font-medium">{t.errors.unauthorized_access}</span>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className={`mx-auto px-4 sm:px-6 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
@@ -1013,6 +872,16 @@ export const BranchSalesReport: React.FC = () => {
             <p className="text-gray-600 text-sm">{t.subtitle}</p>
           </div>
         </div>
+      </header>
+
+      {error && (
+        <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <span className="text-red-600 text-sm font-medium">{error}</span>
+        </div>
+      )}
+
+      <div className="mb-8">
         <div className="flex border-b border-gray-200">
           <button
             onClick={() => setActiveTab('new')}
@@ -1027,20 +896,13 @@ export const BranchSalesReport: React.FC = () => {
             {t.previousSales}
           </button>
         </div>
-      </header>
-
-      {error && (
-        <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <span className="text-red-600 text-sm font-medium">{error}</span>
-        </div>
-      )}
+      </div>
 
       {activeTab === 'new' && (
         <div className={`space-y-8 ${cart.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-8 lg:space-y-0' : ''}`}>
           <section className={`${cart.length > 0 ? 'lg:col-span-2 lg:overflow-y-auto lg:max-h-[calc(100vh-12rem)] scrollbar-none' : ''}`}>
             <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <h2 className="text-lg font-bold text-gray-900 mb-6">{t.availableProducts}</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-6">{t.availableProducts}</h2>
               {!user?.branchId && (
                 <ProductDropdown
                   value={selectedBranch}
@@ -1057,7 +919,7 @@ export const BranchSalesReport: React.FC = () => {
                 placeholder={t.searchPlaceholder}
                 ariaLabel={t.searchPlaceholder}
               />
-              <div className="mt-4 text-center text-xs text-gray-600 font-medium">
+              <div className="mt-4 text-center text-sm text-gray-600 font-medium">
                 {isRtl ? `عدد المنتجات: ${filteredInventory.length}` : `Products Count: ${filteredInventory.length}`}
               </div>
             </div>
@@ -1091,13 +953,13 @@ export const BranchSalesReport: React.FC = () => {
           {cart.length > 0 && (
             <aside className="lg:col-span-1 lg:sticky lg:top-8 space-y-6 max-h-[calc(100vh-12rem)] overflow-y-auto scrollbar-none">
               <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-bold text-gray-900 mb-6">{t.cart}</h3>
+                <h3 className="text-xl font-bold text-gray-900 mb-6">{t.cart}</h3>
                 <div className="space-y-4">
                   {cart.map((item) => (
-                    <div key={item.productId} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
+                    <div key={item.productId} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
                       <div className="flex-1">
                         <p className="font-semibold text-gray-900 text-sm">{item.displayName || t.errors.deleted_product}</p>
-                        <p className="text-xs text-gray-600">
+                        <p className="text-sm text-gray-600">
                           {item.quantity} {item.displayUnit || t.units.default} | {item.unitPrice} {t.currency} = {(item.quantity * item.unitPrice).toFixed(2)} {t.currency}
                         </p>
                       </div>
@@ -1110,7 +972,7 @@ export const BranchSalesReport: React.FC = () => {
                         />
                         <button
                           onClick={() => removeFromCart(item.productId)}
-                          className="w-7 h-7 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
+                          className="w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
                           aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
                         >
                           <Trash2 className="w-4 h-4" />
@@ -1130,7 +992,7 @@ export const BranchSalesReport: React.FC = () => {
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
                       placeholder={t.customerName}
-                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                       aria-label={t.customerName}
                     />
                     <input
@@ -1138,20 +1000,26 @@ export const BranchSalesReport: React.FC = () => {
                       value={customerPhone || ''}
                       onChange={(e) => setCustomerPhone(e.target.value)}
                       placeholder={t.customerPhone}
-                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                       aria-label={t.customerPhone}
+                    />
+                    <ProductDropdown
+                      value={paymentMethod}
+                      onChange={setPaymentMethod}
+                      options={paymentMethodOptions}
+                      ariaLabel={t.paymentMethod}
                     />
                     <textarea
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
                       placeholder={t.notes}
-                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm resize-none h-20 ${isRtl ? 'text-right' : 'text-left'}`}
+                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm resize-none h-24 ${isRtl ? 'text-right' : 'text-left'}`}
                       aria-label={t.notes}
                     />
                   </div>
                   <button
                     onClick={handleSubmitSale}
-                    className="w-full mt-4 px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                    className="w-full mt-4 px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
                     disabled={cart.length === 0 || !selectedBranch}
                     aria-label={t.submitSale}
                   >
@@ -1165,11 +1033,12 @@ export const BranchSalesReport: React.FC = () => {
       )}
 
       {activeTab === 'previous' && (
-        <div className="mt-8 space-y-8">
-          <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-            <h2 className="text-lg font-bold text-gray-900 mb-6">{t.filters}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {!user?.branchId && (
+        <div className="mt-8">
+          <h2 className="text-xl font-bold text-gray-900 mb-6">{t.previousSales}</h2>
+          {!user?.branchId && (
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-8">
+              <h2 className="text-xl font-bold text-gray-900 mb-6">{t.filters}</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                 <ProductDropdown
                   value={selectedBranch}
                   onChange={setSelectedBranch}
@@ -1177,189 +1046,66 @@ export const BranchSalesReport: React.FC = () => {
                   ariaLabel={t.branches.select_branch}
                   disabled={!!user?.branchId}
                 />
-              )}
-              <ProductDropdown value={filterPeriod} onChange={setFilterPeriod} options={periodOptions} ariaLabel={t.filterBy} />
-              {filterPeriod === 'custom' && (
-                <>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-                    aria-label={t.date}
-                  />
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-                    aria-label={t.date}
-                  />
-                </>
-              )}
-            </div>
-          </div>
-
-          <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-6">{t.branchStats}</h2>
-            {analyticsLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {[...Array(6)].map((_, index) => (
-                  <StatsSkeletonCard key={index} />
-                ))}
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                  <StatsCard
-                    title={t.totalSales}
-                    value={`${analytics.totalSales.toFixed(2)} ${t.currency}`}
-                    icon={<DollarSign className="w-5 h-5 text-white" />}
-                    color="bg-amber-600"
-                  />
-                  <StatsCard
-                    title={t.totalCount}
-                    value={analytics.totalCount}
-                    icon={<Package className="w-5 h-5 text-white" />}
-                    color="bg-blue-600"
-                  />
-                  <StatsCard
-                    title={t.averageOrderValue}
-                    value={`${analytics.averageOrderValue.toFixed(2)} ${t.currency}`}
-                    icon={<DollarSign className="w-5 h-5 text-white" />}
-                    color="bg-green-600"
-                  />
-                  <StatsCard
-                    title={t.returnRate}
-                    value={`${analytics.returnRate.toFixed(1)}%`}
-                    icon={<AlertCircle className="w-5 h-5 text-white" />}
-                    color="bg-red-600"
-                  />
-                  <StatsCard
-                    title={t.topProduct}
-                    value={analytics.topProduct.displayName || t.errors.deleted_product}
-                    icon=<Package className="w-5 h-5 text-white" />
-                    color="bg-purple-600"
-                  />
-                  <StatsCard
-                    title={t.topDepartment}
-                    value={analytics.departmentSales[0]?.displayName || t.departments.unknown}
-                    icon=<Package className="w-5 h-5 text-white" />
-                    color="bg-teal-600"
-                  />
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4">{t.topProduct}</h3>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <BarChart data={productSalesChartData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" fontSize={10} angle={45} textAnchor="end" height={60} />
-                        <YAxis fontSize={10} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend verticalAlign="bottom" />
-                        <Bar dataKey={t.totalSales} fill={chartColors[0]} radius={[4, 4, 0, 0]} />
-                        <Bar dataKey={t.quantity} fill={chartColors[1]} radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4">{t.topDepartment}</h3>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <BarChart data={departmentSalesChartData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" fontSize={10} angle={45} textAnchor="end" height={60} />
-                        <YAxis fontSize={10} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend verticalAlign="bottom" />
-                        <Bar dataKey={t.totalSales} fill={chartColors[2]} radius={[4, 4, 0, 0]} />
-                        <Bar dataKey={t.quantity} fill={chartColors[3]} radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4">{t.salesTrends}</h3>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <LineChart data={salesTrendsChartData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="period" fontSize={10} angle={45} textAnchor="end" height={60} />
-                        <YAxis fontSize={10} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend verticalAlign="bottom" />
-                        <Line type="monotone" dataKey={t.totalSales} stroke={chartColors[0]} strokeWidth={2} dot={{ r: 4 }} />
-                        <Line type="monotone" dataKey={t.totalCount} stroke={chartColors[1]} strokeWidth={2} dot={{ r: 4 }} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <div className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4">{t.returns}</h3>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <PieChart>
-                        <Pie
-                          data={returnStatsChartData}
-                          dataKey="value"
-                          nameKey="name"
-                          cx="50%"
-                          cy="50%"
-                          outerRadius={80}
-                          label={({ name, percent }) => `${name} (${(percent * 100).toFixed(1)}%)`}
-                          labelLine={false}
-                        >
-                          {returnStatsChartData.map((_, index) => (
-                            <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend verticalAlign="bottom" />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-6">{t.previousSales}</h2>
-            {loading ? (
-              <div className="space-y-6">
-                {[...Array(3)].map((_, index) => (
-                  <SaleSkeletonCard key={index} />
-                ))}
-              </div>
-            ) : sales.length === 0 ? (
-              <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
-                <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600 text-sm font-medium">{t.noSales}</p>
-              </div>
-            ) : (
-              <>
-                <div className="space-y-6">
-                  {sales.map((sale) => (
-                    <SaleCard key={sale._id} sale={sale} />
-                  ))}
-                </div>
-                {hasMore && (
-                  <div className="flex justify-center mt-6">
-                    <button
-                      onClick={loadMoreSales}
-                      className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                      disabled={salesLoading}
-                    >
-                      {salesLoading ? (
-                        <svg className="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                      ) : (
-                        t.loadMore
-                      )}
-                    </button>
-                  </div>
+                <ProductDropdown value={filterPeriod} onChange={setFilterPeriod} options={periodOptions} ariaLabel={t.filterBy} />
+                {filterPeriod === 'custom' && (
+                  <>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                      aria-label={t.date}
+                    />
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                      aria-label={t.date}
+                    />
+                  </>
                 )}
-              </>
-            )}
-          </div>
+              </div>
+            </div>
+          )}
+          {loading ? (
+            <div className="space-y-6">
+              {[...Array(3)].map((_, index) => (
+                <SaleSkeletonCard key={index} />
+              ))}
+            </div>
+          ) : sales.length === 0 ? (
+            <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
+              <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600 text-sm font-medium">{t.noSales}</p>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-6">
+                {sales.map((sale) => (
+                  <SaleCard key={sale._id} sale={sale} />
+                ))}
+              </div>
+              {hasMore && (
+                <div className="flex justify-center mt-6">
+                  <button
+                    onClick={loadMoreSales}
+                    className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                    disabled={salesLoading}
+                  >
+                    {salesLoading ? (
+                      <svg className="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      t.loadMore
+                    )}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
