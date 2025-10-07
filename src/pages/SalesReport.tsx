@@ -143,6 +143,7 @@ const translations = {
     export: 'تصدير',
     customerNameLabel: 'اسم العميل',
     customerPhoneLabel: 'رقم الهاتف',
+    paymentMethodLabel: 'طريقة الدفع',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       fetch_sales: 'خطأ أثناء جلب المبيعات',
@@ -196,6 +197,7 @@ const translations = {
     export: 'Export',
     customerNameLabel: 'Customer Name',
     customerPhoneLabel: 'Phone Number',
+    paymentMethodLabel: 'Payment Method',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       fetch_sales: 'Error fetching sales',
@@ -303,7 +305,7 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
             <p className="text-xs text-gray-500 font-alexandria">{t.totalSales}: {sale.totalAmount} {t.currency}</p>
             {sale.paymentMethod && (
               <p className="text-xs text-gray-500 font-alexandria">
-                {t.paymentMethodsLabel}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] || 'N/A'}
+                <span className="font-medium">{t.paymentMethodLabel}: </span>{t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] || 'N/A'}
               </p>
             )}
             {sale.customerName && (
@@ -667,6 +669,11 @@ export const SalesReport: React.FC = () => {
         display: true,
         font: { size: 14, family: 'Alexandria', weight: '600' },
         color: '#1F2937',
+        position: 'top' as const,
+        padding: {
+          top: 10,
+          bottom: 30,
+        },
       },
     },
     scales: {
@@ -674,9 +681,10 @@ export const SalesReport: React.FC = () => {
         ticks: {
           font: { size: 10, family: 'Alexandria', weight: '400' },
           color: '#1F2937',
-          maxRotation: isRtl ? -45 : 45,
-          minRotation: isRtl ? -45 : 45,
+          maxRotation: isRtl ? -60 : 60,
+          minRotation: isRtl ? -60 : 60,
           autoSkip: false,
+          padding: 10,
         },
         grid: { display: false },
         title: {
@@ -684,6 +692,10 @@ export const SalesReport: React.FC = () => {
           text: t.totalSales,
           font: { size: 12, family: 'Alexandria', weight: '500' },
           color: '#1F2937',
+          padding: {
+            top: 20,
+            bottom: 10,
+          },
         },
       },
       y: {
@@ -693,7 +705,7 @@ export const SalesReport: React.FC = () => {
     },
     elements: {
       bar: {
-        barThickness: 20, // عرض أصغر للعمدة
+        barThickness: 15, // عرض أصغر للعمدة في جميع الرسوم
       },
     },
   }), [isRtl, t]);
@@ -916,9 +928,9 @@ export const SalesReport: React.FC = () => {
         </div>
       )}
       {tabValue === 1 && (
-        <div className="p-3 sm:p-4 bg-white rounded-xl shadow-sm border border-gray-100 space-y-4 sm:space-y-6">
+        <div className="p-3 sm:p-4 bg-white rounded-xl shadow-sm border border-gray-100 space-y-6 sm:space-y-8">
           <h2 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4 font-alexandria">{t.analytics}</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             <div className="p-3 sm:p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-1 text-xs sm:text-sm font-alexandria">
               <h3 className="font-medium text-gray-800">{t.totalSales}</h3>
               <p className="font-semibold text-amber-600">{analytics.totalSales} {t.currency}</p>
@@ -946,17 +958,17 @@ export const SalesReport: React.FC = () => {
               data={salesTrendsData}
               options={{
                 ...chartOptions,
-                plugins: { ...chartOptions.plugins, title: { display: true, text: t.salesTrends, font: { size: 16, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.salesTrends } },
               }}
             />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8">
             <div className="w-full h-48 sm:h-64">
               <Bar
                 data={productSalesData}
                 options={{
                   ...chartOptions,
-                  plugins: { ...chartOptions.plugins, title: { display: true, text: t.productSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.productSales } },
                 }}
               />
             </div>
@@ -965,7 +977,7 @@ export const SalesReport: React.FC = () => {
                 data={leastProductSalesData}
                 options={{
                   ...chartOptions,
-                  plugins: { ...chartOptions.plugins, title: { display: true, text: t.leastProductSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.leastProductSales } },
                 }}
               />
             </div>
@@ -974,7 +986,7 @@ export const SalesReport: React.FC = () => {
                 data={departmentSalesData}
                 options={{
                   ...chartOptions,
-                  plugins: { ...chartOptions.plugins, title: { display: true, text: t.departmentSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.departmentSales } },
                 }}
               />
             </div>
@@ -983,7 +995,7 @@ export const SalesReport: React.FC = () => {
                 data={leastDepartmentSalesData}
                 options={{
                   ...chartOptions,
-                  plugins: { ...chartOptions.plugins, title: { display: true, text: t.leastDepartmentSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.leastDepartmentSales } },
                 }}
               />
             </div>
@@ -992,7 +1004,7 @@ export const SalesReport: React.FC = () => {
                 data={branchSalesData}
                 options={{
                   ...chartOptions,
-                  plugins: { ...chartOptions.plugins, title: { display: true, text: t.branchSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.branchSales } },
                 }}
               />
             </div>
@@ -1001,7 +1013,7 @@ export const SalesReport: React.FC = () => {
                 data={leastBranchSalesData}
                 options={{
                   ...chartOptions,
-                  plugins: { ...chartOptions.plugins, title: { display: true, text: t.leastBranchSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.leastBranchSales } },
                 }}
               />
             </div>
