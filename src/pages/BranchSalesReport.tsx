@@ -7,7 +7,7 @@ import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, Chevr
 import { toast } from 'react-toastify';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { debounce } from 'lodash';
-import { useSocket } from '../contexts/SocketContext';
+import io from 'socket.io-client';
 
 interface Sale {
   _id: string;
@@ -235,21 +235,20 @@ const ProductSearchInput = React.memo<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder: string;
-}>(({ value, onChange, placeholder }) => {
+  ariaLabel: string;
+}>(({ value, onChange, placeholder, ariaLabel }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
     <div className="relative group">
-      <Search
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
-      />
+      <Search className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`} />
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
         className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
-        aria-label={placeholder}
+        aria-label={ariaLabel}
       />
       {value && (
         <button
@@ -514,7 +513,6 @@ const StatsSkeletonCard = React.memo(() => (
 export const BranchSalesReport: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
-  const { socket, emit, isConnected } = useSocket(); // Use SocketProvider's socket
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   const [activeTab, setActiveTab] = useState<'new' | 'previous'>('new');
@@ -548,6 +546,7 @@ export const BranchSalesReport: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState(user?.role === 'branch' && user?.branchId ? user.branchId : '');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const socket = useMemo(() => io('https://eljoodia-server-production.up.railway.app'), []);
 
   const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim()), 300), []);
 
@@ -768,8 +767,6 @@ export const BranchSalesReport: React.FC = () => {
   }, [fetchData]);
 
   useEffect(() => {
-    if (!socket || !isConnected) return;
-
     socket.on('saleCreated', (data: any) => {
       if (data.branchId === selectedBranch) {
         toast.info(isRtl ? `تم إنشاء مبيعة جديدة: ${data.saleNumber}` : `New sale created: ${data.saleNumber}`, {
@@ -790,7 +787,7 @@ export const BranchSalesReport: React.FC = () => {
       socket.off('saleCreated');
       socket.off('saleDeleted');
     };
-  }, [socket, isConnected, fetchData, selectedBranch, isRtl]);
+  }, [socket, fetchData, selectedBranch, isRtl]);
 
   const loadMoreSales = useCallback(() => {
     setPage((prev) => prev + 1);
@@ -915,7 +912,7 @@ export const BranchSalesReport: React.FC = () => {
     };
 
     try {
-      const response = await salesAPI.create(saleData);
+      await salesAPI.create(saleData);
       toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
       setCart([]);
       setNotes('');
@@ -1238,13 +1235,13 @@ export const BranchSalesReport: React.FC = () => {
                   <StatsCard
                     title={t.topProduct}
                     value={analytics.topProduct.displayName || t.errors.deleted_product}
-                    icon=<Package className="w-5 h-5 text-white" />
+                    icon={<Package className="w-5 h-5 text-white" />}
                     color="bg-purple-600"
                   />
                   <StatsCard
                     title={t.topDepartment}
                     value={analytics.departmentSales[0]?.displayName || t.departments.unknown}
-                    icon=<Package className="w-5 h-5 text-white" />
+                    icon={<Package className="w-5 h-5 text-white" />}
                     color="bg-teal-600"
                   />
                 </div>
