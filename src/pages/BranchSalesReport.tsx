@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useLanguage } from '../contexts/LanguageContext';
+import { useLanguage, Language } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { salesAPI, branchesAPI, inventoryAPI } from '../services/api';
+import { branchesAPI, inventoryAPI, salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
-import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown  , Download} from 'lucide-react';
+import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
-import Papa from 'papaparse';
 
 interface Sale {
   _id: string;
@@ -106,7 +105,6 @@ const translations = {
     loadMore: 'تحميل المزيد',
     filterBy: 'تصفية حسب',
     customRange: 'نطاق مخصص',
-    export: 'تصدير التقرير',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       no_branch_assigned: 'لم يتم تعيين فرع',
@@ -121,7 +119,7 @@ const translations = {
       deleted_product: 'منتج محذوف',
       invalid_customer_phone: 'رقم هاتف العميل غير صالح',
       invalid_payment_method: 'طريقة الدفع غير صالحة',
-      export_failed: 'فشل تصدير التقرير',
+      no_branches_available: 'لا توجد فروع متاحة',
     },
     currency: 'ريال',
     units: { default: 'غير محدد' },
@@ -132,7 +130,6 @@ const translations = {
       credit_card: 'بطاقة ائتمان',
       bank_transfer: 'تحويل بنكي',
     },
-    returns: { status: { pending: 'معلق', approved: 'مقبول', rejected: 'مرفوض' } },
   },
   en: {
     title: 'Sales Report',
@@ -164,7 +161,6 @@ const translations = {
     loadMore: 'Load More',
     filterBy: 'Filter By',
     customRange: 'Custom Range',
-    export: 'Export Report',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       no_branch_assigned: 'No branch assigned',
@@ -179,7 +175,7 @@ const translations = {
       deleted_product: 'Deleted Product',
       invalid_customer_phone: 'Invalid customer phone',
       invalid_payment_method: 'Invalid payment method',
-      export_failed: 'Failed to export report',
+      no_branches_available: 'No branches available',
     },
     currency: 'SAR',
     units: { default: 'N/A' },
@@ -190,11 +186,9 @@ const translations = {
       credit_card: 'Credit Card',
       bank_transfer: 'Bank Transfer',
     },
-    returns: { status: { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' } },
   },
 };
 
-// Memoized Components
 const ProductSearchInput = React.memo<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -233,35 +227,41 @@ const ProductDropdown = React.memo<{
   options: { value: string; label: string }[];
   ariaLabel: string;
   disabled?: boolean;
-}>(({ value, onChange, options, ariaLabel, disabled = false }) => {
+  className?: string;
+}>(({ value, onChange, options, ariaLabel, disabled = false, className }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
+  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
+
   return (
-    <div className="relative">
+    <div className={`relative group ${className || ''}`}>
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        disabled={disabled}
-        className={`w-full ${isRtl ? 'text-right' : 'text-left'} py-2.5 px-4 border border-gray-200 rounded-lg bg-white shadow-sm hover:shadow-md flex items-center justify-between disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300`}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         aria-label={ariaLabel}
       >
-        <span>{options.find((opt) => opt.value === value)?.label || translations[language].paymentMethods.cash}</span>
-        <ChevronDown className={`w-5 h-5 transform transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <span className="truncate">{selectedOption.label}</span>
+        <ChevronDown className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200 w-5 h-5 text-gray-400 group-focus-within:text-amber-500`} />
       </button>
       {isOpen && !disabled && (
-        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-          {options.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => {
-                onChange(option.value);
-                setIsOpen(false);
-              }}
-              className={`w-full ${isRtl ? 'text-right' : 'text-left'} px-4 py-2 hover:bg-amber-50 text-sm transition-colors`}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="absolute w-full mt-2 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none">
+          {options.length > 0 ? (
+            options.map((option) => (
+              <div
+                key={option.value}
+                onClick={() => {
+                  onChange(option.value);
+                  setIsOpen(false);
+                }}
+                className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
+              >
+                {option.label}
+              </div>
+            ))
+          ) : (
+            <div className="px-4 py-2.5 text-sm text-gray-500">{isRtl ? 'لا توجد خيارات متاحة' : 'No options available'}</div>
+          )}
         </div>
       )}
     </div>
@@ -315,7 +315,7 @@ const ProductCard = React.memo<{
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   return (
-    <div className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200">
+    <div className="h-[200px] p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200">
       <div className="space-y-2">
         <h3 className="font-bold text-gray-900 text-base truncate">{product.displayName}</h3>
         <p className="text-sm text-amber-600">{t.department}: {product.product.department?.displayName || t.departments.unknown}</p>
@@ -439,12 +439,13 @@ const SaleSkeletonCard = React.memo(() => (
 ));
 
 const BranchSalesReport: React.FC = () => {
-  const { language } = useLanguage();
+  const { t: languageT, language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
-  const t = translations[isRtl ? 'ar' : 'en'];
+  const t = translations[isRtl ? 'ar' : 'en'] || translations.en;
   const [activeTab, setActiveTab] = useState<'new' | 'previous'>('new');
   const [sales, setSales] = useState<Sale[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [filterPeriod, setFilterPeriod] = useState('all');
   const [startDate, setStartDate] = useState('');
@@ -459,18 +460,14 @@ const BranchSalesReport: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<string>('cash');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState<string | undefined>(undefined);
+  const [selectedBranch, setSelectedBranch] = useState(user?.role === 'branch' && user?.branchId ? user.branchId : '');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const toastIdRef = React.useRef<string | number | null>(null);
 
-  const showToast = useCallback((message: string, type: 'error' | 'success') => {
-    if (toastIdRef.current) {
-      toast.dismiss(toastIdRef.current);
-    }
-    toastIdRef.current = toast[type](message, { autoClose: 3000, position: isRtl ? 'top-right' : 'top-left' });
-  }, [isRtl]);
-
-  const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim()), 300), []);
+  const debouncedSearch = useCallback(
+    debounce((value: string) => setSearchTerm(value.trim()), 300),
+    []
+  );
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -483,19 +480,40 @@ const BranchSalesReport: React.FC = () => {
     return inventory.filter((item) => item.displayName.toLowerCase().includes(lowerSearchTerm));
   }, [inventory, searchTerm]);
 
+  useEffect(() => {
+    setCart((prevCart) =>
+      prevCart.map((item) => {
+        const product = inventory.find((inv) => inv.product._id === item.productId);
+        return {
+          ...item,
+          displayName: product
+            ? isRtl
+              ? product.product.name || t.departments.unknown
+              : product.product.nameEn || product.product.name || t.departments.unknown
+            : item.displayName,
+          displayUnit: product
+            ? isRtl
+              ? product.product.unit || t.units.default
+              : product.product.unitEn || product.product.unit || t.units.default
+            : item.displayUnit,
+        };
+      })
+    );
+  }, [language, inventory, isRtl, t]);
+
   const fetchData = useCallback(
     async (pageNum: number = 1, append: boolean = false) => {
       if (!user?.role || user.role !== 'branch') {
         setError(t.errors.unauthorized_access);
-        showToast(t.errors.unauthorized_access, 'error');
+        toast.error(t.errors.unauthorized_access, { position: isRtl ? 'top-right' : 'top-left' });
         setLoading(false);
         return;
       }
 
-      const effectiveBranch = user.branchId;
+      const effectiveBranch = user.branchId || selectedBranch;
       if (!effectiveBranch) {
         setError(t.errors.no_branch_assigned);
-        showToast(t.errors.no_branch_assigned, 'error');
+        toast.error(t.errors.no_branch_assigned, { position: isRtl ? 'top-right' : 'top-left' });
         setLoading(false);
         return;
       }
@@ -503,30 +521,36 @@ const BranchSalesReport: React.FC = () => {
       setLoading(pageNum === 1);
       setSalesLoading(pageNum > 1);
       try {
-        const salesParams: any = { page: pageNum, limit: 20, sort: '-createdAt', branch: effectiveBranch, lang: language };
+        const salesParams: any = { page: pageNum, limit: 20, sort: '-createdAt', branch: effectiveBranch };
         if (filterPeriod === 'custom' && startDate && endDate) {
           salesParams.startDate = startDate;
           salesParams.endDate = endDate;
         }
 
-        const inventoryParams: any = { lowStock: false, branch: effectiveBranch };
+        const inventoryParams: any = { lowStock: false };
+        if (effectiveBranch) {
+          inventoryParams.branch = effectiveBranch;
+        }
 
-        const [salesResponse, inventoryResponse, branchResponse] = await Promise.all([
+        const [salesResponse, branchesResponse, inventoryResponse] = await Promise.all([
           salesAPI.getAll(salesParams).catch((err) => {
             console.error(`[${new Date().toISOString()}] Sales fetch error:`, err);
-            showToast(t.errors.fetch_sales, 'error');
+            toast.error(t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left' });
             return { sales: [], total: 0, returns: [] };
           }),
+          branchesAPI.getAll().catch((err) => {
+            console.error(`[${new Date().toISOString()}] Branch fetch error:`, err);
+            toast.error(t.errors.fetch_branches, { position: isRtl ? 'top-right' : 'top-left' });
+            return { branches: [] };
+          }),
           inventoryAPI.getInventory(inventoryParams).catch((err) => {
-            console.error(`[${new Date().toISOString()}] Inventory fetch error:`, err);
-            showToast(t.errors.fetch_inventory, 'error');
+            console.error(`[${new Date().toISOString()}] Inventory fetch error:`, err, { params: inventoryParams });
+            toast.error(t.errors.fetch_inventory, { position: isRtl ? 'top-right' : 'top-left' });
             return [];
           }),
-          branchesAPI.getById(effectiveBranch).catch((err) => {
-            console.error(`[${new Date().toISOString()}] Branch fetch error:`, err);
-            return { _id: effectiveBranch, name: t.branches.unknown, displayName: t.branches.unknown };
-          }),
         ]);
+
+        console.log(`[${new Date().toISOString()}] Inventory response:`, inventoryResponse);
 
         const returnsMap = new Map<string, Sale['returns']>();
         if (Array.isArray(salesResponse.returns)) {
@@ -540,7 +564,7 @@ const BranchSalesReport: React.FC = () => {
               items: Array.isArray(ret.items)
                 ? ret.items.map((item: any) => ({
                     productId: item.product?._id || item.productId,
-                    productName: item.product?.name || t.errors.deleted_product,
+                    productName: item.product?.name || t.departments.unknown,
                     productNameEn: item.product?.nameEn,
                     quantity: item.quantity,
                     reason: item.reason,
@@ -556,30 +580,28 @@ const BranchSalesReport: React.FC = () => {
           _id: sale._id,
           saleNumber: sale.saleNumber || 'N/A',
           branch: {
-            _id: branchResponse._id || effectiveBranch,
-            name: branchResponse.name || t.branches.unknown,
-            nameEn: branchResponse.nameEn,
-            displayName: isRtl ? (branchResponse.name || t.branches.unknown) : (branchResponse.nameEn || branchResponse.name || t.branches.unknown),
+            _id: sale.branch?._id || 'unknown',
+            name: sale.branch?.name || t.branches.unknown,
+            nameEn: sale.branch?.nameEn,
+            displayName: isRtl ? sale.branch?.name : (sale.branch?.nameEn || sale.branch?.name || t.branches.unknown),
           },
           items: Array.isArray(sale.items)
             ? sale.items.map((item: any) => ({
                 productId: item.product?._id || item.productId,
-                productName: item.product?.name || t.errors.deleted_product,
+                productName: item.product?.name || t.departments.unknown,
                 productNameEn: item.product?.nameEn,
                 unit: item.product?.unit,
                 unitEn: item.product?.unitEn,
-                displayName: isRtl ? (item.product?.name || t.errors.deleted_product) : (item.product?.nameEn || item.product?.name || t.errors.deleted_product),
+                displayName: isRtl ? (item.product?.name || t.departments.unknown) : (item.product?.nameEn || item.product?.name || t.departments.unknown),
                 displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
                 quantity: item.quantity,
                 unitPrice: item.unitPrice,
                 department: item.product?.department
                   ? {
                       _id: item.product.department._id,
-                      name: item.product.department.name || t.departments.unknown,
+                      name: item.product.department.name,
                       nameEn: item.product.department.nameEn,
-                      displayName: isRtl
-                        ? (item.product.department.name || t.departments.unknown)
-                        : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
+                      displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
                     }
                   : undefined,
               }))
@@ -596,71 +618,92 @@ const BranchSalesReport: React.FC = () => {
         setSales((prev) => (append ? [...prev, ...newSales] : newSales));
         setHasMore(salesResponse.total > pageNum * 20);
 
+        const fetchedBranches = Array.isArray(branchesResponse.branches)
+          ? branchesResponse.branches.map((branch: any) => ({
+              _id: branch._id,
+              name: branch.name || t.branches.unknown,
+              nameEn: branch.nameEn,
+              displayName: isRtl ? branch.name : (branch.nameEn || branch.name || t.branches.unknown),
+            }))
+          : [];
+        setBranches(fetchedBranches);
+
+        if (fetchedBranches.length === 0) {
+          setError(t.errors.no_branches_available);
+          toast.warn(t.errors.no_branches_available, { position: isRtl ? 'top-right' : 'top-left' });
+        }
+
         const newInventory = Array.isArray(inventoryResponse)
           ? inventoryResponse
               .filter((item: any) => item.currentStock > 0 && item.product?._id)
               .map((item: any) => ({
                 _id: item._id,
                 product: {
-                  _id: item.product?._id || item.productId,
-                  name: item.product?.name || t.errors.deleted_product,
+                  _id: item.product?._id || 'unknown',
+                  name: item.product?.name || t.departments.unknown,
                   nameEn: item.product?.nameEn,
                   unit: item.product?.unit,
                   unitEn: item.product?.unitEn,
                   price: item.product?.price || 0,
                   department: item.product?.department
                     ? {
-                        _id: item.product.department._id,
+                        _id: item.product.department._id || 'unknown',
                         name: item.product.department.name || t.departments.unknown,
                         nameEn: item.product.department.nameEn,
-                        displayName: isRtl
-                          ? (item.product.department.name || t.departments.unknown)
-                          : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
+                        displayName: isRtl ? (item.product.department.name || t.departments.unknown) : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
                       }
                     : undefined,
                 },
                 currentStock: item.currentStock || 0,
-                displayName: isRtl ? (item.product?.name || t.errors.deleted_product) : (item.product?.nameEn || item.product?.name || t.errors.deleted_product),
+                displayName: isRtl ? (item.product?.name || t.departments.unknown) : (item.product?.nameEn || item.product?.name || t.departments.unknown),
                 displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
               }))
           : [];
-
+        console.log(`[${new Date().toISOString()}] Processed inventory:`, newInventory);
         setInventory(newInventory);
-        setError('');
+
+        if (newInventory.length === 0) {
+          setError(t.noProducts);
+          toast.warn(t.noProducts, { position: isRtl ? 'top-right' : 'top-left' });
+        } else {
+          setError('');
+        }
       } catch (err: any) {
         console.error(`[${new Date().toISOString()}] Fetch error:`, err);
-        setError(t.errors.fetch_sales);
-        showToast(t.errors.fetch_sales, 'error');
+        setError(err.message || t.errors.fetch_sales);
+        toast.error(err.message || t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left' });
         setSales([]);
+        setInventory([]);
       } finally {
         setLoading(false);
         setSalesLoading(false);
       }
     },
-    [user, t, isRtl, language, showToast, filterPeriod, startDate, endDate]
+    [filterPeriod, startDate, endDate, user, t, isRtl, language, selectedBranch]
   );
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (!inventory.length && !error) {
+      fetchData();
+    }
+  }, [fetchData, inventory, error]);
 
   const loadMoreSales = useCallback(() => {
     setPage((prev) => prev + 1);
     fetchData(page + 1, true);
   }, [fetchData, page]);
 
-  const handleAddToCart = useCallback(
+  const addToCart = useCallback(
     (product: InventoryItem) => {
-      const stock = product.currentStock;
-      if (stock < 1) {
-        showToast(t.errors.insufficient_stock, 'error');
+      if (product.currentStock < 1) {
+        toast.error(t.errors.insufficient_stock, { position: isRtl ? 'top-right' : 'top-left' });
         return;
       }
       setCart((prev) => {
         const existingItem = prev.find((item) => item.productId === product.product._id);
         if (existingItem) {
-          if (existingItem.quantity >= stock) {
-            showToast(t.errors.exceeds_max_quantity, 'error');
+          if (existingItem.quantity >= product.currentStock) {
+            toast.error(t.errors.exceeds_max_quantity, { position: isRtl ? 'top-right' : 'top-left' });
             return prev;
           }
           return prev.map((item) =>
@@ -675,374 +718,394 @@ const BranchSalesReport: React.FC = () => {
             productNameEn: product.product.nameEn,
             unit: product.product.unit,
             unitEn: product.product.unitEn,
-            displayName: product.displayName,
-            displayUnit: product.displayUnit,
+            displayName: isRtl ? (product.product.name || t.departments.unknown) : (product.product.nameEn || product.product.name || t.departments.unknown),
+            displayUnit: isRtl ? (product.product.unit || t.units.default) : (product.product.unitEn || product.product.unit || t.units.default),
             quantity: 1,
             unitPrice: product.product.price,
           },
         ];
       });
     },
-    [t, showToast]
+    [t, isRtl]
   );
 
-  const handleUpdateCartQuantity = useCallback(
+  const updateCartQuantity = useCallback(
     (productId: string, quantity: number) => {
       const product = inventory.find((item) => item.product._id === productId);
       if (!product) {
-        showToast(t.errors.deleted_product, 'error');
-        return;
-      }
-      if (quantity < 1) {
-        setCart((prev) => prev.filter((item) => item.productId !== productId));
+        toast.error(t.errors.deleted_product, { position: isRtl ? 'top-right' : 'top-left' });
         return;
       }
       if (quantity > product.currentStock) {
-        showToast(t.errors.exceeds_max_quantity, 'error');
+        toast.error(t.errors.exceeds_max_quantity, { position: isRtl ? 'top-right' : 'top-left' });
+        return;
+      }
+      if (quantity <= 0) {
+        setCart((prev) => prev.filter((item) => item.productId !== productId));
         return;
       }
       setCart((prev) =>
-        prev.map((item) => (item.productId === productId ? { ...item, quantity } : item))
+        prev.map((item) =>
+          item.productId === productId
+            ? {
+                ...item,
+                quantity,
+                displayName: isRtl ? (product.product.name || t.departments.unknown) : (product.product.nameEn || product.product.name || t.departments.unknown),
+                displayUnit: isRtl ? (product.product.unit || t.units.default) : (product.product.unitEn || product.product.unit || t.units.default),
+              }
+            : item
+        )
       );
     },
-    [inventory, t, showToast]
+    [inventory, t, isRtl]
   );
 
-  const handleRemoveFromCart = useCallback(
-    (productId: string) => {
-      setCart((prev) => prev.filter((item) => item.productId !== productId));
-    },
-    []
-  );
+  const removeFromCart = useCallback((productId: string) => {
+    setCart((prev) => prev.filter((item) => item.productId !== productId));
+  }, []);
 
   const handleSubmitSale = useCallback(async () => {
-    if (!user?.branchId) {
-      showToast(t.errors.no_branch_assigned, 'error');
-      return;
-    }
     if (cart.length === 0) {
-      showToast(t.errors.empty_cart, 'error');
+      toast.error(t.errors.empty_cart, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
-    if (customerPhone && !/^\+?\d{10,15}$/.test(customerPhone)) {
-      showToast(t.errors.invalid_customer_phone, 'error');
+
+    if (customerPhone && !/^\+?\d{7,15}$/.test(customerPhone)) {
+      toast.error(t.errors.invalid_customer_phone, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
-    if (!['cash', 'credit_card', 'bank_transfer'].includes(paymentMethod)) {
-      showToast(t.errors.invalid_payment_method, 'error');
+
+    if (paymentMethod && !['cash', 'credit_card', 'bank_transfer'].includes(paymentMethod)) {
+      toast.error(t.errors.invalid_payment_method, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
+
+    const effectiveBranch = user?.branchId || selectedBranch;
+    if (!effectiveBranch) {
+      toast.error(t.errors.no_branch_assigned, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+
+    for (const item of cart) {
+      const product = inventory.find((inv) => inv.product._id === item.productId);
+      if (!product) {
+        toast.error(t.errors.deleted_product, { position: isRtl ? 'top-right' : 'top-left' });
+        return;
+      }
+      if (item.quantity > product.currentStock) {
+        toast.error(`${t.errors.insufficient_stock}: ${item.displayName}`, { position: isRtl ? 'top-right' : 'top-left' });
+        return;
+      }
+      if (item.quantity <= 0) {
+        toast.error(`${t.errors.invalid_quantity}: ${item.displayName}`, { position: isRtl ? 'top-right' : 'top-left' });
+        return;
+      }
+    }
+
+    const saleData = {
+      branch: effectiveBranch,
+      items: cart.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      })),
+      notes: notes.trim() || undefined,
+      paymentMethod: paymentMethod || undefined,
+      customerName: customerName.trim() || undefined,
+      customerPhone: customerPhone?.trim() || undefined,
+    };
 
     try {
-      const saleData = {
-        branch: user.branchId,
-        items: cart.map((item) => ({
-          product: item.productId,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-        })),
-        totalAmount: cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0),
-        notes: notes || undefined,
-        paymentMethod,
-        customerName: customerName || undefined,
-        customerPhone: customerPhone || undefined,
-      };
-
       await salesAPI.create(saleData);
-      showToast(t.submitSale, 'success');
+      toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
       setCart([]);
       setNotes('');
       setCustomerName('');
       setCustomerPhone(undefined);
       setPaymentMethod('cash');
-      fetchData(1, false); // Refresh sales
+      fetchData();
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Create sale error:`, err);
-      showToast(t.errors.create_sale_failed, 'error');
+      console.error(`[${new Date().toISOString()}] Sale submission error:`, err);
+      toast.error(t.errors.create_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
     }
-  }, [cart, notes, paymentMethod, customerName, customerPhone, user, t, showToast, fetchData]);
+  }, [cart, notes, paymentMethod, customerName, customerPhone, user, selectedBranch, inventory, t, isRtl, fetchData]);
 
-  const handleExport = useCallback(() => {
-    try {
-      const csvData = sales.map((sale) => ({
-        SaleNumber: sale.saleNumber,
-        Branch: sale.branch.displayName,
-        TotalAmount: sale.totalAmount,
-        CreatedAt: sale.createdAt,
-        PaymentMethod: sale.paymentMethod ? t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] : 'N/A',
-        CustomerName: sale.customerName || 'N/A',
-        CustomerPhone: sale.customerPhone || 'N/A',
-        Items: sale.items
-          .map((item) => `${item.displayName} (${item.quantity} ${item.displayUnit})`)
-          .join('; '),
-      }));
-      const csv = Papa.unparse(csvData);
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `branch_sales_report_${new Date().toISOString().slice(0, 10)}.csv`;
-      link.click();
-      URL.revokeObjectURL(link.href);
-      showToast(t.export, 'success');
-    } catch (err) {
-      console.error('Export failed:', err);
-      showToast(t.errors.export_failed, 'error');
+  const branchOptions = useMemo(() => {
+    if (user?.role === 'branch' && user?.branchId) {
+      const branch = branches.find((b) => b._id === user.branchId);
+      return branch ? [{ value: branch._id, label: branch.displayName }] : [];
     }
-  }, [sales, t, showToast]);
+    return [
+      { value: '', label: t.branches.select_branch },
+      ...branches.map((branch) => ({ value: branch._id, label: branch.displayName })),
+    ];
+  }, [branches, t.branches, user]);
 
-  const totalCartAmount = useMemo(
-    () => cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0).toFixed(2),
-    [cart]
+  const paymentMethodOptions = useMemo(
+    () => [
+      { value: 'cash', label: t.paymentMethods.cash },
+      { value: 'credit_card', label: t.paymentMethods.credit_card },
+      { value: 'bank_transfer', label: t.paymentMethods.bank_transfer },
+    ],
+    [t.paymentMethods]
   );
 
-  if (!user?.role || user.role !== 'branch' || !user.branchId) {
-    return (
-      <div className={`min-h-screen flex items-center justify-center bg-gradient-to-br from-amber-50 to-teal-50 ${isRtl ? 'font-arabic' : 'font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
-        <div className="p-6 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3">
-          <AlertCircle className="w-6 h-6 text-red-600" />
-          <span className="text-red-600 text-base">{user?.branchId ? t.errors.unauthorized_access : t.errors.no_branch_assigned}</span>
-        </div>
-      </div>
-    );
-  }
+  const periodOptions = useMemo(
+    () => [
+      { value: 'all', label: isRtl ? 'الكل' : 'All' },
+      { value: 'custom', label: t.customRange },
+    ],
+    [t, isRtl]
+  );
+
+  const totalCartAmount = useMemo(() => {
+    return cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0).toFixed(2);
+  }, [cart]);
 
   return (
-    <div className={`container mx-auto px-4 py-6 min-h-screen bg-gradient-to-br from-amber-50 to-teal-50 ${isRtl ? 'font-arabic' : 'font-sans'}`} dir={isRtl ? 'rtl' : 'ltr'}>
-      <header className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-center">
+    <div className={`mx-auto px-4 sm:px-6 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+      <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
-          <DollarSign className="w-8 h-8 text-amber-600" />
+          <DollarSign className="w-7 h-7 text-amber-600" />
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">{t.title}</h1>
-            <p className="text-gray-600 text-sm mt-1">{t.subtitle}</p>
+            <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
+            <p className="text-gray-600 text-sm">{t.subtitle}</p>
           </div>
         </div>
-        <div className="mt-4 sm:mt-0 flex gap-2">
+      </header>
+
+      {error && (
+        <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <span className="text-red-600 text-sm font-medium">{error}</span>
+        </div>
+      )}
+
+      <div className="mb-8">
+        <div className="flex border-b border-gray-200">
           <button
             onClick={() => setActiveTab('new')}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${activeTab === 'new' ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+            className={`px-4 py-2 text-sm font-medium ${activeTab === 'new' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-500 hover:text-amber-600'} transition-colors duration-200`}
           >
             {t.newSale}
           </button>
           <button
             onClick={() => setActiveTab('previous')}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${activeTab === 'previous' ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+            className={`px-4 py-2 text-sm font-medium ${activeTab === 'previous' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-500 hover:text-amber-600'} transition-colors duration-200`}
           >
             {t.previousSales}
           </button>
         </div>
-      </header>
-
-      {error && (
-        <div className="mb-6 p-4 bg-red-100 border border-red-300 rounded-lg flex items-center gap-3 animate-fade-in">
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <span className="text-red-600">{error}</span>
-        </div>
-      )}
+      </div>
 
       {activeTab === 'new' && (
-        <div className="space-y-6">
-          <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">{t.availableProducts}</h2>
-            <div className="mb-4">
+        <div className={`space-y-8 ${cart.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-8 lg:space-y-0' : ''}`}>
+          <section className={`${cart.length > 0 ? 'lg:col-span-2 lg:overflow-y-auto lg:max-h-[calc(100vh-12rem)] scrollbar-none' : ''}`}>
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+              <h2 className="text-xl font-bold text-gray-900 mb-6">{t.availableProducts}</h2>
+              {!user?.branchId && (
+                <ProductDropdown
+                  value={selectedBranch}
+                  onChange={setSelectedBranch}
+                  options={branchOptions}
+                  ariaLabel={t.branches.select_branch}
+                  disabled={!!user?.branchId}
+                  className="mb-4"
+                />
+              )}
               <ProductSearchInput
                 value={searchInput}
                 onChange={handleSearchChange}
                 placeholder={t.searchPlaceholder}
                 ariaLabel={t.searchPlaceholder}
               />
+              <div className="mt-4 text-center text-sm text-gray-600 font-medium">
+                {isRtl ? `عدد المنتجات: ${filteredInventory.length}` : `Products Count: ${filteredInventory.length}`}
+              </div>
             </div>
             {loading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
                 {[...Array(6)].map((_, index) => (
                   <ProductSkeletonCard key={index} />
                 ))}
               </div>
             ) : filteredInventory.length === 0 ? (
-              <div className="p-8 text-center bg-white rounded-xl shadow-md border border-gray-100">
+              <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100 mt-6">
                 <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">{t.noProducts}</p>
+                <p className="text-gray-600 text-sm font-medium">{t.noProducts}</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
                 {filteredInventory.map((product) => (
                   <ProductCard
                     key={product._id}
                     product={product}
                     cartItem={cart.find((item) => item.productId === product.product._id)}
-                    onAdd={() => handleAddToCart(product)}
-                    onUpdate={(quantity) => handleUpdateCartQuantity(product.product._id, quantity)}
-                    onRemove={() => handleRemoveFromCart(product.product._id)}
+                    onAdd={() => addToCart(product)}
+                    onUpdate={(quantity) => updateCartQuantity(product.product._id, quantity)}
+                    onRemove={() => removeFromCart(product.product._id)}
                   />
                 ))}
               </div>
             )}
-          </div>
+          </section>
 
-          <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">{t.cart}</h2>
-            {cart.length === 0 ? (
-              <div className="p-8 text-center">
-                <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">{t.emptyCart}</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {cart.map((item) => (
-                  <div key={item.productId} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div className="space-y-1">
-                      <p className="font-semibold text-gray-900">{item.displayName}</p>
-                      <p className="text-sm text-gray-600">{item.quantity} {item.displayUnit} x {item.unitPrice} {t.currency}</p>
+          {cart.length > 0 && (
+            <aside className="lg:col-span-1 lg:sticky lg:top-8 space-y-6 max-h-[calc(100vh-12rem)] overflow-y-auto scrollbar-none">
+              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+                <h3 className="text-xl font-bold text-gray-900 mb-6">{t.cart}</h3>
+                <div className="space-y-4">
+                  {cart.map((item) => (
+                    <div key={item.productId} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
+                      <div className="flex-1">
+                        <p className="font-semibold text-gray-900 text-sm">{item.displayName || t.errors.deleted_product}</p>
+                        <p className="text-sm text-gray-600">
+                          {item.quantity} {item.displayUnit || t.units.default} | {item.unitPrice} {t.currency} = {(item.quantity * item.unitPrice).toFixed(2)} {t.currency}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <QuantityInput
+                          value={item.quantity}
+                          onChange={(val) => updateCartQuantity(item.productId, parseInt(val) || 0)}
+                          onIncrement={() => updateCartQuantity(item.productId, item.quantity + 1)}
+                          onDecrement={() => updateCartQuantity(item.productId, item.quantity - 1)}
+                        />
+                        <button
+                          onClick={() => removeFromCart(item.productId)}
+                          className="w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
+                          aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <QuantityInput
-                        value={item.quantity}
-                        onChange={(val) => handleUpdateCartQuantity(item.productId, parseInt(val) || 0)}
-                        onIncrement={() => handleUpdateCartQuantity(item.productId, item.quantity + 1)}
-                        onDecrement={() => handleUpdateCartQuantity(item.productId, item.quantity - 1)}
-                      />
-                      <button
-                        onClick={() => handleRemoveFromCart(item.productId)}
-                        className="w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center"
-                        aria-label={isRtl ? 'إزالة المنتج' : 'Remove item'}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                  ))}
+                  <div className="border-t pt-4">
+                    <div className="flex justify-between font-bold text-gray-900 text-sm">
+                      <span>{t.total}:</span>
+                      <span className="text-amber-600">{totalCartAmount} {t.currency}</span>
                     </div>
                   </div>
-                ))}
-                <div className="flex justify-between items-center font-bold text-gray-900 text-base border-t pt-4">
-                  <span>{t.total}:</span>
-                  <span className="text-amber-600">{totalCartAmount} {t.currency}</span>
-                </div>
-                <div className="space-y-4">
-                  <textarea
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    placeholder={t.notes}
-                    className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-sm resize-none"
-                    rows={4}
-                    aria-label={t.notes}
-                  />
-                  <input
-                    type="text"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder={t.customerName}
-                    className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-sm"
-                    aria-label={t.customerName}
-                  />
-                  <input
-                    type="tel"
-                    value={customerPhone || ''}
-                    onChange={(e) => setCustomerPhone(e.target.value || undefined)}
-                    placeholder={t.customerPhone}
-                    className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-sm"
-                    aria-label={t.customerPhone}
-                  />
-                  <ProductDropdown
-                    value={paymentMethod}
-                    onChange={setPaymentMethod}
-                    options={Object.entries(t.paymentMethods).map(([value, label]) => ({
-                      value,
-                      label,
-                    }))}
-                    ariaLabel={t.paymentMethod}
-                  />
+                  <div className="mt-4 space-y-4">
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder={t.customerName}
+                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                      aria-label={t.customerName}
+                    />
+                    <input
+                      type="text"
+                      value={customerPhone || ''}
+                      onChange={(e) => setCustomerPhone(e.target.value)}
+                      placeholder={t.customerPhone}
+                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                      aria-label={t.customerPhone}
+                    />
+                    <ProductDropdown
+                      value={paymentMethod}
+                      onChange={setPaymentMethod}
+                      options={paymentMethodOptions}
+                      ariaLabel={t.paymentMethod}
+                    />
+                    <textarea
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder={t.notes}
+                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm resize-none h-24 ${isRtl ? 'text-right' : 'text-left'}`}
+                      aria-label={t.notes}
+                    />
+                  </div>
                   <button
                     onClick={handleSubmitSale}
-                    className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors duration-200"
+                    className="w-full mt-4 px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                    disabled={cart.length === 0 || !selectedBranch}
                     aria-label={t.submitSale}
                   >
                     {t.submitSale}
                   </button>
                 </div>
               </div>
-            )}
-          </div>
+            </aside>
+          )}
         </div>
       )}
 
       {activeTab === 'previous' && (
-        <div className="space-y-6">
-          <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">{t.filters}</h2>
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                <ProductSearchInput
-                  value={searchInput}
-                  onChange={handleSearchChange}
-                  placeholder={t.searchPlaceholder}
-                  ariaLabel={t.searchPlaceholder}
-                />
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full sm:w-40 p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-sm"
-                  aria-label={t.date}
-                  disabled={filterPeriod !== 'custom'}
-                />
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full sm:w-40 p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm text-sm"
-                  aria-label={t.date}
-                  disabled={filterPeriod !== 'custom'}
-                />
+        <div className="mt-8">
+          <h2 className="text-xl font-bold text-gray-900 mb-6">{t.previousSales}</h2>
+          {!user?.branchId && (
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-8">
+              <h2 className="text-xl font-bold text-gray-900 mb-6">{t.filters}</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                 <ProductDropdown
-                  value={filterPeriod}
-                  onChange={setFilterPeriod}
-                  options={[
-                    { value: 'all', label: t.branches.all_branches },
-                    { value: 'custom', label: t.customRange },
-                  ]}
-                  ariaLabel={t.filterBy}
+                  value={selectedBranch}
+                  onChange={setSelectedBranch}
+                  options={branchOptions}
+                  ariaLabel={t.branches.select_branch}
+                  disabled={!!user?.branchId}
                 />
+                <ProductDropdown value={filterPeriod} onChange={setFilterPeriod} options={periodOptions} ariaLabel={t.filterBy} />
+                {filterPeriod === 'custom' && (
+                  <>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                      aria-label={t.date}
+                    />
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                      aria-label={t.date}
+                    />
+                  </>
+                )}
               </div>
             </div>
-            <button
-              onClick={handleExport}
-              className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm flex items-center gap-2 transition-colors"
-            >
-              <Download className="w-5 h-5" />
-              {t.export}
-            </button>
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">{t.previousSales}</h2>
-            {loading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {[...Array(6)].map((_, index) => (
-                  <SaleSkeletonCard key={index} />
+          )}
+          {loading ? (
+            <div className="space-y-6">
+              {[...Array(3)].map((_, index) => (
+                <SaleSkeletonCard key={index} />
+              ))}
+            </div>
+          ) : sales.length === 0 ? (
+            <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
+              <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600 text-sm font-medium">{t.noSales}</p>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-6">
+                {sales.map((sale) => (
+                  <SaleCard key={sale._id} sale={sale} />
                 ))}
               </div>
-            ) : sales.length === 0 ? (
-              <div className="p-8 text-center bg-white rounded-xl shadow-md border border-gray-100">
-                <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">{t.noSales}</p>
-              </div>
-            ) : (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {sales.map((sale) => (
-                    <SaleCard key={sale._id} sale={sale} />
-                  ))}
-                </div>
-                {hasMore && (
+              {hasMore && (
+                <div className="flex justify-center mt-6">
                   <button
                     onClick={loadMoreSales}
+                    className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
                     disabled={salesLoading}
-                    className="mt-4 w-full py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm transition-colors disabled:opacity-50"
                   >
-                    {salesLoading ? 'Loading...' : t.loadMore}
+                    {salesLoading ? (
+                      <svg className="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      t.loadMore
+                    )}
                   </button>
-                )}
-              </>
-            )}
-          </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
