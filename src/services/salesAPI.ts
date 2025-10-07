@@ -106,7 +106,7 @@ const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 
 const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7,15}$/.test(phone);
 
-const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'card', 'credit'].includes(method);
+const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'card'].includes(method);
 
 const isValidPaymentStatus = (status: string | undefined): boolean => !status || ['pending', 'completed', 'canceled'].includes(status);
 
@@ -135,7 +135,7 @@ export const salesAPI = {
     }
     if (!isValidPaymentMethod(saleData.paymentMethod)) {
       console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid payment method:`, saleData.paymentMethod);
-      throw new Error(isRtl ? 'طريقة الدفع غير صالحة' : 'Invalid payment method');
+      throw new Error(isRtl ? 'طريقة الدفع غير صالحة (يجب أن تكون cash أو card)' : 'Invalid payment method (must be cash or card)');
     }
     if (!isValidPaymentStatus(saleData.paymentStatus)) {
       console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid payment status:`, saleData.paymentStatus);
