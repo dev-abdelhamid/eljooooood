@@ -7,13 +7,13 @@ import { branchesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, DollarSign, Search, X, ChevronDown, Edit, Trash } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { Bar, Line, Pie } from 'react-chartjs-2';
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend } from 'chart.js';
+import { Bar, Line } from 'react-chartjs-2';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend } from 'chart.js';
 import { debounce } from 'lodash';
 import Papa from 'papaparse';
 
 // تسجيل مكونات Chart.js
-ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend);
 
 // تعريف الأنواع
 interface Sale {
@@ -109,7 +109,6 @@ interface SalesAnalytics {
   };
   salesTrends: Array<{ period: string; totalSales: number; saleCount: number }>;
   topCustomers: Array<{ customerName: string; customerPhone: string; totalSpent: number; purchaseCount: number }>;
-  paymentMethods: Array<{ paymentMethod: string; totalAmount: number; count: number }>;
 }
 
 // الترجمات
@@ -130,7 +129,6 @@ const translations = {
     topProduct: 'المنتج الأكثر مبيعًا',
     salesTrends: 'اتجاهات المبيعات',
     topCustomers: 'أفضل العملاء',
-    paymentMethodsLabel: 'طرق الدفع',
     noSales: 'لا توجد مبيعات',
     date: 'التاريخ',
     quantity: 'الكمية',
@@ -183,7 +181,6 @@ const translations = {
     topProduct: 'Top Selling Product',
     salesTrends: 'Sales Trends',
     topCustomers: 'Top Customers',
-    paymentMethodsLabel: 'Payment Methods',
     noSales: 'No sales found',
     date: 'Date',
     quantity: 'Quantity',
@@ -295,30 +292,30 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
     const isRtl = language === 'ar';
     const t = translations[isRtl ? 'ar' : 'en'];
     return (
-      <div className="p-4 sm:p-6 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100">
-        <div className="flex flex-col sm:flex-row items-start justify-between space-y-4 sm:space-y-0 sm:space-x-4">
+      <div className="p-3 sm:p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100">
+        <div className="flex flex-col sm:flex-row items-start justify-between space-y-3 sm:space-y-0 sm:space-x-4">
           <div className="space-y-2 w-full">
-            <h3 className="font-semibold text-gray-800 text-lg font-alexandria">{sale.orderNumber}</h3>
-            <p className="text-sm text-gray-500 font-alexandria">{t.date}: {sale.createdAt}</p>
-            <p className="text-sm text-gray-500 font-alexandria">{t.branchSales}: {sale.branch?.displayName || t.errors.departments.unknown}</p>
-            <p className="text-sm text-gray-500 font-alexandria">{t.totalSales}: {sale.totalAmount} {t.currency}</p>
+            <h3 className="font-semibold text-gray-800 text-base sm:text-lg font-alexandria">{sale.orderNumber}</h3>
+            <p className="text-xs text-gray-500 font-alexandria">{t.date}: {sale.createdAt}</p>
+            <p className="text-xs text-gray-500 font-alexandria">{t.branchSales}: {sale.branch?.displayName || t.errors.departments.unknown}</p>
+            <p className="text-xs text-gray-500 font-alexandria">{t.totalSales}: {sale.totalAmount} {t.currency}</p>
             {sale.paymentMethod && (
-              <p className="text-sm text-gray-500 font-alexandria">
+              <p className="text-xs text-gray-500 font-alexandria">
                 {t.paymentMethodsLabel}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] || 'N/A'}
               </p>
             )}
             {sale.customerName && (
-              <p className="text-sm text-gray-500 font-alexandria">
+              <p className="text-xs text-gray-500 font-alexandria">
                 <span className="font-medium">{t.customerNameLabel}: </span>{sale.customerName}
               </p>
             )}
             {sale.customerPhone && (
-              <p className="text-sm text-gray-500 font-alexandria">
+              <p className="text-xs text-gray-500 font-alexandria">
                 <span className="font-medium">{t.customerPhoneLabel}: </span>{sale.customerPhone}
               </p>
             )}
-            {sale.notes && <p className="text-sm text-gray-400 italic font-alexandria">{t.notes}: {sale.notes}</p>}
-            <ul className="space-y-1 text-sm text-gray-600">
+            {sale.notes && <p className="text-xs text-gray-400 italic font-alexandria">{t.notes}: {sale.notes}</p>}
+            <ul className="space-y-1 text-xs text-gray-600">
               {sale.items.map((item, index) => (
                 <li key={index} className="border-t border-gray-100 pt-1 font-alexandria">
                   {item.displayName || t.errors.deleted_product} ({item.department?.displayName || t.errors.departments.unknown}) - {t.quantity}: {item.quantity} {item.displayUnit || t.units.default}, {t.totalSales}: {item.unitPrice} {t.currency}
@@ -326,12 +323,12 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
               ))}
             </ul>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <button onClick={() => onEdit(sale)} aria-label={t.editSale}>
-              <Edit className="w-5 h-5 text-blue-500 hover:text-blue-700 transition-colors" />
+              <Edit className="w-4 h-4 text-blue-500 hover:text-blue-700 transition-colors" />
             </button>
             <button onClick={() => onDelete(sale._id)} aria-label={t.deleteSale}>
-              <Trash className="w-5 h-5 text-red-500 hover:text-red-700 transition-colors" />
+              <Trash className="w-4 h-4 text-red-500 hover:text-red-700 transition-colors" />
             </button>
           </div>
         </div>
@@ -362,7 +359,6 @@ export const SalesReport: React.FC = () => {
     topProduct: { productId: null, productName: '', displayName: '', totalQuantity: 0, totalRevenue: 0 },
     salesTrends: [],
     topCustomers: [],
-    paymentMethods: [],
   });
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
@@ -521,13 +517,9 @@ export const SalesReport: React.FC = () => {
             : { productId: null, productName: '', displayName: '', totalQuantity: 0, totalRevenue: 0 },
           salesTrends: (analyticsResponse.salesTrends || []).map((trend: any) => ({
             ...trend,
-            period: formatDate(trend.period, language),
+            period: new Date(trend.period).toLocaleDateString('ar-SA', { day: '2-digit', month: '2-digit' }),
           })),
           topCustomers: analyticsResponse.topCustomers || [],
-          paymentMethods: (analyticsResponse.paymentMethods || []).map((pm: any) => ({
-            ...pm,
-            paymentMethod: t.paymentMethods[pm.paymentMethod as keyof typeof t.paymentMethods] || pm.paymentMethod || 'N/A',
-          })),
         });
         setError('');
       } catch (err: any) {
@@ -638,12 +630,6 @@ export const SalesReport: React.FC = () => {
         backgroundColor: chartColors[0],
         borderWidth: 0,
       },
-      {
-        label: t.quantity,
-        data: analytics.productSales.slice(0, 5).map((p) => p.totalQuantity),
-        backgroundColor: chartColors[1],
-        borderWidth: 0,
-      },
     ],
   };
 
@@ -653,13 +639,7 @@ export const SalesReport: React.FC = () => {
       {
         label: `${t.totalSales} (${t.currency})`,
         data: analytics.leastProductSales.slice(0, 5).map((p) => p.totalRevenue),
-        backgroundColor: chartColors[2],
-        borderWidth: 0,
-      },
-      {
-        label: t.quantity,
-        data: analytics.leastProductSales.slice(0, 5).map((p) => p.totalQuantity),
-        backgroundColor: chartColors[3],
+        backgroundColor: chartColors[1],
         borderWidth: 0,
       },
     ],
@@ -671,13 +651,7 @@ export const SalesReport: React.FC = () => {
       {
         label: `${t.totalSales} (${t.currency})`,
         data: analytics.departmentSales.slice(0, 5).map((d) => d.totalRevenue),
-        backgroundColor: chartColors[4],
-        borderWidth: 0,
-      },
-      {
-        label: t.quantity,
-        data: analytics.departmentSales.slice(0, 5).map((d) => d.totalQuantity),
-        backgroundColor: chartColors[0],
+        backgroundColor: chartColors[2],
         borderWidth: 0,
       },
     ],
@@ -689,12 +663,6 @@ export const SalesReport: React.FC = () => {
       {
         label: `${t.totalSales} (${t.currency})`,
         data: analytics.leastDepartmentSales.slice(0, 5).map((d) => d.totalRevenue),
-        backgroundColor: chartColors[2],
-        borderWidth: 0,
-      },
-      {
-        label: t.quantity,
-        data: analytics.leastDepartmentSales.slice(0, 5).map((d) => d.totalQuantity),
         backgroundColor: chartColors[3],
         borderWidth: 0,
       },
@@ -707,13 +675,7 @@ export const SalesReport: React.FC = () => {
       {
         label: `${t.totalSales} (${t.currency})`,
         data: analytics.branchSales.slice(0, 5).map((b) => b.totalSales),
-        backgroundColor: chartColors[0],
-        borderWidth: 0,
-      },
-      {
-        label: t.totalCount,
-        data: analytics.branchSales.slice(0, 5).map((b) => b.saleCount),
-        backgroundColor: chartColors[1],
+        backgroundColor: chartColors[4],
         borderWidth: 0,
       },
     ],
@@ -725,13 +687,7 @@ export const SalesReport: React.FC = () => {
       {
         label: `${t.totalSales} (${t.currency})`,
         data: analytics.leastBranchSales.slice(0, 5).map((b) => b.totalSales),
-        backgroundColor: chartColors[2],
-        borderWidth: 0,
-      },
-      {
-        label: t.totalCount,
-        data: analytics.leastBranchSales.slice(0, 5).map((b) => b.saleCount),
-        backgroundColor: chartColors[3],
+        backgroundColor: chartColors[0],
         borderWidth: 0,
       },
     ],
@@ -740,14 +696,6 @@ export const SalesReport: React.FC = () => {
   const salesTrendsData = {
     labels: analytics.salesTrends.slice(0, 10).map((trend) => trend.period),
     datasets: [
-      {
-        label: `${t.totalSales} (${t.currency})`,
-        data: analytics.salesTrends.slice(0, 10).map((trend) => trend.totalSales),
-        borderColor: chartColors[0],
-        backgroundColor: 'transparent',
-        fill: false,
-        tension: 0.4,
-      },
       {
         label: t.totalCount,
         data: analytics.salesTrends.slice(0, 10).map((trend) => trend.saleCount),
@@ -759,60 +707,37 @@ export const SalesReport: React.FC = () => {
     ],
   };
 
-  const paymentMethodsData = {
-    labels: analytics.paymentMethods.map((pm) => pm.paymentMethod),
-    datasets: [
-      {
-        data: analytics.paymentMethods.map((pm) => pm.totalAmount),
-        backgroundColor: chartColors,
-      },
-    ],
-  };
-
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
       legend: {
         position: 'bottom' as const,
-        labels: { font: { size: 10, family: 'Alexandria' }, color: '#6B7280' },
+        labels: { font: { size: 12, family: 'Alexandria', weight: '500' }, color: '#1F2937' },
       },
       tooltip: {
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-        borderColor: '#E5E7EB',
+        backgroundColor: '#1F2937',
+        titleColor: '#FFFFFF',
+        bodyColor: '#FFFFFF',
+        borderColor: '#4B5563',
         borderWidth: 1,
-        titleFont: { size: 10, family: 'Alexandria' },
-        bodyFont: { size: 10, family: 'Alexandria' },
-        padding: 8,
+        titleFont: { size: 12, family: 'Alexandria', weight: '500' },
+        bodyFont: { size: 12, family: 'Alexandria' },
+        padding: 10,
+      },
+      title: {
+        font: { size: 14, family: 'Alexandria', weight: '600' },
+        color: '#1F2937',
       },
     },
     scales: {
       x: {
-        ticks: { font: { size: 9, family: 'Alexandria' }, color: '#6B7280', maxRotation: isRtl ? -45 : 45, minRotation: isRtl ? -45 : 45 },
+        ticks: { font: { size: 10, family: 'Alexandria', weight: '400' }, color: '#1F2937', maxRotation: isRtl ? -45 : 45, minRotation: isRtl ? -45 : 45 },
         grid: { display: false },
       },
       y: {
-        ticks: { font: { size: 9, family: 'Alexandria' }, color: '#6B7280' },
+        ticks: { font: { size: 10, family: 'Alexandria', weight: '400' }, color: '#1F2937' },
         grid: { color: '#E5E7EB' },
-      },
-    },
-  };
-
-  const pieChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: 'bottom' as const,
-        labels: { font: { size: 10, family: 'Alexandria' }, color: '#6B7280' },
-      },
-      tooltip: {
-        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-        borderColor: '#E5E7EB',
-        borderWidth: 1,
-        titleFont: { size: 10, family: 'Alexandria' },
-        bodyFont: { size: 10, family: 'Alexandria' },
-        padding: 8,
       },
     },
   };
@@ -820,64 +745,64 @@ export const SalesReport: React.FC = () => {
   if (user?.role !== 'admin') {
     return (
       <div className={`min-h-screen flex items-center justify-center bg-gray-50 ${isRtl ? 'font-alexandria' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
-        <div className="p-6 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
-          <AlertCircle className="w-6 h-6 text-red-600" />
-          <span className="text-red-600 text-base font-medium font-alexandria">{t.errors.unauthorized_access}</span>
+        <div className="p-4 sm:p-6 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
+          <span className="text-red-600 text-sm sm:text-base font-medium font-alexandria">{t.errors.unauthorized_access}</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`min-h-screen bg-gray-50 p-4 sm:p-6 ${isRtl ? 'font-alexandria' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`min-h-screen bg-gray-50 p-3 sm:p-4 md:p-6 ${isRtl ? 'font-alexandria' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;500;600&display=swap" rel="stylesheet" />
-      <header className="mb-6 flex flex-col gap-4">
-        <div className="flex items-center gap-3">
-          <DollarSign className="w-6 h-6 text-amber-600" />
+      <header className="mb-4 sm:mb-6 flex flex-col gap-3 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600" />
           <div>
-            <h1 className="text-xl sm:text-2xl font-semibold text-gray-800 font-alexandria">{t.title}</h1>
-            <p className="text-gray-500 text-xs font-alexandria">{t.previousSales}</p>
+            <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800 font-alexandria">{t.title}</h1>
+            <p className="text-gray-500 text-xs sm:text-sm font-alexandria">{t.previousSales}</p>
           </div>
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => setTabValue(0)}
-            className={`px-3 py-1 text-xs font-medium rounded-md transition-all font-alexandria ${tabValue === 0 ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+            className={`px-2 sm:px-3 py-1 text-xs sm:text-sm font-medium rounded-md transition-all font-alexandria ${tabValue === 0 ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
           >
             {t.previousSales}
           </button>
           <button
             onClick={() => setTabValue(1)}
-            className={`px-3 py-1 text-xs font-medium rounded-md transition-all font-alexandria ${tabValue === 1 ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+            className={`px-2 sm:px-3 py-1 text-xs sm:text-sm font-medium rounded-md transition-all font-alexandria ${tabValue === 1 ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
           >
             {t.analytics}
           </button>
         </div>
       </header>
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2 text-xs font-alexandria">
-          <AlertCircle className="w-4 h-4 text-red-600" />
+        <div className="mb-3 sm:mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2 text-xs sm:text-sm font-alexandria">
+          <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
           <span className="text-red-600 font-medium">{error}</span>
         </div>
       )}
       {tabValue === 0 && (
-        <div className="space-y-6">
-          <div className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-            <h2 className="text-lg font-semibold text-gray-800 mb-4 font-alexandria">{t.filters}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-4 sm:space-y-6">
+          <div className="p-3 sm:p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4 font-alexandria">{t.filters}</h2>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
               <SearchInput value={searchInput} onChange={handleSearchChange} placeholder={t.searchPlaceholder} />
               <input
                 type="date"
                 value={filterStartDate}
                 onChange={(e) => setFilterStartDate(e.target.value)}
-                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}
+                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white shadow-sm hover:shadow-md text-xs sm:text-sm ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}
                 aria-label={t.date}
               />
               <input
                 type="date"
                 value={filterEndDate}
                 onChange={(e) => setFilterEndDate(e.target.value)}
-                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white shadow-sm hover:shadow-md text-xs ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}
+                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white shadow-sm hover:shadow-md text-xs sm:text-sm ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}
                 aria-label={t.date}
               />
               <BranchFilter
@@ -888,10 +813,10 @@ export const SalesReport: React.FC = () => {
                 allBranchesLabel={t.allBranches}
               />
             </div>
-            <div className="mt-4 flex justify-end">
+            <div className="mt-3 sm:mt-4 flex justify-end">
               <button
                 onClick={handleExport}
-                className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-medium transition-colors font-alexandria"
+                className="px-2 sm:px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs sm:text-sm font-medium transition-colors font-alexandria"
                 aria-label={t.export}
               >
                 {t.export}
@@ -899,11 +824,11 @@ export const SalesReport: React.FC = () => {
             </div>
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-gray-800 mb-3 font-alexandria">{t.previousSales}</h2>
+            <h2 className="text-base sm:text-lg font-semibold text-gray-800 mb-2 sm:mb-3 font-alexandria">{t.previousSales}</h2>
             {loading || branchesLoading ? (
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 gap-3 sm:gap-4">
                 {[...Array(6)].map((_, index) => (
-                  <div key={index} className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100 animate-pulse">
+                  <div key={index} className="p-3 sm:p-4 bg-white rounded-xl shadow-sm border border-gray-100 animate-pulse">
                     <div className="space-y-2">
                       <div className="h-4 bg-gray-200 rounded w-3/4"></div>
                       <div className="h-3 bg-gray-200 rounded w-1/2"></div>
@@ -913,26 +838,26 @@ export const SalesReport: React.FC = () => {
                 ))}
               </div>
             ) : filteredSales.length === 0 ? (
-              <div className="p-6 text-center bg-white rounded-xl shadow-sm border border-gray-100">
-                <DollarSign className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-                <p className="text-gray-600 text-xs font-medium font-alexandria">{t.noSales}</p>
+              <div className="p-4 sm:p-6 text-center bg-white rounded-xl shadow-sm border border-gray-100">
+                <DollarSign className="w-8 h-8 sm:w-10 sm:h-10 text-gray-400 mx-auto mb-2 sm:mb-3" />
+                <p className="text-gray-600 text-xs sm:text-sm font-medium font-alexandria">{t.noSales}</p>
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-1 gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:gap-4">
                   {filteredSales.map((sale) => (
                     <SaleCard key={sale._id} sale={sale} onEdit={handleEditSale} onDelete={handleDeleteSale} />
                   ))}
                 </div>
                 {hasMore && (
-                  <div className="flex justify-center mt-4">
+                  <div className="flex justify-center mt-3 sm:mt-4">
                     <button
                       onClick={loadMoreSales}
-                      className="px-4 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-medium transition-colors disabled:opacity-50 font-alexandria"
+                      className="px-3 sm:px-4 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs sm:text-sm font-medium transition-colors disabled:opacity-50 font-alexandria"
                       disabled={salesLoading}
                     >
                       {salesLoading ? (
-                        <svg className="animate-spin h-4 w-4 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <svg className="animate-spin h-4 w-4 sm:h-5 sm:w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
@@ -948,53 +873,94 @@ export const SalesReport: React.FC = () => {
         </div>
       )}
       {tabValue === 1 && (
-        <div className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4 font-alexandria">{t.analytics}</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="w-full h-48 sm:h-64">
-              <Bar data={productSalesData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { display: true, text: t.productSales, font: { size: 14, family: 'Alexandria' }, color: '#4B5563' } } }} />
+        <div className="p-3 sm:p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+          <h2 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4 font-alexandria">{t.analytics}</h2>
+          <div className="space-y-4 sm:space-y-6">
+            <div className="w-full h-64 sm:h-80">
+              <Line
+                data={salesTrendsData}
+                options={{
+                  ...chartOptions,
+                  plugins: { ...chartOptions.plugins, title: { display: true, text: t.salesTrends, font: { size: 16, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                }}
+              />
             </div>
-            <div className="w-full h-48 sm:h-64">
-              <Bar data={leastProductSalesData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { display: true, text: t.leastProductSales, font: { size: 14, family: 'Alexandria' }, color: '#4B5563' } } }} />
-            </div>
-            <div className="w-full h-48 sm:h-64">
-              <Bar data={departmentSalesData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { display: true, text: t.departmentSales, font: { size: 14, family: 'Alexandria' }, color: '#4B5563' } } }} />
-            </div>
-            <div className="w-full h-48 sm:h-64">
-              <Bar data={leastDepartmentSalesData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { display: true, text: t.leastDepartmentSales, font: { size: 14, family: 'Alexandria' }, color: '#4B5563' } } }} />
-            </div>
-            <div className="w-full h-48 sm:h-64">
-              <Bar data={branchSalesData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { display: true, text: t.branchSales, font: { size: 14, family: 'Alexandria' }, color: '#4B5563' } } }} />
-            </div>
-            <div className="w-full h-48 sm:h-64">
-              <Bar data={leastBranchSalesData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { display: true, text: t.leastBranchSales, font: { size: 14, family: 'Alexandria' }, color: '#4B5563' } } }} />
-            </div>
-            <div className="w-full h-48 sm:h-64">
-              <Line data={salesTrendsData} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { display: true, text: t.salesTrends, font: { size: 14, family: 'Alexandria' }, color: '#4B5563' } } }} />
-            </div>
-            <div className="w-full h-48 sm:h-64">
-              <Pie data={paymentMethodsData} options={{ ...pieChartOptions, plugins: { ...pieChartOptions.plugins, title: { display: true, text: t.paymentMethodsLabel, font: { size: 14, family: 'Alexandria' }, color: '#4B5563' } } }} />
-            </div>
-            <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-1 text-xs font-alexandria">
-              <h3 className="font-medium text-gray-800">{t.totalSales}</h3>
-              <p className="font-semibold text-amber-600">{analytics.totalSales} {t.currency}</p>
-              <p className="text-gray-600">{t.totalCount}: {analytics.totalCount}</p>
-              <p className="text-gray-600">{t.averageOrderValue}: {analytics.averageOrderValue} {t.currency}</p>
-              <p className="text-gray-600">{t.topProduct}: {analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity})</p>
-            </div>
-            <div className="p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-1 text-xs font-alexandria">
-              <h3 className="font-medium text-gray-800">{t.topCustomers}</h3>
-              {analytics.topCustomers.length > 0 ? (
-                <ul className="space-y-1 text-gray-600">
-                  {analytics.topCustomers.map((customer, index) => (
-                    <li key={index}>
-                      <span className="font-medium">{t.customerNameLabel}: </span>{customer.customerName} ({customer.customerPhone}) - {customer.totalSpent} {t.currency}, {customer.purchaseCount} {t.totalCount}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-gray-600">{t.noSales}</p>
-              )}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <div className="w-full h-48 sm:h-64">
+                <Bar
+                  data={productSalesData}
+                  options={{
+                    ...chartOptions,
+                    plugins: { ...chartOptions.plugins, title: { display: true, text: t.productSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  }}
+                />
+              </div>
+              <div className="w-full h-48 sm:h-64">
+                <Bar
+                  data={leastProductSalesData}
+                  options={{
+                    ...chartOptions,
+                    plugins: { ...chartOptions.plugins, title: { display: true, text: t.leastProductSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  }}
+                />
+              </div>
+              <div className="w-full h-48 sm:h-64">
+                <Bar
+                  data={departmentSalesData}
+                  options={{
+                    ...chartOptions,
+                    plugins: { ...chartOptions.plugins, title: { display: true, text: t.departmentSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  }}
+                />
+              </div>
+              <div className="w-full h-48 sm:h-64">
+                <Bar
+                  data={leastDepartmentSalesData}
+                  options={{
+                    ...chartOptions,
+                    plugins: { ...chartOptions.plugins, title: { display: true, text: t.leastDepartmentSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  }}
+                />
+              </div>
+              <div className="w-full h-48 sm:h-64">
+                <Bar
+                  data={branchSalesData}
+                  options={{
+                    ...chartOptions,
+                    plugins: { ...chartOptions.plugins, title: { display: true, text: t.branchSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  }}
+                />
+              </div>
+              <div className="w-full h-48 sm:h-64">
+                <Bar
+                  data={leastBranchSalesData}
+                  options={{
+                    ...chartOptions,
+                    plugins: { ...chartOptions.plugins, title: { display: true, text: t.leastBranchSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  }}
+                />
+              </div>
+              <div className="p-3 sm:p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-1 text-xs sm:text-sm font-alexandria">
+                <h3 className="font-medium text-gray-800">{t.totalSales}</h3>
+                <p className="font-semibold text-amber-600">{analytics.totalSales} {t.currency}</p>
+                <p className="text-gray-600">{t.totalCount}: {analytics.totalCount}</p>
+                <p className="text-gray-600">{t.averageOrderValue}: {analytics.averageOrderValue} {t.currency}</p>
+                <p className="text-gray-600">{t.topProduct}: {analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity})</p>
+              </div>
+              <div className="p-3 sm:p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-1 text-xs sm:text-sm font-alexandria">
+                <h3 className="font-medium text-gray-800">{t.topCustomers}</h3>
+                {analytics.topCustomers.length > 0 ? (
+                  <ul className="space-y-1 text-gray-600">
+                    {analytics.topCustomers.map((customer, index) => (
+                      <li key={index}>
+                        <span className="font-medium">{t.customerNameLabel}: </span>{customer.customerName} ({customer.customerPhone}) - {customer.totalSpent} {t.currency}, {customer.purchaseCount} {t.totalCount}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-gray-600">{t.noSales}</p>
+                )}
+              </div>
             </div>
           </div>
         </div>
