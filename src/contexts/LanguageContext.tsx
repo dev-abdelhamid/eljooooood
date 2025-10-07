@@ -59,6 +59,7 @@ const translations = {
   "orders.review": " الطلبات ",
     "sales.review": " المبيعات ",
     "productionTasks": " مهامي  ",
+    "sales.create": " انشاء مبيعات جديدة ",
 
     "returns.review": " المرتجعات ",
     // الطلبات
@@ -379,6 +380,7 @@ const translations = {
     "login": "Login",
     "logout": "Logout",
     "username": "Username",
+    "sales.create": "Create new Sale",
     "password": "Password",
     "dashboard": "Dashboard",
     "save": "Save",

@@ -69,6 +69,8 @@ export function Sidebar({
     const branchItems = [
       { path: '/orders/new', icon: ShoppingBag, label: t('orders.create') },
       { path: '/branch-orders', icon: ShoppingBag, label: t('orders.review') },
+            { path: '/branch-sales/new', icon: ListTodo, label: t('sales.create') },
+
       { path: '/branch-sales', icon: TrendingUp, label: t('sales.review') },
       { path: '/branch-returns', icon: RefreshCcw, label: t('returns.review') },
       { path: '/branch-inventory', icon: Warehouse, label: t('inventory') },

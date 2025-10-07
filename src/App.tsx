@@ -25,6 +25,7 @@ import { Users } from './pages/Users';
 import { BranchInventory } from './pages/BranchInventory';
 import SalesReport from './pages/SalesReport';
 import BranchSalesReport from './pages/BranchSalesReport';
+import CreateSale from './pages/CreateSale';
 import  AdminSalesReport   from './pages/AdminSalesReport';
 
 
@@ -87,6 +88,7 @@ function AppContent() {
                   <Route path="/branch-inventory" element={<BranchInventory />} />
                   <Route path="/branch-sales" element={<BranchSalesReport />} />
                   <Route path="/branch-returns" element={<BranchReturns />} />
+                  <Route path="/branch-sales/new" element={<CreateSale />} />
                   <Route path="/branch-orders" element={<BranchOrders />} />
                   <Route path="/chefstatics" element={<Chefstatics />} />
                   <Route path="/chefs" element={<Chefs />} />
