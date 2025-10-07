@@ -33,14 +33,6 @@ interface Sale {
   paymentStatus?: string;
   customerName?: string;
   customerPhone?: string;
-  returns?: Array<{
-    _id: string;
-    returnNumber: string;
-    status: string;
-    items: Array<{ product: string; productName: string; productNameEn?: string; quantity: number; reason: string }>;
-    reason: string;
-    createdAt: string;
-  }>;
 }
 
 interface Branch {
@@ -102,7 +94,6 @@ interface SalesAnalytics {
   totalSales: number;
   totalCount: number;
   averageOrderValue: number;
-  returnRate: number;
   topProduct: {
     productId: string | null;
     productName: string;
@@ -114,7 +105,6 @@ interface SalesAnalytics {
   salesTrends: Array<{ period: string; totalSales: number; saleCount: number }>;
   topCustomers: Array<{ customerName: string; customerPhone: string; totalSpent: number; purchaseCount: number }>;
   paymentMethods: Array<{ paymentMethod: string; totalAmount: number; count: number }>;
-  returnStats: Array<{ status: string; count: number; totalQuantity: number }>;
 }
 
 const translations = {
@@ -131,17 +121,12 @@ const translations = {
     totalSales: 'إجمالي المبيعات',
     totalCount: 'عدد المبيعات',
     averageOrderValue: 'متوسط قيمة الطلب',
-    returnRate: 'نسبة المرتجعات',
     topProduct: 'المنتج الأكثر مبيعًا',
     salesTrends: 'اتجاهات المبيعات',
     topCustomers: 'أفضل العملاء',
     paymentMethodsLabel: 'طرق الدفع',
-    returnStats: 'إحصائيات المرتجعات',
     noSales: 'لا توجد مبيعات',
     date: 'التاريخ',
-    returns: 'المرتجعات',
-    return: 'مرتجع',
-    reason: 'السبب',
     quantity: 'الكمية',
     branchFilter: 'اختر فرعًا',
     allBranches: 'جميع الفروع',
@@ -151,12 +136,13 @@ const translations = {
     deleteSale: 'حذف المبيعة',
     confirmDelete: 'هل أنت متأكد من حذف هذه المبيعة؟',
     export: 'تصدير',
+    showCustomer: 'إظهار بيانات العميل',
+    hideCustomer: 'إخفاء بيانات العميل',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       fetch_sales: 'خطأ أثناء جلب المبيعات',
       fetch_branches: 'خطأ أثناء جلب الفروع',
       delete_sale_failed: 'فشل حذف المبيعة',
-      update_sale_failed: 'فشل تعديل المبيعة',
       invalid_sale_id: 'معرف المبيعة غير صالح',
       deleted_product: 'منتج محذوف',
       departments: { unknown: 'غير معروف' },
@@ -173,7 +159,6 @@ const translations = {
       completed: 'مكتمل',
       canceled: 'ملغى',
     },
-    returns: { status: { pending: 'معلق', approved: 'مقبول', rejected: 'مرفوض' } },
   },
   en: {
     title: 'Sales Report',
@@ -188,17 +173,12 @@ const translations = {
     totalSales: 'Total Sales',
     totalCount: 'Total Sale Count',
     averageOrderValue: 'Average Order Value',
-    returnRate: 'Return Rate',
     topProduct: 'Top Selling Product',
     salesTrends: 'Sales Trends',
     topCustomers: 'Top Customers',
     paymentMethodsLabel: 'Payment Methods',
-    returnStats: 'Return Statistics',
     noSales: 'No sales found',
     date: 'Date',
-    returns: 'Returns',
-    return: 'Return',
-    reason: 'Reason',
     quantity: 'Quantity',
     branchFilter: 'Select Branch',
     allBranches: 'All Branches',
@@ -208,12 +188,13 @@ const translations = {
     deleteSale: 'Delete Sale',
     confirmDelete: 'Are you sure you want to delete this sale?',
     export: 'Export',
+    showCustomer: 'Show Customer Info',
+    hideCustomer: 'Hide Customer Info',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       fetch_sales: 'Error fetching sales',
       fetch_branches: 'Error fetching branches',
       delete_sale_failed: 'Failed to delete sale',
-      update_sale_failed: 'Failed to update sale',
       invalid_sale_id: 'Invalid sale ID',
       deleted_product: 'Deleted Product',
       departments: { unknown: 'Unknown' },
@@ -230,11 +211,9 @@ const translations = {
       completed: 'Completed',
       canceled: 'Canceled',
     },
-    returns: { status: { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' } },
   },
 };
 
-// Memoized Components
 const SearchInput = React.memo<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -243,22 +222,22 @@ const SearchInput = React.memo<{
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
-    <div className="relative group">
+    <div className="relative">
       <Search
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 transition-colors group-focus-within:text-blue-500`}
+        className={`absolute ${isRtl ? 'left-2' : 'right-2'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4`}
       />
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-10 pr-4' : 'pr-10 pl-4'} py-2 border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white shadow-sm text-sm placeholder-gray-400 font-arabic ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pl-8 pr-2' : 'pr-8 pl-2'} py-1.5 border border-gray-200 rounded-md focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all bg-white text-sm placeholder-gray-400 font-arabic ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={placeholder}
       />
       {value && (
         <button
           onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
-          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-blue-500 transition-colors`}
+          className={`absolute ${isRtl ? 'left-2' : 'right-2'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
           <X className="w-4 h-4" />
@@ -282,7 +261,7 @@ const BranchFilter = React.memo<{
       <select
         value={selectedBranch}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-full ${isRtl ? 'pr-8 pl-3' : 'pl-8 pr-3'} py-2 border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white shadow-sm text-sm appearance-none font-arabic ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pr-8 pl-2' : 'pl-8 pr-2'} py-1.5 border border-gray-200 rounded-md focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all bg-white text-sm appearance-none font-arabic ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={placeholder}
       >
         <option value="">{allBranchesLabel}</option>
@@ -307,9 +286,9 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
     const [showCustomerInfo, setShowCustomerInfo] = useState(false);
 
     return (
-      <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100 hover:border-blue-200 transition-all duration-200 max-w-2xl mx-auto">
+      <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100 hover:border-amber-200 transition-all max-w-2xl mx-auto">
         <div className="flex items-start justify-between">
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <h3 className="font-semibold text-gray-800 text-base">{sale.orderNumber}</h3>
             <p className="text-xs text-gray-500">{t.date}: {sale.createdAt}</p>
             <p className="text-xs text-gray-500">{t.branchSales}: {sale.branch?.displayName || t.errors.departments.unknown}</p>
@@ -328,13 +307,13 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
               <div>
                 <button
                   onClick={() => setShowCustomerInfo(!showCustomerInfo)}
-                  className="text-xs text-blue-500 hover:text-blue-600 flex items-center gap-1"
+                  className="text-xs text-amber-500 hover:text-amber-600 flex items-center gap-1"
                 >
                   {showCustomerInfo ? t.hideCustomer : t.showCustomer}
                   <ChevronDown className={`w-4 h-4 transform ${showCustomerInfo ? 'rotate-180' : ''}`} />
                 </button>
                 {showCustomerInfo && (
-                  <div className="mt-2 space-y-1">
+                  <div className="mt-1 space-y-1">
                     {sale.customerName && <p className="text-xs text-gray-500">{t.customerName}: {sale.customerName}</p>}
                     {sale.customerPhone && <p className="text-xs text-gray-500">{t.customerPhone}: {sale.customerPhone}</p>}
                   </div>
@@ -349,32 +328,13 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
                 </li>
               ))}
             </ul>
-            {(sale.returns || []).length > 0 && (
-              <div className="mt-3">
-                <p className="text-xs font-medium text-gray-600">{t.returns}:</p>
-                <ul className="list-disc list-inside text-xs text-gray-500">
-                  {sale.returns.map((ret, index) => (
-                    <li key={index}>
-                      {t.return} #{ret.returnNumber} ({t.returns.status[ret.status as keyof typeof t.returns.status]}) - {t.reason}: {ret.reason} ({t.date}: {ret.createdAt})
-                      <ul className="list-circle list-inside ml-4">
-                        {(ret.items || []).map((item, i) => (
-                          <li key={i}>
-                            {item.productName || t.errors.deleted_product} - {t.quantity}: {item.quantity}, {t.reason}: {item.reason}
-                          </li>
-                        ))}
-                      </ul>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
           <div className="flex gap-2">
             <button onClick={() => onEdit(sale)} aria-label={t.editSale}>
-              <Edit className="w-4 h-4 text-blue-500 hover:text-blue-600 transition-colors" />
+              <Edit className="w-4 h-4 text-blue-500 hover:text-blue-600" />
             </button>
             <button onClick={() => onDelete(sale._id)} aria-label={t.deleteSale}>
-              <Trash className="w-4 h-4 text-red-500 hover:text-red-600 transition-colors" />
+              <Trash className="w-4 h-4 text-red-500 hover:text-red-600" />
             </button>
           </div>
         </div>
@@ -400,12 +360,10 @@ const SalesReport: React.FC = () => {
     totalSales: 0,
     totalCount: 0,
     averageOrderValue: 0,
-    returnRate: 0,
     topProduct: { productId: null, productName: '', displayName: '', totalQuantity: 0, totalRevenue: 0 },
     salesTrends: [],
     topCustomers: [],
     paymentMethods: [],
-    returnStats: [],
   });
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
@@ -425,9 +383,8 @@ const SalesReport: React.FC = () => {
   const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim()), 300), []);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchInput(value);
-    debouncedSearch(value);
+    setSearchInput(e.target.value);
+    debouncedSearch(e.target.value);
   };
 
   const fetchBranches = useCallback(async () => {
@@ -475,26 +432,6 @@ const SalesReport: React.FC = () => {
           salesAPI.getAnalytics(analyticsParams),
         ]);
 
-        const returnsMap = new Map<string, Sale['returns']>();
-        (salesResponse.returns || []).forEach((ret: any) => {
-          const orderId = ret.order?._id || ret.order;
-          if (!returnsMap.has(orderId)) returnsMap.set(orderId, []);
-          returnsMap.get(orderId)!.push({
-            _id: ret._id,
-            returnNumber: ret.returnNumber,
-            status: ret.status,
-            items: (ret.items || []).map((item: any) => ({
-              product: item.product?._id || item.product,
-              productName: item.product?.name || t.errors.deleted_product,
-              productNameEn: item.product?.nameEn,
-              quantity: item.quantity,
-              reason: item.reason,
-            })),
-            reason: ret.reason,
-            createdAt: formatDate(ret.createdAt, language),
-          });
-        });
-
         const newSales = (salesResponse.sales || []).map((sale: any) => ({
           _id: sale._id,
           orderNumber: sale.saleNumber || sale.orderNumber,
@@ -538,7 +475,6 @@ const SalesReport: React.FC = () => {
           paymentStatus: sale.paymentStatus,
           customerName: sale.customerName,
           customerPhone: sale.customerPhone,
-          returns: returnsMap.get(sale._id) || [],
         }));
 
         setSales((prev) => (append ? [...prev, ...newSales] : newSales));
@@ -566,13 +502,13 @@ const SalesReport: React.FC = () => {
               : ps.productNameEn || ps.productName || t.errors.deleted_product,
           })),
           departmentSales: (analyticsResponse.departmentSales || []).map((ds: any) => ({
-            ...ds,
+            ...bs,
             displayName: isRtl
               ? ds.departmentName
               : ds.departmentNameEn || ds.departmentName || t.errors.departments.unknown,
           })),
           leastDepartmentSales: (analyticsResponse.leastDepartmentSales || []).map((ds: any) => ({
-            ...ds,
+            ...bs,
             displayName: isRtl
               ? ds.departmentName
               : ds.departmentNameEn || ds.departmentName || t.errors.departments.unknown,
@@ -580,7 +516,6 @@ const SalesReport: React.FC = () => {
           totalSales: analyticsResponse.totalSales || 0,
           totalCount: analyticsResponse.totalCount || 0,
           averageOrderValue: analyticsResponse.averageOrderValue || 0,
-          returnRate: analyticsResponse.returnRate || 0,
           topProduct: analyticsResponse.topProduct
             ? {
                 ...analyticsResponse.topProduct,
@@ -599,10 +534,6 @@ const SalesReport: React.FC = () => {
           paymentMethods: (analyticsResponse.paymentMethods || []).map((pm: any) => ({
             ...pm,
             paymentMethod: t.paymentMethods[pm.paymentMethod as keyof typeof t.paymentMethods] || pm.paymentMethod,
-          })),
-          returnStats: (analyticsResponse.returnStats || []).map((rs: any) => ({
-            ...rs,
-            status: t.returns.status[rs.status as keyof typeof t.returns.status] || rs.status,
           })),
         });
 
@@ -703,12 +634,12 @@ const SalesReport: React.FC = () => {
     [sales, searchTerm]
   );
 
-  const chartColors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+  const chartColors = ['#FBBF24', '#3B82F6', '#FF6384', '#4BC0C0', '#9966FF'];
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-gray-800 text-white p-2 rounded-md shadow-lg opacity-90 font-arabic text-sm">
+        <div className="bg-gray-800 text-white p-2 rounded-md shadow-lg opacity-90 font-arabic text-xs">
           <p className="font-medium">{label}</p>
           {payload.map((entry: any, index: number) => (
             <p key={index} style={{ color: entry.color }}>
@@ -723,9 +654,9 @@ const SalesReport: React.FC = () => {
 
   if (user?.role !== 'admin') {
     return (
-      <div className={`min-h-screen flex items-center justify-center bg-gray-50 ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+      <div className={`min-h-screen flex items-center justify-center bg-gray-50 font-arabic`} dir={isRtl ? 'rtl' : 'ltr'}>
         <div className="p-4 bg-red-50 border border-red-200 rounded-md flex items-center gap-2">
-          <AlertCircle className="w-5 h-5 text-red-500" />
+          <AlertCircle className="w-4 h-4 text-red-500" />
           <span className="text-red-500 text-sm font-medium">{t.errors.unauthorized_access}</span>
         </div>
       </div>
@@ -733,25 +664,25 @@ const SalesReport: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen bg-gray-50 p-4 sm:p-6 font-arabic ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`min-h-screen bg-gray-50 p-4 font-arabic`} dir={isRtl ? 'rtl' : 'ltr'}>
       <header className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-2">
-          <DollarSign className="w-6 h-6 text-blue-500" />
+          <DollarSign className="w-6 h-6 text-amber-500" />
           <div>
-            <h1 className="text-2xl font-semibold text-gray-800">{t.title}</h1>
-            <p className="text-xs text-gray-500 mt-1">{t.previousSales}</p>
+            <h1 className="text-xl font-semibold text-gray-800">{t.title}</h1>
+            <p className="text-xs text-gray-500">{t.previousSales}</p>
           </div>
         </div>
         <div className="mt-3 sm:mt-0 flex gap-2">
           <button
             onClick={() => setTabValue(0)}
-            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${tabValue === 0 ? 'bg-blue-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${tabValue === 0 ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
           >
             {t.previousSales}
           </button>
           <button
             onClick={() => setTabValue(1)}
-            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${tabValue === 1 ? 'bg-blue-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${tabValue === 1 ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
           >
             {t.analytics}
           </button>
@@ -768,21 +699,21 @@ const SalesReport: React.FC = () => {
       {tabValue === 0 && (
         <div className="space-y-4">
           <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-            <h2 className="text-base font-semibold text-gray-800 mb-4">{t.filters}</h2>
+            <h2 className="text-base font-semibold text-gray-800 mb-3">{t.filters}</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <SearchInput value={searchInput} onChange={handleSearchChange} placeholder={t.searchPlaceholder} />
               <input
                 type="date"
                 value={filterStartDate}
                 onChange={(e) => setFilterStartDate(e.target.value)}
-                className={`w-full ${isRtl ? 'pr-3' : 'pl-3'} py-2 border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white shadow-sm text-sm font-arabic ${isRtl ? 'text-right' : 'text-left'}`}
+                className={`w-full ${isRtl ? 'pr-2' : 'pl-2'} py-1.5 border border-gray-200 rounded-md focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all bg-white text-sm font-arabic ${isRtl ? 'text-right' : 'text-left'}`}
                 aria-label={t.date}
               />
               <input
                 type="date"
                 value={filterEndDate}
                 onChange={(e) => setFilterEndDate(e.target.value)}
-                className={`w-full ${isRtl ? 'pr-3' : 'pl-3'} py-2 border border-gray-200 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 bg-white shadow-sm text-sm font-arabic ${isRtl ? 'text-right' : 'text-left'}`}
+                className={`w-full ${isRtl ? 'pr-2' : 'pl-2'} py-1.5 border border-gray-200 rounded-md focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all bg-white text-sm font-arabic ${isRtl ? 'text-right' : 'text-left'}`}
                 aria-label={t.date}
               />
               <BranchFilter
@@ -796,7 +727,7 @@ const SalesReport: React.FC = () => {
             <div className="mt-3 flex justify-end">
               <button
                 onClick={handleExport}
-                className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm font-medium transition-colors duration-200"
+                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm font-medium transition-colors"
                 aria-label={t.export}
               >
                 {t.export}
@@ -806,13 +737,13 @@ const SalesReport: React.FC = () => {
           <div>
             <h2 className="text-base font-semibold text-gray-800 mb-3">{t.previousSales}</h2>
             {loading || branchesLoading ? (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {[...Array(3)].map((_, index) => (
                   <div
                     key={index}
                     className="p-4 bg-white rounded-lg shadow-sm border border-gray-100 animate-pulse max-w-2xl mx-auto"
                   >
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       <div className="h-3 bg-gray-200 rounded w-3/4"></div>
                       <div className="h-2 bg-gray-200 rounded w-1/2"></div>
                       <div className="h-2 bg-gray-200 rounded w-1/3"></div>
@@ -822,12 +753,12 @@ const SalesReport: React.FC = () => {
               </div>
             ) : filteredSales.length === 0 ? (
               <div className="p-6 text-center bg-white rounded-lg shadow-sm border border-gray-100 max-w-2xl mx-auto">
-                <DollarSign className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+                <DollarSign className="w-8 h-8 text-gray-400 mx-auto mb-2" />
                 <p className="text-gray-500 text-sm font-medium">{t.noSales}</p>
               </div>
             ) : (
               <>
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {filteredSales.map((sale) => (
                     <SaleCard key={sale._id} sale={sale} onEdit={handleEditSale} onDelete={handleDeleteSale} />
                   ))}
@@ -836,7 +767,7 @@ const SalesReport: React.FC = () => {
                   <div className="flex justify-center mt-4">
                     <button
                       onClick={loadMoreSales}
-                      className="px-4 py-1.5 bg-blue-500 hover:bg-blue-600 text-white rounded-md text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                      className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm font-medium transition-colors disabled:opacity-50"
                       disabled={salesLoading}
                     >
                       {salesLoading ? (
@@ -844,7 +775,7 @@ const SalesReport: React.FC = () => {
                           className="animate-spin h-4 w-4 text-white mx-auto"
                           xmlns="http://www.w3.org/2000/svg"
                           fill="none"
-                          viewBox="0 0 24 24"
+                          viewBox="0 24 24"
                         >
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path
@@ -867,39 +798,37 @@ const SalesReport: React.FC = () => {
 
       {tabValue === 1 && (
         <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-          <h2 className="text-base font-semibold text-gray-800 mb-4">{t.analytics}</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-gray-800">{t.productSales}</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={analytics.productSales.slice(0, 5)} layout="horizontal">
+          <h2 className="text-base font-semibold text-gray-800 mb-3">{t.analytics}</h2>
+          <div className="space-y-4 max-w-2xl mx-auto">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.productSales}</h3>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={analytics.productSales.slice(0, 5)} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="displayName" tick={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} textAnchor={isRtl ? 'end' : 'middle'} />
-                  <YAxis tick={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
+                  <XAxis type="number" tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
+                  <YAxis dataKey="displayName" type="category" tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} width={100} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
+                  <Legend wrapperStyle={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
                   <Bar dataKey="totalRevenue" name={`${t.totalSales} (${t.currency})`} fill={chartColors[0]} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="totalQuantity" name={t.quantity} fill={chartColors[1]} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-gray-800">{t.leastProductSales}</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={analytics.leastProductSales.slice(0, 5)} layout="horizontal">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.leastProductSales}</h3>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={analytics.leastProductSales.slice(0, 5)} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="displayName" tick={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} textAnchor={isRtl ? 'end' : 'middle'} />
-                  <YAxis tick={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
+                  <XAxis type="number" tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
+                  <YAxis dataKey="displayName" type="category" tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} width={100} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
+                  <Legend wrapperStyle={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
                   <Bar dataKey="totalRevenue" name={`${t.totalSales} (${t.currency})`} fill={chartColors[2]} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="totalQuantity" name={t.quantity} fill={chartColors[3]} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-gray-800">{t.departmentSales}</h3>
-              <ResponsiveContainer width="100%" height={250}>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.departmentSales}</h3>
+              <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
                   <Pie
                     data={analytics.departmentSales}
@@ -907,22 +836,23 @@ const SalesReport: React.FC = () => {
                     nameKey="displayName"
                     cx="50%"
                     cy="50%"
-                    outerRadius={80}
+                    outerRadius={70}
                     fill="#8884d8"
-                    label={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }}
+                    label={{ position: 'outside', fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit', offset: 10 }}
+                    labelLine={{ stroke: '#999', strokeWidth: 1 }}
                   >
                     {analytics.departmentSales.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
                     ))}
                   </Pie>
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
+                  <Legend wrapperStyle={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-gray-800">{t.leastDepartmentSales}</h3>
-              <ResponsiveContainer width="100%" height={250}>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.leastDepartmentSales}</h3>
+              <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
                   <Pie
                     data={analytics.leastDepartmentSales}
@@ -930,64 +860,62 @@ const SalesReport: React.FC = () => {
                     nameKey="displayName"
                     cx="50%"
                     cy="50%"
-                    outerRadius={80}
+                    outerRadius={70}
                     fill="#8884d8"
-                    label={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }}
+                    label={{ position: 'outside', fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit', offset: 10 }}
+                    labelLine={{ stroke: '#999', strokeWidth: 1 }}
                   >
                     {analytics.leastDepartmentSales.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
                     ))}
                   </Pie>
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
+                  <Legend wrapperStyle={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-gray-800">{t.branchSales}</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={analytics.branchSales.slice(0, 5)} layout="horizontal">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.branchSales}</h3>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={analytics.branchSales.slice(0, 5)} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="displayName" tick={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} textAnchor={isRtl ? 'end' : 'middle'} />
-                  <YAxis tick={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
+                  <XAxis type="number" tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
+                  <YAxis dataKey="displayName" type="category" tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} width={100} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
+                  <Legend wrapperStyle={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
                   <Bar dataKey="totalSales" name={`${t.totalSales} (${t.currency})`} fill={chartColors[0]} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="saleCount" name={t.totalCount} fill={chartColors[1]} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-gray-800">{t.leastBranchSales}</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={analytics.leastBranchSales.slice(0, 5)} layout="horizontal">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.leastBranchSales}</h3>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={analytics.leastBranchSales.slice(0, 5)} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="displayName" tick={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} textAnchor={isRtl ? 'end' : 'middle'} />
-                  <YAxis tick={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
+                  <XAxis type="number" tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
+                  <YAxis dataKey="displayName" type="category" tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} width={100} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
+                  <Legend wrapperStyle={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
                   <Bar dataKey="totalSales" name={`${t.totalSales} (${t.currency})`} fill={chartColors[2]} radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="saleCount" name={t.totalCount} fill={chartColors[3]} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-gray-800">{t.salesTrends}</h3>
-              <ResponsiveContainer width="100%" height={250}>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.salesTrends}</h3>
+              <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={analytics.salesTrends}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="period" tick={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} textAnchor={isRtl ? 'end' : 'middle'} />
-                  <YAxis tick={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
+                  <XAxis dataKey="period" tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
+                  <YAxis tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
-                  <Line type="monotone" dataKey="totalSales" name={`${t.totalSales} (${t.currency})`} stroke={chartColors[0]} strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="saleCount" name={t.totalCount} stroke={chartColors[1]} strokeWidth={2} dot={false} />
+                  <Legend wrapperStyle={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
+                  <Line type="monotone" dataKey="totalSales" name={`${t.totalSales} (${t.currency})`} stroke={chartColors[0]} strokeWidth={1.5} dot={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-gray-800">{t.paymentMethodsLabel}</h3>
-              <ResponsiveContainer width="100%" height={250}>
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.paymentMethodsLabel}</h3>
+              <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
                   <Pie
                     data={analytics.paymentMethods}
@@ -995,56 +923,33 @@ const SalesReport: React.FC = () => {
                     nameKey="paymentMethod"
                     cx="50%"
                     cy="50%"
-                    outerRadius={80}
+                    outerRadius={70}
                     fill="#8884d8"
-                    label={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }}
+                    label={{ position: 'outside', fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit', offset: 10 }}
+                    labelLine={{ stroke: '#999', strokeWidth: 1 }}
                   >
                     {analytics.paymentMethods.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
                     ))}
                   </Pie>
                   <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-gray-800">{t.returnStats}</h3>
-              <ResponsiveContainer width="100%" height={250}>
-                <PieChart>
-                  <Pie
-                    data={analytics.returnStats}
-                    dataKey="count"
-                    nameKey="status"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    fill="#8884d8"
-                    label={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }}
-                  >
-                    {analytics.returnStats.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 12, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
+                  <Legend wrapperStyle={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
             <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.totalSales}</h3>
-              <p className="text-2xl font-semibold text-blue-500">{analytics.totalSales} {t.currency}</p>
-              <p className="text-xs text-gray-500 mt-2">{t.totalCount}: {analytics.totalCount}</p>
-              <p className="text-xs text-gray-500 mt-2">{t.averageOrderValue}: {analytics.averageOrderValue} {t.currency}</p>
-              <p className="text-xs text-gray-500 mt-2">{t.returnRate}: {analytics.returnRate}%</p>
-              <p className="text-xs text-gray-500 mt-2">
+              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.totalSales}</h3>
+              <p className="text-xl font-semibold text-amber-500">{analytics.totalSales} {t.currency}</p>
+              <p className="text-xs text-gray-500 mt-1">{t.totalCount}: {analytics.totalCount}</p>
+              <p className="text-xs text-gray-500 mt-1">{t.averageOrderValue}: {analytics.averageOrderValue} {t.currency}</p>
+              <p className="text-xs text-gray-500 mt-1">
                 {t.topProduct}: {analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity})
               </p>
             </div>
             <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.topCustomers}</h3>
+              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.topCustomers}</h3>
               {analytics.topCustomers.length > 0 ? (
-                <ul className="space-y-2">
+                <ul className="space-y-1">
                   {analytics.topCustomers.map((customer, index) => (
                     <li key={index} className="text-xs text-gray-500">
                       {customer.customerName} ({customer.customerPhone}) - {customer.totalSpent} {t.currency}, {customer.purchaseCount} {t.totalCount}
