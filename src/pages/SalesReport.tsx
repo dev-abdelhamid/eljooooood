@@ -129,6 +129,7 @@ const translations = {
     topProduct: 'المنتج الأكثر مبيعًا',
     salesTrends: 'اتجاهات المبيعات',
     topCustomers: 'أفضل العملاء',
+    unknownCustomers: 'عملاء غير معروفين',
     noSales: 'لا توجد مبيعات',
     date: 'التاريخ',
     quantity: 'الكمية',
@@ -181,6 +182,7 @@ const translations = {
     topProduct: 'Top Selling Product',
     salesTrends: 'Sales Trends',
     topCustomers: 'Top Customers',
+    unknownCustomers: 'Unknown Customers',
     noSales: 'No sales found',
     date: 'Date',
     quantity: 'Quantity',
@@ -519,7 +521,7 @@ export const SalesReport: React.FC = () => {
             ...trend,
             period: new Date(trend.period).toLocaleDateString('ar-SA', { day: '2-digit', month: '2-digit' }),
           })),
-          topCustomers: analyticsResponse.topCustomers || [],
+          topCustomers: (analyticsResponse.topCustomers || []),
         });
         setError('');
       } catch (err: any) {
@@ -613,101 +615,37 @@ export const SalesReport: React.FC = () => {
   }, [sales, t]);
 
   const filteredSales = useMemo(
-    () => sales.filter((sale) => sale.orderNumber.toLowerCase().includes(searchTerm.toLowerCase())),
+    () => sales.filter((sale) => {
+      const term = searchTerm.toLowerCase();
+      return (
+        sale.orderNumber.toLowerCase().includes(term) ||
+        (sale.customerName?.toLowerCase().includes(term) ?? false) ||
+        (sale.customerPhone?.toLowerCase().includes(term) ?? false) ||
+        sale.items.some((item) => item.displayName.toLowerCase().includes(term))
+      );
+    }),
     [sales, searchTerm]
   );
+
+  const processedTopCustomers = useMemo(() => {
+    const customers = analytics.topCustomers.map((customer) => {
+      if (!customer.customerName && !customer.customerPhone) {
+        return { ...customer, customerName: t.unknownCustomers, customerPhone: '' };
+      }
+      return customer;
+    });
+    return customers.sort((a, b) => {
+      if (a.customerName === t.unknownCustomers) return 1;
+      if (b.customerName === t.unknownCustomers) return -1;
+      return b.totalSpent - a.totalSpent;
+    });
+  }, [analytics.topCustomers, t]);
 
   // ألوان الرسوم
   const chartColors = ['#FBBF24', '#3B82F6', '#FF6384', '#4BC0C0', '#9966FF'];
 
   // خيارات الرسوم باستخدام Chart.js
-  const productSalesData = {
-    labels: analytics.productSales.slice(0, 5).map((p) => p.displayName),
-    datasets: [
-      {
-        label: `${t.totalSales} (${t.currency})`,
-        data: analytics.productSales.slice(0, 5).map((p) => p.totalRevenue),
-        backgroundColor: chartColors[0],
-        borderWidth: 0,
-      },
-    ],
-  };
-
-  const leastProductSalesData = {
-    labels: analytics.leastProductSales.slice(0, 5).map((p) => p.displayName),
-    datasets: [
-      {
-        label: `${t.totalSales} (${t.currency})`,
-        data: analytics.leastProductSales.slice(0, 5).map((p) => p.totalRevenue),
-        backgroundColor: chartColors[1],
-        borderWidth: 0,
-      },
-    ],
-  };
-
-  const departmentSalesData = {
-    labels: analytics.departmentSales.slice(0, 5).map((d) => d.displayName),
-    datasets: [
-      {
-        label: `${t.totalSales} (${t.currency})`,
-        data: analytics.departmentSales.slice(0, 5).map((d) => d.totalRevenue),
-        backgroundColor: chartColors[2],
-        borderWidth: 0,
-      },
-    ],
-  };
-
-  const leastDepartmentSalesData = {
-    labels: analytics.leastDepartmentSales.slice(0, 5).map((d) => d.displayName),
-    datasets: [
-      {
-        label: `${t.totalSales} (${t.currency})`,
-        data: analytics.leastDepartmentSales.slice(0, 5).map((d) => d.totalRevenue),
-        backgroundColor: chartColors[3],
-        borderWidth: 0,
-      },
-    ],
-  };
-
-  const branchSalesData = {
-    labels: analytics.branchSales.slice(0, 5).map((b) => b.displayName),
-    datasets: [
-      {
-        label: `${t.totalSales} (${t.currency})`,
-        data: analytics.branchSales.slice(0, 5).map((b) => b.totalSales),
-        backgroundColor: chartColors[4],
-        borderWidth: 0,
-      },
-    ],
-  };
-
-  const leastBranchSalesData = {
-    labels: analytics.leastBranchSales.slice(0, 5).map((b) => b.displayName),
-    datasets: [
-      {
-        label: `${t.totalSales} (${t.currency})`,
-        data: analytics.leastBranchSales.slice(0, 5).map((b) => b.totalSales),
-        backgroundColor: chartColors[0],
-        borderWidth: 0,
-      },
-    ],
-  };
-
-  const salesTrendsData = {
-    labels: analytics.salesTrends.slice(0, 10).map((trend) => trend.period),
-    datasets: [
-      {
-        label: t.totalCount,
-        data: analytics.salesTrends.slice(0, 10).map((trend) => trend.saleCount),
-        borderColor: chartColors[1],
-        backgroundColor: 'transparent',
-        fill: false,
-        tension: 0.4,
-      },
-    ],
-  };
-
-  const chartOptions = {
+  const chartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -726,20 +664,125 @@ export const SalesReport: React.FC = () => {
         padding: 10,
       },
       title: {
+        display: true,
         font: { size: 14, family: 'Alexandria', weight: '600' },
         color: '#1F2937',
       },
     },
     scales: {
       x: {
-        ticks: { font: { size: 10, family: 'Alexandria', weight: '400' }, color: '#1F2937', maxRotation: isRtl ? -45 : 45, minRotation: isRtl ? -45 : 45 },
+        ticks: {
+          font: { size: 10, family: 'Alexandria', weight: '400' },
+          color: '#1F2937',
+          maxRotation: isRtl ? -45 : 45,
+          minRotation: isRtl ? -45 : 45,
+          autoSkip: false,
+        },
         grid: { display: false },
+        title: {
+          display: true,
+          text: t.totalSales,
+          font: { size: 12, family: 'Alexandria', weight: '500' },
+          color: '#1F2937',
+        },
       },
       y: {
         ticks: { font: { size: 10, family: 'Alexandria', weight: '400' }, color: '#1F2937' },
         grid: { color: '#E5E7EB' },
       },
     },
+    elements: {
+      bar: {
+        barThickness: 20, // عرض أصغر للعمدة
+      },
+    },
+  }), [isRtl, t]);
+
+  // بيانات الرسوم مع عرض 10 عناصر بدلاً من 5
+  const productSalesData = {
+    labels: analytics.productSales.slice(0, 10).map((p) => p.displayName),
+    datasets: [
+      {
+        label: `${t.totalSales} (${t.currency})`,
+        data: analytics.productSales.slice(0, 10).map((p) => p.totalRevenue),
+        backgroundColor: chartColors[0],
+        borderWidth: 0,
+      },
+    ],
+  };
+
+  const leastProductSalesData = {
+    labels: analytics.leastProductSales.slice(0, 10).map((p) => p.displayName),
+    datasets: [
+      {
+        label: `${t.totalSales} (${t.currency})`,
+        data: analytics.leastProductSales.slice(0, 10).map((p) => p.totalRevenue),
+        backgroundColor: chartColors[1],
+        borderWidth: 0,
+      },
+    ],
+  };
+
+  const departmentSalesData = {
+    labels: analytics.departmentSales.slice(0, 10).map((d) => d.displayName),
+    datasets: [
+      {
+        label: `${t.totalSales} (${t.currency})`,
+        data: analytics.departmentSales.slice(0, 10).map((d) => d.totalRevenue),
+        backgroundColor: chartColors[2],
+        borderWidth: 0,
+      },
+    ],
+  };
+
+  const leastDepartmentSalesData = {
+    labels: analytics.leastDepartmentSales.slice(0, 10).map((d) => d.displayName),
+    datasets: [
+      {
+        label: `${t.totalSales} (${t.currency})`,
+        data: analytics.leastDepartmentSales.slice(0, 10).map((d) => d.totalRevenue),
+        backgroundColor: chartColors[3],
+        borderWidth: 0,
+      },
+    ],
+  };
+
+  const branchSalesData = {
+    labels: analytics.branchSales.slice(0, 10).map((b) => b.displayName),
+    datasets: [
+      {
+        label: `${t.totalSales} (${t.currency})`,
+        data: analytics.branchSales.slice(0, 10).map((b) => b.totalSales),
+        backgroundColor: chartColors[4],
+        borderWidth: 0,
+      },
+    ],
+  };
+
+  const leastBranchSalesData = {
+    labels: analytics.leastBranchSales.slice(0, 10).map((b) => b.displayName),
+    datasets: [
+      {
+        label: `${t.totalSales} (${t.currency})`,
+        data: analytics.leastBranchSales.slice(0, 10).map((b) => b.totalSales),
+        backgroundColor: chartColors[0],
+        borderWidth: 0,
+      },
+    ],
+  };
+
+  const salesTrendsData = {
+    labels: analytics.salesTrends.slice(0, 10).map((trend) => trend.period),
+    datasets: [
+      {
+        label: t.totalCount,
+        data: analytics.salesTrends.slice(0, 10).map((trend) => trend.saleCount),
+        borderColor: chartColors[1],
+        backgroundColor: 'transparent',
+        fill: false,
+        tension: 0.4,
+      },
+    ],
   };
 
   if (user?.role !== 'admin') {
@@ -789,7 +832,7 @@ export const SalesReport: React.FC = () => {
         <div className="space-y-4 sm:space-y-6">
           <div className="p-3 sm:p-4 bg-white rounded-xl shadow-sm border border-gray-100">
             <h2 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4 font-alexandria">{t.filters}</h2>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
               <SearchInput value={searchInput} onChange={handleSearchChange} placeholder={t.searchPlaceholder} />
               <input
                 type="date"
@@ -873,94 +916,94 @@ export const SalesReport: React.FC = () => {
         </div>
       )}
       {tabValue === 1 && (
-        <div className="p-3 sm:p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="p-3 sm:p-4 bg-white rounded-xl shadow-sm border border-gray-100 space-y-4 sm:space-y-6">
           <h2 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4 font-alexandria">{t.analytics}</h2>
-          <div className="space-y-4 sm:space-y-6">
-            <div className="w-full h-64 sm:h-80">
-              <Line
-                data={salesTrendsData}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div className="p-3 sm:p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-1 text-xs sm:text-sm font-alexandria">
+              <h3 className="font-medium text-gray-800">{t.totalSales}</h3>
+              <p className="font-semibold text-amber-600">{analytics.totalSales} {t.currency}</p>
+              <p className="text-gray-600">{t.totalCount}: {analytics.totalCount}</p>
+              <p className="text-gray-600">{t.averageOrderValue}: {analytics.averageOrderValue} {t.currency}</p>
+              <p className="text-gray-600">{t.topProduct}: {analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity})</p>
+            </div>
+            <div className="p-3 sm:p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-1 text-xs sm:text-sm font-alexandria">
+              <h3 className="font-medium text-gray-800">{t.topCustomers}</h3>
+              {processedTopCustomers.length > 0 ? (
+                <ul className="space-y-1 text-gray-600">
+                  {processedTopCustomers.map((customer, index) => (
+                    <li key={index}>
+                      <span className="font-medium">{t.customerNameLabel}: </span>{customer.customerName} ({customer.customerPhone}) - {customer.totalSpent} {t.currency}, {customer.purchaseCount} {t.totalCount}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-gray-600">{t.noSales}</p>
+              )}
+            </div>
+          </div>
+          <div className="w-full h-64 sm:h-80">
+            <Line
+              data={salesTrendsData}
+              options={{
+                ...chartOptions,
+                plugins: { ...chartOptions.plugins, title: { display: true, text: t.salesTrends, font: { size: 16, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+              }}
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+            <div className="w-full h-48 sm:h-64">
+              <Bar
+                data={productSalesData}
                 options={{
                   ...chartOptions,
-                  plugins: { ...chartOptions.plugins, title: { display: true, text: t.salesTrends, font: { size: 16, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  plugins: { ...chartOptions.plugins, title: { display: true, text: t.productSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
                 }}
               />
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              <div className="w-full h-48 sm:h-64">
-                <Bar
-                  data={productSalesData}
-                  options={{
-                    ...chartOptions,
-                    plugins: { ...chartOptions.plugins, title: { display: true, text: t.productSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
-                  }}
-                />
-              </div>
-              <div className="w-full h-48 sm:h-64">
-                <Bar
-                  data={leastProductSalesData}
-                  options={{
-                    ...chartOptions,
-                    plugins: { ...chartOptions.plugins, title: { display: true, text: t.leastProductSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
-                  }}
-                />
-              </div>
-              <div className="w-full h-48 sm:h-64">
-                <Bar
-                  data={departmentSalesData}
-                  options={{
-                    ...chartOptions,
-                    plugins: { ...chartOptions.plugins, title: { display: true, text: t.departmentSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
-                  }}
-                />
-              </div>
-              <div className="w-full h-48 sm:h-64">
-                <Bar
-                  data={leastDepartmentSalesData}
-                  options={{
-                    ...chartOptions,
-                    plugins: { ...chartOptions.plugins, title: { display: true, text: t.leastDepartmentSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
-                  }}
-                />
-              </div>
-              <div className="w-full h-48 sm:h-64">
-                <Bar
-                  data={branchSalesData}
-                  options={{
-                    ...chartOptions,
-                    plugins: { ...chartOptions.plugins, title: { display: true, text: t.branchSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
-                  }}
-                />
-              </div>
-              <div className="w-full h-48 sm:h-64">
-                <Bar
-                  data={leastBranchSalesData}
-                  options={{
-                    ...chartOptions,
-                    plugins: { ...chartOptions.plugins, title: { display: true, text: t.leastBranchSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
-                  }}
-                />
-              </div>
-              <div className="p-3 sm:p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-1 text-xs sm:text-sm font-alexandria">
-                <h3 className="font-medium text-gray-800">{t.totalSales}</h3>
-                <p className="font-semibold text-amber-600">{analytics.totalSales} {t.currency}</p>
-                <p className="text-gray-600">{t.totalCount}: {analytics.totalCount}</p>
-                <p className="text-gray-600">{t.averageOrderValue}: {analytics.averageOrderValue} {t.currency}</p>
-                <p className="text-gray-600">{t.topProduct}: {analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity})</p>
-              </div>
-              <div className="p-3 sm:p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-1 text-xs sm:text-sm font-alexandria">
-                <h3 className="font-medium text-gray-800">{t.topCustomers}</h3>
-                {analytics.topCustomers.length > 0 ? (
-                  <ul className="space-y-1 text-gray-600">
-                    {analytics.topCustomers.map((customer, index) => (
-                      <li key={index}>
-                        <span className="font-medium">{t.customerNameLabel}: </span>{customer.customerName} ({customer.customerPhone}) - {customer.totalSpent} {t.currency}, {customer.purchaseCount} {t.totalCount}
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-gray-600">{t.noSales}</p>
-                )}
-              </div>
+            <div className="w-full h-48 sm:h-64">
+              <Bar
+                data={leastProductSalesData}
+                options={{
+                  ...chartOptions,
+                  plugins: { ...chartOptions.plugins, title: { display: true, text: t.leastProductSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                }}
+              />
+            </div>
+            <div className="w-full h-48 sm:h-64">
+              <Bar
+                data={departmentSalesData}
+                options={{
+                  ...chartOptions,
+                  plugins: { ...chartOptions.plugins, title: { display: true, text: t.departmentSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                }}
+              />
+            </div>
+            <div className="w-full h-48 sm:h-64">
+              <Bar
+                data={leastDepartmentSalesData}
+                options={{
+                  ...chartOptions,
+                  plugins: { ...chartOptions.plugins, title: { display: true, text: t.leastDepartmentSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                }}
+              />
+            </div>
+            <div className="w-full h-48 sm:h-64">
+              <Bar
+                data={branchSalesData}
+                options={{
+                  ...chartOptions,
+                  plugins: { ...chartOptions.plugins, title: { display: true, text: t.branchSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                }}
+              />
+            </div>
+            <div className="w-full h-48 sm:h-64">
+              <Bar
+                data={leastBranchSalesData}
+                options={{
+                  ...chartOptions,
+                  plugins: { ...chartOptions.plugins, title: { display: true, text: t.leastBranchSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                }}
+              />
             </div>
           </div>
         </div>
