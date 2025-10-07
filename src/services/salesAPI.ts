@@ -1,4 +1,3 @@
-// src/services/salesAPI.ts
 import axios from 'axios';
 import { toast } from 'react-toastify';
 
@@ -103,8 +102,8 @@ salesAxios.interceptors.response.use(
 
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7,15}$/.test(phone);
-const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'credit_card', 'bank_transfer'].includes(method);
-const isValidPaymentStatus = (status: string | undefined): boolean => !status || ['pending', 'completed', 'failed'].includes(status);
+const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'card', 'credit'].includes(method);
+const isValidPaymentStatus = (status: string | undefined): boolean => !method || ['pending', 'completed', 'canceled'].includes(status);
 
 export const salesAPI = {
   create: async (saleData: {
@@ -213,9 +212,54 @@ export const salesAPI = {
       };
       const response = await salesAxios.get('/sales/analytics', { params: cleanedParams });
       console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Response:`, response);
-      return response;
+      return {
+        branchSales: response.branchSales || [],
+        leastBranchSales: response.leastBranchSales || [],
+        productSales: response.productSales || [],
+        leastProductSales: response.leastProductSales || [],
+        departmentSales: response.departmentSales || [],
+        leastDepartmentSales: response.leastDepartmentSales || [],
+        totalSales: response.totalSales || 0,
+        totalCount: response.totalCount || 0,
+        averageOrderValue: response.averageOrderValue || 0,
+        returnRate: response.returnRate || 0,
+        topProduct: response.topProduct || { productId: null, productName: isRtl ? 'غير معروف' : 'Unknown', displayName: isRtl ? 'غير معروف' : 'Unknown', totalQuantity: 0, totalRevenue: 0 },
+        salesTrends: response.salesTrends || [],
+        topCustomers: response.topCustomers || [],
+        paymentMethods: response.paymentMethods || [],
+        returnStats: response.returnStats || [],
+      };
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Error:`, err);
+      throw err;
+    }
+  },
+
+  getBranches: async () => {
+    console.log(`[${new Date().toISOString()}] salesAPI.getBranches - Sending request`);
+    try {
+      const response = await salesAxios.get('/branches', { params: { lang: isRtl ? 'ar' : 'en' } });
+      console.log(`[${new Date().toISOString()}] salesAPI.getBranches - Response:`, response);
+      return response.branches || [];
+    } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] salesAPI.getBranches - Error:`, err);
+      throw err;
+    }
+  },
+
+  delete: async (id: string) => {
+    console.log(`[${new Date().toISOString()}] salesAPI.delete - Sending:`, id);
+    if (!isValidObjectId(id)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.delete - Invalid sale ID:`, id);
+      throw new Error(isRtl ? 'معرف المبيعة غير صالح' : 'Invalid sale ID');
+    }
+    try {
+      const response = await salesAxios.delete(`/sales/${id}`, { params: { lang: isRtl ? 'ar' : 'en' } });
+      console.log(`[${new Date().toISOString()}] salesAPI.delete - Response:`, response);
+      toast.success(isRtl ? 'تم حذف المبيعة بنجاح' : 'Sale deleted successfully', { position: isRtl ? 'top-right' : 'top-left' });
+      return response;
+    } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] salesAPI.delete - Error:`, err);
       throw err;
     }
   },
