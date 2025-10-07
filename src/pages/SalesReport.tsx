@@ -281,7 +281,7 @@ const SaleCard = React.memo(({ sale, onEdit, onDelete, t, isRtl }: { sale: Sale;
       </div>
     </div>
   </div>
-);
+));
 
 export const SalesReport: React.FC = () => {
   const { language } = useLanguage();
