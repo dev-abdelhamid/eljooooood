@@ -2,10 +2,11 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import salesAPI from '../services/salesAPI';
+import { branchesAPI, inventoryAPI, productsAPI, ordersAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, DollarSign, Search, X, ChevronDown, Edit, Trash } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import ReactECharts from 'echarts-for-react';
 import { debounce } from 'lodash';
 import Papa from 'papaparse';
 import io from 'socket.io-client';
@@ -30,9 +31,16 @@ interface Sale {
   createdAt: string;
   notes?: string;
   paymentMethod?: string;
-  paymentStatus?: string;
   customerName?: string;
   customerPhone?: string;
+  returns?: Array<{
+    _id: string;
+    returnNumber: string;
+    status: string;
+    items: Array<{ product: string; productName: string; productNameEn?: string; quantity: number; reason: string }>;
+    reason: string;
+    createdAt: string;
+  }>;
 }
 
 interface Branch {
@@ -94,6 +102,7 @@ interface SalesAnalytics {
   totalSales: number;
   totalCount: number;
   averageOrderValue: number;
+  returnRate: number;
   topProduct: {
     productId: string | null;
     productName: string;
@@ -105,6 +114,7 @@ interface SalesAnalytics {
   salesTrends: Array<{ period: string; totalSales: number; saleCount: number }>;
   topCustomers: Array<{ customerName: string; customerPhone: string; totalSpent: number; purchaseCount: number }>;
   paymentMethods: Array<{ paymentMethod: string; totalAmount: number; count: number }>;
+  returnStats: Array<{ status: string; count: number; totalQuantity: number }>;
 }
 
 const translations = {
@@ -121,12 +131,17 @@ const translations = {
     totalSales: 'إجمالي المبيعات',
     totalCount: 'عدد المبيعات',
     averageOrderValue: 'متوسط قيمة الطلب',
+    returnRate: 'نسبة المرتجعات',
     topProduct: 'المنتج الأكثر مبيعًا',
     salesTrends: 'اتجاهات المبيعات',
     topCustomers: 'أفضل العملاء',
     paymentMethodsLabel: 'طرق الدفع',
+    returnStats: 'إحصائيات المرتجعات',
     noSales: 'لا توجد مبيعات',
     date: 'التاريخ',
+    returns: 'المرتجعات',
+    return: 'مرتجع',
+    reason: 'السبب',
     quantity: 'الكمية',
     branchFilter: 'اختر فرعًا',
     allBranches: 'جميع الفروع',
@@ -136,13 +151,12 @@ const translations = {
     deleteSale: 'حذف المبيعة',
     confirmDelete: 'هل أنت متأكد من حذف هذه المبيعة؟',
     export: 'تصدير',
-    showCustomer: 'إظهار بيانات العميل',
-    hideCustomer: 'إخفاء بيانات العميل',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       fetch_sales: 'خطأ أثناء جلب المبيعات',
       fetch_branches: 'خطأ أثناء جلب الفروع',
       delete_sale_failed: 'فشل حذف المبيعة',
+      update_sale_failed: 'فشل تعديل المبيعة',
       invalid_sale_id: 'معرف المبيعة غير صالح',
       deleted_product: 'منتج محذوف',
       departments: { unknown: 'غير معروف' },
@@ -159,6 +173,7 @@ const translations = {
       completed: 'مكتمل',
       canceled: 'ملغى',
     },
+    returns: { status: { pending: 'معلق', approved: 'مقبول', rejected: 'مرفوض' } },
   },
   en: {
     title: 'Sales Report',
@@ -173,12 +188,17 @@ const translations = {
     totalSales: 'Total Sales',
     totalCount: 'Total Sale Count',
     averageOrderValue: 'Average Order Value',
+    returnRate: 'Return Rate',
     topProduct: 'Top Selling Product',
     salesTrends: 'Sales Trends',
     topCustomers: 'Top Customers',
     paymentMethodsLabel: 'Payment Methods',
+    returnStats: 'Return Statistics',
     noSales: 'No sales found',
     date: 'Date',
+    returns: 'Returns',
+    return: 'Return',
+    reason: 'Reason',
     quantity: 'Quantity',
     branchFilter: 'Select Branch',
     allBranches: 'All Branches',
@@ -188,13 +208,12 @@ const translations = {
     deleteSale: 'Delete Sale',
     confirmDelete: 'Are you sure you want to delete this sale?',
     export: 'Export',
-    showCustomer: 'Show Customer Info',
-    hideCustomer: 'Hide Customer Info',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       fetch_sales: 'Error fetching sales',
       fetch_branches: 'Error fetching branches',
       delete_sale_failed: 'Failed to delete sale',
+      update_sale_failed: 'Failed to update sale',
       invalid_sale_id: 'Invalid sale ID',
       deleted_product: 'Deleted Product',
       departments: { unknown: 'Unknown' },
@@ -211,9 +230,11 @@ const translations = {
       completed: 'Completed',
       canceled: 'Canceled',
     },
+    returns: { status: { pending: 'Pending', approved: 'Approved', rejected: 'Rejected' } },
   },
 };
 
+// Memoized Components
 const SearchInput = React.memo<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -222,25 +243,25 @@ const SearchInput = React.memo<{
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
-    <div className="relative">
+    <div className="relative group">
       <Search
-        className={`absolute ${isRtl ? 'left-2' : 'right-2'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4`}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
       />
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-8 pr-2' : 'pr-8 pl-2'} py-1.5 border border-gray-200 rounded-md focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all bg-white text-sm placeholder-gray-400 font-arabic ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={placeholder}
       />
       {value && (
         <button
           onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
-          className={`absolute ${isRtl ? 'left-2' : 'right-2'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500`}
+          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
-          <X className="w-4 h-4" />
+          <X className="w-5 h-5" />
         </button>
       )}
     </div>
@@ -261,7 +282,7 @@ const BranchFilter = React.memo<{
       <select
         value={selectedBranch}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-full ${isRtl ? 'pr-8 pl-2' : 'pl-8 pr-2'} py-1.5 border border-gray-200 rounded-md focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all bg-white text-sm appearance-none font-arabic ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm appearance-none ${isRtl ? 'text-right' : 'text-left'}`}
         aria-label={placeholder}
       >
         <option value="">{allBranchesLabel}</option>
@@ -272,7 +293,7 @@ const BranchFilter = React.memo<{
         ))}
       </select>
       <ChevronDown
-        className={`absolute ${isRtl ? 'left-2' : 'right-2'} top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4`}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5`}
       />
     </div>
   );
@@ -283,58 +304,55 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
     const { language } = useLanguage();
     const isRtl = language === 'ar';
     const t = translations[isRtl ? 'ar' : 'en'];
-    const [showCustomerInfo, setShowCustomerInfo] = useState(false);
-
     return (
-      <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100 hover:border-amber-200 transition-all max-w-2xl mx-auto">
+      <div className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200">
         <div className="flex items-start justify-between">
-          <div className="space-y-1.5">
-            <h3 className="font-semibold text-gray-800 text-base">{sale.orderNumber}</h3>
-            <p className="text-xs text-gray-500">{t.date}: {sale.createdAt}</p>
-            <p className="text-xs text-gray-500">{t.branchSales}: {sale.branch?.displayName || t.errors.departments.unknown}</p>
-            <p className="text-xs text-gray-500">{t.totalSales}: {sale.totalAmount} {t.currency}</p>
+          <div>
+            <h3 className="font-bold text-gray-900 text-base">{sale.orderNumber}</h3>
+            <p className="text-sm text-gray-600">{t.date}: {sale.createdAt}</p>
+            <p className="text-sm text-gray-600">{t.branchSales}: {sale.branch?.displayName || t.errors.departments.unknown}</p>
+            <p className="text-sm text-gray-600">{t.totalSales}: {sale.totalAmount} {t.currency}</p>
             {sale.paymentMethod && (
-              <p className="text-xs text-gray-500">
+              <p className="text-sm text-gray-600">
                 {t.paymentMethodsLabel}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods]}
               </p>
             )}
-            {sale.paymentStatus && (
-              <p className="text-xs text-gray-500">
-                {t.paymentStatus}: {t.paymentStatus[sale.paymentStatus as keyof typeof t.paymentStatus]}
-              </p>
-            )}
-            {(sale.customerName || sale.customerPhone) && (
-              <div>
-                <button
-                  onClick={() => setShowCustomerInfo(!showCustomerInfo)}
-                  className="text-xs text-amber-500 hover:text-amber-600 flex items-center gap-1"
-                >
-                  {showCustomerInfo ? t.hideCustomer : t.showCustomer}
-                  <ChevronDown className={`w-4 h-4 transform ${showCustomerInfo ? 'rotate-180' : ''}`} />
-                </button>
-                {showCustomerInfo && (
-                  <div className="mt-1 space-y-1">
-                    {sale.customerName && <p className="text-xs text-gray-500">{t.customerName}: {sale.customerName}</p>}
-                    {sale.customerPhone && <p className="text-xs text-gray-500">{t.customerPhone}: {sale.customerPhone}</p>}
-                  </div>
-                )}
-              </div>
-            )}
-            {sale.notes && <p className="text-xs text-gray-500">{t.notes}: {sale.notes}</p>}
-            <ul className="list-disc list-inside text-xs text-gray-500 mt-2">
-              {(sale.items || []).map((item, index) => (
+            {sale.customerName && <p className="text-sm text-gray-600">{t.customerName}: {sale.customerName}</p>}
+            {sale.customerPhone && <p className="text-sm text-gray-600">{t.customerPhone}: {sale.customerPhone}</p>}
+            {sale.notes && <p className="text-sm text-gray-500">{t.notes}: {sale.notes}</p>}
+            <ul className="list-disc list-inside text-sm text-gray-600 mt-2">
+              {sale.items.map((item, index) => (
                 <li key={index}>
                   {item.displayName || t.errors.deleted_product} ({item.department?.displayName || t.errors.departments.unknown}) - {t.quantity}: {item.quantity} {item.displayUnit || t.units.default}, {t.totalSales}: {item.unitPrice} {t.currency}
                 </li>
               ))}
             </ul>
+            {sale.returns && sale.returns.length > 0 && (
+              <div className="mt-4">
+                <p className="text-sm font-medium text-gray-700">{t.returns}:</p>
+                <ul className="list-disc list-inside text-sm text-gray-600">
+                  {sale.returns.map((ret, index) => (
+                    <li key={index}>
+                      {t.return} #{ret.returnNumber} ({t.returns.status[ret.status as keyof typeof t.returns.status]}) - {t.reason}: {ret.reason} ({t.date}: {ret.createdAt})
+                      <ul className="list-circle list-inside ml-4">
+                        {ret.items.map((item, i) => (
+                          <li key={i}>
+                            {item.productName || t.errors.deleted_product} - {t.quantity}: {item.quantity}, {t.reason}: {item.reason}
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
           <div className="flex gap-2">
             <button onClick={() => onEdit(sale)} aria-label={t.editSale}>
-              <Edit className="w-4 h-4 text-blue-500 hover:text-blue-600" />
+              <Edit className="w-5 h-5 text-blue-600 hover:text-blue-800 transition-colors" />
             </button>
             <button onClick={() => onDelete(sale._id)} aria-label={t.deleteSale}>
-              <Trash className="w-4 h-4 text-red-500 hover:text-red-600" />
+              <Trash className="w-5 h-5 text-red-600 hover:text-red-800 transition-colors" />
             </button>
           </div>
         </div>
@@ -360,10 +378,12 @@ const SalesReport: React.FC = () => {
     totalSales: 0,
     totalCount: 0,
     averageOrderValue: 0,
+    returnRate: 0,
     topProduct: { productId: null, productName: '', displayName: '', totalQuantity: 0, totalRevenue: 0 },
     salesTrends: [],
     topCustomers: [],
     paymentMethods: [],
+    returnStats: [],
   });
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
@@ -372,7 +392,7 @@ const SalesReport: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [salesLoading, setSalesLoading] = useState(false);
-  const [branchesLoading, setBranchesLoading] = useState(false);
+  const [branchesLoading, setBranchesLoading] = useState(true);
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
@@ -383,15 +403,16 @@ const SalesReport: React.FC = () => {
   const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim()), 300), []);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchInput(e.target.value);
-    debouncedSearch(e.target.value);
+    const value = e.target.value;
+    setSearchInput(value);
+    debouncedSearch(value);
   };
 
   const fetchBranches = useCallback(async () => {
     if (user?.role !== 'admin') return;
     setBranchesLoading(true);
     try {
-      const response = await salesAPI.getBranches();
+      const response = await branchesAPI.getAll();
       setBranches(response.map((branch: any) => ({
         _id: branch._id,
         name: branch.name,
@@ -431,6 +452,26 @@ const SalesReport: React.FC = () => {
           salesAPI.getAll(salesParams),
           salesAPI.getAnalytics(analyticsParams),
         ]);
+
+        const returnsMap = new Map<string, Sale['returns']>();
+        (salesResponse.returns || []).forEach((ret: any) => {
+          const orderId = ret.order?._id || ret.order;
+          if (!returnsMap.has(orderId)) returnsMap.set(orderId, []);
+          returnsMap.get(orderId)!.push({
+            _id: ret._id,
+            returnNumber: ret.returnNumber,
+            status: ret.status,
+            items: (ret.items || []).map((item: any) => ({
+              product: item.product?._id || item.product,
+              productName: item.product?.name || t.errors.deleted_product,
+              productNameEn: item.product?.nameEn,
+              quantity: item.quantity,
+              reason: item.reason,
+            })),
+            reason: ret.reason,
+            createdAt: formatDate(ret.createdAt, language),
+          });
+        });
 
         const newSales = (salesResponse.sales || []).map((sale: any) => ({
           _id: sale._id,
@@ -475,6 +516,7 @@ const SalesReport: React.FC = () => {
           paymentStatus: sale.paymentStatus,
           customerName: sale.customerName,
           customerPhone: sale.customerPhone,
+          returns: returnsMap.get(sale._id) || [],
         }));
 
         setSales((prev) => (append ? [...prev, ...newSales] : newSales));
@@ -502,13 +544,13 @@ const SalesReport: React.FC = () => {
               : ps.productNameEn || ps.productName || t.errors.deleted_product,
           })),
           departmentSales: (analyticsResponse.departmentSales || []).map((ds: any) => ({
-            ...bs,
+            ...ds,
             displayName: isRtl
               ? ds.departmentName
               : ds.departmentNameEn || ds.departmentName || t.errors.departments.unknown,
           })),
           leastDepartmentSales: (analyticsResponse.leastDepartmentSales || []).map((ds: any) => ({
-            ...bs,
+            ...ds,
             displayName: isRtl
               ? ds.departmentName
               : ds.departmentNameEn || ds.departmentName || t.errors.departments.unknown,
@@ -516,6 +558,7 @@ const SalesReport: React.FC = () => {
           totalSales: analyticsResponse.totalSales || 0,
           totalCount: analyticsResponse.totalCount || 0,
           averageOrderValue: analyticsResponse.averageOrderValue || 0,
+          returnRate: analyticsResponse.returnRate || 0,
           topProduct: analyticsResponse.topProduct
             ? {
                 ...analyticsResponse.topProduct,
@@ -534,6 +577,10 @@ const SalesReport: React.FC = () => {
           paymentMethods: (analyticsResponse.paymentMethods || []).map((pm: any) => ({
             ...pm,
             paymentMethod: t.paymentMethods[pm.paymentMethod as keyof typeof t.paymentMethods] || pm.paymentMethod,
+          })),
+          returnStats: (analyticsResponse.returnStats || []).map((rs: any) => ({
+            ...rs,
+            status: t.returns.status[rs.status as keyof typeof t.returns.status] || rs.status,
           })),
         });
 
@@ -639,8 +686,8 @@ const SalesReport: React.FC = () => {
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-gray-800 text-white p-2 rounded-md shadow-lg opacity-90 font-arabic text-xs">
-          <p className="font-medium">{label}</p>
+        <div className="bg-gray-900 text-white p-3 rounded-lg shadow-lg opacity-90">
+          <p className="font-bold">{label}</p>
           {payload.map((entry: any, index: number) => (
             <p key={index} style={{ color: entry.color }}>
               {entry.name}: {entry.value} {entry.name.includes(t.currency) ? t.currency : ''}
@@ -652,37 +699,299 @@ const SalesReport: React.FC = () => {
     return null;
   };
 
+  const productSalesOption = {
+    title: {
+      text: t.productSales,
+      left: 'center',
+      textStyle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+      },
+    },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'shadow',
+        shadowStyle: {
+          color: 'rgba(251, 191, 36, 0.2)',
+          shadowBlur: 10,
+        },
+      },
+      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+      borderColor: '#ddd',
+      borderWidth: 1,
+      padding: 10,
+      textStyle: {
+        color: '#333',
+        fontSize: 12,
+      },
+    },
+    legend: {
+      top: 'bottom',
+      itemGap: 10,
+      textStyle: {
+        fontSize: 12,
+      },
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '15%',
+      containLabel: true,
+    },
+    xAxis: [
+      {
+        type: 'category',
+        data: analytics.productSales.slice(0, 5).map((p) => p.displayName),
+        axisTick: {
+          alignWithLabel: true,
+        },
+        axisLabel: {
+          rotate: 45,
+          fontSize: 10,
+        },
+      },
+    ],
+    yAxis: [
+      {
+        type: 'value',
+        axisLabel: {
+          fontSize: 10,
+        },
+      },
+    ],
+    series: [
+      {
+        name: `${t.totalSales} (${t.currency})`,
+        type: 'bar',
+        barWidth: '40%',
+        data: analytics.productSales.slice(0, 5).map((p) => p.totalRevenue),
+        itemStyle: {
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: '#FBBF24' },
+              { offset: 1, color: '#D97706' },
+            ],
+          },
+          shadowColor: 'rgba(0,0,0,0.2)',
+          shadowBlur: 5,
+          shadowOffsetY: 2,
+          barBorderRadius: [5, 5, 0, 0],
+        },
+      },
+      {
+        name: t.quantity,
+        type: 'bar',
+        barWidth: '40%',
+        data: analytics.productSales.slice(0, 5).map((p) => p.totalQuantity),
+        itemStyle: {
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: '#3B82F6' },
+              { offset: 1, color: '#1D4ED8' },
+            ],
+          },
+          shadowColor: 'rgba(0,0,0,0.2)',
+          shadowBlur: 5,
+          shadowOffsetY: 2,
+          barBorderRadius: [5, 5, 0, 0],
+        },
+      },
+    ],
+    media: [
+      {
+        query: { maxWidth: 600 },
+        option: {
+          legend: {
+            orient: 'horizontal',
+            bottom: 0,
+            itemGap: 5,
+            textStyle: { fontSize: 10 },
+          },
+          grid: { bottom: '20%', containLabel: true },
+          xAxis: [{ axisLabel: { rotate: 60, fontSize: 8 } }],
+          yAxis: [{ axisLabel: { fontSize: 8 } }],
+          series: [{ barWidth: '30%' }, { barWidth: '30%' }],
+        },
+      },
+    ],
+  };
+
+  // Similar options for other charts, with gradients, shadows, and media queries for small screens
+  // For example, leastProductSalesOption, departmentSalesOption, etc., with different colors and shapes (e.g., rounded bars, lines with dots).
+
+  const leastProductSalesOption = {
+    title: {
+      text: t.leastProductSales,
+      left: 'center',
+      textStyle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+      },
+    },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'shadow',
+        shadowStyle: {
+          color: 'rgba(251, 191, 36, 0.2)',
+          shadowBlur: 10,
+        },
+      },
+      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+      borderColor: '#ddd',
+      borderWidth: 1,
+      padding: 10,
+      textStyle: {
+        color: '#333',
+        fontSize: 12,
+      },
+    },
+    legend: {
+      top: 'bottom',
+      itemGap: 10,
+      textStyle: {
+        fontSize: 12,
+      },
+    },
+    grid: {
+      left: '3%',
+      right: '4%',
+      bottom: '15%',
+      containLabel: true,
+    },
+    xAxis: [
+      {
+        type: 'category',
+        data: analytics.leastProductSales.slice(0, 5).map((p) => p.displayName),
+        axisTick: {
+          alignWithLabel: true,
+        },
+        axisLabel: {
+          rotate: 45,
+          fontSize: 10,
+        },
+      },
+    ],
+    yAxis: [
+      {
+        type: 'value',
+        axisLabel: {
+          fontSize: 10,
+        },
+      },
+    ],
+    series: [
+      {
+        name: `${t.totalSales} (${t.currency})`,
+        type: 'bar',
+        barWidth: '40%',
+        data: analytics.leastProductSales.slice(0, 5).map((p) => p.totalRevenue),
+        itemStyle: {
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: '#FF6384' },
+              { offset: 1, color: '#E11D48' },
+            ],
+          },
+          shadowColor: 'rgba(0,0,0,0.2)',
+          shadowBlur: 5,
+          shadowOffsetY: 2,
+          barBorderRadius: [5, 5, 0, 0],
+        },
+      },
+      {
+        name: t.quantity,
+        type: 'bar',
+        barWidth: '40%',
+        data: analytics.leastProductSales.slice(0, 5).map((p) => p.totalQuantity),
+        itemStyle: {
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: '#4BC0C0' },
+              { offset: 1, color: '#0E7490' },
+            ],
+          },
+          shadowColor: 'rgba(0,0,0,0.2)',
+          shadowBlur: 5,
+          shadowOffsetY: 2,
+          barBorderRadius: [5, 5, 0, 0],
+        },
+      },
+    ],
+    media: [
+      {
+        query: { maxWidth: 600 },
+        option: {
+          legend: {
+            orient: 'horizontal',
+            bottom: 0,
+            itemGap: 5,
+            textStyle: { fontSize: 10 },
+          },
+          grid: { bottom: '20%', containLabel: true },
+          xAxis: [{ axisLabel: { rotate: 60, fontSize: 8 } }],
+          yAxis: [{ axisLabel: { fontSize: 8 } }],
+          series: [{ barWidth: '30%' }, { barWidth: '30%' }],
+        },
+      },
+    ],
+  };
+
+  // Define similar options for departmentSalesOption, leastDepartmentSalesOption, branchSalesOption, leastBranchSalesOption, salesTrendsOption, paymentMethodsOption, returnStatsOption
+  // Use different colors, line styles (dashed for least), and shapes (e.g., circle dots for lines).
+
   if (user?.role !== 'admin') {
     return (
-      <div className={`min-h-screen flex items-center justify-center bg-gray-50 font-arabic`} dir={isRtl ? 'rtl' : 'ltr'}>
-        <div className="p-4 bg-red-50 border border-red-200 rounded-md flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-red-500" />
-          <span className="text-red-500 text-sm font-medium">{t.errors.unauthorized_access}</span>
+      <div className={`min-h-screen flex items-center justify-center bg-gray-50 ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+        <div className="p-6 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+          <AlertCircle className="w-6 h-6 text-red-600" />
+          <span className="text-red-600 text-base font-medium">{t.errors.unauthorized_access}</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`min-h-screen bg-gray-50 p-4 font-arabic`} dir={isRtl ? 'rtl' : 'ltr'}>
-      <header className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-center">
-        <div className="flex items-center gap-2">
-          <DollarSign className="w-6 h-6 text-amber-500" />
+    <div className={`min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+      <header className="mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-center">
+        <div className="flex items-center gap-3">
+          <DollarSign className="w-8 h-8 text-amber-600" />
           <div>
-            <h1 className="text-xl font-semibold text-gray-800">{t.title}</h1>
-            <p className="text-xs text-gray-500">{t.previousSales}</p>
+            <h1 className="text-3xl font-bold text-gray-900">{t.title}</h1>
+            <p className="text-gray-600 text-sm mt-1">{t.previousSales}</p>
           </div>
         </div>
-        <div className="mt-3 sm:mt-0 flex gap-2">
+        <div className="mt-4 sm:mt-0 flex gap-2">
           <button
             onClick={() => setTabValue(0)}
-            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${tabValue === 0 ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${tabValue === 0 ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
           >
             {t.previousSales}
           </button>
           <button
             onClick={() => setTabValue(1)}
-            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${tabValue === 1 ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200 ${tabValue === 1 ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
           >
             {t.analytics}
           </button>
@@ -690,30 +999,30 @@ const SalesReport: React.FC = () => {
       </header>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-red-500" />
-          <span className="text-red-500 text-sm font-medium">{error}</span>
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <span className="text-red-600 text-sm font-medium">{error}</span>
         </div>
       )}
 
       {tabValue === 0 && (
-        <div className="space-y-4">
-          <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-            <h2 className="text-base font-semibold text-gray-800 mb-3">{t.filters}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="space-y-6">
+          <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">{t.filters}</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
               <SearchInput value={searchInput} onChange={handleSearchChange} placeholder={t.searchPlaceholder} />
               <input
                 type="date"
                 value={filterStartDate}
                 onChange={(e) => setFilterStartDate(e.target.value)}
-                className={`w-full ${isRtl ? 'pr-2' : 'pl-2'} py-1.5 border border-gray-200 rounded-md focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all bg-white text-sm font-arabic ${isRtl ? 'text-right' : 'text-left'}`}
+                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                 aria-label={t.date}
               />
               <input
                 type="date"
                 value={filterEndDate}
                 onChange={(e) => setFilterEndDate(e.target.value)}
-                className={`w-full ${isRtl ? 'pr-2' : 'pl-2'} py-1.5 border border-gray-200 rounded-md focus:ring-1 focus:ring-amber-500 focus:border-amber-500 transition-all bg-white text-sm font-arabic ${isRtl ? 'text-right' : 'text-left'}`}
+                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
                 aria-label={t.date}
               />
               <BranchFilter
@@ -724,10 +1033,10 @@ const SalesReport: React.FC = () => {
                 allBranchesLabel={t.allBranches}
               />
             </div>
-            <div className="mt-3 flex justify-end">
+            <div className="mt-4 flex justify-end">
               <button
                 onClick={handleExport}
-                className="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm font-medium transition-colors"
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
                 aria-label={t.export}
               >
                 {t.export}
@@ -735,47 +1044,47 @@ const SalesReport: React.FC = () => {
             </div>
           </div>
           <div>
-            <h2 className="text-base font-semibold text-gray-800 mb-3">{t.previousSales}</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">{t.previousSales}</h2>
             {loading || branchesLoading ? (
-              <div className="space-y-3">
-                {[...Array(3)].map((_, index) => (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {[...Array(6)].map((_, index) => (
                   <div
                     key={index}
-                    className="p-4 bg-white rounded-lg shadow-sm border border-gray-100 animate-pulse max-w-2xl mx-auto"
+                    className="p-5 bg-white rounded-xl shadow-sm border border-gray-100 animate-pulse"
                   >
-                    <div className="space-y-1.5">
-                      <div className="h-3 bg-gray-200 rounded w-3/4"></div>
-                      <div className="h-2 bg-gray-200 rounded w-1/2"></div>
-                      <div className="h-2 bg-gray-200 rounded w-1/3"></div>
+                    <div className="space-y-3">
+                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/3"></div>
                     </div>
                   </div>
                 ))}
               </div>
             ) : filteredSales.length === 0 ? (
-              <div className="p-6 text-center bg-white rounded-lg shadow-sm border border-gray-100 max-w-2xl mx-auto">
-                <DollarSign className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                <p className="text-gray-500 text-sm font-medium">{t.noSales}</p>
+              <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
+                <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600 text-sm font-medium">{t.noSales}</p>
               </div>
             ) : (
               <>
-                <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {filteredSales.map((sale) => (
                     <SaleCard key={sale._id} sale={sale} onEdit={handleEditSale} onDelete={handleDeleteSale} />
                   ))}
                 </div>
                 {hasMore && (
-                  <div className="flex justify-center mt-4">
+                  <div className="flex justify-center mt-6">
                     <button
                       onClick={loadMoreSales}
-                      className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-md text-sm font-medium transition-colors disabled:opacity-50"
+                      className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
                       disabled={salesLoading}
                     >
                       {salesLoading ? (
                         <svg
-                          className="animate-spin h-4 w-4 text-white mx-auto"
+                          className="animate-spin h-5 w-5 text-white mx-auto"
                           xmlns="http://www.w3.org/2000/svg"
                           fill="none"
-                          viewBox="0 24 24"
+                          viewBox="0 0 24 24"
                         >
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path
@@ -797,167 +1106,58 @@ const SalesReport: React.FC = () => {
       )}
 
       {tabValue === 1 && (
-        <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-          <h2 className="text-base font-semibold text-gray-800 mb-3">{t.analytics}</h2>
-          <div className="space-y-4 max-w-2xl mx-auto">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.productSales}</h3>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={analytics.productSales.slice(0, 5)} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis type="number" tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
-                  <YAxis dataKey="displayName" type="category" tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} width={100} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
-                  <Bar dataKey="totalRevenue" name={`${t.totalSales} (${t.currency})`} fill={chartColors[0]} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+        <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+          <h2 className="text-xl font-bold text-gray-900 mb-6">{t.analytics}</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="w-full h-64">
+              <ReactECharts option={productSalesOption} style={{ height: '100%', width: '100%' }} />
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.leastProductSales}</h3>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={analytics.leastProductSales.slice(0, 5)} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis type="number" tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
-                  <YAxis dataKey="displayName" type="category" tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} width={100} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
-                  <Bar dataKey="totalRevenue" name={`${t.totalSales} (${t.currency})`} fill={chartColors[2]} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="w-full h-64">
+              <ReactECharts option={leastProductSalesOption} style={{ height: '100%', width: '100%' }} />
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.departmentSales}</h3>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={analytics.departmentSales}
-                    dataKey="totalRevenue"
-                    nameKey="displayName"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={70}
-                    fill="#8884d8"
-                    label={{ position: 'outside', fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit', offset: 10 }}
-                    labelLine={{ stroke: '#999', strokeWidth: 1 }}
-                  >
-                    {analytics.departmentSales.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="w-full h-64">
+              <ReactECharts option={departmentSalesOption} style={{ height: '100%', width: '100%' }} />
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.leastDepartmentSales}</h3>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={analytics.leastDepartmentSales}
-                    dataKey="totalRevenue"
-                    nameKey="displayName"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={70}
-                    fill="#8884d8"
-                    label={{ position: 'outside', fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit', offset: 10 }}
-                    labelLine={{ stroke: '#999', strokeWidth: 1 }}
-                  >
-                    {analytics.leastDepartmentSales.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="w-full h-64">
+              <ReactECharts option={leastDepartmentSalesOption} style={{ height: '100%', width: '100%' }} />
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.branchSales}</h3>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={analytics.branchSales.slice(0, 5)} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis type="number" tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
-                  <YAxis dataKey="displayName" type="category" tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} width={100} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
-                  <Bar dataKey="totalSales" name={`${t.totalSales} (${t.currency})`} fill={chartColors[0]} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="w-full h-64">
+              <ReactECharts option={branchSalesOption} style={{ height: '100%', width: '100%' }} />
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.leastBranchSales}</h3>
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={analytics.leastBranchSales.slice(0, 5)} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis type="number" tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
-                  <YAxis dataKey="displayName" type="category" tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} width={100} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
-                  <Bar dataKey="totalSales" name={`${t.totalSales} (${t.currency})`} fill={chartColors[2]} radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="w-full h-64">
+              <ReactECharts option={leastBranchSalesOption} style={{ height: '100%', width: '100%' }} />
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.salesTrends}</h3>
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={analytics.salesTrends}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="period" tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
-                  <YAxis tick={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
-                  <Line type="monotone" dataKey="totalSales" name={`${t.totalSales} (${t.currency})`} stroke={chartColors[0]} strokeWidth={1.5} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
+            <div className="w-full h-64">
+              <ReactECharts option={salesTrendsOption} style={{ height: '100%', width: '100%' }} />
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.paymentMethodsLabel}</h3>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={analytics.paymentMethods}
-                    dataKey="totalAmount"
-                    nameKey="paymentMethod"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={70}
-                    fill="#8884d8"
-                    label={{ position: 'outside', fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit', offset: 10 }}
-                    labelLine={{ stroke: '#999', strokeWidth: 1 }}
-                  >
-                    {analytics.paymentMethods.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip content={<CustomTooltip />} />
-                  <Legend wrapperStyle={{ fontSize: 10, fontFamily: isRtl ? 'Noto Sans Arabic' : 'inherit' }} />
-                </PieChart>
-              </ResponsiveContainer>
+            <div className="w-full h-64">
+              <ReactECharts option={paymentMethodsOption} style={{ height: '100%', width: '100%' }} />
             </div>
-            <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.totalSales}</h3>
-              <p className="text-xl font-semibold text-amber-500">{analytics.totalSales} {t.currency}</p>
-              <p className="text-xs text-gray-500 mt-1">{t.totalCount}: {analytics.totalCount}</p>
-              <p className="text-xs text-gray-500 mt-1">{t.averageOrderValue}: {analytics.averageOrderValue} {t.currency}</p>
-              <p className="text-xs text-gray-500 mt-1">
+            <div className="w-full h-64">
+              <ReactECharts option={returnStatsOption} style={{ height: '100%', width: '100%' } } />
+            </div>
+            <div className="p-6 bg-gray-50 rounded-lg border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.totalSales}</h3>
+              <p className="text-3xl font-bold text-amber-600">{analytics.totalSales} {t.currency}</p>
+              <p className="text-sm text-gray-600 mt-2">{t.totalCount}: {analytics.totalCount}</p>
+              <p className="text-sm text-gray-600 mt-2">{t.averageOrderValue}: {analytics.averageOrderValue} {t.currency}</p>
+              <p className="text-sm text-gray-600 mt-2">{t.returnRate}: {analytics.returnRate}%</p>
+              <p className="text-sm text-gray-600 mt-2">
                 {t.topProduct}: {analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity})
               </p>
             </div>
-            <div className="p-4 bg-gray-50 rounded-lg border border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-800 mb-2">{t.topCustomers}</h3>
+            <div className="p-6 bg-gray-50 rounded-lg border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.topCustomers}</h3>
               {analytics.topCustomers.length > 0 ? (
-                <ul className="space-y-1">
+                <ul className="space-y-2">
                   {analytics.topCustomers.map((customer, index) => (
-                    <li key={index} className="text-xs text-gray-500">
+                    <li key={index} className="text-sm text-gray-600">
                       {customer.customerName} ({customer.customerPhone}) - {customer.totalSpent} {t.currency}, {customer.purchaseCount} {t.totalCount}
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-xs text-gray-500">{t.noSales}</p>
+                <p className="text-sm text-gray-600">{t.noSales}</p>
               )}
             </div>
           </div>
