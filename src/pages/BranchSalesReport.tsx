@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useSocket } from '../contexts/SocketContext'; // Import useSocket
 import { branchesAPI, inventoryAPI, salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { debounce } from 'lodash';
+import { useSocket } from '../contexts/SocketContext';
 
 interface Sale {
   _id: string;
@@ -230,25 +230,26 @@ const translations = {
   },
 };
 
-// Memoized Components (unchanged from original)
+// Memoized Components
 const ProductSearchInput = React.memo<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder: string;
-  ariaLabel: string;
-}>(({ value, onChange, placeholder, ariaLabel }) => {
+}>(({ value, onChange, placeholder }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
     <div className="relative group">
-      <Search className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`} />
+      <Search
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
+      />
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
         className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
-        aria-label={ariaLabel}
+        aria-label={placeholder}
       />
       {value && (
         <button
@@ -915,9 +916,6 @@ export const BranchSalesReport: React.FC = () => {
 
     try {
       const response = await salesAPI.create(saleData);
-      if (response && isConnected && socket) {
-        emit('saleCreated', { branchId: effectiveBranch, saleNumber: response.saleNumber || 'N/A' });
-      }
       toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
       setCart([]);
       setNotes('');
@@ -926,10 +924,9 @@ export const BranchSalesReport: React.FC = () => {
       fetchData();
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Sale submission error:`, err);
-      const errorMessage = err.response?.data?.message || t.errors.create_sale_failed;
-      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(t.errors.create_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
     }
-  }, [cart, notes, customerName, customerPhone, user, selectedBranch, inventory, t, isRtl, fetchData, socket, isConnected, emit]);
+  }, [cart, notes, customerName, customerPhone, user, selectedBranch, inventory, t, isRtl, fetchData]);
 
   const branchOptions = useMemo(() => {
     if (user?.role === 'branch' && user?.branchId) {
@@ -1241,13 +1238,13 @@ export const BranchSalesReport: React.FC = () => {
                   <StatsCard
                     title={t.topProduct}
                     value={analytics.topProduct.displayName || t.errors.deleted_product}
-                    icon={<Package className="w-5 h-5 text-white" />}
+                    icon=<Package className="w-5 h-5 text-white" />
                     color="bg-purple-600"
                   />
                   <StatsCard
                     title={t.topDepartment}
                     value={analytics.departmentSales[0]?.displayName || t.departments.unknown}
-                    icon={<Package className="w-5 h-5 text-white" />}
+                    icon=<Package className="w-5 h-5 text-white" />
                     color="bg-teal-600"
                   />
                 </div>
@@ -1348,7 +1345,6 @@ export const BranchSalesReport: React.FC = () => {
                       onClick={loadMoreSales}
                       className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
                       disabled={salesLoading}
-                  
                     >
                       {salesLoading ? (
                         <svg className="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
