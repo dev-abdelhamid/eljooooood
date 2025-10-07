@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useSocket } from '../contexts/SocketContext'; // Import useSocket
 import { branchesAPI, inventoryAPI, salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { debounce } from 'lodash';
-import io from 'socket.io-client';
 
 interface Sale {
   _id: string;
@@ -230,7 +230,7 @@ const translations = {
   },
 };
 
-// Memoized Components
+// Memoized Components (unchanged from original)
 const ProductSearchInput = React.memo<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -513,6 +513,7 @@ const StatsSkeletonCard = React.memo(() => (
 export const BranchSalesReport: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
+  const { socket, emit, isConnected } = useSocket(); // Use SocketProvider's socket
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   const [activeTab, setActiveTab] = useState<'new' | 'previous'>('new');
@@ -546,7 +547,6 @@ export const BranchSalesReport: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState(user?.role === 'branch' && user?.branchId ? user.branchId : '');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const socket = useMemo(() => io('https://eljoodia-server-production.up.railway.app'), []);
 
   const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim()), 300), []);
 
@@ -767,6 +767,8 @@ export const BranchSalesReport: React.FC = () => {
   }, [fetchData]);
 
   useEffect(() => {
+    if (!socket || !isConnected) return;
+
     socket.on('saleCreated', (data: any) => {
       if (data.branchId === selectedBranch) {
         toast.info(isRtl ? `تم إنشاء مبيعة جديدة: ${data.saleNumber}` : `New sale created: ${data.saleNumber}`, {
@@ -787,7 +789,7 @@ export const BranchSalesReport: React.FC = () => {
       socket.off('saleCreated');
       socket.off('saleDeleted');
     };
-  }, [socket, fetchData, selectedBranch, isRtl]);
+  }, [socket, isConnected, fetchData, selectedBranch, isRtl]);
 
   const loadMoreSales = useCallback(() => {
     setPage((prev) => prev + 1);
@@ -912,7 +914,10 @@ export const BranchSalesReport: React.FC = () => {
     };
 
     try {
-      await salesAPI.create(saleData);
+      const response = await salesAPI.create(saleData);
+      if (response && isConnected && socket) {
+        emit('saleCreated', { branchId: effectiveBranch, saleNumber: response.saleNumber || 'N/A' });
+      }
       toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
       setCart([]);
       setNotes('');
@@ -921,9 +926,10 @@ export const BranchSalesReport: React.FC = () => {
       fetchData();
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Sale submission error:`, err);
-      toast.error(t.errors.create_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
+      const errorMessage = err.response?.data?.message || t.errors.create_sale_failed;
+      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
     }
-  }, [cart, notes, customerName, customerPhone, user, selectedBranch, inventory, t, isRtl, fetchData]);
+  }, [cart, notes, customerName, customerPhone, user, selectedBranch, inventory, t, isRtl, fetchData, socket, isConnected, emit]);
 
   const branchOptions = useMemo(() => {
     if (user?.role === 'branch' && user?.branchId) {
@@ -1342,6 +1348,7 @@ export const BranchSalesReport: React.FC = () => {
                       onClick={loadMoreSales}
                       className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
                       disabled={salesLoading}
+                  
                     >
                       {salesLoading ? (
                         <svg className="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
