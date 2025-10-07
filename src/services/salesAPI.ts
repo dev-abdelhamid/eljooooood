@@ -1,8 +1,7 @@
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 import { toast } from 'react-toastify';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
-
 const isRtl = localStorage.getItem('language') === 'ar';
 
 const salesAxios = axios.create({
@@ -11,7 +10,7 @@ const salesAxios = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-const handleError = async (error: any, originalRequest: any): Promise<never> => {
+const handleError = async (error: any, originalRequest: AxiosRequestConfig): Promise<never> => {
   console.error(`[${new Date().toISOString()}] Sales API response error:`, {
     url: error.config?.url,
     method: error.config?.method,
@@ -21,7 +20,6 @@ const handleError = async (error: any, originalRequest: any): Promise<never> => 
   });
 
   let message = error.response?.data?.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
-
   if (error.response?.status === 400) message = error.response?.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
   if (error.response?.status === 403) message = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
   if (error.response?.status === 404) message = error.response?.data?.message || (isRtl ? 'المبيعة غير موجودة' : 'Sale not found');
@@ -49,9 +47,9 @@ const handleError = async (error: any, originalRequest: any): Promise<never> => 
       localStorage.setItem('token', accessToken);
       if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
       console.log(`[${new Date().toISOString()}] Token refreshed successfully`);
-      originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+      originalRequest.headers = { ...originalRequest.headers, Authorization: `Bearer ${accessToken}` };
       return salesAxios(originalRequest);
-    } catch (refreshError) {
+    } catch (refreshError: any) {
       console.error(`[${new Date().toISOString()}] Refresh token failed:`, refreshError);
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -103,12 +101,9 @@ salesAxios.interceptors.response.use(
 );
 
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
-
 const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7,15}$/.test(phone);
-
-const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'credit_card', 'bank_transfer'].includes(method);
-
-const isValidPaymentStatus = (status: string | undefined): boolean => !status || ['pending', 'completed', 'canceled'].includes(status);
+const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'card', 'credit'].includes(method);
+const isValidPaymentStatus = (status: string | undefined): boolean => !method || ['pending', 'completed', 'canceled'].includes(status);
 
 export const salesAPI = {
   create: async (saleData: {
@@ -135,7 +130,7 @@ export const salesAPI = {
     }
     if (!isValidPaymentMethod(saleData.paymentMethod)) {
       console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid payment method:`, saleData.paymentMethod);
-      throw new Error(isRtl ? 'طريقة الدفع غير صالحة (يجب أن تكون cash أو credit_card أو bank_transfer)' : 'Invalid payment method (must be cash, credit_card, or bank_transfer)');
+      throw new Error(isRtl ? 'طريقة الدفع غير صالحة (يجب أن تكون cash أو card أو credit)' : 'Invalid payment method (must be cash, card, or credit)');
     }
     if (!isValidPaymentStatus(saleData.paymentStatus)) {
       console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid payment status:`, saleData.paymentStatus);
@@ -145,7 +140,6 @@ export const salesAPI = {
     console.log(`[${new Date().toISOString()}] salesAPI.create - Success:`, response);
     return response;
   },
-
   getAll: async (params: {
     page?: number;
     limit?: number;
@@ -174,7 +168,6 @@ export const salesAPI = {
     });
     return response;
   },
-
   getById: async (id: string) => {
     console.log(`[${new Date().toISOString()}] salesAPI.getById - Sending:`, { id });
     if (!isValidObjectId(id)) {
@@ -185,17 +178,30 @@ export const salesAPI = {
     console.log(`[${new Date().toISOString()}] salesAPI.getById - Success:`, response);
     return response.sale;
   },
-
-  update: async (id: string, saleData: {
-    notes?: string;
-    paymentMethod?: string;
-    customerName?: string;
-    customerPhone?: string;
-  }) => {
+  update: async (
+    id: string,
+    saleData: {
+      items?: Array<{ productId: string; quantity: number; unitPrice: number }>;
+      branch?: string;
+      notes?: string;
+      paymentMethod?: string;
+      paymentStatus?: string;
+      customerName?: string;
+      customerPhone?: string;
+    }
+  ) => {
     console.log(`[${new Date().toISOString()}] salesAPI.update - Sending:`, { id, saleData });
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid sale ID:`, id);
       throw new Error(isRtl ? 'معرف المبيعة غير صالح' : 'Invalid sale ID');
+    }
+    if (saleData.branch && !isValidObjectId(saleData.branch)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid branch ID:`, saleData.branch);
+      throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
+    }
+    if (saleData.items?.some((item) => !isValidObjectId(item.productId) || item.quantity < 1 || item.unitPrice < 0)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid items:`, saleData.items);
+      throw new Error(isRtl ? 'بيانات المنتجات غير صالحة' : 'Invalid product data');
     }
     if (!isValidPhone(saleData.customerPhone)) {
       console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid customer phone:`, saleData.customerPhone);
@@ -203,13 +209,16 @@ export const salesAPI = {
     }
     if (!isValidPaymentMethod(saleData.paymentMethod)) {
       console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid payment method:`, saleData.paymentMethod);
-      throw new Error(isRtl ? 'طريقة الدفع غير صالحة (يجب أن تكون cash أو credit_card أو bank_transfer)' : 'Invalid payment method (must be cash, credit_card, or bank_transfer)');
+      throw new Error(isRtl ? 'طريقة الدفع غير صالحة (يجب أن تكون cash أو card أو credit)' : 'Invalid payment method (must be cash, card, or credit)');
     }
-    const response = await salesAxios.patch(`/sales/${id}`, saleData);
+    if (!isValidPaymentStatus(saleData.paymentStatus)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid payment status:`, saleData.paymentStatus);
+      throw new Error(isRtl ? 'حالة الدفع غير صالحة' : 'Invalid payment status');
+    }
+    const response = await salesAxios.put(`/sales/${id}`, saleData);
     console.log(`[${new Date().toISOString()}] salesAPI.update - Success:`, response);
-    return response.sale;
+    return response;
   },
-
   delete: async (id: string) => {
     console.log(`[${new Date().toISOString()}] salesAPI.delete - Sending:`, { id });
     if (!isValidObjectId(id)) {
@@ -220,7 +229,6 @@ export const salesAPI = {
     console.log(`[${new Date().toISOString()}] salesAPI.delete - Success:`, response);
     return response;
   },
-
   getAnalytics: async (params: {
     branch?: string;
     startDate?: string;

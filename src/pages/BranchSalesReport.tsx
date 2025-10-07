@@ -6,10 +6,12 @@ import { formatDate } from '../utils/formatDate';
 import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown, Edit } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
-import { Bar } from 'react-chartjs-2';
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip, Legend } from 'chart.js';
+import io from 'socket.io-client';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, BarChart, Bar, PieChart, Pie, Cell,
+} from 'recharts';
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app';
 
 interface Sale {
   _id: string;
@@ -89,6 +91,15 @@ interface SalesAnalytics {
     totalQuantity: number;
     totalRevenue: number;
   }>;
+  salesTrends: Array<{ period: string; totalSales: number; saleCount: number }>;
+}
+
+interface EditSaleForm {
+  items: Array<{ productId: string; quantity: number; unitPrice: number }>;
+  notes?: string;
+  paymentMethod?: string;
+  customerName?: string;
+  customerPhone?: string;
 }
 
 const translations = {
@@ -129,6 +140,8 @@ const translations = {
     editSale: 'تعديل المبيعة',
     deleteSale: 'حذف المبيعة',
     confirmDelete: 'هل أنت متأكد من حذف هذه المبيعة؟',
+    save: 'حفظ',
+    cancel: 'إلغاء',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       no_branch_assigned: 'لم يتم تعيين فرع',
@@ -194,6 +207,8 @@ const translations = {
     editSale: 'Edit Sale',
     deleteSale: 'Delete Sale',
     confirmDelete: 'Are you sure you want to delete this sale?',
+    save: 'Save',
+    cancel: 'Cancel',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       no_branch_assigned: 'No branch assigned',
@@ -477,6 +492,7 @@ const BranchSalesReport: React.FC = () => {
     totalCount: 0,
     averageOrderValue: 0,
     topProducts: [],
+    salesTrends: [],
   });
   const [filterPeriod, setFilterPeriod] = useState('all');
   const [startDate, setStartDate] = useState('');
@@ -494,6 +510,8 @@ const BranchSalesReport: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState(user?.role === 'branch' && user?.branchId ? user.branchId : '');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [editSale, setEditSale] = useState<Sale | null>(null);
+  const [editForm, setEditForm] = useState<EditSaleForm>({ items: [] });
 
   const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim().toLowerCase()), 300), []);
 
@@ -513,58 +531,22 @@ const BranchSalesReport: React.FC = () => {
       [
         sale.customerName || '',
         sale.customerPhone || '',
-        formatDate(sale.createdAt, language).toLowerCase(),
+        sale.createdAt.toLowerCase(),
         ...sale.items.map((item) => item.displayName || ''),
       ].some((value) => value.toLowerCase().includes(searchTerm))
     );
-  }, [sales, searchTerm, language]);
+  }, [sales, searchTerm]);
 
   useEffect(() => {
-    setCart((prevCart) =>
-      prevCart.map((item) => {
-        const product = inventory.find((inv) => inv.product._id === item.productId);
-        return {
-          ...item,
-          displayName: product
-            ? isRtl
-              ? product.product.name || t.departments.unknown
-              : product.product.nameEn || product.product.name || t.departments.unknown
-            : item.displayName,
-          displayUnit: product
-            ? isRtl
-              ? product.product.unit || t.units.default
-              : product.product.unitEn || product.product.unit || t.units.default
-            : item.displayUnit,
-        };
-      })
-    );
-    setBranches((prevBranches) =>
-      prevBranches.map((branch) => ({
-        ...branch,
-        displayName: isRtl ? branch.name : branch.nameEn || branch.name || t.branches.unknown,
-      }))
-    );
-    setSales((prevSales) =>
-      prevSales.map((sale) => ({
-        ...sale,
-        branch: {
-          ...sale.branch,
-          displayName: isRtl
-            ? sale.branch.name
-            : sale.branch.nameEn || sale.branch.name || t.branches.unknown,
-        },
-        items: sale.items.map((item) => ({
-          ...item,
-          displayName: isRtl
-            ? item.productName || t.departments.unknown
-            : item.productNameEn || item.productName || t.departments.unknown,
-          displayUnit: isRtl
-            ? item.unit || t.units.default
-            : item.unitEn || item.unit || t.units.default,
-        })),
-      }))
-    );
-  }, [language, inventory, isRtl, t]);
+    const socket = io(API_BASE_URL);
+    socket.on('saleCreated', () => fetchData());
+    socket.on('saleUpdated', () => fetchData());
+    socket.on('saleDeleted', () => fetchData());
+    socket.on('inventoryUpdated', () => fetchData());
+    return () => {
+      socket.disconnect();
+    };
+  }, [fetchData]);
 
   const fetchData = useCallback(
     async (pageNum: number = 1, append: boolean = false) => {
@@ -619,6 +601,7 @@ const BranchSalesReport: React.FC = () => {
               totalCount: 0,
               averageOrderValue: 0,
               topProducts: [],
+              salesTrends: [],
             };
           }),
         ]);
@@ -748,6 +731,11 @@ const BranchSalesReport: React.FC = () => {
               : ps.productNameEn || ps.productName || t.departments.unknown,
             totalQuantity: ps.totalQuantity || 0,
             totalRevenue: ps.totalRevenue || 0,
+          })),
+          salesTrends: (analyticsResponse.salesTrends || []).map((trend: any) => ({
+            period: trend.period,
+            totalSales: trend.totalSales || 0,
+            saleCount: trend.saleCount || 0,
           })),
         });
 
@@ -910,18 +898,64 @@ const BranchSalesReport: React.FC = () => {
       fetchData();
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Sale submission error:`, err);
-      toast.error(t.errors.create_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(err.message || t.errors.create_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
     }
   }, [cart, notes, paymentMethod, customerName, customerPhone, user, selectedBranch, inventory, t, isRtl, fetchData]);
 
-  const handleEditSale = useCallback(
-    (sale: Sale) => {
-      // Placeholder for edit functionality
-      toast.info(t.editSale, { position: isRtl ? 'top-right' : 'top-left' });
-      // Implement edit logic here (e.g., open a modal with sale details)
-    },
-    [t, isRtl]
-  );
+  const handleEditSale = useCallback((sale: Sale) => {
+    setEditSale(sale);
+    setEditForm({
+      items: sale.items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      })),
+      notes: sale.notes,
+      paymentMethod: sale.paymentMethod,
+      customerName: sale.customerName,
+      customerPhone: sale.customerPhone,
+    });
+  }, []);
+
+  const handleSaveEdit = useCallback(async () => {
+    if (!editSale) return;
+    if (editForm.items.length === 0) {
+      toast.error(t.errors.empty_cart, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+    if (editForm.customerPhone && !/^\+?\d{7,15}$/.test(editForm.customerPhone)) {
+      toast.error(t.errors.invalid_customer_phone, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+    if (editForm.paymentMethod && !['cash', 'credit_card', 'bank_transfer'].includes(editForm.paymentMethod)) {
+      toast.error(t.errors.invalid_payment_method, { position: isRtl ? 'top-right' : 'top-left' });
+      return;
+    }
+    for (const item of editForm.items) {
+      const product = inventory.find((inv) => inv.product._id === item.productId);
+      if (!product) {
+        toast.error(t.errors.deleted_product, { position: isRtl ? 'top-right' : 'top-left' });
+        return;
+      }
+      if (item.quantity > product.currentStock) {
+        toast.error(`${t.errors.insufficient_stock}: ${product.displayName}`, { position: isRtl ? 'top-right' : 'top-left' });
+        return;
+      }
+      if (item.quantity <= 0) {
+        toast.error(`${t.errors.invalid_quantity}: ${product.displayName}`, { position: isRtl ? 'top-right' : 'top-left' });
+        return;
+      }
+    }
+    try {
+      await salesAPI.update(editSale._id, editForm);
+      toast.success(t.editSale, { position: isRtl ? 'top-right' : 'top-left' });
+      setEditSale(null);
+      fetchData();
+    } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] Sale update error:`, err);
+      toast.error(err.message || t.errors.update_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
+    }
+  }, [editSale, editForm, inventory, t, isRtl, fetchData]);
 
   const handleDeleteSale = useCallback(
     async (id: string) => {
@@ -932,7 +966,7 @@ const BranchSalesReport: React.FC = () => {
           fetchData();
         } catch (err: any) {
           console.error(`[${new Date().toISOString()}] Delete sale error:`, err);
-          toast.error(t.errors.delete_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
+          toast.error(err.message || t.errors.delete_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
         }
       }
     },
@@ -971,83 +1005,7 @@ const BranchSalesReport: React.FC = () => {
     return cart.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0).toFixed(2);
   }, [cart]);
 
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        backgroundColor: '#1F2937',
-        titleColor: '#FFFFFF',
-        bodyColor: '#FFFFFF',
-        borderColor: '#4B5563',
-        borderWidth: 1,
-        titleFont: { size: 12, family: 'Alexandria', weight: '500' },
-        bodyFont: { size: 12, family: 'Alexandria' },
-        padding: 10,
-      },
-      title: {
-        display: true,
-        text: t.topProducts,
-        font: { size: 16, family: 'Alexandria', weight: '600' },
-        color: '#1F2937',
-        padding: { top: 10, bottom: 20 },
-      },
-    },
-    scales: {
-      x: {
-        title: {
-          display: true,
-          text: t.topProducts,
-          font: { size: 12, family: 'Alexandria', weight: '500' },
-          color: '#1F2937',
-        },
-        ticks: {
-          font: { size: 10, family: 'Alexandria', weight: '400' },
-          color: '#1F2937',
-          maxRotation: isRtl ? -45 : 45,
-          minRotation: isRtl ? -45 : 45,
-          autoSkip: false,
-          maxTicksLimit: 10,
-          callback: function (value: any, index: number) {
-            const label = this.getLabelForValue(value);
-            return label.length > 10 ? `${label.substring(0, 10)}...` : label;
-          },
-        },
-        grid: { display: false },
-      },
-      y: {
-        title: {
-          display: true,
-          text: `${t.totalSales} (${t.currency})`,
-          font: { size: 12, family: 'Alexandria', weight: '500' },
-          color: '#1F2937',
-        },
-        ticks: {
-          font: { size: 10, family: 'Alexandria', weight: '400' },
-          color: '#1F2937',
-        },
-        grid: { color: '#E5E7EB' },
-      },
-    },
-    barPercentage: 0.4,
-    categoryPercentage: 0.5,
-    layout: {
-      padding: { top: 20, bottom: 20, left: 10, right: 10 },
-    },
-  };
-
-  const topProductsData = {
-    labels: analytics.topProducts.slice(0, 10).map((p) => p.displayName),
-    datasets: [
-      {
-        label: t.topProducts,
-        data: analytics.topProducts.slice(0, 10).map((p) => p.totalRevenue),
-        backgroundColor: '#FBBF24',
-        borderWidth: 0,
-      },
-    ],
-  };
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
   return (
     <div className={`min-h-screen bg-gray-50 px-4 sm:px-6 py-8 ${isRtl ? 'font-alexandria' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
@@ -1322,8 +1280,150 @@ const BranchSalesReport: React.FC = () => {
           </div>
           <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
             <h2 className="text-xl font-semibold text-gray-800 mb-4 font-alexandria">{t.topProducts}</h2>
-            <div className="w-full h-64">
-              <Bar data={topProductsData} options={chartOptions} />
+            <BarChart width={500} height={300} data={analytics.topProducts.slice(0, 10)}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="displayName" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Bar dataKey="totalRevenue" fill="#FBBF24" />
+            </BarChart>
+          </div>
+          <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4 font-alexandria">{t.salesTrends}</h2>
+            <LineChart width={500} height={300} data={analytics.salesTrends}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="period" />
+              <YAxis />
+              <Tooltip />
+              <Legend />
+              <Line type="monotone" dataKey="totalSales" stroke="#8884d8" />
+              <Line type="monotone" dataKey="saleCount" stroke="#82ca9d" />
+            </LineChart>
+          </div>
+          <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+            <h2 className="text-xl font-semibold text-gray-800 mb-4 font-alexandria">{t.topProducts}</h2>
+            <PieChart width={500} height={300}>
+              <Pie
+                data={analytics.topProducts.slice(0, 10)}
+                dataKey="totalRevenue"
+                nameKey="displayName"
+                cx="50%"
+                cy="50%"
+                outerRadius=100
+                fill="#8884d8"
+                label
+              >
+                {analytics.topProducts.slice(0, 10).map((_, index) => (
+                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip />
+              <Legend />
+            </PieChart>
+          </div>
+        </div>
+      )}
+
+      {editSale && (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex justify-center items-center">
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 w-full max-w-lg">
+            <h2 className="text-xl font-semibold text-gray-800 mb-6 font-alexandria">{t.editSale}</h2>
+            <div className="space-y-4">
+              <input
+                type="text"
+                value={editForm.customerName || ''}
+                onChange={(e) => setEditForm({ ...editForm, customerName: e.target.value })}
+                placeholder={t.customerName}
+                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria`}
+                aria-label={t.customerName}
+              />
+              <input
+                type="text"
+                value={editForm.customerPhone || ''}
+                onChange={(e) => setEditForm({ ...editForm, customerPhone: e.target.value })}
+                placeholder={t.customerPhone}
+                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria`}
+                aria-label={t.customerPhone}
+              />
+              <ProductDropdown
+                value={editForm.paymentMethod || ''}
+                onChange={(value) => setEditForm({ ...editForm, paymentMethod: value })}
+                options={paymentMethodOptions}
+                ariaLabel={t.paymentMethod}
+              />
+              <textarea
+                value={editForm.notes || ''}
+                onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                placeholder={t.notes}
+                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-600 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria resize-none h-24`}
+                aria-label={t.notes}
+              />
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-2 font-alexandria">{t.cart}</h3>
+                {editForm.items.map((item, index) => (
+                  <div key={index} className="flex items-center gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={item.productId}
+                      onChange={(e) => {
+                        const newItems = [...editForm.items];
+                        newItems[index].productId = e.target.value;
+                        setEditForm({ ...editForm, items: newItems });
+                      }}
+                      placeholder={isRtl ? 'معرف المنتج' : 'Product ID'}
+                      className={`flex-1 ${isRtl ? 'pr-4' : 'pl-4'} py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm text-sm font-alexandria`}
+                      aria-label={isRtl ? 'معرف المنتج' : 'Product ID'}
+                    />
+                    <QuantityInput
+                      value={item.quantity}
+                      onChange={(val) => {
+                        const newItems = [...editForm.items];
+                        newItems[index].quantity = parseInt(val) || 0;
+                        setEditForm({ ...editForm, items: newItems });
+                      }}
+                      onIncrement={() => {
+                        const newItems = [...editForm.items];
+                        newItems[index].quantity += 1;
+                        setEditForm({ ...editForm, items: newItems });
+                      }}
+                      onDecrement={() => {
+                        const newItems = [...editForm.items];
+                        newItems[index].quantity = Math.max(0, newItems[index].quantity - 1);
+                        setEditForm({ ...editForm, items: newItems });
+                      }}
+                    />
+                    <input
+                      type="number"
+                      value={item.unitPrice}
+                      onChange={(e) => {
+                        const newItems = [...editForm.items];
+                        newItems[index].unitPrice = parseFloat(e.target.value) || 0;
+                        setEditForm({ ...editForm, items: newItems });
+                      }}
+                      placeholder={t.unitPrice}
+                      className={`w-24 ${isRtl ? 'pr-4' : 'pl-4'} py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-amber-600 focus:border-transparent bg-white shadow-sm text-sm font-alexandria`}
+                      aria-label={t.unitPrice}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="mt-6 flex gap-4">
+              <button
+                onClick={handleSaveEdit}
+                className="px-6 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-base font-medium transition-colors duration-300 font-alexandria"
+                aria-label={t.save}
+              >
+                {t.save}
+              </button>
+              <button
+                onClick={() => setEditSale(null)}
+                className="px-6 py-3 bg-gray-500 hover:bg-gray-600 text-white rounded-xl text-base font-medium transition-colors duration-300 font-alexandria"
+                aria-label={t.cancel}
+              >
+                {t.cancel}
+              </button>
             </div>
           </div>
         </div>
