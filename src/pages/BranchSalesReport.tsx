@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage, Language } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { branchesAPI, inventoryAPI, salesAPI } from '../services/api';
+import { inventoryAPI, salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
-import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown } from 'lucide-react';
+import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown, Edit2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
+import moment from 'moment';
+import 'moment/locale/ar';
 
 interface Sale {
   _id: string;
@@ -74,6 +76,13 @@ interface CartItem {
   unitPrice: number;
 }
 
+interface Department {
+  _id: string;
+  name: string;
+  nameEn?: string;
+  displayName: string;
+}
+
 const translations = {
   ar: {
     title: 'تقرير المبيعات',
@@ -82,6 +91,7 @@ const translations = {
     availableProducts: 'المنتجات المتاحة',
     noProducts: 'لا توجد منتجات متاحة',
     department: 'القسم',
+    allDepartments: 'كل الأقسام',
     availableStock: 'المخزون المتاح',
     unitPrice: 'سعر الوحدة',
     addToCart: 'إضافة إلى السلة',
@@ -93,6 +103,8 @@ const translations = {
     customerName: 'اسم العميل',
     customerPhone: 'هاتف العميل',
     submitSale: 'إرسال المبيعة',
+    updateSale: 'تحديث المبيعة',
+    deleteSale: 'حذف المبيعة',
     newSale: 'مبيعة جديدة',
     previousSales: 'المبيعات السابقة',
     noSales: 'لا توجد مبيعات',
@@ -105,6 +117,7 @@ const translations = {
     loadMore: 'تحميل المزيد',
     filterBy: 'تصفية حسب',
     customRange: 'نطاق مخصص',
+    editSale: 'تعديل المبيعة',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       no_branch_assigned: 'لم يتم تعيين فرع',
@@ -112,6 +125,8 @@ const translations = {
       fetch_branches: 'خطأ أثناء جلب الفروع',
       fetch_inventory: 'خطأ أثناء جلب المخزون',
       create_sale_failed: 'فشل إنشاء المبيعة',
+      update_sale_failed: 'فشل تحديث المبيعة',
+      delete_sale_failed: 'فشل حذف المبيعة',
       insufficient_stock: 'المخزون غير كافٍ',
       exceeds_max_quantity: 'الكمية تتجاوز الحد الأقصى',
       invalid_quantity: 'الكمية غير صالحة',
@@ -138,6 +153,7 @@ const translations = {
     availableProducts: 'Available Products',
     noProducts: 'No products available',
     department: 'Department',
+    allDepartments: 'All Departments',
     availableStock: 'Available Stock',
     unitPrice: 'Unit Price',
     addToCart: 'Add to Cart',
@@ -149,6 +165,8 @@ const translations = {
     customerName: 'Customer Name',
     customerPhone: 'Customer Phone',
     submitSale: 'Submit Sale',
+    updateSale: 'Update Sale',
+    deleteSale: 'Delete Sale',
     newSale: 'New Sale',
     previousSales: 'Previous Sales',
     noSales: 'No sales found',
@@ -161,6 +179,7 @@ const translations = {
     loadMore: 'Load More',
     filterBy: 'Filter By',
     customRange: 'Custom Range',
+    editSale: 'Edit Sale',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       no_branch_assigned: 'No branch assigned',
@@ -168,6 +187,8 @@ const translations = {
       fetch_branches: 'Error fetching branches',
       fetch_inventory: 'Error fetching inventory',
       create_sale_failed: 'Failed to create sale',
+      update_sale_failed: 'Failed to update sale',
+      delete_sale_failed: 'Failed to delete sale',
       insufficient_stock: 'Insufficient stock',
       exceeds_max_quantity: 'Quantity exceeds maximum available',
       invalid_quantity: 'Invalid quantity',
@@ -233,7 +254,6 @@ const ProductDropdown = React.memo<{
   const isRtl = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
   const selectedOption = options.find((opt) => opt.value === value) || options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
-
   return (
     <div className={`relative group ${className || ''}`}>
       <button
@@ -355,16 +375,38 @@ const ProductCard = React.memo<{
   );
 });
 
-const SaleCard = React.memo<{ sale: Sale }>(({ sale }) => {
+const SaleCard = React.memo<{
+  sale: Sale;
+  onEdit: (sale: Sale) => void;
+  onDelete: (id: string) => void;
+}>(({ sale, onEdit, onDelete }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   return (
     <div className="p-6 bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 hover:border-amber-200">
       <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <h3 className="font-bold text-gray-900 text-xl">{sale.saleNumber}</h3>
-          <span className="text-sm text-gray-500">({sale.branch.displayName})</span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <h3 className="font-bold text-gray-900 text-xl">{sale.saleNumber}</h3>
+            <span className="text-sm text-gray-500">({sale.branch.displayName})</span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => onEdit(sale)}
+              className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full transition-colors duration-200"
+              aria-label={t.editSale}
+            >
+              <Edit2 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => onDelete(sale._id)}
+              className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200"
+              aria-label={t.deleteSale}
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
         </div>
         <div className="space-y-2">
           {sale.items.map((item, index) => (
@@ -373,7 +415,7 @@ const SaleCard = React.memo<{ sale: Sale }>(({ sale }) => {
                 {item.quantity} {item.displayUnit || t.units.default} {item.displayName || t.errors.deleted_product}
               </span>
               <span className="font-semibold text-amber-600">
-                {item.quantity}x{item.unitPrice} = {(item.quantity * item.unitPrice).toFixed(2)} {t.currency}
+                {item.quantity} × {item.unitPrice} {t.currency}
               </span>
             </div>
           ))}
@@ -383,7 +425,7 @@ const SaleCard = React.memo<{ sale: Sale }>(({ sale }) => {
           </div>
         </div>
         <div className="space-y-2 text-sm text-gray-600">
-          <p>{t.date}: {formatDate(sale.createdAt, language)}</p>
+          <p>{t.date}: {sale.createdAt}</p>
           {sale.paymentMethod && (
             <p>{t.paymentMethod}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] || t.paymentMethods.cash}</p>
           )}
@@ -397,7 +439,7 @@ const SaleCard = React.memo<{ sale: Sale }>(({ sale }) => {
             <ul className="list-disc list-inside text-sm text-gray-600">
               {sale.returns.map((ret, index) => (
                 <li key={index}>
-                  {t.return} #{ret.returnNumber} ({t.returns.status[ret.status as keyof typeof t.returns.status]}) - {t.reason}: {ret.reason} ({t.date}: {formatDate(ret.createdAt, language)})
+                  {t.return} #{ret.returnNumber} ({ret.status}) - {t.reason}: {ret.reason} ({t.date}: {ret.createdAt})
                   <ul className="list-circle list-inside ml-4">
                     {ret.items.map((item, i) => (
                       <li key={i}>
@@ -447,11 +489,13 @@ export const BranchSalesReport: React.FC = () => {
   const [sales, setSales] = useState<Sale[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [filterPeriod, setFilterPeriod] = useState('all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedDepartment, setSelectedDepartment] = useState('');
   const [loading, setLoading] = useState(true);
   const [salesLoading, setSalesLoading] = useState(false);
   const [error, setError] = useState('');
@@ -460,9 +504,15 @@ export const BranchSalesReport: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<string>('cash');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState<string | undefined>(undefined);
-  const [selectedBranch, setSelectedBranch] = useState(user?.role === 'branch' && user?.branchId ? user.branchId : '');
+  const [selectedBranch] = useState(user?.branchId || '');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [editingSaleId, setEditingSaleId] = useState<string | null>(null);
+
+  // إعداد Moment.js لدعم اللغة العربية
+  useEffect(() => {
+    moment.locale(language);
+  }, [language]);
 
   const debouncedSearch = useCallback(
     debounce((value: string) => setSearchTerm(value.trim()), 300),
@@ -477,8 +527,12 @@ export const BranchSalesReport: React.FC = () => {
 
   const filteredInventory = useMemo(() => {
     const lowerSearchTerm = searchTerm.toLowerCase();
-    return inventory.filter((item) => item.displayName.toLowerCase().includes(lowerSearchTerm));
-  }, [inventory, searchTerm]);
+    return inventory.filter((item) => {
+      const matchesSearch = item.displayName.toLowerCase().includes(lowerSearchTerm);
+      const matchesDepartment = !selectedDepartment || item.product.department?._id === selectedDepartment;
+      return matchesSearch && matchesDepartment;
+    });
+  }, [inventory, searchTerm, selectedDepartment]);
 
   useEffect(() => {
     setCart((prevCart) =>
@@ -510,38 +564,23 @@ export const BranchSalesReport: React.FC = () => {
         return;
       }
 
-      const effectiveBranch = user.branchId || selectedBranch;
-      if (!effectiveBranch) {
-        setError(t.errors.no_branch_assigned);
-        toast.error(t.errors.no_branch_assigned, { position: isRtl ? 'top-right' : 'top-left' });
-        setLoading(false);
-        return;
-      }
-
       setLoading(pageNum === 1);
       setSalesLoading(pageNum > 1);
+
       try {
-        const salesParams: any = { page: pageNum, limit: 20, sort: '-createdAt', branch: effectiveBranch };
+        const salesParams: any = { page: pageNum, limit: 20, sort: '-createdAt', branch: user.branchId };
         if (filterPeriod === 'custom' && startDate && endDate) {
           salesParams.startDate = startDate;
           salesParams.endDate = endDate;
         }
 
-        const inventoryParams: any = { lowStock: false };
-        if (effectiveBranch) {
-          inventoryParams.branch = effectiveBranch;
-        }
+        const inventoryParams: any = { lowStock: false, branch: user.branchId };
 
-        const [salesResponse, branchesResponse, inventoryResponse] = await Promise.all([
+        const [salesResponse, inventoryResponse] = await Promise.all([
           salesAPI.getAll(salesParams).catch((err) => {
             console.error(`[${new Date().toISOString()}] Sales fetch error:`, err);
             toast.error(t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left' });
             return { sales: [], total: 0, returns: [] };
-          }),
-          branchesAPI.getAll().catch((err) => {
-            console.error(`[${new Date().toISOString()}] Branch fetch error:`, err);
-            toast.error(t.errors.fetch_branches, { position: isRtl ? 'top-right' : 'top-left' });
-            return { branches: [] };
           }),
           inventoryAPI.getInventory(inventoryParams).catch((err) => {
             console.error(`[${new Date().toISOString()}] Inventory fetch error:`, err, { params: inventoryParams });
@@ -549,8 +588,6 @@ export const BranchSalesReport: React.FC = () => {
             return [];
           }),
         ]);
-
-        console.log(`[${new Date().toISOString()}] Inventory response:`, inventoryResponse);
 
         const returnsMap = new Map<string, Sale['returns']>();
         if (Array.isArray(salesResponse.returns)) {
@@ -571,7 +608,7 @@ export const BranchSalesReport: React.FC = () => {
                   }))
                 : [],
               reason: ret.reason,
-              createdAt: formatDate(ret.createdAt, language),
+              createdAt: moment(ret.createdAt).format(isRtl ? 'D MMMM YYYY [في] h:mm A' : 'MMMM D, YYYY [at] h:mm A'),
             });
           });
         }
@@ -607,7 +644,7 @@ export const BranchSalesReport: React.FC = () => {
               }))
             : [],
           totalAmount: sale.totalAmount || 0,
-          createdAt: formatDate(sale.createdAt, language),
+          createdAt: moment(sale.createdAt).format(isRtl ? 'D MMMM YYYY [في] h:mm A' : 'MMMM D, YYYY [at] h:mm A'),
           notes: sale.notes,
           paymentMethod: sale.paymentMethod,
           customerName: sale.customerName,
@@ -617,21 +654,6 @@ export const BranchSalesReport: React.FC = () => {
 
         setSales((prev) => (append ? [...prev, ...newSales] : newSales));
         setHasMore(salesResponse.total > pageNum * 20);
-
-        const fetchedBranches = Array.isArray(branchesResponse.branches)
-          ? branchesResponse.branches.map((branch: any) => ({
-              _id: branch._id,
-              name: branch.name || t.branches.unknown,
-              nameEn: branch.nameEn,
-              displayName: isRtl ? branch.name : (branch.nameEn || branch.name || t.branches.unknown),
-            }))
-          : [];
-        setBranches(fetchedBranches);
-
-        if (fetchedBranches.length === 0) {
-          setError(t.errors.no_branches_available);
-          toast.warn(t.errors.no_branches_available, { position: isRtl ? 'top-right' : 'top-left' });
-        }
 
         const newInventory = Array.isArray(inventoryResponse)
           ? inventoryResponse
@@ -659,8 +681,26 @@ export const BranchSalesReport: React.FC = () => {
                 displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
               }))
           : [];
-        console.log(`[${new Date().toISOString()}] Processed inventory:`, newInventory);
+
         setInventory(newInventory);
+
+        // استخراج الأقسام الفريدة
+        const uniqueDepartments = Array.from(
+          new Map(
+            newInventory
+              .filter((item: InventoryItem) => item.product.department)
+              .map((item: InventoryItem) => [
+                item.product.department!._id,
+                {
+                  _id: item.product.department!._id,
+                  name: item.product.department!.name,
+                  nameEn: item.product.department!.nameEn,
+                  displayName: item.product.department!.displayName,
+                },
+              ])
+          ).values()
+        );
+        setDepartments(uniqueDepartments);
 
         if (newInventory.length === 0) {
           setError(t.noProducts);
@@ -679,7 +719,7 @@ export const BranchSalesReport: React.FC = () => {
         setSalesLoading(false);
       }
     },
-    [filterPeriod, startDate, endDate, user, t, isRtl, language, selectedBranch]
+    [filterPeriod, startDate, endDate, user, t, isRtl, language]
   );
 
   useEffect(() => {
@@ -769,41 +809,17 @@ export const BranchSalesReport: React.FC = () => {
       toast.error(t.errors.empty_cart, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
-
     if (customerPhone && !/^\+?\d{7,15}$/.test(customerPhone)) {
       toast.error(t.errors.invalid_customer_phone, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
-
     if (paymentMethod && !['cash', 'credit_card', 'bank_transfer'].includes(paymentMethod)) {
       toast.error(t.errors.invalid_payment_method, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
 
-    const effectiveBranch = user?.branchId || selectedBranch;
-    if (!effectiveBranch) {
-      toast.error(t.errors.no_branch_assigned, { position: isRtl ? 'top-right' : 'top-left' });
-      return;
-    }
-
-    for (const item of cart) {
-      const product = inventory.find((inv) => inv.product._id === item.productId);
-      if (!product) {
-        toast.error(t.errors.deleted_product, { position: isRtl ? 'top-right' : 'top-left' });
-        return;
-      }
-      if (item.quantity > product.currentStock) {
-        toast.error(`${t.errors.insufficient_stock}: ${item.displayName}`, { position: isRtl ? 'top-right' : 'top-left' });
-        return;
-      }
-      if (item.quantity <= 0) {
-        toast.error(`${t.errors.invalid_quantity}: ${item.displayName}`, { position: isRtl ? 'top-right' : 'top-left' });
-        return;
-      }
-    }
-
     const saleData = {
-      branch: effectiveBranch,
+      branch: user?.branchId,
       items: cart.map((item) => ({
         productId: item.productId,
         quantity: item.quantity,
@@ -816,30 +832,75 @@ export const BranchSalesReport: React.FC = () => {
     };
 
     try {
-      await salesAPI.create(saleData);
-      toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
+      if (editingSaleId) {
+        await salesAPI.update(editingSaleId, saleData);
+        toast.success(t.updateSale, { position: isRtl ? 'top-right' : 'top-left' });
+      } else {
+        await salesAPI.create(saleData);
+        toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
+      }
       setCart([]);
       setNotes('');
       setCustomerName('');
       setCustomerPhone(undefined);
       setPaymentMethod('cash');
+      setEditingSaleId(null);
       fetchData();
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Sale submission error:`, err);
-      toast.error(t.errors.create_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
+      console.error(`[${new Date().toISOString()}] Sale ${editingSaleId ? 'update' : 'submission'} error:`, err);
+      toast.error(editingSaleId ? t.errors.update_sale_failed : t.errors.create_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
     }
-  }, [cart, notes, paymentMethod, customerName, customerPhone, user, selectedBranch, inventory, t, isRtl, fetchData]);
+  }, [cart, notes, paymentMethod, customerName, customerPhone, user, t, isRtl, fetchData, editingSaleId]);
+
+  const handleEditSale = useCallback((sale: Sale) => {
+    setEditingSaleId(sale._id);
+    setCart(
+      sale.items.map((item) => ({
+        productId: item.productId,
+        productName: item.productName,
+        productNameEn: item.productNameEn,
+        unit: item.unit,
+        unitEn: item.unitEn,
+        displayName: item.displayName,
+        displayUnit: item.displayUnit,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      }))
+    );
+    setNotes(sale.notes || '');
+    setCustomerName(sale.customerName || '');
+    setCustomerPhone(sale.customerPhone || undefined);
+    setPaymentMethod(sale.paymentMethod || 'cash');
+    setActiveTab('new');
+  }, []);
+
+  const handleDeleteSale = useCallback(
+    async (id: string) => {
+      if (window.confirm(isRtl ? 'هل أنت متأكد من حذف هذه المبيعة؟' : 'Are you sure you want to delete this sale?')) {
+        try {
+          await salesAPI.delete(id);
+          toast.success(t.deleteSale, { position: isRtl ? 'top-right' : 'top-left' });
+          fetchData();
+        } catch (err: any) {
+          console.error(`[${new Date().toISOString()}] Sale deletion error:`, err);
+          toast.error(t.errors.delete_sale_failed, { position: isRtl ? 'top-right' : 'top-left' });
+        }
+      }
+    },
+    [fetchData, t, isRtl]
+  );
 
   const branchOptions = useMemo(() => {
-    if (user?.role === 'branch' && user?.branchId) {
-      const branch = branches.find((b) => b._id === user.branchId);
-      return branch ? [{ value: branch._id, label: branch.displayName }] : [];
-    }
-    return [
-      { value: '', label: t.branches.select_branch },
-      ...branches.map((branch) => ({ value: branch._id, label: branch.displayName })),
-    ];
-  }, [branches, t.branches, user]);
+    return branches.map((branch) => ({ value: branch._id, label: branch.displayName }));
+  }, [branches]);
+
+  const departmentOptions = useMemo(
+    () => [
+      { value: '', label: t.allDepartments },
+      ...departments.map((dept) => ({ value: dept._id, label: dept.displayName })),
+    ],
+    [departments, t]
+  );
 
   const paymentMethodOptions = useMemo(
     () => [
@@ -873,18 +934,24 @@ export const BranchSalesReport: React.FC = () => {
           </div>
         </div>
       </header>
-
       {error && (
         <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
           <AlertCircle className="w-5 h-5 text-red-600" />
           <span className="text-red-600 text-sm font-medium">{error}</span>
         </div>
       )}
-
       <div className="mb-8">
         <div className="flex border-b border-gray-200">
           <button
-            onClick={() => setActiveTab('new')}
+            onClick={() => {
+              setActiveTab('new');
+              setEditingSaleId(null);
+              setCart([]);
+              setNotes('');
+              setCustomerName('');
+              setCustomerPhone(undefined);
+              setPaymentMethod('cash');
+            }}
             className={`px-4 py-2 text-sm font-medium ${activeTab === 'new' ? 'border-b-2 border-amber-600 text-amber-600' : 'text-gray-500 hover:text-amber-600'} transition-colors duration-200`}
           >
             {t.newSale}
@@ -897,28 +964,25 @@ export const BranchSalesReport: React.FC = () => {
           </button>
         </div>
       </div>
-
       {activeTab === 'new' && (
         <div className={`space-y-8 ${cart.length > 0 ? 'lg:grid lg:grid-cols-3 lg:gap-8 lg:space-y-0' : ''}`}>
           <section className={`${cart.length > 0 ? 'lg:col-span-2 lg:overflow-y-auto lg:max-h-[calc(100vh-12rem)] scrollbar-none' : ''}`}>
             <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
               <h2 className="text-xl font-bold text-gray-900 mb-6">{t.availableProducts}</h2>
-              {!user?.branchId && (
-                <ProductDropdown
-                  value={selectedBranch}
-                  onChange={setSelectedBranch}
-                  options={branchOptions}
-                  ariaLabel={t.branches.select_branch}
-                  disabled={!!user?.branchId}
-                  className="mb-4"
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                <ProductSearchInput
+                  value={searchInput}
+                  onChange={handleSearchChange}
+                  placeholder={t.searchPlaceholder}
+                  ariaLabel={t.searchPlaceholder}
                 />
-              )}
-              <ProductSearchInput
-                value={searchInput}
-                onChange={handleSearchChange}
-                placeholder={t.searchPlaceholder}
-                ariaLabel={t.searchPlaceholder}
-              />
+                <ProductDropdown
+                  value={selectedDepartment}
+                  onChange={setSelectedDepartment}
+                  options={departmentOptions}
+                  ariaLabel={t.department}
+                />
+              </div>
               <div className="mt-4 text-center text-sm text-gray-600 font-medium">
                 {isRtl ? `عدد المنتجات: ${filteredInventory.length}` : `Products Count: ${filteredInventory.length}`}
               </div>
@@ -949,7 +1013,6 @@ export const BranchSalesReport: React.FC = () => {
               </div>
             )}
           </section>
-
           {cart.length > 0 && (
             <aside className="lg:col-span-1 lg:sticky lg:top-8 space-y-6 max-h-[calc(100vh-12rem)] overflow-y-auto scrollbar-none">
               <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
@@ -960,7 +1023,7 @@ export const BranchSalesReport: React.FC = () => {
                       <div className="flex-1">
                         <p className="font-semibold text-gray-900 text-sm">{item.displayName || t.errors.deleted_product}</p>
                         <p className="text-sm text-gray-600">
-                          {item.quantity} {item.displayUnit || t.units.default} | {item.unitPrice} {t.currency} = {(item.quantity * item.unitPrice).toFixed(2)} {t.currency}
+                          {item.quantity} × {item.unitPrice} {t.currency}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -1020,10 +1083,10 @@ export const BranchSalesReport: React.FC = () => {
                   <button
                     onClick={handleSubmitSale}
                     className="w-full mt-4 px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                    disabled={cart.length === 0 || !selectedBranch}
-                    aria-label={t.submitSale}
+                    disabled={cart.length === 0}
+                    aria-label={editingSaleId ? t.updateSale : t.submitSale}
                   >
-                    {t.submitSale}
+                    {editingSaleId ? t.updateSale : t.submitSale}
                   </button>
                 </div>
               </div>
@@ -1031,43 +1094,33 @@ export const BranchSalesReport: React.FC = () => {
           )}
         </div>
       )}
-
       {activeTab === 'previous' && (
         <div className="mt-8">
           <h2 className="text-xl font-bold text-gray-900 mb-6">{t.previousSales}</h2>
-          {!user?.branchId && (
-            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-8">
-              <h2 className="text-xl font-bold text-gray-900 mb-6">{t.filters}</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                <ProductDropdown
-                  value={selectedBranch}
-                  onChange={setSelectedBranch}
-                  options={branchOptions}
-                  ariaLabel={t.branches.select_branch}
-                  disabled={!!user?.branchId}
-                />
-                <ProductDropdown value={filterPeriod} onChange={setFilterPeriod} options={periodOptions} ariaLabel={t.filterBy} />
-                {filterPeriod === 'custom' && (
-                  <>
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-                      aria-label={t.date}
-                    />
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-                      aria-label={t.date}
-                    />
-                  </>
-                )}
-              </div>
+          <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-8">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">{t.filters}</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              <ProductDropdown value={filterPeriod} onChange={setFilterPeriod} options={periodOptions} ariaLabel={t.filterBy} />
+              {filterPeriod === 'custom' && (
+                <>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                    aria-label={t.date}
+                  />
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                    aria-label={t.date}
+                  />
+                </>
+              )}
             </div>
-          )}
+          </div>
           {loading ? (
             <div className="space-y-6">
               {[...Array(3)].map((_, index) => (
@@ -1083,7 +1136,7 @@ export const BranchSalesReport: React.FC = () => {
             <>
               <div className="space-y-6">
                 {sales.map((sale) => (
-                  <SaleCard key={sale._id} sale={sale} />
+                  <SaleCard key={sale._id} sale={sale} onEdit={handleEditSale} onDelete={handleDeleteSale} />
                 ))}
               </div>
               {hasMore && (
@@ -1094,7 +1147,7 @@ export const BranchSalesReport: React.FC = () => {
                     disabled={salesLoading}
                   >
                     {salesLoading ? (
-                      <svg className="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 24">
+                      <svg className="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
