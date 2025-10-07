@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { branchesAPI, inventoryAPI, salesAPI } from '../services/api';
+import { branchesAPI, inventoryAPI, salesAPI, departmentAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown, Edit } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -19,7 +19,6 @@ interface Department {
   nameEn?: string;
   displayName: string;
 }
-
 interface Sale {
   _id: string;
   saleNumber: string;
@@ -52,14 +51,12 @@ interface Sale {
     createdAt: string;
   }>;
 }
-
 interface Branch {
   _id: string;
   name: string;
   nameEn?: string;
   displayName: string;
 }
-
 interface InventoryItem {
   _id: string;
   product: {
@@ -75,7 +72,6 @@ interface InventoryItem {
   displayName: string;
   displayUnit: string;
 }
-
 interface CartItem {
   productId: string;
   productName: string;
@@ -87,7 +83,6 @@ interface CartItem {
   quantity: number;
   unitPrice: number;
 }
-
 interface SalesAnalytics {
   totalSales: number;
   totalCount: number;
@@ -550,7 +545,6 @@ export const BranchSalesReport: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState(user?.role === 'branch' && user?.branchId ? user.branchId : '');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-
   const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim().toLowerCase()), 300), []);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -680,12 +674,10 @@ export const BranchSalesReport: React.FC = () => {
         setLoading(false);
         return;
       }
-
       setLoading(pageNum === 1);
       setSalesLoading(pageNum > 1);
       setInventoryLoading(true);
       setAnalyticsLoading(true);
-
       try {
         const salesParams: any = { page: pageNum, limit: 20, sort: '-createdAt', branch: effectiveBranch, lang: language };
         if (filterPeriod === 'custom' && startDate && endDate) {
@@ -704,7 +696,6 @@ export const BranchSalesReport: React.FC = () => {
           analyticsParams.startDate = startDate;
           analyticsParams.endDate = endDate;
         }
-
         const [salesResponse, branchesResponse, inventoryResponse, departmentsResponse, analyticsResponse] = await Promise.all([
           salesAPI.getAll(salesParams).catch((err) => {
             console.error(`[${new Date().toISOString()}] Sales fetch error:`, { message: err.message, stack: err.stack });
@@ -721,7 +712,7 @@ export const BranchSalesReport: React.FC = () => {
             toast.error(t.errors.fetch_inventory, { position: isRtl ? 'top-right' : 'top-left' });
             return [];
           }),
-          branchesAPI.getDepartments().catch((err) => {
+          departmentAPI.getAll().catch((err) => {
             console.error(`[${new Date().toISOString()}] Departments fetch error:`, { message: err.message, stack: err.stack });
             toast.error(t.errors.fetch_departments, { position: isRtl ? 'top-right' : 'top-left' });
             return { departments: [] };
@@ -738,7 +729,6 @@ export const BranchSalesReport: React.FC = () => {
             };
           }),
         ]);
-
         const returnsMap = new Map<string, Sale['returns']>();
         if (Array.isArray(salesResponse.returns)) {
           salesResponse.returns.forEach((ret: any) => {
@@ -762,7 +752,6 @@ export const BranchSalesReport: React.FC = () => {
             });
           });
         }
-
         const newSales = salesResponse.sales.map((sale: any) => ({
           _id: sale._id,
           saleNumber: sale.saleNumber || 'N/A',
@@ -810,10 +799,8 @@ export const BranchSalesReport: React.FC = () => {
           customerPhone: sale.customerPhone,
           returns: returnsMap.get(sale._id) || [],
         }));
-
         setSales((prev) => (append ? [...prev, ...newSales] : newSales));
         setHasMore(salesResponse.total > pageNum * 20);
-
         const fetchedBranches = Array.isArray(branchesResponse.branches)
           ? branchesResponse.branches.map((branch: any) => ({
               _id: branch._id,
@@ -827,7 +814,6 @@ export const BranchSalesReport: React.FC = () => {
           setError(t.errors.no_branches_available);
           toast.warn(t.errors.no_branches_available, { position: isRtl ? 'top-right' : 'top-left' });
         }
-
         const fetchedDepartments = Array.isArray(departmentsResponse.departments)
           ? departmentsResponse.departments.map((dept: any) => ({
               _id: dept._id,
@@ -841,7 +827,6 @@ export const BranchSalesReport: React.FC = () => {
           setError(t.errors.no_departments_available);
           toast.warn(t.errors.no_departments_available, { position: isRtl ? 'top-right' : 'top-left' });
         }
-
         const newInventory = Array.isArray(inventoryResponse)
           ? inventoryResponse
               .filter((item: any) => item.currentStock > 0 && item.product?._id)
@@ -875,7 +860,6 @@ export const BranchSalesReport: React.FC = () => {
               }))
           : [];
         setInventory(newInventory);
-
         setAnalytics({
           totalSales: analyticsResponse.totalSales || 0,
           totalCount: analyticsResponse.totalCount || 0,
@@ -901,7 +885,6 @@ export const BranchSalesReport: React.FC = () => {
             totalRevenue: ds.totalRevenue || 0,
           })),
         });
-
         setError('');
       } catch (err: any) {
         console.error(`[${new Date().toISOString()}] Fetch error:`, { message: err.message, stack: err.stack });
@@ -1186,7 +1169,6 @@ export const BranchSalesReport: React.FC = () => {
           minRotation: isRtl ? -45 : 45,
           autoSkip: false,
           maxTicksLimit: 10,
-        
         },
         grid: { display: false },
       },
@@ -1599,7 +1581,7 @@ export const BranchSalesReport: React.FC = () => {
               {analytics.departmentSales.length > 0 && (
                 <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
                   <div className="h-64">
-                    <Bar data={departmentSalesData} options={departmentChartOptions} />
+                    <Bar data={departmentSalesData} options={chartOptions} />
                   </div>
                 </div>
               )}
