@@ -129,13 +129,12 @@ const translations = {
     topProduct: 'المنتج الأكثر مبيعًا',
     salesTrends: 'اتجاهات المبيعات',
     topCustomers: 'أفضل العملاء',
-    unknownCustomers: 'عملاء غير معروفين',
     noSales: 'لا توجد مبيعات',
     date: 'التاريخ',
     quantity: 'الكمية',
     branchFilter: 'اختر فرعًا',
     allBranches: 'جميع الفروع',
-    searchPlaceholder: 'ابحث باسم العميل أو رقم الهاتف أو اسم المنتج...',
+    searchPlaceholder: 'ابحث عن المبيعات...',
     loadMore: 'تحميل المزيد',
     editSale: 'تعديل المبيعة',
     deleteSale: 'حذف المبيعة',
@@ -143,7 +142,6 @@ const translations = {
     export: 'تصدير',
     customerNameLabel: 'اسم العميل',
     customerPhoneLabel: 'رقم الهاتف',
-    filters: 'الفلاتر',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       fetch_sales: 'خطأ أثناء جلب المبيعات',
@@ -183,13 +181,12 @@ const translations = {
     topProduct: 'Top Selling Product',
     salesTrends: 'Sales Trends',
     topCustomers: 'Top Customers',
-    unknownCustomers: 'Unknown Customers',
     noSales: 'No sales found',
     date: 'Date',
     quantity: 'Quantity',
     branchFilter: 'Select Branch',
     allBranches: 'All Branches',
-    searchPlaceholder: 'Search by customer name, phone, or product name...',
+    searchPlaceholder: 'Search sales...',
     loadMore: 'Load More',
     editSale: 'Edit Sale',
     deleteSale: 'Delete Sale',
@@ -197,7 +194,6 @@ const translations = {
     export: 'Export',
     customerNameLabel: 'Customer Name',
     customerPhoneLabel: 'Phone Number',
-    filters: 'Filters',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       fetch_sales: 'Error fetching sales',
@@ -305,7 +301,7 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
             <p className="text-xs text-gray-500 font-alexandria">{t.totalSales}: {sale.totalAmount} {t.currency}</p>
             {sale.paymentMethod && (
               <p className="text-xs text-gray-500 font-alexandria">
-                طريقة الدفع: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] || 'N/A'}
+                {t.paymentMethodsLabel}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] || 'N/A'}
               </p>
             )}
             {sale.customerName && (
@@ -318,7 +314,7 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
                 <span className="font-medium">{t.customerPhoneLabel}: </span>{sale.customerPhone}
               </p>
             )}
-            {sale.notes && <p className="text-xs text-gray-400 italic font-alexandria">ملاحظات: {sale.notes}</p>}
+            {sale.notes && <p className="text-xs text-gray-400 italic font-alexandria">{t.notes}: {sale.notes}</p>}
             <ul className="space-y-1 text-xs text-gray-600">
               {sale.items.map((item, index) => (
                 <li key={index} className="border-t border-gray-100 pt-1 font-alexandria">
@@ -616,39 +612,21 @@ export const SalesReport: React.FC = () => {
     link.click();
   }, [sales, t]);
 
-  const filteredSales = useMemo(() => {
-    if (!searchTerm) return sales;
-    const lowerSearch = searchTerm.toLowerCase();
-    return sales.filter((sale) =>
-      sale.orderNumber.toLowerCase().includes(lowerSearch) ||
-      (sale.customerName && sale.customerName.toLowerCase().includes(lowerSearch)) ||
-      (sale.customerPhone && sale.customerPhone.includes(searchTerm)) ||
-      sale.items.some((item) => item.displayName.toLowerCase().includes(lowerSearch)) ||
-      (sale.branch && sale.branch.displayName.toLowerCase().includes(lowerSearch))
-    );
-  }, [sales, searchTerm]);
-
-  // ترتيب أفضل العملاء بحيث يكون العميل غير المعروف آخر
-  const sortedTopCustomers = useMemo(() => {
-    return [...analytics.topCustomers].sort((a, b) => {
-      const aIsUnknown = !a.customerName || a.customerName.trim() === '' || a.customerName === '()';
-      const bIsUnknown = !b.customerName || b.customerName.trim() === '' || b.customerName === '()';
-      if (aIsUnknown && !bIsUnknown) return 1;
-      if (!aIsUnknown && bIsUnknown) return -1;
-      return b.totalSpent - a.totalSpent;
-    });
-  }, [analytics.topCustomers]);
+  const filteredSales = useMemo(
+    () => sales.filter((sale) => sale.orderNumber.toLowerCase().includes(searchTerm.toLowerCase())),
+    [sales, searchTerm]
+  );
 
   // ألوان الرسوم
   const chartColors = ['#FBBF24', '#3B82F6', '#FF6384', '#4BC0C0', '#9966FF'];
 
-  // بيانات الرسوم (عرض 10 عناصر لعرض بيانات أكثر)
+  // خيارات الرسوم باستخدام Chart.js
   const productSalesData = {
-    labels: analytics.productSales.slice(0, 10).map((p) => p.displayName),
+    labels: analytics.productSales.slice(0, 5).map((p) => p.displayName),
     datasets: [
       {
         label: `${t.totalSales} (${t.currency})`,
-        data: analytics.productSales.slice(0, 10).map((p) => p.totalRevenue),
+        data: analytics.productSales.slice(0, 5).map((p) => p.totalRevenue),
         backgroundColor: chartColors[0],
         borderWidth: 0,
       },
@@ -656,11 +634,11 @@ export const SalesReport: React.FC = () => {
   };
 
   const leastProductSalesData = {
-    labels: analytics.leastProductSales.slice(0, 10).map((p) => p.displayName),
+    labels: analytics.leastProductSales.slice(0, 5).map((p) => p.displayName),
     datasets: [
       {
         label: `${t.totalSales} (${t.currency})`,
-        data: analytics.leastProductSales.slice(0, 10).map((p) => p.totalRevenue),
+        data: analytics.leastProductSales.slice(0, 5).map((p) => p.totalRevenue),
         backgroundColor: chartColors[1],
         borderWidth: 0,
       },
@@ -668,11 +646,11 @@ export const SalesReport: React.FC = () => {
   };
 
   const departmentSalesData = {
-    labels: analytics.departmentSales.slice(0, 10).map((d) => d.displayName),
+    labels: analytics.departmentSales.slice(0, 5).map((d) => d.displayName),
     datasets: [
       {
         label: `${t.totalSales} (${t.currency})`,
-        data: analytics.departmentSales.slice(0, 10).map((d) => d.totalRevenue),
+        data: analytics.departmentSales.slice(0, 5).map((d) => d.totalRevenue),
         backgroundColor: chartColors[2],
         borderWidth: 0,
       },
@@ -680,11 +658,11 @@ export const SalesReport: React.FC = () => {
   };
 
   const leastDepartmentSalesData = {
-    labels: analytics.leastDepartmentSales.slice(0, 10).map((d) => d.displayName),
+    labels: analytics.leastDepartmentSales.slice(0, 5).map((d) => d.displayName),
     datasets: [
       {
         label: `${t.totalSales} (${t.currency})`,
-        data: analytics.leastDepartmentSales.slice(0, 10).map((d) => d.totalRevenue),
+        data: analytics.leastDepartmentSales.slice(0, 5).map((d) => d.totalRevenue),
         backgroundColor: chartColors[3],
         borderWidth: 0,
       },
@@ -692,11 +670,11 @@ export const SalesReport: React.FC = () => {
   };
 
   const branchSalesData = {
-    labels: analytics.branchSales.slice(0, 10).map((b) => b.displayName),
+    labels: analytics.branchSales.slice(0, 5).map((b) => b.displayName),
     datasets: [
       {
         label: `${t.totalSales} (${t.currency})`,
-        data: analytics.branchSales.slice(0, 10).map((b) => b.totalSales),
+        data: analytics.branchSales.slice(0, 5).map((b) => b.totalSales),
         backgroundColor: chartColors[4],
         borderWidth: 0,
       },
@@ -704,11 +682,11 @@ export const SalesReport: React.FC = () => {
   };
 
   const leastBranchSalesData = {
-    labels: analytics.leastBranchSales.slice(0, 10).map((b) => b.displayName),
+    labels: analytics.leastBranchSales.slice(0, 5).map((b) => b.displayName),
     datasets: [
       {
         label: `${t.totalSales} (${t.currency})`,
-        data: analytics.leastBranchSales.slice(0, 10).map((b) => b.totalSales),
+        data: analytics.leastBranchSales.slice(0, 5).map((b) => b.totalSales),
         backgroundColor: chartColors[0],
         borderWidth: 0,
       },
@@ -729,14 +707,13 @@ export const SalesReport: React.FC = () => {
     ],
   };
 
-  // خيارات الرسوم المحسنة (عرض أعمدة أضيق لعرض بيانات أكثر، تحسين العناوين والمسافات)
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
       legend: {
         position: 'bottom' as const,
-        labels: { font: { size: 12, family: 'Alexandria', weight: '500' }, color: '#1F2937', padding: 20 },
+        labels: { font: { size: 12, family: 'Alexandria', weight: '500' }, color: '#1F2937' },
       },
       tooltip: {
         backgroundColor: '#1F2937',
@@ -746,36 +723,22 @@ export const SalesReport: React.FC = () => {
         borderWidth: 1,
         titleFont: { size: 12, family: 'Alexandria', weight: '500' },
         bodyFont: { size: 12, family: 'Alexandria' },
-        padding: 12,
+        padding: 10,
       },
       title: {
-        display: true,
-        position: 'top' as const,
-        font: { size: 16, family: 'Alexandria', weight: '600' },
+        font: { size: 14, family: 'Alexandria', weight: '600' },
         color: '#1F2937',
-        padding: { top: 10, bottom: 20 },
       },
     },
     scales: {
       x: {
-        barPercentage: 0.8,
-        categoryPercentage: 0.9,
-        ticks: { 
-          font: { size: 10, family: 'Alexandria', weight: '400' }, 
-          color: '#1F2937', 
-          maxRotation: isRtl ? -45 : 45, 
-          minRotation: isRtl ? -45 : 45,
-          padding: 10
-        },
+        ticks: { font: { size: 10, family: 'Alexandria', weight: '400' }, color: '#1F2937', maxRotation: isRtl ? -45 : 45, minRotation: isRtl ? -45 : 45 },
         grid: { display: false },
       },
       y: {
         ticks: { font: { size: 10, family: 'Alexandria', weight: '400' }, color: '#1F2937' },
         grid: { color: '#E5E7EB' },
       },
-    },
-    layout: {
-      padding: { top: 10, bottom: 10, left: 10, right: 10 },
     },
   };
 
@@ -791,55 +754,55 @@ export const SalesReport: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen bg-gray-50 p-4 sm:p-6 lg:p-8 ${isRtl ? 'font-alexandria' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`min-h-screen bg-gray-50 p-3 sm:p-4 md:p-6 ${isRtl ? 'font-alexandria' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;500;600&display=swap" rel="stylesheet" />
-      <header className="mb-6 sm:mb-8 flex flex-col gap-4 sm:gap-6">
-        <div className="flex items-center gap-3 sm:gap-4">
-          <DollarSign className="w-6 h-6 sm:w-7 sm:h-7 text-amber-600" />
+      <header className="mb-4 sm:mb-6 flex flex-col gap-3 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <DollarSign className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600" />
           <div>
-            <h1 className="text-xl sm:text-2xl lg:text-3xl font-semibold text-gray-800 font-alexandria">{t.title}</h1>
-            <p className="text-gray-500 text-sm sm:text-base font-alexandria">{tabValue === 0 ? t.previousSales : t.analytics}</p>
+            <h1 className="text-lg sm:text-xl md:text-2xl font-semibold text-gray-800 font-alexandria">{t.title}</h1>
+            <p className="text-gray-500 text-xs sm:text-sm font-alexandria">{t.previousSales}</p>
           </div>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           <button
             onClick={() => setTabValue(0)}
-            className={`px-4 sm:px-6 py-2 text-sm sm:text-base font-medium rounded-lg transition-all font-alexandria ${tabValue === 0 ? 'bg-amber-600 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:shadow-sm'}`}
+            className={`px-2 sm:px-3 py-1 text-xs sm:text-sm font-medium rounded-md transition-all font-alexandria ${tabValue === 0 ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
           >
             {t.previousSales}
           </button>
           <button
             onClick={() => setTabValue(1)}
-            className={`px-4 sm:px-6 py-2 text-sm sm:text-base font-medium rounded-lg transition-all font-alexandria ${tabValue === 1 ? 'bg-amber-600 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 hover:shadow-sm'}`}
+            className={`px-2 sm:px-3 py-1 text-xs sm:text-sm font-medium rounded-md transition-all font-alexandria ${tabValue === 1 ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
           >
             {t.analytics}
           </button>
         </div>
       </header>
       {error && (
-        <div className="mb-4 sm:mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3 text-sm sm:text-base font-alexandria">
-          <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
+        <div className="mb-3 sm:mb-4 p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2 text-xs sm:text-sm font-alexandria">
+          <AlertCircle className="w-4 h-4 sm:w-5 sm:h-5 text-red-600" />
           <span className="text-red-600 font-medium">{error}</span>
         </div>
       )}
       {tabValue === 0 && (
-        <div className="space-y-6 sm:space-y-8">
-          <div className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-4 sm:mb-6 font-alexandria">{t.filters}</h2>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 sm:gap-6">
+        <div className="space-y-4 sm:space-y-6">
+          <div className="p-3 sm:p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4 font-alexandria">{t.filters}</h2>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
               <SearchInput value={searchInput} onChange={handleSearchChange} placeholder={t.searchPlaceholder} />
               <input
                 type="date"
                 value={filterStartDate}
                 onChange={(e) => setFilterStartDate(e.target.value)}
-                className={`w-full py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}
+                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white shadow-sm hover:shadow-md text-xs sm:text-sm ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}
                 aria-label={t.date}
               />
               <input
                 type="date"
                 value={filterEndDate}
                 onChange={(e) => setFilterEndDate(e.target.value)}
-                className={`w-full py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}
+                className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white shadow-sm hover:shadow-md text-xs sm:text-sm ${isRtl ? 'text-right' : 'text-left'} font-alexandria`}
                 aria-label={t.date}
               />
               <BranchFilter
@@ -850,10 +813,10 @@ export const SalesReport: React.FC = () => {
                 allBranchesLabel={t.allBranches}
               />
             </div>
-            <div className="mt-4 sm:mt-6 flex justify-end">
+            <div className="mt-3 sm:mt-4 flex justify-end">
               <button
                 onClick={handleExport}
-                className="px-4 sm:px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm sm:text-base font-medium transition-colors font-alexandria shadow-sm hover:shadow-md"
+                className="px-2 sm:px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs sm:text-sm font-medium transition-colors font-alexandria"
                 aria-label={t.export}
               >
                 {t.export}
@@ -861,40 +824,40 @@ export const SalesReport: React.FC = () => {
             </div>
           </div>
           <div>
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-4 sm:mb-6 font-alexandria">{t.previousSales}</h2>
+            <h2 className="text-base sm:text-lg font-semibold text-gray-800 mb-2 sm:mb-3 font-alexandria">{t.previousSales}</h2>
             {loading || branchesLoading ? (
-              <div className="grid grid-cols-1 gap-4 sm:gap-6">
+              <div className="grid grid-cols-1 gap-3 sm:gap-4">
                 {[...Array(6)].map((_, index) => (
-                  <div key={index} className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100 animate-pulse">
-                    <div className="space-y-3">
-                      <div className="h-5 bg-gray-200 rounded w-3/4"></div>
-                      <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                      <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+                  <div key={index} className="p-3 sm:p-4 bg-white rounded-xl shadow-sm border border-gray-100 animate-pulse">
+                    <div className="space-y-2">
+                      <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                      <div className="h-3 bg-gray-200 rounded w-1/3"></div>
                     </div>
                   </div>
                 ))}
               </div>
             ) : filteredSales.length === 0 ? (
-              <div className="p-6 sm:p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
-                <DollarSign className="w-10 h-10 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-3 sm:mb-4" />
-                <p className="text-gray-600 text-sm sm:text-base font-medium font-alexandria">{t.noSales}</p>
+              <div className="p-4 sm:p-6 text-center bg-white rounded-xl shadow-sm border border-gray-100">
+                <DollarSign className="w-8 h-8 sm:w-10 sm:h-10 text-gray-400 mx-auto mb-2 sm:mb-3" />
+                <p className="text-gray-600 text-xs sm:text-sm font-medium font-alexandria">{t.noSales}</p>
               </div>
             ) : (
               <>
-                <div className="grid grid-cols-1 gap-4 sm:gap-6">
+                <div className="grid grid-cols-1 gap-3 sm:gap-4">
                   {filteredSales.map((sale) => (
                     <SaleCard key={sale._id} sale={sale} onEdit={handleEditSale} onDelete={handleDeleteSale} />
                   ))}
                 </div>
                 {hasMore && (
-                  <div className="flex justify-center mt-4 sm:mt-6">
+                  <div className="flex justify-center mt-3 sm:mt-4">
                     <button
                       onClick={loadMoreSales}
-                      className="px-6 sm:px-8 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm sm:text-base font-medium transition-colors disabled:opacity-50 font-alexandria shadow-sm hover:shadow-md"
+                      className="px-3 sm:px-4 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs sm:text-sm font-medium transition-colors disabled:opacity-50 font-alexandria"
                       disabled={salesLoading}
                     >
                       {salesLoading ? (
-                        <svg className="animate-spin h-5 w-5 sm:h-6 sm:w-6 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <svg className="animate-spin h-4 w-4 sm:h-5 sm:w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
@@ -910,107 +873,93 @@ export const SalesReport: React.FC = () => {
         </div>
       )}
       {tabValue === 1 && (
-        <div className="space-y-8 sm:space-y-10">
-          <div className="p-4 sm:p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-4 sm:mb-6 font-alexandria">{t.analytics}</h2>
-            {/* قسم الإحصائيات الأساسية في الأول */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 mb-8 sm:mb-10">
-              <div className="p-6 bg-gray-50 rounded-xl border border-gray-100 space-y-4 text-sm sm:text-base font-alexandria">
-                <h3 className="font-semibold text-gray-800 text-lg sm:text-xl">{t.totalSales}</h3>
-                <p className="font-bold text-2xl sm:text-3xl text-amber-600">{analytics.totalSales.toLocaleString()} {t.currency}</p>
+        <div className="p-3 sm:p-4 bg-white rounded-xl shadow-sm border border-gray-100">
+          <h2 className="text-base sm:text-lg font-semibold text-gray-800 mb-3 sm:mb-4 font-alexandria">{t.analytics}</h2>
+          <div className="space-y-4 sm:space-y-6">
+            <div className="w-full h-64 sm:h-80">
+              <Line
+                data={salesTrendsData}
+                options={{
+                  ...chartOptions,
+                  plugins: { ...chartOptions.plugins, title: { display: true, text: t.salesTrends, font: { size: 16, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                }}
+              />
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+              <div className="w-full h-48 sm:h-64">
+                <Bar
+                  data={productSalesData}
+                  options={{
+                    ...chartOptions,
+                    plugins: { ...chartOptions.plugins, title: { display: true, text: t.productSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  }}
+                />
+              </div>
+              <div className="w-full h-48 sm:h-64">
+                <Bar
+                  data={leastProductSalesData}
+                  options={{
+                    ...chartOptions,
+                    plugins: { ...chartOptions.plugins, title: { display: true, text: t.leastProductSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  }}
+                />
+              </div>
+              <div className="w-full h-48 sm:h-64">
+                <Bar
+                  data={departmentSalesData}
+                  options={{
+                    ...chartOptions,
+                    plugins: { ...chartOptions.plugins, title: { display: true, text: t.departmentSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  }}
+                />
+              </div>
+              <div className="w-full h-48 sm:h-64">
+                <Bar
+                  data={leastDepartmentSalesData}
+                  options={{
+                    ...chartOptions,
+                    plugins: { ...chartOptions.plugins, title: { display: true, text: t.leastDepartmentSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  }}
+                />
+              </div>
+              <div className="w-full h-48 sm:h-64">
+                <Bar
+                  data={branchSalesData}
+                  options={{
+                    ...chartOptions,
+                    plugins: { ...chartOptions.plugins, title: { display: true, text: t.branchSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  }}
+                />
+              </div>
+              <div className="w-full h-48 sm:h-64">
+                <Bar
+                  data={leastBranchSalesData}
+                  options={{
+                    ...chartOptions,
+                    plugins: { ...chartOptions.plugins, title: { display: true, text: t.leastBranchSales, font: { size: 14, family: 'Alexandria', weight: '600' }, color: '#1F2937' } },
+                  }}
+                />
+              </div>
+              <div className="p-3 sm:p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-1 text-xs sm:text-sm font-alexandria">
+                <h3 className="font-medium text-gray-800">{t.totalSales}</h3>
+                <p className="font-semibold text-amber-600">{analytics.totalSales} {t.currency}</p>
                 <p className="text-gray-600">{t.totalCount}: {analytics.totalCount}</p>
-                <p className="text-gray-600">{t.averageOrderValue}: {analytics.averageOrderValue.toFixed(2)} {t.currency}</p>
+                <p className="text-gray-600">{t.averageOrderValue}: {analytics.averageOrderValue} {t.currency}</p>
                 <p className="text-gray-600">{t.topProduct}: {analytics.topProduct.displayName} ({analytics.topProduct.totalQuantity})</p>
               </div>
-              <div className="p-6 bg-gray-50 rounded-xl border border-gray-100 space-y-3 text-sm sm:text-base font-alexandria">
-                <h3 className="font-semibold text-gray-800 text-lg sm:text-xl">{t.topCustomers}</h3>
-                {sortedTopCustomers.length > 0 ? (
-                  <ul className="space-y-2 text-gray-600">
-                    {sortedTopCustomers.map((customer, index) => {
-                      const isUnknown = !customer.customerName || customer.customerName.trim() === '' || customer.customerName === '()';
-                      const displayName = isUnknown ? '()' : customer.customerName;
-                      const label = isUnknown ? t.unknownCustomers : t.customerNameLabel;
-                      return (
-                        <li key={index} className="flex flex-wrap items-center gap-1">
-                          <span className="font-medium">{label}: </span>
-                          <span>{displayName}</span>
-                          {customer.customerPhone && !isUnknown && <span>({customer.customerPhone})</span>}
-                          <span> - {customer.totalSpent} {t.currency}, {customer.purchaseCount} {t.totalCount}</span>
-                        </li>
-                      );
-                    })}
+              <div className="p-3 sm:p-4 bg-gray-50 rounded-xl border border-gray-100 space-y-1 text-xs sm:text-sm font-alexandria">
+                <h3 className="font-medium text-gray-800">{t.topCustomers}</h3>
+                {analytics.topCustomers.length > 0 ? (
+                  <ul className="space-y-1 text-gray-600">
+                    {analytics.topCustomers.map((customer, index) => (
+                      <li key={index}>
+                        <span className="font-medium">{t.customerNameLabel}: </span>{customer.customerName} ({customer.customerPhone}) - {customer.totalSpent} {t.currency}, {customer.purchaseCount} {t.totalCount}
+                      </li>
+                    ))}
                   </ul>
                 ) : (
                   <p className="text-gray-600">{t.noSales}</p>
                 )}
-              </div>
-            </div>
-            {/* الرسوم البيانية */}
-            <div className="space-y-6 sm:space-y-8">
-              <div className="w-full h-72 sm:h-96 bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
-                <Line
-                  data={salesTrendsData}
-                  options={{
-                    ...chartOptions,
-                    plugins: { ...chartOptions.plugins, title: { text: t.salesTrends } },
-                  }}
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-8">
-                <div className="w-full h-64 sm:h-80 bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
-                  <Bar
-                    data={productSalesData}
-                    options={{
-                      ...chartOptions,
-                      plugins: { ...chartOptions.plugins, title: { text: t.productSales } },
-                    }}
-                  />
-                </div>
-                <div className="w-full h-64 sm:h-80 bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
-                  <Bar
-                    data={leastProductSalesData}
-                    options={{
-                      ...chartOptions,
-                      plugins: { ...chartOptions.plugins, title: { text: t.leastProductSales } },
-                    }}
-                  />
-                </div>
-                <div className="w-full h-64 sm:h-80 bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
-                  <Bar
-                    data={departmentSalesData}
-                    options={{
-                      ...chartOptions,
-                      plugins: { ...chartOptions.plugins, title: { text: t.departmentSales } },
-                    }}
-                  />
-                </div>
-                <div className="w-full h-64 sm:h-80 bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
-                  <Bar
-                    data={leastDepartmentSalesData}
-                    options={{
-                      ...chartOptions,
-                      plugins: { ...chartOptions.plugins, title: { text: t.leastDepartmentSales } },
-                    }}
-                  />
-                </div>
-                <div className="w-full h-64 sm:h-80 bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
-                  <Bar
-                    data={branchSalesData}
-                    options={{
-                      ...chartOptions,
-                      plugins: { ...chartOptions.plugins, title: { text: t.branchSales } },
-                    }}
-                  />
-                </div>
-                <div className="w-full h-64 sm:h-80 bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100">
-                  <Bar
-                    data={leastBranchSalesData}
-                    options={{
-                      ...chartOptions,
-                      plugins: { ...chartOptions.plugins, title: { text: t.leastBranchSales } },
-                    }}
-                  />
-                </div>
               </div>
             </div>
           </div>
