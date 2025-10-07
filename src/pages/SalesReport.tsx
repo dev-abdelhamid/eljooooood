@@ -2,11 +2,10 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import salesAPI from '../services/salesAPI';
-import { branchesAPI, inventoryAPI, productsAPI, ordersAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, DollarSign, Search, X, ChevronDown, Edit, Trash } from 'lucide-react';
 import { toast } from 'react-toastify';
-import ReactECharts from 'echarts-for-react';
+import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { debounce } from 'lodash';
 import Papa from 'papaparse';
 import io from 'socket.io-client';
@@ -31,6 +30,7 @@ interface Sale {
   createdAt: string;
   notes?: string;
   paymentMethod?: string;
+  paymentStatus?: string;
   customerName?: string;
   customerPhone?: string;
   returns?: Array<{
@@ -317,17 +317,22 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
                 {t.paymentMethodsLabel}: {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods]}
               </p>
             )}
+            {sale.paymentStatus && (
+              <p className="text-sm text-gray-600">
+                {t.paymentStatus}: {t.paymentStatus[sale.paymentStatus as keyof typeof t.paymentStatus]}
+              </p>
+            )}
             {sale.customerName && <p className="text-sm text-gray-600">{t.customerName}: {sale.customerName}</p>}
             {sale.customerPhone && <p className="text-sm text-gray-600">{t.customerPhone}: {sale.customerPhone}</p>}
             {sale.notes && <p className="text-sm text-gray-500">{t.notes}: {sale.notes}</p>}
             <ul className="list-disc list-inside text-sm text-gray-600 mt-2">
-              {sale.items.map((item, index) => (
+              {(sale.items || []).map((item, index) => (
                 <li key={index}>
                   {item.displayName || t.errors.deleted_product} ({item.department?.displayName || t.errors.departments.unknown}) - {t.quantity}: {item.quantity} {item.displayUnit || t.units.default}, {t.totalSales}: {item.unitPrice} {t.currency}
                 </li>
               ))}
             </ul>
-            {sale.returns && sale.returns.length > 0 && (
+            {(sale.returns || []).length > 0 && (
               <div className="mt-4">
                 <p className="text-sm font-medium text-gray-700">{t.returns}:</p>
                 <ul className="list-disc list-inside text-sm text-gray-600">
@@ -335,7 +340,7 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
                     <li key={index}>
                       {t.return} #{ret.returnNumber} ({t.returns.status[ret.status as keyof typeof t.returns.status]}) - {t.reason}: {ret.reason} ({t.date}: {ret.createdAt})
                       <ul className="list-circle list-inside ml-4">
-                        {ret.items.map((item, i) => (
+                        {(ret.items || []).map((item, i) => (
                           <li key={i}>
                             {item.productName || t.errors.deleted_product} - {t.quantity}: {item.quantity}, {t.reason}: {item.reason}
                           </li>
@@ -392,7 +397,7 @@ const SalesReport: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [salesLoading, setSalesLoading] = useState(false);
-  const [branchesLoading, setBranchesLoading] = useState(true);
+  const [branchesLoading, setBranchesLoading] = useState(false);
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
@@ -412,7 +417,7 @@ const SalesReport: React.FC = () => {
     if (user?.role !== 'admin') return;
     setBranchesLoading(true);
     try {
-      const response = await branchesAPI.getAll();
+      const response = await salesAPI.getBranches();
       setBranches(response.map((branch: any) => ({
         _id: branch._id,
         name: branch.name,
@@ -699,268 +704,6 @@ const SalesReport: React.FC = () => {
     return null;
   };
 
-  const productSalesOption = {
-    title: {
-      text: t.productSales,
-      left: 'center',
-      textStyle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-      },
-    },
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: {
-        type: 'shadow',
-        shadowStyle: {
-          color: 'rgba(251, 191, 36, 0.2)',
-          shadowBlur: 10,
-        },
-      },
-      backgroundColor: 'rgba(255, 255, 255, 0.9)',
-      borderColor: '#ddd',
-      borderWidth: 1,
-      padding: 10,
-      textStyle: {
-        color: '#333',
-        fontSize: 12,
-      },
-    },
-    legend: {
-      top: 'bottom',
-      itemGap: 10,
-      textStyle: {
-        fontSize: 12,
-      },
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '15%',
-      containLabel: true,
-    },
-    xAxis: [
-      {
-        type: 'category',
-        data: analytics.productSales.slice(0, 5).map((p) => p.displayName),
-        axisTick: {
-          alignWithLabel: true,
-        },
-        axisLabel: {
-          rotate: 45,
-          fontSize: 10,
-        },
-      },
-    ],
-    yAxis: [
-      {
-        type: 'value',
-        axisLabel: {
-          fontSize: 10,
-        },
-      },
-    ],
-    series: [
-      {
-        name: `${t.totalSales} (${t.currency})`,
-        type: 'bar',
-        barWidth: '40%',
-        data: analytics.productSales.slice(0, 5).map((p) => p.totalRevenue),
-        itemStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: '#FBBF24' },
-              { offset: 1, color: '#D97706' },
-            ],
-          },
-          shadowColor: 'rgba(0,0,0,0.2)',
-          shadowBlur: 5,
-          shadowOffsetY: 2,
-          barBorderRadius: [5, 5, 0, 0],
-        },
-      },
-      {
-        name: t.quantity,
-        type: 'bar',
-        barWidth: '40%',
-        data: analytics.productSales.slice(0, 5).map((p) => p.totalQuantity),
-        itemStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: '#3B82F6' },
-              { offset: 1, color: '#1D4ED8' },
-            ],
-          },
-          shadowColor: 'rgba(0,0,0,0.2)',
-          shadowBlur: 5,
-          shadowOffsetY: 2,
-          barBorderRadius: [5, 5, 0, 0],
-        },
-      },
-    ],
-    media: [
-      {
-        query: { maxWidth: 600 },
-        option: {
-          legend: {
-            orient: 'horizontal',
-            bottom: 0,
-            itemGap: 5,
-            textStyle: { fontSize: 10 },
-          },
-          grid: { bottom: '20%', containLabel: true },
-          xAxis: [{ axisLabel: { rotate: 60, fontSize: 8 } }],
-          yAxis: [{ axisLabel: { fontSize: 8 } }],
-          series: [{ barWidth: '30%' }, { barWidth: '30%' }],
-        },
-      },
-    ],
-  };
-
-  // Similar options for other charts, with gradients, shadows, and media queries for small screens
-  // For example, leastProductSalesOption, departmentSalesOption, etc., with different colors and shapes (e.g., rounded bars, lines with dots).
-
-  const leastProductSalesOption = {
-    title: {
-      text: t.leastProductSales,
-      left: 'center',
-      textStyle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-      },
-    },
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: {
-        type: 'shadow',
-        shadowStyle: {
-          color: 'rgba(251, 191, 36, 0.2)',
-          shadowBlur: 10,
-        },
-      },
-      backgroundColor: 'rgba(255, 255, 255, 0.9)',
-      borderColor: '#ddd',
-      borderWidth: 1,
-      padding: 10,
-      textStyle: {
-        color: '#333',
-        fontSize: 12,
-      },
-    },
-    legend: {
-      top: 'bottom',
-      itemGap: 10,
-      textStyle: {
-        fontSize: 12,
-      },
-    },
-    grid: {
-      left: '3%',
-      right: '4%',
-      bottom: '15%',
-      containLabel: true,
-    },
-    xAxis: [
-      {
-        type: 'category',
-        data: analytics.leastProductSales.slice(0, 5).map((p) => p.displayName),
-        axisTick: {
-          alignWithLabel: true,
-        },
-        axisLabel: {
-          rotate: 45,
-          fontSize: 10,
-        },
-      },
-    ],
-    yAxis: [
-      {
-        type: 'value',
-        axisLabel: {
-          fontSize: 10,
-        },
-      },
-    ],
-    series: [
-      {
-        name: `${t.totalSales} (${t.currency})`,
-        type: 'bar',
-        barWidth: '40%',
-        data: analytics.leastProductSales.slice(0, 5).map((p) => p.totalRevenue),
-        itemStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: '#FF6384' },
-              { offset: 1, color: '#E11D48' },
-            ],
-          },
-          shadowColor: 'rgba(0,0,0,0.2)',
-          shadowBlur: 5,
-          shadowOffsetY: 2,
-          barBorderRadius: [5, 5, 0, 0],
-        },
-      },
-      {
-        name: t.quantity,
-        type: 'bar',
-        barWidth: '40%',
-        data: analytics.leastProductSales.slice(0, 5).map((p) => p.totalQuantity),
-        itemStyle: {
-          color: {
-            type: 'linear',
-            x: 0,
-            y: 0,
-            x2: 0,
-            y2: 1,
-            colorStops: [
-              { offset: 0, color: '#4BC0C0' },
-              { offset: 1, color: '#0E7490' },
-            ],
-          },
-          shadowColor: 'rgba(0,0,0,0.2)',
-          shadowBlur: 5,
-          shadowOffsetY: 2,
-          barBorderRadius: [5, 5, 0, 0],
-        },
-      },
-    ],
-    media: [
-      {
-        query: { maxWidth: 600 },
-        option: {
-          legend: {
-            orient: 'horizontal',
-            bottom: 0,
-            itemGap: 5,
-            textStyle: { fontSize: 10 },
-          },
-          grid: { bottom: '20%', containLabel: true },
-          xAxis: [{ axisLabel: { rotate: 60, fontSize: 8 } }],
-          yAxis: [{ axisLabel: { fontSize: 8 } }],
-          series: [{ barWidth: '30%' }, { barWidth: '30%' }],
-        },
-      },
-    ],
-  };
-
-  // Define similar options for departmentSalesOption, leastDepartmentSalesOption, branchSalesOption, leastBranchSalesOption, salesTrendsOption, paymentMethodsOption, returnStatsOption
-  // Use different colors, line styles (dashed for least), and shapes (e.g., circle dots for lines).
-
   if (user?.role !== 'admin') {
     return (
       <div className={`min-h-screen flex items-center justify-center bg-gray-50 ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
@@ -1108,33 +851,168 @@ const SalesReport: React.FC = () => {
       {tabValue === 1 && (
         <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
           <h2 className="text-xl font-bold text-gray-900 mb-6">{t.analytics}</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div className="w-full h-64">
-              <ReactECharts option={productSalesOption} style={{ height: '100%', width: '100%' }} />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">{t.productSales}</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={analytics.productSales.slice(0, 5)} layout={isRtl ? 'vertical' : 'horizontal'}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="displayName" type={isRtl ? 'category' : 'category'} tick={{ fontSize: 12 }} />
+                  <YAxis type={isRtl ? 'number' : 'number'} tick={{ fontSize: 12 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                  <Bar dataKey="totalRevenue" name={`${t.totalSales} (${t.currency})`} fill={chartColors[0]} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="totalQuantity" name={t.quantity} fill={chartColors[1]} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <div className="w-full h-64">
-              <ReactECharts option={leastProductSalesOption} style={{ height: '100%', width: '100%' }} />
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">{t.leastProductSales}</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={analytics.leastProductSales.slice(0, 5)} layout={isRtl ? 'vertical' : 'horizontal'}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="displayName" type={isRtl ? 'category' : 'category'} tick={{ fontSize: 12 }} />
+                  <YAxis type={isRtl ? 'number' : 'number'} tick={{ fontSize: 12 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                  <Bar dataKey="totalRevenue" name={`${t.totalSales} (${t.currency})`} fill={chartColors[2]} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="totalQuantity" name={t.quantity} fill={chartColors[3]} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <div className="w-full h-64">
-              <ReactECharts option={departmentSalesOption} style={{ height: '100%', width: '100%' }} />
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">{t.departmentSales}</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={analytics.departmentSales}
+                    dataKey="totalRevenue"
+                    nameKey="displayName"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    fill="#8884d8"
+                    label
+                  >
+                    {analytics.departmentSales.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
-            <div className="w-full h-64">
-              <ReactECharts option={leastDepartmentSalesOption} style={{ height: '100%', width: '100%' }} />
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">{t.leastDepartmentSales}</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={analytics.leastDepartmentSales}
+                    dataKey="totalRevenue"
+                    nameKey="displayName"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    fill="#8884d8"
+                    label
+                  >
+                    {analytics.leastDepartmentSales.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
-            <div className="w-full h-64">
-              <ReactECharts option={branchSalesOption} style={{ height: '100%', width: '100%' }} />
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">{t.branchSales}</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={analytics.branchSales.slice(0, 5)} layout={isRtl ? 'vertical' : 'horizontal'}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="displayName" type={isRtl ? 'category' : 'category'} tick={{ fontSize: 12 }} />
+                  <YAxis type={isRtl ? 'number' : 'number'} tick={{ fontSize: 12 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                  <Bar dataKey="totalSales" name={`${t.totalSales} (${t.currency})`} fill={chartColors[0]} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="saleCount" name={t.totalCount} fill={chartColors[1]} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <div className="w-full h-64">
-              <ReactECharts option={leastBranchSalesOption} style={{ height: '100%', width: '100%' }} />
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">{t.leastBranchSales}</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={analytics.leastBranchSales.slice(0, 5)} layout={isRtl ? 'vertical' : 'horizontal'}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="displayName" type={isRtl ? 'category' : 'category'} tick={{ fontSize: 12 }} />
+                  <YAxis type={isRtl ? 'number' : 'number'} tick={{ fontSize: 12 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                  <Bar dataKey="totalSales" name={`${t.totalSales} (${t.currency})`} fill={chartColors[2]} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="saleCount" name={t.totalCount} fill={chartColors[3]} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-            <div className="w-full h-64">
-              <ReactECharts option={salesTrendsOption} style={{ height: '100%', width: '100%' }} />
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">{t.salesTrends}</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={analytics.salesTrends}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="period" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                  <Line type="monotone" dataKey="totalSales" name={`${t.totalSales} (${t.currency})`} stroke={chartColors[0]} strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="saleCount" name={t.totalCount} stroke={chartColors[1]} strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
-            <div className="w-full h-64">
-              <ReactECharts option={paymentMethodsOption} style={{ height: '100%', width: '100%' }} />
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">{t.paymentMethodsLabel}</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={analytics.paymentMethods}
+                    dataKey="totalAmount"
+                    nameKey="paymentMethod"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    fill="#8884d8"
+                    label
+                  >
+                    {analytics.paymentMethods.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
-            <div className="w-full h-64">
-              <ReactECharts option={returnStatsOption} style={{ height: '100%', width: '100%' } } />
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">{t.returnStats}</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={analytics.returnStats}
+                    dataKey="count"
+                    nameKey="status"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={100}
+                    fill="#8884d8"
+                    label
+                  >
+                    {analytics.returnStats.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip />} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
             <div className="p-6 bg-gray-50 rounded-lg border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.totalSales}</h3>
