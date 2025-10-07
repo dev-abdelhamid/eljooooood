@@ -413,7 +413,7 @@ const SaleCard = React.memo<{ sale: Sale }>(({ sale }) => {
               <span className="truncate max-w-[60%]">
                 {item.quantity} {item.displayUnit || t.units.default} {item.displayName || t.errors.deleted_product}
               </span>
-              <span className="font-semibold text-amber-600">
+              <span className={`font-semibold text-amber-600 ${isRtl ? 'mr-2 flex-row-reverse' : 'ml-2'}`}>
                 {item.quantity}x{item.unitPrice} = {(item.quantity * item.unitPrice).toFixed(2)} {t.currency}
               </span>
             </div>
