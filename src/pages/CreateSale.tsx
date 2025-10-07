@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useReducer } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { inventoryAPI, salesAPI } from '../services/api';
-import { formatDate } from '../utils/formatDate';
 import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
@@ -208,7 +207,7 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
   }
 };
 
-// مكونات فرعية (بدون تغيير، بس ضمنت memoization للperformance)
+// مكونات فرعية (بدون تغيير)
 const ProductSearchInput = React.memo<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -391,7 +390,7 @@ const ProductSkeletonCard = React.memo(() => (
 export const CreateSale: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
-  const { id } = useParams<{ id?: string }>(); // للتعديل إذا كان id موجود
+  const { id } = useParams<{ id?: string }>();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'] || translations.en;
 
@@ -441,7 +440,7 @@ export const CreateSale: React.FC = () => {
     });
   }, [inventory, searchTerm, selectedDepartment]);
 
-  // جلب المخزون (بدون تغيير display هنا، هيحصل في useEffect)
+  // جلب المخزون (إرجاع تعيين displayName و displayUnit زي الأصلي)
   const fetchInventory = useCallback(async () => {
     if (!user?.branchId) {
       setError(t.errors.no_branch_assigned);
@@ -453,7 +452,11 @@ export const CreateSale: React.FC = () => {
 
     try {
       const inventoryParams: any = { lowStock: false, branch: user.branchId };
-      const inventoryResponse = await inventoryAPI.getInventory(inventoryParams);
+      const inventoryResponse = await inventoryAPI.getInventory(inventoryParams).catch((err) => {
+        console.error(`[${new Date().toISOString()}] Inventory fetch error:`, err);
+        toast.error(t.errors.fetch_inventory, { position: isRtl ? 'top-right' : 'top-left' });
+        return [];
+      });
 
       const newInventory = Array.isArray(inventoryResponse)
         ? inventoryResponse
@@ -472,13 +475,13 @@ export const CreateSale: React.FC = () => {
                       _id: item.product.department._id || 'unknown',
                       name: item.product.department.name || t.departments.unknown,
                       nameEn: item.product.department.nameEn,
-                      displayName: '', // سنحدثها لاحقًا
+                      displayName: isRtl ? (item.product.department.name || t.departments.unknown) : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
                     }
                   : undefined,
               },
               currentStock: item.currentStock || 0,
-              displayName: '', // سنحدثها لاحقًا
-              displayUnit: '', // سنحدثها لاحقًا
+              displayName: isRtl ? (item.product?.name || t.departments.unknown) : (item.product?.nameEn || item.product?.name || t.departments.unknown),
+              displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
             }))
         : [];
 
@@ -494,7 +497,7 @@ export const CreateSale: React.FC = () => {
                 _id: item.product.department!._id,
                 name: item.product.department!.name,
                 nameEn: item.product.department!.nameEn,
-                displayName: '', // سنحدثها لاحقًا
+                displayName: isRtl ? (item.product.department!.name || t.departments.unknown) : (item.product.department!.nameEn || item.product.department!.name || t.departments.unknown),
               },
             ])
         ).values()
@@ -522,48 +525,26 @@ export const CreateSale: React.FC = () => {
     fetchInventory();
   }, [fetchInventory]);
 
-  // تحديث display لـ inventory وdepartments عند تغيير اللغة
-  useEffect(() => {
-    setInventory((prev) => prev.map((item) => ({
-      ...item,
-      displayName: isRtl ? (item.product.name || t.departments.unknown) : (item.product.nameEn || item.product.name || t.departments.unknown),
-      displayUnit: isRtl ? (item.product.unit || t.units.default) : (item.product.unitEn || item.product.unit || t.units.default),
-      product: {
-        ...item.product,
-        department: item.product.department ? {
-          ...item.product.department,
-          displayName: isRtl ? (item.product.department.name || t.departments.unknown) : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
-        } : undefined,
-      },
-    })));
-
-    setDepartments((prev) => prev.map((dept) => ({
-      ...dept,
-      displayName: isRtl ? (dept.name || t.departments.unknown) : (dept.nameEn || dept.name || t.departments.unknown),
-    })));
-  }, [language, isRtl, t]);
-
   // جلب بيانات المبيعة للتعديل إذا كان id موجود
   useEffect(() => {
     if (id) {
       const fetchSale = async () => {
         try {
           const sale = await salesAPI.getById(id);
-          const loadedItems = sale.items.map((item: any) => ({
-            productId: item.product?._id || item.productId,
-            productName: item.product?.name,
-            productNameEn: item.product?.nameEn,
-            unit: item.product?.unit,
-            unitEn: item.product?.unitEn,
-            displayName: isRtl ? (item.product?.name || t.departments.unknown) : (item.product?.nameEn || item.product?.name || t.departments.unknown),
-            displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-          }));
           dispatchCart({
             type: 'LOAD_SALE',
             payload: {
-              items: loadedItems,
+              items: sale.items.map((item: any) => ({
+                productId: item.product?._id || item.productId,
+                productName: item.product?.name,
+                productNameEn: item.product?.nameEn,
+                unit: item.product?.unit,
+                unitEn: item.product?.unitEn,
+                displayName: isRtl ? (item.product?.name || t.departments.unknown) : (item.product?.nameEn || item.product?.name || t.departments.unknown),
+                displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+              })),
               notes: sale.notes || '',
               paymentMethod: sale.paymentMethod || 'cash',
               customerName: sale.customerName || '',
@@ -594,7 +575,7 @@ export const CreateSale: React.FC = () => {
         });
       }
     });
-  }, [language, cartState.items, isRtl, t, dispatchCart]);
+  }, [language, cartState.items, isRtl, t]);
 
   // إضافة إلى السلة
   const addToCart = useCallback(
@@ -651,7 +632,7 @@ export const CreateSale: React.FC = () => {
     dispatchCart({ type: 'REMOVE_ITEM', payload: productId });
   }, []);
 
-  // إرسال أو تحديث المبيعة (بدون navigate، بس reset وtoast)
+  // إرسال أو تحديث المبيعة (بدون navigate)
   const handleSubmitSale = useCallback(async () => {
     if (cartState.items.length === 0) {
       toast.error(t.errors.empty_cart, { position: isRtl ? 'top-right' : 'top-left' });
@@ -688,7 +669,7 @@ export const CreateSale: React.FC = () => {
         toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
       }
       dispatchCart({ type: 'RESET' });
-      // لا navigate هنا، الصفحة بتنظف (reset) وtoast يظهر بس
+      // بدون navigate، بس reset وtoast
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Sale ${id ? 'update' : 'submission'} error:`, err);
       const errorMessage = err.response?.status === 403 ? t.errors.unauthorized_access : (id ? t.errors.update_sale_failed : t.errors.create_sale_failed);
@@ -715,7 +696,7 @@ export const CreateSale: React.FC = () => {
     [t.paymentMethods]
   );
 
-  // إجمالي السلة (useMemo للأداء)
+  // إجمالي السلة
   const totalCartAmount = useMemo(() => {
     return cartState.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0).toFixed(2);
   }, [cartState.items]);
