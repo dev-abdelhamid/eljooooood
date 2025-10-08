@@ -454,7 +454,7 @@ const SalesReport: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen p-4 sm:p-6 md:p-8 bg-gradient-to-br from-gray-50 to-gray-100" dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="min-h-screen px-4 py-8">
       <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;500;600&display=swap" rel="stylesheet" />
       <header className="mb-6 flex flex-col gap-4">
         <div className="flex items-center gap-3">

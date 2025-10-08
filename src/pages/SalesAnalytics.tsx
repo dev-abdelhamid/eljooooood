@@ -480,7 +480,7 @@ const SalesAnalytics: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen pX-4 py-8 bg-gradient ">
+    <div className="min-h-screen px-4 py-8  ">
       <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;500;600&display=swap" rel="stylesheet" />
       <header className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div className="flex items-center gap-3">
