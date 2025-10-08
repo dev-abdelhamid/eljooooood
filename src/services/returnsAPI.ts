@@ -58,6 +58,7 @@ returnsAxios.interceptors.response.use(
     }
     if (error.response?.status === 403) message = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
     if (error.response?.status === 404) message = error.response?.data?.message || (isRtl ? 'الإرجاع غير موجود' : 'Return not found');
+    if (error.response?.status === 422) message = error.response?.data?.message || (isRtl ? 'الكمية غير كافية' : 'Insufficient quantity');
     if (error.response?.status === 429) message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
 
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -141,7 +142,6 @@ export const returnsAPI = {
       throw error;
     }
   },
-  
 
   createReturn: async (data: {
     branchId: string;
@@ -149,6 +149,7 @@ export const returnsAPI = {
       product: string;
       quantity: number;
       reason: string;
+      reasonEn?: string;
     }>;
     notes?: string | null;
   }) => {
@@ -165,12 +166,19 @@ export const returnsAPI = {
       throw new Error('Invalid branch ID or item data');
     }
     try {
+      const reasonMap = {
+        'تالف': 'Damaged',
+        'منتج خاطئ': 'Wrong Item',
+        'كمية زائدة': 'Excess Quantity',
+        'أخرى': 'Other',
+      };
       const response = await returnsAxios.post('/returns', {
         branchId: data.branchId,
         items: data.items.map(item => ({
           product: item.product,
           quantity: Number(item.quantity),
           reason: item.reason.trim(),
+          reasonEn: item.reasonEn || reasonMap[item.reason] || 'Other',
         })),
         notes: data.notes ? data.notes.trim() : undefined,
       });
@@ -239,5 +247,3 @@ export const returnsAPI = {
 };
 
 export default returnsAPI;
-
-
