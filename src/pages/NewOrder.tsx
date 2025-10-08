@@ -109,7 +109,7 @@ const translations = {
   },
 };
 
-const ProductSearchInput = ({
+export const ProductSearchInput = ({
   value,
   onChange,
   placeholder,
@@ -151,7 +151,7 @@ const ProductSearchInput = ({
   );
 };
 
-const ProductDropdown = ({
+export const ProductDropdown = ({
   value,
   onChange,
   options,
