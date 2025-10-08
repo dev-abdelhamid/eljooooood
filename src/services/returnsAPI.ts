@@ -193,7 +193,7 @@ export const returnsAPI = {
           product: item.product,
           quantity: Number(item.quantity),
           reason: item.reason.trim(),
-          reasonEn: item.reasonEn || reasonMap[item.reason] || 'Other',
+          reasonEn: item.reasonEn ,
         })),
         notes: data.notes ? data.notes.trim() : undefined,
       });
