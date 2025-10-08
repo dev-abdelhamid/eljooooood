@@ -15,6 +15,7 @@ const translations = {
     totalSales: 'إجمالي المبيعات',
     totalCount: 'عدد المبيعات',
     averageOrderValue: 'متوسط قيمة الطلب',
+    returnRate: 'نسبة الإرجاع',
     topProduct: 'المنتج الأعلى',
     topProducts: 'المنتجات الأعلى مبيعًا',
     leastProducts: 'المنتجات الأقل مبيعًا',
@@ -22,6 +23,7 @@ const translations = {
     leastDepartmentSales: 'الأقسام الأقل مبيعًا',
     salesTrends: 'اتجاهات المبيعات',
     topCustomers: 'أفضل العملاء',
+    paymentMethods: 'طرق الدفع',
     noAnalytics: 'لا توجد إحصائيات متاحة',
     noData: 'لا توجد بيانات',
     noCustomers: 'لا توجد عملاء',
@@ -30,6 +32,8 @@ const translations = {
     totalSpent: 'إجمالي الإنفاق',
     purchaseCount: 'عدد الشراء',
     unknown: 'غير معروف',
+    startDate: 'تاريخ البدء',
+    endDate: 'تاريخ الانتهاء',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       no_branch_assigned: 'لم يتم تعيين فرع',
@@ -37,6 +41,10 @@ const translations = {
       network_error: 'خطأ في الاتصال بالشبكة',
     },
     currency: 'ريال',
+    paymentMethods: {
+      cash: 'نقدي',
+      card: 'بطاقة',
+    },
   },
   en: {
     title: 'Sales Analytics',
@@ -44,6 +52,7 @@ const translations = {
     totalSales: 'Total Sales',
     totalCount: 'Total Count',
     averageOrderValue: 'Average Order Value',
+    returnRate: 'Return Rate',
     topProduct: 'Top Product',
     topProducts: 'Top Products',
     leastProducts: 'Least Products',
@@ -51,6 +60,7 @@ const translations = {
     leastDepartmentSales: 'Least Department Sales',
     salesTrends: 'Sales Trends',
     topCustomers: 'Top Customers',
+    paymentMethods: 'Payment Methods',
     noAnalytics: 'No analytics available',
     noData: 'No data available',
     noCustomers: 'No customers',
@@ -59,6 +69,8 @@ const translations = {
     totalSpent: 'Total Spent',
     purchaseCount: 'Purchase Count',
     unknown: 'Unknown',
+    startDate: 'Start Date',
+    endDate: 'End Date',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       no_branch_assigned: 'No branch assigned',
@@ -66,6 +78,10 @@ const translations = {
       network_error: 'Network connection error',
     },
     currency: 'SAR',
+    paymentMethods: {
+      cash: 'Cash',
+      card: 'Card',
+    },
   },
 };
 
@@ -74,6 +90,7 @@ interface AnalyticsData {
   totalSales: number;
   totalCount: number;
   averageOrderValue: number;
+  returnRate: number;
   topProduct: {
     productId: string | null;
     productName: string;
@@ -124,13 +141,23 @@ interface AnalyticsData {
     totalSpent: number;
     purchaseCount: number;
   }>;
+  paymentMethods: Array<{
+    paymentMethod: string;
+    totalAmount: number;
+    count: number;
+  }>;
+  returnStats: Array<{
+    status: string;
+    count: number;
+    totalQuantity: number;
+  }>;
 }
 
 // مكونات فرعية
 const AnalyticsSkeleton = React.memo(() => (
   <div className="space-y-6 animate-pulse">
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-      {[...Array(3)].map((_, index) => (
+      {[...Array(4)].map((_, index) => (
         <div key={index} className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
           <div className="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
           <div className="h-8 bg-gray-200 rounded w-1/2"></div>
@@ -159,6 +186,10 @@ export const BranchSalesAnalytics: React.FC = () => {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [startDate, setStartDate] = useState<string>(
+    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  );
+  const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   // التحقق من الصلاحيات ومعرف الفرع
   useEffect(() => {
@@ -175,8 +206,7 @@ export const BranchSalesAnalytics: React.FC = () => {
     if (!user?.branchId) return;
     setLoading(true);
     try {
-      const params = { branch: user.branchId };
-      const response = await salesAPI.getAnalytics(params);
+      const response = await salesAPI.getBranchAnalytics({ startDate, endDate });
       setAnalytics({
         ...response,
         salesTrends: response.salesTrends.map((trend: any) => ({
@@ -194,7 +224,7 @@ export const BranchSalesAnalytics: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, t, isRtl]);
+  }, [user, t, isRtl, startDate, endDate]);
 
   useEffect(() => {
     fetchAnalytics();
@@ -211,6 +241,26 @@ export const BranchSalesAnalytics: React.FC = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
             <p className="text-gray-600 text-sm">{t.subtitle}</p>
+          </div>
+        </div>
+        <div className="flex gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">{t.startDate}</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="mt-1 p-2 border border-gray-300 rounded-md"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">{t.endDate}</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="mt-1 p-2 border border-gray-300 rounded-md"
+            />
           </div>
         </div>
       </header>
@@ -230,7 +280,7 @@ export const BranchSalesAnalytics: React.FC = () => {
       ) : (
         <div className="space-y-8">
           {/* الإحصائيات الأساسية */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
             <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900">{t.totalSales}</h3>
               <p className="text-2xl font-bold text-amber-600 mt-2">{analytics.totalSales.toFixed(2)} {t.currency}</p>
@@ -242,6 +292,10 @@ export const BranchSalesAnalytics: React.FC = () => {
             <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900">{t.averageOrderValue}</h3>
               <p className="text-2xl font-bold text-amber-600 mt-2">{analytics.averageOrderValue.toFixed(2)} {t.currency}</p>
+            </div>
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900">{t.returnRate}</h3>
+              <p className="text-2xl font-bold text-amber-600 mt-2">{analytics.returnRate.toFixed(2)}%</p>
             </div>
           </div>
 
@@ -365,6 +419,35 @@ export const BranchSalesAnalytics: React.FC = () => {
                     label
                   >
                     {analytics.leastDepartmentSales.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <NoDataMessage message={t.noData} />
+            )}
+          </div>
+
+          {/* طرق الدفع */}
+          <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.paymentMethods}</h3>
+            {analytics.paymentMethods.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={analytics.paymentMethods}
+                    dataKey="totalAmount"
+                    nameKey={(entry) => t.paymentMethods[entry.paymentMethod] || entry.paymentMethod}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    fill="#8884d8"
+                    label
+                  >
+                    {analytics.paymentMethods.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
                     ))}
                   </Pie>
