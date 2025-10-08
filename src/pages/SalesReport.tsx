@@ -735,3 +735,5 @@ const SalesReport: React.FC = () => {
     </div>
   );
 };
+
+export default SalesReport;
