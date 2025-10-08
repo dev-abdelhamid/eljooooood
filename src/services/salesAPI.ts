@@ -124,8 +124,8 @@ salesAxios.interceptors.response.use(
 // دوال التحقق
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7,15}$/.test(phone);
-const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'card'].includes(method);
-const isValidPaymentStatus = (status: string | undefined): boolean => !method || ['pending', 'completed', 'canceled'].includes(status);
+const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'credit_card', 'bank_transfer'].includes(method);
+const isValidPaymentStatus = (status: string | undefined): boolean => !status || ['pending', 'completed', 'canceled'].includes(status);
 
 // واجهة للبيع
 interface SaleData {
@@ -134,6 +134,14 @@ interface SaleData {
   notes?: string;
   paymentMethod?: string;
   paymentStatus?: string;
+  customerName?: string;
+  customerPhone?: string;
+}
+
+interface UpdateData {
+  items?: Array<{ productId: string; quantity: number; unitPrice: number }>;
+  notes?: string;
+  paymentMethod?: string;
   customerName?: string;
   customerPhone?: string;
 }
@@ -162,7 +170,7 @@ export const salesAPI = {
     }
     if (!isValidPaymentMethod(saleData.paymentMethod)) {
       console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid payment method:`, saleData.paymentMethod);
-      throw new Error(isRtl ? 'طريقة الدفع غير صالحة (يجب أن تكون cash أو card)' : 'Invalid payment method (must be cash or card)');
+      throw new Error(isRtl ? 'طريقة الدفع غير صالحة' : 'Invalid payment method');
     }
     if (!isValidPaymentStatus(saleData.paymentStatus)) {
       console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid payment status:`, saleData.paymentStatus);
@@ -170,6 +178,29 @@ export const salesAPI = {
     }
     const response = await salesAxios.post('/sales', saleData);
     console.log(`[${new Date().toISOString()}] salesAPI.create - Success:`, response);
+    return response;
+  },
+
+  update: async (id: string, updateData: UpdateData) => {
+    console.log(`[${new Date().toISOString()}] salesAPI.update - Sending:`, { id, updateData });
+    if (!isValidObjectId(id)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid sale ID:`, id);
+      throw new Error(isRtl ? 'معرف المبيعة غير صالح' : 'Invalid sale ID');
+    }
+    if (updateData.items && (!updateData.items.length || updateData.items.some((item) => !isValidObjectId(item.productId) || item.quantity < 1 || item.unitPrice < 0))) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid items:`, updateData.items);
+      throw new Error(isRtl ? 'بيانات المنتجات غير صالحة' : 'Invalid product data');
+    }
+    if (updateData.customerPhone && !isValidPhone(updateData.customerPhone)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid customer phone:`, updateData.customerPhone);
+      throw new Error(isRtl ? 'رقم هاتف العميل غير صالح' : 'Invalid customer phone');
+    }
+    if (updateData.paymentMethod && !isValidPaymentMethod(updateData.paymentMethod)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid payment method:`, updateData.paymentMethod);
+      throw new Error(isRtl ? 'طريقة الدفع غير صالحة' : 'Invalid payment method');
+    }
+    const response = await salesAxios.put(`/sales/${id}`, updateData);
+    console.log(`[${new Date().toISOString()}] salesAPI.update - Success:`, response);
     return response;
   },
 

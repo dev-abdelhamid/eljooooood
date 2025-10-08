@@ -4,7 +4,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
-import { AlertCircle, DollarSign, Trash2, Search, X, ChevronDown } from 'lucide-react';
+import { AlertCircle, DollarSign, Trash2, Search, X, ChevronDown, Pencil } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 
@@ -62,7 +62,7 @@ const translations = {
     month: 'الشهر',
     custom: 'مخصص',
     deleteSale: 'حذف المبيعة',
-    viewDetails: 'عرض التفاصيل',
+    editSale: 'تحرير المبيعة',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       no_branch_assigned: 'لم يتم تعيين فرع',
@@ -105,7 +105,7 @@ const translations = {
     month: 'Month',
     custom: 'Custom',
     deleteSale: 'Delete Sale',
-    viewDetails: 'View Details',
+    editSale: 'Edit Sale',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       no_branch_assigned: 'No branch assigned',
@@ -180,7 +180,8 @@ const ProductDropdown = React.memo<{
 const SaleCard = React.memo<{
   sale: Sale;
   onDelete: (id: string) => void;
-}>(({ sale, onDelete }) => {
+  onEdit: (sale: Sale) => void;
+}>(({ sale, onDelete, onEdit }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
@@ -193,6 +194,13 @@ const SaleCard = React.memo<{
             <span className="text-sm text-gray-500">({sale.branch.displayName})</span>
           </div>
           <div className="flex gap-2">
+            <button
+              onClick={() => onEdit(sale)}
+              className="p-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors duration-200"
+              aria-label={t.editSale}
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
             <button
               onClick={() => onDelete(sale._id)}
               className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200"
@@ -280,6 +288,17 @@ export const BranchSalesReport: React.FC = () => {
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
+  const [editedSale, setEditedSale] = useState<Sale | null>(null);
+
+  useEffect(() => {
+    if (selectedSale) {
+      setEditedSale({
+        ...selectedSale,
+        items: selectedSale.items.map(item => ({ ...item })),
+      });
+    }
+  }, [selectedSale]);
 
   // التحقق من الصلاحيات
   useEffect(() => {
@@ -485,8 +504,33 @@ export const BranchSalesReport: React.FC = () => {
     [fetchData, t, isRtl]
   );
 
+  const handleSubmitEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editedSale) return;
+    const data = {
+      items: editedSale.items.map((item) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+      })),
+      customerName: editedSale.customerName,
+      customerPhone: editedSale.customerPhone,
+      paymentMethod: editedSale.paymentMethod,
+      notes: editedSale.notes,
+    };
+    try {
+      await salesAPI.update(editedSale._id, data);
+      toast.success(isRtl ? 'تم تحديث المبيعة بنجاح' : 'Sale updated successfully', { position: isRtl ? 'top-right' : 'top-left' });
+      setSelectedSale(null);
+      fetchData();
+    } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] Sale update error:`, err);
+      toast.error(isRtl ? 'فشل تحديث المبيعة' : 'Failed to update sale', { position: isRtl ? 'top-right' : 'top-left' });
+    }
+  };
+
   return (
-    <div className={`mx-auto px-4 py-8 min-h-screen`} >
+    <div className={`mx-auto px-4 py-8 min-h-screen`}>
       <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <DollarSign className="w-7 h-7 text-amber-600" />
@@ -566,7 +610,7 @@ export const BranchSalesReport: React.FC = () => {
           <>
             <div className="space-y-6">
               {filteredSales.map((sale) => (
-                <SaleCard key={sale._id} sale={sale} onDelete={handleDeleteSale} />
+                <SaleCard key={sale._id} sale={sale} onDelete={handleDeleteSale} onEdit={(sale) => setSelectedSale(sale)} />
               ))}
             </div>
             {hasMore && (
@@ -590,6 +634,97 @@ export const BranchSalesReport: React.FC = () => {
           </>
         )}
       </div>
+      {selectedSale && editedSale && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-xl shadow-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <h2 className="text-xl font-bold mb-4">{t.editSale}</h2>
+            <form onSubmit={handleSubmitEdit}>
+              <div className="space-y-4">
+                <input
+                  type="text"
+                  value={editedSale.customerName || ''}
+                  onChange={(e) => setEditedSale({ ...editedSale, customerName: e.target.value })}
+                  placeholder={t.customerName}
+                  className="w-full p-2 border rounded"
+                />
+                <input
+                  type="text"
+                  value={editedSale.customerPhone || ''}
+                  onChange={(e) => setEditedSale({ ...editedSale, customerPhone: e.target.value })}
+                  placeholder={t.customerPhone}
+                  className="w-full p-2 border rounded"
+                />
+                <select
+                  value={editedSale.paymentMethod || 'cash'}
+                  onChange={(e) => setEditedSale({ ...editedSale, paymentMethod: e.target.value })}
+                  className="w-full p-2 border rounded"
+                >
+                  <option value="cash">{t.paymentMethods.cash}</option>
+                  <option value="credit_card">{t.paymentMethods.credit_card}</option>
+                  <option value="bank_transfer">{t.paymentMethods.bank_transfer}</option>
+                </select>
+                <textarea
+                  value={editedSale.notes || ''}
+                  onChange={(e) => setEditedSale({ ...editedSale, notes: e.target.value })}
+                  placeholder={t.notes}
+                  className="w-full p-2 border rounded"
+                />
+                <div>
+                  <h3 className="font-semibold mb-2">{isRtl ? 'المنتجات' : 'Products'}</h3>
+                  {editedSale.items.map((item, index) => (
+                    <div key={index} className="flex items-center gap-2 mb-2">
+                      <span className="truncate w-40">{item.displayName}</span>
+                      <input
+                        type="number"
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const newQuantity = parseInt(e.target.value) || 0;
+                          const newItems = [...editedSale.items];
+                          newItems[index] = { ...newItems[index], quantity: newQuantity };
+                          setEditedSale({ ...editedSale, items: newItems });
+                        }}
+                        className="w-20 p-1 border rounded"
+                        min="1"
+                      />
+                      <input
+                        type="number"
+                        value={item.unitPrice}
+                        onChange={(e) => {
+                          const newPrice = parseFloat(e.target.value) || 0;
+                          const newItems = [...editedSale.items];
+                          newItems[index] = { ...newItems[index], unitPrice: newPrice };
+                          setEditedSale({ ...editedSale, items: newItems });
+                        }}
+                        className="w-24 p-1 border rounded"
+                        min="0"
+                        step="0.01"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newItems = editedSale.items.filter((_, i) => i !== index);
+                          setEditedSale({ ...editedSale, items: newItems });
+                        }}
+                        className="text-red-600"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setSelectedSale(null)} className="px-4 py-2 bg-gray-300 rounded">
+                    {isRtl ? 'إلغاء' : 'Cancel'}
+                  </button>
+                  <button type="submit" className="px-4 py-2 bg-amber-600 text-white rounded">
+                    {isRtl ? 'حفظ' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
