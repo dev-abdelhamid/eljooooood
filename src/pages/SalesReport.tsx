@@ -799,7 +799,7 @@ export const SalesReport: React.FC = () => {
 
   if (user?.role !== 'admin') {
     return (
-      <div className={`min-h-screen flex items-center justify-center bg-gray-50 ${isRtl ? 'font-alexandria' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+      <div className={`min-h-screen flex items-center justify-center `} >
         <div className="p-4 sm:p-6 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
           <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
           <span className="text-red-600 text-sm sm:text-base font-medium font-alexandria">{t.errors.unauthorized_access}</span>
@@ -809,7 +809,7 @@ export const SalesReport: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen bg-gray-50 p-3 sm:p-4 md:p-6 ${isRtl ? 'font-alexandria' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className={`min-h-screen p-3 sm:p-4 md:p-6 `} >
       <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;500;600&display=swap" rel="stylesheet" />
       <header className="mb-4 sm:mb-6 flex flex-col gap-3 sm:gap-4">
         <div className="flex items-center gap-2 sm:gap-3">
