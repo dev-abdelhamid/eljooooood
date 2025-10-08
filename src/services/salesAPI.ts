@@ -95,7 +95,7 @@ salesAxios.interceptors.response.use(
     const data = response.data;
     if (!data) {
       console.error(`[${new Date().toISOString()}] Empty response data:`, response);
-      throw new Error(isRtl ? 'استجابة فارغة من الخادم' : 'Empty response from server');
+      throw new Error(isRtl ? 'استجابة فارغة من الخادم'رغة من الخادم' : 'Empty response from server');
     }
     return data;
   },
@@ -210,11 +210,6 @@ interface AnalyticsData {
     totalSpent: number;
     purchaseCount: number;
   }>;
-  paymentMethods: Array<{
-    paymentMethod: string;
-    totalAmount: number;
-    count: number;
-  }>;
   returnStats: Array<{
     status: string;
     count: number;
@@ -265,7 +260,7 @@ export const salesAPI = {
     }
     const response = await salesAxios.post('/sales', { ...saleData, lang: isRtl ? 'ar' : 'en' });
     console.log(`[${new Date().toISOString()}] salesAPI.create - Success:`, response);
-    return response.sale; // إرجاع الحقل sale من البيانات
+    return response.sale;
   },
 
   getAll: async (params: {
@@ -294,7 +289,7 @@ export const salesAPI = {
       total: response.total,
       salesCount: response.sales?.length,
     });
-    return response; // إرجاع البيانات مباشرة لأنها تتطابق مع النوع المتوقع
+    return response;
   },
 
   getById: async (id: string): Promise<Sale> => {
@@ -305,7 +300,7 @@ export const salesAPI = {
     }
     const response = await salesAxios.get(`/sales/${id}`, { params: { lang: isRtl ? 'ar' : 'en' } });
     console.log(`[${new Date().toISOString()}] salesAPI.getById - Success:`, response);
-    return response.sale; // إرجاع الحقل sale من البيانات
+    return response.sale;
   },
 
   delete: async (id: string): Promise<{ message: string }> => {
@@ -316,7 +311,7 @@ export const salesAPI = {
     }
     const response = await salesAxios.delete(`/sales/${id}`, { params: { lang: isRtl ? 'ar' : 'en' } });
     console.log(`[${new Date().toISOString()}] salesAPI.delete - Success:`, response);
-    return response; // إرجاع البيانات مباشرة لأنها تتطابق مع النوع المتوقع
+    return response;
   },
 
   getAnalytics: async (params: {
@@ -342,7 +337,7 @@ export const salesAPI = {
       totalSales: response.totalSales,
       totalCount: response.totalCount,
     });
-    return response; // إرجاع البيانات مباشرة لأنها تتطابق مع AnalyticsData
+    return response;
   },
 
   getBranchAnalytics: async (params: {
@@ -362,8 +357,10 @@ export const salesAPI = {
     console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Success:`, {
       totalSales: response.totalSales,
       totalCount: response.totalCount,
+      productSalesCount: response.productSales?.length,
+      topCustomersCount: response.topCustomers?.length,
     });
-    return response; // إرجاع البيانات مباشرة لأنها تتطابق مع AnalyticsData
+    return response;
   },
 };
 
