@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { toast } from 'react-toastify';
 import { salesAPI, branchesAPI } from '../services/api';
-import { formatDate, formatDateForDisplay } from '../utils/formatDate'; // إضافة formatDateForDisplay
+import { formatDate } from '../utils/formatDate'; // إضافة formatDateForDisplay
 import { AlertCircle, Search, X, ChevronDown } from 'lucide-react';
 import { debounce } from 'lodash';
 
@@ -434,7 +434,7 @@ const BranchSalesAnalytics: React.FC = () => {
               />
               {endDate && (
                 <span className="text-sm text-gray-600 dark:text-gray-400 mt-1 block">
-                  {formatDateForDisplay(new Date(endDate), isRtl ? 'ar' : 'en')}
+                  {(new Date(endDate), isRtl ? 'ar' : 'en')}
                 </span>
               )}
             </div>
