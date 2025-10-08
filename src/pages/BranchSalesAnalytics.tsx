@@ -23,6 +23,7 @@ interface AnalyticsData {
   topProduct: {
     productId: string | null;
     productName: string;
+    productNameEn?: string | null;
     displayName: string;
     totalQuantity: number;
     totalRevenue: number;
@@ -30,6 +31,7 @@ interface AnalyticsData {
   productSales: Array<{
     productId: string;
     productName: string;
+    productNameEn?: string | null;
     displayName: string;
     totalQuantity: number;
     totalRevenue: number;
@@ -37,6 +39,7 @@ interface AnalyticsData {
   leastProductSales: Array<{
     productId: string;
     productName: string;
+    productNameEn?: string | null;
     displayName: string;
     totalQuantity: number;
     totalRevenue: number;
@@ -44,6 +47,7 @@ interface AnalyticsData {
   departmentSales: Array<{
     departmentId: string;
     departmentName: string;
+    departmentNameEn?: string | null;
     displayName: string;
     totalRevenue: number;
     totalQuantity: number;
@@ -51,6 +55,7 @@ interface AnalyticsData {
   leastDepartmentSales: Array<{
     departmentId: string;
     departmentName: string;
+    departmentNameEn?: string | null;
     displayName: string;
     totalRevenue: number;
     totalQuantity: number;
@@ -95,8 +100,9 @@ const translations = {
     quantity: 'الكمية',
     noAnalytics: 'لا توجد إحصائيات متاحة',
     errors: {
-      unauthorized_access: 'غير مصرح لك بالوصول',
-      no_branch_assigned: 'لم يتم تعيين فرع',
+      unauthorized_access: 'غير مخول لك بالوصول',
+      no_branch_assigned: 'لا يوجد فرع مخصص',
+      branch_not_found: 'الفرع غير موجود',
       fetch_analytics: 'خطأ أثناء جلب الإحصائيات',
       server_error: 'خطأ في السيرفر، حاول لاحقًا',
       method_not_found: 'خطأ في تهيئة النظام، يرجى التواصل مع الدعم',
@@ -130,6 +136,7 @@ const translations = {
     errors: {
       unauthorized_access: 'You are not authorized to access',
       no_branch_assigned: 'No branch assigned',
+      branch_not_found: 'Branch not found',
       fetch_analytics: 'Error fetching analytics',
       server_error: 'Server error, please try again later',
       method_not_found: 'System initialization error, please contact support',
@@ -140,6 +147,10 @@ const translations = {
 
 const safeNumber = (value: any, defaultValue: number = 0): number => {
   return typeof value === 'number' && !isNaN(value) ? value : defaultValue;
+};
+
+const safeString = (value: any, defaultValue: string = ''): string => {
+  return typeof value === 'string' ? value : defaultValue;
 };
 
 // Reusable Components
@@ -327,40 +338,45 @@ export const BranchSalesAnalytics: React.FC = () => {
       setAnalytics({
         totalSales: safeNumber(response.totalSales),
         totalCount: safeNumber(response.totalCount),
-        averageOrderValue: response.averageOrderValue || '0.00',
-        returnRate: response.returnRate || '0.00',
-        topProduct: response.topProduct || {
-          productId: null,
-          productName: t.noAnalytics,
-          displayName: t.noAnalytics,
-          totalQuantity: 0,
-          totalRevenue: 0,
+        averageOrderValue: safeString(response.averageOrderValue, '0.00'),
+        returnRate: safeString(response.returnRate, '0.00'),
+        topProduct: {
+          productId: response.topProduct?.productId || null,
+          productName: safeString(response.topProduct?.productName, t.noAnalytics),
+          productNameEn: response.topProduct?.productNameEn || null,
+          displayName: safeString(response.topProduct?.displayName, t.noAnalytics),
+          totalQuantity: safeNumber(response.topProduct?.totalQuantity),
+          totalRevenue: safeNumber(response.topProduct?.totalRevenue),
         },
         productSales: (response.productSales || []).map((ps: any) => ({
           productId: ps.productId,
-          productName: ps.productName || t.noAnalytics,
-          displayName: ps.displayName || t.noAnalytics,
+          productName: safeString(ps.productName, t.noAnalytics),
+          productNameEn: ps.productNameEn || null,
+          displayName: safeString(ps.displayName, t.noAnalytics),
           totalQuantity: safeNumber(ps.totalQuantity),
           totalRevenue: safeNumber(ps.totalRevenue),
         })),
         leastProductSales: (response.leastProductSales || []).map((ps: any) => ({
           productId: ps.productId,
-          productName: ps.productName || t.noAnalytics,
-          displayName: ps.displayName || t.noAnalytics,
+          productName: safeString(ps.productName, t.noAnalytics),
+          productNameEn: ps.productNameEn || null,
+          displayName: safeString(ps.displayName, t.noAnalytics),
           totalQuantity: safeNumber(ps.totalQuantity),
           totalRevenue: safeNumber(ps.totalRevenue),
         })),
         departmentSales: (response.departmentSales || []).map((ds: any) => ({
           departmentId: ds.departmentId,
-          departmentName: ds.departmentName || t.noAnalytics,
-          displayName: ds.displayName || t.noAnalytics,
+          departmentName: safeString(ds.departmentName, t.noAnalytics),
+          departmentNameEn: ds.departmentNameEn || null,
+          displayName: safeString(ds.displayName, t.noAnalytics),
           totalRevenue: safeNumber(ds.totalRevenue),
           totalQuantity: safeNumber(ds.totalQuantity),
         })),
         leastDepartmentSales: (response.leastDepartmentSales || []).map((ds: any) => ({
           departmentId: ds.departmentId,
-          departmentName: ds.departmentName || t.noAnalytics,
-          displayName: ds.displayName || t.noAnalytics,
+          departmentName: safeString(ds.departmentName, t.noAnalytics),
+          departmentNameEn: ds.departmentNameEn || null,
+          displayName: safeString(ds.displayName, t.noAnalytics),
           totalRevenue: safeNumber(ds.totalRevenue),
           totalQuantity: safeNumber(ds.totalQuantity),
         })),
@@ -370,13 +386,13 @@ export const BranchSalesAnalytics: React.FC = () => {
           saleCount: safeNumber(trend.saleCount),
         })),
         topCustomers: (response.topCustomers || []).map((tc: any) => ({
-          customerName: tc.customerName || t.noAnalytics,
-          customerPhone: tc.customerPhone || '',
+          customerName: safeString(tc.customerName, t.noAnalytics),
+          customerPhone: safeString(tc.customerPhone, ''),
           totalSpent: safeNumber(tc.totalSpent),
           purchaseCount: safeNumber(tc.purchaseCount),
         })),
         returnStats: (response.returnStats || []).map((rs: any) => ({
-          status: rs.status || 'unknown',
+          status: safeString(rs.status, 'unknown'),
           count: safeNumber(rs.count),
           totalQuantity: safeNumber(rs.totalQuantity),
         })),
@@ -387,7 +403,8 @@ export const BranchSalesAnalytics: React.FC = () => {
       const errorMessage =
         err.message.includes('getBranchAnalytics is not a function') ? t.errors.method_not_found :
         err.status === 403 ? t.errors.unauthorized_access :
-        err.status === 404 ? t.noAnalytics :
+        err.status === 404 ? t.errors.branch_not_found :
+        err.status === 500 ? t.errors.server_error :
         t.errors.fetch_analytics;
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
