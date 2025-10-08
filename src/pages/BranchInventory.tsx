@@ -324,7 +324,7 @@ const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): Re
 // Validate ObjectId
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 
-const BranchInventory: React.FC = () => {
+export const BranchInventory: React.FC = () => {
   const { t: languageT, language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
