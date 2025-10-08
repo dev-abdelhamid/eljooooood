@@ -253,7 +253,7 @@ export const BranchFilter = React.memo<{
 });
 
 // المكون الرئيسي لإحصائيات الفروع
-export const BranchAnalytics: React.FC = () => {
+export const BranchSalesAnalytics: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
@@ -632,4 +632,4 @@ export const BranchAnalytics: React.FC = () => {
   );
 };
 
-export default BranchAnalytics;
+export default BranchSalesAnalytics;
