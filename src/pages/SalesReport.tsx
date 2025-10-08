@@ -4,12 +4,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { salesAPI, branchesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
-import { AlertCircle, DollarSign, Search, X, ChevronDown, Edit, Trash, BarChart2 } from 'lucide-react';
+import { AlertCircle, DollarSign, Search, X, ChevronDown, Trash } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
-import Papa from 'papaparse';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
+// واجهات البيانات
 export interface Sale {
   _id: string;
   orderNumber: string;
@@ -25,6 +24,7 @@ export interface Sale {
     displayName: string;
     displayUnit: string;
     department?: { _id: string; name: string; nameEn?: string; displayName: string };
+    category?: { _id: string; name: string; nameEn?: string; displayName: string };
   }>;
   totalAmount: number;
   createdAt: string;
@@ -33,7 +33,6 @@ export interface Sale {
   customerName?: string;
   customerPhone?: string;
 }
-
 export interface Branch {
   _id: string;
   name: string;
@@ -41,11 +40,7 @@ export interface Branch {
   displayName: string;
 }
 
-export interface SalesTrend {
-  period: string;
-  totalSales: number;
-}
-
+// ترجمات الواجهة
 export const translations = {
   ar: {
     title: 'تقرير المبيعات',
@@ -59,18 +54,14 @@ export const translations = {
     allBranches: 'جميع الفروع',
     searchPlaceholder: 'ابحث عن المبيعات، العملاء، أو المنتجات...',
     loadMore: 'تحميل المزيد',
-    editSale: 'تعديل المبيعة',
     deleteSale: 'حذف المبيعة',
     confirmDelete: 'هل أنت متأكد من حذف هذه المبيعة؟',
-    export: 'تصدير إلى CSV',
     filterBy: 'تصفية حسب',
     all: 'الكل',
     day: 'اليوم',
     week: 'الأسبوع',
     month: 'الشهر',
     custom: 'مخصص',
-    salesTrends: 'اتجاهات المبيعات',
-    totalSales: 'إجمالي المبيعات',
     customerNameLabel: 'اسم العميل',
     customerPhoneLabel: 'رقم الهاتف',
     paymentMethodLabel: 'طريقة الدفع',
@@ -81,7 +72,6 @@ export const translations = {
       delete_sale_failed: 'فشل حذف المبيعة',
       departments: { unknown: 'غير معروف' },
       deleted_product: 'منتج محذوف',
-      no_analytics: 'لا توجد إحصائيات متاحة',
     },
     currency: 'ريال',
     units: { default: 'غير محدد' },
@@ -103,18 +93,14 @@ export const translations = {
     allBranches: 'All Branches',
     searchPlaceholder: 'Search sales, customers, or products...',
     loadMore: 'Load More',
-    editSale: 'Edit Sale',
     deleteSale: 'Delete Sale',
     confirmDelete: 'Are you sure you want to delete this sale?',
-    export: 'Export to CSV',
     filterBy: 'Filter By',
     all: 'All',
     day: 'Day',
     week: 'Week',
     month: 'Month',
     custom: 'Custom',
-    salesTrends: 'Sales Trends',
-    totalSales: 'Total Sales',
     customerNameLabel: 'Customer Name',
     customerPhoneLabel: 'Phone Number',
     paymentMethodLabel: 'Payment Method',
@@ -125,7 +111,6 @@ export const translations = {
       delete_sale_failed: 'Failed to delete sale',
       departments: { unknown: 'Unknown' },
       deleted_product: 'Deleted Product',
-      no_analytics: 'No analytics available',
     },
     currency: 'SAR',
     units: { default: 'N/A' },
@@ -137,11 +122,12 @@ export const translations = {
   },
 };
 
-// دالة مساعدة للتأكد من أن القيمة عدد صالح
+// دالة للتحقق من القيم العددية
 export const safeNumber = (value: any, defaultValue: number = 0): number => {
   return typeof value === 'number' && !isNaN(value) ? value : defaultValue;
 };
 
+// مكون البحث
 const SearchInput = React.memo<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -176,6 +162,7 @@ const SearchInput = React.memo<{
   );
 });
 
+// مكون القائمة المنسدلة
 export const ProductDropdown = React.memo<{
   value: string;
   onChange: (value: string) => void;
@@ -221,6 +208,7 @@ export const ProductDropdown = React.memo<{
   );
 });
 
+// مكون فلتر الفروع
 export const BranchFilter = React.memo<{
   branches: Branch[];
   selectedBranch: string;
@@ -252,8 +240,9 @@ export const BranchFilter = React.memo<{
   );
 });
 
-export const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete: (id: string) => void }>(
-  ({ sale, onEdit, onDelete }) => {
+// مكون بطاقة المبيعة
+export const SaleCard = React.memo<{ sale: Sale; onDelete: (id: string) => void }>(
+  ({ sale, onDelete }) => {
     const { language } = useLanguage();
     const isRtl = language === 'ar';
     const t = translations[isRtl ? 'ar' : 'en'];
@@ -291,9 +280,6 @@ export const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; o
             </ul>
           </div>
           <div className="flex gap-3">
-            <button onClick={() => onEdit(sale)} aria-label={t.editSale} className="p-2.5 rounded-full hover:bg-gray-100 transition-colors duration-200">
-              <Edit className="w-5 h-5 text-blue-600 hover:text-blue-800" />
-            </button>
             <button onClick={() => onDelete(sale._id)} aria-label={t.deleteSale} className="p-2.5 rounded-full hover:bg-gray-100 transition-colors duration-200">
               <Trash className="w-5 h-5 text-red-600 hover:text-red-800" />
             </button>
@@ -304,6 +290,7 @@ export const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; o
   }
 );
 
+// مكون بطاقة التحميل
 export const SaleSkeletonCard = React.memo(() => (
   <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 animate-pulse">
     <div className="space-y-3">
@@ -315,6 +302,7 @@ export const SaleSkeletonCard = React.memo(() => (
   </div>
 ));
 
+// المكون الرئيسي لتقرير المبيعات
 export const SalesReport: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
@@ -323,7 +311,6 @@ export const SalesReport: React.FC = () => {
   const t = translations[isRtl ? 'ar' : 'en'];
   const [sales, setSales] = useState<Sale[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [salesTrends, setSalesTrends] = useState<SalesTrend[]>([]);
   const [filterPeriod, setFilterPeriod] = useState('all');
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
@@ -337,8 +324,10 @@ export const SalesReport: React.FC = () => {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
 
+  // دالة البحث المؤخر
   const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim()), 300), []);
 
+  // معالجة تغيير البحث
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchInput(value);
@@ -350,7 +339,6 @@ export const SalesReport: React.FC = () => {
     const today = new Date();
     let newStartDate = '';
     let newEndDate = today.toISOString().split('T')[0];
-
     if (filterPeriod === 'day') {
       newStartDate = newEndDate;
     } else if (filterPeriod === 'week') {
@@ -366,17 +354,17 @@ export const SalesReport: React.FC = () => {
       newStartDate = '';
       newEndDate = '';
     }
-
     setFilterStartDate(newStartDate);
     setFilterEndDate(newEndDate);
   }, [filterPeriod]);
 
+  // جلب الفروع
   const fetchBranches = useCallback(async () => {
     if (user?.role !== 'admin') return;
     setBranchesLoading(true);
     try {
       const response = await branchesAPI.getAll();
-      console.log(`[${new Date().toISOString()}] Branches response:`, response);
+      console.log(`[${new Date().toISOString()}] جلب الفروع:`, response);
       setBranches(
         response.map((branch: any) => ({
           _id: branch._id,
@@ -387,7 +375,7 @@ export const SalesReport: React.FC = () => {
       );
       setError('');
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Fetch branches error:`, { message: err.message, stack: err.stack });
+      console.error(`[${new Date().toISOString()}] خطأ في جلب الفروع:`, { message: err.message, stack: err.stack });
       setError(t.errors.fetch_branches);
       toast.error(t.errors.fetch_branches, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
     } finally {
@@ -395,6 +383,7 @@ export const SalesReport: React.FC = () => {
     }
   }, [user, isRtl, t]);
 
+  // جلب المبيعات
   const fetchSales = useCallback(
     async (pageNum: number = 1, append: boolean = false) => {
       if (user?.role !== 'admin') {
@@ -412,8 +401,7 @@ export const SalesReport: React.FC = () => {
           salesParams.endDate = filterEndDate;
         }
         const salesResponse = await salesAPI.getAll(salesParams);
-        console.log(`[${new Date().toISOString()}] Sales response:`, salesResponse);
-
+        console.log(`[${new Date().toISOString()}] جلب المبيعات:`, salesResponse);
         const newSales = (salesResponse.sales || []).map((sale: any) => ({
           _id: sale._id,
           orderNumber: sale.saleNumber || sale.orderNumber || 'N/A',
@@ -449,6 +437,16 @@ export const SalesReport: React.FC = () => {
                     : (item.product.department.nameEn || item.product.department.name || t.errors.departments.unknown),
                 }
               : undefined,
+            category: item.product?.category
+              ? {
+                  _id: item.product.category._id,
+                  name: item.product.category.name || t.errors.departments.unknown,
+                  nameEn: item.product.category.nameEn,
+                  displayName: isRtl
+                    ? (item.product.category.name || t.errors.departments.unknown)
+                    : (item.product.category.nameEn || item.product.category.name || t.errors.departments.unknown),
+                }
+              : undefined,
           })),
           totalAmount: safeNumber(sale.totalAmount),
           createdAt: formatDate(new Date(sale.createdAt), language),
@@ -459,25 +457,12 @@ export const SalesReport: React.FC = () => {
         }));
         setSales((prev) => (append ? [...prev, ...newSales] : newSales));
         setHasMore(salesResponse.total > pageNum * 20);
-
-        // جلب اتجاهات المبيعات
-        const analyticsParams = { ...salesParams, groupBy: 'day' };
-        const analyticsResponse = await salesAPI.getAnalytics(analyticsParams);
-        console.log(`[${new Date().toISOString()}] Analytics response:`, analyticsResponse);
-        setSalesTrends(
-          (analyticsResponse.salesTrends || []).map((trend: any) => ({
-            period: formatDate(new Date(trend.period), language),
-            totalSales: safeNumber(trend.totalSales),
-          }))
-        );
-
         setError('');
       } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Fetch sales error:`, { message: err.message, stack: err.stack });
+        console.error(`[${new Date().toISOString()}] خطأ في جلب المبيعات:`, { message: err.message, stack: err.stack });
         setError(t.errors.fetch_sales);
         toast.error(t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
         setSales([]);
-        setSalesTrends([]);
       } finally {
         setLoading(false);
         setSalesLoading(false);
@@ -486,11 +471,13 @@ export const SalesReport: React.FC = () => {
     [user, t, isRtl, language, filterBranch, filterPeriod, filterStartDate, filterEndDate]
   );
 
+  // جلب البيانات عند التحميل الأولي
   useEffect(() => {
     fetchBranches();
     fetchSales();
   }, [fetchBranches, fetchSales]);
 
+  // التعامل مع تحديثات السوكت
   useEffect(() => {
     if (!socket || !isConnected) return;
     socket.on('saleCreated', (data: any) => {
@@ -517,15 +504,13 @@ export const SalesReport: React.FC = () => {
     };
   }, [socket, isConnected, fetchSales, filterBranch, isRtl]);
 
+  // تحميل المزيد من المبيعات
   const loadMoreSales = useCallback(() => {
     setPage((prev) => prev + 1);
     fetchSales(page + 1, true);
   }, [fetchSales, page]);
 
-  const handleEditSale = useCallback((sale: Sale) => {
-    toast.info(t.editSale, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
-  }, [t, isRtl]);
-
+  // حذف المبيعة
   const handleDeleteSale = useCallback(
     async (id: string) => {
       if (window.confirm(t.confirmDelete)) {
@@ -535,7 +520,7 @@ export const SalesReport: React.FC = () => {
           emit('saleDeleted', { saleId: id, branchId: filterBranch });
           fetchSales();
         } catch (err: any) {
-          console.error(`[${new Date().toISOString()}] Delete error:`, { message: err.message, stack: err.stack });
+          console.error(`[${new Date().toISOString()}] خطأ في حذف المبيعة:`, { message: err.message, stack: err.stack });
           setError(t.errors.delete_sale_failed);
           toast.error(t.errors.delete_sale_failed, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
         }
@@ -544,27 +529,7 @@ export const SalesReport: React.FC = () => {
     [t, emit, fetchSales, isRtl, filterBranch]
   );
 
-  const handleExport = useCallback(() => {
-    const csvData = sales.map((sale) => ({
-      OrderNumber: sale.orderNumber,
-      Branch: sale.branch?.displayName || t.errors.departments.unknown,
-      TotalAmount: safeNumber(sale.totalAmount).toFixed(2),
-      CreatedAt: sale.createdAt,
-      PaymentMethod: sale.paymentMethod ? t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] : 'N/A',
-      CustomerName: sale.customerName || 'N/A',
-      CustomerPhone: sale.customerPhone || 'N/A',
-      Items: sale.items
-        .map((item) => `${item.displayName} (${safeNumber(item.quantity)} x ${safeNumber(item.unitPrice).toFixed(2)} ${t.currency})`)
-        .join('; '),
-    }));
-    const csv = Papa.unparse(csvData);
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `sales_report_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-  }, [sales, t]);
-
+  // تصفية المبيعات بناءً على البحث
   const filteredSales = useMemo(
     () =>
       sales.filter((sale) => {
@@ -579,6 +544,7 @@ export const SalesReport: React.FC = () => {
     [sales, searchTerm]
   );
 
+  // خيارات الفترة
   const periodOptions = useMemo(
     () => [
       { value: 'all', label: t.all },
@@ -590,8 +556,7 @@ export const SalesReport: React.FC = () => {
     [t]
   );
 
-  const chartColors = useMemo(() => ['#FFBB28', '#FF8042', '#0088FE', '#00C49F', '#FF4444'], []);
-
+  // التحقق من صلاحيات المستخدم
   if (user?.role !== 'admin') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4 font-alexandria" dir={isRtl ? 'rtl' : 'ltr'}>
@@ -663,32 +628,6 @@ export const SalesReport: React.FC = () => {
               allBranchesLabel={t.allBranches}
             />
           </div>
-          <div className="mt-4 flex justify-end">
-            <button
-              onClick={handleExport}
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 font-alexandria"
-              aria-label={t.export}
-            >
-              {t.export}
-            </button>
-          </div>
-        </div>
-        <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.salesTrends}</h3>
-          {salesTrends.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={salesTrends}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="period" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="totalSales" stroke={chartColors[0]} name={t.totalSales} />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="text-center py-8 text-gray-500 font-alexandria">{t.errors.no_analytics}</div>
-          )}
         </div>
         <div>
           <h2 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.previousSales}</h2>
@@ -707,7 +646,7 @@ export const SalesReport: React.FC = () => {
             <>
               <div className="grid grid-cols-1 gap-6">
                 {filteredSales.map((sale) => (
-                  <SaleCard key={sale._id} sale={sale} onEdit={handleEditSale} onDelete={handleDeleteSale} />
+                  <SaleCard key={sale._id} sale={sale} onDelete={handleDeleteSale} />
                 ))}
               </div>
               {hasMore && (
