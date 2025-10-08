@@ -1,27 +1,21 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { salesAPI, branchesAPI } from '../services/api';
+import { salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, Search, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 
-// واجهات البيانات
-export interface Branch {
-  _id: string;
-  name: string;
-  nameEn?: string;
-  displayName: string;
-}
-
-export interface SalesTrend {
+// Interfaces
+interface SalesTrend {
   period: string;
   totalSales: number;
   saleCount: number;
 }
 
-export interface AnalyticsData {
+interface AnalyticsData {
   totalSales: number;
   totalCount: number;
   averageOrderValue: string;
@@ -33,18 +27,9 @@ export interface AnalyticsData {
     totalQuantity: number;
     totalRevenue: number;
   };
-  branchSales: Array<{
-    branchId: string;
-    branchName: string;
-    branchNameEn?: string;
-    displayName: string;
-    totalSales: number;
-    saleCount: number;
-  }>;
   productSales: Array<{
     productId: string;
     productName: string;
-    productNameEn?: string;
     displayName: string;
     totalQuantity: number;
     totalRevenue: number;
@@ -52,7 +37,6 @@ export interface AnalyticsData {
   leastProductSales: Array<{
     productId: string;
     productName: string;
-    productNameEn?: string;
     displayName: string;
     totalQuantity: number;
     totalRevenue: number;
@@ -60,7 +44,6 @@ export interface AnalyticsData {
   departmentSales: Array<{
     departmentId: string;
     departmentName: string;
-    departmentNameEn?: string;
     displayName: string;
     totalRevenue: number;
     totalQuantity: number;
@@ -68,7 +51,6 @@ export interface AnalyticsData {
   leastDepartmentSales: Array<{
     departmentId: string;
     departmentName: string;
-    departmentNameEn?: string;
     displayName: string;
     totalRevenue: number;
     totalQuantity: number;
@@ -87,14 +69,11 @@ export interface AnalyticsData {
   }>;
 }
 
-// ترجمات الواجهة
 export const translations = {
   ar: {
-    title: 'إحصائيات الفروع',
-    subtitle: 'تحليل أداء المبيعات حسب الفروع',
-    branchFilter: 'اختر فرعًا',
-    allBranches: 'جميع الفروع',
-    searchPlaceholder: 'ابحث عن الفروع أو المنتجات...',
+    title: 'إحصائيات الفرع',
+    subtitle: 'تحليل أداء المبيعات للفرع',
+    searchPlaceholder: 'ابحث عن المنتجات...',
     filterBy: 'تصفية حسب',
     all: 'الكل',
     day: 'اليوم',
@@ -115,18 +94,16 @@ export const translations = {
     quantity: 'الكمية',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
+      no_branch_assigned: 'لم يتم تعيين فرع',
       fetch_analytics: 'خطأ أثناء جلب الإحصائيات',
-      fetch_branches: 'خطأ أثناء جلب الفروع',
       no_analytics: 'لا توجد إحصائيات متاحة',
     },
     currency: 'ريال',
   },
   en: {
     title: 'Branch Analytics',
-    subtitle: 'Analyze sales performance by branch',
-    branchFilter: 'Select Branch',
-    allBranches: 'All Branches',
-    searchPlaceholder: 'Search branches or products...',
+    subtitle: 'Analyze sales performance for the branch',
+    searchPlaceholder: 'Search products...',
     filterBy: 'Filter By',
     all: 'All',
     day: 'Day',
@@ -147,20 +124,18 @@ export const translations = {
     quantity: 'Quantity',
     errors: {
       unauthorized_access: 'You are not authorized to access',
+      no_branch_assigned: 'No branch assigned',
       fetch_analytics: 'Error fetching analytics',
-      fetch_branches: 'Error fetching branches',
       no_analytics: 'No analytics available',
     },
     currency: 'SAR',
   },
 };
 
-// دالة للتحقق من القيم العددية
 export const safeNumber = (value: any, defaultValue: number = 0): number => {
   return typeof value === 'number' && !isNaN(value) ? value : defaultValue;
 };
 
-// مكون البحث
 const SearchInput = React.memo<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -195,7 +170,6 @@ const SearchInput = React.memo<{
   );
 });
 
-// مكون القائمة المنسدلة
 export const ProductDropdown = React.memo<{
   value: string;
   onChange: (value: string) => void;
@@ -241,66 +215,50 @@ export const ProductDropdown = React.memo<{
   );
 });
 
-// مكون فلتر الفروع
-export const BranchFilter = React.memo<{
-  branches: Branch[];
-  selectedBranch: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-  allBranchesLabel: string;
-}>(({ branches, selectedBranch, onChange, placeholder, allBranchesLabel }) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  return (
-    <div className="relative group">
-      <select
-        value={selectedBranch}
-        onChange={(e) => onChange(e.target.value)}
-        className={`w-full ${isRtl ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria`}
-        aria-label={placeholder}
-      >
-        <option value="">{allBranchesLabel}</option>
-        {branches.map((branch) => (
-          <option key={branch._id} value={branch._id}>
-            {branch.displayName}
-          </option>
-        ))}
-      </select>
-      <ChevronDown
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5 group-focus-within:text-amber-500`}
-      />
+const AnalyticsSkeletonCard = React.memo(() => (
+  <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 animate-pulse">
+    <div className="space-y-3">
+      <div className="h-5 bg-gray-200 rounded w-3/4"></div>
+      <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+      <div className="h-4 bg-gray-200 rounded w-1/3"></div>
     </div>
-  );
-});
+  </div>
+));
 
-// المكون الرئيسي لإحصائيات الفروع
 export const BranchSalesAnalytics: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
-  const [branches, setBranches] = useState<Branch[]>([]);
   const [filterPeriod, setFilterPeriod] = useState('all');
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
-  const [filterBranch, setFilterBranch] = useState(user?.role === 'branch' && user?.branchId ? user.branchId : '');
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // دالة البحث المؤخر
   const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim()), 300), []);
 
-  // معالجة تغيير البحث
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setSearchInput(value);
     debouncedSearch(value);
   };
 
-  // حساب التواريخ بناءً على الفترة
+  useEffect(() => {
+    if (!user?.role || user.role !== 'branch' || !user.branchId) {
+      setError(user?.branchId ? t.errors.unauthorized_access : t.errors.no_branch_assigned);
+      toast.error(user?.branchId ? t.errors.unauthorized_access : t.errors.no_branch_assigned, {
+        position: isRtl ? 'top-right' : 'top-left',
+        autoClose: 3000,
+      });
+      navigate('/unauthorized');
+    }
+  }, [user, t, isRtl, navigate]);
+
   useEffect(() => {
     const today = new Date();
     let newStartDate = '';
@@ -324,42 +282,21 @@ export const BranchSalesAnalytics: React.FC = () => {
     setFilterEndDate(newEndDate);
   }, [filterPeriod]);
 
-  // جلب الفروع
-  const fetchBranches = useCallback(async () => {
-    if (user?.role !== 'admin') return;
-    try {
-      const response = await branchesAPI.getAll();
-      console.log(`[${new Date().toISOString()}] جلب الفروع:`, response);
-      setBranches(
-        response.map((branch: any) => ({
-          _id: branch._id,
-          name: branch.name || 'غير معروف',
-          nameEn: branch.nameEn,
-          displayName: isRtl ? (branch.name || 'غير معروف') : (branch.nameEn || branch.name || 'Unknown'),
-        }))
-      );
-      setError('');
-    } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] خطأ في جلب الفروع:`, { message: err.message, stack: err.stack });
-      setError(t.errors.fetch_branches);
-      toast.error(t.errors.fetch_branches, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
-    }
-  }, [user, isRtl, t]);
-
-  // جلب الإحصائيات
   const fetchAnalytics = useCallback(async () => {
+    if (!user?.branchId) {
+      setError(t.errors.no_branch_assigned);
+      toast.error(t.errors.no_branch_assigned, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
+      return;
+    }
+
     setLoading(true);
     try {
-      const params: any = { lang: language };
+      const params: any = { lang: language, branch: user.branchId };
       if (filterPeriod !== 'all' && filterStartDate && filterEndDate) {
         params.startDate = filterStartDate;
         params.endDate = filterEndDate;
       }
-      if (user?.role === 'admin' && filterBranch) {
-        params.branch = filterBranch;
-      }
-      const apiMethod = user?.role === 'branch' ? salesAPI.getBranchAnalytics : salesAPI.getAnalytics;
-      const response = await apiMethod(params);
+      const response = await salesAPI.getBranchAnalytics(params);
       console.log(`[${new Date().toISOString()}] جلب الإحصائيات:`, response);
       setAnalytics({
         totalSales: safeNumber(response.totalSales),
@@ -373,18 +310,9 @@ export const BranchSalesAnalytics: React.FC = () => {
           totalQuantity: 0,
           totalRevenue: 0,
         },
-        branchSales: user?.role === 'admin' ? (response.branchSales || []).map((bs: any) => ({
-          branchId: bs.branchId,
-          branchName: bs.branchName || 'غير معروف',
-          branchNameEn: bs.branchNameEn,
-          displayName: isRtl ? (bs.branchName || 'غير معروف') : (bs.branchNameEn || bs.branchName || 'Unknown'),
-          totalSales: safeNumber(bs.totalSales),
-          saleCount: safeNumber(bs.saleCount),
-        })) : [],
         productSales: (response.productSales || []).map((ps: any) => ({
           productId: ps.productId,
           productName: ps.productName || 'غير معروف',
-          productNameEn: ps.productNameEn,
           displayName: isRtl ? (ps.productName || 'غير معروف') : (ps.productNameEn || ps.productName || 'Unknown'),
           totalQuantity: safeNumber(ps.totalQuantity),
           totalRevenue: safeNumber(ps.totalRevenue),
@@ -392,7 +320,6 @@ export const BranchSalesAnalytics: React.FC = () => {
         leastProductSales: (response.leastProductSales || []).map((ps: any) => ({
           productId: ps.productId,
           productName: ps.productName || 'غير معروف',
-          productNameEn: ps.productNameEn,
           displayName: isRtl ? (ps.productName || 'غير معروف') : (ps.productNameEn || ps.productName || 'Unknown'),
           totalQuantity: safeNumber(ps.totalQuantity),
           totalRevenue: safeNumber(ps.totalRevenue),
@@ -400,7 +327,6 @@ export const BranchSalesAnalytics: React.FC = () => {
         departmentSales: (response.departmentSales || []).map((ds: any) => ({
           departmentId: ds.departmentId,
           departmentName: ds.departmentName || 'غير معروف',
-          departmentNameEn: ds.departmentNameEn,
           displayName: isRtl ? (ds.departmentName || 'غير معروف') : (ds.departmentNameEn || ds.departmentName || 'Unknown'),
           totalRevenue: safeNumber(ds.totalRevenue),
           totalQuantity: safeNumber(ds.totalQuantity),
@@ -408,7 +334,6 @@ export const BranchSalesAnalytics: React.FC = () => {
         leastDepartmentSales: (response.leastDepartmentSales || []).map((ds: any) => ({
           departmentId: ds.departmentId,
           departmentName: ds.departmentName || 'غير معروف',
-          departmentNameEn: ds.departmentNameEn,
           displayName: isRtl ? (ds.departmentName || 'غير معروف') : (ds.departmentNameEn || ds.departmentName || 'Unknown'),
           totalRevenue: safeNumber(ds.totalRevenue),
           totalQuantity: safeNumber(ds.totalQuantity),
@@ -433,31 +358,18 @@ export const BranchSalesAnalytics: React.FC = () => {
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] خطأ في جلب الإحصائيات:`, { message: err.message, stack: err.stack });
-      setError(t.errors.fetch_analytics);
-      toast.error(t.errors.fetch_analytics, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
+      const errorMessage = err.status === 403 ? t.errors.unauthorized_access : t.errors.fetch_analytics;
+      setError(errorMessage);
+      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
       setAnalytics(null);
     } finally {
       setLoading(false);
     }
-  }, [user, language, isRtl, t, filterPeriod, filterStartDate, filterEndDate, filterBranch]);
+  }, [user, language, isRtl, t, filterPeriod, filterStartDate, filterEndDate]);
 
-  // جلب البيانات عند التحميل الأولي
   useEffect(() => {
-    if (user?.role === 'admin') {
-      fetchBranches();
-    }
     fetchAnalytics();
-  }, [fetchBranches, fetchAnalytics]);
-
-  // تصفية البيانات بناءً على البحث
-  const filteredBranchSales = useMemo(
-    () =>
-      analytics?.branchSales.filter((bs) => {
-        const term = searchTerm.toLowerCase();
-        return bs.displayName.toLowerCase().includes(term);
-      }) || [],
-    [analytics, searchTerm]
-  );
+  }, [fetchAnalytics]);
 
   const filteredProductSales = useMemo(
     () =>
@@ -495,7 +407,6 @@ export const BranchSalesAnalytics: React.FC = () => {
     [analytics, searchTerm]
   );
 
-  // خيارات الفترة
   const periodOptions = useMemo(
     () => [
       { value: 'all', label: t.all },
@@ -507,20 +418,8 @@ export const BranchSalesAnalytics: React.FC = () => {
     [t]
   );
 
-  // التحقق من صلاحيات المستخدم
-  if (!user || (user.role !== 'admin' && user.role !== 'branch')) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4 font-alexandria" dir={isRtl ? 'rtl' : 'ltr'}>
-        <div className="p-6 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
-          <AlertCircle className="w-6 h-6 text-red-600" />
-          <span className="text-red-600 text-base font-medium font-alexandria">{t.errors.unauthorized_access}</span>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen px-4 sm:px-6 py-8 bg-gradient-to-br from-gray-50 to-gray-100 font-alexandria" dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="min-h-screen px-4 py-8 bg-gradient-to-br from-gray-50 to-gray-100 font-alexandria" dir={isRtl ? 'rtl' : 'ltr'}>
       <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;500;600&display=swap" rel="stylesheet" />
       <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
@@ -539,7 +438,7 @@ export const BranchSalesAnalytics: React.FC = () => {
       <div className="space-y-8">
         <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
           <h2 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.filterBy}</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <SearchInput
               value={searchInput}
               onChange={handleSearchChange}
@@ -570,27 +469,12 @@ export const BranchSalesAnalytics: React.FC = () => {
                 />
               </>
             )}
-            {user?.role === 'admin' && (
-              <BranchFilter
-                branches={branches}
-                selectedBranch={filterBranch}
-                onChange={setFilterBranch}
-                placeholder={t.branchFilter}
-                allBranchesLabel={t.allBranches}
-              />
-            )}
           </div>
         </div>
         {loading ? (
           <div className="grid grid-cols-1 gap-6">
             {[...Array(4)].map((_, index) => (
-              <div key={index} className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 animate-pulse">
-                <div className="space-y-3">
-                  <div className="h-5 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                  <div className="h-4 bg-gray-200 rounded w-1/3"></div>
-                </div>
-              </div>
+              <AnalyticsSkeletonCard key={index} />
             ))}
           </div>
         ) : !analytics ? (
@@ -623,22 +507,6 @@ export const BranchSalesAnalytics: React.FC = () => {
                 <p className="text-sm text-gray-600 font-alexandria">{t.quantity}: {safeNumber(analytics.topProduct.totalQuantity)}</p>
               </div>
             </div>
-            {user?.role === 'admin' && (
-              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.branchFilter}</h3>
-                <ul className="space-y-2">
-                  {filteredBranchSales.length > 0 ? (
-                    filteredBranchSales.map((bs) => (
-                      <li key={bs.branchId} className="border-t border-gray-100 pt-2 font-alexandria">
-                        {bs.displayName} - {t.totalSales}: {safeNumber(bs.totalSales).toFixed(2)} {t.currency}, {t.totalOrders}: {safeNumber(bs.saleCount)}
-                      </li>
-                    ))
-                  ) : (
-                    <li className="text-gray-500 font-alexandria">{t.errors.no_analytics}</li>
-                  )}
-                </ul>
-              </div>
-            )}
             <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.productSales}</h3>
               <ul className="space-y-2">
@@ -716,4 +584,4 @@ export const BranchSalesAnalytics: React.FC = () => {
   );
 };
 
-export default BranchSalesAnalytics;
+export default React.memo(BranchSalesAnalytics);
