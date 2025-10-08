@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { salesAPI } from '../services/api';
+import { salesAPI } from '../services/salesAPI';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, Search, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -106,6 +106,7 @@ const translations = {
       fetch_analytics: 'خطأ أثناء جلب الإحصائيات',
       server_error: 'خطأ في السيرفر، حاول لاحقًا',
       method_not_found: 'خطأ في تهيئة النظام، يرجى التواصل مع الدعم',
+      invalid_dates: 'تاريخ البداية يجب أن يكون قبل تاريخ النهاية',
     },
     currency: 'ريال',
   },
@@ -140,6 +141,7 @@ const translations = {
       fetch_analytics: 'Error fetching analytics',
       server_error: 'Server error, please try again later',
       method_not_found: 'System initialization error, please contact support',
+      invalid_dates: 'Start date must be before end date',
     },
     currency: 'SAR',
   },
@@ -285,20 +287,21 @@ export const BranchSalesAnalytics: React.FC = () => {
       newStartDate = newEndDate;
     } else if (filterPeriod === 'week') {
       const firstDayOfWeek = new Date(today);
-      firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1);
+      firstDayOfWeek.setDate(today.getDate() - today.getDay());
       newStartDate = firstDayOfWeek.toISOString().split('T')[0];
     } else if (filterPeriod === 'month') {
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
       newStartDate = firstDayOfMonth.toISOString().split('T')[0];
     } else if (filterPeriod === 'custom') {
-      return;
+      newStartDate = startDate || newEndDate;
+      newEndDate = endDate || newEndDate;
     } else {
       newStartDate = '';
       newEndDate = '';
     }
     setStartDate(newStartDate);
     setEndDate(newEndDate);
-  }, [filterPeriod]);
+  }, [filterPeriod, startDate, endDate]);
 
   const fetchAnalytics = useCallback(async () => {
     if (!user?.branchId) {
@@ -309,22 +312,22 @@ export const BranchSalesAnalytics: React.FC = () => {
       return;
     }
 
-    if (!salesAPI.getBranchAnalytics) {
-      console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics is not defined`);
-      setError(t.errors.method_not_found);
-      toast.error(t.errors.method_not_found, { position: isRtl ? 'top-right' : 'top-left', autoClose: 5000 });
+    if (filterPeriod === 'custom' && startDate && endDate && new Date(startDate) > new Date(endDate)) {
+      console.error(`[${new Date().toISOString()}] Invalid date range:`, { startDate, endDate });
+      setError(t.errors.invalid_dates);
+      toast.error(t.errors.invalid_dates, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
       setLoading(false);
       return;
     }
 
     setLoading(true);
     try {
-      const params: any = { lang: language, branch: user.branchId };
+      const params: any = { lang: language };
       if (filterPeriod !== 'all' && startDate && endDate) {
         params.startDate = startDate;
         params.endDate = endDate;
       }
-      console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Sending:`, params);
+      console.log(`[${new Date().toISOString()}] Fetching analytics with params:`, params);
       const response = await salesAPI.getBranchAnalytics(params);
       if (!response || !response.success) {
         throw new Error(response?.message || t.errors.server_error);
@@ -401,7 +404,6 @@ export const BranchSalesAnalytics: React.FC = () => {
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Fetch analytics error:`, { message: err.message, status: err.status, stack: err.stack });
       const errorMessage =
-        err.message.includes('getBranchAnalytics is not a function') ? t.errors.method_not_found :
         err.status === 403 ? t.errors.unauthorized_access :
         err.status === 404 ? t.errors.branch_not_found :
         err.status === 500 ? t.errors.server_error :
@@ -419,26 +421,22 @@ export const BranchSalesAnalytics: React.FC = () => {
   }, [fetchAnalytics]);
 
   const filteredProductSales = useMemo(
-    () =>
-      analytics?.productSales.filter((ps) => ps.displayName.toLowerCase().includes(searchTerm.toLowerCase())) || [],
+    () => analytics?.productSales.filter((ps) => ps.displayName.toLowerCase().includes(searchTerm.toLowerCase())) || [],
     [analytics, searchTerm]
   );
 
   const filteredLeastProductSales = useMemo(
-    () =>
-      analytics?.leastProductSales.filter((ps) => ps.displayName.toLowerCase().includes(searchTerm.toLowerCase())) || [],
+    () => analytics?.leastProductSales.filter((ps) => ps.displayName.toLowerCase().includes(searchTerm.toLowerCase())) || [],
     [analytics, searchTerm]
   );
 
   const filteredDepartmentSales = useMemo(
-    () =>
-      analytics?.departmentSales.filter((ds) => ds.displayName.toLowerCase().includes(searchTerm.toLowerCase())) || [],
+    () => analytics?.departmentSales.filter((ds) => ds.displayName.toLowerCase().includes(searchTerm.toLowerCase())) || [],
     [analytics, searchTerm]
   );
 
   const filteredLeastDepartmentSales = useMemo(
-    () =>
-      analytics?.leastDepartmentSales.filter((ds) => ds.displayName.toLowerCase().includes(searchTerm.toLowerCase())) || [],
+    () => analytics?.leastDepartmentSales.filter((ds) => ds.displayName.toLowerCase().includes(searchTerm.toLowerCase())) || [],
     [analytics, searchTerm]
   );
 

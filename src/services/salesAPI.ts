@@ -237,7 +237,7 @@ export const salesAPI = {
     });
     return response;
   },
-  getBranchAnalytics: async (params: AnalyticsParams) => {
+   getBranchAnalytics: async (params: AnalyticsParams) => {
     console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Sending:`, params);
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid branch ID:`, params.branch);
