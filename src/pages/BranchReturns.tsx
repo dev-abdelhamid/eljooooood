@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useCallback, useEffect, useReducer } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
@@ -16,7 +15,6 @@ enum ReturnStatus {
   APPROVED = 'approved',
   REJECTED = 'rejected',
 }
-
 enum ReturnReason {
   DAMAGED_AR = 'تالف',
   WRONG_ITEM_AR = 'منتج خاطئ',
@@ -48,7 +46,16 @@ interface Return {
   branch: { _id: string; name: string; nameEn: string; displayName: string } | null;
   items: Array<{
     itemId: string;
-    product: { _id: string; name: string; nameEn: string; unit: string; unitEn: string; department: { name: string; nameEn: string } | null };
+    product: { 
+      _id: string; 
+      name: string; 
+      nameEn: string; 
+      unit: string; 
+      unitEn: string; 
+      displayName: string; 
+      displayUnit: string;
+      department: { name: string; nameEn: string; displayName: string } | null 
+    };
     quantity: number;
     reason: string;
     reasonEn: string;
@@ -64,11 +71,12 @@ interface AvailableItem {
   productName: string;
   available: number;
   unit: string;
+  displayUnit: string;
   departmentName: string;
   stock: number;
 }
 
-// Translations
+// Translations (unchanged)
 const translations = {
   ar: {
     title: 'إدارة طلبات الإرجاع',
@@ -129,6 +137,7 @@ const translations = {
       branchNotFound: 'الفرع غير موجود',
       productNotFound: 'المنتج غير موجود',
       socketInit: 'خطأ في تهيئة الاتصال بالخادم',
+      invalidReasonPair: 'سبب الإرجاع وسبب الإرجاع بالإنجليزية غير متطابقين',
     },
     socket: {
       connected: 'تم الاتصال بالخادم',
@@ -200,6 +209,7 @@ const translations = {
       branchNotFound: 'Branch not found',
       productNotFound: 'Product not found',
       socketInit: 'Error initializing server connection',
+      invalidReasonPair: 'Return reason and English reason do not match',
     },
     socket: {
       connected: 'Connected to server',
@@ -214,7 +224,7 @@ const translations = {
   },
 };
 
-// QuantityInput Component (reused from BranchInventory)
+// QuantityInput Component (unchanged)
 const QuantityInput = ({
   value,
   onChange,
@@ -275,7 +285,7 @@ const QuantityInput = ({
   );
 };
 
-// Reducer for return form (reused from BranchInventory)
+// Reducer for return form (unchanged)
 type ReturnFormAction =
   | { type: 'SET_NOTES'; payload: string }
   | { type: 'ADD_ITEM'; payload: ReturnItem }
@@ -302,7 +312,7 @@ const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): Re
   }
 };
 
-// Validate ObjectId
+// Validate ObjectId (unchanged)
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 
 export const BranchReturns: React.FC = () => {
@@ -324,7 +334,7 @@ export const BranchReturns: React.FC = () => {
 
   const RETURNS_PER_PAGE = 10;
 
-  // Custom debounce hook
+  // Custom debounce hook (unchanged)
   const useDebouncedState = <T,>(initialValue: T, delay: number) => {
     const [value, setValue] = useState<T>(initialValue);
     const [debouncedValue, setDebouncedValue] = useState<T>(initialValue);
@@ -351,6 +361,7 @@ export const BranchReturns: React.FC = () => {
         search: debouncedSearchQuery,
         page: currentPage,
         limit: RETURNS_PER_PAGE,
+        context: { isRtl } // Pass context for virtual fields
       };
       const response = await returnsAPI.getAll(query);
       return {
@@ -362,7 +373,7 @@ export const BranchReturns: React.FC = () => {
                 _id: ret.branch._id,
                 name: ret.branch.name,
                 nameEn: ret.branch.nameEn || ret.branch.name,
-                displayName: isRtl ? ret.branch.name : ret.branch.nameEn || ret.branch.name,
+                displayName: ret.branch.displayName || (isRtl ? ret.branch.name : ret.branch.nameEn || ret.branch.name),
               }
             : null,
           items: Array.isArray(ret.items)
@@ -374,10 +385,13 @@ export const BranchReturns: React.FC = () => {
                   nameEn: item.product?.nameEn || item.product?.name || t.product,
                   unit: item.product?.unit || t.unit,
                   unitEn: item.product?.unitEn || item.product?.unit || 'N/A',
+                  displayName: item.product?.displayName || (isRtl ? item.product?.name : item.product?.nameEn || item.product?.name) || t.product,
+                  displayUnit: item.product?.displayUnit || (isRtl ? item.product?.unit : item.product?.unitEn || item.product?.unit) || 'N/A',
                   department: item.product?.department
                     ? {
                         name: item.product.department.name,
                         nameEn: item.product.department.nameEn || item.product.department.name,
+                        displayName: item.product.department.displayName || (isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name),
                       }
                     : null,
                 },
@@ -412,19 +426,19 @@ export const BranchReturns: React.FC = () => {
         .filter((item: any) => item.currentStock > 0 && item.product)
         .map((item: any) => ({
           productId: item.product._id,
-          productName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
+          productName: item.product.displayName || (isRtl ? item.product.name : item.product.nameEn || item.product.name),
           available: item.currentStock,
-          unit: isRtl ? item.product.unit || t.unit : item.product.unitEn || item.product.unit || 'N/A',
-          departmentName: isRtl
-            ? item.product.department?.name || 'Unknown'
-            : item.product.department?.nameEn || item.product.department?.name || 'Unknown',
+          unit: item.product.unit || t.unit,
+          displayUnit: item.product.displayUnit || (isRtl ? item.product.unit : item.product.unitEn || item.product.unit) || 'N/A',
+          departmentName: item.product.department?.displayName || (isRtl ? item.product.department?.name : item.product.department?.nameEn || item.product.department?.name) || 'Unknown',
+          stock: item.currentStock,
         }));
     },
     enabled: !!user?.branchId,
     staleTime: 5 * 60 * 1000,
   });
 
-  // Socket Events
+  // Socket Events (unchanged)
   useEffect(() => {
     if (!socket || !user?.branchId) return;
 
@@ -462,7 +476,7 @@ export const BranchReturns: React.FC = () => {
     };
   }, [socket, user, queryClient, t, isRtl]);
 
-  // Status Options
+  // Status Options (unchanged)
   const statusOptions = useMemo(
     () => [
       { value: '', label: t.status.all },
@@ -473,7 +487,7 @@ export const BranchReturns: React.FC = () => {
     [t]
   );
 
-  // Reason Options
+  // Reason Options (unchanged)
   const reasonOptions = useMemo(
     () => [
       { value: '', label: t.selectReason, enValue: '' },
@@ -491,7 +505,7 @@ export const BranchReturns: React.FC = () => {
       { value: '', label: t.selectProduct },
       ...availableItems.map((item) => ({
         value: item.productId,
-        label: `${item.productName} (${t.quantity}: ${item.available} ${item.unit})`,
+        label: `${item.productName} (${t.quantity}: ${item.available} ${item.displayUnit})`,
       })),
     ],
     [availableItems, t]
@@ -504,7 +518,7 @@ export const BranchReturns: React.FC = () => {
     }
   }, [inventoryData]);
 
-  // Filtered and Paginated Returns
+  // Filtered and Paginated Returns (unchanged)
   const filteredReturns = useMemo(
     () =>
       (returnsData?.returns || []).filter(
@@ -575,6 +589,15 @@ export const BranchReturns: React.FC = () => {
         type: 'UPDATE_ITEM',
         payload: { index, field: 'quantity', value: 1 },
       });
+      // Reset reason and reasonEn to ensure consistency
+      dispatchReturnForm({
+        type: 'UPDATE_ITEM',
+        payload: { index, field: 'reason', value: '' },
+      });
+      dispatchReturnForm({
+        type: 'UPDATE_ITEM',
+        payload: { index, field: 'reasonEn', value: '' },
+      });
     },
     [inventoryData]
   );
@@ -586,7 +609,7 @@ export const BranchReturns: React.FC = () => {
   const validateReturnForm = useCallback(() => {
     const errors: Record<string, string> = {};
     if (!user?.branchId) {
-      errors.form = t.errors.noBranch;
+      errors.form = t.Errors.noBranch;
     }
     if (returnForm.items.length === 0) {
       errors.items = t.errors.required.replace('{field}', t.items);
@@ -602,6 +625,11 @@ export const BranchReturns: React.FC = () => {
       }
       if (!item.reasonEn) {
         errors[`item_${index}_reasonEn`] = t.errors.required.replace('{field}', t.reason);
+      } else {
+        const selectedReason = reasonOptions.find((opt) => opt.value === item.reason);
+        if (selectedReason && selectedReason.enValue !== item.reasonEn) {
+          errors[`item_${index}_reasonEn`] = t.errors.invalidReasonPair;
+        }
       }
       if (item.quantity < 1 || item.quantity > item.maxQuantity || isNaN(item.quantity)) {
         errors[`item_${index}_quantity`] = t.errors.invalidQuantityMax.replace('{max}', item.maxQuantity.toString());
@@ -615,7 +643,7 @@ export const BranchReturns: React.FC = () => {
     });
     setReturnErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [returnForm, t, inventoryData, user]);
+  }, [returnForm, t, inventoryData, user, reasonOptions]);
 
   const createReturnMutation = useMutation<{ returnId: string }, Error, void>({
     mutationFn: async () => {
@@ -632,7 +660,7 @@ export const BranchReturns: React.FC = () => {
         notes: returnForm.notes || undefined,
       };
       const response = await returnsAPI.createReturn(data);
-      return { returnId: response?.returnRequest?._id || crypto.randomUUID() };
+      return { returnId: response?._id || crypto.randomUUID() };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['returns'] });
@@ -658,6 +686,8 @@ export const BranchReturns: React.FC = () => {
         errorMessage = t.errors.invalidForm;
       } else if (err.message.includes('المنتج غير موجود') || err.message.includes('Product not found')) {
         errorMessage = t.errors.productNotFound;
+      } else if (err.message.includes('Invalid reason pair')) {
+        errorMessage = t.errors.invalidReasonPair;
       }
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       setReturnErrors({ form: errorMessage });
@@ -707,10 +737,10 @@ export const BranchReturns: React.FC = () => {
               <div className="flex flex-col gap-2">
                 {ret.items.map((item, index) => (
                   <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100">
-                    <p className="text-sm font-medium text-gray-900">{item.product.name}</p>
+                    <p className="text-sm font-medium text-gray-900">{item.product.displayName}</p>
                     <p className="text-sm text-gray-600">{t.quantity}: {item.quantity}</p>
-                    <p className="text-sm text-gray-600">{t.unit}: {isRtl ? item.product.unit : item.product.unitEn}</p>
-                    <p className="text-sm text-gray-600">{t.department}: {item.product.department?.name || 'N/A'}</p>
+                    <p className="text-sm text-gray-600">{t.unit}: {item.product.displayUnit}</p>
+                    <p className="text-sm text-gray-600">{t.department}: {item.product.department?.displayName || 'N/A'}</p>
                     <p className="text-sm text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
                   </div>
                 ))}
@@ -751,10 +781,7 @@ export const BranchReturns: React.FC = () => {
   );
 
   return (
-    <div
-      className=" mx-auto px-4 py-8 min-h-screen "
-      dir={isRtl ? 'rtl' : 'ltr'}
-    >
+    <div className="mx-auto px-4 py-8 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
       <div className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <Package className="w-7 h-7 text-amber-600" />
@@ -854,7 +881,7 @@ export const BranchReturns: React.FC = () => {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1  gap-6">
+        <div className="grid grid-cols-1 gap-6">
           <AnimatePresence>
             {paginatedReturns.map((ret) => (
               <ReturnCard key={ret._id} ret={ret} />
@@ -1081,10 +1108,10 @@ export const BranchReturns: React.FC = () => {
                 <p className="text-sm font-medium text-gray-700 mb-2">{t.items}</p>
                 {selectedReturn.items.map((item, index) => (
                   <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100 mb-2">
-                    <p className="text-sm font-medium text-gray-900">{item.product.name}</p>
+                    <p className="text-sm font-medium text-gray-900">{item.product.displayName}</p>
                     <p className="text-sm text-gray-600">{t.quantity}: {item.quantity}</p>
-                    <p className="text-sm text-gray-600">{t.unit}: {isRtl ? item.product.unit : item.product.unitEn}</p>
-                    <p className="text-sm text-gray-600">{t.department}: {item.product.department?.name || 'N/A'}</p>
+                    <p className="text-sm text-gray-600">{t.unit}: {item.product.displayUnit}</p>
+                    <p className="text-sm text-gray-600">{t.department}: {item.product.department?.displayName || 'N/A'}</p>
                     <p className="text-sm text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
                   </div>
                 ))}
@@ -1097,7 +1124,7 @@ export const BranchReturns: React.FC = () => {
                 </div>
               )}
               {selectedReturn.reviewNotes && (
-                <div className="p-3 bg-blue-50 rounded-md border border-blue-100">
+                <div className="pivilian p-3 bg-blue-50 rounded-md border border-blue-100">
                   <p className="text-sm text-blue-800">
                     <strong>{t.reviewNotes}:</strong> {selectedReturn.reviewNotes}
                   </p>
