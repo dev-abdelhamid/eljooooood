@@ -248,8 +248,7 @@ export const BranchFilter = React.memo<{
   onChange: (value: string) => void;
   placeholder: string;
   allBranchesLabel: string;
-  disabled?: boolean;
-}>(({ branches, selectedBranch, onChange, placeholder, allBranchesLabel, disabled = false }) => {
+}>(({ branches, selectedBranch, onChange, placeholder, allBranchesLabel }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
@@ -257,9 +256,8 @@ export const BranchFilter = React.memo<{
       <select
         value={selectedBranch}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-full ${isRtl ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`w-full ${isRtl ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria`}
         aria-label={placeholder}
-        disabled={disabled}
       >
         <option value="">{allBranchesLabel}</option>
         {branches.map((branch) => (
@@ -269,7 +267,7 @@ export const BranchFilter = React.memo<{
         ))}
       </select>
       <ChevronDown
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5 group-focus-within:text-amber-500 ${disabled ? 'opacity-50' : ''}`}
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5 group-focus-within:text-amber-500`}
       />
     </div>
   );
@@ -572,14 +570,15 @@ export const BranchSalesAnalytics: React.FC = () => {
                 />
               </>
             )}
-            <BranchFilter
-              branches={branches}
-              selectedBranch={filterBranch}
-              onChange={setFilterBranch}
-              placeholder={t.branchFilter}
-              allBranchesLabel={t.allBranches}
-              disabled={user?.role === 'branch'}
-            />
+            {user?.role === 'admin' && (
+              <BranchFilter
+                branches={branches}
+                selectedBranch={filterBranch}
+                onChange={setFilterBranch}
+                placeholder={t.branchFilter}
+                allBranchesLabel={t.allBranches}
+              />
+            )}
           </div>
         </div>
         {loading ? (
