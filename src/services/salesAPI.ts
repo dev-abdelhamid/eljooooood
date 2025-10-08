@@ -138,14 +138,6 @@ interface SaleData {
   customerPhone?: string;
 }
 
-interface UpdateData {
-  items?: Array<{ productId: string; quantity: number; unitPrice: number }>;
-  notes?: string;
-  paymentMethod?: string;
-  customerName?: string;
-  customerPhone?: string;
-}
-
 // واجهة للمعاملات
 interface AnalyticsParams {
   branch?: string;
@@ -178,29 +170,6 @@ export const salesAPI = {
     }
     const response = await salesAxios.post('/sales', saleData);
     console.log(`[${new Date().toISOString()}] salesAPI.create - Success:`, response);
-    return response;
-  },
-
-  update: async (id: string, updateData: UpdateData) => {
-    console.log(`[${new Date().toISOString()}] salesAPI.update - Sending:`, { id, updateData });
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid sale ID:`, id);
-      throw new Error(isRtl ? 'معرف المبيعة غير صالح' : 'Invalid sale ID');
-    }
-    if (updateData.items && (!updateData.items.length || updateData.items.some((item) => !isValidObjectId(item.productId) || item.quantity < 1 || item.unitPrice < 0))) {
-      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid items:`, updateData.items);
-      throw new Error(isRtl ? 'بيانات المنتجات غير صالحة' : 'Invalid product data');
-    }
-    if (updateData.customerPhone && !isValidPhone(updateData.customerPhone)) {
-      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid customer phone:`, updateData.customerPhone);
-      throw new Error(isRtl ? 'رقم هاتف العميل غير صالح' : 'Invalid customer phone');
-    }
-    if (updateData.paymentMethod && !isValidPaymentMethod(updateData.paymentMethod)) {
-      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid payment method:`, updateData.paymentMethod);
-      throw new Error(isRtl ? 'طريقة الدفع غير صالحة' : 'Invalid payment method');
-    }
-    const response = await salesAxios.put(`/sales/${id}`, updateData);
-    console.log(`[${new Date().toISOString()}] salesAPI.update - Success:`, response);
     return response;
   },
 
