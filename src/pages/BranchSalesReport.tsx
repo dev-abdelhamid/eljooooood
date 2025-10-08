@@ -222,7 +222,7 @@ const SaleCard = React.memo<{
           ))}
           <div className="flex justify-between items-center font-bold text-gray-900 text-base border-t pt-2 mt-2">
             <span>{t.total}:</span>
-            <span className="text-green-500">{sale.totalAmount.toFixed(2)} {t.currency}</span>
+            <span className="text-teal-600">{sale.totalAmount.toFixed(2)} {t.currency}</span>
           </div>
         </div>
         {sale.returns && sale.returns.length > 0 && (
