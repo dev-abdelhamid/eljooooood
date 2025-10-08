@@ -42,11 +42,7 @@ const translations = {
       invalid_data: 'بيانات غير صالحة من الخادم',
     },
     currency: 'ريال',
-    paymentMethods: {
-      cash: 'نقدي',
-      card: 'بطاقة',
-      unknown: 'غير معروف',
-    },
+  
   },
   en: {
     title: 'Sales Analytics',
@@ -81,11 +77,7 @@ const translations = {
       invalid_data: 'Invalid data from server',
     },
     currency: 'SAR',
-    paymentMethods: {
-      cash: 'Cash',
-      card: 'Card',
-      unknown: 'Unknown',
-    },
+   
   },
 };
 
