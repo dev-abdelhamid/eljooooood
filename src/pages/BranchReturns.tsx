@@ -1,415 +1,714 @@
-// src/pages/BranchReturns.tsx
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useReducer } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useLanguage } from '../contexts/LanguageContext';
-import { useAuth } from '../contexts/AuthContext';
-import { returnsAPI, ordersAPI, inventoryAPI } from '../services/api';
-import { Card } from '../components/UI/Card';
-import { Button } from '../components/UI/Button';
-import { Input } from '../components/UI/Input';
-import { Select } from '../components/UI/Select';
-import { Modal } from '../components/UI/Modal';
-import { Package, Eye, Clock, Check, AlertCircle, Search, Download, Plus, X } from 'lucide-react';
-import { io } from 'socket.io-client';
-import { debounce } from 'lodash';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Package, Eye, Clock, Check, AlertCircle, Search, Download, Plus, X } from 'lucide-react';
+import { returnsAPI, inventoryAPI } from '../services/api';
+import { ProductSearchInput, ProductDropdown } from './NewOrder';
+import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
+import { useSocket } from '../contexts/SocketContext';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { formatDate } from '../utils/formatDate';
-import 'react-toastify/dist/ReactToastify.css';
-import 'tailwindcss/tailwind.css';
 
-const RETURNS_PER_PAGE = 10;
+// Enums for type safety
+enum ReturnStatus {
+  PENDING = 'pending_approval',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
+}
 
-const BranchReturns = () => {
-  const { t, language } = useLanguage();
+enum ReturnReason {
+  DAMAGED_AR = 'تالف',
+  WRONG_ITEM_AR = 'منتج خاطئ',
+  EXCESS_QUANTITY_AR = 'كمية زائدة',
+  OTHER_AR = 'أخرى',
+  DAMAGED_EN = 'Damaged',
+  WRONG_ITEM_EN = 'Wrong Item',
+  EXCESS_QUANTITY_EN = 'Excess Quantity',
+  OTHER_EN = 'Other',
+}
+
+// Interfaces
+interface ReturnItem {
+  productId: string;
+  quantity: number;
+  reason: string;
+  reasonEn: string;
+  maxQuantity: number;
+}
+
+interface ReturnFormState {
+  notes: string;
+  items: ReturnItem[];
+}
+
+interface Return {
+  _id: string;
+  returnNumber: string;
+  branch: { _id: string; name: string; nameEn: string; displayName: string } | null;
+  items: Array<{
+    itemId: string;
+    product: { _id: string; name: string; nameEn: string; unit: string; unitEn: string; department: { name: string; nameEn: string } | null };
+    quantity: number;
+    reason: string;
+    reasonEn: string;
+  }>;
+  status: ReturnStatus;
+  createdAt: string;
+  notes: string;
+  reviewNotes: string;
+}
+
+interface AvailableItem {
+  productId: string;
+  productName: string;
+  available: number;
+  unit: string;
+  departmentName: string;
+  stock: number;
+}
+
+// Translations
+const translations = {
+  ar: {
+    title: 'إدارة طلبات الإرجاع',
+    subtitle: 'إنشاء ومتابعة طلبات الإرجاع للفرع',
+    noReturns: 'لا توجد طلبات إرجاع',
+    returnNumber: 'رقم الإرجاع',
+    statusLabel: 'الحالة',
+    date: 'التاريخ',
+    itemsCount: 'عدد العناصر',
+    branch: 'الفرع',
+    notesLabel: 'ملاحظات',
+    reviewNotes: 'ملاحظات المراجعة',
+    noNotes: 'لا توجد ملاحظات',
+    createReturn: 'إنشاء طلب إرجاع',
+    viewReturn: 'عرض طلب الإرجاع',
+    view: 'عرض',
+    searchPlaceholder: 'البحث برقم الإرجاع أو الملاحظات...',
+    filterStatus: 'تصفية حسب الحالة',
+    allStatuses: 'جميع الحالات',
+    exportExcel: 'تصدير إلى Excel',
+    exportPdf: 'تصدير إلى PDF',
+    exportSuccess: 'تم التصدير بنجاح',
+    pdfExportSuccess: 'تم تصدير PDF بنجاح',
+    selectProduct: 'اختر منتج',
+    reason: 'سبب الإرجاع',
+    selectReason: 'اختر السبب',
+    damaged: 'تالف',
+    wrongItem: 'منتج خاطئ',
+    excessQuantity: 'كمية زائدة',
+    other: 'أخرى',
+    notesPlaceholder: 'أدخل ملاحظات إضافية (اختياري)',
+    items: 'العناصر',
+    addItem: 'إضافة عنصر',
+    removeItem: 'إزالة العنصر',
+    submitReturn: 'إرسال طلب الإرجاع',
+    createSuccess: 'تم إنشاء طلب الإرجاع بنجاح',
+    newReturnNotification: 'تم إنشاء طلب إرجاع جديد: {returnNumber}',
+    quantity: 'الكمية',
+    unit: 'الوحدة',
+    department: 'القسم',
+    product: 'المنتج',
+    status: {
+      pending: 'قيد الانتظار',
+      approved: 'موافق عليه',
+      rejected: 'مرفوض',
+      all: 'جميع الحالات',
+    },
+    pagination: {
+      previous: 'السابق',
+      next: 'التالي',
+      page: 'الصفحة {current} من {total}',
+    },
+    errors: {
+      noBranch: 'لم يتم العثور على فرع',
+      fetchReturns: 'خطأ في جلب طلبات الإرجاع',
+      createReturn: 'خطأ في إنشاء طلب الإرجاع',
+      invalidForm: 'البيانات المدخلة غير صالحة',
+      required: 'حقل {field} مطلوب',
+      invalidQuantityMax: 'الكمية يجب أن تكون بين 1 و{max}',
+      noItemSelected: 'لم يتم اختيار عنصر',
+      insufficientQuantity: 'الكمية غير كافية للمنتج في المخزون',
+      branchNotFound: 'الفرع غير موجود',
+      productNotFound: 'المنتج غير موجود',
+      pdfExport: 'خطأ في تصدير PDF',
+      socketInit: 'خطأ في تهيئة الاتصال بالخادم',
+    },
+    socket: {
+      connected: 'تم الاتصال بالخادم',
+      returnStatusUpdated: 'تم تحديث حالة الإرجاع إلى {status}',
+    },
+    common: {
+      cancel: 'إلغاء',
+      close: 'إغلاق',
+      retry: 'إعادة المحاولة',
+      submitting: 'جاري الإرسال...',
+    },
+  },
+  en: {
+    title: 'Return Requests Management',
+    subtitle: 'Create and track return requests for the branch',
+    noReturns: 'No return requests found',
+    returnNumber: 'Return Number',
+    statusLabel: 'Status',
+    date: 'Date',
+    itemsCount: 'Items Count',
+    branch: 'Branch',
+    notesLabel: 'Notes',
+    reviewNotes: 'Review Notes',
+    noNotes: 'No notes available',
+    createReturn: 'Create Return Request',
+    viewReturn: 'View Return Request',
+    view: 'View',
+    searchPlaceholder: 'Search by return number or notes...',
+    filterStatus: 'Filter by Status',
+    allStatuses: 'All Statuses',
+    exportExcel: 'Export to Excel',
+    exportPdf: 'Export to PDF',
+    exportSuccess: 'Export successful',
+    pdfExportSuccess: 'PDF export successful',
+    selectProduct: 'Select Product',
+    reason: 'Return Reason',
+    selectReason: 'Select Reason',
+    damaged: 'Damaged',
+    wrongItem: 'Wrong Item',
+    excessQuantity: 'Excess Quantity',
+    other: 'Other',
+    notesPlaceholder: 'Enter additional notes (optional)',
+    items: 'Items',
+    addItem: 'Add Item',
+    removeItem: 'Remove Item',
+    submitReturn: 'Submit Return Request',
+    createSuccess: 'Return request created successfully',
+    newReturnNotification: 'New return request created: {returnNumber}',
+    quantity: 'Quantity',
+    unit: 'Unit',
+    department: 'Department',
+    product: 'Product',
+    status: {
+      pending: 'Pending',
+      approved: 'Approved',
+      rejected: 'Rejected',
+      all: 'All Statuses',
+    },
+    pagination: {
+      previous: 'Previous',
+      next: 'Next',
+      page: 'Page {current} of {total}',
+    },
+    errors: {
+      noBranch: 'No branch found',
+      fetchReturns: 'Error fetching return requests',
+      createReturn: 'Error creating return request',
+      invalidForm: 'Invalid form data',
+      required: '{field} is required',
+      invalidQuantityMax: 'Quantity must be between 1 and {max}',
+      noItemSelected: 'No item selected',
+      insufficientQuantity: 'Insufficient quantity for the product in inventory',
+      branchNotFound: 'Branch not found',
+      productNotFound: 'Product not found',
+      pdfExport: 'Error exporting PDF',
+      socketInit: 'Error initializing server connection',
+    },
+    socket: {
+      connected: 'Connected to server',
+      returnStatusUpdated: 'Return status updated to {status}',
+    },
+    common: {
+      cancel: 'Cancel',
+      close: 'Close',
+      retry: 'Retry',
+      submitting: 'Submitting...',
+    },
+  },
+};
+
+// QuantityInput Component (reused from BranchInventory)
+const QuantityInput = ({
+  value,
+  onChange,
+  onIncrement,
+  onDecrement,
+  max,
+}: {
+  value: number;
+  onChange: (val: string) => void;
+  onIncrement: () => void;
+  onDecrement: () => void;
+  max?: number;
+}) => {
+  const { language } = useLanguage();
   const isRtl = language === 'ar';
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [selectedReturn, setSelectedReturn] = useState(null);
-  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    orderId: '',
-    branchId: user?.branchId || '',
-    reason: '',
-    notes: '',
-    items: [],
-  });
-  const [formErrors, setFormErrors] = useState({});
-  const [submitting, setSubmitting] = useState(false);
-  const [availableItems, setAvailableItems] = useState([]);
-
-  const toastOptions = useMemo(
-    () => ({
-      position: isRtl ? 'top-left' : 'top-right',
-      autoClose: 3000,
-      hideProgressBar: false,
-      closeOnClick: true,
-      pauseOnHover: true,
-      draggable: true,
-      className: 'bg-white text-gray-800 rounded-lg shadow-lg border border-gray-200 p-3',
-      progressClassName: 'bg-amber-500',
-    }),
-    [isRtl]
-  );
-
-  // Socket connection with language awareness
-  const socket = useMemo(() => {
-    const apiUrl = import.meta.env.VITE_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
-    try {
-      const socketInstance = io(apiUrl, {
-        auth: { token: localStorage.getItem('token') },
-        transports: ['websocket'],
-        autoConnect: true,
-        reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 1000,
-      });
-      return socketInstance;
-    } catch (err) {
-      console.error(`[${new Date().toISOString()}] Socket initialization error:`, err);
-      toast.error(t('errors.socket_init'), toastOptions);
-      return null;
+  const handleChange = (val: string) => {
+    const num = parseInt(val, 10);
+    if (val === '' || isNaN(num) || num < 1) {
+      onChange('1');
+      return;
     }
-  }, [t, toastOptions]);
+    if (max !== undefined && num > max) {
+      onChange(max.toString());
+      return;
+    }
+    onChange(val);
+  };
 
-  // Language-dependent options memoized to avoid re-creation on every render
-  const statusOptions = useMemo(
-    () => [
-      { value: '', label: t('returns.status.all') },
-      { value: 'pending_approval', label: t('returns.status.pending') },
-      { value: 'approved', label: t('returns.status.approved') },
-      { value: 'rejected', label: t('returns.status.rejected') },
-    ],
-    [t]
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={onDecrement}
+        className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center"
+        aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
+        disabled={value <= 1}
+      >
+        <Minus className="w-4 h-4" />
+      </button>
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => handleChange(e.target.value)}
+        max={max}
+        min={1}
+        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm min-w-[2.75rem] transition-all duration-200"
+        style={{ appearance: 'none' }}
+        aria-label={isRtl ? 'الكمية' : 'Quantity'}
+      />
+      <button
+        onClick={onIncrement}
+        className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center"
+        aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
+        disabled={max !== undefined && value >= max}
+      >
+        <Plus className="w-4 h-4 text-white" />
+      </button>
+    </div>
   );
+};
 
-  const reasonOptions = useMemo(
-    () => [
-      { value: 'تالف', label: isRtl ? 'تالف' : 'Damaged' },
-      { value: 'منتج خاطئ', label: isRtl ? 'منتج خاطئ' : 'Wrong Item' },
-      { value: 'كمية زائدة', label: isRtl ? 'كمية زائدة' : 'Excess Quantity' },
-      { value: 'أخرى', label: isRtl ? 'أخرى' : 'Other' },
-    ],
-    [isRtl]
-  );
+// Reducer for return form (reused from BranchInventory)
+type ReturnFormAction =
+  | { type: 'SET_NOTES'; payload: string }
+  | { type: 'ADD_ITEM'; payload: ReturnItem }
+  | { type: 'UPDATE_ITEM'; payload: { index: number; field: keyof ReturnItem; value: string | number } }
+  | { type: 'REMOVE_ITEM'; payload: number }
+  | { type: 'RESET' };
 
-  const STATUS_COLORS = useMemo(
-    () => ({
-      pending_approval: { color: 'bg-amber-100 text-amber-800', icon: Clock, label: t('returns.status.pending') },
-      approved: { color: 'bg-green-100 text-green-800', icon: Check, label: t('returns.status.approved') },
-      rejected: { color: 'bg-red-100 text-red-800', icon: AlertCircle, label: t('returns.status.rejected') },
-    }),
-    [t]
-  );
+const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): ReturnFormState => {
+  switch (action.type) {
+    case 'SET_NOTES':
+      return { ...state, notes: action.payload };
+    case 'ADD_ITEM':
+      return { ...state, items: [...state.items, action.payload] };
+    case 'UPDATE_ITEM':
+      const newItems = [...state.items];
+      newItems[action.payload.index] = { ...newItems[action.payload.index], [action.payload.field]: action.payload.value };
+      return { ...state, items: newItems };
+    case 'REMOVE_ITEM':
+      return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
+    case 'RESET':
+      return { notes: '', items: [] };
+    default:
+      return state;
+  }
+};
 
-  const getStatusInfo = useCallback(
-    (status) => STATUS_COLORS[status] || { color: 'bg-gray-100 text-gray-800', icon: Clock, label: t(`returns.status.${status}`) },
-    [STATUS_COLORS, t]
-  );
+// Validate ObjectId
+const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 
-  // Query for returns with language in key to refetch on language change
-  const { data: returnsData, isLoading, error } = useQuery({
-    queryKey: ['returns', filterStatus, currentPage, user?.branchId, language],
+const BranchReturns: React.FC = () => {
+  const { t: languageT, language } = useLanguage();
+  const isRtl = language === 'ar';
+  const t = translations[isRtl ? 'ar' : 'en'];
+  const { user } = useAuth();
+  const { socket } = useSocket();
+  const queryClient = useQueryClient();
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterStatus, setFilterStatus] = useState<ReturnStatus | ''>('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [selectedReturn, setSelectedReturn] = useState<Return | null>(null);
+  const [returnForm, dispatchReturnForm] = useReducer(returnFormReducer, { notes: '', items: [] });
+  const [returnErrors, setReturnErrors] = useState<Record<string, string>>({});
+  const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
+
+  const RETURNS_PER_PAGE = 10;
+
+  // Custom debounce hook
+  const useDebouncedState = <T,>(initialValue: T, delay: number) => {
+    const [value, setValue] = useState<T>(initialValue);
+    const [debouncedValue, setDebouncedValue] = useState<T>(initialValue);
+    useEffect(() => {
+      const handler = setTimeout(() => setDebouncedValue(value), delay);
+      return () => clearTimeout(handler);
+    }, [value, delay]);
+    return [value, setSearchInput, debouncedValue] as const;
+  };
+
+  const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
+
+  // Returns Query
+  const { data: returnsData, isLoading: returnsLoading, error: returnsError, refetch: refetchReturns } = useQuery<
+    { returns: Return[]; total: number },
+    Error
+  >({
+    queryKey: ['returns', user?.branchId, filterStatus, debouncedSearchQuery, currentPage, language],
     queryFn: async () => {
-      if (!user?.branchId) throw new Error(t('errors.no_branch_associated'));
-      const query = { status: filterStatus, branch: user.branchId, page: currentPage, limit: RETURNS_PER_PAGE, lang: language };
-      const { returns: returnsData, total } = await returnsAPI.getAll(query);
-      if (!Array.isArray(returnsData)) throw new Error('Invalid returns data format');
+      if (!user?.branchId) throw new Error(t.errors.noBranch);
+      const query = {
+        branch: user.branchId,
+        status: filterStatus,
+        search: debouncedSearchQuery,
+        page: currentPage,
+        limit: RETURNS_PER_PAGE,
+      };
+      const response = await returnsAPI.getAll(query);
       return {
-        returns: returnsData.map((ret) => ({
-          id: ret._id || 'unknown',
-          returnNumber: ret.returnNumber || t('returns.unknown'),
-          order: {
-            id: ret.order?._id || 'unknown',
-            orderNumber: ret.order?.orderNumber || t('orders.unknown'),
-            totalAmount: ret.order?.totalAmount || 0,
-            createdAt: ret.order?.createdAt || new Date().toISOString(),
-          },
+        returns: response.returns.map((ret: any) => ({
+          _id: ret._id,
+          returnNumber: ret.returnNumber || t.returnNumber,
+          branch: ret.branch
+            ? {
+                _id: ret.branch._id,
+                name: ret.branch.name,
+                nameEn: ret.branch.nameEn || ret.branch.name,
+                displayName: isRtl ? ret.branch.name : ret.branch.nameEn || ret.branch.name,
+              }
+            : null,
           items: Array.isArray(ret.items)
-            ? ret.items.map((item) => ({
-                itemId: item.itemId || item._id || 'unknown',
-                productId: item.product?._id || 'unknown',
-                productName: isRtl ? item.product?.name : item.product?.nameEn || t('products.unknown'),
+            ? ret.items.map((item: any) => ({
+                itemId: item.itemId || item._id,
+                product: {
+                  _id: item.product?._id || '',
+                  name: item.product?.name || t.product,
+                  nameEn: item.product?.nameEn || item.product?.name || t.product,
+                  unit: item.product?.unit || t.unit,
+                  unitEn: item.product?.unitEn || item.product?.unit || 'N/A',
+                  department: item.product?.department
+                    ? {
+                        name: item.product.department.name,
+                        nameEn: item.product.department.nameEn || item.product.department.name,
+                      }
+                    : null,
+                },
                 quantity: item.quantity || 0,
-                price: item.product?.price || 0,
-                reason: isRtl ? item.reason : item.reasonEn || item.reason || 'unknown',
-                unit: isRtl ? item.product?.unit : item.product?.unitEn || 'N/A',
-                departmentName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || 'Unknown',
+                reason: item.reason || '',
+                reasonEn: item.reasonEn || '',
               }))
             : [],
-          status: ret.status || 'pending_approval',
-          date: formatDate(ret.createdAt || new Date().toISOString(), language),
+          status: ret.status || ReturnStatus.PENDING,
           createdAt: ret.createdAt || new Date().toISOString(),
-          notes: isRtl ? ret.notes : ret.notesEn || ret.notes || '',
-          reviewNotes: isRtl ? ret.reviewNotes : ret.reviewNotesEn || ret.reviewNotes || '',
-          branch: { _id: ret.branch?._id || 'unknown', name: isRtl ? ret.branch?.name : ret.branch?.nameEn || t('branches.unknown') },
-          department: ret.order?.department || { _id: 'unknown', name: t('departments.unknown') },
+          notes: ret.notes || '',
+          reviewNotes: ret.reviewNotes || '',
         })),
-        total,
+        total: response.total || 0,
       };
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes cache to reduce re-fetches on language change
+    enabled: !!user?.branchId,
+    staleTime: 5 * 60 * 1000,
+    cacheTime: 10 * 60 * 1000,
     onError: (err) => {
-      toast.error(err.message || t('errors.fetch_returns'), toastOptions);
+      toast.error(err.message || t.errors.fetchReturns, { position: isRtl ? 'top-right' : 'top-left' });
     },
   });
 
-  // Inventory query with language in key
-  const { data: inventoryData } = useQuery({
+  // Inventory Query for Available Items
+  const { data: inventoryData } = useQuery<AvailableItem[], Error>({
     queryKey: ['inventory', user?.branchId, language],
     queryFn: async () => {
       if (!user?.branchId) return [];
       const response = await inventoryAPI.getByBranch(user.branchId);
-      return response.map((item) => ({
-        productId: item.product._id,
-        productName: isRtl ? item.product.name : item.product.nameEn,
-        currentStock: item.currentStock,
-        unit: isRtl ? item.product.unit : item.product.unitEn,
-      }));
+      return response
+        .filter((item: any) => item.currentStock > 0 && item.product)
+        .map((item: any) => ({
+          productId: item.product._id,
+          productName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
+          available: item.currentStock,
+          unit: isRtl ? item.product.unit || t.unit : item.product.unitEn || item.product.unit || 'N/A',
+          departmentName: isRtl
+            ? item.product.department?.name || t.departments?.unknown || 'Unknown'
+            : item.product.department?.nameEn || item.product.department?.name || t.departments?.unknown || 'Unknown',
+          stock: item.currentStock,
+        }));
     },
     enabled: !!user?.branchId,
     staleTime: 5 * 60 * 1000,
   });
 
-  // Delivered orders query
-  const { data: deliveredOrders } = useQuery({
-    queryKey: ['deliveredOrders', user?.branchId, language],
-    queryFn: async () => {
-      if (!user?.branchId) return [];
-      const { orders } = await ordersAPI.getAll({ branch: user.branchId, status: 'delivered' });
-      return orders || [];
-    },
-    enabled: !!user?.branchId,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  // Fetch selected order details
-  useQuery({
-    queryKey: ['selectedOrder', formData.orderId, language],
-    queryFn: async () => {
-      if (!formData.orderId) return null;
-      const order = await ordersAPI.getById(formData.orderId);
-      const items = order.items.map((i: any) => {
-        const inv = inventoryData?.find((inv: any) => inv.productId === i.product._id) || { currentStock: 0 };
-        return {
-          itemId: i._id,
-          productId: i.product._id,
-          productName: isRtl ? i.product.name : i.product.nameEn || i.product.name,
-          available: i.quantity - (i.returnedQuantity || 0),
-          unit: isRtl ? i.product.unit : i.product.unitEn || i.product.unit,
-          departmentName: isRtl ? i.product.department.name : i.product.department.nameEn || i.product.department.name,
-          stock: inv.currentStock,
-        };
-      });
-      setAvailableItems(items);
-      return order;
-    },
-    enabled: !!formData.orderId,
-  });
-
-  // Form validation function
-  const validateFormData = useCallback(() => {
-    const errors: any = {};
-    if (!formData.orderId.trim()) errors.orderId = t('errors.required', { field: t('returns.order_id') });
-    if (!formData.reason.trim()) errors.reason = t('errors.required', { field: t('returns.reason') });
-    if (formData.items.length === 0) errors.items = t('errors.required', { field: t('returns.items') });
-    formData.items.forEach((item: any, index) => {
-      if (!item.itemId) errors[`item_${index}_productId`] = t('errors.required', { field: t('returns.product') });
-      if (!item.reason.trim()) errors[`item_${index}_reason`] = t('errors.required', { field: t('returns.reason') });
-      const maxQty = item.maxQuantity || 0;
-      if (item.quantity < 1 || item.quantity > maxQty || isNaN(item.quantity)) {
-        errors[`item_${index}_quantity`] = t('errors.invalid_quantity_max', { max: maxQty });
-      }
-    });
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  }, [formData, t]);
-
-  const createReturnMutation = useMutation({
-    mutationFn: (data: any) => {
-      if (!validateFormData()) {
-        throw new Error(t('errors.invalid_form'));
-      }
-      // Map to backend format
-      const payload = {
-        orderId: data.orderId,
-        branchId: data.branchId,
-        reason: data.reason,
-        notes: data.notes,
-        items: data.items.map((item: any) => ({
-          itemId: item.itemId,
-          product: item.productId,
-          quantity: item.quantity,
-          reason: item.reason,
-        })),
-      };
-      return returnsAPI.createReturn(payload);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries(['returns']);
-      setIsCreateModalOpen(false);
-      setFormData({ orderId: '', branchId: user?.branchId || '', reason: '', notes: '', items: [] });
-      setFormErrors({});
-      setAvailableItems([]);
-      toast.success(t('returns.create_success'), toastOptions);
-    },
-    onError: (err: any) => {
-      const errorMessage = err.message || t('errors.create_return');
-      toast.error(errorMessage, toastOptions);
-      // Parse backend validation errors
-      if (err.response?.data?.errors) {
-        const backendErrors = err.response.data.errors.reduce((acc: any, error: any) => {
-          acc[error.path] = error.msg;
-          return acc;
-        }, {});
-        setFormErrors(backendErrors);
-      }
-    },
-  });
-
-  // Socket events
+  // Socket Events
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !user?.branchId) return;
+
+    const handleReturnCreated = ({ branchId, returnNumber }: { branchId: string; returnNumber: string }) => {
+      if (branchId === user.branchId) {
+        queryClient.invalidateQueries({ queryKey: ['returns'] });
+        toast.success(t.newReturnNotification.replace('{returnNumber}', returnNumber), {
+          position: isRtl ? 'top-right' : 'top-left',
+        });
+      }
+    };
+
+    const handleReturnStatusUpdated = ({ branchId, status }: { branchId: string; status: string }) => {
+      if (branchId === user.branchId) {
+        queryClient.invalidateQueries({ queryKey: ['returns'] });
+        const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
+        audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
+        toast.info(t.socket.returnStatusUpdated.replace('{status}', t.status[status as keyof typeof t.status] || status), {
+          position: isRtl ? 'top-right' : 'top-left',
+        });
+      }
+    };
+
     socket.on('connect', () => {
       socket.emit('joinRoom', { role: user?.role, branchId: user?.branchId, userId: user?._id });
-      toast.info(t('socket.connected'), toastOptions);
+      toast.info(t.socket.connected, { position: isRtl ? 'top-right' : 'top-left' });
     });
-    socket.on('returnCreated', (data) => {
-      if (data.branchId === user?.branchId) {
-        queryClient.invalidateQueries(['returns']);
-        toast.success(t('returns.new_return_notification', { returnNumber: data.returnNumber }), toastOptions);
-      }
-    });
-    socket.on('returnStatusUpdated', (data) => {
-      if (data.branchId === user?.branchId) {
-        queryClient.invalidateQueries(['returns']);
-        toast.info(t('socket.return_status_updated', { status: t(`returns.status.${data.status}`) }), toastOptions);
-      }
-    });
+    socket.on('returnCreated', handleReturnCreated);
+    socket.on('returnStatusUpdated', handleReturnStatusUpdated);
+
     return () => {
       socket.off('connect');
-      socket.off('returnCreated');
-      socket.off('returnStatusUpdated');
+      socket.off('returnCreated', handleReturnCreated);
+      socket.off('returnStatusUpdated', handleReturnStatusUpdated);
     };
-  }, [socket, user, queryClient, t, toastOptions]);
+  }, [socket, user, queryClient, t, isRtl]);
 
-  // Debounced search
-  const debouncedSetSearchQuery = useMemo(() => debounce((value) => setSearchQuery(value), 300), []);
+  // Status Options
+  const statusOptions = useMemo(
+    () => [
+      { value: '', label: t.status.all },
+      { value: ReturnStatus.PENDING, label: t.status.pending },
+      { value: ReturnStatus.APPROVED, label: t.status.approved },
+      { value: ReturnStatus.REJECTED, label: t.status.rejected },
+    ],
+    [t]
+  );
 
-  // Filtered and paginated returns
+  // Reason Options
+  const reasonOptions = useMemo(
+    () => [
+      { value: '', label: t.selectReason, enValue: '' },
+      { value: ReturnReason.DAMAGED_AR, label: t.damaged, enValue: ReturnReason.DAMAGED_EN },
+      { value: ReturnReason.WRONG_ITEM_AR, label: t.wrongItem, enValue: ReturnReason.WRONG_ITEM_EN },
+      { value: ReturnReason.EXCESS_QUANTITY_AR, label: t.excessQuantity, enValue: ReturnReason.EXCESS_QUANTITY_EN },
+      { value: ReturnReason.OTHER_AR, label: t.other, enValue: ReturnReason.OTHER_EN },
+    ],
+    [t]
+  );
+
+  // Product Options
+  const productOptions = useMemo(
+    () => [
+      { value: '', label: t.selectProduct },
+      ...availableItems.map((item) => ({
+        value: item.productId,
+        label: `${item.productName} (${t.quantity}: ${item.available} ${item.unit})`,
+      })),
+    ],
+    [availableItems, t]
+  );
+
+  // Update available items
+  useEffect(() => {
+    if (inventoryData) {
+      setAvailableItems(inventoryData);
+    }
+  }, [inventoryData]);
+
+  // Filtered and Paginated Returns
   const filteredReturns = useMemo(
     () =>
       (returnsData?.returns || []).filter(
         (ret) =>
-          ret.returnNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          ret.order.orderNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (ret.notes || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-          ret.branch.name.toLowerCase().includes(searchQuery.toLowerCase())
+          ret.returnNumber.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+          (ret.notes || '').toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+          (ret.branch?.displayName || '').toLowerCase().includes(debouncedSearchQuery.toLowerCase())
       ),
-    [returnsData, searchQuery]
-  );
-
-  const sortedReturns = useMemo(
-    () => [...filteredReturns].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
-    [filteredReturns]
+    [returnsData, debouncedSearchQuery]
   );
 
   const paginatedReturns = useMemo(
-    () => sortedReturns.slice((currentPage - 1) * RETURNS_PER_PAGE, currentPage * RETURNS_PER_PAGE),
-    [sortedReturns, currentPage]
+    () => filteredReturns.slice((currentPage - 1) * RETURNS_PER_PAGE, currentPage * RETURNS_PER_PAGE),
+    [filteredReturns, currentPage]
   );
 
-  const totalPages = Math.ceil(sortedReturns.length / RETURNS_PER_PAGE);
+  const totalPages = Math.ceil(filteredReturns.length / RETURNS_PER_PAGE);
 
-  // Form handlers
-  const handleCreateReturn = useCallback(() => {
-    setSubmitting(true);
-    createReturnMutation.mutate(formData, {
-      onSettled: () => setSubmitting(false),
-    });
-  }, [createReturnMutation, formData]);
+  // Handlers
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchInput(e.target.value);
+    setCurrentPage(1);
+  }, [setSearchInput]);
 
   const addItemToForm = useCallback(() => {
-    setFormData((prev) => ({
-      ...prev,
-      items: [...prev.items, { productId: '', itemId: '', quantity: 1, reason: '', maxQuantity: 0 }],
-    }));
+    dispatchReturnForm({
+      type: 'ADD_ITEM',
+      payload: { productId: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0 },
+    });
   }, []);
 
-  const updateItemInForm = useCallback((index: number, field: string, value: any) => {
-    setFormData((prev: any) => {
-      const newItems = [...prev.items];
-      newItems[index] = { ...newItems[index], [field]: value };
-      if (field === 'productId') {
-        const sel = availableItems.find((a: any) => a.productId === value);
-        if (sel) {
-          newItems[index].itemId = sel.itemId;
-          newItems[index].maxQuantity = Math.min(sel.available, sel.stock);
-        }
+  const updateItemInForm = useCallback(
+    (index: number, field: keyof ReturnItem, value: string | number) => {
+      if (field === 'quantity' && typeof value === 'string') {
+        const numValue = parseInt(value);
+        if (isNaN(numValue) || numValue < 1) return;
+        value = numValue;
       }
-      return { ...prev, items: newItems };
-    });
-  }, [availableItems]);
+      if (field === 'reason') {
+        const selectedReason = reasonOptions.find((opt) => opt.value === value);
+        dispatchReturnForm({
+          type: 'UPDATE_ITEM',
+          payload: { index, field: 'reason', value },
+        });
+        dispatchReturnForm({
+          type: 'UPDATE_ITEM',
+          payload: { index, field: 'reasonEn', value: selectedReason?.enValue || '' },
+        });
+      } else {
+        dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
+      }
+    },
+    [reasonOptions]
+  );
+
+  const handleProductChange = useCallback(
+    (index: number, productId: string) => {
+      const inventoryItem = inventoryData?.find((inv) => inv.productId === productId);
+      dispatchReturnForm({
+        type: 'UPDATE_ITEM',
+        payload: { index, field: 'productId', value: productId },
+      });
+      dispatchReturnForm({
+        type: 'UPDATE_ITEM',
+        payload: { index, field: 'maxQuantity', value: inventoryItem?.available || 0 },
+      });
+      dispatchReturnForm({
+        type: 'UPDATE_ITEM',
+        payload: { index, field: 'quantity', value: 1 },
+      });
+    },
+    [inventoryData]
+  );
 
   const removeItemFromForm = useCallback((index: number) => {
-    setFormData((prev: any) => ({
-      ...prev,
-      items: prev.items.filter((_: any, i: number) => i !== index),
-    }));
+    dispatchReturnForm({ type: 'REMOVE_ITEM', payload: index });
   }, []);
 
-  // Export functions
+  const validateReturnForm = useCallback(() => {
+    const errors: Record<string, string> = {};
+    if (!user?.branchId) {
+      errors.form = t.errors.noBranch;
+    }
+    if (returnForm.items.length === 0) {
+      errors.items = t.errors.required.replace('{field}', t.items);
+    }
+    returnForm.items.forEach((item, index) => {
+      if (!item.productId) {
+        errors[`item_${index}_productId`] = t.errors.required.replace('{field}', t.product);
+      } else if (!isValidObjectId(item.productId)) {
+        errors[`item_${index}_productId`] = t.errors.productNotFound;
+      }
+      if (!item.reason) {
+        errors[`item_${index}_reason`] = t.errors.required.replace('{field}', t.reason);
+      }
+      if (!item.reasonEn) {
+        errors[`item_${index}_reasonEn`] = t.errors.required.replace('{field}', t.reason);
+      }
+      if (item.quantity < 1 || item.quantity > item.maxQuantity || isNaN(item.quantity)) {
+        errors[`item_${index}_quantity`] = t.errors.invalidQuantityMax.replace('{max}', item.maxQuantity.toString());
+      }
+      const inventoryItem = inventoryData?.find((inv) => inv.productId === item.productId);
+      if (!inventoryItem) {
+        errors[`item_${index}_productId`] = t.errors.productNotFound;
+      } else if (item.quantity > inventoryItem.available) {
+        errors[`item_${index}_quantity`] = t.errors.insufficientQuantity;
+      }
+    });
+    setReturnErrors(errors);
+    return Object.keys(errors).length === 0;
+  }, [returnForm, t, inventoryData, user]);
+
+  const createReturnMutation = useMutation<{ returnId: string }, Error, void>({
+    mutationFn: async () => {
+      if (!validateReturnForm()) throw new Error(t.errors.invalidForm);
+      if (!user?.branchId) throw new Error(t.errors.noBranch);
+      const data = {
+        branchId: user.branchId,
+        items: returnForm.items.map((item) => ({
+          product: item.productId,
+          quantity: item.quantity,
+          reason: item.reason,
+          reasonEn: item.reasonEn,
+        })),
+        notes: returnForm.notes || undefined,
+      };
+      const response = await returnsAPI.createReturn(data);
+      return { returnId: response?.returnRequest?._id || crypto.randomUUID() };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['returns'] });
+      setIsCreateModalOpen(false);
+      dispatchReturnForm({ type: 'RESET' });
+      setReturnErrors({});
+      toast.success(t.createSuccess, { position: isRtl ? 'top-right' : 'top-left' });
+      socket?.emit('returnCreated', {
+        branchId: user?.branchId,
+        returnId: data.returnId,
+        returnNumber: `RET-${data.returnId.slice(-6)}`,
+        status: 'pending_approval',
+        eventId: crypto.randomUUID(),
+      });
+    },
+    onError: (err) => {
+      let errorMessage = err.message || t.errors.createReturn;
+      if (err.message.includes('الفرع غير موجود') || err.message.includes('Branch not found')) {
+        errorMessage = t.errors.noBranch;
+      } else if (err.message.includes('الكمية غير كافية') || err.message.includes('Insufficient quantity')) {
+        errorMessage = t.errors.insufficientQuantity;
+      } else if (err.message.includes('بيانات العنصر غير صالحة') || err.message.includes('Invalid item data')) {
+        errorMessage = t.errors.invalidForm;
+      } else if (err.message.includes('المنتج غير موجود') || err.message.includes('Product not found')) {
+        errorMessage = t.errors.productNotFound;
+      }
+      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+      setReturnErrors({ form: errorMessage });
+    },
+  });
+
+  // Export Functions
   const exportToExcel = useCallback(() => {
-    const exportData = sortedReturns.map((ret) => ({
-      [t('returns.return_number')]: ret.returnNumber,
-      [t('returns.order_number')]: ret.order.orderNumber,
-      [t('returns.status_label')]: getStatusInfo(ret.status).label,
-      [t('returns.date')]: ret.date,
-      [t('returns.items_count')]: ret.items.length,
-      [t('returns.branch')]: ret.branch.name,
-      [t('returns.notes_label')]: ret.notes || t('returns.no_notes'),
-      [t('returns.review_notes')]: ret.reviewNotes || t('returns.no_notes'),
+    const exportData = filteredReturns.map((ret) => ({
+      [t.returnNumber]: ret.returnNumber,
+      [t.statusLabel]: t.status[ret.status as keyof typeof t.status] || ret.status,
+      [t.date]: new Date(ret.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US'),
+      [t.itemsCount]: ret.items.length,
+      [t.branch]: ret.branch?.displayName || t.branch,
+      [t.notesLabel]: ret.notes || t.noNotes,
+      [t.reviewNotes]: ret.reviewNotes || t.noNotes,
     }));
     const ws = XLSX.utils.json_to_sheet(isRtl ? exportData.map((row) => Object.fromEntries(Object.entries(row).reverse())) : exportData);
     ws['!cols'] = Object.keys(exportData[0] || {}).map(() => ({ wpx: 120 }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Returns');
     XLSX.writeFile(wb, `Returns_${new Date().toISOString().split('T')[0]}.xlsx`);
-    toast.success(t('returns.export_success'), toastOptions);
-  }, [sortedReturns, isRtl, t, getStatusInfo]);
+    toast.success(t.exportSuccess, { position: isRtl ? 'top-right' : 'top-left' });
+  }, [filteredReturns, isRtl, t]);
 
-  const exportToPDF = useCallback(async () => {
+  const exportToPDF = useCallback(() => {
     try {
       const doc = new jsPDF({ orientation: 'landscape' });
-      const fontName = 'Amiri';
-      // Simplified font loading for demo - in production, use proper font loading
-      doc.setFont('helvetica'); // Fallback
-      const headers = [
-        t('returns.return_number'),
-        t('returns.order_number'),
-        t('returns.status_label'),
-        t('returns.date'),
-        t('returns.items_count'),
-        t('returns.branch'),
-        t('returns.notes_label'),
-        t('returns.review_notes'),
-      ];
-      const data = sortedReturns.map((ret) => [
+      doc.setFont('Amiri', 'normal');
+      const headers = [t.returnNumber, t.statusLabel, t.date, t.itemsCount, t.branch, t.notesLabel, t.reviewNotes];
+      const data = filteredReturns.map((ret) => [
         ret.returnNumber,
-        ret.order.orderNumber,
-        getStatusInfo(ret.status).label,
-        ret.date,
+        t.status[ret.status as keyof typeof t.status] || ret.status,
+        new Date(ret.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US'),
         ret.items.length.toString(),
-        ret.branch.name,
-        ret.notes || t('returns.no_notes'),
-        ret.reviewNotes || t('returns.no_notes'),
+        ret.branch?.displayName || t.branch,
+        ret.notes || t.noNotes,
+        ret.reviewNotes || t.noNotes,
       ]);
       const finalHeaders = isRtl ? headers.reverse() : headers;
       const finalData = isRtl ? data.map((row) => row.reverse()) : data;
@@ -417,496 +716,488 @@ const BranchReturns = () => {
         head: [finalHeaders],
         body: finalData,
         theme: 'grid',
-        headStyles: { fillColor: [41, 128, 185], textColor: 255, fontSize: 10, halign: isRtl ? 'right' : 'left' },
-        bodyStyles: { fontSize: 9, halign: isRtl ? 'right' : 'left', cellPadding: 4 },
+        headStyles: { fillColor: [255, 193, 7], textColor: 0, fontSize: 10, halign: isRtl ? 'right' : 'left', font: 'Amiri' },
+        bodyStyles: { fontSize: 9, halign: isRtl ? 'right' : 'left', cellPadding: 4, font: 'Amiri' },
         columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 30 } },
         margin: { top: 20 },
       });
       doc.save(`Returns_${new Date().toISOString().split('T')[0]}.pdf`);
-      toast.success(t('returns.pdf_export_success'), toastOptions);
+      toast.success(t.pdfExportSuccess, { position: isRtl ? 'top-right' : 'top-left' });
     } catch (err) {
-      console.error('PDF export error:', err);
-      toast.error(t('errors.pdf_export'), toastOptions);
+      console.error(`[${new Date().toISOString()}] PDF export error:`, err);
+      toast.error(t.errors.pdfExport, { position: isRtl ? 'top-right' : 'top-left' });
     }
-  }, [sortedReturns, isRtl, t, getStatusInfo, toastOptions]);
+  }, [filteredReturns, isRtl, t]);
 
-  // ReturnCard component (optimized)
-  const ReturnCard = useMemo(() => ({ ret }: any) => {
-    const statusInfo = getStatusInfo(ret.status);
-    const StatusIcon = statusInfo.icon;
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="flex flex-col"
-      >
-        <Card className="p-4 sm:p-5 bg-white shadow-md hover:shadow-xl transition-shadow duration-300 rounded-lg border border-gray-200">
-          <div className="flex flex-col gap-4">
-            <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${isRtl ? 'sm:flex-row-reverse' : ''}`}>
-              <h3 className="text-lg font-semibold text-gray-900">
-                {t('returns.return_number', { returnNumber: ret.returnNumber })}
-              </h3>
-              <span className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${statusInfo.color}`}>
-                <StatusIcon className="w-5 h-5" />
-                <span>{statusInfo.label}</span>
-              </span>
-            </div>
-            <div className="flex flex-col sm:grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.order_number')}</p>
-                <p className="text-base font-medium text-gray-900">{ret.order.orderNumber}</p>
+  // ReturnCard Component
+  const ReturnCard = useCallback(
+    ({ ret }: { ret: Return }) => {
+      const statusInfo = {
+        [ReturnStatus.PENDING]: { color: 'bg-amber-100 text-amber-800', icon: Clock, label: t.status.pending },
+        [ReturnStatus.APPROVED]: { color: 'bg-green-100 text-green-800', icon: Check, label: t.status.approved },
+        [ReturnStatus.REJECTED]: { color: 'bg-red-100 text-red-800', icon: AlertCircle, label: t.status.rejected },
+      }[ret.status] || { color: 'bg-gray-100 text-gray-800', icon: Clock, label: t.status.pending };
+      const StatusIcon = statusInfo.icon;
+
+      return (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="flex flex-col"
+        >
+          <div className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200">
+            <div className="flex flex-col gap-4">
+              <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${isRtl ? 'sm:flex-row-reverse' : ''}`}>
+                <h3 className="text-lg font-bold text-gray-900">{t.returnNumber}: {ret.returnNumber}</h3>
+                <span className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${statusInfo.color}`}>
+                  <StatusIcon className="w-5 h-5" />
+                  {statusInfo.label}
+                </span>
               </div>
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.items_count')}</p>
-                <p className="text-base font-medium text-gray-900">{ret.items.length} {t('returns.item')}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.date')}</p>
-                <p className="text-base font-medium text-gray-900">{ret.date}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.branch')}</p>
-                <p className="text-base font-medium text-gray-900">{ret.branch.name}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.total_amount')}</p>
-                <p className="text-base font-medium text-teal-600">{ret.items.reduce((sum: number, item: any) => sum + (item.price || 0) * item.quantity, 0)} {t('currency')}</p>
-              </div>
-            </div>
-            <div className="flex flex-col gap-2">
-              {ret.items.map((item: any, index: number) => (
-                <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100">
-                  <p className="text-base font-medium text-gray-900">{item.productName}</p>
-                  <p className="text-sm text-gray-600">{t('returns.quantity', { quantity: item.quantity })}</p>
-                  <p className="text-sm text-gray-600">{t('returns.unit', { unit: item.unit })}</p>
-                  <p className="text-sm text-gray-600">{t('returns.department', { department: item.departmentName })}</p>
-                  <p className="text-sm text-gray-600">{t('returns.reason', { reason: item.reason })}</p>
-                  {item.price && (
-                    <p className="text-sm text-gray-600">{t('returns.price', { price: item.price })} {t('currency')}</p>
-                  )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500">{t.date}</p>
+                  <p className="text-sm font-medium text-gray-900">{new Date(ret.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</p>
                 </div>
-              ))}
-            </div>
-            {ret.notes && (
-              <div className="p-3 bg-amber-50 rounded-md border border-amber-100">
-                <p className="text-sm text-amber-800"><strong>{t('returns.notes_label')}:</strong> {ret.notes}</p>
+                <div>
+                  <p className="text-sm text-gray-500">{t.itemsCount}</p>
+                  <p className="text-sm font-medium text-gray-900">{ret.items.length} {t.items}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">{t.branch}</p>
+                  <p className="text-sm font-medium text-gray-900">{ret.branch?.displayName || t.branch}</p>
+                </div>
               </div>
-            )}
-            {ret.reviewNotes && (
-              <div className="p-3 bg-blue-50 rounded-md border border-blue-100">
-                <p className="text-sm text-blue-800"><strong>{t('returns.review_notes')}:</strong> {ret.reviewNotes}</p>
+              <div className="flex flex-col gap-2">
+                {ret.items.map((item, index) => (
+                  <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100">
+                    <p className="text-sm font-medium text-gray-900">{item.product.name}</p>
+                    <p className="text-sm text-gray-600">{t.quantity}: {item.quantity}</p>
+                    <p className="text-sm text-gray-600">{t.unit}: {isRtl ? item.product.unit : item.product.unitEn}</p>
+                    <p className="text-sm text-gray-600">{t.department}: {item.product.department?.name || 'N/A'}</p>
+                    <p className="text-sm text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
+                  </div>
+                ))}
               </div>
-            )}
-            <div className="flex justify-end">
-              <Button
-                variant="primary"
-                size="md"
-                icon={Eye}
-                onClick={() => {
-                  setSelectedReturn(ret);
-                  setIsViewModalOpen(true);
-                }}
-                className="bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 py-2 transition-colors duration-200"
-                aria-label={t('returns.view_return', { returnNumber: ret.returnNumber })}
-              >
-                {t('returns.view')}
-              </Button>
+              {ret.notes && (
+                <div className="p-3 bg-amber-50 rounded-md border border-amber-100">
+                  <p className="text-sm text-amber-800">
+                    <strong>{t.notesLabel}:</strong> {ret.notes}
+                  </p>
+                </div>
+              )}
+              {ret.reviewNotes && (
+                <div className="p-3 bg-blue-50 rounded-md border border-blue-100">
+                  <p className="text-sm text-blue-800">
+                    <strong>{t.reviewNotes}:</strong> {ret.reviewNotes}
+                  </p>
+                </div>
+              )}
+              <div className="flex justify-end">
+                <button
+                  onClick={() => {
+                    setSelectedReturn(ret);
+                    setIsViewModalOpen(true);
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+                  aria-label={t.viewReturn}
+                >
+                  <Eye className="w-4 h-4 inline mr-2" />
+                  {t.view}
+                </button>
+              </div>
             </div>
           </div>
-        </Card>
-      </motion.div>
-    );
-  }, [isRtl, t, getStatusInfo]);
-
-  const Pagination = () => (
-    sortedReturns.length > RETURNS_PER_PAGE && (
-      <div className={`flex items-center justify-center gap-3 mt-6 ${isRtl ? 'flex-row-reverse' : ''}`}>
-        <Button
-          variant="secondary"
-          size="md"
-          onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-          disabled={currentPage === 1}
-          className="disabled:opacity-50 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
-          aria-label={t('pagination.previous')}
-        >
-          {t('pagination.previous')}
-        </Button>
-        <span className="text-gray-700 font-medium">{t('pagination.page', { current: currentPage, total: totalPages })}</span>
-        <Button
-          variant="secondary"
-          size="md"
-          onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-          disabled={currentPage === totalPages}
-          className="disabled:opacity-50 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
-          aria-label={t('pagination.next')}
-        >
-          {t('pagination.next')}
-        </Button>
-      </div>
-    )
+        </motion.div>
+      );
+    },
+    [t, isRtl]
   );
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.5 }}
-      className="container mx-auto px-4 sm:px-6 lg:px-8 py-8 min-h-screen bg-gray-50"
+    <div
+      className="container mx-auto px-4 py-8 min-h-screen bg-gradient-to-br from-amber-50 to-gray-50"
       dir={isRtl ? 'rtl' : 'ltr'}
     >
-      <AnimatePresence>
-        {isLoading ? (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.5 }}
-            className="min-h-screen flex items-center justify-center"
-          >
-            <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-amber-600"></div>
-          </motion.div>
-        ) : error ? (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="flex justify-center"
-          >
-            <Card className="p-6 max-w-md text-center bg-red-50 shadow-lg rounded-lg border border-red-200">
-              <div className={`flex items-center justify-center gap-3 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <AlertCircle className="w-8 h-8 text-red-600" />
-                <p className="text-lg font-semibold text-red-600">{error.message}</p>
-              </div>
-              <Button
-                variant="primary"
-                onClick={() => queryClient.invalidateQueries(['returns'])}
-                className="bg-amber-600 hover:bg-amber-700 text-white rounded-full px-6 py-2 transition-colors duration-200"
-                aria-label={t('common.retry')}
-              >
-                {t('common.retry')}
-              </Button>
-            </Card>
-          </motion.div>
-        ) : (
-          <div className="flex flex-col gap-6">
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
-              className="sticky top-0 z-10 bg-gray-50 py-4 border-b border-gray-100"
-            >
-              <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 ${isRtl ? 'sm:flex-row-reverse' : ''}`}>
-                <div>
-                  <h1 className="text-3xl font-bold text-gray-900">{t('returns.title')}</h1>
-                  <p className="text-base text-gray-600 mt-1">{t('returns.subtitle')}</p>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="primary"
-                    onClick={() => setIsCreateModalOpen(true)}
-                    className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white rounded-full px-4 py-2 transition-colors duration-200"
-                    aria-label={t('returns.create_return')}
-                  >
-                    <Plus className="w-5 h-5" />
-                    <span>{t('returns.create_return')}</span>
-                  </Button>
-                  <Button
-                    variant="primary"
-                    onClick={exportToExcel}
-                    className="flex items-center gap-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full px-4 py-2 transition-colors duration-200"
-                    aria-label={t('returns.export_excel')}
-                  >
-                    <Download className="w-5 h-5" />
-                    <span>{t('returns.export_excel')}</span>
-                  </Button>
-                  <Button
-                    variant="primary"
-                    onClick={exportToPDF}
-                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white rounded-full px-4 py-2 transition-colors duration-200"
-                    aria-label={t('returns.export_pdf')}
-                  >
-                    <Download className="w-5 h-5" />
-                    <span>{t('returns.export_pdf')}</span>
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
-              className="flex flex-col sm:flex-row gap-4 items-center"
-            >
-              <div className="relative flex-1">
-                <Search className="absolute top-1/2 transform -translate-y-1/2 left-3 w-5 h-5 text-gray-400" />
-                <Input
-                  type="text"
-                  placeholder={t('returns.search_placeholder')}
-                  value={searchQuery}
-                  onChange={(e) => debouncedSetSearchQuery(e.target.value)}
-                  className={`pl-10 pr-4 py-2 w-full rounded-full border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-transparent ${isRtl ? 'text-right' : 'text-left'}`}
-                  aria-label={t('returns.search_placeholder')}
-                />
-              </div>
-              <Select
-                value={filterStatus}
-                onChange={(e) => {
-                  setFilterStatus(e.target.value);
-                  setCurrentPage(1);
-                }}
-                options={statusOptions}
-                className="w-full sm:w-48 rounded-full border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                aria-label={t('returns.filter_status')}
-              />
-            </motion.div>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.5 }}
-              className="grid gap-6"
-            >
-              {paginatedReturns.length === 0 ? (
-                <Card className="p-6 text-center bg-gray-100 shadow-md rounded-lg border border-gray-200">
-                  <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-lg font-semibold text-gray-600">{t('returns.no_returns')}</p>
-                </Card>
-              ) : (
-                paginatedReturns.map((ret: any) => <ReturnCard key={ret.id} ret={ret} />)
-              )}
-            </motion.div>
-            <Pagination />
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Create Return Modal */}
-      <Modal
-        isOpen={isCreateModalOpen}
-        onClose={() => {
-          setIsCreateModalOpen(false);
-          setFormData({ orderId: '', branchId: user?.branchId || '', reason: '', notes: '', items: [] });
-          setFormErrors({});
-          setAvailableItems([]);
-        }}
-        title={t('returns.create_return')}
-        className="max-w-2xl"
-      >
-        <div className="flex flex-col gap-6">
-          <div className="grid gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('returns.order_id')}</label>
-              <Select
-                value={formData.orderId}
-                onChange={(e) => setFormData({ ...formData, orderId: e.target.value, items: [] })}
-                options={[
-                  { value: '', label: t('returns.select_order') },
-                  ...(deliveredOrders || []).map((order: any) => ({
-                    value: order._id,
-                    label: `${order.orderNumber} - ${formatDate(order.deliveredAt || order.createdAt, language)}`,
-                  })),
-                ]}
-                className={`w-full rounded-full border ${formErrors.orderId ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent`}
-                aria-label={t('returns.order_id')}
-              />
-              {formErrors.orderId && <p className="text-red-500 text-sm mt-1">{formErrors.orderId}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('returns.reason')}</label>
-              <Select
-                value={formData.reason}
-                onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                options={reasonOptions}
-                className={`w-full rounded-full border ${formErrors.reason ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent`}
-                aria-label={t('returns.reason')}
-              />
-              {formErrors.reason && <p className="text-red-500 text-sm mt-1">{formErrors.reason}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('returns.notes_label')}</label>
-              <Input
-                type="text"
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                className="w-full rounded-full border border-gray-300 focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                placeholder={t('returns.notes_placeholder')}
-                aria-label={t('returns.notes_label')}
-              />
-            </div>
-          </div>
+      <div className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
+        <div className="flex items-center gap-3">
+          <Package className="w-7 h-7 text-amber-600" />
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('returns.items')}</label>
-            {formData.items.map((item: any, index: number) => (
-              <div key={index} className="flex flex-col sm:flex-row gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('returns.product')}</label>
-                  <Select
-                    value={item.productId}
-                    onChange={(e) => updateItemInForm(index, 'productId', e.target.value)}
-                    options={[
-                      { value: '', label: t('returns.select_product') },
-                      ...availableItems.map((a: any) => ({
-                        value: a.productId,
-                        label: `${a.productName} (available: ${a.available}, stock: ${a.stock})`,
-                      })),
-                    ]}
-                    className={`w-full rounded-full border ${formErrors[`item_${index}_productId`] ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent`}
-                    aria-label={t('returns.product')}
-                  />
-                  {formErrors[`item_${index}_productId`] && (
-                    <p className="text-red-500 text-sm mt-1">{formErrors[`item_${index}_productId`]}</p>
-                  )}
-                </div>
-                <div className="w-24">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('returns.quantity')}</label>
-                  <Input
-                    type="number"
-                    min="1"
-                    max={item.maxQuantity}
-                    value={item.quantity}
-                    onChange={(e) => updateItemInForm(index, 'quantity', parseInt(e.target.value))}
-                    className={`w-full rounded-full border ${formErrors[`item_${index}_quantity`] ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent`}
-                    aria-label={t('returns.quantity')}
-                  />
-                  {formErrors[`item_${index}_quantity`] && (
-                    <p className="text-red-500 text-sm mt-1">{formErrors[`item_${index}_quantity`]}</p>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('returns.reason')}</label>
-                  <Select
-                    value={item.reason}
-                    onChange={(e) => updateItemInForm(index, 'reason', e.target.value)}
-                    options={reasonOptions}
-                    className={`w-full rounded-full border ${formErrors[`item_${index}_reason`] ? 'border-red-500' : 'border-gray-300'} focus:ring-2 focus:ring-amber-500 focus:border-transparent`}
-                    aria-label={t('returns.reason')}
-                  />
-                  {formErrors[`item_${index}_reason`] && (
-                    <p className="text-red-500 text-sm mt-1">{formErrors[`item_${index}_reason`]}</p>
-                  )}
-                </div>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={() => removeItemFromForm(index)}
-                  className="mt-6 bg-red-600 hover:bg-red-700 text-white rounded-full px-4 py-2 transition-colors duration-200"
-                  aria-label={t('returns.remove_item')}
-                >
-                  <X className="w-5 h-5" />
-                </Button>
-              </div>
-            ))}
-            {formErrors.items && <p className="text-red-500 text-sm mt-1">{formErrors.items}</p>}
-            <Button
-              variant="secondary"
-              onClick={addItemToForm}
-              className="mt-4 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
-              aria-label={t('returns.add_item')}
-              disabled={availableItems.length === 0}
-            >
-              {t('returns.add_item')}
-            </Button>
-          </div>
-          <div className="flex justify-end gap-3">
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setIsCreateModalOpen(false);
-                setFormData({ orderId: '', branchId: user?.branchId || '', reason: '', notes: '', items: [] });
-                setFormErrors({});
-                setAvailableItems([]);
-              }}
-              className="bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
-              aria-label={t('common.cancel')}
-            >
-              {t('common.cancel')}
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleCreateReturn}
-              disabled={submitting || createReturnMutation.isPending}
-              className="bg-amber-600 hover:bg-amber-700 text-white rounded-full px-4 py-2 transition-colors duration-200 disabled:opacity-50"
-              aria-label={t('returns.submit_return')}
-            >
-              {submitting || createReturnMutation.isPending ? t('common.submitting') : t('returns.submit_return')}
-            </Button>
+            <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
+            <p className="text-gray-600 text-sm">{t.subtitle}</p>
           </div>
         </div>
-      </Modal>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2 shadow-sm"
+            aria-label={t.createReturn}
+          >
+            <Plus className="w-4 h-4" />
+            {t.createReturn}
+          </button>
+          <button
+            onClick={exportToExcel}
+            className="px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2 shadow-sm"
+            aria-label={t.exportExcel}
+          >
+            <Download className="w-4 h-4" />
+            {t.exportExcel}
+          </button>
+          <button
+            onClick={exportToPDF}
+            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2 shadow-sm"
+            aria-label={t.exportPdf}
+          >
+            <Download className="w-4 h-4" />
+            {t.exportPdf}
+          </button>
+        </div>
+      </div>
 
-      {/* View Return Modal */}
-      <Modal
-        isOpen={isViewModalOpen}
-        onClose={() => setIsViewModalOpen(false)}
-        title={t('returns.view_return', { returnNumber: selectedReturn?.returnNumber || '' })}
-        className="max-w-2xl"
-      >
-        {selectedReturn && (
-          <div className="flex flex-col gap-6">
-            <div className="grid gap-4">
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.return_number')}</p>
-                <p className="text-base font-medium text-gray-900">{selectedReturn.returnNumber}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.order_number')}</p>
-                <p className="text-base font-medium text-gray-900">{selectedReturn.order.orderNumber}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.status_label')}</p>
-                <span
-                  className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${getStatusInfo(selectedReturn.status).color}`}
-                >
-                  {getStatusInfo(selectedReturn.status).label}
-                </span>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.date')}</p>
-                <p className="text-base font-medium text-gray-900">{selectedReturn.date}</p>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">{t('returns.branch')}</p>
-                <p className="text-base font-medium text-gray-900">{selectedReturn.branch.name}</p>
-              </div>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-700 mb-2">{t('returns.items')}</p>
-              {selectedReturn.items.map((item: any, index: number) => (
-                <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100 mb-2">
-                  <p className="text-base font-medium text-gray-900">{item.productName}</p>
-                  <p className="text-sm text-gray-600">{t('returns.quantity', { quantity: item.quantity })}</p>
-                  <p className="text-sm text-gray-600">{t('returns.unit', { unit: item.unit })}</p>
-                  <p className="text-sm text-gray-600">{t('returns.department', { department: item.departmentName })}</p>
-                  <p className="text-sm text-gray-600">{t('returns.reason', { reason: item.reason })}</p>
-                  {item.price && (
-                    <p className="text-sm text-gray-600">{t('returns.price', { price: item.price })} {t('currency')}</p>
-                  )}
+      {returnsError && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3"
+        >
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <span className="text-red-600 text-sm font-medium">{returnsError.message}</span>
+          <button
+            onClick={() => refetchReturns()}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+            aria-label={t.common.retry}
+          >
+            {t.common.retry}
+          </button>
+        </motion.div>
+      )}
+
+      <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="lg:col-span-1">
+            <ProductSearchInput
+              value={searchInput}
+              onChange={handleSearchChange}
+              placeholder={t.searchPlaceholder}
+              ariaLabel={t.searchPlaceholder}
+              className="w-full"
+            />
+          </div>
+          <div className="lg:col-span-1">
+            <ProductDropdown
+              value={filterStatus}
+              onChange={(value) => {
+                setFilterStatus(value as ReturnStatus | '');
+                setCurrentPage(1);
+              }}
+              options={statusOptions}
+              ariaLabel={t.filterStatus}
+              className="w-full"
+            />
+          </div>
+        </div>
+        <div className="mt-4 text-center text-sm text-gray-600 font-medium">
+          {isRtl ? `عدد الطلبات: ${filteredReturns.length}` : `Returns Count: ${filteredReturns.length}`}
+        </div>
+      </div>
+
+      {returnsLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <div key={i} className="p-5 bg-white rounded-xl shadow-sm border border-gray-100">
+              <div className="space-y-3 animate-pulse">
+                <div className="flex items-center justify-between">
+                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-gray-200 rounded w-1/4"></div>
                 </div>
-              ))}
-            </div>
-            {selectedReturn.notes && (
-              <div className="p-3 bg-amber-50 rounded-md border border-amber-100">
-                <p className="text-sm text-amber-800"><strong>{t('returns.notes_label')}:</strong> {selectedReturn.notes}</p>
+                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+                <div className="mt-4 flex justify-end">
+                  <div className="h-8 bg-gray-200 rounded-lg w-24"></div>
+                </div>
               </div>
-            )}
-            {selectedReturn.reviewNotes && (
-              <div className="p-3 bg-blue-50 rounded-md border border-blue-100">
-                <p className="text-sm text-blue-800"><strong>{t('returns.review_notes')}:</strong> {selectedReturn.reviewNotes}</p>
-              </div>
-            )}
-            <div className="flex justify-end">
-              <Button
-                variant="secondary"
-                onClick={() => setIsViewModalOpen(false)}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-4 py-2 transition-colors duration-200"
-                aria-label={t('common.close')}
-              >
-                {t('common.close')}
-              </Button>
             </div>
+          ))}
+        </div>
+      ) : paginatedReturns.length === 0 ? (
+        <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
+          <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-600 text-sm font-medium">{t.noReturns}</p>
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+            aria-label={t.createReturn}
+          >
+            {t.createReturn}
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <AnimatePresence>
+            {paginatedReturns.map((ret) => (
+              <ReturnCard key={ret._id} ret={ret} />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+
+      <div className="mt-6">
+        {totalPages > 1 && (
+          <div className={`flex items-center justify-center gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <button
+              onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+              disabled={currentPage === 1}
+              aria-label={t.pagination.previous}
+            >
+              {t.pagination.previous}
+            </button>
+            <span className="text-gray-700 font-medium">
+              {t.pagination.page.replace('{current}', currentPage.toString()).replace('{total}', totalPages.toString())}
+            </span>
+            <button
+              onClick={() => setCurrentPage(Math.min(currentPage + 1, totalPages))}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+              disabled={currentPage === totalPages}
+              aria-label={t.pagination.next}
+            >
+              {t.pagination.next}
+            </button>
           </div>
         )}
-      </Modal>
-    </motion.div>
+      </div>
+
+      {/* Create Return Modal */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: isCreateModalOpen ? 1 : 0 }}
+        className={`fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 ${isCreateModalOpen ? '' : 'pointer-events-none'}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t.createReturn}
+      >
+        <motion.div
+          initial={{ scale: 0.95, y: 20 }}
+          animate={{ scale: isCreateModalOpen ? 1 : 0.95, y: isCreateModalOpen ? 0 : 20 }}
+          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-lg w-full"
+        >
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-bold text-gray-900">{t.createReturn}</h2>
+            <button
+              onClick={() => {
+                setIsCreateModalOpen(false);
+                dispatchReturnForm({ type: 'RESET' });
+                setReturnErrors({});
+              }}
+              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
+              aria-label={t.common.cancel}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t.notesLabel}</label>
+              <textarea
+                value={returnForm.notes}
+                onChange={(e) => dispatchReturnForm({ type: 'SET_NOTES', payload: e.target.value })}
+                placeholder={t.notesPlaceholder}
+                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
+                rows={3}
+                aria-label={t.notesLabel}
+              />
+              {returnErrors.form && <p className="text-red-600 text-xs mt-1">{returnErrors.form}</p>}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
+              {returnForm.items.map((item, index) => (
+                <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                  <ProductDropdown
+                    value={item.productId}
+                    onChange={(value) => handleProductChange(index, value)}
+                    options={productOptions}
+                    ariaLabel={`${t.items} ${index + 1}`}
+                    placeholder={t.selectProduct}
+                    className="w-full"
+                  />
+                  {returnErrors[`item_${index}_productId`] && (
+                    <p className="text-red-600 text-xs">{returnErrors[`item_${index}_productId`]}</p>
+                  )}
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.quantity}</label>
+                      <QuantityInput
+                        value={item.quantity}
+                        onChange={(val) => updateItemInForm(index, 'quantity', val)}
+                        onIncrement={() => updateItemInForm(index, 'quantity', item.quantity + 1)}
+                        onDecrement={() => updateItemInForm(index, 'quantity', item.quantity - 1)}
+                        max={item.maxQuantity}
+                      />
+                      {returnErrors[`item_${index}_quantity`] && (
+                        <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_quantity`]}</p>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.reason}</label>
+                      <ProductDropdown
+                        value={item.reason}
+                        onChange={(value) => updateItemInForm(index, 'reason', value)}
+                        options={reasonOptions}
+                        ariaLabel={`${t.reason} ${index + 1}`}
+                        className="w-full"
+                      />
+                      {returnErrors[`item_${index}_reason`] && (
+                        <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_reason`]}</p>
+                      )}
+                      {returnErrors[`item_${index}_reasonEn`] && (
+                        <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_reasonEn`]}</p>
+                      )}
+                    </div>
+                    {returnForm.items.length > 1 && (
+                      <button
+                        onClick={() => removeItemFromForm(index)}
+                        className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 mt-6"
+                        aria-label={t.removeItem}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <button
+                onClick={addItemToForm}
+                className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
+                aria-label={t.addItem}
+                disabled={availableItems.length === 0}
+              >
+                <Plus className="w-4 h-4" />
+                {t.addItem}
+              </button>
+              {returnErrors.items && <p className="text-red-600 text-xs">{returnErrors.items}</p>}
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setIsCreateModalOpen(false);
+                  dispatchReturnForm({ type: 'RESET' });
+                  setReturnErrors({});
+                }}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
+                aria-label={t.common.cancel}
+              >
+                {t.common.cancel}
+              </button>
+              <button
+                onClick={() => createReturnMutation.mutate()}
+                disabled={createReturnMutation.isLoading}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                aria-label={createReturnMutation.isLoading ? t.common.submitting : t.submitReturn}
+              >
+                {createReturnMutation.isLoading ? t.common.submitting : t.submitReturn}
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+
+      {/* View Return Modal */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: isViewModalOpen ? 1 : 0 }}
+        className={`fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 ${isViewModalOpen ? '' : 'pointer-events-none'}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t.viewReturn}
+      >
+        <motion.div
+          initial={{ scale: 0.95, y: 20 }}
+          animate={{ scale: isViewModalOpen ? 1 : 0.95, y: isViewModalOpen ? 0 : 20 }}
+          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-lg w-full"
+        >
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-xl font-bold text-gray-900">{t.viewReturn}: {selectedReturn?.returnNumber}</h2>
+            <button
+              onClick={() => setIsViewModalOpen(false)}
+              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
+              aria-label={t.common.close}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {selectedReturn && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500">{t.returnNumber}</p>
+                  <p className="text-sm font-medium text-gray-900">{selectedReturn.returnNumber}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">{t.statusLabel}</p>
+                  <span
+                    className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
+                      selectedReturn.status === ReturnStatus.PENDING
+                        ? 'bg-amber-100 text-amber-800'
+                        : selectedReturn.status === ReturnStatus.APPROVED
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}
+                  >
+                    {t.status[selectedReturn.status as keyof typeof t.status] || selectedReturn.status}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">{t.date}</p>
+                  <p className="text-sm font-medium text-gray-900">{new Date(selectedReturn.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">{t.branch}</p>
+                  <p className="text-sm font-medium text-gray-900">{selectedReturn.branch?.displayName || t.branch}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">{t.items}</p>
+                {selectedReturn.items.map((item, index) => (
+                  <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100 mb-2">
+                    <p className="text-sm font-medium text-gray-900">{item.product.name}</p>
+                    <p className="text-sm text-gray-600">{t.quantity}: {item.quantity}</p>
+                    <p className="text-sm text-gray-600">{t.unit}: {isRtl ? item.product.unit : item.product.unitEn}</p>
+                    <p className="text-sm text-gray-600">{t.department}: {item.product.department?.name || 'N/A'}</p>
+                    <p className="text-sm text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
+                  </div>
+                ))}
+              </div>
+              {selectedReturn.notes && (
+                <div className="p-3 bg-amber-50 rounded-md border border-amber-100">
+                  <p className="text-sm text-amber-800">
+                    <strong>{t.notesLabel}:</strong> {selectedReturn.notes}
+                  </p>
+                </div>
+              )}
+              {selectedReturn.reviewNotes && (
+                <div className="p-3 bg-blue-50 rounded-md border border-blue-100">
+                  <p className="text-sm text-blue-800">
+                    <strong>{t.reviewNotes}:</strong> {selectedReturn.reviewNotes}
+                  </p>
+                </div>
+              )}
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setIsViewModalOpen(false)}
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
+                  aria-label={t.common.close}
+                >
+                  {t.common.close}
+                </button>
+              </div>
+            </div>
+          )}
+        </motion.div>
+      </motion.div>
+    </div>
   );
 };
 

@@ -166,7 +166,7 @@ export const returnsAPI = {
       reason: string;
       reasonEn?: string;
     }>;
-    notes?: string | null;
+    notes?: string ;
   }) => {
     console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Sending:`, data);
     if (
@@ -181,19 +181,14 @@ export const returnsAPI = {
       throw new Error('Invalid branch ID or item data');
     }
     try {
-      const reasonMap = {
-        'تالف': 'Damaged',
-        'منتج خاطئ': 'Wrong Item',
-        'كمية زائدة': 'Excess Quantity',
-        'أخرى': 'Other',
-      };
+    
       const response = await returnsAxios.post('/returns', {
         branchId: data.branchId,
         items: data.items.map(item => ({
           product: item.product,
           quantity: Number(item.quantity),
           reason: item.reason.trim(),
-          reasonEn: item.reasonEn ,
+          reasonEn: item.reasonEn,
         })),
         notes: data.notes ? data.notes.trim() : undefined,
       });
