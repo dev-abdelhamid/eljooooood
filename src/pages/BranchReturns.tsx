@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect, useReducer } from 're
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Eye, Clock, Check, AlertCircle, Search, Download, Plus, X } from 'lucide-react';
+import { Package, Eye, Clock, Check, AlertCircle, Minus, Download, Plus, X } from 'lucide-react';
 import { returnsAPI, inventoryAPI } from '../services/api';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -317,7 +317,7 @@ const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): Re
 // Validate ObjectId
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 
-const BranchReturns: React.FC = () => {
+export const BranchReturns: React.FC = () => {
   const { t: languageT, language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
