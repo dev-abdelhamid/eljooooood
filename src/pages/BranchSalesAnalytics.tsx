@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { toast } from 'react-toastify';
+import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
 import { salesAPI, branchesAPI } from '../services/api';
-import { formatDate } from '../utils/formatDate'; // إضافة formatDateForDisplay
+import { formatDate } from '../utils/formatDate';
 import { AlertCircle, Search, X, ChevronDown } from 'lucide-react';
+import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 
-// واجهات البيانات (بدون تغيير)
+// واجهات البيانات
 export interface Branch {
   _id: string;
   name: string;
@@ -77,7 +79,7 @@ export interface AnalyticsData {
   }>;
 }
 
-// ترجمات الواجهة (بدون تغيير)
+// ترجمات الواجهة
 export const translations = {
   ar: {
     title: 'إحصائيات الفروع',
@@ -145,20 +147,78 @@ export const translations = {
   },
 };
 
-// دالة للحصول على الترجمة بناءً على اللغة
-const getTranslation = (key: string) => {
-  const language = localStorage.getItem('language') || 'en';
-  return translations[language][key] || translations.en[key];
-};
-
 // دالة للتحقق من القيم العددية
-const safeNumber = (value: any, defaultValue: number = 0): number => {
+export const safeNumber = (value: any, defaultValue: number = 0): number => {
   return typeof value === 'number' && !isNaN(value) ? value : defaultValue;
 };
 
+// مكون البحث
+const SearchInput = React.memo<{
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  ariaLabel: string;
+}>(({ value, onChange, placeholder, ariaLabel }) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="relative group">
+      <Search
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
+      />
+      <input
+        type="text"
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        className={`w-full ${isRtl ? 'pr-10 pl-3' : 'pl-10 pr-3'} py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400`}
+      />
+      {value && (
+        <button
+          onClick={() => onChange({ target: { value: '' } } as any)}
+          className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-gray-400 hover:text-amber-500`}
+        >
+          <X className="w-5 h-5" />
+        </button>
+      )}
+    </div>
+  );
+});
+
+// مكون اختيار التاريخ
+const DateRangePicker = React.memo<{
+  startDate: string | null;
+  endDate: string | null;
+  onChange: (start: string | null, end: string | null) => void;
+}>(({ startDate, endDate, onChange }) => {
+  const { language, t } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="flex space-x-2 space-x-reverse">
+      <input
+        type="date"
+        value={startDate || ''}
+        onChange={(e) => onChange(e.target.value, endDate)}
+        className={`w-full py-2 px-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={t('filterBy') + ': ' + t('custom') + ' - ' + t('startDate')}
+      />
+      <input
+        type="date"
+        value={endDate || ''}
+        onChange={(e) => onChange(startDate, e.target.value)}
+        className={`w-full py-2 px-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 ${isRtl ? 'text-right' : 'text-left'}`}
+        aria-label={t('filterBy') + ': ' + t('custom') + ' - ' + t('endDate')}
+      />
+    </div>
+  );
+});
+
 // مكون إحصائيات الفروع
 const BranchSalesAnalytics: React.FC = () => {
-  const isRtl = localStorage.getItem('language') === 'ar';
+  const { language, t } = useLanguage();
+  const isRtl = language === 'ar';
+  const { user } = useAuth();
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
   const [filter, setFilter] = useState<'all' | 'day' | 'week' | 'month' | 'custom'>('month');
@@ -173,20 +233,20 @@ const BranchSalesAnalytics: React.FC = () => {
   const fetchBranches = useCallback(async () => {
     try {
       const response = await branchesAPI.getAll();
-      const transformedBranches = response.branches.map((branch: any) => ({
-        ...branch,
-        displayName: isRtl ? branch.name : (branch.nameEn || branch.name),
-      }));
-      setBranches(transformedBranches);
+      if (response.success) {
+        const transformedBranches = response.branches.map((branch: any) => ({
+          ...branch,
+          displayName: language === 'ar' ? branch.name : (branch.nameEn || branch.name),
+        }));
+        setBranches(transformedBranches);
+      } else {
+        toast.error(t('errors.fetch_branches'));
+      }
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Error fetching branches:`, err);
-      setError(getTranslation('errors.fetch_branches'));
-      toast.error(getTranslation('errors.fetch_branches'), {
-        position: isRtl ? 'top-right' : 'top-left',
-        autoClose: 3000,
-      });
+      toast.error(t('errors.fetch_branches'));
     }
-  }, [isRtl]);
+  }, [language, t]);
 
   // جلب الإحصائيات
   const fetchAnalytics = useCallback(
@@ -198,71 +258,72 @@ const BranchSalesAnalytics: React.FC = () => {
           branchId,
           startDate: start,
           endDate: end,
+          userBranchId: user?.branchId,
         });
         const response = await salesAPI.getBranchAnalytics({
-          branch: branchId,
+          branch: branchId || user?.branchId,
           startDate: start,
           endDate: end,
+          lang: language,
         });
-        setAnalyticsData(response);
+        if (response.success) {
+          setAnalyticsData(response);
+        } else {
+          setError(response.message || t('errors.no_analytics'));
+          setAnalyticsData(null);
+          toast.error(response.message || t('errors.no_analytics'));
+        }
       } catch (err: any) {
         console.error(`[${new Date().toISOString()}] Error fetching analytics:`, err);
-        setError(err.message || getTranslation('errors.no_analytics'));
+        setError(t('errors.fetch_analytics'));
         setAnalyticsData(null);
-        toast.error(err.message || getTranslation('errors.no_analytics'), {
-          position: isRtl ? 'top-right' : 'top-left',
-          autoClose: 3000,
-        });
+        toast.error(t('errors.fetch_analytics'));
       } finally {
         setIsLoading(false);
       }
     }, 500),
-    [isRtl]
+    [language, t, user?.branchId]
   );
 
   // تحديث التواريخ بناءً على الفلتر
-  const updateDateRange = useCallback(
-    (filterType: 'all' | 'day' | 'week' | 'month' | 'custom') => {
-      const today = new Date();
-      let start: string | null = null;
-      let end: string | null = formatDate(today); // استخدام formatDate للحصول على YYYY-MM-DD
-      switch (filterType) {
-        case 'day':
-          start = formatDate(today);
-          break;
-        case 'week':
-          start = formatDate(new Date(today.setDate(today.getDate() - 7)));
-          break;
-        case 'month':
-          start = formatDate(new Date(today.setFullYear(today.getFullYear(), today.getMonth() - 1, today.getDate())));
-          break;
-        case 'custom':
-          start = startDate; // من حقل <input type="date">، بالفعل YYYY-MM-DD
-          end = endDate; // من حقل <input type="date">، بالفعل YYYY-MM-DD
-          break;
-        case 'all':
-          start = null;
-          end = null;
-          break;
-      }
-      setFilter(filterType);
-      setStartDate(start);
-      setEndDate(end);
-      fetchAnalytics(selectedBranch, start, end);
-    },
-    [fetchAnalytics, startDate, endDate, selectedBranch]
-  );
+  const updateDateRange = useCallback((filterType: 'all' | 'day' | 'week' | 'month' | 'custom') => {
+    const today = new Date();
+    let start: string | null = null;
+    let end: string | null = formatDate(today);
+    switch (filterType) {
+      case 'day':
+        start = formatDate(today);
+        break;
+      case 'week':
+        start = formatDate(new Date(today.setDate(today.getDate() - 7)));
+        break;
+      case 'month':
+        start = formatDate(new Date(today.setFullYear(today.getFullYear(), today.getMonth() - 1, today.getDate())));
+        break;
+      case 'custom':
+        start = startDate;
+        end = endDate;
+        break;
+      case 'all':
+        start = null;
+        end = null;
+        break;
+    }
+    setFilter(filterType);
+    setStartDate(start);
+    setEndDate(end);
+    fetchAnalytics(user?.branchId || selectedBranch, start, end);
+  }, [fetchAnalytics, startDate, endDate, user?.branchId, selectedBranch]);
 
   // جلب البيانات عند تحميل المكون
   useEffect(() => {
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
     if (user?.role === 'admin') {
       fetchBranches();
     } else if (user?.role === 'branch' && user?.branchId) {
       setSelectedBranch(user.branchId);
       updateDateRange('month');
     }
-  }, [fetchBranches, updateDateRange]);
+  }, [user, fetchBranches, updateDateRange]);
 
   // معالجة البحث
   const filteredProductSales = useMemo(() => {
@@ -272,74 +333,6 @@ const BranchSalesAnalytics: React.FC = () => {
       product.displayName.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [analyticsData, searchQuery]);
-
-  // بيانات الرسم البياني
-  const chartData = useMemo(() => {
-    if (!analyticsData?.salesTrends) return null;
-    return {
-      type: 'line',
-      data: {
-        labels: analyticsData.salesTrends.map((trend) => trend.period),
-        datasets: [
-          {
-            label: getTranslation('totalSales'),
-            data: analyticsData.salesTrends.map((trend) => trend.totalSales),
-            borderColor: '#F59E0B',
-            backgroundColor: 'rgba(245, 158, 11, 0.2)',
-            fill: true,
-            tension: 0.4,
-          },
-          {
-            label: getTranslation('totalOrders'),
-            data: analyticsData.salesTrends.map((trend) => trend.saleCount),
-            borderColor: '#10B981',
-            backgroundColor: 'rgba(16, 185, 129, 0.2)',
-            fill: true,
-            tension: 0.4,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: {
-            position: 'top',
-            labels: {
-              color: isRtl ? '#1F2937' : '#F3F4F6',
-            },
-          },
-          title: {
-            display: true,
-            text: getTranslation('salesTrends'),
-            color: isRtl ? '#1F2937' : '#F3F4F6',
-          },
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            title: {
-              display: true,
-              text: getTranslation('totalSales'),
-              color: isRtl ? '#1F2937' : '#F3F4F6',
-            },
-            ticks: {
-              color: isRtl ? '#1F2937' : '#F3F4F6',
-            },
-          },
-          x: {
-            title: {
-              display: true,
-              text: getTranslation('filterBy'),
-              color: isRtl ? '#1F2937' : '#F3F4F6',
-            },
-            ticks: {
-              color: isRtl ? '#1F2937' : '#F3F4F6',
-            },
-          },
-        },
-      },
-    };
-  }, [analyticsData, isRtl]);
 
   // عرض رسالة تحميل أو خطأ
   if (isLoading) {
@@ -363,12 +356,12 @@ const BranchSalesAnalytics: React.FC = () => {
 
   return (
     <div className={`p-6 ${isRtl ? 'text-right' : 'text-left'}`}>
-      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{getTranslation('title')}</h1>
-      <p className="text-gray-600 dark:text-gray-400 mb-6">{getTranslation('subtitle')}</p>
+      <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{t('title')}</h1>
+      <p className="text-gray-600 dark:text-gray-400 mb-6">{t('subtitle')}</p>
 
       {/* فلاتر */}
       <div className="flex flex-col md:flex-row gap-4 mb-6">
-        {JSON.parse(localStorage.getItem('user') || '{}')?.role === 'admin' && (
+        {user?.role === 'admin' && (
           <div className="relative">
             <select
               value={selectedBranch || ''}
@@ -378,7 +371,7 @@ const BranchSalesAnalytics: React.FC = () => {
               }}
               className="w-full py-2 px-3 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 appearance-none"
             >
-              <option value="">{getTranslation('allBranches')}</option>
+              <option value="">{t('allBranches')}</option>
               {branches.map((branch) => (
                 <option key={branch._id} value={branch._id}>
                   {branch.displayName}
@@ -394,74 +387,118 @@ const BranchSalesAnalytics: React.FC = () => {
             onChange={(e) => updateDateRange(e.target.value as any)}
             className="w-full py-2 px-3 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 appearance-none"
           >
-            <option value="all">{getTranslation('all')}</option>
-            <option value="day">{getTranslation('day')}</option>
-            <option value="week">{getTranslation('week')}</option>
-            <option value="month">{getTranslation('month')}</option>
-            <option value="custom">{getTranslation('custom')}</option>
+            <option value="all">{t('all')}</option>
+            <option value="day">{t('day')}</option>
+            <option value="week">{t('week')}</option>
+            <option value="month">{t('month')}</option>
+            <option value="custom">{t('custom')}</option>
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" />
         </div>
         {filter === 'custom' && (
-          <div className="flex space-x-2 space-x-reverse">
-            <div className="relative">
-              <input
-                type="date"
-                value={startDate || ''}
-                onChange={(e) => {
-                  setStartDate(e.target.value);
-                  fetchAnalytics(selectedBranch, e.target.value, endDate);
-                }}
-                className={`w-full py-2 px-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 ${isRtl ? 'text-right' : 'text-left'}`}
-                aria-label={getTranslation('filterBy') + ': ' + getTranslation('custom') + ' - ' + getTranslation('startDate')}
-              />
-              {startDate && (
-                <span className="text-sm text-gray-600 dark:text-gray-400 mt-1 block">
-                  {formatDateForDisplay(new Date(startDate), isRtl ? 'ar' : 'en')}
-                </span>
-              )}
-            </div>
-            <div className="relative">
-              <input
-                type="date"
-                value={endDate || ''}
-                onChange={(e) => {
-                  setEndDate(e.target.value);
-                  fetchAnalytics(selectedBranch, startDate, e.target.value);
-                }}
-                className={`w-full py-2 px-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 ${isRtl ? 'text-right' : 'text-left'}`}
-                aria-label={getTranslation('filterBy') + ': ' + getTranslation('custom') + ' - ' + getTranslation('endDate')}
-              />
-              {endDate && (
-                <span className="text-sm text-gray-600 dark:text-gray-400 mt-1 block">
-                  {(new Date(endDate), isRtl ? 'ar' : 'en')}
-                </span>
-              )}
-            </div>
-          </div>
+          <DateRangePicker
+            startDate={startDate}
+            endDate={endDate}
+            onChange={(start, end) => {
+              setStartDate(start);
+              setEndDate(end);
+              fetchAnalytics(user?.branchId || selectedBranch, start, end);
+            }}
+          />
         )}
-        <div className="relative group">
-          <Search
-            className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${searchQuery ? 'opacity-0' : 'opacity-100'}`}
-          />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={getTranslation('searchPlaceholder')}
-            aria-label={getTranslation('searchPlaceholder')}
-            className={`w-full ${isRtl ? 'pr-10 pl-3' : 'pl-10 pr-3'} py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-colors bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400`}
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-gray-400 hover:text-amber-500`}
-            >
-              <X className="w-5 h-5" />
-            </button>
-          )}
-        </div>
+        <SearchInput
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder={t('searchPlaceholder')}
+          ariaLabel={t('searchPlaceholder')}
+        />
       </div>
+
+      {/* عرض الإحصائيات */}
+      {analyticsData && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t('totalSales')}</h3>
+            <p className="text-2xl font-bold text-amber-500">{safeNumber(analyticsData.totalSales).toLocaleString()} {t('currency')}</p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t('totalOrders')}</h3>
+            <p className="text-2xl font-bold text-amber-500">{safeNumber(analyticsData.totalCount).toLocaleString()}</p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t('averageOrderValue')}</h3>
+            <p className="text-2xl font-bold text-amber-500">{safeNumber(parseFloat(analyticsData.averageOrderValue)).toLocaleString()} {t('currency')}</p>
+          </div>
+          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{t('returnRate')}</h3>
+            <p className="text-2xl font-bold text-amber-500">{safeNumber(parseFloat(analyticsData.returnRate)).toFixed(2)}%</p>
+          </div>
+        </div>
+      )}
+
+      {/* أفضل منتج */}
+      {analyticsData?.topProduct && (
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{t('topProduct')}</h3>
+          <p className="text-gray-600 dark:text-gray-400">
+            {analyticsData.topProduct.displayName} ({analyticsData.topProduct.totalQuantity} {t('quantity')}, {analyticsData.topProduct.totalRevenue.toLocaleString()} {t('currency')})
+          </p>
+        </div>
+      )}
+
+      {/* مبيعات المنتجات */}
+      {filteredProductSales.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{t('productSales')}</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-gray-900 dark:text-gray-100">
+              <thead>
+                <tr className="border-b dark:border-gray-600">
+                  <th className={`py-2 px-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t('productSales')}</th>
+                  <th className={`py-2 px-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t('quantity')}</th>
+                  <th className={`py-2 px-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t('totalSales')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredProductSales.map((product) => (
+                  <tr key={product.productId} className="border-b dark:border-gray-600">
+                    <td className="py-2 px-4">{product.displayName}</td>
+                    <td className="py-2 px-4">{product.totalQuantity.toLocaleString()}</td>
+                    <td className="py-2 px-4">{product.totalRevenue.toLocaleString()} {t('currency')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* مبيعات الأقسام */}
+      {analyticsData?.departmentSales.length > 0 && (
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">{t('departmentSales')}</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-gray-900 dark:text-gray-100">
+              <thead>
+                <tr className="border-b dark:border-gray-600">
+                  <th className={`py-2 px-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t('departmentSales')}</th>
+                  <th className={`py-2 px-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t('quantity')}</th>
+                  <th className={`py-2 px-4 ${isRtl ? 'text-right' : 'text-left'}`}>{t('totalSales')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analyticsData.departmentSales.map((department) => (
+                  <tr key={department.departmentId} className="border-b dark:border-gray-600">
+                    <td className="py-2 px-4">{department.displayName}</td>
+                    <td className="py-2 px-4">{department.totalQuantity.toLocaleString()}</td>
+                    <td className="py-2 px-4">{department.totalRevenue.toLocaleString()} {t('currency')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
