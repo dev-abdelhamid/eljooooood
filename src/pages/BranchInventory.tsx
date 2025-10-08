@@ -9,8 +9,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
-export const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
-
 
 // Enums for type safety
 enum InventoryStatus {
@@ -20,10 +18,14 @@ enum InventoryStatus {
 }
 
 enum ReturnReason {
-  DAMAGED = 'تالف',
-  WRONG_ITEM = 'منتج خاطئ',
-  EXCESS_QUANTITY = 'كمية زائدة',
-  OTHER = 'أخرى',
+  DAMAGED_AR = 'تالف',
+  WRONG_ITEM_AR = 'منتج خاطئ',
+  EXCESS_QUANTITY_AR = 'كمية زائدة',
+  OTHER_AR = 'أخرى',
+  DAMAGED_EN = 'Damaged',
+  WRONG_ITEM_EN = 'Wrong Item',
+  EXCESS_QUANTITY_EN = 'Excess Quantity',
+  OTHER_EN = 'Other',
 }
 
 // Interfaces aligned with backend
@@ -51,6 +53,7 @@ interface ReturnItem {
   productId: string;
   quantity: number;
   reason: string;
+  reasonEn: string;
   maxQuantity: number;
 }
 
@@ -517,11 +520,11 @@ export const BranchInventory: React.FC = () => {
   // Reason options
   const reasonOptions = useMemo(
     () => [
-      { value: '', label: t.selectReason },
-      { value: ReturnReason.DAMAGED, label: t.damaged },
-      { value: ReturnReason.WRONG_ITEM, label: t.wrongItem },
-      { value: ReturnReason.EXCESS_QUANTITY, label: t.excessQuantity },
-      { value: ReturnReason.OTHER, label: t.other },
+      { value: '', label: t.selectReason, enValue: '' },
+      { value: ReturnReason.DAMAGED_AR, label: t.damaged, enValue: ReturnReason.DAMAGED_EN },
+      { value: ReturnReason.WRONG_ITEM_AR, label: t.wrongItem, enValue: ReturnReason.WRONG_ITEM_EN },
+      { value: ReturnReason.EXCESS_QUANTITY_AR, label: t.excessQuantity, enValue: ReturnReason.EXCESS_QUANTITY_EN },
+      { value: ReturnReason.OTHER_AR, label: t.other, enValue: ReturnReason.OTHER_EN },
     ],
     [t]
   );
@@ -561,7 +564,7 @@ export const BranchInventory: React.FC = () => {
       if (item?.product) {
         dispatchReturnForm({
           type: 'ADD_ITEM',
-          payload: { productId: item.product._id, quantity: 1, reason: '', maxQuantity: item.currentStock },
+          payload: { productId: item.product._id, quantity: 1, reason: '', reasonEn: '', maxQuantity: item.currentStock },
         });
       }
       setReturnErrors({});
@@ -586,7 +589,7 @@ export const BranchInventory: React.FC = () => {
   const addItemToForm = useCallback(() => {
     dispatchReturnForm({
       type: 'ADD_ITEM',
-      payload: { productId: '', quantity: 1, reason: '', maxQuantity: 0 },
+      payload: { productId: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0 },
     });
   }, []);
 
@@ -597,9 +600,21 @@ export const BranchInventory: React.FC = () => {
         if (isNaN(numValue) || numValue < 1) return;
         value = numValue;
       }
-      dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
+      if (field === 'reason') {
+        const selectedReason = reasonOptions.find(opt => opt.value === value);
+        dispatchReturnForm({
+          type: 'UPDATE_ITEM',
+          payload: { index, field: 'reason', value },
+        });
+        dispatchReturnForm({
+          type: 'UPDATE_ITEM',
+          payload: { index, field: 'reasonEn', value: selectedReason?.enValue || 'Other' },
+        });
+      } else {
+        dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
+      }
     },
-    []
+    [reasonOptions]
   );
 
   const handleProductChange = useCallback(
@@ -642,6 +657,9 @@ export const BranchInventory: React.FC = () => {
       if (!item.reason) {
         errors[`item_${index}_reason`] = t.errors.required.replace('{field}', t.reason);
       }
+      if (!item.reasonEn) {
+        errors[`item_${index}_reasonEn`] = t.errors.required.replace('{field}', t.reason);
+      }
       if (item.quantity < 1 || item.quantity > item.maxQuantity || isNaN(item.quantity)) {
         errors[`item_${index}_quantity`] = t.errors.invalidQuantityMax.replace('{max}', item.maxQuantity.toString());
       }
@@ -675,11 +693,12 @@ export const BranchInventory: React.FC = () => {
           product: item.productId,
           quantity: item.quantity,
           reason: item.reason,
+          reasonEn: item.reasonEn,
         })),
         notes: returnForm.notes || undefined,
       };
       const response = await returnsAPI.createReturn(data);
-      return { returnId: response?.returnId || crypto.randomUUID() };
+      return { returnId: response?.returnRequest?._id || crypto.randomUUID() };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -701,7 +720,7 @@ export const BranchInventory: React.FC = () => {
         errorMessage = t.errors.noBranch;
       } else if (err.message.includes('الكمية غير كافية') || err.message.includes('Insufficient quantity')) {
         errorMessage = t.errors.insufficientQuantity;
-      } else if (err.message.includes('بيانات العنصر غير صالحة') || err.message.includes('Invalid data')) {
+      } else if (err.message.includes('بيانات العنصر غير صالحة') || err.message.includes('Invalid item data')) {
         errorMessage = t.errors.invalidForm;
       } else if (err.message.includes('المنتج غير موجود') || err.message.includes('Product not found')) {
         errorMessage = t.errors.productNotFound;
@@ -1038,6 +1057,9 @@ export const BranchInventory: React.FC = () => {
                       />
                       {returnErrors[`item_${index}_reason`] && (
                         <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_reason`]}</p>
+                      )}
+                      {returnErrors[`item_${index}_reasonEn`] && (
+                        <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_reasonEn`]}</p>
                       )}
                     </div>
                     {!selectedItem && returnForm.items.length > 1 && (
