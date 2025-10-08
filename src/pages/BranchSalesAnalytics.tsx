@@ -1,45 +1,94 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import {
-  useLanguage,
-} from '../contexts/LanguageContext'; // Adjust paths to your context files
+import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
+import { salesAPI, branchesAPI } from '../services/api';
+import { formatDate } from '../utils/formatDate';
+import { AlertCircle, Search, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
-import   { useAuth } from '../contexts/AuthContext';
-import {
-  AlertCircle,
-  Search,
-  X,
-  ChevronDown,
-} from 'lucide-react';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js';
-import { Line, Bar } from 'react-chartjs-2';
-import { salesAPI, AnalyticsData, BranchStatsParams, AnalyticsParams } from '../services/salesAPI'; // Adjust path to SalesAPI.ts
-import { branchesAPI } from '../services/api'; // Adjust path to your main API file for branchesAPI
 
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend
-);
+// واجهات البيانات
+export interface Branch {
+  _id: string;
+  name: string;
+  nameEn?: string;
+  displayName: string;
+}
 
-// Translations
-const translations = {
+export interface SalesTrend {
+  period: string;
+  totalSales: number;
+  saleCount: number;
+}
+
+export interface AnalyticsData {
+  totalSales: number;
+  totalCount: number;
+  averageOrderValue: string;
+  returnRate: string;
+  topProduct: {
+    productId: string | null;
+    productName: string;
+    displayName: string;
+    totalQuantity: number;
+    totalRevenue: number;
+  };
+  branchSales: Array<{
+    branchId: string;
+    branchName: string;
+    branchNameEn?: string;
+    displayName: string;
+    totalSales: number;
+    saleCount: number;
+  }>;
+  productSales: Array<{
+    productId: string;
+    productName: string;
+    productNameEn?: string;
+    displayName: string;
+    totalQuantity: number;
+    totalRevenue: number;
+  }>;
+  leastProductSales: Array<{
+    productId: string;
+    productName: string;
+    productNameEn?: string;
+    displayName: string;
+    totalQuantity: number;
+    totalRevenue: number;
+  }>;
+  departmentSales: Array<{
+    departmentId: string;
+    departmentName: string;
+    departmentNameEn?: string;
+    displayName: string;
+    totalRevenue: number;
+    totalQuantity: number;
+  }>;
+  leastDepartmentSales: Array<{
+    departmentId: string;
+    departmentName: string;
+    departmentNameEn?: string;
+    displayName: string;
+    totalRevenue: number;
+    totalQuantity: number;
+  }>;
+  salesTrends: SalesTrend[];
+  topCustomers: Array<{
+    customerName: string;
+    customerPhone: string;
+    totalSpent: number;
+    purchaseCount: number;
+  }>;
+  returnStats: Array<{
+    status: string;
+    count: number;
+    totalQuantity: number;
+  }>;
+}
+
+// ترجمات الواجهة
+export const translations = {
   ar: {
     title: 'إحصائيات الفروع',
     subtitle: 'تحليل أداء المبيعات حسب الفروع',
@@ -52,12 +101,11 @@ const translations = {
     week: 'الأسبوع',
     month: 'الشهر',
     custom: 'مخصص',
-    startDate: 'تاريخ البدء',
-    endDate: 'تاريخ الانتهاء',
     salesTrends: 'اتجاهات المبيعات',
     totalSales: 'إجمالي المبيعات',
     totalOrders: 'عدد الطلبات',
     averageOrderValue: 'متوسط قيمة الطلب',
+    returnRate: 'معدل الإرجاع',
     topProduct: 'أفضل منتج',
     topCustomers: 'أفضل العملاء',
     productSales: 'مبيعات المنتجات',
@@ -65,7 +113,6 @@ const translations = {
     leastProductSales: 'أقل المنتجات مبيعًا',
     leastDepartmentSales: 'أقل الأقسام مبيعًا',
     quantity: 'الكمية',
-    revenue: 'الإيرادات',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       fetch_analytics: 'خطأ أثناء جلب الإحصائيات',
@@ -86,12 +133,11 @@ const translations = {
     week: 'Week',
     month: 'Month',
     custom: 'Custom',
-    startDate: 'Start Date',
-    endDate: 'End Date',
     salesTrends: 'Sales Trends',
     totalSales: 'Total Sales',
     totalOrders: 'Total Orders',
     averageOrderValue: 'Average Order Value',
+    returnRate: 'Return Rate',
     topProduct: 'Top Product',
     topCustomers: 'Top Customers',
     productSales: 'Product Sales',
@@ -99,7 +145,6 @@ const translations = {
     leastProductSales: 'Least Sold Products',
     leastDepartmentSales: 'Least Sold Departments',
     quantity: 'Quantity',
-    revenue: 'Revenue',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       fetch_analytics: 'Error fetching analytics',
@@ -110,84 +155,18 @@ const translations = {
   },
 };
 
-// Interfaces (assumed to be in SalesAPI.ts for consistency)
-interface Branch {
-  _id: string;
-  name: string;
-  nameEn?: string;
-  displayName: string;
-}
-
-interface AnalyticsData {
-  totalSales: number;
-  totalCount: number;
-  averageOrderValue: string;
-  topProduct: {
-    productId: string | null;
-    productName: string;
-    displayName: string;
-    totalQuantity: number;
-    totalRevenue: number;
-  };
-  productSales: Array<{
-    productId: string;
-    productName: string;
-    displayName: string;
-    totalQuantity: number;
-    totalRevenue: number;
-  }>;
-  leastProductSales: Array<{
-    productId: string;
-    productName: string;
-    displayName: string;
-    totalQuantity: number;
-    totalRevenue: number;
-  }>;
-  departmentSales: Array<{
-    departmentId: string;
-    departmentName: string;
-    displayName: string;
-    totalQuantity: number;
-    totalRevenue: number;
-  }>;
-  leastDepartmentSales: Array<{
-    departmentId: string;
-    departmentName: string;
-    displayName: string;
-    totalQuantity: number;
-    totalRevenue: number;
-  }>;
-  salesTrends: Array<{
-    period: string;
-    totalSales: number;
-    saleCount: number;
-  }>;
-  topCustomers: Array<{
-    customerName: string;
-    customerPhone: string;
-    totalSpent: number;
-    purchaseCount: number;
-  }>;
-  returnStats?: Array<{
-    status: string;
-    count: number;
-    totalQuantity: number;
-  }>;
-  returnRate?: string;
-}
-
-// Utility to format numbers
-const formatNumber = (num: number, language: string): string => {
-  return num.toLocaleString(language === 'ar' ? 'ar-EG' : 'en-US');
+// دالة للتحقق من القيم العددية
+export const safeNumber = (value: any, defaultValue: number = 0): number => {
+  return typeof value === 'number' && !isNaN(value) ? value : defaultValue;
 };
 
-// Search Input Component
-const SearchInput: React.FC<{
+// مكون البحث
+const SearchInput = React.memo<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder: string;
   ariaLabel: string;
-}> = React.memo(({ value, onChange, placeholder, ariaLabel }) => {
+}>(({ value, onChange, placeholder, ariaLabel }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
@@ -207,6 +186,7 @@ const SearchInput: React.FC<{
         <button
           onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
           className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
+          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
           <X className="w-5 h-5" />
         </button>
@@ -215,257 +195,310 @@ const SearchInput: React.FC<{
   );
 });
 
-// Dropdown Component
-const Dropdown: React.FC<{
-  label: string;
-  options: Array<{ value: string; label: string }>;
+// مكون القائمة المنسدلة
+export const ProductDropdown = React.memo<{
   value: string;
   onChange: (value: string) => void;
-}> = ({ label, options, value, onChange }) => {
+  options: { value: string; label: string }[];
+  ariaLabel: string;
+  disabled?: boolean;
+}>(({ value, onChange, options, ariaLabel, disabled = false }) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
+  return (
+    <div className="relative group">
+      <button
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        aria-label={ariaLabel}
+      >
+        <span className="truncate">{selectedOption.label}</span>
+        <ChevronDown className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200 w-5 h-5 text-gray-400 group-focus-within:text-amber-500`} />
+      </button>
+      {isOpen && !disabled && (
+        <div className="absolute w-full mt-2 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none">
+          {options.length > 0 ? (
+            options.map((option) => (
+              <div
+                key={option.value}
+                onClick={() => {
+                  onChange(option.value);
+                  setIsOpen(false);
+                }}
+                className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
+              >
+                {option.label}
+              </div>
+            ))
+          ) : (
+            <div className="px-4 py-2.5 text-sm text-gray-500">{isRtl ? 'لا توجد خيارات متاحة' : 'No options available'}</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
+
+// مكون فلتر الفروع
+export const BranchFilter = React.memo<{
+  branches: Branch[];
+  selectedBranch: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  allBranchesLabel: string;
+  disabled?: boolean;
+}>(({ branches, selectedBranch, onChange, placeholder, allBranchesLabel, disabled = false }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
-    <div className="relative">
-      <label className="block text-sm font-medium text-gray-700 font-alexandria mb-1">{label}</label>
-      <div className="relative">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className={`w-full ${isRtl ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria appearance-none`}
-        >
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-        <ChevronDown
-          className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5`}
-        />
-      </div>
+    <div className="relative group">
+      <select
+        value={selectedBranch}
+        onChange={(e) => onChange(e.target.value)}
+        className={`w-full ${isRtl ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        aria-label={placeholder}
+        disabled={disabled}
+      >
+        <option value="">{allBranchesLabel}</option>
+        {branches.map((branch) => (
+          <option key={branch._id} value={branch._id}>
+            {branch.displayName}
+          </option>
+        ))}
+      </select>
+      <ChevronDown
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5 group-focus-within:text-amber-500 ${disabled ? 'opacity-50' : ''}`}
+      />
     </div>
   );
-};
+});
 
-// Main Component
-const BranchSalesAnalytics: React.FC = () => {
+// المكون الرئيسي لإحصائيات الفروع
+export const BranchSalesAnalytics: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
-  const t = translations[language || 'en'];
-
+  const t = translations[isRtl ? 'ar' : 'en'];
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [selectedBranch, setSelectedBranch] = useState<string>('');
-  const [filterType, setFilterType] = useState<string>('all');
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [filterPeriod, setFilterPeriod] = useState('all');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
+  const [filterBranch, setFilterBranch] = useState(user?.role === 'branch' && user?.branchId ? user.branchId : '');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
-  // Fetch branches (for admin only)
+  // دالة البحث المؤخر
+  const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim()), 300), []);
+
+  // معالجة تغيير البحث
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchInput(value);
+    debouncedSearch(value);
+  };
+
+  // حساب التواريخ بناءً على الفترة
+  useEffect(() => {
+    const today = new Date();
+    let newStartDate = '';
+    let newEndDate = today.toISOString().split('T')[0];
+    if (filterPeriod === 'day') {
+      newStartDate = newEndDate;
+    } else if (filterPeriod === 'week') {
+      const firstDayOfWeek = new Date(today);
+      firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1);
+      newStartDate = firstDayOfWeek.toISOString().split('T')[0];
+    } else if (filterPeriod === 'month') {
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      newStartDate = firstDayOfMonth.toISOString().split('T')[0];
+    } else if (filterPeriod === 'custom') {
+      return;
+    } else {
+      newStartDate = '';
+      newEndDate = '';
+    }
+    setFilterStartDate(newStartDate);
+    setFilterEndDate(newEndDate);
+  }, [filterPeriod]);
+
+  // جلب الفروع
   const fetchBranches = useCallback(async () => {
     if (user?.role !== 'admin') return;
     try {
-      const response = await branchesAPI.getAll({ page: 1, limit: 100 });
-      setBranches([{ _id: '', name: t.allBranches, displayName: t.allBranches }, ...response.branches]);
-    } catch (error) {
-      console.error(`[${new Date().toISOString()}] Error fetching branches:`, error);
-      toast.error(t.errors.fetch_branches, {
-        position: isRtl ? 'top-right' : 'top-left',
-        autoClose: 3000,
-      });
+      const response = await branchesAPI.getAll();
+      console.log(`[${new Date().toISOString()}] جلب الفروع:`, response);
+      setBranches(
+        response.map((branch: any) => ({
+          _id: branch._id,
+          name: branch.name || 'غير معروف',
+          nameEn: branch.nameEn,
+          displayName: isRtl ? (branch.name || 'غير معروف') : (branch.nameEn || branch.name || 'Unknown'),
+        }))
+      );
+      setError('');
+    } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] خطأ في جلب الفروع:`, { message: err.message, stack: err.stack });
+      setError(t.errors.fetch_branches);
+      toast.error(t.errors.fetch_branches, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
     }
-  }, [user?.role, t, isRtl]);
+  }, [user, isRtl, t]);
 
-  // Calculate date range based on filter type
-  const getDateRange = useCallback(() => {
-    const today = new Date();
-    let start: Date | undefined;
-    let end: Date | undefined;
-
-    switch (filterType) {
-      case 'day':
-        start = new Date(today);
-        end = new Date(today);
-        break;
-      case 'week':
-        start = new Date(today);
-        start.setDate(today.getDate() - 7);
-        end = new Date(today);
-        break;
-      case 'month':
-        start = new Date(today);
-        start.setMonth(today.getMonth() - 1);
-        end = new Date(today);
-        break;
-      case 'custom':
-        if (startDate && endDate) {
-          start = new Date(startDate);
-          end = new Date(endDate);
-        }
-        break;
-      default:
-        start = undefined;
-        end = undefined;
-    }
-
-    return {
-      startDate: start ? start.toISOString().split('T')[0] : undefined,
-      endDate: end ? end.toISOString().split('T')[0] : undefined,
-    };
-  }, [filterType, startDate, endDate]);
-
-  // Fetch analytics data
-  const fetchAnalytics = useCallback(
-    debounce(async (params: AnalyticsParams | BranchStatsParams) => {
-      setIsLoading(true);
-      try {
-        const response = user?.role === 'admin'
-          ? await salesAPI.getAnalytics(params as AnalyticsParams)
-          : await salesAPI.getBranchStats(params as BranchStatsParams);
-        setAnalytics(response);
-      } catch (error: any) {
-        console.error(`[${new Date().toISOString()}] Error fetching analytics:`, error);
-        toast.error(error.message || t.errors.fetch_analytics, {
-          position: isRtl ? 'top-right' : 'top-left',
-          autoClose: 3000,
-        });
-        setAnalytics(null);
-      } finally {
-        setIsLoading(false);
+  // جلب الإحصائيات
+  const fetchAnalytics = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params: any = { lang: language };
+      if (filterPeriod !== 'all' && filterStartDate && filterEndDate) {
+        params.startDate = filterStartDate;
+        params.endDate = filterEndDate;
       }
-    }, 500),
-    [user?.role, t, isRtl]
-  );
-
-  // Handle search and filters
-  const handleSearch = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchQuery(e.target.value);
-  }, []);
-
-  const handleFilterChange = useCallback((value: string) => {
-    setFilterType(value);
-    if (value !== 'custom') {
-      setStartDate('');
-      setEndDate('');
+      if (filterBranch) {
+        params.branch = filterBranch;
+      }
+      const apiMethod = user?.role === 'branch' ? salesAPI.getBranchAnalytics;
+      const response = await apiMethod(params);
+      console.log(`[${new Date().toISOString()}] جلب الإحصائيات:`, response);
+      setAnalytics({
+        totalSales: safeNumber(response.totalSales),
+        totalCount: safeNumber(response.totalCount),
+        averageOrderValue: response.averageOrderValue || '0.00',
+        returnRate: response.returnRate || '0.00',
+        topProduct: response.topProduct || {
+          productId: null,
+          productName: 'غير معروف',
+          displayName: isRtl ? 'غير معروف' : 'Unknown',
+          totalQuantity: 0,
+          totalRevenue: 0,
+        },
+        branchSales: (response.branchSales || []).map((bs: any) => ({
+          branchId: bs.branchId,
+          branchName: bs.branchName || 'غير معروف',
+          branchNameEn: bs.branchNameEn,
+          displayName: isRtl ? (bs.branchName || 'غير معروف') : (bs.branchNameEn || bs.branchName || 'Unknown'),
+          totalSales: safeNumber(bs.totalSales),
+          saleCount: safeNumber(bs.saleCount),
+        })),
+        productSales: (response.productSales || []).map((ps: any) => ({
+          productId: ps.productId,
+          productName: ps.productName || 'غير معروف',
+          productNameEn: ps.productNameEn,
+          displayName: isRtl ? (ps.productName || 'غير معروف') : (ps.productNameEn || ps.productName || 'Unknown'),
+          totalQuantity: safeNumber(ps.totalQuantity),
+          totalRevenue: safeNumber(ps.totalRevenue),
+        })),
+        leastProductSales: (response.leastProductSales || []).map((ps: any) => ({
+          productId: ps.productId,
+          productName: ps.productName || 'غير معروف',
+          productNameEn: ps.productNameEn,
+          displayName: isRtl ? (ps.productName || 'غير معروف') : (ps.productNameEn || ps.productName || 'Unknown'),
+          totalQuantity: safeNumber(ps.totalQuantity),
+          totalRevenue: safeNumber(ps.totalRevenue),
+        })),
+        departmentSales: (response.departmentSales || []).map((ds: any) => ({
+          departmentId: ds.departmentId,
+          departmentName: ds.departmentName || 'غير معروف',
+          departmentNameEn: ds.departmentNameEn,
+          displayName: isRtl ? (ds.departmentName || 'غير معروف') : (ds.departmentNameEn || ds.departmentName || 'Unknown'),
+          totalRevenue: safeNumber(ds.totalRevenue),
+          totalQuantity: safeNumber(ds.totalQuantity),
+        })),
+        leastDepartmentSales: (response.leastDepartmentSales || []).map((ds: any) => ({
+          departmentId: ds.departmentId,
+          departmentName: ds.departmentName || 'غير معروف',
+          departmentNameEn: ds.departmentNameEn,
+          displayName: isRtl ? (ds.departmentName || 'غير معروف') : (ds.departmentNameEn || ds.departmentName || 'Unknown'),
+          totalRevenue: safeNumber(ds.totalRevenue),
+          totalQuantity: safeNumber(ds.totalQuantity),
+        })),
+        salesTrends: (response.salesTrends || []).map((trend: any) => ({
+          period: formatDate(new Date(trend.period), language),
+          totalSales: safeNumber(trend.totalSales),
+          saleCount: safeNumber(trend.saleCount),
+        })),
+        topCustomers: (response.topCustomers || []).map((tc: any) => ({
+          customerName: tc.customerName || 'غير معروف',
+          customerPhone: tc.customerPhone || '',
+          totalSpent: safeNumber(tc.totalSpent),
+          purchaseCount: safeNumber(tc.purchaseCount),
+        })),
+        returnStats: (response.returnStats || []).map((rs: any) => ({
+          status: rs.status || 'unknown',
+          count: safeNumber(rs.count),
+          totalQuantity: safeNumber(rs.totalQuantity),
+        })),
+      });
+      setError('');
+    } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] خطأ في جلب الإحصائيات:`, { message: err.message, stack: err.stack });
+      setError(t.errors.fetch_analytics);
+      toast.error(t.errors.fetch_analytics, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
+      setAnalytics(null);
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  }, [user, language, isRtl, t, filterPeriod, filterStartDate, filterEndDate, filterBranch]);
 
-  // Fetch data on mount and when filters change
+  // جلب البيانات عند التحميل الأولي
   useEffect(() => {
     if (user?.role === 'admin') {
       fetchBranches();
     }
-  }, [fetchBranches, user?.role]);
+    fetchAnalytics();
+  }, [fetchBranches, fetchAnalytics]);
 
-  useEffect(() => {
-    const { startDate, endDate } = getDateRange();
-    const params: AnalyticsParams | BranchStatsParams = {
-      ...(user?.role === 'admin' && selectedBranch ? { branch: selectedBranch } : {}),
-      ...(startDate ? { startDate } : {}),
-      ...(endDate ? { endDate } : {}),
-    };
-    fetchAnalytics(params);
-  }, [selectedBranch, filterType, startDate, endDate, fetchAnalytics, user?.role]);
+  // تصفية البيانات بناءً على البحث
+  const filteredBranchSales = useMemo(
+    () =>
+      analytics?.branchSales.filter((bs) => {
+        const term = searchTerm.toLowerCase();
+        return bs.displayName.toLowerCase().includes(term);
+      }) || [],
+    [analytics, searchTerm]
+  );
 
-  // Filtered lists based on search query
-  const filteredProductSales = useMemo(() => {
-    if (!analytics?.productSales) return [];
-    return analytics.productSales.filter((item) =>
-      item.displayName.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [analytics, searchQuery]);
+  const filteredProductSales = useMemo(
+    () =>
+      analytics?.productSales.filter((ps) => {
+        const term = searchTerm.toLowerCase();
+        return ps.displayName.toLowerCase().includes(term);
+      }) || [],
+    [analytics, searchTerm]
+  );
 
-  const filteredDepartmentSales = useMemo(() => {
-    if (!analytics?.departmentSales) return [];
-    return analytics.departmentSales.filter((item) =>
-      item.displayName.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [analytics, searchQuery]);
+  const filteredLeastProductSales = useMemo(
+    () =>
+      analytics?.leastProductSales.filter((ps) => {
+        const term = searchTerm.toLowerCase();
+        return ps.displayName.toLowerCase().includes(term);
+      }) || [],
+    [analytics, searchTerm]
+  );
 
-  const filteredLeastProductSales = useMemo(() => {
-    if (!analytics?.leastProductSales) return [];
-    return analytics.leastProductSales.filter((item) =>
-      item.displayName.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [analytics, searchQuery]);
+  const filteredDepartmentSales = useMemo(
+    () =>
+      analytics?.departmentSales.filter((ds) => {
+        const term = searchTerm.toLowerCase();
+        return ds.displayName.toLowerCase().includes(term);
+      }) || [],
+    [analytics, searchTerm]
+  );
 
-  const filteredLeastDepartmentSales = useMemo(() => {
-    if (!analytics?.leastDepartmentSales) return [];
-    return analytics.leastDepartmentSales.filter((item) =>
-      item.displayName.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [analytics, searchQuery]);
+  const filteredLeastDepartmentSales = useMemo(
+    () =>
+      analytics?.leastDepartmentSales.filter((ds) => {
+        const term = searchTerm.toLowerCase();
+        return ds.displayName.toLowerCase().includes(term);
+      }) || [],
+    [analytics, searchTerm]
+  );
 
-  // Chart data for sales trends
-  const salesTrendsChart = useMemo(() => {
-    if (!analytics?.salesTrends?.length) return null;
-    return {
-      type: 'line',
-      data: {
-        labels: analytics.salesTrends.map((trend) => trend.period),
-        datasets: [
-          {
-            label: t.salesTrends,
-            data: analytics.salesTrends.map((trend) => trend.totalSales),
-            borderColor: '#f59e0b',
-            backgroundColor: 'rgba(245, 158, 11, 0.2)',
-            tension: 0.4,
-            fill: true,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { position: 'top', labels: { font: { family: 'Alexandria' } } },
-          title: { display: true, text: t.salesTrends, font: { family: 'Alexandria', size: 16 } },
-        },
-        scales: {
-          y: { beginAtZero: true, title: { display: true, text: `${t.revenue} (${t.currency})` } },
-          x: { title: { display: true, text: t.filterBy } },
-        },
-      },
-    };
-  }, [analytics, t]);
-
-  // Chart data for top products
-  const productSalesChart = useMemo(() => {
-    if (!filteredProductSales.length) return null;
-    return {
-      type: 'bar',
-      data: {
-        labels: filteredProductSales.map((item) => item.displayName),
-        datasets: [
-          {
-            label: t.quantity,
-            data: filteredProductSales.map((item) => item.totalQuantity),
-            backgroundColor: '#f59e0b',
-          },
-          {
-            label: t.revenue,
-            data: filteredProductSales.map((item) => item.totalRevenue),
-            backgroundColor: '#3b82f6',
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { position: 'top', labels: { font: { family: 'Alexandria' } } },
-          title: { display: true, text: t.productSales, font: { family: 'Alexandria', size: 16 } },
-        },
-        scales: {
-          y: { beginAtZero: true, title: { display: true, text: t.quantity } },
-          x: { title: { display: true, text: t.productSales } },
-        },
-      },
-    };
-  }, [filteredProductSales, t]);
-
-  // Filter options
-  const filterOptions = useMemo(
+  // خيارات الفترة
+  const periodOptions = useMemo(
     () => [
       { value: 'all', label: t.all },
       { value: 'day', label: t.day },
@@ -476,234 +509,210 @@ const BranchSalesAnalytics: React.FC = () => {
     [t]
   );
 
-  return (
-    <div className={`p-6 ${isRtl ? 'text-right' : 'text-left'} font-alexandria bg-gray-50 min-h-screen`}>
-      <h1 className="text-2xl font-bold text-gray-800 mb-2">{t.title}</h1>
-      <p className="text-gray-600 mb-6">{t.subtitle}</p>
+  // التحقق من صلاحيات المستخدم
+  if (!user || (user.role !== 'admin' && user.role !== 'branch')) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4 font-alexandria" dir={isRtl ? 'rtl' : 'ltr'}>
+        <div className="p-6 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+          <AlertCircle className="w-6 h-6 text-red-600" />
+          <span className="text-red-600 text-base font-medium font-alexandria">{t.errors.unauthorized_access}</span>
+        </div>
+      </div>
+    );
+  }
 
-      {/* Filters */}
-      <div className="flex flex-col md:flex-row gap-4 mb-6">
-        {user?.role === 'admin' && (
-          <div className="w-full md:w-1/4">
-            <Dropdown
-              label={t.branchFilter}
-              options={branches.map((branch) => ({
-                value: branch._id,
-                label: branch.displayName,
-              }))}
-              value={selectedBranch}
-              onChange={setSelectedBranch}
+  return (
+    <div className="min-h-screen px-4 sm:px-6 py-8 bg-gradient-to-br from-gray-50 to-gray-100 font-alexandria" dir={isRtl ? 'rtl' : 'ltr'}>
+      <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;500;600&display=swap" rel="stylesheet" />
+      <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
+        <div className="flex items-center gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 font-alexandria">{t.title}</h1>
+            <p className="text-gray-600 text-sm font-alexandria">{t.subtitle}</p>
+          </div>
+        </div>
+      </header>
+      {error && (
+        <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <span className="text-red-600 text-sm font-medium font-alexandria">{error}</span>
+        </div>
+      )}
+      <div className="space-y-8">
+        <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.filterBy}</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <SearchInput
+              value={searchInput}
+              onChange={handleSearchChange}
+              placeholder={t.searchPlaceholder}
+              ariaLabel={t.searchPlaceholder}
+            />
+            <ProductDropdown
+              value={filterPeriod}
+              onChange={setFilterPeriod}
+              options={periodOptions}
+              ariaLabel={t.filterBy}
+            />
+            {filterPeriod === 'custom' && (
+              <>
+                <input
+                  type="date"
+                  value={filterStartDate}
+                  onChange={(e) => setFilterStartDate(e.target.value)}
+                  className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria`}
+                  aria-label={t.filterBy}
+                />
+                <input
+                  type="date"
+                  value={filterEndDate}
+                  onChange={(e) => setFilterEndDate(e.target.value)}
+                  className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria`}
+                  aria-label={t.filterBy}
+                />
+              </>
+            )}
+            <BranchFilter
+              branches={branches}
+              selectedBranch={filterBranch}
+              onChange={setFilterBranch}
+              placeholder={t.branchFilter}
+              allBranchesLabel={t.allBranches}
+              disabled={user?.role === 'branch'}
             />
           </div>
-        )}
-        <div className="w-full md:w-1/4">
-          <Dropdown
-            label={t.filterBy}
-            options={filterOptions}
-            value={filterType}
-            onChange={handleFilterChange}
-          />
         </div>
-        {filterType === 'custom' && (
+        {loading ? (
+          <div className="grid grid-cols-1 gap-6">
+            {[...Array(4)].map((_, index) => (
+              <div key={index} className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 animate-pulse">
+                <div className="space-y-3">
+                  <div className="h-5 bg-gray-200 rounded w-3/4"></div>
+                  <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+                  <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : !analytics ? (
+          <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
+            <p className="text-gray-600 text-sm font-medium font-alexandria">{t.errors.no_analytics}</p>
+          </div>
+        ) : (
           <>
-            <div className="w-full md:w-1/4">
-              <label className="block text-sm font-medium text-gray-700 font-alexandria mb-1">{t.startDate}</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full py-2.5 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.totalSales}</h3>
+                <p className="text-2xl font-bold text-amber-600 font-alexandria">{safeNumber(analytics.totalSales).toFixed(2)} {t.currency}</p>
+              </div>
+              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.totalOrders}</h3>
+                <p className="text-2xl font-bold text-amber-600 font-alexandria">{safeNumber(analytics.totalCount)}</p>
+              </div>
+              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.averageOrderValue}</h3>
+                <p className="text-2xl font-bold text-amber-600 font-alexandria">{analytics.averageOrderValue} {t.currency}</p>
+              </div>
+              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.returnRate}</h3>
+                <p className="text-2xl font-bold text-amber-600 font-alexandria">{analytics.returnRate}%</p>
+              </div>
+              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.topProduct}</h3>
+                <p className="text-sm text-gray-600 font-alexandria">{analytics.topProduct.displayName}</p>
+                <p className="text-sm text-gray-600 font-alexandria">{t.totalSales}: {safeNumber(analytics.topProduct.totalRevenue).toFixed(2)} {t.currency}</p>
+                <p className="text-sm text-gray-600 font-alexandria">{t.quantity}: {safeNumber(analytics.topProduct.totalQuantity)}</p>
+              </div>
             </div>
-            <div className="w-full md:w-1/4">
-              <label className="block text-sm font-medium text-gray-700 font-alexandria mb-1">{t.endDate}</label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="w-full py-2.5 px-4 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria"
-              />
+            {user?.role === 'admin' && (
+              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.branchFilter}</h3>
+                <ul className="space-y-2">
+                  {filteredBranchSales.length > 0 ? (
+                    filteredBranchSales.map((bs) => (
+                      <li key={bs.branchId} className="border-t border-gray-100 pt-2 font-alexandria">
+                        {bs.displayName} - {t.totalSales}: {safeNumber(bs.totalSales).toFixed(2)} {t.currency}, {t.totalOrders}: {safeNumber(bs.saleCount)}
+                      </li>
+                    ))
+                  ) : (
+                    <li className="text-gray-500 font-alexandria">{t.errors.no_analytics}</li>
+                  )}
+                </ul>
+              </div>
+            )}
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.productSales}</h3>
+              <ul className="space-y-2">
+                {filteredProductSales.length > 0 ? (
+                  filteredProductSales.map((ps) => (
+                    <li key={ps.productId} className="border-t border-gray-100 pt-2 font-alexandria">
+                      {ps.displayName} - {t.totalSales}: {safeNumber(ps.totalRevenue).toFixed(2)} {t.currency}, {t.quantity}: {safeNumber(ps.totalQuantity)}
+                    </li>
+                  ))
+                ) : (
+                  <li className="text-gray-500 font-alexandria">{t.errors.no_analytics}</li>
+                )}
+              </ul>
+            </div>
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.leastProductSales}</h3>
+              <ul className="space-y-2">
+                {filteredLeastProductSales.length > 0 ? (
+                  filteredLeastProductSales.map((ps) => (
+                    <li key={ps.productId} className="border-t border-gray-100 pt-2 font-alexandria">
+                      {ps.displayName} - {t.totalSales}: {safeNumber(ps.totalRevenue).toFixed(2)} {t.currency}, {t.quantity}: {safeNumber(ps.totalQuantity)}
+                    </li>
+                  ))
+                ) : (
+                  <li className="text-gray-500 font-alexandria">{t.errors.no_analytics}</li>
+                )}
+              </ul>
+            </div>
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.departmentSales}</h3>
+              <ul className="space-y-2">
+                {filteredDepartmentSales.length > 0 ? (
+                  filteredDepartmentSales.map((ds) => (
+                    <li key={ds.departmentId} className="border-t border-gray-100 pt-2 font-alexandria">
+                      {ds.displayName} - {t.totalSales}: {safeNumber(ds.totalRevenue).toFixed(2)} {t.currency}, {t.quantity}: {safeNumber(ds.totalQuantity)}
+                    </li>
+                  ))
+                ) : (
+                  <li className="text-gray-500 font-alexandria">{t.errors.no_analytics}</li>
+                )}
+              </ul>
+            </div>
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.leastDepartmentSales}</h3>
+              <ul className="space-y-2">
+                {filteredLeastDepartmentSales.length > 0 ? (
+                  filteredLeastDepartmentSales.map((ds) => (
+                    <li key={ds.departmentId} className="border-t border-gray-100 pt-2 font-alexandria">
+                      {ds.displayName} - {t.totalSales}: {safeNumber(ds.totalRevenue).toFixed(2)} {t.currency}, {t.quantity}: {safeNumber(ds.totalQuantity)}
+                    </li>
+                  ))
+                ) : (
+                  <li className="text-gray-500 font-alexandria">{t.errors.no_analytics}</li>
+                )}
+              </ul>
+            </div>
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.topCustomers}</h3>
+              <ul className="space-y-2">
+                {analytics.topCustomers.length > 0 ? (
+                  analytics.topCustomers.map((tc) => (
+                    <li key={`${tc.customerName}-${tc.customerPhone}`} className="border-t border-gray-100 pt-2 font-alexandria">
+                      {tc.customerName} ({tc.customerPhone}) - {t.totalSales}: {safeNumber(tc.totalSpent).toFixed(2)} {t.currency}, {t.totalOrders}: {safeNumber(tc.purchaseCount)}
+                    </li>
+                  ))
+                ) : (
+                  <li className="text-gray-500 font-alexandria">{t.errors.no_analytics}</li>
+                )}
+              </ul>
             </div>
           </>
         )}
       </div>
-
-      {/* Search */}
-      <div className="mb-6">
-        <SearchInput
-          value={searchQuery}
-          onChange={handleSearch}
-          placeholder={t.searchPlaceholder}
-          ariaLabel={t.searchPlaceholder}
-        />
-      </div>
-
-      {isLoading ? (
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-500"></div>
-        </div>
-      ) : !analytics || analytics.totalCount === 0 ? (
-        <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-          <AlertCircle className="w-12 h-12 mb-2" />
-          <p>{t.errors.no_analytics}</p>
-        </div>
-      ) : (
-        <>
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            <div className="bg-white p-4 rounded-lg shadow-md">
-              <h3 className="text-sm font-medium text-gray-600">{t.totalSales}</h3>
-              <p className="text-2xl font-bold text-amber-500">
-                {formatNumber(analytics.totalSales, language)} {t.currency}
-              </p>
-            </div>
-            <div className="bg-white p-4 rounded-lg shadow-md">
-              <h3 className="text-sm font-medium text-gray-600">{t.totalOrders}</h3>
-              <p className="text-2xl font-bold text-amber-500">{formatNumber(analytics.totalCount, language)}</p>
-            </div>
-            <div className="bg-white p-4 rounded-lg shadow-md">
-              <h3 className="text-sm font-medium text-gray-600">{t.averageOrderValue}</h3>
-              <p className="text-2xl font-bold text-amber-500">
-                {formatNumber(parseFloat(analytics.averageOrderValue), language)} {t.currency}
-              </p>
-            </div>
-            {user?.role === 'admin' && analytics.returnRate && (
-              <div className="bg-white p-4 rounded-lg shadow-md">
-                <h3 className="text-sm font-medium text-gray-600">{t.returnRate}</h3>
-                <p className="text-2xl font-bold text-amber-500">{analytics.returnRate}%</p>
-              </div>
-            )}
-          </div>
-
-          {/* Top Product */}
-          <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">{t.topProduct}</h3>
-            <p className="text-gray-600">
-              {analytics.topProduct.displayName} ({formatNumber(analytics.topProduct.totalQuantity, language)} {t.quantity},{' '}
-              {formatNumber(analytics.topProduct.totalRevenue, language)} {t.currency})
-            </p>
-          </div>
-
-          {/* Charts */}
-          {salesTrendsChart && (
-            <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-              <Line data={salesTrendsChart.data} options={salesTrendsChart.options} />
-            </div>
-          )}
-          {productSalesChart && (
-            <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-              <Bar data={productSalesChart.data} options={productSalesChart.options} />
-            </div>
-          )}
-
-          {/* Lists */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Product Sales */}
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">{t.productSales}</h3>
-              {filteredProductSales.length ? (
-                <ul className="space-y-2">
-                  {filteredProductSales.map((item) => (
-                    <li key={item.productId} className="flex justify-between text-sm text-gray-600">
-                      <span>{item.displayName}</span>
-                      <span>
-                        {formatNumber(item.totalQuantity, language)} {t.quantity},{' '}
-                        {formatNumber(item.totalRevenue, language)} {t.currency}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-gray-500">{t.errors.no_analytics}</p>
-              )}
-            </div>
-
-            {/* Department Sales */}
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">{t.departmentSales}</h3>
-              {filteredDepartmentSales.length ? (
-                <ul className="space-y-2">
-                  {filteredDepartmentSales.map((item) => (
-                    <li key={item.departmentId} className="flex justify-between text-sm text-gray-600">
-                      <span>{item.displayName}</span>
-                      <span>
-                        {formatNumber(item.totalQuantity, language)} {t.quantity},{' '}
-                        {formatNumber(item.totalRevenue, language)} {t.currency}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-gray-500">{t.errors.no_analytics}</p>
-              )}
-            </div>
-
-            {/* Least Product Sales */}
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">{t.leastProductSales}</h3>
-              {filteredLeastProductSales.length ? (
-                <ul className="space-y-2">
-                  {filteredLeastProductSales.map((item) => (
-                    <li key={item.productId} className="flex justify-between text-sm text-gray-600">
-                      <span>{item.displayName}</span>
-                      <span>
-                        {formatNumber(item.totalQuantity, language)} {t.quantity},{' '}
-                        {formatNumber(item.totalRevenue, language)} {t.currency}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-gray-500">{t.errors.no_analytics}</p>
-              )}
-            </div>
-
-            {/* Least Department Sales */}
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">{t.leastDepartmentSales}</h3>
-              {filteredLeastDepartmentSales.length ? (
-                <ul className="space-y-2">
-                  {filteredLeastDepartmentSales.map((item) => (
-                    <li key={item.departmentId} className="flex justify-between text-sm text-gray-600">
-                      <span>{item.displayName}</span>
-                      <span>
-                        {formatNumber(item.totalQuantity, language)} {t.quantity},{' '}
-                        {formatNumber(item.totalRevenue, language)} {t.currency}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-gray-500">{t.errors.no_analytics}</p>
-              )}
-            </div>
-
-            {/* Top Customers */}
-            <div className="bg-white p-6 rounded-lg shadow-md">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4">{t.topCustomers}</h3>
-              {analytics.topCustomers.length ? (
-                <ul className="space-y-2">
-                  {analytics.topCustomers
-                    .filter((customer) =>
-                      customer.customerName.toLowerCase().includes(searchQuery.toLowerCase())
-                    )
-                    .map((customer, index) => (
-                      <li key={index} className="flex justify-between text-sm text-gray-600">
-                        <span>{customer.customerName} ({customer.customerPhone})</span>
-                        <span>
-                          {formatNumber(customer.purchaseCount, language)} {t.totalOrders},{' '}
-                          {formatNumber(customer.totalSpent, language)} {t.currency}
-                        </span>
-                      </li>
-                    ))}
-                </ul>
-              ) : (
-                <p className="text-gray-500">{t.errors.no_analytics}</p>
-              )}
-            </div>
-          </div>
-        </>
-      )}
     </div>
   );
 };
