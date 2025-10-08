@@ -1,16 +1,14 @@
+
 import React, { useState, useMemo, useCallback, useEffect, useReducer } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Eye, Clock, Check, AlertCircle, Minus, Download, Plus, X } from 'lucide-react';
+import { Package, Eye, Clock, Check, AlertCircle, MinusCircle, Plus, X } from 'lucide-react';
 import { returnsAPI, inventoryAPI } from '../services/api';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 
 // Enums for type safety
 enum ReturnStatus {
@@ -90,10 +88,6 @@ const translations = {
     searchPlaceholder: 'البحث برقم الإرجاع أو الملاحظات...',
     filterStatus: 'تصفية حسب الحالة',
     allStatuses: 'جميع الحالات',
-    exportExcel: 'تصدير إلى Excel',
-    exportPdf: 'تصدير إلى PDF',
-    exportSuccess: 'تم التصدير بنجاح',
-    pdfExportSuccess: 'تم تصدير PDF بنجاح',
     selectProduct: 'اختر منتج',
     reason: 'سبب الإرجاع',
     selectReason: 'اختر السبب',
@@ -134,7 +128,6 @@ const translations = {
       insufficientQuantity: 'الكمية غير كافية للمنتج في المخزون',
       branchNotFound: 'الفرع غير موجود',
       productNotFound: 'المنتج غير موجود',
-      pdfExport: 'خطأ في تصدير PDF',
       socketInit: 'خطأ في تهيئة الاتصال بالخادم',
     },
     socket: {
@@ -166,10 +159,6 @@ const translations = {
     searchPlaceholder: 'Search by return number or notes...',
     filterStatus: 'Filter by Status',
     allStatuses: 'All Statuses',
-    exportExcel: 'Export to Excel',
-    exportPdf: 'Export to PDF',
-    exportSuccess: 'Export successful',
-    pdfExportSuccess: 'PDF export successful',
     selectProduct: 'Select Product',
     reason: 'Return Reason',
     selectReason: 'Select Reason',
@@ -210,7 +199,6 @@ const translations = {
       insufficientQuantity: 'Insufficient quantity for the product in inventory',
       branchNotFound: 'Branch not found',
       productNotFound: 'Product not found',
-      pdfExport: 'Error exporting PDF',
       socketInit: 'Error initializing server connection',
     },
     socket: {
@@ -263,7 +251,7 @@ const QuantityInput = ({
         aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
         disabled={value <= 1}
       >
-        <Minus className="w-4 h-4" />
+        <MinusCircle className="w-4 h-4" />
       </button>
       <input
         type="number"
@@ -344,7 +332,7 @@ export const BranchReturns: React.FC = () => {
       const handler = setTimeout(() => setDebouncedValue(value), delay);
       return () => clearTimeout(handler);
     }, [value, delay]);
-    return [value, setSearchInput, debouncedValue] as const;
+    return [value, setValue, debouncedValue] as const;
   };
 
   const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
@@ -428,9 +416,8 @@ export const BranchReturns: React.FC = () => {
           available: item.currentStock,
           unit: isRtl ? item.product.unit || t.unit : item.product.unitEn || item.product.unit || 'N/A',
           departmentName: isRtl
-            ? item.product.department?.name || t.departments?.unknown || 'Unknown'
-            : item.product.department?.nameEn || item.product.department?.name || t.departments?.unknown || 'Unknown',
-          stock: item.currentStock,
+            ? item.product.department?.name || 'Unknown'
+            : item.product.department?.nameEn || item.product.department?.name || 'Unknown',
         }));
     },
     enabled: !!user?.branchId,
@@ -677,58 +664,6 @@ export const BranchReturns: React.FC = () => {
     },
   });
 
-  // Export Functions
-  const exportToExcel = useCallback(() => {
-    const exportData = filteredReturns.map((ret) => ({
-      [t.returnNumber]: ret.returnNumber,
-      [t.statusLabel]: t.status[ret.status as keyof typeof t.status] || ret.status,
-      [t.date]: new Date(ret.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US'),
-      [t.itemsCount]: ret.items.length,
-      [t.branch]: ret.branch?.displayName || t.branch,
-      [t.notesLabel]: ret.notes || t.noNotes,
-      [t.reviewNotes]: ret.reviewNotes || t.noNotes,
-    }));
-    const ws = XLSX.utils.json_to_sheet(isRtl ? exportData.map((row) => Object.fromEntries(Object.entries(row).reverse())) : exportData);
-    ws['!cols'] = Object.keys(exportData[0] || {}).map(() => ({ wpx: 120 }));
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Returns');
-    XLSX.writeFile(wb, `Returns_${new Date().toISOString().split('T')[0]}.xlsx`);
-    toast.success(t.exportSuccess, { position: isRtl ? 'top-right' : 'top-left' });
-  }, [filteredReturns, isRtl, t]);
-
-  const exportToPDF = useCallback(() => {
-    try {
-      const doc = new jsPDF({ orientation: 'landscape' });
-      doc.setFont('Amiri', 'normal');
-      const headers = [t.returnNumber, t.statusLabel, t.date, t.itemsCount, t.branch, t.notesLabel, t.reviewNotes];
-      const data = filteredReturns.map((ret) => [
-        ret.returnNumber,
-        t.status[ret.status as keyof typeof t.status] || ret.status,
-        new Date(ret.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US'),
-        ret.items.length.toString(),
-        ret.branch?.displayName || t.branch,
-        ret.notes || t.noNotes,
-        ret.reviewNotes || t.noNotes,
-      ]);
-      const finalHeaders = isRtl ? headers.reverse() : headers;
-      const finalData = isRtl ? data.map((row) => row.reverse()) : data;
-      autoTable(doc, {
-        head: [finalHeaders],
-        body: finalData,
-        theme: 'grid',
-        headStyles: { fillColor: [255, 193, 7], textColor: 0, fontSize: 10, halign: isRtl ? 'right' : 'left', font: 'Amiri' },
-        bodyStyles: { fontSize: 9, halign: isRtl ? 'right' : 'left', cellPadding: 4, font: 'Amiri' },
-        columnStyles: { 0: { cellWidth: 30 }, 1: { cellWidth: 30 } },
-        margin: { top: 20 },
-      });
-      doc.save(`Returns_${new Date().toISOString().split('T')[0]}.pdf`);
-      toast.success(t.pdfExportSuccess, { position: isRtl ? 'top-right' : 'top-left' });
-    } catch (err) {
-      console.error(`[${new Date().toISOString()}] PDF export error:`, err);
-      toast.error(t.errors.pdfExport, { position: isRtl ? 'top-right' : 'top-left' });
-    }
-  }, [filteredReturns, isRtl, t]);
-
   // ReturnCard Component
   const ReturnCard = useCallback(
     ({ ret }: { ret: Return }) => {
@@ -836,22 +771,6 @@ export const BranchReturns: React.FC = () => {
           >
             <Plus className="w-4 h-4" />
             {t.createReturn}
-          </button>
-          <button
-            onClick={exportToExcel}
-            className="px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2 shadow-sm"
-            aria-label={t.exportExcel}
-          >
-            <Download className="w-4 h-4" />
-            {t.exportExcel}
-          </button>
-          <button
-            onClick={exportToPDF}
-            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2 shadow-sm"
-            aria-label={t.exportPdf}
-          >
-            <Download className="w-4 h-4" />
-            {t.exportPdf}
           </button>
         </div>
       </div>
