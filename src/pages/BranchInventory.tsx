@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
 import { returnsAPI, inventoryAPI } from '../services/api';
-import { Package, AlertCircle,Minus, Edit, X, Plus, Eye } from 'lucide-react';
+import { Package, AlertCircle, Search, Edit, X, Plus, Eye, Minus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -53,7 +53,6 @@ interface ReturnItem {
 }
 
 interface ReturnFormState {
-  reason: string;
   notes: string;
   items: ReturnItem[];
 }
@@ -220,7 +219,7 @@ const translations = {
   },
 };
 
-// QuantityInput Component
+// QuantityInput Component (Fixed decrement icon to Minus and handled invalid inputs)
 const QuantityInput = ({
   value,
   onChange,
@@ -236,6 +235,19 @@ const QuantityInput = ({
 }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
+  const handleChange = (val: string) => {
+    const num = parseInt(val, 10);
+    if (val === '' || isNaN(num) || num < 1) {
+      onChange('1');
+      return;
+    }
+    if (max !== undefined && num > max) {
+      onChange(max.toString());
+      return;
+    }
+    onChange(val);
+  };
+
   return (
     <div className="flex items-center gap-2">
       <button
@@ -244,12 +256,12 @@ const QuantityInput = ({
         aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
         disabled={value <= 1}
       >
-        <X className="w-4 h-4" />
+        <Minus className="w-4 h-4" />
       </button>
       <input
         type="number"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => handleChange(e.target.value)}
         max={max}
         min={1}
         className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm min-w-[2.75rem] transition-all duration-200"
@@ -270,7 +282,6 @@ const QuantityInput = ({
 
 // Reducer for return form
 type ReturnFormAction =
-  | { type: 'SET_REASON'; payload: string }
   | { type: 'SET_NOTES'; payload: string }
   | { type: 'ADD_ITEM'; payload: ReturnItem }
   | { type: 'UPDATE_ITEM'; payload: { index: number; field: keyof ReturnItem; value: string | number } }
@@ -279,8 +290,6 @@ type ReturnFormAction =
 
 const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): ReturnFormState => {
   switch (action.type) {
-    case 'SET_REASON':
-      return { ...state, reason: action.payload };
     case 'SET_NOTES':
       return { ...state, notes: action.payload };
     case 'ADD_ITEM':
@@ -292,7 +301,7 @@ const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): Re
     case 'REMOVE_ITEM':
       return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
     case 'RESET':
-      return { reason: '', notes: '', items: [] };
+      return { notes: '', items: [] };
     default:
       return state;
   }
@@ -315,7 +324,7 @@ export const BranchInventory: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [returnForm, dispatchReturnForm] = useReducer(returnFormReducer, { reason: '', notes: '', items: [] });
+  const [returnForm, dispatchReturnForm] = useReducer(returnFormReducer, { notes: '', items: [] });
   const [editForm, setEditForm] = useState<EditForm>({ minStockLevel: 0, maxStockLevel: 0 });
   const [returnErrors, setReturnErrors] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
@@ -604,7 +613,6 @@ export const BranchInventory: React.FC = () => {
 
   const validateReturnForm = useCallback(() => {
     const errors: Record<string, string> = {};
-    if (!returnForm.reason) errors.reason = t.errors.required.replace('{field}', t.reason);
     if (returnForm.items.length === 0) errors.items = t.errors.required.replace('{field}', t.items);
     returnForm.items.forEach((item, index) => {
       if (!item.productId) errors[`item_${index}_productId`] = t.errors.required.replace('{field}', t.items);
@@ -636,13 +644,12 @@ export const BranchInventory: React.FC = () => {
       if (!user?.branchId) throw new Error(t.errors.noBranch);
       const data = {
         branchId: user.branchId,
-        reason: returnForm.reason,
-        notes: returnForm.notes || undefined,
         items: returnForm.items.map((item) => ({
           product: item.productId,
           quantity: item.quantity,
           reason: item.reason,
         })),
+        notes: returnForm.notes || undefined,
       };
       await returnsAPI.createReturn(data);
     },
@@ -940,14 +947,6 @@ export const BranchInventory: React.FC = () => {
                 {t.products?.title || 'Product'}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
               </p>
             )}
-            <ProductDropdown
-              value={returnForm.reason}
-              onChange={(value) => dispatchReturnForm({ type: 'SET_REASON', payload: value })}
-              options={reasonOptions}
-              ariaLabel={t.reason}
-              className="w-full"
-            />
-            {returnErrors.reason && <p className="text-red-500 text-xs">{returnErrors.reason}</p>}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">{t.notes}</label>
               <textarea

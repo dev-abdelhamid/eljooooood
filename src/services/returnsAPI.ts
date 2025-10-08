@@ -136,11 +136,9 @@ export const returnsAPI = {
   },
 
   createReturn: async (data: {
-    orderId: string;
-    reason: string;
+    branchId: string;
     items: Array<{
-      itemId: string;
-      productId: string;
+      product: string;
       quantity: number;
       reason: string;
     }>;
@@ -148,16 +146,15 @@ export const returnsAPI = {
   }) => {
     console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Sending:`, data);
     if (
-      !isValidObjectId(data.orderId) ||
-      !data.reason ||
+      !isValidObjectId(data.branchId) ||
       !Array.isArray(data.items) ||
       data.items.length === 0 ||
       data.items.some(
-        (item) => !isValidObjectId(item.itemId) || !isValidObjectId(item.productId) || item.quantity < 1 || !item.reason
+        (item) => !isValidObjectId(item.product) || item.quantity < 1 || !item.reason
       )
     ) {
       console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Invalid data:`, data);
-      throw new Error('Invalid order ID, reason, or item data');
+      throw new Error('Invalid branch ID or item data');
     }
     try {
       const response = await returnsAxios.post('/returns', data);
