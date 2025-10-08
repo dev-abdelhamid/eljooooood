@@ -3,9 +3,10 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { salesAPI, branchesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
-import { AlertCircle, Search, X, ChevronDown } from 'lucide-react';
+import { AlertCircle, BarChart2, Search, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 // واجهات البيانات
 export interface Branch {
@@ -14,18 +15,16 @@ export interface Branch {
   nameEn?: string;
   displayName: string;
 }
-
 export interface SalesTrend {
   period: string;
   totalSales: number;
-  saleCount: number;
 }
-
 export interface AnalyticsData {
   totalSales: number;
   totalCount: number;
   averageOrderValue: string;
   returnRate: string;
+  growthRate: string;
   topProduct: {
     productId: string | null;
     productName: string;
@@ -49,41 +48,19 @@ export interface AnalyticsData {
     totalQuantity: number;
     totalRevenue: number;
   }>;
-  leastProductSales: Array<{
-    productId: string;
-    productName: string;
-    productNameEn?: string;
-    displayName: string;
-    totalQuantity: number;
-    totalRevenue: number;
-  }>;
-  departmentSales: Array<{
-    departmentId: string;
-    departmentName: string;
-    departmentNameEn?: string;
-    displayName: string;
-    totalRevenue: number;
-    totalQuantity: number;
-  }>;
-  leastDepartmentSales: Array<{
-    departmentId: string;
-    departmentName: string;
-    departmentNameEn?: string;
+  categorySales: Array<{
+    categoryId: string;
+    categoryName: string;
+    categoryNameEn?: string;
     displayName: string;
     totalRevenue: number;
     totalQuantity: number;
   }>;
   salesTrends: SalesTrend[];
-  topCustomers: Array<{
-    customerName: string;
-    customerPhone: string;
-    totalSpent: number;
-    purchaseCount: number;
-  }>;
-  returnStats: Array<{
-    status: string;
+  paymentMethodStats: Array<{
+    paymentMethod: string;
+    totalSales: number;
     count: number;
-    totalQuantity: number;
   }>;
 }
 
@@ -105,14 +82,9 @@ export const translations = {
     totalSales: 'إجمالي المبيعات',
     totalOrders: 'عدد الطلبات',
     averageOrderValue: 'متوسط قيمة الطلب',
-    returnRate: 'معدل الإرجاع',
+    growthRate: 'معدل النمو',
     topProduct: 'أفضل منتج',
-    topCustomers: 'أفضل العملاء',
-    productSales: 'مبيعات المنتجات',
-    departmentSales: 'مبيعات الأقسام',
-    leastProductSales: 'أقل المنتجات مبيعًا',
-    leastDepartmentSales: 'أقل الأقسام مبيعًا',
-    quantity: 'الكمية',
+    paymentMethods: 'طرق الدفع',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       fetch_analytics: 'خطأ أثناء جلب الإحصائيات',
@@ -120,6 +92,11 @@ export const translations = {
       no_analytics: 'لا توجد إحصائيات متاحة',
     },
     currency: 'ريال',
+    paymentMethodsLabels: {
+      cash: 'نقدي',
+      card: 'بطاقة ائتمان',
+      credit: 'ائتمان',
+    },
   },
   en: {
     title: 'Branch Analytics',
@@ -137,14 +114,9 @@ export const translations = {
     totalSales: 'Total Sales',
     totalOrders: 'Total Orders',
     averageOrderValue: 'Average Order Value',
-    returnRate: 'Return Rate',
+    growthRate: 'Growth Rate',
     topProduct: 'Top Product',
-    topCustomers: 'Top Customers',
-    productSales: 'Product Sales',
-    departmentSales: 'Department Sales',
-    leastProductSales: 'Least Sold Products',
-    leastDepartmentSales: 'Least Sold Departments',
-    quantity: 'Quantity',
+    paymentMethods: 'Payment Methods',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       fetch_analytics: 'Error fetching analytics',
@@ -152,6 +124,11 @@ export const translations = {
       no_analytics: 'No analytics available',
     },
     currency: 'SAR',
+    paymentMethodsLabels: {
+      cash: 'Cash',
+      card: 'Credit Card',
+      credit: 'Credit',
+    },
   },
 };
 
@@ -335,9 +312,9 @@ export const BranchSalesAnalytics: React.FC = () => {
       setBranches(
         response.map((branch: any) => ({
           _id: branch._id,
-          name: branch.name || 'غير معروف',
+          name: branch.name || t.errors.departments?.unknown || 'غير معروف',
           nameEn: branch.nameEn,
-          displayName: isRtl ? (branch.name || 'غير معروف') : (branch.nameEn || branch.name || 'Unknown'),
+          displayName: isRtl ? (branch.name || t.errors.departments?.unknown || 'غير معروف') : (branch.nameEn || branch.name || t.errors.departments?.unknown || 'Unknown'),
         }))
       );
       setError('');
@@ -352,7 +329,7 @@ export const BranchSalesAnalytics: React.FC = () => {
   const fetchAnalytics = useCallback(async () => {
     setLoading(true);
     try {
-      const params: any = { lang: language };
+      const params: any = { groupBy: filterPeriod === 'all' ? 'day' : filterPeriod, lang: language };
       if (filterPeriod !== 'all' && filterStartDate && filterEndDate) {
         params.startDate = filterStartDate;
         params.endDate = filterEndDate;
@@ -360,7 +337,7 @@ export const BranchSalesAnalytics: React.FC = () => {
       if (filterBranch) {
         params.branch = filterBranch;
       }
-      const apiMethod = user?.role === 'branch' ? salesAPI.getBranchAnalytics;
+      const apiMethod = user?.role === 'branch' ? salesAPI.getBranchAnalytics : salesAPI.getAnalytics;
       const response = await apiMethod(params);
       console.log(`[${new Date().toISOString()}] جلب الإحصائيات:`, response);
       setAnalytics({
@@ -368,68 +345,46 @@ export const BranchSalesAnalytics: React.FC = () => {
         totalCount: safeNumber(response.totalCount),
         averageOrderValue: response.averageOrderValue || '0.00',
         returnRate: response.returnRate || '0.00',
+        growthRate: response.growthRate || '0.00',
         topProduct: response.topProduct || {
           productId: null,
-          productName: 'غير معروف',
-          displayName: isRtl ? 'غير معروف' : 'Unknown',
+          productName: t.errors.departments?.unknown || 'غير معروف',
+          displayName: t.errors.departments?.unknown || 'غير معروف',
           totalQuantity: 0,
           totalRevenue: 0,
         },
         branchSales: (response.branchSales || []).map((bs: any) => ({
           branchId: bs.branchId,
-          branchName: bs.branchName || 'غير معروف',
+          branchName: bs.branchName || t.errors.departments?.unknown || 'غير معروف',
           branchNameEn: bs.branchNameEn,
-          displayName: isRtl ? (bs.branchName || 'غير معروف') : (bs.branchNameEn || bs.branchName || 'Unknown'),
+          displayName: isRtl ? (bs.branchName || t.errors.departments?.unknown || 'غير معروف') : (bs.branchNameEn || bs.branchName || t.errors.departments?.unknown || 'Unknown'),
           totalSales: safeNumber(bs.totalSales),
           saleCount: safeNumber(bs.saleCount),
         })),
         productSales: (response.productSales || []).map((ps: any) => ({
           productId: ps.productId,
-          productName: ps.productName || 'غير معروف',
+          productName: ps.productName || t.errors.departments?.unknown || 'غير معروف',
           productNameEn: ps.productNameEn,
-          displayName: isRtl ? (ps.productName || 'غير معروف') : (ps.productNameEn || ps.productName || 'Unknown'),
+          displayName: isRtl ? (ps.productName || t.errors.departments?.unknown || 'غير معروف') : (ps.productNameEn || ps.productName || t.errors.departments?.unknown || 'Unknown'),
           totalQuantity: safeNumber(ps.totalQuantity),
           totalRevenue: safeNumber(ps.totalRevenue),
         })),
-        leastProductSales: (response.leastProductSales || []).map((ps: any) => ({
-          productId: ps.productId,
-          productName: ps.productName || 'غير معروف',
-          productNameEn: ps.productNameEn,
-          displayName: isRtl ? (ps.productName || 'غير معروف') : (ps.productNameEn || ps.productName || 'Unknown'),
-          totalQuantity: safeNumber(ps.totalQuantity),
-          totalRevenue: safeNumber(ps.totalRevenue),
-        })),
-        departmentSales: (response.departmentSales || []).map((ds: any) => ({
-          departmentId: ds.departmentId,
-          departmentName: ds.departmentName || 'غير معروف',
-          departmentNameEn: ds.departmentNameEn,
-          displayName: isRtl ? (ds.departmentName || 'غير معروف') : (ds.departmentNameEn || ds.departmentName || 'Unknown'),
-          totalRevenue: safeNumber(ds.totalRevenue),
-          totalQuantity: safeNumber(ds.totalQuantity),
-        })),
-        leastDepartmentSales: (response.leastDepartmentSales || []).map((ds: any) => ({
-          departmentId: ds.departmentId,
-          departmentName: ds.departmentName || 'غير معروف',
-          departmentNameEn: ds.departmentNameEn,
-          displayName: isRtl ? (ds.departmentName || 'غير معروف') : (ds.departmentNameEn || ds.departmentName || 'Unknown'),
-          totalRevenue: safeNumber(ds.totalRevenue),
-          totalQuantity: safeNumber(ds.totalQuantity),
+        categorySales: (response.categorySales || []).map((cs: any) => ({
+          categoryId: cs.categoryId,
+          categoryName: cs.categoryName || t.errors.departments?.unknown || 'غير معروف',
+          categoryNameEn: cs.categoryNameEn,
+          displayName: isRtl ? (cs.categoryName || t.errors.departments?.unknown || 'غير معروف') : (cs.categoryNameEn || cs.categoryName || t.errors.departments?.unknown || 'Unknown'),
+          totalRevenue: safeNumber(cs.totalRevenue),
+          totalQuantity: safeNumber(cs.totalQuantity),
         })),
         salesTrends: (response.salesTrends || []).map((trend: any) => ({
           period: formatDate(new Date(trend.period), language),
           totalSales: safeNumber(trend.totalSales),
-          saleCount: safeNumber(trend.saleCount),
         })),
-        topCustomers: (response.topCustomers || []).map((tc: any) => ({
-          customerName: tc.customerName || 'غير معروف',
-          customerPhone: tc.customerPhone || '',
-          totalSpent: safeNumber(tc.totalSpent),
-          purchaseCount: safeNumber(tc.purchaseCount),
-        })),
-        returnStats: (response.returnStats || []).map((rs: any) => ({
-          status: rs.status || 'unknown',
-          count: safeNumber(rs.count),
-          totalQuantity: safeNumber(rs.totalQuantity),
+        paymentMethodStats: (response.paymentMethodStats || []).map((pm: any) => ({
+          paymentMethod: pm.paymentMethod,
+          totalSales: safeNumber(pm.totalSales),
+          count: safeNumber(pm.count),
         })),
       });
       setError('');
@@ -470,29 +425,11 @@ export const BranchSalesAnalytics: React.FC = () => {
     [analytics, searchTerm]
   );
 
-  const filteredLeastProductSales = useMemo(
+  const filteredCategorySales = useMemo(
     () =>
-      analytics?.leastProductSales.filter((ps) => {
+      analytics?.categorySales.filter((cs) => {
         const term = searchTerm.toLowerCase();
-        return ps.displayName.toLowerCase().includes(term);
-      }) || [],
-    [analytics, searchTerm]
-  );
-
-  const filteredDepartmentSales = useMemo(
-    () =>
-      analytics?.departmentSales.filter((ds) => {
-        const term = searchTerm.toLowerCase();
-        return ds.displayName.toLowerCase().includes(term);
-      }) || [],
-    [analytics, searchTerm]
-  );
-
-  const filteredLeastDepartmentSales = useMemo(
-    () =>
-      analytics?.leastDepartmentSales.filter((ds) => {
-        const term = searchTerm.toLowerCase();
-        return ds.displayName.toLowerCase().includes(term);
+        return cs.displayName.toLowerCase().includes(term);
       }) || [],
     [analytics, searchTerm]
   );
@@ -508,6 +445,9 @@ export const BranchSalesAnalytics: React.FC = () => {
     ],
     [t]
   );
+
+  // ألوان الرسم البياني
+  const chartColors = useMemo(() => ['#FFBB28', '#FF8042', '#0088FE', '#00C49F', '#FF4444'], []);
 
   // التحقق من صلاحيات المستخدم
   if (!user || (user.role !== 'admin' && user.role !== 'branch')) {
@@ -526,6 +466,7 @@ export const BranchSalesAnalytics: React.FC = () => {
       <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;500;600&display=swap" rel="stylesheet" />
       <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
+          <BarChart2 className="w-7 h-7 text-amber-600" />
           <div>
             <h1 className="text-2xl font-bold text-gray-900 font-alexandria">{t.title}</h1>
             <p className="text-gray-600 text-sm font-alexandria">{t.subtitle}</p>
@@ -596,10 +537,28 @@ export const BranchSalesAnalytics: React.FC = () => {
           </div>
         ) : !analytics ? (
           <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
+            <BarChart2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600 text-sm font-medium font-alexandria">{t.errors.no_analytics}</p>
           </div>
         ) : (
           <>
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.salesTrends}</h2>
+              {analytics.salesTrends.length > 0 ? (
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={analytics.salesTrends}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="period" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="totalSales" stroke={chartColors[0]} name={t.totalSales} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="text-center py-8 text-gray-500 font-alexandria">{t.errors.no_analytics}</div>
+              )}
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.totalSales}</h3>
@@ -614,8 +573,8 @@ export const BranchSalesAnalytics: React.FC = () => {
                 <p className="text-2xl font-bold text-amber-600 font-alexandria">{analytics.averageOrderValue} {t.currency}</p>
               </div>
               <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.returnRate}</h3>
-                <p className="text-2xl font-bold text-amber-600 font-alexandria">{analytics.returnRate}%</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.growthRate}</h3>
+                <p className="text-2xl font-bold text-amber-600 font-alexandria">{analytics.growthRate}%</p>
               </div>
               <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.topProduct}</h3>
@@ -628,86 +587,42 @@ export const BranchSalesAnalytics: React.FC = () => {
               <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.branchFilter}</h3>
                 <ul className="space-y-2">
-                  {filteredBranchSales.length > 0 ? (
-                    filteredBranchSales.map((bs) => (
-                      <li key={bs.branchId} className="border-t border-gray-100 pt-2 font-alexandria">
-                        {bs.displayName} - {t.totalSales}: {safeNumber(bs.totalSales).toFixed(2)} {t.currency}, {t.totalOrders}: {safeNumber(bs.saleCount)}
-                      </li>
-                    ))
-                  ) : (
-                    <li className="text-gray-500 font-alexandria">{t.errors.no_analytics}</li>
-                  )}
+                  {filteredBranchSales.map((bs) => (
+                    <li key={bs.branchId} className="border-t border-gray-100 pt-2 font-alexandria">
+                      {bs.displayName} - {t.totalSales}: {safeNumber(bs.totalSales).toFixed(2)} {t.currency}, {t.totalOrders}: {safeNumber(bs.saleCount)}
+                    </li>
+                  ))}
                 </ul>
               </div>
             )}
             <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.productSales}</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.paymentMethods}</h3>
               <ul className="space-y-2">
-                {filteredProductSales.length > 0 ? (
-                  filteredProductSales.map((ps) => (
-                    <li key={ps.productId} className="border-t border-gray-100 pt-2 font-alexandria">
-                      {ps.displayName} - {t.totalSales}: {safeNumber(ps.totalRevenue).toFixed(2)} {t.currency}, {t.quantity}: {safeNumber(ps.totalQuantity)}
-                    </li>
-                  ))
-                ) : (
-                  <li className="text-gray-500 font-alexandria">{t.errors.no_analytics}</li>
-                )}
+                {analytics.paymentMethodStats.map((pm) => (
+                  <li key={pm.paymentMethod} className="border-t border-gray-100 pt-2 font-alexandria">
+                    {t.paymentMethodsLabels[pm.paymentMethod as keyof typeof t.paymentMethodsLabels] || pm.paymentMethod} - {t.totalSales}: {safeNumber(pm.totalSales).toFixed(2)} {t.currency}, {t.totalOrders}: {safeNumber(pm.count)}
+                  </li>
+                ))}
               </ul>
             </div>
             <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.leastProductSales}</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">مبيعات المنتجات</h3>
               <ul className="space-y-2">
-                {filteredLeastProductSales.length > 0 ? (
-                  filteredLeastProductSales.map((ps) => (
-                    <li key={ps.productId} className="border-t border-gray-100 pt-2 font-alexandria">
-                      {ps.displayName} - {t.totalSales}: {safeNumber(ps.totalRevenue).toFixed(2)} {t.currency}, {t.quantity}: {safeNumber(ps.totalQuantity)}
-                    </li>
-                  ))
-                ) : (
-                  <li className="text-gray-500 font-alexandria">{t.errors.no_analytics}</li>
-                )}
+                {filteredProductSales.map((ps) => (
+                  <li key={ps.productId} className="border-t border-gray-100 pt-2 font-alexandria">
+                    {ps.displayName} - {t.totalSales}: {safeNumber(ps.totalRevenue).toFixed(2)} {t.currency}, {t.quantity}: {safeNumber(ps.totalQuantity)}
+                  </li>
+                ))}
               </ul>
             </div>
             <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.departmentSales}</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">مبيعات الفئات</h3>
               <ul className="space-y-2">
-                {filteredDepartmentSales.length > 0 ? (
-                  filteredDepartmentSales.map((ds) => (
-                    <li key={ds.departmentId} className="border-t border-gray-100 pt-2 font-alexandria">
-                      {ds.displayName} - {t.totalSales}: {safeNumber(ds.totalRevenue).toFixed(2)} {t.currency}, {t.quantity}: {safeNumber(ds.totalQuantity)}
-                    </li>
-                  ))
-                ) : (
-                  <li className="text-gray-500 font-alexandria">{t.errors.no_analytics}</li>
-                )}
-              </ul>
-            </div>
-            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.leastDepartmentSales}</h3>
-              <ul className="space-y-2">
-                {filteredLeastDepartmentSales.length > 0 ? (
-                  filteredLeastDepartmentSales.map((ds) => (
-                    <li key={ds.departmentId} className="border-t border-gray-100 pt-2 font-alexandria">
-                      {ds.displayName} - {t.totalSales}: {safeNumber(ds.totalRevenue).toFixed(2)} {t.currency}, {t.quantity}: {safeNumber(ds.totalQuantity)}
-                    </li>
-                  ))
-                ) : (
-                  <li className="text-gray-500 font-alexandria">{t.errors.no_analytics}</li>
-                )}
-              </ul>
-            </div>
-            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.topCustomers}</h3>
-              <ul className="space-y-2">
-                {analytics.topCustomers.length > 0 ? (
-                  analytics.topCustomers.map((tc) => (
-                    <li key={`${tc.customerName}-${tc.customerPhone}`} className="border-t border-gray-100 pt-2 font-alexandria">
-                      {tc.customerName} ({tc.customerPhone}) - {t.totalSales}: {safeNumber(tc.totalSpent).toFixed(2)} {t.currency}, {t.totalOrders}: {safeNumber(tc.purchaseCount)}
-                    </li>
-                  ))
-                ) : (
-                  <li className="text-gray-500 font-alexandria">{t.errors.no_analytics}</li>
-                )}
+                {filteredCategorySales.map((cs) => (
+                  <li key={cs.categoryId} className="border-t border-gray-100 pt-2 font-alexandria">
+                    {cs.displayName} - {t.totalSales}: {safeNumber(cs.totalRevenue).toFixed(2)} {t.currency}, {t.quantity}: {safeNumber(cs.totalQuantity)}
+                  </li>
+                ))}
               </ul>
             </div>
           </>
