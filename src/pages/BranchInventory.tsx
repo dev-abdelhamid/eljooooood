@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
+const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 
 // Enums for type safety
 enum InventoryStatus {
