@@ -503,7 +503,6 @@ export const BranchSalesReport: React.FC = () => {
       <div className="mt-8">
         <h2 className="text-xl font-bold text-gray-900 mb-6">{t.previousSales}</h2>
         <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-8">
-          <h2 className="text-xl font-bold text-gray-900 mb-6">{t.filters}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <div className="relative group sm:col-span-2">
               <Search className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${searchInput ? 'opacity-0' : 'opacity-100'}`} />
