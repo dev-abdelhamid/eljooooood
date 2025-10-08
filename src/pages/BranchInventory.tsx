@@ -1,15 +1,15 @@
 import React, { useState, useMemo, useCallback, useEffect, useReducer } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'react-toastify';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Package, Plus, X, Eye, Edit, AlertCircle, Search, Minus } from 'lucide-react';
+import { returnsAPI, inventoryAPI } from '../services/api';
+import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { returnsAPI, inventoryAPI } from '../services/api';
-import { Package, AlertCircle, Search, Edit, X, Plus, Eye, Minus } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { toast } from 'react-toastify';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ProductSearchInput, ProductDropdown } from './NewOrder';
-const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
+
 
 // Enums for type safety
 enum InventoryStatus {
@@ -105,6 +105,7 @@ const translations = {
     viewDetails: 'عرض التفاصيل',
     editStockLimits: 'تعديل حدود المخزون',
     search: 'البحث عن المنتجات...',
+    selectProduct: 'اختر منتج',
     filterByStatus: 'تصفية حسب الحالة',
     filterByDepartment: 'تصفية حسب القسم',
     allStatuses: 'جميع الحالات',
@@ -175,6 +176,7 @@ const translations = {
     viewDetails: 'View Details',
     editStockLimits: 'Edit Stock Limits',
     search: 'Search products...',
+    selectProduct: 'Select Product',
     filterByStatus: 'Filter by Status',
     filterByDepartment: 'Filter by Department',
     allStatuses: 'All Statuses',
@@ -319,7 +321,10 @@ const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): Re
   }
 };
 
-export const BranchInventory: React.FC = () => {
+// Validate ObjectId
+const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
+
+const BranchInventory: React.FC = () => {
   const { t: languageT, language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
@@ -341,6 +346,7 @@ export const BranchInventory: React.FC = () => {
   const [returnErrors, setReturnErrors] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
+  
 
   const ITEMS_PER_PAGE = 10;
 
@@ -455,6 +461,8 @@ export const BranchInventory: React.FC = () => {
     const handleReturnStatusUpdated = ({ branchId, returnId, status }: { branchId: string; returnId: string; status: string }) => {
       if (branchId === user.branchId) {
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
+        const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
+        audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
         addNotification({
           _id: crypto.randomUUID(),
           type: status === 'approved' ? 'success' : 'error',
@@ -462,7 +470,7 @@ export const BranchInventory: React.FC = () => {
           data: { returnId, eventId: crypto.randomUUID() },
           read: false,
           createdAt: new Date().toISOString(),
-          sound: '/sounds/notification.mp3',
+          sound: 'https://eljoodia-client.vercel.app/sounds/notification.mp3',
           vibrate: [200, 100, 200],
         });
         toast[status === 'approved' ? 'success' : 'error'](
@@ -518,7 +526,7 @@ export const BranchInventory: React.FC = () => {
     [t]
   );
 
-  // Reason options
+  // Reason options with fixed reasonEn mapping
   const reasonOptions = useMemo(
     () => [
       { value: '', label: t.selectReason, enValue: '' },
@@ -528,6 +536,18 @@ export const BranchInventory: React.FC = () => {
       { value: ReturnReason.OTHER_AR, label: t.other, enValue: ReturnReason.OTHER_EN },
     ],
     [t]
+  );
+
+  // Product options with default "Select Product"
+  const productOptions = useMemo(
+    () => [
+      { value: '', label: t.selectProduct },
+      ...availableItems.map((availItem) => ({
+        value: availItem.productId,
+        label: `${availItem.productName} (${t.available}: ${availItem.available} ${availItem.unit})`,
+      })),
+    ],
+    [availableItems, t]
   );
 
   // Filtered and paginated inventory
@@ -567,6 +587,11 @@ export const BranchInventory: React.FC = () => {
           type: 'ADD_ITEM',
           payload: { productId: item.product._id, quantity: 1, reason: '', reasonEn: '', maxQuantity: item.currentStock },
         });
+      } else {
+        dispatchReturnForm({
+          type: 'ADD_ITEM',
+          payload: { productId: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0 },
+        });
       }
       setReturnErrors({});
       setIsReturnModalOpen(true);
@@ -602,14 +627,14 @@ export const BranchInventory: React.FC = () => {
         value = numValue;
       }
       if (field === 'reason') {
-        const selectedReason = reasonOptions.find(opt => opt.value === value);
+        const selectedReason = reasonOptions.find((opt) => opt.value === value);
         dispatchReturnForm({
           type: 'UPDATE_ITEM',
           payload: { index, field: 'reason', value },
         });
         dispatchReturnForm({
           type: 'UPDATE_ITEM',
-          payload: { index, field: 'reasonEn', value: selectedReason?.enValue || 'Other' },
+          payload: { index, field: 'reasonEn', value: selectedReason?.enValue || '' },
         });
       } else {
         dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
@@ -808,34 +833,38 @@ export const BranchInventory: React.FC = () => {
       )}
 
       <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-          <ProductSearchInput
-            value={searchInput}
-            onChange={handleSearchChange}
-            placeholder={t.search}
-            ariaLabel={t.search}
-            className="w-full"
-          />
-          <ProductDropdown
-            value={filterStatus}
-            onChange={(value) => {
-              setFilterStatus(value as InventoryStatus | '');
-              setCurrentPage(1);
-            }}
-            options={statusOptions}
-            ariaLabel={t.filterByStatus}
-            className="w-full"
-          />
-          <ProductDropdown
-            value={filterDepartment}
-            onChange={(value) => {
-              setFilterDepartment(value);
-              setCurrentPage(1);
-            }}
-            options={departmentOptions}
-            ariaLabel={t.filterByDepartment}
-            className="w-full"
-          />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="lg:col-span-1">
+            <ProductSearchInput
+              value={searchInput}
+              onChange={handleSearchChange}
+              placeholder={t.search}
+              ariaLabel={t.search}
+              className="w-full"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 lg:col-span-1">
+            <ProductDropdown
+              value={filterStatus}
+              onChange={(value) => {
+                setFilterStatus(value as InventoryStatus | '');
+                setCurrentPage(1);
+              }}
+              options={statusOptions}
+              ariaLabel={t.filterByStatus}
+              className="w-full"
+            />
+            <ProductDropdown
+              value={filterDepartment}
+              onChange={(value) => {
+                setFilterDepartment(value);
+                setCurrentPage(1);
+              }}
+              options={departmentOptions}
+              ariaLabel={t.filterByDepartment}
+              className="w-full"
+            />
+          </div>
         </div>
         <div className="mt-4 text-center text-sm text-gray-600 font-medium">
           {isRtl ? `عدد العناصر: ${filteredInventory.length}` : `Items Count: ${filteredInventory.length}`}
@@ -1021,12 +1050,9 @@ export const BranchInventory: React.FC = () => {
                     <ProductDropdown
                       value={item.productId}
                       onChange={(value) => handleProductChange(index, value)}
-                      options={availableItems.map((availItem) => ({
-                        value: availItem.productId,
-                        label: `${availItem.productName} (${t.available}: ${availItem.available} ${availItem.unit})`,
-                      }))}
+                      options={productOptions}
                       ariaLabel={`${t.items} ${index + 1}`}
-                      placeholder={t.search}
+                      placeholder={t.selectProduct}
                       className="w-full"
                     />
                   )}

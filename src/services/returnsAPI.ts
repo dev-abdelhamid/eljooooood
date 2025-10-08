@@ -6,11 +6,17 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-p
 
 const returnsAxios = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: 30000, // Increased to 30 seconds
   headers: { 'Content-Type': 'application/json' },
 });
 
-axiosRetry(returnsAxios, { retries: 3, retryDelay: (retryCount) => retryCount * 1000 });
+axiosRetry(returnsAxios, {
+  retries: 3,
+  retryDelay: (retryCount) => retryCount * 1000,
+  retryCondition: (error) => {
+    return axios.isCancel(error) || error.code === 'ECONNABORTED' || !error.response || error.response.status >= 500;
+  },
+});
 
 returnsAxios.interceptors.request.use(
   (config) => {
@@ -48,18 +54,27 @@ returnsAxios.interceptors.response.use(
       response: error.response,
     });
 
-    let message = error.response?.data?.message || 'Unexpected error';
+    let message = error.response?.data?.message || error.message || 'Unexpected error';
     const isRtl = localStorage.getItem('language') === 'ar';
-    if (error.response?.status === 400) {
-      message = error.response?.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
-      if (error.response?.data?.field) {
+    
+    if (error.code === 'ECONNABORTED') {
+      message = isRtl ? 'انتهت مهلة الطلب، حاول مرة أخرى' : 'Request timed out, please try again';
+    } else if (!error.response) {
+      message = isRtl ? 'فشل الاتصال بالخادم' : 'Failed to connect to server';
+    } else if (error.response.status === 400) {
+      message = error.response.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
+      if (error.response.data?.field) {
         message = `${message}: ${error.response.data.field} = ${error.response.data.value}`;
       }
+    } else if (error.response.status === 403) {
+      message = error.response.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
+    } else if (error.response.status === 404) {
+      message = error.response.data?.message || (isRtl ? 'الفرع أو المنتج غير موجود' : 'Branch or product not found');
+    } else if (error.response.status === 422) {
+      message = error.response.data?.message || (isRtl ? 'الكمية غير كافية' : 'Insufficient quantity');
+    } else if (error.response.status === 429) {
+      message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
     }
-    if (error.response?.status === 403) message = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
-    if (error.response?.status === 404) message = error.response?.data?.message || (isRtl ? 'الإرجاع غير موجود' : 'Return not found');
-    if (error.response?.status === 422) message = error.response?.data?.message || (isRtl ? 'الكمية غير كافية' : 'Insufficient quantity');
-    if (error.response?.status === 429) message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
@@ -72,7 +87,7 @@ returnsAxios.interceptors.response.use(
           localStorage.removeItem('refreshToken');
           window.location.href = '/login';
           toast.error(isRtl ? 'التوكن منتهي الصلاحية، يرجى تسجيل الدخول مجددًا' : 'Token expired, please log in again', {
-            position: 'top-right',
+            position: isRtl ? 'top-right' : 'top-left',
             autoClose: 3000,
             pauseOnFocusLoss: true,
           });
@@ -92,7 +107,7 @@ returnsAxios.interceptors.response.use(
         localStorage.removeItem('refreshToken');
         window.location.href = '/login';
         toast.error(isRtl ? 'فشل تجديد التوكن، يرجى تسجيل الدخول مجددًا' : 'Failed to refresh token, please log in again', {
-          position: 'top-right',
+          position: isRtl ? 'top-right' : 'top-left',
           autoClose: 3000,
           pauseOnFocusLoss: true,
         });
@@ -100,7 +115,7 @@ returnsAxios.interceptors.response.use(
       }
     }
 
-    toast.error(message, { position: 'top-right', autoClose: 3000, pauseOnFocusLoss: true });
+    toast.error(message, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000, pauseOnFocusLoss: true });
     return Promise.reject({ message, status: error.response?.status, details: error.response?.data });
   }
 );
@@ -143,75 +158,75 @@ export const returnsAPI = {
     }
   },
 
-createReturn: async (data: {
-  branchId: string;
-  items: Array<{
-    product: string;
-    quantity: number;
-    reason: string;
-    reasonEn?: string;
-  }>;
-  notes?: string | null;
-}) => {
-  console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Sending:`, data);
-  if (
-    !isValidObjectId(data.branchId) ||
-    !Array.isArray(data.items) ||
-    data.items.length === 0 ||
-    data.items.some(
-      (item) => !isValidObjectId(item.product) || item.quantity < 1 || !item.reason
-    )
-  ) {
-    console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Invalid data:`, data);
-    throw new Error('Invalid branch ID or item data');
-  }
-  try {
-    const reasonMap = {
-      'تالف': 'Damaged',
-      'منتج خاطئ': 'Wrong Item',
-      'كمية زائدة': 'Excess Quantity',
-      'أخرى': 'Other',
-    };
-    const response = await returnsAxios.post('/returns', {
-      branchId: data.branchId,
-      items: data.items.map(item => ({
-        product: item.product,
-        quantity: Number(item.quantity),
-        reason: item.reason.trim(),
-        reasonEn: item.reasonEn || reasonMap[item.reason] || 'Other',
-      })),
-      notes: data.notes ? data.notes.trim() : undefined,
-    });
-    console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Response:`, response);
-    return response;
-  } catch (error: any) {
-    console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Error:`, {
-      message: error.message,
-      status: error.status,
-      details: error.details,
-      response: error.response,
-    });
-    const isRtl = localStorage.getItem('language') === 'ar';
-    let errorMessage = error.message || (isRtl ? 'خطأ في إنشاء طلب الإرجاع' : 'Error creating return request');
-    if (error.status === 400) {
-      errorMessage = error.details?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
-      if (error.details?.field) {
-        errorMessage = `${errorMessage}: ${error.details.field} = ${error.details.value}`;
-      }
-    } else if (error.status === 403) {
-      errorMessage = error.details?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
-    } else if (error.status === 404) {
-      errorMessage = error.details?.message || (isRtl ? 'الفرع أو المنتج غير موجود' : 'Branch or product not found');
-    } else if (error.status === 422) {
-      errorMessage = error.details?.message || (isRtl ? 'الكمية غير كافية' : 'Insufficient quantity');
-    } else if (error.code === 'ECONNABORTED') {
-      errorMessage = isRtl ? 'انتهت مهلة الطلب، حاول مرة أخرى' : 'Request timed out, please try again';
-    } else if (!error.response) {
-      errorMessage = isRtl ? 'فشل الاتصال بالخادم' : 'Failed to connect to server';
+  createReturn: async (data: {
+    branchId: string;
+    items: Array<{
+      product: string;
+      quantity: number;
+      reason: string;
+      reasonEn?: string;
+    }>;
+    notes?: string | null;
+  }) => {
+    console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Sending:`, data);
+    if (
+      !isValidObjectId(data.branchId) ||
+      !Array.isArray(data.items) ||
+      data.items.length === 0 ||
+      data.items.some(
+        (item) => !isValidObjectId(item.product) || item.quantity < 1 || !item.reason
+      )
+    ) {
+      console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Invalid data:`, data);
+      throw new Error('Invalid branch ID or item data');
     }
-    throw new Error(errorMessage);
-  }
-},
+    try {
+      const reasonMap = {
+        'تالف': 'Damaged',
+        'منتج خاطئ': 'Wrong Item',
+        'كمية زائدة': 'Excess Quantity',
+        'أخرى': 'Other',
+      };
+      const response = await returnsAxios.post('/returns', {
+        branchId: data.branchId,
+        items: data.items.map(item => ({
+          product: item.product,
+          quantity: Number(item.quantity),
+          reason: item.reason.trim(),
+          reasonEn: item.reasonEn || reasonMap[item.reason] || 'Other',
+        })),
+        notes: data.notes ? data.notes.trim() : undefined,
+      });
+      console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Response:`, response);
+      return response;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Error:`, {
+        message: error.message,
+        status: error.status,
+        details: error.details,
+        response: error.response,
+      });
+      const isRtl = localStorage.getItem('language') === 'ar';
+      let errorMessage = error.message || (isRtl ? 'خطأ في إنشاء طلب الإرجاع' : 'Error creating return request');
+      if (error.status === 400) {
+        errorMessage = error.details?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
+        if (error.details?.field) {
+          errorMessage = `${errorMessage}: ${error.details.field} = ${error.details.value}`;
+        }
+      } else if (error.status === 403) {
+        errorMessage = error.details?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
+      } else if (error.status === 404) {
+        errorMessage = error.details?.message || (isRtl ? 'الفرع أو المنتج غير موجود' : 'Branch or product not found');
+      } else if (error.status === 422) {
+        errorMessage = error.details?.message || (isRtl ? 'الكمية غير كافية' : 'Insufficient quantity');
+      } else if (error.code === 'ECONNABORTED') {
+        errorMessage = isRtl ? 'انتهت مهلة الطلب، حاول مرة أخرى' : 'Request timed out, please try again';
+      } else if (!error.response) {
+        errorMessage = isRtl ? 'فشل الاتصال بالخادم' : 'Failed to connect to server';
+      }
+      throw new Error(errorMessage);
+    }
+  },
 
   updateReturnStatus: async (
     returnId: string,
