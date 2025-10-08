@@ -138,7 +138,7 @@ interface SaleItem {
   unitPrice: number;
 }
 
-interface SaleData {
+export interface SaleData {
   items: SaleItem[];
   branch: string;
   notes?: string;
@@ -148,13 +148,13 @@ interface SaleData {
   customerPhone?: string;
 }
 
-interface AnalyticsParams {
+export interface AnalyticsParams {
   branch?: string;
   startDate?: string;
   endDate?: string;
 }
 
-interface BranchStatsParams {
+export interface BranchStatsParams {
   startDate?: string;
   endDate?: string;
 }
