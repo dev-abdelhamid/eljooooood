@@ -1,4 +1,4 @@
-import axios, { AxiosResponse } from 'axios';
+ import axios, { AxiosResponse } from 'axios';
 import { toast } from 'react-toastify';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
@@ -158,8 +158,8 @@ interface Sale {
 interface AnalyticsData {
   totalSales: number;
   totalCount: number;
-  averageOrderValue: string;
-  returnRate: string;
+  averageOrderValue: number;
+  returnRate: number;
   topProduct: {
     productId: string | null;
     productName: string;
@@ -167,14 +167,6 @@ interface AnalyticsData {
     totalQuantity: number;
     totalRevenue: number;
   };
-  branchSales: Array<{
-    branchId: string;
-    branchName: string;
-    branchNameEn?: string;
-    displayName: string;
-    totalSales: number;
-    saleCount: number;
-  }>;
   productSales: Array<{
     productId: string;
     productName: string;
@@ -229,7 +221,7 @@ const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 
 const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7,15}$/.test(phone);
 
-const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'credit_card', 'bank_transfer'].includes(method);
+const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'card'].includes(method);
 
 const isValidPaymentStatus = (status: string | undefined): boolean => !status || ['pending', 'completed', 'canceled'].includes(status);
 
@@ -260,7 +252,7 @@ export const salesAPI = {
     }
     if (!isValidPaymentMethod(saleData.paymentMethod)) {
       console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid payment method:`, saleData.paymentMethod);
-      throw new Error(isRtl ? 'طريقة الدفع غير صالحة (يجب أن تكون cash أو credit_card أو bank_transfer)' : 'Invalid payment method (must be cash, credit_card, or bank_transfer)');
+      throw new Error(isRtl ? 'طريقة الدفع غير صالحة (يجب أن تكون cash أو card)' : 'Invalid payment method (must be cash or card)');
     }
     if (!isValidPaymentStatus(saleData.paymentStatus)) {
       console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid payment status:`, saleData.paymentStatus);
