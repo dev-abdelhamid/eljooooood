@@ -13,11 +13,10 @@ const salesAxios = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
-  withCredentials: true,
+  withCredentials: true, // دعم CORS مع التوكنات
 });
 
-
-
+// معالجة الأخطاء
 const handleError = async (error: AxiosError, originalRequest: AxiosRequestConfig): Promise<never> => {
   const errorDetails = {
     url: error.config?.url,
@@ -96,10 +95,10 @@ const handleError = async (error: AxiosError, originalRequest: AxiosRequestConfi
   throw { message, status: error.response?.status } as SalesApiError;
 };
 
+// Interceptors للطلبات
 salesAxios.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-    console.log(`[${new Date().toISOString()}] Token in request:`, token);
     if (token) config.headers.Authorization = `Bearer ${token}`;
     const language = localStorage.getItem('language') || 'en';
     config.params = { ...config.params, lang: language };
@@ -117,6 +116,7 @@ salesAxios.interceptors.request.use(
   }
 );
 
+// Interceptors للاستجابات
 salesAxios.interceptors.response.use(
   (response) => {
     if (!response.data) {
@@ -128,11 +128,13 @@ salesAxios.interceptors.response.use(
   (error) => handleError(error, error.config)
 );
 
+// دوال التحقق
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7,15}$/.test(phone);
 const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'credit_card', 'bank_transfer'].includes(method);
-const isValidPaymentStatus = (status: string | undefined): boolean => !method || ['pending', 'completed', 'canceled'].includes(status);
+const isValidPaymentStatus = (status: string | undefined): boolean => !status || ['pending', 'completed', 'canceled'].includes(status);
 
+// واجهة للبيع
 interface SaleData {
   items: Array<{ productId: string; quantity: number; unitPrice: number }>;
   branch: string;
@@ -143,6 +145,7 @@ interface SaleData {
   customerPhone?: string;
 }
 
+// واجهة للمعاملات
 interface AnalyticsParams {
   branch?: string;
   startDate?: string;
@@ -197,7 +200,12 @@ export const salesAPI = {
       console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid end date:`, params.endDate);
       throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
     }
-  
+    const response = await salesAxios.get('/sales', { params });
+    console.log(`[${new Date().toISOString()}] salesAPI.getAll - Success:`, {
+      total: response.total,
+      salesCount: response.sales?.length,
+    });
+    return response;
   },
   getById: async (id: string) => {
     console.log(`[${new Date().toISOString()}] salesAPI.getById - Sending:`, { id });
@@ -233,7 +241,12 @@ export const salesAPI = {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid end date:`, params.endDate);
       throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
     }
-    
+    const response = await salesAxios.get('/sales/analytics', { params });
+    console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Success:`, {
+      totalSales: response.totalSales,
+      totalCount: response.totalCount,
+    });
+    return response;
   },
   getBranchAnalytics: async (params: AnalyticsParams) => {
     console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Sending:`, params);
@@ -245,7 +258,12 @@ export const salesAPI = {
       console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid end date:`, params.endDate);
       throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
     }
-
+    const response = await salesAxios.get('/sales/branch-analytics', { params });
+    console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Success:`, {
+      totalSales: response.totalSales,
+      totalCount: response.totalCount,
+    });
+    return response;
   },
 };
 
