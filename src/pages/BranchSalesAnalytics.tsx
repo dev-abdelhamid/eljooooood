@@ -410,7 +410,6 @@ export const salesAPI = {
       });
       return response;
     },
-};
 
 // Utility Function
 const safeNumber = (value: any, defaultValue: number = 0): number => {
