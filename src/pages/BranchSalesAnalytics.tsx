@@ -39,11 +39,13 @@ const translations = {
       no_branch_assigned: 'لم يتم تعيين فرع',
       fetch_analytics: 'خطأ أثناء جلب الإحصائيات',
       network_error: 'خطأ في الاتصال بالشبكة',
+      invalid_data: 'بيانات غير صالحة من الخادم',
     },
     currency: 'ريال',
     paymentMethods: {
       cash: 'نقدي',
       card: 'بطاقة',
+      unknown: 'غير معروف',
     },
   },
   en: {
@@ -76,11 +78,13 @@ const translations = {
       no_branch_assigned: 'No branch assigned',
       fetch_analytics: 'Error fetching analytics',
       network_error: 'Network connection error',
+      invalid_data: 'Invalid data from server',
     },
     currency: 'SAR',
     paymentMethods: {
       cash: 'Cash',
       card: 'Card',
+      unknown: 'Unknown',
     },
   },
 };
@@ -156,7 +160,7 @@ interface AnalyticsData {
 // مكونات فرعية
 const AnalyticsSkeleton = React.memo(() => (
   <div className="space-y-6 animate-pulse">
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
       {[...Array(4)].map((_, index) => (
         <div key={index} className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
           <div className="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
@@ -207,11 +211,19 @@ export const BranchSalesAnalytics: React.FC = () => {
     setLoading(true);
     try {
       const response = await salesAPI.getBranchAnalytics({ startDate, endDate });
+      // التحقق من صحة البيانات
+      if (!response || typeof response !== 'object' || !Array.isArray(response.paymentMethods)) {
+        throw new Error(t.errors.invalid_data);
+      }
       setAnalytics({
         ...response,
         salesTrends: response.salesTrends.map((trend: any) => ({
           ...trend,
           period: formatDate(new Date(trend.period), isRtl ? 'ar' : 'en'),
+        })),
+        paymentMethods: response.paymentMethods.map((method: any) => ({
+          ...method,
+          paymentMethod: method.paymentMethod || 'unknown',
         })),
       });
       setError('');
@@ -440,7 +452,7 @@ export const BranchSalesAnalytics: React.FC = () => {
                   <Pie
                     data={analytics.paymentMethods}
                     dataKey="totalAmount"
-                    nameKey={(entry) => t.paymentMethods[entry.paymentMethod] || entry.paymentMethod}
+                    nameKey={(entry) => t.paymentMethods[entry.paymentMethod] || t.paymentMethods.unknown}
                     cx="50%"
                     cy="50%"
                     outerRadius={80}
