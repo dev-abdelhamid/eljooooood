@@ -225,7 +225,7 @@ export const salesAPI = {
   },
 
   getAnalytics: async (params: AnalyticsParams) => {
-    console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Sending:`, params);
+    console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Sending params:`, params);
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid branch ID:`, params.branch);
       throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
@@ -239,9 +239,12 @@ export const salesAPI = {
       throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
     }
     const response = await salesAxios.get('/sales/analytics', { params });
-    console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Success:`, {
+    console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Success response:`, {
       totalSales: response.totalSales,
       totalCount: response.totalCount,
+      productSalesCount: response.productSales?.length,
+      departmentSalesCount: response.departmentSales?.length,
+      topCustomersCount: response.topCustomers?.length,
     });
     return response;
   },
