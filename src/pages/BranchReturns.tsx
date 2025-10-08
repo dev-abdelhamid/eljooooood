@@ -752,7 +752,7 @@ export const BranchReturns: React.FC = () => {
 
   return (
     <div
-      className="container mx-auto px-4 py-8 min-h-screen bg-gradient-to-br from-amber-50 to-gray-50"
+      className=" mx-auto px-4 py-8 min-h-screen "
       dir={isRtl ? 'rtl' : 'ltr'}
     >
       <div className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
