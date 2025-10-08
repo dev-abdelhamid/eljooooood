@@ -72,6 +72,7 @@ export const translations = {
       delete_sale_failed: 'فشل حذف المبيعة',
       departments: { unknown: 'غير معروف' },
       deleted_product: 'منتج محذوف',
+      no_search_results: 'لا توجد نتائج مطابقة',
     },
     currency: 'ريال',
     units: { default: 'غير محدد' },
@@ -111,6 +112,7 @@ export const translations = {
       delete_sale_failed: 'Failed to delete sale',
       departments: { unknown: 'Unknown' },
       deleted_product: 'Deleted Product',
+      no_search_results: 'No matching results found',
     },
     currency: 'SAR',
     units: { default: 'N/A' },
@@ -137,7 +139,7 @@ const SearchInput = React.memo<{
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   return (
-    <div className="relative group">
+    <div className="relative group w-full">
       <Search
         className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
       />
@@ -175,7 +177,7 @@ export const ProductDropdown = React.memo<{
   const [isOpen, setIsOpen] = useState(false);
   const selectedOption = options.find((opt) => opt.value === value) || options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
   return (
-    <div className="relative group">
+    <div className="relative group w-full">
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
         className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -204,38 +206,6 @@ export const ProductDropdown = React.memo<{
           )}
         </div>
       )}
-    </div>
-  );
-});
-
-// مكون فلتر الفروع
-export const BranchFilter = React.memo<{
-  branches: Branch[];
-  selectedBranch: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-  allBranchesLabel: string;
-}>(({ branches, selectedBranch, onChange, placeholder, allBranchesLabel }) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  return (
-    <div className="relative group">
-      <select
-        value={selectedBranch}
-        onChange={(e) => onChange(e.target.value)}
-        className={`w-full ${isRtl ? 'pr-10 pl-4' : 'pl-10 pr-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria`}
-        aria-label={placeholder}
-      >
-        <option value="">{allBranchesLabel}</option>
-        {branches.map((branch) => (
-          <option key={branch._id} value={branch._id}>
-            {branch.displayName}
-          </option>
-        ))}
-      </select>
-      <ChevronDown
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5 group-focus-within:text-amber-500`}
-      />
     </div>
   );
 });
@@ -325,7 +295,7 @@ export const SalesReport: React.FC = () => {
   const [hasMore, setHasMore] = useState(true);
 
   // دالة البحث المؤخر
-  const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim()), 300), []);
+  const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim().toLowerCase()), 300), []);
 
   // معالجة تغيير البحث
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -533,6 +503,7 @@ export const SalesReport: React.FC = () => {
   const filteredSales = useMemo(
     () =>
       sales.filter((sale) => {
+        if (!searchTerm) return true;
         const term = searchTerm.toLowerCase();
         return (
           sale.orderNumber.toLowerCase().includes(term) ||
@@ -554,6 +525,18 @@ export const SalesReport: React.FC = () => {
       { value: 'custom', label: t.custom },
     ],
     [t]
+  );
+
+  // خيارات الفروع
+  const branchOptions = useMemo(
+    () => [
+      { value: '', label: t.allBranches },
+      ...branches.map((branch) => ({
+        value: branch._id,
+        label: branch.displayName,
+      })),
+    ],
+    [branches, t]
   );
 
   // التحقق من صلاحيات المستخدم
@@ -589,7 +572,7 @@ export const SalesReport: React.FC = () => {
       <div className="space-y-8">
         <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
           <h2 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.filterBy}</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <SearchInput
               value={searchInput}
               onChange={handleSearchChange}
@@ -602,31 +585,30 @@ export const SalesReport: React.FC = () => {
               options={periodOptions}
               ariaLabel={t.filterBy}
             />
+            <ProductDropdown
+              value={filterBranch}
+              onChange={setFilterBranch}
+              options={branchOptions}
+              ariaLabel={t.branchFilter}
+            />
             {filterPeriod === 'custom' && (
               <>
                 <input
                   type="date"
                   value={filterStartDate}
                   onChange={(e) => setFilterStartDate(e.target.value)}
-                  className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria`}
+                  className="w-full py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria"
                   aria-label={t.date}
                 />
                 <input
                   type="date"
                   value={filterEndDate}
                   onChange={(e) => setFilterEndDate(e.target.value)}
-                  className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria`}
+                  className="w-full py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria"
                   aria-label={t.date}
                 />
               </>
             )}
-            <BranchFilter
-              branches={branches}
-              selectedBranch={filterBranch}
-              onChange={setFilterBranch}
-              placeholder={t.branchFilter}
-              allBranchesLabel={t.allBranches}
-            />
           </div>
         </div>
         <div>
@@ -640,7 +622,7 @@ export const SalesReport: React.FC = () => {
           ) : filteredSales.length === 0 ? (
             <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
               <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 text-sm font-medium font-alexandria">{t.noSales}</p>
+              <p className="text-gray-600 text-sm font-medium font-alexandria">{searchTerm ? t.errors.no_search_results : t.noSales}</p>
             </div>
           ) : (
             <>
