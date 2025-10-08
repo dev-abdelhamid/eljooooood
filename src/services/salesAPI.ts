@@ -1,4 +1,4 @@
- import axios, { AxiosResponse } from 'axios';
+import axios, { AxiosResponse } from 'axios';
 import { toast } from 'react-toastify';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
@@ -210,6 +210,11 @@ interface AnalyticsData {
     totalSpent: number;
     purchaseCount: number;
   }>;
+  paymentMethods: Array<{
+    paymentMethod: string;
+    totalAmount: number;
+    count: number;
+  }>;
   returnStats: Array<{
     status: string;
     count: number;
@@ -260,7 +265,7 @@ export const salesAPI = {
     }
     const response = await salesAxios.post('/sales', { ...saleData, lang: isRtl ? 'ar' : 'en' });
     console.log(`[${new Date().toISOString()}] salesAPI.create - Success:`, response);
-    return response.sale;
+    return response.sale; // إرجاع الحقل sale من البيانات
   },
 
   getAll: async (params: {
@@ -289,7 +294,7 @@ export const salesAPI = {
       total: response.total,
       salesCount: response.sales?.length,
     });
-    return response;
+    return response; // إرجاع البيانات مباشرة لأنها تتطابق مع النوع المتوقع
   },
 
   getById: async (id: string): Promise<Sale> => {
@@ -300,7 +305,7 @@ export const salesAPI = {
     }
     const response = await salesAxios.get(`/sales/${id}`, { params: { lang: isRtl ? 'ar' : 'en' } });
     console.log(`[${new Date().toISOString()}] salesAPI.getById - Success:`, response);
-    return response.sale;
+    return response.sale; // إرجاع الحقل sale من البيانات
   },
 
   delete: async (id: string): Promise<{ message: string }> => {
@@ -311,7 +316,7 @@ export const salesAPI = {
     }
     const response = await salesAxios.delete(`/sales/${id}`, { params: { lang: isRtl ? 'ar' : 'en' } });
     console.log(`[${new Date().toISOString()}] salesAPI.delete - Success:`, response);
-    return response;
+    return response; // إرجاع البيانات مباشرة لأنها تتطابق مع النوع المتوقع
   },
 
   getAnalytics: async (params: {
@@ -336,10 +341,8 @@ export const salesAPI = {
     console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Success:`, {
       totalSales: response.totalSales,
       totalCount: response.totalCount,
-      productSalesCount: response.productSales?.length,
-      topCustomersCount: response.topCustomers?.length,
     });
-    return response;
+    return response; // إرجاع البيانات مباشرة لأنها تتطابق مع AnalyticsData
   },
 
   getBranchAnalytics: async (params: {
@@ -359,10 +362,8 @@ export const salesAPI = {
     console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Success:`, {
       totalSales: response.totalSales,
       totalCount: response.totalCount,
-      productSalesCount: response.productSales?.length,
-      topCustomersCount: response.topCustomers?.length,
     });
-    return response;
+    return response; // إرجاع البيانات مباشرة لأنها تتطابق مع AnalyticsData
   },
 };
 
