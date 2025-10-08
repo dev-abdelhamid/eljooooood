@@ -793,8 +793,8 @@ export const BranchInventory: React.FC = () => {
 
   return (
     <div
-      className="container mx-auto px-4 py-8 min-h-screen bg-gradient-to-br from-amber-50 to-gray-50"
-      dir={isRtl ? 'rtl' : 'ltr'}
+      className="container mx-auto px-4 py-8 min-h-screen "
+    
     >
       <div className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
@@ -972,7 +972,7 @@ export const BranchInventory: React.FC = () => {
 
       <div className="mt-6">
         {totalInventoryPages > 1 && (
-          <div className={`flex items-center justify-center gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex items-center justify-center gap-3 ${isRtl ? 'flex-row' : ''}`}>
             <button
               onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
               className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
