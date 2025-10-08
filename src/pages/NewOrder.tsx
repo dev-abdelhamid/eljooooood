@@ -508,8 +508,10 @@ export function NewOrder() {
       console.log(`[${new Date().toISOString()}] Connected to Socket.IO server`);
       if (user?.role === 'branch' && user?.branchId) {
         socket.emit('joinRoom', `branch-${user.branchId}`);
-      } else if (user?.role === 'admin') {
-        socket.emit('joinRoom', 'admin');
+      } else if (user?.role === 'admin' || user?.role === "production") {
+        socket.emit('joinRoom', 'admin' || 'production' );
+                
+
       }
     });
 

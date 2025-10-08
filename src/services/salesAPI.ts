@@ -1,9 +1,13 @@
-import axios from 'axios';
+import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 import { toast } from 'react-toastify';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
-
 const isRtl = localStorage.getItem('language') === 'ar';
+
+interface SalesApiError {
+  message: string;
+  status?: number;
+}
 
 const salesAxios = axios.create({
   baseURL: API_BASE_URL,
@@ -11,21 +15,37 @@ const salesAxios = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-const handleError = async (error: any, originalRequest: any): Promise<never> => {
-  console.error(`[${new Date().toISOString()}] Sales API response error:`, {
+// معالجة الأخطاء
+const handleError = async (error: AxiosError, originalRequest: AxiosRequestConfig): Promise<never> => {
+  const errorDetails = {
     url: error.config?.url,
     method: error.config?.method,
     status: error.response?.status,
     data: error.response?.data,
     message: error.message,
-  });
+  };
+  console.error(`[${new Date().toISOString()}] Sales API response error:`, errorDetails);
 
-  let message = error.response?.data?.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
+  let message = (error.response?.data as any)?.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
 
-  if (error.response?.status === 400) message = error.response?.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
-  if (error.response?.status === 403) message = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
-  if (error.response?.status === 404) message = error.response?.data?.message || (isRtl ? 'المبيعة غير موجودة' : 'Sale not found');
-  if (error.response?.status === 429) message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
+  switch (error.response?.status) {
+    case 400:
+      message = (error.response?.data as any)?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
+      break;
+    case 403:
+      message = (error.response?.data as any)?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
+      break;
+    case 404:
+      message = (error.response?.data as any)?.message || (isRtl ? 'المبيعة غير موجودة' : 'Sale not found');
+      break;
+    case 429:
+      message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
+      break;
+    default:
+      if (!navigator.onLine) {
+        message = isRtl ? 'لا يوجد اتصال بالإنترنت' : 'No internet connection';
+      }
+  }
 
   if (error.response?.status === 401 && !originalRequest._retry) {
     originalRequest._retry = true;
@@ -40,16 +60,15 @@ const handleError = async (error: any, originalRequest: any): Promise<never> => 
         toast.error(isRtl ? 'التوكن منتهي الصلاحية، يرجى تسجيل الدخول مجددًا' : 'Token expired, please log in again', {
           position: isRtl ? 'top-right' : 'top-left',
           autoClose: 3000,
-          pauseOnFocusLoss: true,
         });
-        return Promise.reject({ message: isRtl ? 'التوكن منتهي الصلاحية ولا يوجد توكن منعش' : 'Token expired and no refresh token available', status: 401 });
+        throw new Error(isRtl ? 'التوكن منتهي الصلاحية ولا يوجد توكن منعش' : 'Token expired and no refresh token available');
       }
       const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
       const { accessToken, refreshToken: newRefreshToken } = response.data;
       localStorage.setItem('token', accessToken);
       if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
       console.log(`[${new Date().toISOString()}] Token refreshed successfully`);
-      originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+      originalRequest.headers = { ...originalRequest.headers, Authorization: `Bearer ${accessToken}` };
       return salesAxios(originalRequest);
     } catch (refreshError) {
       console.error(`[${new Date().toISOString()}] Refresh token failed:`, refreshError);
@@ -60,16 +79,16 @@ const handleError = async (error: any, originalRequest: any): Promise<never> => 
       toast.error(isRtl ? 'فشل تجديد التوكن، يرجى تسجيل الدخول مجددًا' : 'Failed to refresh token, please log in again', {
         position: isRtl ? 'top-right' : 'top-left',
         autoClose: 3000,
-        pauseOnFocusLoss: true,
       });
-      return Promise.reject({ message: isRtl ? 'فشل تجديد التوكن' : 'Failed to refresh token', status: 401 });
+      throw new Error(isRtl ? 'فشل تجديد التوكن' : 'Failed to refresh token');
     }
   }
 
-  toast.error(message, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000, pauseOnFocusLoss: true });
-  return Promise.reject({ message, status: error.response?.status });
+  toast.error(message, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
+  throw { message, status: error.response?.status } as SalesApiError;
 };
 
+// Interceptors للطلبات
 salesAxios.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -90,36 +109,44 @@ salesAxios.interceptors.request.use(
   }
 );
 
+// Interceptors للاستجابات
 salesAxios.interceptors.response.use(
   (response) => {
-    const data = response.data;
-    if (!data) {
+    if (!response.data) {
       console.error(`[${new Date().toISOString()}] Empty response data:`, response);
       throw new Error(isRtl ? 'استجابة فارغة من الخادم' : 'Empty response from server');
     }
-    return data;
+    return response.data;
   },
   (error) => handleError(error, error.config)
 );
 
+// دوال التحقق
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
-
 const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7,15}$/.test(phone);
-
 const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'card'].includes(method);
+const isValidPaymentStatus = (status: string | undefined): boolean => !method || ['pending', 'completed', 'canceled'].includes(status);
 
-const isValidPaymentStatus = (status: string | undefined): boolean => !status || ['pending', 'completed', 'canceled'].includes(status);
+// واجهة للبيع
+interface SaleData {
+  items: Array<{ productId: string; quantity: number; unitPrice: number }>;
+  branch: string;
+  notes?: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  customerName?: string;
+  customerPhone?: string;
+}
+
+// واجهة للمعاملات
+interface AnalyticsParams {
+  branch?: string;
+  startDate?: string;
+  endDate?: string;
+}
 
 export const salesAPI = {
-  create: async (saleData: {
-    items: Array<{ productId: string; quantity: number; unitPrice: number }>;
-    branch: string;
-    notes?: string;
-    paymentMethod?: string;
-    paymentStatus?: string;
-    customerName?: string;
-    customerPhone?: string;
-  }) => {
+  create: async (saleData: SaleData) => {
     console.log(`[${new Date().toISOString()}] salesAPI.create - Sending:`, saleData);
     if (!isValidObjectId(saleData.branch)) {
       console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid branch ID:`, saleData.branch);
@@ -197,11 +224,7 @@ export const salesAPI = {
     return response;
   },
 
-  getAnalytics: async (params: {
-    branch?: string;
-    startDate?: string;
-    endDate?: string;
-  }) => {
+  getAnalytics: async (params: AnalyticsParams) => {
     console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Sending:`, params);
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid branch ID:`, params.branch);
