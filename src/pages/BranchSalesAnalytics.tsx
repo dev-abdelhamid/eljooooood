@@ -215,6 +215,14 @@ export const BranchSalesAnalytics: React.FC = () => {
       if (!response || typeof response !== 'object' || !Array.isArray(response.paymentMethods)) {
         throw new Error(t.errors.invalid_data);
       }
+      // التحقق من صحة paymentMethods
+      const validPaymentMethods = response.paymentMethods.every(
+        (method: any) => typeof method.paymentMethod === 'string' && method.paymentMethod
+      );
+      if (!validPaymentMethods) {
+        console.error(`[${new Date().toISOString()}] Invalid paymentMethods data:`, response.paymentMethods);
+        throw new Error(t.errors.invalid_data);
+      }
       setAnalytics({
         ...response,
         salesTrends: response.salesTrends.map((trend: any) => ({
@@ -223,9 +231,10 @@ export const BranchSalesAnalytics: React.FC = () => {
         })),
         paymentMethods: response.paymentMethods.map((method: any) => ({
           ...method,
-          paymentMethod: method.paymentMethod || 'unknown',
+          paymentMethod: t.paymentMethods[method.paymentMethod] || t.paymentMethods.unknown,
         })),
       });
+      console.log(`[${new Date().toISOString()}] Processed paymentMethods:`, response.paymentMethods);
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Analytics fetch error:`, err);
@@ -452,7 +461,7 @@ export const BranchSalesAnalytics: React.FC = () => {
                   <Pie
                     data={analytics.paymentMethods}
                     dataKey="totalAmount"
-                    nameKey={(entry) => t.paymentMethods[entry.paymentMethod] || t.paymentMethods.unknown}
+                    nameKey="paymentMethod"
                     cx="50%"
                     cy="50%"
                     outerRadius={80}
