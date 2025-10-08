@@ -13,9 +13,11 @@ const salesAxios = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,
 });
 
-// معالجة الأخطاء
+
+
 const handleError = async (error: AxiosError, originalRequest: AxiosRequestConfig): Promise<never> => {
   const errorDetails = {
     url: error.config?.url,
@@ -26,24 +28,33 @@ const handleError = async (error: AxiosError, originalRequest: AxiosRequestConfi
   };
   console.error(`[${new Date().toISOString()}] Sales API response error:`, errorDetails);
   let message = (error.response?.data as any)?.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
-  switch (error.response?.status) {
-    case 400:
-      message = (error.response?.data as any)?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
-      break;
-    case 403:
-      message = (error.response?.data as any)?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
-      break;
-    case 404:
-      message = (error.response?.data as any)?.message || (isRtl ? 'المبيعة غير موجودة' : 'Sale not found');
-      break;
-    case 429:
-      message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
-      break;
-    default:
-      if (!navigator.onLine) {
-        message = isRtl ? 'لا يوجد اتصال بالإنترنت' : 'No internet connection';
-      }
+
+  if (error.response?.status === 0 || error.code === 'ERR_NETWORK') {
+    message = isRtl ? 'فشل الاتصال بالخادم، تحقق من الاتصال بالإنترنت' : 'Failed to connect to server, check your internet connection';
+  } else {
+    switch (error.response?.status) {
+      case 400:
+        message = (error.response?.data as any)?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
+        break;
+      case 403:
+        message = (error.response?.data as any)?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
+        break;
+      case 404:
+        message = (error.response?.data as any)?.message || (isRtl ? 'المبيعة غير موجودة' : 'Sale not found');
+        break;
+      case 429:
+        message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
+        break;
+      case 502:
+        message = isRtl ? 'خطأ في الخادم (502)، حاول مرة أخرى لاحقًا' : 'Server error (502), try again later';
+        break;
+      default:
+        if (!navigator.onLine) {
+          message = isRtl ? 'لا يوجد اتصال بالإنترنت' : 'No internet connection';
+        }
+    }
   }
+
   if (error.response?.status === 401 && !originalRequest._retry) {
     originalRequest._retry = true;
     try {
@@ -80,14 +91,15 @@ const handleError = async (error: AxiosError, originalRequest: AxiosRequestConfi
       throw new Error(isRtl ? 'فشل تجديد التوكن' : 'Failed to refresh token');
     }
   }
+
   toast.error(message, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
   throw { message, status: error.response?.status } as SalesApiError;
 };
 
-// Interceptors للطلبات
 salesAxios.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
+    console.log(`[${new Date().toISOString()}] Token in request:`, token);
     if (token) config.headers.Authorization = `Bearer ${token}`;
     const language = localStorage.getItem('language') || 'en';
     config.params = { ...config.params, lang: language };
@@ -105,7 +117,6 @@ salesAxios.interceptors.request.use(
   }
 );
 
-// Interceptors للاستجابات
 salesAxios.interceptors.response.use(
   (response) => {
     if (!response.data) {
@@ -117,13 +128,11 @@ salesAxios.interceptors.response.use(
   (error) => handleError(error, error.config)
 );
 
-// دوال التحقق
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7,15}$/.test(phone);
 const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'credit_card', 'bank_transfer'].includes(method);
-const isValidPaymentStatus = (status: string | undefined): boolean => !status || ['pending', 'completed', 'canceled'].includes(status);
+const isValidPaymentStatus = (status: string | undefined): boolean => !method || ['pending', 'completed', 'canceled'].includes(status);
 
-// واجهة للبيع
 interface SaleData {
   items: Array<{ productId: string; quantity: number; unitPrice: number }>;
   branch: string;
@@ -134,12 +143,10 @@ interface SaleData {
   customerPhone?: string;
 }
 
-// واجهة للمعاملات
 interface AnalyticsParams {
   branch?: string;
   startDate?: string;
   endDate?: string;
-
 }
 
 export const salesAPI = {
@@ -190,12 +197,7 @@ export const salesAPI = {
       console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid end date:`, params.endDate);
       throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
     }
-    const response = await salesAxios.get('/sales', { params });
-    console.log(`[${new Date().toISOString()}] salesAPI.getAll - Success:`, {
-      total: response.total,
-      salesCount: response.sales?.length,
-    });
-    return response;
+  
   },
   getById: async (id: string) => {
     console.log(`[${new Date().toISOString()}] salesAPI.getById - Sending:`, { id });
@@ -231,12 +233,19 @@ export const salesAPI = {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid end date:`, params.endDate);
       throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
     }
-    const response = await salesAxios.get('/sales/analytics', { params });
-    console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Success:`, {
-      totalSales: response.totalSales,
-      totalCount: response.totalCount,
-    });
-    return response;
+    
+  },
+  getBranchAnalytics: async (params: AnalyticsParams) => {
+    console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Sending:`, params);
+    if (params.startDate && isNaN(new Date(params.startDate).getTime())) {
+      console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid start date:`, params.startDate);
+      throw new Error(isRtl ? 'تاريخ البدء غير صالح' : 'Invalid start date');
+    }
+    if (params.endDate && isNaN(new Date(params.endDate).getTime())) {
+      console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid end date:`, params.endDate);
+      throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
+    }
+
   },
 };
 
