@@ -13,7 +13,6 @@ const salesAxios = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
-  withCredentials: true, // دعم CORS مع التوكنات
 });
 
 // معالجة الأخطاء
@@ -27,33 +26,24 @@ const handleError = async (error: AxiosError, originalRequest: AxiosRequestConfi
   };
   console.error(`[${new Date().toISOString()}] Sales API response error:`, errorDetails);
   let message = (error.response?.data as any)?.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
-
-  if (error.response?.status === 0 || error.code === 'ERR_NETWORK') {
-    message = isRtl ? 'فشل الاتصال بالخادم، تحقق من الاتصال بالإنترنت' : 'Failed to connect to server, check your internet connection';
-  } else {
-    switch (error.response?.status) {
-      case 400:
-        message = (error.response?.data as any)?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
-        break;
-      case 403:
-        message = (error.response?.data as any)?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
-        break;
-      case 404:
-        message = (error.response?.data as any)?.message || (isRtl ? 'المبيعة غير موجودة' : 'Sale not found');
-        break;
-      case 429:
-        message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
-        break;
-      case 502:
-        message = isRtl ? 'خطأ في الخادم (502)، حاول مرة أخرى لاحقًا' : 'Server error (502), try again later';
-        break;
-      default:
-        if (!navigator.onLine) {
-          message = isRtl ? 'لا يوجد اتصال بالإنترنت' : 'No internet connection';
-        }
-    }
+  switch (error.response?.status) {
+    case 400:
+      message = (error.response?.data as any)?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
+      break;
+    case 403:
+      message = (error.response?.data as any)?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
+      break;
+    case 404:
+      message = (error.response?.data as any)?.message || (isRtl ? 'المبيعة غير موجودة' : 'Sale not found');
+      break;
+    case 429:
+      message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
+      break;
+    default:
+      if (!navigator.onLine) {
+        message = isRtl ? 'لا يوجد اتصال بالإنترنت' : 'No internet connection';
+      }
   }
-
   if (error.response?.status === 401 && !originalRequest._retry) {
     originalRequest._retry = true;
     try {
@@ -90,7 +80,6 @@ const handleError = async (error: AxiosError, originalRequest: AxiosRequestConfi
       throw new Error(isRtl ? 'فشل تجديد التوكن' : 'Failed to refresh token');
     }
   }
-
   toast.error(message, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
   throw { message, status: error.response?.status } as SalesApiError;
 };
@@ -150,6 +139,7 @@ interface AnalyticsParams {
   branch?: string;
   startDate?: string;
   endDate?: string;
+
 }
 
 export const salesAPI = {
@@ -243,23 +233,6 @@ export const salesAPI = {
     }
     const response = await salesAxios.get('/sales/analytics', { params });
     console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Success:`, {
-      totalSales: response.totalSales,
-      totalCount: response.totalCount,
-    });
-    return response;
-  },
-  getBranchAnalytics: async (params: AnalyticsParams) => {
-    console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Sending:`, params);
-    if (params.startDate && isNaN(new Date(params.startDate).getTime())) {
-      console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid start date:`, params.startDate);
-      throw new Error(isRtl ? 'تاريخ البدء غير صالح' : 'Invalid start date');
-    }
-    if (params.endDate && isNaN(new Date(params.endDate).getTime())) {
-      console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid end date:`, params.endDate);
-      throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
-    }
-    const response = await salesAxios.get('/sales/branch-analytics', { params });
-    console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Success:`, {
       totalSales: response.totalSales,
       totalCount: response.totalCount,
     });
