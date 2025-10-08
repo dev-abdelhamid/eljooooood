@@ -196,7 +196,7 @@ export const BranchSalesAnalytics: React.FC = () => {
 
   useEffect(() => {
     fetchAnalytics();
-  }, [fetch-fetchAnalytics]);
+  }, [fetchAnalytics]);
 
   // تحسين الأداء باستخدام useMemo
   const chartColors = useMemo(() => ['#FFBB28', '#FF8042', '#0088FE', '#00C49F', '#FF4444'], []);

@@ -139,6 +139,7 @@ interface AnalyticsParams {
   branch?: string;
   startDate?: string;
   endDate?: string;
+
 }
 
 export const salesAPI = {
