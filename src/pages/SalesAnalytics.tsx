@@ -135,6 +135,11 @@ const translations = {
   },
 };
 
+// دالة مساعدة للتأكد من أن القيمة عدد صالح
+const safeNumber = (value: any, defaultValue: number = 0): number => {
+  return typeof value === 'number' && !isNaN(value) ? value : defaultValue;
+};
+
 const AnalyticsSkeleton = React.memo(() => (
   <div className="space-y-6 animate-pulse">
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -201,38 +206,50 @@ const SalesAnalytics: React.FC = () => {
         branchSales: (response.branchSales || []).map((bs: any) => ({
           ...bs,
           displayName: isRtl ? bs.branchName : bs.branchNameEn || bs.branchName || t.errors.departments.unknown,
+          totalSales: safeNumber(bs.totalSales),
+          saleCount: safeNumber(bs.saleCount),
         })),
         leastBranchSales: (response.leastBranchSales || []).map((bs: any) => ({
           ...bs,
           displayName: isRtl ? bs.branchName : bs.branchNameEn || bs.branchName || t.errors.departments.unknown,
+          totalSales: safeNumber(bs.totalSales),
+          saleCount: safeNumber(bs.saleCount),
         })),
         productSales: (response.productSales || []).map((ps: any) => ({
           ...ps,
           displayName: isRtl
             ? ps.productName || t.errors.deleted_product
             : ps.productNameEn || ps.productName || t.errors.deleted_product,
+          totalQuantity: safeNumber(ps.totalQuantity),
+          totalRevenue: safeNumber(ps.totalRevenue),
         })),
         leastProductSales: (response.leastProductSales || []).map((ps: any) => ({
           ...ps,
           displayName: isRtl
             ? ps.productName || t.errors.deleted_product
             : ps.productNameEn || ps.productName || t.errors.deleted_product,
+          totalQuantity: safeNumber(ps.totalQuantity),
+          totalRevenue: safeNumber(ps.totalRevenue),
         })),
         departmentSales: (response.departmentSales || []).map((ds: any) => ({
           ...ds,
           displayName: isRtl
             ? ds.departmentName
             : ds.departmentNameEn || ds.departmentName || t.errors.departments.unknown,
+          totalRevenue: safeNumber(ds.totalRevenue),
+          totalQuantity: safeNumber(ds.totalQuantity),
         })),
         leastDepartmentSales: (response.leastDepartmentSales || []).map((ds: any) => ({
           ...ds,
           displayName: isRtl
             ? ds.departmentName
             : ds.departmentNameEn || ds.departmentName || t.errors.departments.unknown,
+          totalRevenue: safeNumber(ds.totalRevenue),
+          totalQuantity: safeNumber(ds.totalQuantity),
         })),
-        totalSales: response.totalSales || 0,
-        totalCount: response.totalCount || 0,
-        averageOrderValue: response.averageOrderValue || 0,
+        totalSales: safeNumber(response.totalSales),
+        totalCount: safeNumber(response.totalCount),
+        averageOrderValue: safeNumber(response.averageOrderValue),
         topProduct: response.topProduct
           ? {
               ...response.topProduct,
@@ -241,13 +258,21 @@ const SalesAnalytics: React.FC = () => {
                 : response.topProduct.productNameEn ||
                   response.topProduct.productName ||
                   t.errors.deleted_product,
+              totalQuantity: safeNumber(response.topProduct.totalQuantity),
+              totalRevenue: safeNumber(response.topProduct.totalRevenue),
             }
           : { productId: null, productName: '', displayName: '', totalQuantity: 0, totalRevenue: 0 },
         salesTrends: (response.salesTrends || []).map((trend: any) => ({
           ...trend,
           period: formatDate(new Date(trend.period), language),
+          totalSales: safeNumber(trend.totalSales),
+          saleCount: safeNumber(trend.saleCount),
         })),
-        topCustomers: (response.topCustomers || []),
+        topCustomers: (response.topCustomers || []).map((customer: any) => ({
+          ...customer,
+          totalSpent: safeNumber(customer.totalSpent),
+          purchaseCount: safeNumber(customer.purchaseCount),
+        })),
       });
       setError('');
     } catch (err: any) {
@@ -362,7 +387,7 @@ const SalesAnalytics: React.FC = () => {
     datasets: [
       {
         label: `${t.totalSales} (${t.currency})`,
-        data: analytics.productSales.slice(0, 8).map((p) => p.totalRevenue),
+        data: analytics.productSales.slice(0, 8).map((p) => safeNumber(p.totalRevenue)),
         backgroundColor: chartColors[0],
         borderWidth: 0,
       },
@@ -374,7 +399,7 @@ const SalesAnalytics: React.FC = () => {
     datasets: [
       {
         label: `${t.totalSales} (${t.currency})`,
-        data: analytics.leastProductSales.slice(0, 8).map((p) => p.totalRevenue),
+        data: analytics.leastProductSales.slice(0, 8).map((p) => safeNumber(p.totalRevenue)),
         backgroundColor: chartColors[1],
         borderWidth: 0,
       },
@@ -386,7 +411,7 @@ const SalesAnalytics: React.FC = () => {
     datasets: [
       {
         label: `${t.totalSales} (${t.currency})`,
-        data: analytics.departmentSales.slice(0, 8).map((d) => d.totalRevenue),
+        data: analytics.departmentSales.slice(0, 8).map((d) => safeNumber(d.totalRevenue)),
         backgroundColor: chartColors[2],
         borderWidth: 0,
       },
@@ -398,7 +423,7 @@ const SalesAnalytics: React.FC = () => {
     datasets: [
       {
         label: `${t.totalSales} (${t.currency})`,
-        data: analytics.leastDepartmentSales.slice(0, 8).map((d) => d.totalRevenue),
+        data: analytics.leastDepartmentSales.slice(0, 8).map((d) => safeNumber(d.totalRevenue)),
         backgroundColor: chartColors[3],
         borderWidth: 0,
       },
@@ -410,7 +435,7 @@ const SalesAnalytics: React.FC = () => {
     datasets: [
       {
         label: `${t.totalSales} (${t.currency})`,
-        data: analytics.branchSales.slice(0, 8).map((b) => b.totalSales),
+        data: analytics.branchSales.slice(0, 8).map((b) => safeNumber(b.totalSales)),
         backgroundColor: chartColors[4],
         borderWidth: 0,
       },
@@ -422,7 +447,7 @@ const SalesAnalytics: React.FC = () => {
     datasets: [
       {
         label: `${t.totalSales} (${t.currency})`,
-        data: analytics.leastBranchSales.slice(0, 8).map((b) => b.totalSales),
+        data: analytics.leastBranchSales.slice(0, 8).map((b) => safeNumber(b.totalSales)),
         backgroundColor: chartColors[0],
         borderWidth: 0,
       },
@@ -434,7 +459,7 @@ const SalesAnalytics: React.FC = () => {
     datasets: [
       {
         label: t.totalCount,
-        data: analytics.salesTrends.slice(0, 10).map((trend) => trend.saleCount),
+        data: analytics.salesTrends.slice(0, 10).map((trend) => safeNumber(trend.saleCount)),
         borderColor: chartColors[1],
         backgroundColor: 'transparent',
         fill: false,
@@ -504,20 +529,20 @@ const SalesAnalytics: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
               <h3 className="text-sm font-semibold text-gray-800">{t.totalSales}</h3>
-              <p className="text-lg font-bold text-amber-600 mt-2">{analytics.totalSales.toFixed(2)} {t.currency}</p>
-              <p className="text-xs text-gray-500">{t.totalCount}: {analytics.totalCount}</p>
+              <p className="text-lg font-bold text-amber-600 mt-2">{safeNumber(analytics.totalSales).toFixed(2)} {t.currency}</p>
+              <p className="text-xs text-gray-500">{t.totalCount}: {safeNumber(analytics.totalCount)}</p>
             </div>
             <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
               <h3 className="text-sm font-semibold text-gray-800">{t.averageOrderValue}</h3>
-              <p className="text-lg font-bold text-amber-600 mt-2">{analytics.averageOrderValue.toFixed(2)} {t.currency}</p>
+              <p className="text-lg font-bold text-amber-600 mt-2">{safeNumber(analytics.averageOrderValue).toFixed(2)} {t.currency}</p>
             </div>
             <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
               <h3 className="text-sm font-semibold text-gray-800">{t.topProduct}</h3>
               {analytics.topProduct?.productId ? (
                 <div className="mt-2 space-y-1">
                   <p className="text-sm font-medium">{analytics.topProduct.displayName}</p>
-                  <p className="text-xs text-gray-500">{t.totalSales}: {analytics.topProduct.totalRevenue.toFixed(2)} {t.currency}</p>
-                  <p className="text-xs text-gray-500">{t.totalCount}: {analytics.topProduct.totalQuantity}</p>
+                  <p className="text-xs text-gray-500">{t.totalSales}: {safeNumber(analytics.topProduct.totalRevenue).toFixed(2)} {t.currency}</p>
+                  <p className="text-xs text-gray-500">{t.totalCount}: {safeNumber(analytics.topProduct.totalQuantity)}</p>
                 </div>
               ) : (
                 <NoDataMessage message={t.noData} />
@@ -542,8 +567,8 @@ const SalesAnalytics: React.FC = () => {
                       <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
                         <td className="px-4 py-2 text-xs">{customer.customerName || t.unknownCustomers}</td>
                         <td className="px-4 py-2 text-xs">{customer.customerPhone || 'N/A'}</td>
-                        <td className="px-4 py-2 text-xs">{customer.totalSpent.toFixed(2)} {t.currency}</td>
-                        <td className="px-4 py-2 text-xs">{customer.purchaseCount}</td>
+                        <td className="px-4 py-2 text-xs">{safeNumber(customer.totalSpent).toFixed(2)} {t.currency}</td>
+                        <td className="px-4 py-2 text-xs">{safeNumber(customer.purchaseCount)}</td>
                       </tr>
                     ))}
                   </tbody>
