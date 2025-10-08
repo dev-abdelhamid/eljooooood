@@ -15,6 +15,8 @@ const translations = {
     totalSales: 'إجمالي المبيعات',
     totalCount: 'عدد المبيعات',
     averageOrderValue: 'متوسط قيمة الطلب',
+    returnRate: 'معدل المرتجعات',
+    topProduct: 'المنتج الأعلى',
     topProducts: 'المنتجات الأعلى مبيعًا',
     leastProducts: 'المنتجات الأقل مبيعًا',
     departmentSales: 'مبيعات الأقسام',
@@ -22,6 +24,7 @@ const translations = {
     salesTrends: 'اتجاهات المبيعات',
     topCustomers: 'أفضل العملاء',
     noAnalytics: 'لا توجد إحصائيات متاحة',
+    noData: 'لا توجد بيانات',
     noCustomers: 'لا توجد عملاء',
     totalRevenue: 'إجمالي الإيرادات',
     totalQuantity: 'إجمالي الكمية',
@@ -42,6 +45,8 @@ const translations = {
     totalSales: 'Total Sales',
     totalCount: 'Total Count',
     averageOrderValue: 'Average Order Value',
+    returnRate: 'Return Rate',
+    topProduct: 'Top Product',
     topProducts: 'Top Products',
     leastProducts: 'Least Products',
     departmentSales: 'Department Sales',
@@ -49,6 +54,7 @@ const translations = {
     salesTrends: 'Sales Trends',
     topCustomers: 'Top Customers',
     noAnalytics: 'No analytics available',
+    noData: 'No data available',
     noCustomers: 'No customers',
     totalRevenue: 'Total Revenue',
     totalQuantity: 'Total Quantity',
@@ -70,6 +76,7 @@ interface AnalyticsData {
   totalSales: number;
   totalCount: number;
   averageOrderValue: number;
+  returnRate: number;
   topProduct: {
     productId: string | null;
     productName: string;
@@ -139,6 +146,10 @@ const AnalyticsSkeleton = React.memo(() => (
     </div>
   </div>
 ));
+
+const NoDataMessage = ({ message }: { message: string }) => (
+  <p className="text-center text-gray-500 py-8">{message}</p>
+);
 
 // المكون الرئيسي
 export const BranchSalesAnalytics: React.FC = () => {
@@ -222,7 +233,7 @@ export const BranchSalesAnalytics: React.FC = () => {
       ) : (
         <div className="space-y-8">
           {/* الإحصائيات الأساسية */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
             <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900">{t.totalSales}</h3>
               <p className="text-2xl font-bold text-amber-600 mt-2">{analytics.totalSales.toFixed(2)} {t.currency}</p>
@@ -235,104 +246,142 @@ export const BranchSalesAnalytics: React.FC = () => {
               <h3 className="text-lg font-semibold text-gray-900">{t.averageOrderValue}</h3>
               <p className="text-2xl font-bold text-amber-600 mt-2">{analytics.averageOrderValue.toFixed(2)} {t.currency}</p>
             </div>
+            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-900">{t.returnRate}</h3>
+              <p className="text-2xl font-bold text-amber-600 mt-2">{analytics.returnRate}%</p>
+            </div>
+          </div>
+
+          {/* المنتج الأعلى */}
+          <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.topProduct}</h3>
+            {analytics.topProduct.productId ? (
+              <div className="space-y-2">
+                <p className="font-medium">{analytics.topProduct.displayName}</p>
+                <p>{t.totalRevenue}: {analytics.topProduct.totalRevenue.toFixed(2)} {t.currency}</p>
+                <p>{t.totalQuantity}: {analytics.topProduct.totalQuantity}</p>
+              </div>
+            ) : (
+              <NoDataMessage message={t.noData} />
+            )}
           </div>
 
           {/* اتجاهات المبيعات */}
           <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.salesTrends}</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={analytics.salesTrends}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="period" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="totalSales" stroke={chartColors[0]} name={t.totalSales} />
-                <Line type="monotone" dataKey="saleCount" stroke={chartColors[2]} name={t.totalCount} />
-              </LineChart>
-            </ResponsiveContainer>
+            {analytics.salesTrends.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={analytics.salesTrends}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="period" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Line type="monotone" dataKey="totalSales" stroke={chartColors[0]} name={t.totalSales} />
+                  <Line type="monotone" dataKey="saleCount" stroke={chartColors[2]} name={t.totalCount} />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <NoDataMessage message={t.noData} />
+            )}
           </div>
 
           {/* مبيعات المنتجات الأعلى */}
           <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.topProducts}</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={analytics.productSales}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="displayName" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="totalRevenue" fill={chartColors[0]} name={t.totalRevenue} />
-                <Bar dataKey="totalQuantity" fill={chartColors[2]} name={t.totalQuantity} />
-              </BarChart>
-            </ResponsiveContainer>
+            {analytics.productSales.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={analytics.productSales}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="displayName" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="totalRevenue" fill={chartColors[0]} name={t.totalRevenue} />
+                  <Bar dataKey="totalQuantity" fill={chartColors[2]} name={t.totalQuantity} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <NoDataMessage message={t.noData} />
+            )}
           </div>
 
           {/* مبيعات المنتجات الأقل */}
           <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.leastProducts}</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={analytics.leastProductSales}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="displayName" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="totalRevenue" fill={chartColors[4]} name={t.totalRevenue} />
-                <Bar dataKey="totalQuantity" fill={chartColors[3]} name={t.totalQuantity} />
-              </BarChart>
-            </ResponsiveContainer>
+            {analytics.leastProductSales.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={analytics.leastProductSales}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="displayName" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="totalRevenue" fill={chartColors[4]} name={t.totalRevenue} />
+                  <Bar dataKey="totalQuantity" fill={chartColors[3]} name={t.totalQuantity} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <NoDataMessage message={t.noData} />
+            )}
           </div>
 
           {/* مبيعات الأقسام */}
           <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.departmentSales}</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={analytics.departmentSales}
-                  dataKey="totalRevenue"
-                  nameKey="displayName"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={80}
-                  fill="#8884d8"
-                  label
-                >
-                  {analytics.departmentSales.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+            {analytics.departmentSales.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={analytics.departmentSales}
+                    dataKey="totalRevenue"
+                    nameKey="displayName"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    fill="#8884d8"
+                    label
+                  >
+                    {analytics.departmentSales.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <NoDataMessage message={t.noData} />
+            )}
           </div>
 
           {/* أقل الأقسام مبيعًا */}
           <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.leastDepartmentSales}</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={analytics.leastDepartmentSales}
-                  dataKey="totalRevenue"
-                  nameKey="displayName"
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={80}
-                  fill="#8884d8"
-                  label
-                >
-                  {analytics.leastDepartmentSales.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
+            {analytics.leastDepartmentSales.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={analytics.leastDepartmentSales}
+                    dataKey="totalRevenue"
+                    nameKey="displayName"
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    fill="#8884d8"
+                    label
+                  >
+                    {analytics.leastDepartmentSales.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <NoDataMessage message={t.noData} />
+            )}
           </div>
 
           {/* أفضل العملاء */}
@@ -362,7 +411,7 @@ export const BranchSalesAnalytics: React.FC = () => {
                 </table>
               </div>
             ) : (
-              <p className="text-gray-600 text-sm">{t.noCustomers}</p>
+              <NoDataMessage message={t.noCustomers} />
             )}
           </div>
         </div>
