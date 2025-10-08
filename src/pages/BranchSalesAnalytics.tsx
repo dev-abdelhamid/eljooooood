@@ -211,30 +211,33 @@ export const BranchSalesAnalytics: React.FC = () => {
     setLoading(true);
     try {
       const response = await salesAPI.getBranchAnalytics({ startDate, endDate });
+      console.log(`[${new Date().toISOString()}] Full response from salesAPI.getBranchAnalytics:`, response);
       // التحقق من صحة البيانات
-      if (!response || typeof response !== 'object' || !Array.isArray(response.paymentMethods)) {
+      if (!response || typeof response !== 'object') {
         throw new Error(t.errors.invalid_data);
       }
+      // تهيئة paymentMethods كمصفوفة فارغة إذا لم تكن موجودة
+      const paymentMethods = Array.isArray(response.paymentMethods) ? response.paymentMethods : [];
       // التحقق من صحة paymentMethods
-      const validPaymentMethods = response.paymentMethods.every(
+      const validPaymentMethods = paymentMethods.length === 0 || paymentMethods.every(
         (method: any) => typeof method.paymentMethod === 'string' && method.paymentMethod
       );
       if (!validPaymentMethods) {
-        console.error(`[${new Date().toISOString()}] Invalid paymentMethods data:`, response.paymentMethods);
+        console.error(`[${new Date().toISOString()}] Invalid paymentMethods data:`, paymentMethods);
         throw new Error(t.errors.invalid_data);
       }
       setAnalytics({
         ...response,
-        salesTrends: response.salesTrends.map((trend: any) => ({
+        salesTrends: Array.isArray(response.salesTrends) ? response.salesTrends.map((trend: any) => ({
           ...trend,
           period: formatDate(new Date(trend.period), isRtl ? 'ar' : 'en'),
-        })),
-        paymentMethods: response.paymentMethods.map((method: any) => ({
+        })) : [],
+        paymentMethods: paymentMethods.map((method: any) => ({
           ...method,
           paymentMethod: t.paymentMethods[method.paymentMethod] || t.paymentMethods.unknown,
         })),
       });
-      console.log(`[${new Date().toISOString()}] Processed paymentMethods:`, response.paymentMethods);
+      console.log(`[${new Date().toISOString()}] Processed paymentMethods:`, paymentMethods);
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Analytics fetch error:`, err);
@@ -323,7 +326,7 @@ export const BranchSalesAnalytics: React.FC = () => {
           {/* المنتج الأعلى */}
           <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.topProduct}</h3>
-            {analytics.topProduct.productId ? (
+            {analytics.topProduct?.productId ? (
               <div className="space-y-2">
                 <p className="font-medium">{analytics.topProduct.displayName}</p>
                 <p>{t.totalRevenue}: {analytics.topProduct.totalRevenue.toFixed(2)} {t.currency}</p>
@@ -455,7 +458,9 @@ export const BranchSalesAnalytics: React.FC = () => {
           {/* طرق الدفع */}
           <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.paymentMethods}</h3>
-            {analytics.paymentMethods.length > 0 ? (
+            {analytics.paymentMethods.length > 0 && analytics.paymentMethods.every(
+              (method) => typeof method.paymentMethod === 'string' && method.paymentMethod
+            ) ? (
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie
