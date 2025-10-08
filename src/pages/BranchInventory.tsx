@@ -3,8 +3,8 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { returnsAPI, inventoryAPI, ordersAPI } from '../services/api';
-import { Package, AlertCircle, Search, Edit, X, Plus, Eye, Minus , } from 'lucide-react';
+import { returnsAPI, inventoryAPI } from '../services/api';
+import { Package, AlertCircle,Minus, Edit, X, Plus, Eye } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -23,13 +23,6 @@ enum ReturnReason {
   EXCESS_QUANTITY = 'كمية زائدة',
   OTHER = 'أخرى',
 }
-
-const returnReasonMapping = {
-  [ReturnReason.DAMAGED]: 'Damaged',
-  [ReturnReason.WRONG_ITEM]: 'Wrong Item',
-  [ReturnReason.EXCESS_QUANTITY]: 'Excess Quantity',
-  [ReturnReason.OTHER]: 'Other',
-};
 
 // Interfaces aligned with backend
 interface InventoryItem {
@@ -53,9 +46,7 @@ interface InventoryItem {
 }
 
 interface ReturnItem {
-  itemId: string;
   productId: string;
-  orderId: string;
   quantity: number;
   reason: string;
   maxQuantity: number;
@@ -65,17 +56,16 @@ interface ReturnFormState {
   reason: string;
   notes: string;
   items: ReturnItem[];
-  orders: string[];
 }
 
 interface ProductHistoryEntry {
   _id: string;
   date: string;
-  type: 'addition' | 'return' | 'sale' | 'adjustment';
+  type: 'delivery' | 'return_pending' | 'return_rejected' | 'return_approved' | 'sale' | 'adjustment';
   quantity: number;
   description: string;
-  orderId?: string;
-  returnId?: string;
+  referenceType?: 'order' | 'return' | 'sale' | 'adjustment';
+  referenceId?: string;
 }
 
 interface EditForm {
@@ -90,12 +80,6 @@ interface AvailableItem {
   unit: string;
   departmentName: string;
   stock: number;
-}
-
-interface Order {
-  _id: string;
-  orderNumber: string;
-  items: Array<{ itemId: string; productId: string; quantity: number; returnedQuantity: number }>;
 }
 
 // Translations
@@ -129,7 +113,6 @@ const translations = {
     notes: 'ملاحظات',
     notesPlaceholder: 'أدخل ملاحظات إضافية (اختياري)',
     items: 'العناصر',
-    selectOrder: 'اختر الطلب',
     addItem: 'إضافة عنصر',
     removeItem: 'إزالة العنصر',
     submit: 'إرسال',
@@ -143,8 +126,10 @@ const translations = {
     type: 'النوع',
     quantity: 'الكمية',
     description: 'الوصف',
-    addition: 'إضافة',
-    return: 'إرجاع',
+    delivery: 'تسليم',
+    return_pending: 'إرجاع قيد الانتظار',
+    return_rejected: 'إرجاع مرفوض',
+    return_approved: 'إرجاع موافق عليه',
     sale: 'بيع',
     adjustment: 'تعديل',
     available: 'متوفر',
@@ -159,12 +144,11 @@ const translations = {
       maxGreaterMin: 'الحد الأقصى للمخزون يجب أن يكون أكبر من الحد الأدنى',
       invalidQuantityMax: 'الكمية يجب أن تكون بين 1 و{max}',
       noItemSelected: 'لم يتم اختيار عنصر',
-      orderNotFound: 'الطلب غير موجود',
       insufficientQuantity: 'الكمية غير كافية للمنتج في المخزون',
-      invalidOrder: 'الطلب غير صالح أو ليس في حالة "تم التسليم"',
     },
     notifications: {
       returnApproved: 'تمت الموافقة على طلب الإرجاع',
+      returnRejected: 'تم رفض طلب الإرجاع',
     },
   },
   en: {
@@ -196,7 +180,6 @@ const translations = {
     notes: 'Notes',
     notesPlaceholder: 'Enter additional notes (optional)',
     items: 'Items',
-    selectOrder: 'Select Order',
     addItem: 'Add Item',
     removeItem: 'Remove Item',
     submit: 'Submit',
@@ -210,8 +193,10 @@ const translations = {
     type: 'Type',
     quantity: 'Quantity',
     description: 'Description',
-    addition: 'Addition',
-    return: 'Return',
+    delivery: 'Delivery',
+    return_pending: 'Return Pending',
+    return_rejected: 'Return Rejected',
+    return_approved: 'Return Approved',
     sale: 'Sale',
     adjustment: 'Adjustment',
     available: 'Available',
@@ -226,12 +211,11 @@ const translations = {
       maxGreaterMin: 'Maximum stock must be greater than minimum stock',
       invalidQuantityMax: 'Quantity must be between 1 and {max}',
       noItemSelected: 'No item selected',
-      orderNotFound: 'Order not found',
       insufficientQuantity: 'Insufficient quantity for the product in inventory',
-      invalidOrder: 'Order is invalid or not in "delivered" status',
     },
     notifications: {
       returnApproved: 'Return request approved',
+      returnRejected: 'Return request rejected',
     },
   },
 };
@@ -291,7 +275,6 @@ type ReturnFormAction =
   | { type: 'ADD_ITEM'; payload: ReturnItem }
   | { type: 'UPDATE_ITEM'; payload: { index: number; field: keyof ReturnItem; value: string | number } }
   | { type: 'REMOVE_ITEM'; payload: number }
-  | { type: 'SET_ORDERS'; payload: string[] }
   | { type: 'RESET' };
 
 const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): ReturnFormState => {
@@ -308,10 +291,8 @@ const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): Re
       return { ...state, items: newItems };
     case 'REMOVE_ITEM':
       return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
-    case 'SET_ORDERS':
-      return { ...state, orders: action.payload };
     case 'RESET':
-      return { reason: '', notes: '', items: [], orders: [] };
+      return { reason: '', notes: '', items: [] };
     default:
       return state;
   }
@@ -334,14 +315,11 @@ export const BranchInventory: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [returnForm, dispatchReturnForm] = useReducer(returnFormReducer, { reason: '', notes: '', items: [], orders: [] });
+  const [returnForm, dispatchReturnForm] = useReducer(returnFormReducer, { reason: '', notes: '', items: [] });
   const [editForm, setEditForm] = useState<EditForm>({ minStockLevel: 0, maxStockLevel: 0 });
   const [returnErrors, setReturnErrors] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
-  const [possibleOrders, setPossibleOrders] = useState<
-    Record<string, { value: string; label: string; remaining: number; itemId: string }[]>
-  >({});
 
   const ITEMS_PER_PAGE = 10;
 
@@ -424,17 +402,6 @@ export const BranchInventory: React.FC = () => {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Orders Query
-  const { data: ordersData } = useQuery<Order[], Error>({
-    queryKey: ['orders', user?.branchId, language],
-    queryFn: async () => {
-      if (!user?.branchId) throw new Error(t.errors.noBranch);
-      const response = await ordersAPI.getAll({ branch: user.branchId, status: 'delivered' });
-      return response.orders || [];
-    },
-    enabled: isReturnModalOpen && !!user?.branchId,
-  });
-
   // Update available items
   useEffect(() => {
     if (inventoryData) {
@@ -454,30 +421,6 @@ export const BranchInventory: React.FC = () => {
     }
   }, [inventoryData, isRtl, t]);
 
-  // Update possible orders
-  useEffect(() => {
-    if (ordersData && isReturnModalOpen) {
-      const newPossibleOrders: Record<string, { value: string; label: string; remaining: number; itemId: string }[]> = {};
-      ordersData.forEach((order) => {
-        order.items.forEach((item) => {
-          const remaining = item.quantity - (item.returnedQuantity || 0);
-          if (remaining > 0) {
-            if (!newPossibleOrders[item.productId]) {
-              newPossibleOrders[item.productId] = [];
-            }
-            newPossibleOrders[item.productId].push({
-              value: order._id,
-              label: `${order.orderNumber} (${remaining} ${t.available})`,
-              remaining,
-              itemId: item.itemId,
-            });
-          }
-        });
-      });
-      setPossibleOrders(newPossibleOrders);
-    }
-  }, [ordersData, isReturnModalOpen, t]);
-
   // Socket Events
   useEffect(() => {
     if (!socket || !user?.branchId) return;
@@ -485,23 +428,26 @@ export const BranchInventory: React.FC = () => {
     const handleInventoryUpdated = ({ branchId }: { branchId: string }) => {
       if (branchId === user.branchId) {
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
-        toast.info(t.notifications.returnApproved, { position: isRtl ? 'top-right' : 'top-left' });
       }
     };
 
     const handleReturnStatusUpdated = ({ branchId, returnId, status }: { branchId: string; returnId: string; status: string }) => {
-      if (branchId === user.branchId && status === 'approved') {
+      if (branchId === user.branchId) {
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
         addNotification({
           _id: crypto.randomUUID(),
-          type: 'info',
-          message: t.notifications.returnApproved,
+          type: status === 'approved' ? 'success' : 'error',
+          message: status === 'approved' ? t.notifications.returnApproved : t.notifications.returnRejected,
           data: { returnId, eventId: crypto.randomUUID() },
           read: false,
           createdAt: new Date().toISOString(),
           sound: '/sounds/notification.mp3',
           vibrate: [200, 100, 200],
         });
+        toast[status === 'approved' ? 'success' : 'error'](
+          status === 'approved' ? t.notifications.returnApproved : t.notifications.returnRejected,
+          { position: isRtl ? 'top-right' : 'top-left' }
+        );
       }
     };
 
@@ -597,7 +543,7 @@ export const BranchInventory: React.FC = () => {
     if (item?.product) {
       dispatchReturnForm({
         type: 'ADD_ITEM',
-        payload: { itemId: '', productId: item.product._id, orderId: '', quantity: 1, reason: '', maxQuantity: 0 },
+        payload: { productId: item.product._id, quantity: 1, reason: '', maxQuantity: item.currentStock },
       });
     }
     setReturnErrors({});
@@ -621,57 +567,40 @@ export const BranchInventory: React.FC = () => {
   const addItemToForm = useCallback(() => {
     dispatchReturnForm({
       type: 'ADD_ITEM',
-      payload: { itemId: '', productId: '', orderId: '', quantity: 1, reason: '', maxQuantity: 0 },
+      payload: { productId: '', quantity: 1, reason: '', maxQuantity: 0 },
     });
   }, []);
 
-  const handleProductChange = useCallback(
-    (index: number, productId: string) => {
-      dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'productId', value: productId } });
-      dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'orderId', value: '' } });
-      dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'itemId', value: '' } });
-      dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'maxQuantity', value: 0 } });
-    },
-    []
-  );
-
-  const handleOrderChange = useCallback(
-    (index: number, orderId: string) => {
-      dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'orderId', value: orderId } });
-      const productId = returnForm.items[index]?.productId;
-      if (productId && orderId) {
-        const selectedOrder = possibleOrders[productId]?.find((o) => o.value === orderId);
-        if (selectedOrder) {
-          dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'maxQuantity', value: selectedOrder.remaining } });
-          dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'itemId', value: selectedOrder.itemId } });
-          // Update orders array
-          dispatchReturnForm({ type: 'SET_ORDERS', payload: [...new Set([...returnForm.orders, orderId])] });
-        }
-      } else {
-        dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'maxQuantity', value: 0 } });
-        dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field: 'itemId', value: '' } });
-      }
-    },
-    [returnForm.items, returnForm.orders, possibleOrders]
-  );
-
   const updateItemInForm = useCallback(
     (index: number, field: keyof ReturnItem, value: string | number) => {
+      if (field === 'quantity' && typeof value === 'string') {
+        const numValue = parseInt(value);
+        if (isNaN(numValue) || numValue < 1) return; // Prevent invalid or negative quantities
+        value = numValue;
+      }
       dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
     },
     []
   );
 
-  const removeItemFromForm = useCallback((index: number) => {
-    const orderId = returnForm.items[index]?.orderId;
-    dispatchReturnForm({ type: 'REMOVE_ITEM', payload: index });
-    if (orderId) {
+  const handleProductChange = useCallback(
+    (index: number, productId: string) => {
+      const inventoryItem = inventoryData?.find((inv) => inv.product?._id === productId);
       dispatchReturnForm({
-        type: 'SET_ORDERS',
-        payload: returnForm.orders.filter((id) => id !== orderId),
+        type: 'UPDATE_ITEM',
+        payload: { index, field: 'productId', value: productId },
       });
-    }
-  }, [returnForm.items, returnForm.orders]);
+      dispatchReturnForm({
+        type: 'UPDATE_ITEM',
+        payload: { index, field: 'maxQuantity', value: inventoryItem?.currentStock || 0 },
+      });
+    },
+    [inventoryData]
+  );
+
+  const removeItemFromForm = useCallback((index: number) => {
+    dispatchReturnForm({ type: 'REMOVE_ITEM', payload: index });
+  }, []);
 
   const validateReturnForm = useCallback(() => {
     const errors: Record<string, string> = {};
@@ -679,8 +608,6 @@ export const BranchInventory: React.FC = () => {
     if (returnForm.items.length === 0) errors.items = t.errors.required.replace('{field}', t.items);
     returnForm.items.forEach((item, index) => {
       if (!item.productId) errors[`item_${index}_productId`] = t.errors.required.replace('{field}', t.items);
-      if (!item.orderId) errors[`item_${index}_orderId`] = t.errors.required.replace('{field}', t.selectOrder);
-      if (!item.itemId) errors[`item_${index}_itemId`] = t.errors.required.replace('{field}', t.items);
       if (!item.reason) errors[`item_${index}_reason`] = t.errors.required.replace('{field}', t.reason);
       if (item.quantity < 1 || item.quantity > item.maxQuantity || isNaN(item.quantity)) {
         errors[`item_${index}_quantity`] = t.errors.invalidQuantityMax.replace('{max}', item.maxQuantity.toString());
@@ -708,13 +635,10 @@ export const BranchInventory: React.FC = () => {
       if (!validateReturnForm()) throw new Error(t.errors.invalidForm);
       if (!user?.branchId) throw new Error(t.errors.noBranch);
       const data = {
-        orderId: returnForm.items[0]?.orderId || undefined,
-        orders: returnForm.orders.length > 0 ? returnForm.orders : undefined,
+        branchId: user.branchId,
         reason: returnForm.reason,
         notes: returnForm.notes || undefined,
         items: returnForm.items.map((item) => ({
-          order: item.orderId || undefined,
-          itemId: item.itemId || undefined,
           product: item.productId,
           quantity: item.quantity,
           reason: item.reason,
@@ -728,7 +652,6 @@ export const BranchInventory: React.FC = () => {
       dispatchReturnForm({ type: 'RESET' });
       setReturnErrors({});
       setSelectedItem(null);
-      setPossibleOrders({});
       toast.success(t.create, { position: isRtl ? 'top-right' : 'top-left' });
       socket?.emit('returnCreated', {
         branchId: user?.branchId,
@@ -739,9 +662,9 @@ export const BranchInventory: React.FC = () => {
     },
     onError: (err) => {
       let errorMessage = err.message || t.errors.createReturn;
-      if (err.message.includes('الطلب غير موجود')) errorMessage = t.errors.orderNotFound;
-      if (err.message.includes('الكمية تتجاوز المتاحة')) errorMessage = t.errors.invalidQuantityMax.replace('{max}', 'المتاح');
-      if (err.message.includes('يجب أن يكون الطلب في حالة "تم التسليم"')) errorMessage = t.errors.invalidOrder;
+      if (err.message.includes('الفرع غير موجود')) errorMessage = t.errors.noBranch;
+      if (err.message.includes('الكمية غير كافية')) errorMessage = t.errors.insufficientQuantity;
+      if (err.message.includes('بيانات العنصر غير صالحة')) errorMessage = t.errors.invalidForm;
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       setReturnErrors({ form: errorMessage });
     },
@@ -1004,7 +927,6 @@ export const BranchInventory: React.FC = () => {
                 dispatchReturnForm({ type: 'RESET' });
                 setReturnErrors({});
                 setSelectedItem(null);
-                setPossibleOrders({});
               }}
               className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
               aria-label={t.cancel}
@@ -1059,20 +981,9 @@ export const BranchInventory: React.FC = () => {
                   {returnErrors[`item_${index}_productId`] && (
                     <p className="text-red-500 text-xs">{returnErrors[`item_${index}_productId`]}</p>
                   )}
-                  <ProductDropdown
-                    value={item.orderId}
-                    onChange={(value) => handleOrderChange(index, value)}
-                    options={[{ value: '', label: t.selectOrder }].concat(possibleOrders[item.productId] || [])}
-                    disabled={!item.productId}
-                    ariaLabel={t.selectOrder}
-                    className="w-full sm:w-auto"
-                  />
-                  {returnErrors[`item_${index}_orderId`] && (
-                    <p className="text-red-500 text-xs">{returnErrors[`item_${index}_orderId`]}</p>
-                  )}
                   <QuantityInput
                     value={item.quantity}
-                    onChange={(val) => updateItemInForm(index, 'quantity', Number(val))}
+                    onChange={(val) => updateItemInForm(index, 'quantity', val)}
                     onIncrement={() => updateItemInForm(index, 'quantity', item.quantity + 1)}
                     onDecrement={() => updateItemInForm(index, 'quantity', item.quantity - 1)}
                     max={item.maxQuantity}
@@ -1121,7 +1032,6 @@ export const BranchInventory: React.FC = () => {
                   dispatchReturnForm({ type: 'RESET' });
                   setReturnErrors({});
                   setSelectedItem(null);
-                  setPossibleOrders({});
                 }}
                 className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
                 aria-label={t.cancel}
