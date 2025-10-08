@@ -10,7 +10,7 @@ import { debounce } from 'lodash';
 import Papa from 'papaparse';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-interface Sale {
+export interface Sale {
   _id: string;
   orderNumber: string;
   branch: { _id: string; name: string; nameEn?: string; displayName: string };
@@ -34,19 +34,19 @@ interface Sale {
   customerPhone?: string;
 }
 
-interface Branch {
+export interface Branch {
   _id: string;
   name: string;
   nameEn?: string;
   displayName: string;
 }
 
-interface SalesTrend {
+export interface SalesTrend {
   period: string;
   totalSales: number;
 }
 
-const translations = {
+export const translations = {
   ar: {
     title: 'تقرير المبيعات',
     subtitle: 'متابعة وتحليل المبيعات السابقة',
@@ -138,7 +138,7 @@ const translations = {
 };
 
 // دالة مساعدة للتأكد من أن القيمة عدد صالح
-const safeNumber = (value: any, defaultValue: number = 0): number => {
+export const safeNumber = (value: any, defaultValue: number = 0): number => {
   return typeof value === 'number' && !isNaN(value) ? value : defaultValue;
 };
 
@@ -176,7 +176,7 @@ const SearchInput = React.memo<{
   );
 });
 
-const ProductDropdown = React.memo<{
+export const ProductDropdown = React.memo<{
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
@@ -221,7 +221,7 @@ const ProductDropdown = React.memo<{
   );
 });
 
-const BranchFilter = React.memo<{
+export const BranchFilter = React.memo<{
   branches: Branch[];
   selectedBranch: string;
   onChange: (value: string) => void;
@@ -252,7 +252,7 @@ const BranchFilter = React.memo<{
   );
 });
 
-const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete: (id: string) => void }>(
+export const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete: (id: string) => void }>(
   ({ sale, onEdit, onDelete }) => {
     const { language } = useLanguage();
     const isRtl = language === 'ar';
@@ -304,7 +304,7 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
   }
 );
 
-const SaleSkeletonCard = React.memo(() => (
+export const SaleSkeletonCard = React.memo(() => (
   <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 animate-pulse">
     <div className="space-y-3">
       <div className="h-5 bg-gray-200 rounded w-3/4"></div>
@@ -315,7 +315,7 @@ const SaleSkeletonCard = React.memo(() => (
   </div>
 ));
 
-const SalesReport: React.FC = () => {
+export const SalesReport: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const { socket, emit, isConnected } = useSocket();
