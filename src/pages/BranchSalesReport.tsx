@@ -4,7 +4,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
-import { AlertCircle, DollarSign, Trash2, Search, X, ChevronDown, Eye } from 'lucide-react';
+import { AlertCircle, DollarSign, Trash2, Search, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 
@@ -180,8 +180,7 @@ const ProductDropdown = React.memo<{
 const SaleCard = React.memo<{
   sale: Sale;
   onDelete: (id: string) => void;
-  onViewDetails: (sale: Sale) => void;
-}>(({ sale, onDelete, onViewDetails }) => {
+}>(({ sale, onDelete }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
@@ -194,13 +193,6 @@ const SaleCard = React.memo<{
             <span className="text-sm text-gray-500">({sale.branch.displayName})</span>
           </div>
           <div className="flex gap-2">
-            <button
-              onClick={() => onViewDetails(sale)}
-              className="p-2 bg-amber-600 hover:bg-amber-700 text-white rounded-full transition-colors duration-200"
-              aria-label={t.viewDetails}
-            >
-              <Eye className="w-4 h-4" />
-            </button>
             <button
               onClick={() => onDelete(sale._id)}
               className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200"
@@ -225,14 +217,14 @@ const SaleCard = React.memo<{
               <span className="truncate max-w-[60%]">
                 {item.quantity} {item.displayUnit || t.units.default} {item.displayName || t.departments.unknown}
               </span>
-              <span className="font-semibold text-amber-600">
+              <span className="font-semibold text-gray-900">
                 {item.quantity} × {item.unitPrice}
               </span>
             </div>
           ))}
           <div className="flex justify-between items-center font-bold text-gray-900 text-base border-t pt-2 mt-2">
             <span>{t.total}:</span>
-            <span className="text-amber-600">{sale.totalAmount.toFixed(2)} {t.currency}</span>
+            <span className="text-green-500">{sale.totalAmount.toFixed(2)} {t.currency}</span>
           </div>
         </div>
         {sale.returns && sale.returns.length > 0 && (
@@ -288,7 +280,6 @@ export const BranchSalesReport: React.FC = () => {
   const [error, setError] = useState('');
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [selectedSale, setSelectedSale] = useState<Sale | null>(null);
 
   // التحقق من الصلاحيات
   useEffect(() => {
@@ -516,26 +507,7 @@ export const BranchSalesReport: React.FC = () => {
         <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-8">
           <h2 className="text-xl font-bold text-gray-900 mb-6">{t.filters}</h2>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-            <ProductDropdown value={filterPeriod} onChange={setFilterPeriod} options={periodOptions} ariaLabel={t.filterBy} />
-            {filterPeriod === 'custom' && (
-              <>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-                  aria-label={t.date}
-                />
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
-                  aria-label={t.date}
-                />
-              </>
-            )}
-            <div className="relative group">
+            <div className="relative group sm:col-span-2">
               <Search className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${searchInput ? 'opacity-0' : 'opacity-100'}`} />
               <input
                 type="text"
@@ -558,6 +530,25 @@ export const BranchSalesReport: React.FC = () => {
                 </button>
               )}
             </div>
+            <ProductDropdown value={filterPeriod} onChange={setFilterPeriod} options={periodOptions} ariaLabel={t.filterBy} />
+            {filterPeriod === 'custom' && (
+              <>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                  aria-label={t.date}
+                />
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                  aria-label={t.date}
+                />
+              </>
+            )}
           </div>
         </div>
         {loading ? (
@@ -575,7 +566,7 @@ export const BranchSalesReport: React.FC = () => {
           <>
             <div className="space-y-6">
               {filteredSales.map((sale) => (
-                <SaleCard key={sale._id} sale={sale} onDelete={handleDeleteSale} onViewDetails={() => setSelectedSale(sale)} />
+                <SaleCard key={sale._id} sale={sale} onDelete={handleDeleteSale} />
               ))}
             </div>
             {hasMore && (

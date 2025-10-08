@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { AlertCircle, BarChart2, ChevronDown } from 'lucide-react';
+import { AlertCircle, BarChart2 } from 'lucide-react';
 import { toast } from 'react-toastify';
 
 const translations = {
@@ -32,6 +32,7 @@ const translations = {
       unauthorized_access: 'غير مصرح لك بالوصول',
       no_branch_assigned: 'لم يتم تعيين فرع',
       fetch_analytics: 'خطأ أثناء جلب الإحصائيات',
+      network_error: 'خطأ في الاتصال بالشبكة',
     },
     currency: 'ريال',
   },
@@ -58,6 +59,7 @@ const translations = {
       unauthorized_access: 'You are not authorized to access',
       no_branch_assigned: 'No branch assigned',
       fetch_analytics: 'Error fetching analytics',
+      network_error: 'Network connection error',
     },
     currency: 'SAR',
   },
@@ -150,20 +152,22 @@ export const BranchSalesAnalytics: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // التحقق من الصلاحيات
+  // التحقق من الصلاحيات ومعرف الفرع
   useEffect(() => {
-    if (!user?.role || user.role !== 'branch') {
-      setError(t.errors.unauthorized_access);
-      toast.error(t.errors.unauthorized_access, { position: isRtl ? 'top-right' : 'top-left' });
+    if (!user?.role || user.role !== 'branch' || !user.branchId) {
+      const errorMessage = !user?.branchId ? t.errors.no_branch_assigned : t.errors.unauthorized_access;
+      setError(errorMessage);
+      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
       navigate('/unauthorized');
     }
   }, [user, t, isRtl, navigate]);
 
-  // جلب البيانات التحليلية للفرع نفسه
+  // جلب البيانات التحليلية
   const fetchAnalytics = useCallback(async () => {
+    if (!user?.branchId) return;
     setLoading(true);
     try {
-      const params: any = { branch: user.branchId }; // دائمًا للفرع نفسه
+      const params = { branch: user.branchId };
       const response = await salesAPI.getAnalytics(params);
       setAnalytics({
         ...response,
@@ -175,9 +179,9 @@ export const BranchSalesAnalytics: React.FC = () => {
       setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Analytics fetch error:`, err);
-      const errorMessage = err.status === 403 ? t.errors.unauthorized_access : t.errors.fetch_analytics;
+      const errorMessage = err.status === 403 ? t.errors.unauthorized_access : err.status === 0 ? t.errors.network_error : t.errors.fetch_analytics;
       setError(errorMessage);
-      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
       setAnalytics(null);
     } finally {
       setLoading(false);
@@ -188,8 +192,8 @@ export const BranchSalesAnalytics: React.FC = () => {
     fetchAnalytics();
   }, [fetchAnalytics]);
 
-  // ألوان الرسوم البيانية
-  const COLORS = ['#FFBB28', '#FF8042', '#0088FE', '#00C49F', '#FF4444'];
+  // تحسين الأداء باستخدام useMemo
+  const chartColors = useMemo(() => ['#FFBB28', '#FF8042', '#0088FE', '#00C49F', '#FF4444'], []);
 
   return (
     <div className={`mx-auto px-4 sm:px-6 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 font-sans ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
@@ -243,8 +247,8 @@ export const BranchSalesAnalytics: React.FC = () => {
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Line type="monotone" dataKey="totalSales" stroke="#FFBB28" name={t.totalSales} />
-                <Line type="monotone" dataKey="saleCount" stroke="#0088FE" name={t.totalCount} />
+                <Line type="monotone" dataKey="totalSales" stroke={chartColors[0]} name={t.totalSales} />
+                <Line type="monotone" dataKey="saleCount" stroke={chartColors[2]} name={t.totalCount} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -259,8 +263,8 @@ export const BranchSalesAnalytics: React.FC = () => {
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="totalRevenue" fill="#FFBB28" name={t.totalRevenue} />
-                <Bar dataKey="totalQuantity" fill="#0088FE" name={t.totalQuantity} />
+                <Bar dataKey="totalRevenue" fill={chartColors[0]} name={t.totalRevenue} />
+                <Bar dataKey="totalQuantity" fill={chartColors[2]} name={t.totalQuantity} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -275,8 +279,8 @@ export const BranchSalesAnalytics: React.FC = () => {
                 <YAxis />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="totalRevenue" fill="#FF4444" name={t.totalRevenue} />
-                <Bar dataKey="totalQuantity" fill="#00C49F" name={t.totalQuantity} />
+                <Bar dataKey="totalRevenue" fill={chartColors[4]} name={t.totalRevenue} />
+                <Bar dataKey="totalQuantity" fill={chartColors[3]} name={t.totalQuantity} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -296,8 +300,8 @@ export const BranchSalesAnalytics: React.FC = () => {
                   fill="#8884d8"
                   label
                 >
-                  {analytics.departmentSales.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  {analytics.departmentSales.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -321,8 +325,8 @@ export const BranchSalesAnalytics: React.FC = () => {
                   fill="#8884d8"
                   label
                 >
-                  {analytics.leastDepartmentSales.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  {analytics.leastDepartmentSales.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
                   ))}
                 </Pie>
                 <Tooltip />
