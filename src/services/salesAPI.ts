@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosResponse } from 'axios';
 import { toast } from 'react-toastify';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
@@ -30,8 +30,8 @@ const handleError = async (error: any, originalRequest: any): Promise<never> => 
   if (error.response?.status === 401 && !originalRequest._retry) {
     originalRequest._retry = true;
     try {
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (!refreshToken) {
+      const refreshTokenValue = localStorage.getItem('refreshToken');
+      if (!refreshTokenValue) {
         console.error(`[${new Date().toISOString()}] No refresh token available`);
         localStorage.removeItem('token');
         localStorage.removeItem('user');
@@ -44,7 +44,7 @@ const handleError = async (error: any, originalRequest: any): Promise<never> => 
         });
         return Promise.reject({ message: isRtl ? 'التوكن منتهي الصلاحية ولا يوجد توكن منعش' : 'Token expired and no refresh token available', status: 401 });
       }
-      const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
+      const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken: refreshTokenValue });
       const { accessToken, refreshToken: newRefreshToken } = response.data;
       localStorage.setItem('token', accessToken);
       if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
@@ -91,7 +91,7 @@ salesAxios.interceptors.request.use(
 );
 
 salesAxios.interceptors.response.use(
-  (response) => {
+  (response: AxiosResponse) => {
     const data = response.data;
     if (!data) {
       console.error(`[${new Date().toISOString()}] Empty response data:`, response);
@@ -102,6 +102,126 @@ salesAxios.interceptors.response.use(
   (error) => handleError(error, error.config)
 );
 
+interface Item {
+  productId: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+interface Sale {
+  saleNumber: string;
+  branch: {
+    _id: string;
+    name: string;
+    nameEn?: string;
+    displayName: string;
+  };
+  items: Array<{
+    product: string;
+    productName: string;
+    productNameEn?: string;
+    displayName: string;
+    displayUnit: string;
+    quantity: number;
+    unitPrice: number;
+    department?: {
+      _id: string;
+      name: string;
+      nameEn?: string;
+      displayName: string;
+    };
+  }>;
+  totalAmount: number;
+  status: string;
+  paymentMethod: string;
+  customerName?: string;
+  customerPhone?: string;
+  notes?: string;
+  createdBy: string;
+  createdAt: string;
+  returns?: Array<{
+    _id: string;
+    returnNumber: string;
+    status: string;
+    items: Array<{
+      product: string;
+      productName: string;
+      productNameEn?: string;
+      quantity: number;
+      reason: string;
+    }>;
+    reason: string;
+    createdAt: string;
+  }>;
+}
+
+interface AnalyticsData {
+  totalSales: number;
+  totalCount: number;
+  averageOrderValue: number;
+  returnRate: number;
+  topProduct: {
+    productId: string | null;
+    productName: string;
+    displayName: string;
+    totalQuantity: number;
+    totalRevenue: number;
+  };
+  productSales: Array<{
+    productId: string;
+    productName: string;
+    productNameEn?: string;
+    displayName: string;
+    totalQuantity: number;
+    totalRevenue: number;
+  }>;
+  leastProductSales: Array<{
+    productId: string;
+    productName: string;
+    productNameEn?: string;
+    displayName: string;
+    totalQuantity: number;
+    totalRevenue: number;
+  }>;
+  departmentSales: Array<{
+    departmentId: string;
+    departmentName: string;
+    departmentNameEn?: string;
+    displayName: string;
+    totalRevenue: number;
+    totalQuantity: number;
+  }>;
+  leastDepartmentSales: Array<{
+    departmentId: string;
+    departmentName: string;
+    departmentNameEn?: string;
+    displayName: string;
+    totalRevenue: number;
+    totalQuantity: number;
+  }>;
+  salesTrends: Array<{
+    period: string;
+    totalSales: number;
+    saleCount: number;
+  }>;
+  topCustomers: Array<{
+    customerName: string;
+    customerPhone: string;
+    totalSpent: number;
+    purchaseCount: number;
+  }>;
+  paymentMethods: Array<{
+    paymentMethod: string;
+    totalAmount: number;
+    count: number;
+  }>;
+  returnStats: Array<{
+    status: string;
+    count: number;
+    totalQuantity: number;
+  }>;
+}
+
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 
 const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7,15}$/.test(phone);
@@ -109,6 +229,8 @@ const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7
 const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'card'].includes(method);
 
 const isValidPaymentStatus = (status: string | undefined): boolean => !status || ['pending', 'completed', 'canceled'].includes(status);
+
+const isValidDate = (date: string | undefined): boolean => !date || !isNaN(new Date(date).getTime());
 
 export const salesAPI = {
   create: async (saleData: {
@@ -119,7 +241,7 @@ export const salesAPI = {
     paymentStatus?: string;
     customerName?: string;
     customerPhone?: string;
-  }) => {
+  }): Promise<Sale> => {
     console.log(`[${new Date().toISOString()}] salesAPI.create - Sending:`, saleData);
     if (!isValidObjectId(saleData.branch)) {
       console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid branch ID:`, saleData.branch);
@@ -141,9 +263,9 @@ export const salesAPI = {
       console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid payment status:`, saleData.paymentStatus);
       throw new Error(isRtl ? 'حالة الدفع غير صالحة' : 'Invalid payment status');
     }
-    const response = await salesAxios.post('/sales', saleData);
+    const response = await salesAxios.post('/sales', { ...saleData, lang: isRtl ? 'ar' : 'en' });
     console.log(`[${new Date().toISOString()}] salesAPI.create - Success:`, response);
-    return response;
+    return response.sale; // إرجاع الحقل sale من البيانات
   },
 
   getAll: async (params: {
@@ -153,74 +275,95 @@ export const salesAPI = {
     branch?: string;
     startDate?: string;
     endDate?: string;
-  }) => {
+  }): Promise<{ sales: Sale[]; total: number; returns: any[] }> => {
     console.log(`[${new Date().toISOString()}] salesAPI.getAll - Sending:`, params);
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid branch ID:`, params.branch);
       throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
     }
-    if (params.startDate && isNaN(new Date(params.startDate).getTime())) {
+    if (!isValidDate(params.startDate)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid start date:`, params.startDate);
       throw new Error(isRtl ? 'تاريخ البدء غير صالح' : 'Invalid start date');
     }
-    if (params.endDate && isNaN(new Date(params.endDate).getTime())) {
+    if (!isValidDate(params.endDate)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid end date:`, params.endDate);
       throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
     }
-    const response = await salesAxios.get('/sales', { params });
+    const response = await salesAxios.get('/sales', { params: { ...params, lang: isRtl ? 'ar' : 'en' } });
     console.log(`[${new Date().toISOString()}] salesAPI.getAll - Success:`, {
       total: response.total,
       salesCount: response.sales?.length,
     });
-    return response;
+    return response; // إرجاع البيانات مباشرة لأنها تتطابق مع النوع المتوقع
   },
 
-  getById: async (id: string) => {
+  getById: async (id: string): Promise<Sale> => {
     console.log(`[${new Date().toISOString()}] salesAPI.getById - Sending:`, { id });
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getById - Invalid sale ID:`, id);
       throw new Error(isRtl ? 'معرف المبيعة غير صالح' : 'Invalid sale ID');
     }
-    const response = await salesAxios.get(`/sales/${id}`);
+    const response = await salesAxios.get(`/sales/${id}`, { params: { lang: isRtl ? 'ar' : 'en' } });
     console.log(`[${new Date().toISOString()}] salesAPI.getById - Success:`, response);
-    return response.sale;
+    return response.sale; // إرجاع الحقل sale من البيانات
   },
 
-  delete: async (id: string) => {
+  delete: async (id: string): Promise<{ message: string }> => {
     console.log(`[${new Date().toISOString()}] salesAPI.delete - Sending:`, { id });
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] salesAPI.delete - Invalid sale ID:`, id);
       throw new Error(isRtl ? 'معرف المبيعة غير صالح' : 'Invalid sale ID');
     }
-    const response = await salesAxios.delete(`/sales/${id}`);
+    const response = await salesAxios.delete(`/sales/${id}`, { params: { lang: isRtl ? 'ar' : 'en' } });
     console.log(`[${new Date().toISOString()}] salesAPI.delete - Success:`, response);
-    return response;
+    return response; // إرجاع البيانات مباشرة لأنها تتطابق مع النوع المتوقع
   },
 
   getAnalytics: async (params: {
     branch?: string;
     startDate?: string;
     endDate?: string;
-  }) => {
+  }): Promise<AnalyticsData> => {
     console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Sending:`, params);
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid branch ID:`, params.branch);
       throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
     }
-    if (params.startDate && isNaN(new Date(params.startDate).getTime())) {
+    if (!isValidDate(params.startDate)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid start date:`, params.startDate);
       throw new Error(isRtl ? 'تاريخ البدء غير صالح' : 'Invalid start date');
     }
-    if (params.endDate && isNaN(new Date(params.endDate).getTime())) {
+    if (!isValidDate(params.endDate)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid end date:`, params.endDate);
       throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
     }
-    const response = await salesAxios.get('/sales/analytics', { params });
+    const response = await salesAxios.get('/sales/analytics', { params: { ...params, lang: isRtl ? 'ar' : 'en' } });
     console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Success:`, {
       totalSales: response.totalSales,
       totalCount: response.totalCount,
     });
-    return response;
+    return response; // إرجاع البيانات مباشرة لأنها تتطابق مع AnalyticsData
+  },
+
+  getBranchAnalytics: async (params: {
+    startDate?: string;
+    endDate?: string;
+  }): Promise<AnalyticsData> => {
+    console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Sending:`, params);
+    if (!isValidDate(params.startDate)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid start date:`, params.startDate);
+      throw new Error(isRtl ? 'تاريخ البدء غير صالح' : 'Invalid start date');
+    }
+    if (!isValidDate(params.endDate)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid end date:`, params.endDate);
+      throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
+    }
+    const response = await salesAxios.get('/sales/branch-analytics', { params: { ...params, lang: isRtl ? 'ar' : 'en' } });
+    console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Success:`, {
+      totalSales: response.totalSales,
+      totalCount: response.totalCount,
+    });
+    return response; // إرجاع البيانات مباشرة لأنها تتطابق مع AnalyticsData
   },
 };
 
