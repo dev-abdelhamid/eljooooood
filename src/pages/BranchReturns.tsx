@@ -683,7 +683,7 @@ export const BranchReturns: React.FC = () => {
         >
           <div className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200">
             <div className="flex flex-col gap-4">
-              <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${isRtl ? 'sm:flex-row-reverse' : ''}`}>
+              <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${isRtl ? 'sm:flex-row' : ''}`}>
                 <h3 className="text-lg font-bold text-gray-900">{t.returnNumber}: {ret.returnNumber}</h3>
                 <span className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${statusInfo.color}`}>
                   <StatusIcon className="w-5 h-5" />
@@ -723,8 +723,8 @@ export const BranchReturns: React.FC = () => {
                 </div>
               )}
               {ret.reviewNotes && (
-                <div className="p-3 bg-blue-50 rounded-md border border-blue-100">
-                  <p className="text-sm text-blue-800">
+                <div className="p-3 bg-amber-50 rounded-md border border-amber-100">
+                  <p className="text-sm text-amber-800">
                     <strong>{t.reviewNotes}:</strong> {ret.reviewNotes}
                   </p>
                 </div>
@@ -823,7 +823,7 @@ export const BranchReturns: React.FC = () => {
       </div>
 
       {returnsLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-6">
           {[...Array(6)].map((_, i) => (
             <div key={i} className="p-5 bg-white rounded-xl shadow-sm border border-gray-100">
               <div className="space-y-3 animate-pulse">
@@ -854,7 +854,7 @@ export const BranchReturns: React.FC = () => {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1  gap-6">
           <AnimatePresence>
             {paginatedReturns.map((ret) => (
               <ReturnCard key={ret._id} ret={ret} />
@@ -865,7 +865,7 @@ export const BranchReturns: React.FC = () => {
 
       <div className="mt-6">
         {totalPages > 1 && (
-          <div className={`flex items-center justify-center gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex items-center justify-center gap-3 ${isRtl ? 'flex-row' : ''}`}>
             <button
               onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
               className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
