@@ -144,10 +144,13 @@ const translations = {
       invalidQuantityMax: 'الكمية يجب أن تكون بين 1 و{max}',
       noItemSelected: 'لم يتم اختيار عنصر',
       insufficientQuantity: 'الكمية غير كافية للمنتج في المخزون',
+      branchNotFound: 'الفرع غير موجود',
+      productNotFound: 'المنتج غير موجود',
     },
     notifications: {
       returnApproved: 'تمت الموافقة على طلب الإرجاع',
       returnRejected: 'تم رفض طلب الإرجاع',
+      returnCreated: 'تم إنشاء طلب الإرجاع بنجاح',
     },
   },
   en: {
@@ -211,10 +214,13 @@ const translations = {
       invalidQuantityMax: 'Quantity must be between 1 and {max}',
       noItemSelected: 'No item selected',
       insufficientQuantity: 'Insufficient quantity for the product in inventory',
+      branchNotFound: 'Branch not found',
+      productNotFound: 'Product not found',
     },
     notifications: {
       returnApproved: 'Return request approved',
       returnRejected: 'Return request rejected',
+      returnCreated: 'Return request created successfully',
     },
   },
 };
@@ -547,17 +553,19 @@ export const BranchInventory: React.FC = () => {
   }, []);
 
   const handleOpenReturnModal = useCallback((item?: InventoryItem) => {
-    setSelectedItem(item || null);
-    dispatchReturnForm({ type: 'RESET' });
-    if (item?.product) {
-      dispatchReturnForm({
-        type: 'ADD_ITEM',
-        payload: { productId: item.product._id, quantity: 1, reason: '', maxQuantity: item.currentStock },
-      });
-    }
-    setReturnErrors({});
-    setIsReturnModalOpen(true);
-  }, []);
+    refetchInventory().then(() => {
+      setSelectedItem(item || null);
+      dispatchReturnForm({ type: 'RESET' });
+      if (item?.product) {
+        dispatchReturnForm({
+          type: 'ADD_ITEM',
+          payload: { productId: item.product._id, quantity: 1, reason: '', maxQuantity: item.currentStock },
+        });
+      }
+      setReturnErrors({});
+      setIsReturnModalOpen(true);
+    });
+  }, [refetchInventory]);
 
   const handleOpenEditModal = useCallback((item: InventoryItem) => {
     setSelectedItem(item);
@@ -603,6 +611,10 @@ export const BranchInventory: React.FC = () => {
         type: 'UPDATE_ITEM',
         payload: { index, field: 'maxQuantity', value: inventoryItem?.currentStock || 0 },
       });
+      dispatchReturnForm({
+        type: 'UPDATE_ITEM',
+        payload: { index, field: 'quantity', value: 1 },
+      });
     },
     [inventoryData]
   );
@@ -613,21 +625,34 @@ export const BranchInventory: React.FC = () => {
 
   const validateReturnForm = useCallback(() => {
     const errors: Record<string, string> = {};
-    if (returnForm.items.length === 0) errors.items = t.errors.required.replace('{field}', t.items);
+    if (!user?.branchId) {
+      errors.form = t.errors.noBranch;
+    }
+    if (returnForm.items.length === 0) {
+      errors.items = t.errors.required.replace('{field}', t.items);
+    }
     returnForm.items.forEach((item, index) => {
-      if (!item.productId) errors[`item_${index}_productId`] = t.errors.required.replace('{field}', t.items);
-      if (!item.reason) errors[`item_${index}_reason`] = t.errors.required.replace('{field}', t.reason);
+      if (!item.productId) {
+        errors[`item_${index}_productId`] = t.errors.required.replace('{field}', t.items);
+      } else if (!isValidObjectId(item.productId)) {
+        errors[`item_${index}_productId`] = t.errors.productNotFound;
+      }
+      if (!item.reason) {
+        errors[`item_${index}_reason`] = t.errors.required.replace('{field}', t.reason);
+      }
       if (item.quantity < 1 || item.quantity > item.maxQuantity || isNaN(item.quantity)) {
         errors[`item_${index}_quantity`] = t.errors.invalidQuantityMax.replace('{max}', item.maxQuantity.toString());
       }
       const inventoryItem = inventoryData?.find((inv) => inv.product?._id === item.productId);
-      if (inventoryItem && item.quantity > inventoryItem.currentStock) {
+      if (!inventoryItem) {
+        errors[`item_${index}_productId`] = t.errors.productNotFound;
+      } else if (item.quantity > inventoryItem.currentStock) {
         errors[`item_${index}_quantity`] = t.errors.insufficientQuantity;
       }
     });
     setReturnErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [returnForm, t, inventoryData]);
+  }, [returnForm, t, inventoryData, user]);
 
   const validateEditForm = useCallback(() => {
     const errors: Record<string, string> = {};
@@ -638,7 +663,7 @@ export const BranchInventory: React.FC = () => {
     return Object.keys(errors).length === 0;
   }, [editForm, t]);
 
-  const createReturnMutation = useMutation<void, Error, void>({
+  const createReturnMutation = useMutation<{ returnId: string }, Error, void>({
     mutationFn: async () => {
       if (!validateReturnForm()) throw new Error(t.errors.invalidForm);
       if (!user?.branchId) throw new Error(t.errors.noBranch);
@@ -649,29 +674,36 @@ export const BranchInventory: React.FC = () => {
           quantity: item.quantity,
           reason: item.reason,
         })),
-        notes: returnForm.notes || '',
+        notes: returnForm.notes || undefined,
       };
-      await returnsAPI.createReturn(data);
+      const response = await returnsAPI.createReturn(data);
+      return { returnId: response?.returnId || crypto.randomUUID() };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       setIsReturnModalOpen(false);
       dispatchReturnForm({ type: 'RESET' });
       setReturnErrors({});
       setSelectedItem(null);
-      toast.success(t.create, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.success(t.notifications.returnCreated, { position: isRtl ? 'top-right' : 'top-left' });
       socket?.emit('returnCreated', {
         branchId: user?.branchId,
-        returnId: crypto.randomUUID(),
+        returnId: data.returnId,
         status: 'pending_approval',
         eventId: crypto.randomUUID(),
       });
     },
     onError: (err) => {
       let errorMessage = err.message || t.errors.createReturn;
-      if (err.message.includes('الفرع غير موجود')) errorMessage = t.errors.noBranch;
-      if (err.message.includes('الكمية غير كافية')) errorMessage = t.errors.insufficientQuantity;
-      if (err.message.includes('بيانات العنصر غير صالحة')) errorMessage = t.errors.invalidForm;
+      if (err.message.includes('الفرع غير موجود') || err.message.includes('Branch not found')) {
+        errorMessage = t.errors.noBranch;
+      } else if (err.message.includes('الكمية غير كافية') || err.message.includes('Insufficient quantity')) {
+        errorMessage = t.errors.insufficientQuantity;
+      } else if (err.message.includes('بيانات العنصر غير صالحة') || err.message.includes('Invalid data')) {
+        errorMessage = t.errors.invalidForm;
+      } else if (err.message.includes('المنتج غير موجود') || err.message.includes('Product not found')) {
+        errorMessage = t.errors.productNotFound;
+      }
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       setReturnErrors({ form: errorMessage });
     },
@@ -1030,7 +1062,7 @@ export const BranchInventory: React.FC = () => {
               )}
               {returnErrors.items && <p className="text-red-600 text-xs">{returnErrors.items}</p>}
             </div>
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-3 mt-6">
               <button
                 onClick={() => {
                   setIsReturnModalOpen(false);
@@ -1085,7 +1117,7 @@ export const BranchInventory: React.FC = () => {
           </div>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.minStock}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t.minStock}</label>
               <input
                 type="number"
                 value={editForm.minStockLevel}
@@ -1097,7 +1129,7 @@ export const BranchInventory: React.FC = () => {
               {editErrors.minStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.minStockLevel}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.maxStock}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t.maxStock}</label>
               <input
                 type="number"
                 value={editForm.maxStockLevel}
@@ -1109,7 +1141,7 @@ export const BranchInventory: React.FC = () => {
               {editErrors.maxStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.maxStockLevel}</p>}
             </div>
             {editErrors.form && <p className="text-red-600 text-xs">{editErrors.form}</p>}
-            <div className="flex justify-end gap-3">
+            <div className="flex justify-end gap-3 mt-6">
               <button
                 onClick={() => {
                   setIsEditModalOpen(false);
@@ -1145,7 +1177,7 @@ export const BranchInventory: React.FC = () => {
         <motion.div
           initial={{ scale: 0.95, y: 20 }}
           animate={{ scale: isDetailsModalOpen ? 1 : 0.95, y: isDetailsModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-2xl w-full"
+          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-2xl w-full max-h-[80vh] overflow-y-auto"
         >
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
@@ -1157,51 +1189,36 @@ export const BranchInventory: React.FC = () => {
               <X className="w-4 h-4" />
             </button>
           </div>
-          <div className="space-y-4">
-            {historyLoading ? (
-              <div className="space-y-3 animate-pulse">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-4 bg-gray-200 rounded w-full"></div>
-                ))}
-              </div>
-            ) : !productHistory || productHistory.length === 0 ? (
-              <p className="text-gray-600 text-sm">{t.noHistory}</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-gray-600">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="py-2 px-4 text-left">{t.date}</th>
-                      <th className="py-2 px-4 text-left">{t.type}</th>
-                      <th className="py-2 px-4 text-left">{t.quantity}</th>
-                      <th className="py-2 px-4 text-left">{t.description}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {productHistory.map((entry) => (
-                      <tr key={entry._id} className="border-b border-gray-100">
-                        <td className="py-2 px-4">{new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
-                        <td className="py-2 px-4">{t[entry.type]}</td>
-                        <td className="py-2 px-4">{entry.quantity}</td>
-                        <td className="py-2 px-4">{entry.description}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <div className="flex justify-end">
-              <button
-                onClick={() => setIsDetailsModalOpen(false)}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                {t.cancel}
-              </button>
+          {historyLoading ? (
+            <div className="space-y-3 animate-pulse">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-4 bg-gray-200 rounded w-full"></div>
+              ))}
             </div>
-          </div>
+          ) : productHistory && productHistory.length > 0 ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-4 gap-4 text-sm font-medium text-gray-700 border-b border-gray-200 pb-2">
+                <span>{t.date}</span>
+                <span>{t.type}</span>
+                <span>{t.quantity}</span>
+                <span>{t.description}</span>
+              </div>
+              {productHistory.map((entry) => (
+                <div key={entry._id} className="grid grid-cols-4 gap-4 text-sm text-gray-600 border-b border-gray-100 py-2">
+                  <span>{new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</span>
+                  <span>{t[entry.type]}</span>
+                  <span>{entry.quantity}</span>
+                  <span>{entry.description}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-gray-600 text-sm">{t.noHistory}</p>
+          )}
         </motion.div>
       </motion.div>
     </div>
   );
 };
+
+export default BranchInventory;
