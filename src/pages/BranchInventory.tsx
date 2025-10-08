@@ -8,7 +8,7 @@ import { Package, AlertCircle, Search, Edit, X, Plus, Eye, Minus } from 'lucide-
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ProductSearchInput, ProductDropdown } from './NewOrder'; // Reused components
+import { ProductSearchInput, ProductDropdown } from './NewOrder';
 
 // Enums for type safety
 enum InventoryStatus {
@@ -219,7 +219,7 @@ const translations = {
   },
 };
 
-// QuantityInput Component (Fixed decrement icon to Minus and handled invalid inputs)
+// QuantityInput Component
 const QuantityInput = ({
   value,
   onChange,
@@ -584,7 +584,7 @@ export const BranchInventory: React.FC = () => {
     (index: number, field: keyof ReturnItem, value: string | number) => {
       if (field === 'quantity' && typeof value === 'string') {
         const numValue = parseInt(value);
-        if (isNaN(numValue) || numValue < 1) return; // Prevent invalid or negative quantities
+        if (isNaN(numValue) || numValue < 1) return;
         value = numValue;
       }
       dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
@@ -649,7 +649,7 @@ export const BranchInventory: React.FC = () => {
           quantity: item.quantity,
           reason: item.reason,
         })),
-        notes: returnForm.notes || undefined,
+        notes: returnForm.notes || '',
       };
       await returnsAPI.createReturn(data);
     },
@@ -953,78 +953,84 @@ export const BranchInventory: React.FC = () => {
                 value={returnForm.notes}
                 onChange={(e) => dispatchReturnForm({ type: 'SET_NOTES', payload: e.target.value })}
                 placeholder={t.notesPlaceholder}
-                className={`w-full ${isRtl ? 'text-right' : 'text-left'} p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-white shadow-sm h-24 resize-none`}
+                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
+                rows={3}
                 aria-label={t.notes}
               />
+              {returnErrors.form && <p className="text-red-600 text-xs mt-1">{returnErrors.form}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
               {returnForm.items.map((item, index) => (
-                <div
-                  key={index}
-                  className={`flex flex-col sm:flex-row gap-3 mb-4 items-start sm:items-center flex-wrap ${isRtl ? 'sm:flex-row-reverse' : ''}`}
-                >
-                  <ProductDropdown
-                    value={item.productId}
-                    onChange={(value) => handleProductChange(index, value)}
-                    options={[{ value: '', label: t.products?.select || 'Select Product' }].concat(
-                      availableItems.map((a) => ({
-                        value: a.productId,
-                        label: `${a.productName} (${a.stock} ${t.available}) - [${a.departmentName}]`,
-                      }))
-                    )}
-                    disabled={!!selectedItem}
-                    ariaLabel={t.products?.select || 'Select Product'}
-                    className="w-full sm:w-auto"
-                  />
+                <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                  {!selectedItem && (
+                    <ProductDropdown
+                      value={item.productId}
+                      onChange={(value) => handleProductChange(index, value)}
+                      options={availableItems.map((availItem) => ({
+                        value: availItem.productId,
+                        label: `${availItem.productName} (${t.available}: ${availItem.available} ${availItem.unit})`,
+                      }))}
+                      ariaLabel={`${t.items} ${index + 1}`}
+                      placeholder={t.search}
+                      className="w-full"
+                    />
+                  )}
                   {returnErrors[`item_${index}_productId`] && (
-                    <p className="text-red-500 text-xs">{returnErrors[`item_${index}_productId`]}</p>
+                    <p className="text-red-600 text-xs">{returnErrors[`item_${index}_productId`]}</p>
                   )}
-                  <QuantityInput
-                    value={item.quantity}
-                    onChange={(val) => updateItemInForm(index, 'quantity', val)}
-                    onIncrement={() => updateItemInForm(index, 'quantity', item.quantity + 1)}
-                    onDecrement={() => updateItemInForm(index, 'quantity', item.quantity - 1)}
-                    max={item.maxQuantity}
-                  />
-                  {returnErrors[`item_${index}_quantity`] && (
-                    <p className="text-red-500 text-xs">{returnErrors[`item_${index}_quantity`]}</p>
-                  )}
-                  <ProductDropdown
-                    value={item.reason}
-                    onChange={(value) => updateItemInForm(index, 'reason', value)}
-                    options={reasonOptions}
-                    ariaLabel={t.reason}
-                    className="w-full sm:w-auto"
-                  />
-                  {returnErrors[`item_${index}_reason`] && (
-                    <p className="text-red-500 text-xs">{returnErrors[`item_${index}_reason`]}</p>
-                  )}
-                  <button
-                    onClick={() => removeItemFromForm(index)}
-                    disabled={!!selectedItem && returnForm.items.length === 1}
-                    className="w-8 h-8 bg-red-600 hover:bg-red-700 text-white rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
-                    aria-label={t.removeItem}
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.quantity}</label>
+                      <QuantityInput
+                        value={item.quantity}
+                        onChange={(val) => updateItemInForm(index, 'quantity', val)}
+                        onIncrement={() => updateItemInForm(index, 'quantity', item.quantity + 1)}
+                        onDecrement={() => updateItemInForm(index, 'quantity', item.quantity - 1)}
+                        max={item.maxQuantity}
+                      />
+                      {returnErrors[`item_${index}_quantity`] && (
+                        <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_quantity`]}</p>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.reason}</label>
+                      <ProductDropdown
+                        value={item.reason}
+                        onChange={(value) => updateItemInForm(index, 'reason', value)}
+                        options={reasonOptions}
+                        ariaLabel={`${t.reason} ${index + 1}`}
+                        className="w-full"
+                      />
+                      {returnErrors[`item_${index}_reason`] && (
+                        <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_reason`]}</p>
+                      )}
+                    </div>
+                    {!selectedItem && returnForm.items.length > 1 && (
+                      <button
+                        onClick={() => removeItemFromForm(index)}
+                        className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 mt-6"
+                        aria-label={t.removeItem}
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
-              {returnErrors.items && <p className="text-red-500 text-xs">{returnErrors.items}</p>}
               {!selectedItem && (
                 <button
                   onClick={addItemToForm}
-                  disabled={availableItems.length === 0}
-                  className="mt-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2 disabled:opacity-50"
+                  className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
                   aria-label={t.addItem}
                 >
                   <Plus className="w-4 h-4" />
                   {t.addItem}
                 </button>
               )}
+              {returnErrors.items && <p className="text-red-600 text-xs">{returnErrors.items}</p>}
             </div>
-            {returnErrors.form && <p className="text-red-500 text-xs">{returnErrors.form}</p>}
-            <div className={`flex justify-end gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <div className="flex justify-end gap-3">
               <button
                 onClick={() => {
                   setIsReturnModalOpen(false);
@@ -1032,32 +1038,18 @@ export const BranchInventory: React.FC = () => {
                   setReturnErrors({});
                   setSelectedItem(null);
                 }}
-                className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
                 aria-label={t.cancel}
               >
                 {t.cancel}
               </button>
               <button
                 onClick={() => createReturnMutation.mutate()}
-                disabled={createReturnMutation.isPending}
-                className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                aria-label={createReturnMutation.isPending ? t.submitting : t.submit}
+                disabled={createReturnMutation.isLoading}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                aria-label={createReturnMutation.isLoading ? t.submitting : t.submit}
               >
-                {createReturnMutation.isPending ? (
-                  <span className="flex items-center gap-2">
-                    <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    {t.submitting}
-                  </span>
-                ) : (
-                  t.submit
-                )}
+                {createReturnMutation.isLoading ? t.submitting : t.submit}
               </button>
             </div>
           </div>
@@ -1075,14 +1067,13 @@ export const BranchInventory: React.FC = () => {
         <motion.div
           initial={{ scale: 0.95, y: 20 }}
           animate={{ scale: isEditModalOpen ? 1 : 0.95, y: isEditModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-md w-full"
+          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-lg w-full"
         >
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-bold text-gray-900">{t.editStockLimits}</h2>
             <button
               onClick={() => {
                 setIsEditModalOpen(false);
-                setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
                 setEditErrors({});
                 setSelectedItem(null);
               }}
@@ -1093,70 +1084,50 @@ export const BranchInventory: React.FC = () => {
             </button>
           </div>
           <div className="space-y-4">
-            {selectedItem?.product && (
-              <p className="text-sm text-gray-600">
-                {t.products?.title || 'Product'}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
-              </p>
-            )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">{t.minStock}</label>
               <input
                 type="number"
-                min={0}
                 value={editForm.minStockLevel}
-                onChange={(e) => setEditForm({ ...editForm, minStockLevel: Number(e.target.value) })}
-                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
+                onChange={(e) => setEditForm({ ...editForm, minStockLevel: parseInt(e.target.value) || 0 })}
+                min={0}
+                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
                 aria-label={t.minStock}
               />
-              {editErrors.minStockLevel && <p className="text-red-500 text-xs mt-1">{editErrors.minStockLevel}</p>}
+              {editErrors.minStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.minStockLevel}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">{t.maxStock}</label>
               <input
                 type="number"
-                min={0}
                 value={editForm.maxStockLevel}
-                onChange={(e) => setEditForm({ ...editForm, maxStockLevel: Number(e.target.value) })}
-                className="w-full p-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
+                onChange={(e) => setEditForm({ ...editForm, maxStockLevel: parseInt(e.target.value) || 0 })}
+                min={0}
+                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
                 aria-label={t.maxStock}
               />
-              {editErrors.maxStockLevel && <p className="text-red-500 text-xs mt-1">{editErrors.maxStockLevel}</p>}
+              {editErrors.maxStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.maxStockLevel}</p>}
             </div>
-            {editErrors.form && <p className="text-red-500 text-xs">{editErrors.form}</p>}
-            <div className={`flex justify-end gap-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            {editErrors.form && <p className="text-red-600 text-xs">{editErrors.form}</p>}
+            <div className="flex justify-end gap-3">
               <button
                 onClick={() => {
                   setIsEditModalOpen(false);
-                  setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
                   setEditErrors({});
                   setSelectedItem(null);
                 }}
-                className="px-5 py-2.5 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
                 aria-label={t.cancel}
               >
                 {t.cancel}
               </button>
               <button
                 onClick={() => updateInventoryMutation.mutate()}
-                disabled={updateInventoryMutation.isPending}
-                className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                aria-label={updateInventoryMutation.isPending ? t.saving : t.save}
+                disabled={updateInventoryMutation.isLoading}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                aria-label={updateInventoryMutation.isLoading ? t.saving : t.save}
               >
-                {updateInventoryMutation.isPending ? (
-                  <span className="flex items-center gap-2">
-                    <svg className="animate-spin h-5 w-5 text-white" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                      />
-                    </svg>
-                    {t.saving}
-                  </span>
-                ) : (
-                  t.save
-                )}
+                {updateInventoryMutation.isLoading ? t.saving : t.save}
               </button>
             </div>
           </div>
@@ -1174,65 +1145,63 @@ export const BranchInventory: React.FC = () => {
         <motion.div
           initial={{ scale: 0.95, y: 20 }}
           animate={{ scale: isDetailsModalOpen ? 1 : 0.95, y: isDetailsModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-2xl w-full max-h-[80vh] overflow-y-auto scrollbar-none"
+          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-2xl w-full"
         >
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
             <button
-              onClick={() => {
-                setIsDetailsModalOpen(false);
-                setSelectedProductId('');
-              }}
+              onClick={() => setIsDetailsModalOpen(false)}
               className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
               aria-label={t.cancel}
             >
               <X className="w-4 h-4" />
             </button>
           </div>
-          {historyLoading ? (
-            <div className="text-center text-gray-600 flex items-center justify-center gap-2">
-              <svg className="animate-spin h-5 w-5 text-gray-600" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                />
-              </svg>
-              {t.common?.loading || 'Loading...'}
-            </div>
-          ) : productHistory && productHistory.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="bg-gray-50">
-                    <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'} font-medium`}>{t.date}</th>
-                    <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'} font-medium`}>{t.type}</th>
-                    <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'} font-medium`}>{t.quantity}</th>
-                    <th className={`p-3 ${isRtl ? 'text-right' : 'text-left'} font-medium`}>{t.description}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {productHistory
-                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                    .map((entry) => (
-                      <tr key={entry._id} className="border-b hover:bg-gray-50">
-                        <td className="p-3">{new Date(entry.date).toLocaleString()}</td>
-                        <td className="p-3">{t[entry.type]}</td>
-                        <td className="p-3">{entry.quantity}</td>
-                        <td className="p-3">{entry.description}</td>
+          <div className="space-y-4">
+            {historyLoading ? (
+              <div className="space-y-3 animate-pulse">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="h-4 bg-gray-200 rounded w-full"></div>
+                ))}
+              </div>
+            ) : !productHistory || productHistory.length === 0 ? (
+              <p className="text-gray-600 text-sm">{t.noHistory}</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-gray-600">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="py-2 px-4 text-left">{t.date}</th>
+                      <th className="py-2 px-4 text-left">{t.type}</th>
+                      <th className="py-2 px-4 text-left">{t.quantity}</th>
+                      <th className="py-2 px-4 text-left">{t.description}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productHistory.map((entry) => (
+                      <tr key={entry._id} className="border-b border-gray-100">
+                        <td className="py-2 px-4">{new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
+                        <td className="py-2 px-4">{t[entry.type]}</td>
+                        <td className="py-2 px-4">{entry.quantity}</td>
+                        <td className="py-2 px-4">{entry.description}</td>
                       </tr>
                     ))}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="flex justify-end">
+              <button
+                onClick={() => setIsDetailsModalOpen(false)}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
+                aria-label={t.cancel}
+              >
+                {t.cancel}
+              </button>
             </div>
-          ) : (
-            <p className="text-center text-gray-600 text-sm">{t.noHistory}</p>
-          )}
+          </div>
         </motion.div>
       </motion.div>
     </div>
   );
 };
-
-export default BranchInventory;
