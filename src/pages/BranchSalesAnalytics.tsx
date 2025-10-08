@@ -128,11 +128,19 @@ interface AnalyticsData {
 
 // مكونات فرعية
 const AnalyticsSkeleton = React.memo(() => (
-  <div className="flex flex-col gap-4">
-    <div className="w-full h-6 bg-gray-200 rounded-md animate-pulse"></div>
-    <div className="w-full h-6 bg-gray-200 rounded-md animate-pulse"></div>
-    <div className="w-full h-6 bg-gray-200 rounded-md animate-pulse"></div>
-    <div className="w-full h-6 bg-gray-200 rounded-md animate-pulse"></div>  
+  <div className="space-y-6 animate-pulse">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+      {[...Array(3)].map((_, index) => (
+        <div key={index} className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+          <div className="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
+          <div className="h-8 bg-gray-200 rounded w-1/2"></div>
+        </div>
+      ))}
+    </div>
+    <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+      <div className="h-4 bg-gray-200 rounded w-1/2 mb-4"></div>
+      <div className="h-64 bg-gray-200 rounded"></div>
+    </div>
   </div>
 ));
 
@@ -147,6 +155,7 @@ export const BranchSalesAnalytics: React.FC = () => {
   const navigate = useNavigate();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'] || translations.en;
+
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -166,23 +175,16 @@ export const BranchSalesAnalytics: React.FC = () => {
     if (!user?.branchId) return;
     setLoading(true);
     try {
-      const params = { branch: user.branchId, lang: language };
+      const params = { branch: user.branchId };
       const response = await salesAPI.getAnalytics(params);
-      console.log(`[${new Date().toISOString()}] Analytics Response:`, response);
-      if (!response || response.totalSales === 0 && response.totalCount === 0 && response.productSales.length === 0) {
-        setAnalytics(null);
-        setError(t.noAnalytics);
-        toast.info(t.noAnalytics, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
-      } else {
-        setAnalytics({
-          ...response,
-          salesTrends: response.salesTrends.map((trend: any) => ({
-            ...trend,
-            period: formatDate(new Date(trend.period), isRtl ? 'ar' : 'en'),
-          })),
-        });
-        setError('');
-      }
+      setAnalytics({
+        ...response,
+        salesTrends: response.salesTrends.map((trend: any) => ({
+          ...trend,
+          period: formatDate(new Date(trend.period), isRtl ? 'ar' : 'en'),
+        })),
+      });
+      setError('');
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Analytics fetch error:`, err);
       const errorMessage = err.status === 403 ? t.errors.unauthorized_access : err.status === 0 ? t.errors.network_error : t.errors.fetch_analytics;
@@ -192,7 +194,7 @@ export const BranchSalesAnalytics: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, t, isRtl, language]);
+  }, [user, t, isRtl]);
 
   useEffect(() => {
     fetchAnalytics();
@@ -242,6 +244,7 @@ export const BranchSalesAnalytics: React.FC = () => {
               <p className="text-2xl font-bold text-amber-600 mt-2">{analytics.averageOrderValue.toFixed(2)} {t.currency}</p>
             </div>
           </div>
+
           {/* المنتج الأعلى */}
           <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.topProduct}</h3>
@@ -255,6 +258,7 @@ export const BranchSalesAnalytics: React.FC = () => {
               <NoDataMessage message={t.noData} />
             )}
           </div>
+
           {/* اتجاهات المبيعات */}
           <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.salesTrends}</h3>
@@ -274,6 +278,7 @@ export const BranchSalesAnalytics: React.FC = () => {
               <NoDataMessage message={t.noData} />
             )}
           </div>
+
           {/* مبيعات المنتجات الأعلى */}
           <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.topProducts}</h3>
@@ -293,6 +298,7 @@ export const BranchSalesAnalytics: React.FC = () => {
               <NoDataMessage message={t.noData} />
             )}
           </div>
+
           {/* مبيعات المنتجات الأقل */}
           <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.leastProducts}</h3>
@@ -312,6 +318,7 @@ export const BranchSalesAnalytics: React.FC = () => {
               <NoDataMessage message={t.noData} />
             )}
           </div>
+
           {/* مبيعات الأقسام */}
           <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.departmentSales}</h3>
@@ -340,6 +347,7 @@ export const BranchSalesAnalytics: React.FC = () => {
               <NoDataMessage message={t.noData} />
             )}
           </div>
+
           {/* أقل الأقسام مبيعًا */}
           <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.leastDepartmentSales}</h3>
@@ -368,6 +376,7 @@ export const BranchSalesAnalytics: React.FC = () => {
               <NoDataMessage message={t.noData} />
             )}
           </div>
+
           {/* أفضل العملاء */}
           <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.topCustomers}</h3>
