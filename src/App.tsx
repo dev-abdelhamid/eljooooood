@@ -36,6 +36,7 @@ import Chefstatics from './pages/Chefstatics';
 import BranchProfile from './pages/BranchProfile';
 import { ChefDetails } from './pages/ChefDetails';
 import BranchSalesAnalytics from './pages/BranchSalesAnalytics';
+import SalesAnalytics from './pages/SalesAnalytics';
 
 
 // إعداد QueryClient لإدارة الاستعلامات
@@ -91,6 +92,7 @@ function AppContent() {
                   <Route path="/branch-returns" element={<BranchReturns />} />
                   <Route path="/branch-sales/new" element={<CreateSale />} />
                   <Route path="/branch-sales/analytics" element={<BranchSalesAnalytics />} />
+                  <Route path="/sales/analytics" element={<SalesAnalytics />} />
 
 
                   <Route path="/branch-orders" element={<BranchOrders />} />
