@@ -99,6 +99,7 @@ const translations = {
       no_branch_assigned: 'لم يتم تعيين فرع',
       fetch_analytics: 'خطأ أثناء جلب الإحصائيات',
       server_error: 'خطأ في السيرفر، حاول لاحقًا',
+      method_not_found: 'خطأ في تهيئة النظام، يرجى التواصل مع الدعم',
     },
     currency: 'ريال',
   },
@@ -131,6 +132,7 @@ const translations = {
       no_branch_assigned: 'No branch assigned',
       fetch_analytics: 'Error fetching analytics',
       server_error: 'Server error, please try again later',
+      method_not_found: 'System initialization error, please contact support',
     },
     currency: 'SAR',
   },
@@ -296,6 +298,14 @@ export const BranchSalesAnalytics: React.FC = () => {
       return;
     }
 
+    if (!salesAPI.getBranchAnalytics) {
+      console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics is not defined`);
+      setError(t.errors.method_not_found);
+      toast.error(t.errors.method_not_found, { position: isRtl ? 'top-right' : 'top-left', autoClose: 5000 });
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const params: any = { lang: language, branch: user.branchId };
@@ -375,6 +385,7 @@ export const BranchSalesAnalytics: React.FC = () => {
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Fetch analytics error:`, { message: err.message, status: err.status, stack: err.stack });
       const errorMessage =
+        err.message.includes('getBranchAnalytics is not a function') ? t.errors.method_not_found :
         err.status === 403 ? t.errors.unauthorized_access :
         err.status === 404 ? t.noAnalytics :
         t.errors.fetch_analytics;

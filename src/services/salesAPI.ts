@@ -15,7 +15,7 @@ const salesAxios = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// معالجة الأخطاء
+// Error handling
 const handleError = async (error: AxiosError, originalRequest: AxiosRequestConfig): Promise<never> => {
   const errorDetails = {
     url: error.config?.url,
@@ -84,7 +84,7 @@ const handleError = async (error: AxiosError, originalRequest: AxiosRequestConfi
   throw { message, status: error.response?.status } as SalesApiError;
 };
 
-// Interceptors للطلبات
+// Request interceptor
 salesAxios.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -105,7 +105,7 @@ salesAxios.interceptors.request.use(
   }
 );
 
-// Interceptors للاستجابات
+// Response interceptor
 salesAxios.interceptors.response.use(
   (response) => {
     if (!response.data) {
@@ -117,13 +117,13 @@ salesAxios.interceptors.response.use(
   (error) => handleError(error, error.config)
 );
 
-// دوال التحقق
+// Validation functions
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7,15}$/.test(phone);
 const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'credit_card', 'bank_transfer'].includes(method);
 const isValidPaymentStatus = (status: string | undefined): boolean => !status || ['pending', 'completed', 'canceled'].includes(status);
 
-// واجهة للبيع
+// Sale interface
 interface SaleData {
   items: Array<{ productId: string; quantity: number; unitPrice: number }>;
   branch: string;
@@ -134,12 +134,11 @@ interface SaleData {
   customerPhone?: string;
 }
 
-// واجهة للمعاملات
+// Analytics parameters interface
 interface AnalyticsParams {
   branch?: string;
   startDate?: string;
   endDate?: string;
-
 }
 
 export const salesAPI = {
@@ -233,6 +232,27 @@ export const salesAPI = {
     }
     const response = await salesAxios.get('/sales/analytics', { params });
     console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Success:`, {
+      totalSales: response.totalSales,
+      totalCount: response.totalCount,
+    });
+    return response;
+  },
+  getBranchAnalytics: async (params: AnalyticsParams) => {
+    console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Sending:`, params);
+    if (params.branch && !isValidObjectId(params.branch)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid branch ID:`, params.branch);
+      throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
+    }
+    if (params.startDate && isNaN(new Date(params.startDate).getTime())) {
+      console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid start date:`, params.startDate);
+      throw new Error(isRtl ? 'تاريخ البدء غير صالح' : 'Invalid start date');
+    }
+    if (params.endDate && isNaN(new Date(params.endDate).getTime())) {
+      console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid end date:`, params.endDate);
+      throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
+    }
+    const response = await salesAxios.get('/sales/branch-analytics', { params });
+    console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Success:`, {
       totalSales: response.totalSales,
       totalCount: response.totalCount,
     });
