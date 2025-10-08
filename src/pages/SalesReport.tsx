@@ -121,9 +121,11 @@ const translations = {
     leastProductSales: 'أقل المنتجات مبيعًا',
     departmentSales: 'مبيعات الأقسام',
     leastDepartmentSales: 'أقل الأقسام مبيعًا',
-    branchSales: 'الفرع',
+    branchSales: 'مبيعات الفروع',
     leastBranchSales: 'أقل الفروع مبيعًا',
     totalSales: 'إجمالي المبيعات',
+        branch: ' الفرع',
+
     totalCount: 'عدد المبيعات',
     averageOrderValue: 'متوسط قيمة الطلب',
     topProduct: 'المنتج الأكثر مبيعًا',
@@ -175,7 +177,7 @@ const translations = {
     leastProductSales: 'Least Sold Products',
     departmentSales: 'Department Sales',
     leastDepartmentSales: 'Least Sold Departments',
-    branchSales: 'Branch',
+    branchSales: 'Branch Sales',
     leastBranchSales: 'Least Sold Branches',
     totalSales: 'Total Sales',
     totalCount: 'Total Sale Count',
@@ -186,6 +188,7 @@ const translations = {
     unknownCustomers: 'Unknown Customers',
     noSales: 'No sales found',
     date: 'Date',
+            branch: ' Branch',
     quantity: 'Quantity',
     branchFilter: 'Select Branch',
     allBranches: 'All Branches',
@@ -302,7 +305,7 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
             <h3 className="font-semibold text-gray-800 text-base sm:text-lg font-alexandria">{sale.orderNumber}</h3>
             
             <p className="text-xs text-gray-500 font-alexandria">{t.date}: {sale.createdAt}</p>
-            <p className="text-xs text-gray-500 font-alexandria">{t.branchSales}: {sale.branch?.displayName}</p>
+            <p className="text-xs text-gray-500 font-alexandria">{t.branch}: {sale.branch?.displayName}</p>
             <p className="text-xs text-gray-500 font-alexandria">{t.totalSales}: {sale.totalAmount} {t.currency}</p>
             {sale.paymentMethod && (
               <p className="text-xs text-gray-500 font-alexandria">

@@ -22,7 +22,7 @@ const translations = {
     leastDepartmentSales: 'الأقسام الأقل مبيعًا',
     salesTrends: 'اتجاهات المبيعات',
     topCustomers: 'أفضل العملاء',
-    noAnalytics: 'لا توجد إحصائيات متاحة',
+    noAnalytics: 'لا توجد إحصائيات متاحة، يرجى التحقق من وجود مبيعات للفرع أو الاتصال بالدعم',
     noData: 'لا توجد بيانات',
     noCustomers: 'لا توجد عملاء',
     totalRevenue: 'إجمالي الإيرادات',
@@ -51,7 +51,7 @@ const translations = {
     leastDepartmentSales: 'Least Department Sales',
     salesTrends: 'Sales Trends',
     topCustomers: 'Top Customers',
-    noAnalytics: 'No analytics available',
+    noAnalytics: 'No analytics available, please check if sales exist for the branch or contact support',
     noData: 'No data available',
     noCustomers: 'No customers',
     totalRevenue: 'Total Revenue',
@@ -176,7 +176,9 @@ export const BranchSalesAnalytics: React.FC = () => {
     setLoading(true);
     try {
       const params = { branch: user.branchId };
+      console.log(`[${new Date().toISOString()}] Fetching analytics for branch:`, user.branchId);
       const response = await salesAPI.getAnalytics(params);
+      console.log(`[${new Date().toISOString()}] Analytics response:`, response);
       setAnalytics({
         ...response,
         salesTrends: response.salesTrends.map((trend: any) => ({
