@@ -25,7 +25,9 @@ const handleError = async (error: AxiosError, originalRequest: AxiosRequestConfi
     message: error.message,
   };
   console.error(`[${new Date().toISOString()}] Sales API response error:`, errorDetails);
+
   let message = (error.response?.data as any)?.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
+
   switch (error.response?.status) {
     case 400:
       message = (error.response?.data as any)?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
@@ -44,6 +46,7 @@ const handleError = async (error: AxiosError, originalRequest: AxiosRequestConfi
         message = isRtl ? 'لا يوجد اتصال بالإنترنت' : 'No internet connection';
       }
   }
+
   if (error.response?.status === 401 && !originalRequest._retry) {
     originalRequest._retry = true;
     try {
@@ -80,6 +83,7 @@ const handleError = async (error: AxiosError, originalRequest: AxiosRequestConfi
       throw new Error(isRtl ? 'فشل تجديد التوكن' : 'Failed to refresh token');
     }
   }
+
   toast.error(message, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
   throw { message, status: error.response?.status } as SalesApiError;
 };
@@ -139,7 +143,6 @@ interface AnalyticsParams {
   branch?: string;
   startDate?: string;
   endDate?: string;
-
 }
 
 export const salesAPI = {
@@ -169,6 +172,7 @@ export const salesAPI = {
     console.log(`[${new Date().toISOString()}] salesAPI.create - Success:`, response);
     return response;
   },
+
   getAll: async (params: {
     page?: number;
     limit?: number;
@@ -197,6 +201,7 @@ export const salesAPI = {
     });
     return response;
   },
+
   getById: async (id: string) => {
     console.log(`[${new Date().toISOString()}] salesAPI.getById - Sending:`, { id });
     if (!isValidObjectId(id)) {
@@ -207,6 +212,7 @@ export const salesAPI = {
     console.log(`[${new Date().toISOString()}] salesAPI.getById - Success:`, response);
     return response.sale;
   },
+
   delete: async (id: string) => {
     console.log(`[${new Date().toISOString()}] salesAPI.delete - Sending:`, { id });
     if (!isValidObjectId(id)) {
@@ -217,8 +223,9 @@ export const salesAPI = {
     console.log(`[${new Date().toISOString()}] salesAPI.delete - Success:`, response);
     return response;
   },
+
   getAnalytics: async (params: AnalyticsParams) => {
-    console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Sending:`, params);
+    console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Sending params:`, params);
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid branch ID:`, params.branch);
       throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
@@ -232,9 +239,12 @@ export const salesAPI = {
       throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
     }
     const response = await salesAxios.get('/sales/analytics', { params });
-    console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Success:`, {
+    console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Success response:`, {
       totalSales: response.totalSales,
       totalCount: response.totalCount,
+      productSalesCount: response.productSales?.length,
+      departmentSalesCount: response.departmentSales?.length,
+      topCustomersCount: response.topCustomers?.length,
     });
     return response;
   },
