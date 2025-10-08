@@ -139,6 +139,7 @@ interface AnalyticsParams {
   branch?: string;
   startDate?: string;
   endDate?: string;
+
 }
 
 export const salesAPI = {
@@ -232,23 +233,6 @@ export const salesAPI = {
     }
     const response = await salesAxios.get('/sales/analytics', { params });
     console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Success:`, {
-      totalSales: response.totalSales,
-      totalCount: response.totalCount,
-    });
-    return response;
-  },
-  getBranchAnalytics: async (params: AnalyticsParams) => {
-    console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Sending:`, params);
-    if (params.startDate && isNaN(new Date(params.startDate).getTime())) {
-      console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid start date:`, params.startDate);
-      throw new Error(isRtl ? 'تاريخ البدء غير صالح' : 'Invalid start date');
-    }
-    if (params.endDate && isNaN(new Date(params.endDate).getTime())) {
-      console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid end date:`, params.endDate);
-      throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
-    }
-    const response = await salesAxios.get('/sales/branch-analytics', { params });
-    console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Success:`, {
       totalSales: response.totalSales,
       totalCount: response.totalCount,
     });
