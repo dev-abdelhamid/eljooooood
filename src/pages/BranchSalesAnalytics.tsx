@@ -15,7 +15,6 @@ const translations = {
     totalSales: 'إجمالي المبيعات',
     totalCount: 'عدد المبيعات',
     averageOrderValue: 'متوسط قيمة الطلب',
-    returnRate: 'معدل المرتجعات',
     topProduct: 'المنتج الأعلى',
     topProducts: 'المنتجات الأعلى مبيعًا',
     leastProducts: 'المنتجات الأقل مبيعًا',
@@ -45,7 +44,6 @@ const translations = {
     totalSales: 'Total Sales',
     totalCount: 'Total Count',
     averageOrderValue: 'Average Order Value',
-    returnRate: 'Return Rate',
     topProduct: 'Top Product',
     topProducts: 'Top Products',
     leastProducts: 'Least Products',
@@ -76,7 +74,6 @@ interface AnalyticsData {
   totalSales: number;
   totalCount: number;
   averageOrderValue: number;
-  returnRate: number;
   topProduct: {
     productId: string | null;
     productName: string;
@@ -233,7 +230,7 @@ export const BranchSalesAnalytics: React.FC = () => {
       ) : (
         <div className="space-y-8">
           {/* الإحصائيات الأساسية */}
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900">{t.totalSales}</h3>
               <p className="text-2xl font-bold text-amber-600 mt-2">{analytics.totalSales.toFixed(2)} {t.currency}</p>
@@ -245,10 +242,6 @@ export const BranchSalesAnalytics: React.FC = () => {
             <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-900">{t.averageOrderValue}</h3>
               <p className="text-2xl font-bold text-amber-600 mt-2">{analytics.averageOrderValue.toFixed(2)} {t.currency}</p>
-            </div>
-            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-900">{t.returnRate}</h3>
-              <p className="text-2xl font-bold text-amber-600 mt-2">{analytics.returnRate}%</p>
             </div>
           </div>
 
