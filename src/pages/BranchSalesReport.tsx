@@ -188,7 +188,6 @@ const SaleCard = React.memo<{
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <h3 className="font-bold text-gray-900 text-xl">{sale.saleNumber}</h3>
-            <span className="text-sm text-gray-500">({sale.branch.displayName})</span>
           </div>
           <div className="flex gap-2">
             <button
