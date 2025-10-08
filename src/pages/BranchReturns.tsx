@@ -735,7 +735,7 @@ export const BranchReturns: React.FC = () => {
                     setSelectedReturn(ret);
                     setIsViewModalOpen(true);
                   }}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
                   aria-label={t.viewReturn}
                 >
                   <Eye className="w-4 h-4 inline mr-2" />
