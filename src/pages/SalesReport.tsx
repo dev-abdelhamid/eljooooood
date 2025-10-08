@@ -300,8 +300,9 @@ const SaleCard = React.memo<{ sale: Sale; onEdit: (sale: Sale) => void; onDelete
         <div className="flex flex-col sm:flex-row items-start justify-between space-y-3 sm:space-y-0 sm:space-x-4">
           <div className="space-y-2 w-full">
             <h3 className="font-semibold text-gray-800 text-base sm:text-lg font-alexandria">{sale.orderNumber}</h3>
+                        <span className="text-sm text-gray-500">({sale.branch.displayName})</span>
+
             <p className="text-xs text-gray-500 font-alexandria">{t.date}: {sale.createdAt}</p>
-            <p className="text-xs text-gray-500 font-alexandria">{t.branchSales}: {sale.branch?.displayName || t.errors.departments.unknown}</p>
             <p className="text-xs text-gray-500 font-alexandria">{t.totalSales}: {sale.totalAmount} {t.currency}</p>
             {sale.paymentMethod && (
               <p className="text-xs text-gray-500 font-alexandria">
