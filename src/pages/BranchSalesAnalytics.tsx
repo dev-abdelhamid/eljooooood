@@ -23,7 +23,7 @@ import {
   Legend,
 } from 'chart.js';
 import { Line, Bar } from 'react-chartjs-2';
-import { salesAPI, AnalyticsData, BranchStatsParams, AnalyticsParams } from '../api/SalesAPI'; // Adjust path to SalesAPI.ts
+import { salesAPI, AnalyticsData, BranchStatsParams, AnalyticsParams } from '../services/salesAPI'; // Adjust path to SalesAPI.ts
 import { branchesAPI } from '../services/api'; // Adjust path to your main API file for branchesAPI
 
 // Register Chart.js components

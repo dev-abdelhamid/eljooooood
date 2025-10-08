@@ -4,20 +4,20 @@ import { toast } from 'react-toastify';
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
 const isRtl = localStorage.getItem('language') === 'ar';
 
-interface SalesApiError {
+export interface SalesApiError {
   message: string;
   status?: number;
   errors?: any[];
 }
 
-const salesAxios = axios.create({
+export const salesAxios = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
 });
 
 // Error handling
-const handleError = async (error: AxiosError, originalRequest: AxiosRequestConfig): Promise<never> => {
+export const handleError = async (error: AxiosError, originalRequest: AxiosRequestConfig): Promise<never> => {
   const errorDetails = {
     url: error.config?.url,
     method: error.config?.method,
@@ -125,11 +125,11 @@ salesAxios.interceptors.response.use(
 );
 
 // Validation functions
-const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
-const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7,15}$/.test(phone);
-const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'credit_card', 'bank_transfer'].includes(method);
-const isValidPaymentStatus = (status: string | undefined): boolean => !status || ['pending', 'completed', 'canceled'].includes(status);
-const isValidDate = (date: string | undefined): boolean => !date || !isNaN(new Date(date).getTime());
+export const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
+export const isValidPhone = (phone: string | undefined): boolean => !phone || /^\+?\d{7,15}$/.test(phone);
+export const isValidPaymentMethod = (method: string | undefined): boolean => !method || ['cash', 'credit_card', 'bank_transfer'].includes(method);
+export const isValidPaymentStatus = (status: string | undefined): boolean => !status || ['pending', 'completed', 'canceled'].includes(status);
+export const isValidDate = (date: string | undefined): boolean => !date || !isNaN(new Date(date).getTime());
 
 // Interfaces
 interface SaleItem {
