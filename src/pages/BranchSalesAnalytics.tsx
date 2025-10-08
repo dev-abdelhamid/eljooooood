@@ -23,7 +23,6 @@ const translations = {
     leastDepartmentSales: 'الأقسام الأقل مبيعًا',
     salesTrends: 'اتجاهات المبيعات',
     topCustomers: 'أفضل العملاء',
-    paymentMethods: 'طرق الدفع',
     noAnalytics: 'لا توجد إحصائيات متاحة',
     noData: 'لا توجد بيانات',
     noCustomers: 'لا توجد عملاء',
@@ -42,7 +41,6 @@ const translations = {
       invalid_data: 'بيانات غير صالحة من الخادم',
     },
     currency: 'ريال',
-  
   },
   en: {
     title: 'Sales Analytics',
@@ -58,7 +56,6 @@ const translations = {
     leastDepartmentSales: 'Least Department Sales',
     salesTrends: 'Sales Trends',
     topCustomers: 'Top Customers',
-    paymentMethods: 'Payment Methods',
     noAnalytics: 'No analytics available',
     noData: 'No data available',
     noCustomers: 'No customers',
@@ -77,7 +74,6 @@ const translations = {
       invalid_data: 'Invalid data from server',
     },
     currency: 'SAR',
-   
   },
 };
 
@@ -136,11 +132,6 @@ interface AnalyticsData {
     customerPhone: string;
     totalSpent: number;
     purchaseCount: number;
-  }>;
-  paymentMethods: Array<{
-    paymentMethod: string;
-    totalAmount: number;
-    count: number;
   }>;
   returnStats: Array<{
     status: string;
@@ -208,31 +199,20 @@ export const BranchSalesAnalytics: React.FC = () => {
       if (!response || typeof response !== 'object') {
         throw new Error(t.errors.invalid_data);
       }
-      // تهيئة paymentMethods كمصفوفة فارغة إذا لم تكن موجودة
-      const paymentMethods = Array.isArray(response.paymentMethods) ? response.paymentMethods : [];
-      // التحقق من صحة paymentMethods
-      const validPaymentMethods = paymentMethods.length === 0 || paymentMethods.every(
-        (method: any) => typeof method.paymentMethod === 'string' && method.paymentMethod
-      );
-      if (!validPaymentMethods) {
-        console.error(`[${new Date().toISOString()}] Invalid paymentMethods data:`, paymentMethods);
-        throw new Error(t.errors.invalid_data);
-      }
       setAnalytics({
         ...response,
         salesTrends: Array.isArray(response.salesTrends) ? response.salesTrends.map((trend: any) => ({
           ...trend,
           period: formatDate(new Date(trend.period), isRtl ? 'ar' : 'en'),
         })) : [],
-        paymentMethods: paymentMethods.map((method: any) => ({
-          ...method,
-          paymentMethod: t.paymentMethods[method.paymentMethod] || t.paymentMethods.unknown,
-        })),
       });
-      console.log(`[${new Date().toISOString()}] Processed paymentMethods:`, paymentMethods);
       setError('');
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Analytics fetch error:`, err);
+      console.error(`[${new Date().toISOString()}] Analytics fetch error:`, {
+        message: err.message,
+        status: err.status,
+        stack: err.stack,
+      });
       const errorMessage = err.status === 403 ? t.errors.unauthorized_access : err.status === 0 ? t.errors.network_error : t.errors.fetch_analytics;
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
@@ -435,37 +415,6 @@ export const BranchSalesAnalytics: React.FC = () => {
                     label
                   >
                     {analytics.leastDepartmentSales.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <NoDataMessage message={t.noData} />
-            )}
-          </div>
-
-          {/* طرق الدفع */}
-          <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.paymentMethods}</h3>
-            {analytics.paymentMethods.length > 0 && analytics.paymentMethods.every(
-              (method) => typeof method.paymentMethod === 'string' && method.paymentMethod
-            ) ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={analytics.paymentMethods}
-                    dataKey="totalAmount"
-                    nameKey="paymentMethod"
-                    cx="50%"
-                    cy="50%"
-                    outerRadius={80}
-                    fill="#8884d8"
-                    label
-                  >
-                    {analytics.paymentMethods.map((_, index) => (
                       <Cell key={`cell-${index}`} fill={chartColors[index % chartColors.length]} />
                     ))}
                   </Pie>

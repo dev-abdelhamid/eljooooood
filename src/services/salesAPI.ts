@@ -95,7 +95,7 @@ salesAxios.interceptors.response.use(
     const data = response.data;
     if (!data) {
       console.error(`[${new Date().toISOString()}] Empty response data:`, response);
-      throw new Error(isRtl ? 'استجابة فارغة من الخادم'رغة من الخادم' : 'Empty response from server');
+      throw new Error(isRtl ? 'استجابة فارغة من الخادم' : 'Empty response from server');
     }
     return data;
   },
@@ -336,6 +336,8 @@ export const salesAPI = {
     console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Success:`, {
       totalSales: response.totalSales,
       totalCount: response.totalCount,
+      productSalesCount: response.productSales?.length,
+      topCustomersCount: response.topCustomers?.length,
     });
     return response;
   },
