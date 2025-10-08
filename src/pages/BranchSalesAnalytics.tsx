@@ -30,7 +30,7 @@ interface AnalyticsData {
   totalSales: number;
   totalCount: number;
   averageOrderValue: string;
-  returnRate: string;
+  returnRate?: string;
   topProduct: {
     productId: string | null;
     productName: string;
@@ -38,7 +38,7 @@ interface AnalyticsData {
     totalQuantity: number;
     totalRevenue: number;
   };
-  branchSales: Array<{
+  branchSales?: Array<{
     branchId: string;
     branchName: string;
     branchNameEn?: string;
@@ -85,7 +85,7 @@ interface AnalyticsData {
     totalSpent: number;
     purchaseCount: number;
   }>;
-  returnStats: Array<{
+  returnStats?: Array<{
     status: string;
     count: number;
     totalQuantity: number;
@@ -315,102 +315,101 @@ export const salesAPI = {
     }
     if (!isValidPaymentStatus(saleData.paymentStatus)) {
       console.error(`[${new Date().toISOString()}] salesAPI.create - Invalid payment status:`, saleData.paymentStatus);
-      throw new Error(isRtl ? 'حالة الدفع غير صالحة' : 'Invalid payment status');
-    }
-    const response = await salesAxios.post('/sales', saleData);
-    console.log(`[${new Date().toISOString()}] salesAPI.create - Success:`, response);
-    return response;
-  },
-  getAll: async (params: {
-    page?: number;
-    limit?: number;
-    sort?: string;
-    branch?: string;
-    startDate?: string;
-    endDate?: string;
-  }) => {
-    console.log(`[${new Date().toISOString()}] salesAPI.getAll - Sending:`, params);
-    if (params.branch && !isValidObjectId(params.branch)) {
-      console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid branch ID:`, params.branch);
-      throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
-    }
-    if (params.startDate && isNaN(new Date(params.startDate).getTime())) {
-      console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid start date:`, params.startDate);
-      throw new Error(isRtl ? 'تاريخ البدء غير صالح' : 'Invalid start date');
-    }
-    if (params.endDate && isNaN(new Date(params.endDate).getTime())) {
-      console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid end date:`, params.endDate);
-      throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
-    }
-    const response = await salesAxios.get('/sales', { params });
-    console.log(`[${new Date().toISOString()}] salesAPI.getAll - Success:`, {
-      total: response.total,
-      salesCount: response.sales?.length,
-    });
-    return response;
-  },
-  getById: async (id: string) => {
-    console.log(`[${new Date().toISOString()}] salesAPI.getById - Sending:`, { id });
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] salesAPI.getById - Invalid sale ID:`, id);
-      throw new Error(isRtl ? 'معرف المبيعة غير صالح' : 'Invalid sale ID');
-    }
-    const response = await salesAxios.get(`/sales/${id}`);
-    console.log(`[${new Date().toISOString()}] salesAPI.getById - Success:`, response);
-    return response.sale;
-  },
-  delete: async (id: string) => {
-    console.log(`[${new Date().toISOString()}] salesAPI.delete - Sending:`, { id });
-    if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] salesAPI.delete - Invalid sale ID:`, id);
-      throw new Error(isRtl ? 'معرف المبيعة غير صالح' : 'Invalid sale ID');
-    }
-    const response = await salesAxios.delete(`/sales/${id}`);
-    console.log(`[${new Date().toISOString()}] salesAPI.delete - Success:`, response);
-    return response;
-  },
-  getAnalytics: async (params: AnalyticsParams) => {
-    console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Sending:`, params);
-    if (params.branch && !isValidObjectId(params.branch)) {
-      console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid branch ID:`, params.branch);
-      throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
-    }
-    if (params.startDate && isNaN(new Date(params.startDate).getTime())) {
-      console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid start date:`, params.startDate);
-      throw new Error(isRtl ? 'تاريخ البدء غير صالح' : 'Invalid start date');
-    }
-    if (params.endDate && isNaN(new Date(params.endDate).getTime())) {
-      console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid end date:`, params.endDate);
-      throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
-    }
-    const response = await salesAxios.get('/sales/analytics', { params });
-    console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Success:`, {
-      totalSales: response.totalSales,
-      totalCount: response.totalCount,
-    });
-    return response;
-  },
-  getBranchAnalytics: async (params: AnalyticsParams) => {
-    console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Sending:`, params);
-    if (params.branch && !isValidObjectId(params.branch)) {
-      console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid branch ID:`, params.branch);
-      throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
-    }
-    if (params.startDate && isNaN(new Date(params.startDate).getTime())) {
-      console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid start date:`, params.startDate);
-      throw new Error(isRtl ? 'تاريخ البدء غير صالح' : 'Invalid start date');
-    }
-    if (params.endDate && isNaN(new Date(params.endDate).getTime())) {
-      console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid end date:`, params.endDate);
-      throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
-    }
-    const response = await salesAxios.get('/sales/branch-analytics', { params });
-    console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Success:`, {
-      totalSales: response.totalSales,
-      totalCount: response.totalCount,
-    });
-    return response;
-  },
+      throw new Error(isRtl ? Ascending
+      const response = await salesAxios.post('/sales', saleData);
+      console.log(`[${new Date().toISOString()}] salesAPI.create - Success:`, response);
+      return response;
+    },
+    getAll: async (params: {
+      page?: number;
+      limit?: number;
+      sort?: string;
+      branch?: string;
+      startDate?: string;
+      endDate?: string;
+    }) => {
+      console.log(`[${new Date().toISOString()}] salesAPI.getAll - Sending:`, params);
+      if (params.branch && !isValidObjectId(params.branch)) {
+        console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid branch ID:`, params.branch);
+        throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
+      }
+      if (params.startDate && isNaN(new Date(params.startDate).getTime())) {
+        console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid start date:`, params.startDate);
+        throw new Error(isRtl ? 'تاريخ البدء غير صالح' : 'Invalid start date');
+      }
+      if (params.endDate && isNaN(new Date(params.endDate).getTime())) {
+        console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid end date:`, params.endDate);
+        throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
+      }
+      const response = await salesAxios.get('/sales', { params });
+      console.log(`[${new Date().toISOString()}] salesAPI.getAll - Success:`, {
+        total: response.total,
+        salesCount: response.sales?.length,
+      });
+      return response;
+    },
+    getById: async (id: string) => {
+      console.log(`[${new Date().toISOString()}] salesAPI.getById - Sending:`, { id });
+      if (!isValidObjectId(id)) {
+        console.error(`[${new Date().toISOString()}] salesAPI.getById - Invalid sale ID:`, id);
+        throw new Error(isRtl ? 'معرف المبيعة غير صالح' : 'Invalid sale ID');
+      }
+      const response = await salesAxios.get(`/sales/${id}`);
+      console.log(`[${new Date().toISOString()}] salesAPI.getById - Success:`, response);
+      return response.sale;
+    },
+    delete: async (id: string) => {
+      console.log(`[${new Date().toISOString()}] salesAPI.delete - Sending:`, { id });
+      if (!isValidObjectId(id)) {
+        console.error(`[${new Date().toISOString()}] salesAPI.delete - Invalid sale ID:`, id);
+        throw new Error(isRtl ? 'معرف المبيعة غير صالح' : 'Invalid sale ID');
+      }
+      const response = await salesAxios.delete(`/sales/${id}`);
+      console.log(`[${new Date().toISOString()}] salesAPI.delete - Success:`, response);
+      return response;
+    },
+    getAnalytics: async (params: AnalyticsParams) => {
+      console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Sending:`, params);
+      if (params.branch && !isValidObjectId(params.branch)) {
+        console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid branch ID:`, params.branch);
+        throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
+      }
+      if (params.startDate && isNaN(new Date(params.startDate).getTime())) {
+        console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid start date:`, params.startDate);
+        throw new Error(isRtl ? 'تاريخ البدء غير صالح' : 'Invalid start date');
+      }
+      if (params.endDate && isNaN(new Date(params.endDate).getTime())) {
+        console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid end date:`, params.endDate);
+        throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
+      }
+      const response = await salesAxios.get('/sales/analytics', { params });
+      console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Success:`, {
+        totalSales: response.totalSales,
+        totalCount: response.totalCount,
+      });
+      return response;
+    },
+    getBranchStats: async (params: AnalyticsParams) => {
+      console.log(`[${new Date().toISOString()}] salesAPI.getBranchStats - Sending:`, params);
+      if (params.branch && !isValidObjectId(params.branch)) {
+        console.error(`[${new Date().toISOString()}] salesAPI.getBranchStats - Invalid branch ID:`, params.branch);
+        throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
+      }
+      if (params.startDate && isNaN(new Date(params.startDate).getTime())) {
+        console.error(`[${new Date().toISOString()}] salesAPI.getBranchStats - Invalid start date:`, params.startDate);
+        throw new Error(isRtl ? 'تاريخ البدء غير صالح' : 'Invalid start date');
+      }
+      if (params.endDate && isNaN(new Date(params.endDate).getTime())) {
+        console.error(`[${new Date().toISOString()}] salesAPI.getBranchStats - Invalid end date:`, params.endDate);
+        throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
+      }
+      const response = await salesAxios.get('/sales/branch-stats', { params });
+      console.log(`[${new Date().toISOString()}] salesAPI.getBranchStats - Success:`, {
+        totalSales: response.totalSales,
+        totalCount: response.totalCount,
+      });
+      return response;
+    },
 };
 
 // Utility Function
@@ -617,7 +616,7 @@ export const BranchSalesAnalytics: React.FC = () => {
       if (filterBranch) {
         params.branch = filterBranch;
       }
-      const apiMethod = user?.role === 'branch' ? salesAPI.getBranchAnalytics : salesAPI.getAnalytics;
+      const apiMethod = user?.role === 'branch' ? salesAPI.getBranchStats : salesAPI.getAnalytics;
       const response = await apiMethod(params);
       console.log(`[${new Date().toISOString()}] Fetch analytics:`, response);
       setAnalytics({
@@ -711,7 +710,7 @@ export const BranchSalesAnalytics: React.FC = () => {
   // Filtered Data
   const filteredBranchSales = useMemo(
     () =>
-      analytics?.branchSales.filter((bs) => {
+      analytics?.branchSales?.filter((bs) => {
         const term = searchTerm.toLowerCase();
         return bs.displayName.toLowerCase().includes(term);
       }) || [],
@@ -765,6 +764,146 @@ export const BranchSalesAnalytics: React.FC = () => {
     ],
     [t]
   );
+
+  // Sales Trends Chart
+  const salesTrendsChart = analytics?.salesTrends && analytics.salesTrends.length > 0 ? (
+    ```chartjs
+    {
+      "type": "line",
+      "data": {
+        "labels": ${JSON.stringify(analytics.salesTrends.map((trend) => trend.period))},
+        "datasets": [
+          {
+            "label": "${t.totalSales}",
+            "data": ${JSON.stringify(analytics.salesTrends.map((trend) => trend.totalSales))},
+            "borderColor": "#F59E0B",
+            "backgroundColor": "rgba(245, 158, 11, 0.2)",
+            "fill": true,
+            "tension": 0.4
+          },
+          {
+            "label": "${t.totalOrders}",
+            "data": ${JSON.stringify(analytics.salesTrends.map((trend) => trend.saleCount))},
+            "borderColor": "#10B981",
+            "backgroundColor": "rgba(16, 185, 129, 0.2)",
+            "fill": true,
+            "tension": 0.4
+          }
+        ]
+      },
+      "options": {
+        "responsive": true,
+        "plugins": {
+          "legend": {
+            "position": "top",
+            "labels": {
+              "font": {
+                "family": "'Alexandria', sans-serif",
+                "size": 14
+              }
+            }
+          },
+          "title": {
+            "display": true,
+            "text": "${t.salesTrends}",
+            "font": {
+              "family": "'Alexandria', sans-serif",
+              "size": 18
+            }
+          }
+        },
+        "scales": {
+          "x": {
+            "title": {
+              "display": true,
+              "text": "${t.filterBy}",
+              "font": {
+                "family": "'Alexandria', sans-serif"
+              }
+            }
+          },
+          "y": {
+            "title": {
+              "display": true,
+              "text": "${t.totalSales} (${t.currency})",
+              "font": {
+                "family": "'Alexandria', sans-serif"
+              }
+            },
+            "beginAtZero": true
+          }
+        }
+      }
+    }
+    ```
+  ) : null;
+
+  // Top Products Chart
+  const topProductsChart = analytics?.productSales && analytics.productSales.length > 0 ? (
+    ```chartjs
+    {
+      "type": "bar",
+      "data": {
+        "labels": ${JSON.stringify(analytics.productSales.map((ps) => ps.displayName))},
+        "datasets": [
+          {
+            "label": "${t.totalSales}",
+            "data": ${JSON.stringify(analytics.productSales.map((ps) => ps.totalRevenue))},
+            "backgroundColor": "#F59E0B"
+          },
+          {
+            "label": "${t.quantity}",
+            "data": ${JSON.stringify(analytics.productSales.map((ps) => ps.totalQuantity))},
+            "backgroundColor": "#10B981"
+          }
+        ]
+      },
+      "options": {
+        "responsive": true,
+        "plugins": {
+          "legend": {
+            "position": "top",
+            "labels": {
+              "font": {
+                "family": "'Alexandria', sans-serif",
+                "size": 14
+              }
+            }
+          },
+          "title": {
+            "display": true,
+            "text": "${t.productSales}",
+            "font": {
+              "family": "'Alexandria', sans-serif",
+              "size": 18
+            }
+          }
+        },
+        "scales": {
+          "x": {
+            "title": {
+              "display": true,
+              "text": "${t.productSales}",
+              "font": {
+                "family": "'Alexandria', sans-serif"
+              }
+            }
+          },
+          "y": {
+            "title": {
+              "display": true,
+              "text": "${t.totalSales} (${t.currency})",
+              "font": {
+                "family": "'Alexandria', sans-serif"
+              }
+            },
+            "beginAtZero": true
+          }
+        }
+      }
+    }
+    ```
+  ) : null;
 
   // Authorization Check
   if (!user || (user.role !== 'admin' && user.role !== 'branch')) {
@@ -870,10 +1009,12 @@ export const BranchSalesAnalytics: React.FC = () => {
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.averageOrderValue}</h3>
                 <p className="text-2xl font-bold text-amber-600 font-alexandria">{analytics.averageOrderValue} {t.currency}</p>
               </div>
-              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.returnRate}</h3>
-                <p className="text-2xl font-bold text-amber-600 font-alexandria">{analytics.returnRate}%</p>
-              </div>
+              {user?.role === 'admin' && analytics.returnRate && (
+                <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.returnRate}</h3>
+                  <p className="text-2xl font-bold text-amber-600 font-alexandria">{analytics.returnRate}%</p>
+                </div>
+              )}
               <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.topProduct}</h3>
                 <p className="text-sm text-gray-600 font-alexandria">{analytics.topProduct.displayName}</p>
@@ -881,6 +1022,16 @@ export const BranchSalesAnalytics: React.FC = () => {
                 <p className="text-sm text-gray-600 font-alexandria">{t.quantity}: {safeNumber(analytics.topProduct.totalQuantity)}</p>
               </div>
             </div>
+            {salesTrendsChart && (
+              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+                {salesTrendsChart}
+              </div>
+            )}
+            {topProductsChart && (
+              <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+                {topProductsChart}
+              </div>
+            )}
             {user?.role === 'admin' && (
               <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.branchFilter}</h3>
