@@ -142,7 +142,7 @@ export const returnsAPI = {
       quantity: number;
       reason: string;
     }>;
-    notes?: string;
+    notes?: string | null;
   }) => {
     console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Sending:`, data);
     if (
