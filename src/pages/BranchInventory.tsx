@@ -52,7 +52,7 @@ interface InventoryItem {
 }
 
 interface ReturnItem {
-  productId: string;
+  productId: string; // Changed from 'product' to 'productId'
   quantity: number;
   reason: string;
   reasonEn: string;
@@ -70,7 +70,7 @@ interface ProductHistoryEntry {
   type: 'delivery' | 'return_pending' | 'return_rejected' | 'return_approved' | 'sale' | 'adjustment';
   quantity: number;
   description: string;
-  referenceType?: 'order' | 'return' | 'sale' | 'adjustment';
+  referenceType?: 'return' | 'sale' | 'adjustment'; // Removed 'order'
   referenceId?: string;
 }
 
@@ -588,7 +588,7 @@ export const BranchInventory: React.FC = () => {
         dispatchReturnForm({
           type: 'ADD_ITEM',
           payload: {
-            productId: item.product._id,
+            productId: item.product._id, // Changed from 'product' to 'productId'
             quantity: 1,
             reason: '',
             reasonEn: '',
@@ -656,7 +656,7 @@ export const BranchInventory: React.FC = () => {
       const inventoryItem = inventoryData?.find((inv) => inv.product?._id === productId);
       dispatchReturnForm({
         type: 'UPDATE_ITEM',
-        payload: { index, field: 'productId', value: productId },
+        payload: { index, field: 'productId', value: productId }, // Changed from 'product' to 'productId'
       });
       dispatchReturnForm({
         type: 'UPDATE_ITEM',
@@ -733,7 +733,7 @@ export const BranchInventory: React.FC = () => {
       const data = {
         branchId: user.branchId,
         items: returnForm.items.map((item) => ({
-          productId: item.productId,
+          productId: item.productId, // Changed from 'product' to 'productId'
           quantity: item.quantity,
           reason: item.reason,
           reasonEn: item.reasonEn,
@@ -1182,114 +1182,131 @@ export const BranchInventory: React.FC = () => {
               <X className="w-4 h-4" />
             </button>
           </div>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t.minStock}</label>
-              <input
-                type="number"
-                value={editForm.minStockLevel}
-                onChange={(e) => setEditForm({ ...editForm, minStockLevel: parseInt(e.target.value) || 0 })}
-                min={0}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
-                aria-label={t.minStock}
-              />
-              {editErrors.minStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.minStockLevel}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t.maxStock}</label>
-              <input
-                type="number"
-                value={editForm.maxStockLevel}
-                onChange={(e) => setEditForm({ ...editForm, maxStockLevel: parseInt(e.target.value) || 0 })}
-                min={0}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2         focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
-                aria-label={t.maxStock}
-              />
-              {editErrors.maxStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.maxStockLevel}</p>}
-            </div>
-            {editErrors.form && <p className="text-red-600 text-xs mt-1">{editErrors.form}</p>}
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setIsEditModalOpen(false);
-                  setEditErrors({});
-                  setSelectedItem(null);
-                }}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                {t.cancel}
-              </button>
-              <button
-                onClick={() => updateInventoryMutation.mutate()}
-                disabled={updateInventoryMutation.isLoading}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                aria-label={updateInventoryMutation.isLoading ? t.saving : t.save}
-              >
-                {updateInventoryMutation.isLoading ? t.saving : t.save}
-              </button>
-            </div>
-          </div>
-        </motion.div>
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: isDetailsModalOpen ? 1 : 0 }}
-        className={`fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 ${isDetailsModalOpen ? '' : 'pointer-events-none'}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t.productDetails}
-      >
-        <motion.div
-          initial={{ scale: 0.95, y: 20 }}
-          animate={{ scale: isDetailsModalOpen ? 1 : 0.95, y: isDetailsModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-2xl w-full max-h-[80vh] overflow-y-auto"
-        >
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
-            <button
-              onClick={() => {
-                setIsDetailsModalOpen(false);
-                setSelectedProductId('');
-              }}
-              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-              aria-label={t.cancel}
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          {historyLoading ? (
-            <div className="space-y-3 animate-pulse">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-4 bg-gray-200 rounded w-full"></div>
-              ))}
-            </div>
-          ) : productHistory && productHistory.length > 0 ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm font-medium text-gray-700">
-                <div>{t.date}</div>
-                <div>{t.type}</div>
-                <div>{t.quantity}</div>
-                <div>{t.description}</div>
-              </div>
-              {productHistory.map((entry) => (
-                <div
-                  key={entry._id}
-                  className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm text-gray-600 border-t border-gray-100 pt-2"
-                >
-                  <div>{new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</div>
-                  <div>{t[entry.type]}</div>
-                  <div>{entry.quantity}</div>
-                  <div>{entry.description}</div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-gray-600 text-sm">{t.noHistory}</p>
-          )}
-        </motion.div>
-      </motion.div>
+        <div className="space-y-4">
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">{t.minStock}</label>
+      <input
+        type="number"
+        value={editForm.minStockLevel}
+        onChange={(e) => setEditForm({ ...editForm, minStockLevel: parseInt(e.target.value) || 0 })}
+        min={0}
+        className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
+        aria-label={t.minStock}
+      />
+      {editErrors.minStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.minStockLevel}</p>}
     </div>
-  );
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">{t.maxStock}</label>
+      <input
+        type="number"
+        value={editForm.maxStockLevel}
+        onChange={(e) => setEditForm({ ...editForm, maxStockLevel: parseInt(e.target.value) || 0 })}
+        min={0}
+        className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
+        aria-label={t.maxStock}
+      />
+      {editErrors.maxStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.maxStockLevel}</p>}
+    </div>
+    {editErrors.form && <p className="text-red-600 text-xs">{editErrors.form}</p>}
+    <div className="flex justify-end gap-3 mt-6">
+      <button
+        onClick={() => {
+          setIsEditModalOpen(false);
+          setEditErrors({});
+          setSelectedItem(null);
+        }}
+        className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
+        aria-label={t.cancel}
+      >
+        {t.cancel}
+      </button>
+      <button
+        onClick={() => updateInventoryMutation.mutate()}
+        disabled={updateInventoryMutation.isLoading}
+        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+        aria-label={updateInventoryMutation.isLoading ? t.saving : t.save}
+      >
+        {updateInventoryMutation.isLoading ? t.saving : t.save}
+      </button>
+    </div>
+  </div>
+</motion.div>
+</motion.div>
+
+<motion.div
+  initial={{ opacity: 0 }}
+  animate={{ opacity: isDetailsModalOpen ? 1 : 0 }}
+  className={`fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 ${isDetailsModalOpen ? '' : 'pointer-events-none'}`}
+  role="dialog"
+  aria-modal="true"
+  aria-label={t.productDetails}
+>
+  <motion.div
+    initial={{ scale: 0.95, y: 20 }}
+    animate={{ scale: isDetailsModalOpen ? 1 : 0.95, y: isDetailsModalOpen ? 0 : 20 }}
+    className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-2xl w-full"
+  >
+    <div className="flex justify-between items-center mb-6">
+      <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
+      <button
+        onClick={() => {
+          setIsDetailsModalOpen(false);
+          setSelectedProductId('');
+        }}
+        className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
+        aria-label={t.cancel}
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+    <div className="space-y-4">
+      {historyLoading ? (
+        <div className="space-y-3 animate-pulse">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-4 bg-gray-200 rounded w-full"></div>
+          ))}
+        </div>
+      ) : productHistory && productHistory.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-gray-700">
+            <thead>
+              <tr className="border-b border-gray-200">
+                <th className="py-2 px-4 text-left font-medium">{t.date}</th>
+                <th className="py-2 px-4 text-left font-medium">{t.type}</th>
+                <th className="py-2 px-4 text-left font-medium">{t.quantity}</th>
+                <th className="py-2 px-4 text-left font-medium">{t.description}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {productHistory.map((entry) => (
+                <tr key={entry._id} className="border-b border-gray-100">
+                  <td className="py-2 px-4">{new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
+                  <td className="py-2 px-4">{t[entry.type]}</td>
+                  <td className="py-2 px-4">{entry.quantity}</td>
+                  <td className="py-2 px-4">{entry.description}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="text-gray-600 text-sm font-medium">{t.noHistory}</p>
+      )}
+      <div className="flex justify-end mt-6">
+        <button
+          onClick={() => {
+            setIsDetailsModalOpen(false);
+            setSelectedProductId('');
+          }}
+          className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
+          aria-label={t.cancel}
+        >
+          {t.cancel}
+        </button>
+      </div>
+    </div>
+  </motion.div>
+</motion.div>
+</div>
+);
 };
