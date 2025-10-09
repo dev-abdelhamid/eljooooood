@@ -23,8 +23,9 @@ axiosRetry(returnsAxios, {
 returnsAxios.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-    const language = localStorage.getItem('language') || 'ar';
-    if (token) {
+   const language = localStorage.getItem('language') || 'ar';
+    const isRtl = language === 'ar';
+        if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     config.params = { ...config.params, lang: language };
