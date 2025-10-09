@@ -54,12 +54,11 @@ returnsAxios.interceptors.response.use(
       response: error.response,
     });
 
-    // Ensure isRtl is defined safely
     const language = localStorage.getItem('language') || 'en';
     const isRtl = language === 'ar';
 
     let message = error.response?.data?.message || error.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
-    
+
     if (error.code === 'ECONNABORTED') {
       message = isRtl ? 'انتهت مهلة الطلب، حاول مرة أخرى' : 'Request timed out, please try again';
     } else if (!error.response) {
@@ -74,7 +73,7 @@ returnsAxios.interceptors.response.use(
     } else if (error.response.status === 404) {
       message = error.response.data?.message || (isRtl ? 'الفرع أو المنتج غير موجود' : 'Branch or product not found');
     } else if (error.response.status === 422) {
-      message = error.response.data?.message || (isRtl ? 'الكمية غير كافية' : 'Insufficient quantity');
+      message = error.response.data?.message || (isRtl ? 'الكمية غير كافية أو تتجاوز المسلم' : 'Insufficient quantity or exceeds delivered quantity');
     } else if (error.response.status === 429) {
       message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
     } else if (error.response.status === 500) {
@@ -164,10 +163,8 @@ export const returnsAPI = {
   },
 
   createReturn: async (data: {
-    orderId: string;
     branchId: string;
     items: Array<{
-      itemId?: string;
       productId: string;
       quantity: number;
       reason: string;
@@ -182,14 +179,12 @@ export const returnsAPI = {
 
     // Validate input data
     if (
-      !isValidObjectId(data.orderId) ||
       !isValidObjectId(data.branchId) ||
       !data.reason ||
       !Array.isArray(data.items) ||
       data.items.length === 0 ||
       data.items.some(
         (item) =>
-          (item.itemId && !isValidObjectId(item.itemId)) ||
           !isValidObjectId(item.productId) ||
           item.quantity < 1 ||
           !item.reason
@@ -201,12 +196,10 @@ export const returnsAPI = {
 
     try {
       const response = await returnsAxios.post('/inventory/returns', {
-        orderId: data.orderId,
         branchId: data.branchId,
         reason: data.reason.trim(),
         items: data.items.map((item) => ({
-          itemId: item.itemId,
-          productId: item.productId,
+          product: item.productId,
           quantity: Number(item.quantity),
           reason: item.reason.trim(),
           reasonEn: item.reasonEn?.trim(),
@@ -232,9 +225,9 @@ export const returnsAPI = {
       } else if (error.status === 403) {
         errorMessage = error.details?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
       } else if (error.status === 404) {
-        errorMessage = error.details?.message || (isRtl ? 'الطلب، الفرع، أو المنتج غير موجود' : 'Order, branch, or product not found');
+        errorMessage = error.details?.message || (isRtl ? 'الفرع أو المنتج غير موجود' : 'Branch or product not found');
       } else if (error.status === 422) {
-        errorMessage = error.details?.message || (isRtl ? 'الكمية غير كافية' : 'Insufficient quantity');
+        errorMessage = error.details?.message || (isRtl ? 'الكمية غير كافية أو تتجاوز المسلم' : 'Insufficient quantity or exceeds delivered quantity');
       } else if (error.code === 'ECONNABORTED') {
         errorMessage = isRtl ? 'انتهت مهلة الطلب، حاول مرة أخرى' : 'Request timed out, please try again';
       } else if (!error.response) {
