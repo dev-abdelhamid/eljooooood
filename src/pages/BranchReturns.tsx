@@ -3,18 +3,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Package, Eye, Clock, Check, AlertCircle, MinusCircle, Plus, X } from 'lucide-react';
-import { returnsAPI, inventoryAPI } from '../services/api';
+import { returnsAPI, inventoryAPI } from './api';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 
-// Enums for type safety
 enum ReturnStatus {
   PENDING = 'pending_approval',
   APPROVED = 'approved',
   REJECTED = 'rejected',
 }
+
 enum ReturnReason {
   DAMAGED_AR = 'تالف',
   WRONG_ITEM_AR = 'منتج خاطئ',
@@ -26,7 +26,6 @@ enum ReturnReason {
   OTHER_EN = 'Other',
 }
 
-// Interfaces
 interface ReturnItem {
   productId: string;
   quantity: number;
@@ -46,15 +45,15 @@ interface Return {
   branch: { _id: string; name: string; nameEn: string; displayName: string } | null;
   items: Array<{
     itemId: string;
-    product: { 
-      _id: string; 
-      name: string; 
-      nameEn: string; 
-      unit: string; 
-      unitEn: string; 
-      displayName: string; 
+    product: {
+      _id: string;
+      name: string;
+      nameEn: string;
+      unit: string;
+      unitEn: string;
+      displayName: string;
       displayUnit: string;
-      department: { name: string; nameEn: string; displayName: string } | null 
+      department: { name: string; nameEn: string; displayName: string } | null;
     };
     quantity: number;
     reason: string;
@@ -76,7 +75,6 @@ interface AvailableItem {
   stock: number;
 }
 
-// Translations (unchanged)
 const translations = {
   ar: {
     title: 'إدارة طلبات الإرجاع',
@@ -134,9 +132,7 @@ const translations = {
       invalidQuantityMax: 'الكمية يجب أن تكون بين 1 و{max}',
       noItemSelected: 'لم يتم اختيار عنصر',
       insufficientQuantity: 'الكمية غير كافية للمنتج في المخزون',
-      branchNotFound: 'الفرع غير موجود',
       productNotFound: 'المنتج غير موجود',
-      socketInit: 'خطأ في تهيئة الاتصال بالخادم',
       invalidReasonPair: 'سبب الإرجاع وسبب الإرجاع بالإنجليزية غير متطابقين',
     },
     socket: {
@@ -206,9 +202,7 @@ const translations = {
       invalidQuantityMax: 'Quantity must be between 1 and {max}',
       noItemSelected: 'No item selected',
       insufficientQuantity: 'Insufficient quantity for the product in inventory',
-      branchNotFound: 'Branch not found',
       productNotFound: 'Product not found',
-      socketInit: 'Error initializing server connection',
       invalidReasonPair: 'Return reason and English reason do not match',
     },
     socket: {
@@ -224,7 +218,6 @@ const translations = {
   },
 };
 
-// QuantityInput Component (unchanged)
 const QuantityInput = ({
   value,
   onChange,
@@ -269,8 +262,7 @@ const QuantityInput = ({
         onChange={(e) => handleChange(e.target.value)}
         max={max}
         min={1}
-        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm min-w-[2.75rem] transition-all duration-200"
-        style={{ appearance: 'none' }}
+        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
         aria-label={isRtl ? 'الكمية' : 'Quantity'}
       />
       <button
@@ -285,7 +277,6 @@ const QuantityInput = ({
   );
 };
 
-// Reducer for return form (unchanged)
 type ReturnFormAction =
   | { type: 'SET_NOTES'; payload: string }
   | { type: 'ADD_ITEM'; payload: ReturnItem }
@@ -312,7 +303,6 @@ const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): Re
   }
 };
 
-// Validate ObjectId (unchanged)
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 
 export const BranchReturns: React.FC = () => {
@@ -334,7 +324,6 @@ export const BranchReturns: React.FC = () => {
 
   const RETURNS_PER_PAGE = 10;
 
-  // Custom debounce hook (unchanged)
   const useDebouncedState = <T,>(initialValue: T, delay: number) => {
     const [value, setValue] = useState<T>(initialValue);
     const [debouncedValue, setDebouncedValue] = useState<T>(initialValue);
@@ -347,7 +336,6 @@ export const BranchReturns: React.FC = () => {
 
   const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
 
-  // Returns Query
   const { data: returnsData, isLoading: returnsLoading, error: returnsError, refetch: refetchReturns } = useQuery<
     { returns: Return[]; total: number },
     Error
@@ -361,19 +349,18 @@ export const BranchReturns: React.FC = () => {
         search: debouncedSearchQuery,
         page: currentPage,
         limit: RETURNS_PER_PAGE,
-        context: { isRtl } // Pass context for virtual fields
       };
       const response = await returnsAPI.getAll(query);
       return {
         returns: response.returns.map((ret: any) => ({
           _id: ret._id,
-          returnNumber: ret.returnNumber || t.returnNumber,
+          returnNumber: ret.returnNumber || `RET-${ret._id.slice(-6)}`,
           branch: ret.branch
             ? {
                 _id: ret.branch._id,
                 name: ret.branch.name,
                 nameEn: ret.branch.nameEn || ret.branch.name,
-                displayName: ret.branch.displayName || (isRtl ? ret.branch.name : ret.branch.nameEn || ret.branch.name),
+                displayName: isRtl ? ret.branch.name : ret.branch.nameEn || ret.branch.name,
               }
             : null,
           items: Array.isArray(ret.items)
@@ -384,18 +371,18 @@ export const BranchReturns: React.FC = () => {
                   name: item.product?.name || t.product,
                   nameEn: item.product?.nameEn || item.product?.name || t.product,
                   unit: item.product?.unit || t.unit,
-                  unitEn: item.product?.unitEn || item.product?.unit || 'N/A',
-                  displayName: item.product?.displayName || (isRtl ? item.product?.name : item.product?.nameEn || item.product?.name) || t.product,
-                  displayUnit: item.product?.displayUnit || (isRtl ? item.product?.unit : item.product?.unitEn || item.product?.unit) || 'N/A',
+                  unitEn: item.product?.unitEn || item.product?.unit || t.unit,
+                  displayName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name || t.product,
+                  displayUnit: isRtl ? item.product?.unit : item.product?.unitEn || item.product?.unit || t.unit,
                   department: item.product?.department
                     ? {
                         name: item.product.department.name,
                         nameEn: item.product.department.nameEn || item.product.department.name,
-                        displayName: item.product.department.displayName || (isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name),
+                        displayName: isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name,
                       }
                     : null,
                 },
-                quantity: item.quantity || 0,
+                quantity: item.quantity || 1,
                 reason: item.reason || '',
                 reasonEn: item.reasonEn || '',
               }))
@@ -416,7 +403,6 @@ export const BranchReturns: React.FC = () => {
     },
   });
 
-  // Inventory Query for Available Items
   const { data: inventoryData } = useQuery<AvailableItem[], Error>({
     queryKey: ['inventory', user?.branchId, language],
     queryFn: async () => {
@@ -426,11 +412,13 @@ export const BranchReturns: React.FC = () => {
         .filter((item: any) => item.currentStock > 0 && item.product)
         .map((item: any) => ({
           productId: item.product._id,
-          productName: item.product.displayName || (isRtl ? item.product.name : item.product.nameEn || item.product.name),
+          productName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
           available: item.currentStock,
           unit: item.product.unit || t.unit,
-          displayUnit: item.product.displayUnit || (isRtl ? item.product.unit : item.product.unitEn || item.product.unit) || 'N/A',
-          departmentName: item.product.department?.displayName || (isRtl ? item.product.department?.name : item.product.department?.nameEn || item.product.department?.name) || 'Unknown',
+          displayUnit: isRtl ? item.product.unit : item.product.unitEn || item.product.unit || t.unit,
+          departmentName: item.product.department
+            ? (isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name)
+            : 'Unknown',
           stock: item.currentStock,
         }));
     },
@@ -438,7 +426,6 @@ export const BranchReturns: React.FC = () => {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Socket Events (unchanged)
   useEffect(() => {
     if (!socket || !user?.branchId) return;
 
@@ -454,8 +441,6 @@ export const BranchReturns: React.FC = () => {
     const handleReturnStatusUpdated = ({ branchId, status }: { branchId: string; status: string }) => {
       if (branchId === user.branchId) {
         queryClient.invalidateQueries({ queryKey: ['returns'] });
-        const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
-        audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
         toast.info(t.socket.returnStatusUpdated.replace('{status}', t.status[status as keyof typeof t.status] || status), {
           position: isRtl ? 'top-right' : 'top-left',
         });
@@ -476,7 +461,6 @@ export const BranchReturns: React.FC = () => {
     };
   }, [socket, user, queryClient, t, isRtl]);
 
-  // Status Options (unchanged)
   const statusOptions = useMemo(
     () => [
       { value: '', label: t.status.all },
@@ -487,7 +471,6 @@ export const BranchReturns: React.FC = () => {
     [t]
   );
 
-  // Reason Options (unchanged)
   const reasonOptions = useMemo(
     () => [
       { value: '', label: t.selectReason, enValue: '' },
@@ -499,7 +482,6 @@ export const BranchReturns: React.FC = () => {
     [t]
   );
 
-  // Product Options
   const productOptions = useMemo(
     () => [
       { value: '', label: t.selectProduct },
@@ -511,14 +493,12 @@ export const BranchReturns: React.FC = () => {
     [availableItems, t]
   );
 
-  // Update available items
   useEffect(() => {
     if (inventoryData) {
       setAvailableItems(inventoryData);
     }
   }, [inventoryData]);
 
-  // Filtered and Paginated Returns (unchanged)
   const filteredReturns = useMemo(
     () =>
       (returnsData?.returns || []).filter(
@@ -537,7 +517,6 @@ export const BranchReturns: React.FC = () => {
 
   const totalPages = Math.ceil(filteredReturns.length / RETURNS_PER_PAGE);
 
-  // Handlers
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchInput(e.target.value);
     setCurrentPage(1);
@@ -589,7 +568,6 @@ export const BranchReturns: React.FC = () => {
         type: 'UPDATE_ITEM',
         payload: { index, field: 'quantity', value: 1 },
       });
-      // Reset reason and reasonEn to ensure consistency
       dispatchReturnForm({
         type: 'UPDATE_ITEM',
         payload: { index, field: 'reason', value: '' },
@@ -609,7 +587,7 @@ export const BranchReturns: React.FC = () => {
   const validateReturnForm = useCallback(() => {
     const errors: Record<string, string> = {};
     if (!user?.branchId) {
-      errors.form = t.Errors.noBranch;
+      errors.form = t.errors.noBranch;
     }
     if (returnForm.items.length === 0) {
       errors.items = t.errors.required.replace('{field}', t.items);
@@ -623,14 +601,6 @@ export const BranchReturns: React.FC = () => {
       if (!item.reason) {
         errors[`item_${index}_reason`] = t.errors.required.replace('{field}', t.reason);
       }
-      if (!item.reasonEn) {
-        errors[`item_${index}_reasonEn`] = t.errors.required.replace('{field}', t.reason);
-      } else {
-        const selectedReason = reasonOptions.find((opt) => opt.value === item.reason);
-        if (selectedReason && selectedReason.enValue !== item.reasonEn) {
-          errors[`item_${index}_reasonEn`] = t.errors.invalidReasonPair;
-        }
-      }
       if (item.quantity < 1 || item.quantity > item.maxQuantity || isNaN(item.quantity)) {
         errors[`item_${index}_quantity`] = t.errors.invalidQuantityMax.replace('{max}', item.maxQuantity.toString());
       }
@@ -643,7 +613,7 @@ export const BranchReturns: React.FC = () => {
     });
     setReturnErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [returnForm, t, inventoryData, user, reasonOptions]);
+  }, [returnForm, t, inventoryData, user]);
 
   const createReturnMutation = useMutation<{ returnId: string }, Error, void>({
     mutationFn: async () => {
@@ -677,24 +647,11 @@ export const BranchReturns: React.FC = () => {
       });
     },
     onError: (err) => {
-      let errorMessage = err.message || t.errors.createReturn;
-      if (err.message.includes('الفرع غير موجود') || err.message.includes('Branch not found')) {
-        errorMessage = t.errors.noBranch;
-      } else if (err.message.includes('الكمية غير كافية') || err.message.includes('Insufficient quantity')) {
-        errorMessage = t.errors.insufficientQuantity;
-      } else if (err.message.includes('بيانات العنصر غير صالحة') || err.message.includes('Invalid item data')) {
-        errorMessage = t.errors.invalidForm;
-      } else if (err.message.includes('المنتج غير موجود') || err.message.includes('Product not found')) {
-        errorMessage = t.errors.productNotFound;
-      } else if (err.message.includes('Invalid reason pair')) {
-        errorMessage = t.errors.invalidReasonPair;
-      }
-      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
-      setReturnErrors({ form: errorMessage });
+      toast.error(err.message || t.errors.createReturn, { position: isRtl ? 'top-right' : 'top-left' });
+      setReturnErrors({ form: err.message });
     },
   });
 
-  // ReturnCard Component
   const ReturnCard = useCallback(
     ({ ret }: { ret: Return }) => {
       const statusInfo = {
@@ -711,16 +668,16 @@ export const BranchReturns: React.FC = () => {
           transition={{ duration: 0.3 }}
           className="flex flex-col"
         >
-          <div className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200">
+          <div className="p-5 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 border border-gray-100">
             <div className="flex flex-col gap-4">
-              <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${isRtl ? 'sm:flex-row' : ''}`}>
-                <h3 className="text-lg font-bold text-gray-900">{t.returnNumber}: {ret.returnNumber}</h3>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <h3 className="text-lg font-semibold text-gray-900">{t.returnNumber}: {ret.returnNumber}</h3>
                 <span className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${statusInfo.color}`}>
                   <StatusIcon className="w-5 h-5" />
                   {statusInfo.label}
                 </span>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-gray-500">{t.date}</p>
                   <p className="text-sm font-medium text-gray-900">{new Date(ret.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</p>
@@ -729,49 +686,36 @@ export const BranchReturns: React.FC = () => {
                   <p className="text-sm text-gray-500">{t.itemsCount}</p>
                   <p className="text-sm font-medium text-gray-900">{ret.items.length} {t.items}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-500">{t.branch}</p>
-                  <p className="text-sm font-medium text-gray-900">{ret.branch?.displayName || t.branch}</p>
-                </div>
               </div>
               <div className="flex flex-col gap-2">
                 {ret.items.map((item, index) => (
                   <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100">
                     <p className="text-sm font-medium text-gray-900">{item.product.displayName}</p>
-                    <p className="text-sm text-gray-600">{t.quantity}: {item.quantity}</p>
-                    <p className="text-sm text-gray-600">{t.unit}: {item.product.displayUnit}</p>
-                    <p className="text-sm text-gray-600">{t.department}: {item.product.department?.displayName || 'N/A'}</p>
+                    <p className="text-sm text-gray-600">{t.quantity}: {item.quantity} {item.product.displayUnit}</p>
                     <p className="text-sm text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
                   </div>
                 ))}
               </div>
               {ret.notes && (
-                <div className="p-3 bg-amber-50 rounded-md border border-amber-100">
-                  <p className="text-sm text-amber-800">
-                    <strong>{t.notesLabel}:</strong> {ret.notes}
-                  </p>
+                <div className="p-3 bg-amber-50 rounded-md">
+                  <p className="text-sm text-amber-800">{t.notesLabel}: {ret.notes}</p>
                 </div>
               )}
               {ret.reviewNotes && (
-                <div className="p-3 bg-amber-50 rounded-md border border-amber-100">
-                  <p className="text-sm text-amber-800">
-                    <strong>{t.reviewNotes}:</strong> {ret.reviewNotes}
-                  </p>
+                <div className="p-3 bg-blue-50 rounded-md">
+                  <p className="text-sm text-blue-800">{t.reviewNotes}: {ret.reviewNotes}</p>
                 </div>
               )}
-              <div className="flex justify-end">
-                <button
-                  onClick={() => {
-                    setSelectedReturn(ret);
-                    setIsViewModalOpen(true);
-                  }}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
-                  aria-label={t.viewReturn}
-                >
-                  <Eye className="w-4 h-4 inline mr-2" />
-                  {t.view}
-                </button>
-              </div>
+              <button
+                onClick={() => {
+                  setSelectedReturn(ret);
+                  setIsViewModalOpen(true);
+                }}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 self-end"
+              >
+                <Eye className="w-4 h-4 inline mr-2" />
+                {t.view}
+              </button>
             </div>
           </div>
         </motion.div>
@@ -782,7 +726,7 @@ export const BranchReturns: React.FC = () => {
 
   return (
     <div className="mx-auto px-4 py-8 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
-      <div className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
+      <div className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div className="flex items-center gap-3">
           <Package className="w-7 h-7 text-amber-600" />
           <div>
@@ -790,98 +734,75 @@ export const BranchReturns: React.FC = () => {
             <p className="text-gray-600 text-sm">{t.subtitle}</p>
           </div>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2 shadow-sm"
-            aria-label={t.createReturn}
-          >
-            <Plus className="w-4 h-4" />
-            {t.createReturn}
-          </button>
-        </div>
+        <button
+          onClick={() => setIsCreateModalOpen(true)}
+          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          {t.createReturn}
+        </button>
       </div>
 
       {returnsError && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3"
+          className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3"
         >
           <AlertCircle className="w-5 h-5 text-red-600" />
           <span className="text-red-600 text-sm font-medium">{returnsError.message}</span>
           <button
             onClick={() => refetchReturns()}
             className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
-            aria-label={t.common.retry}
           >
             {t.common.retry}
           </button>
         </motion.div>
       )}
 
-      <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="lg:col-span-1">
-            <ProductSearchInput
-              value={searchInput}
-              onChange={handleSearchChange}
-              placeholder={t.searchPlaceholder}
-              ariaLabel={t.searchPlaceholder}
-              className="w-full"
-            />
-          </div>
-          <div className="lg:col-span-1">
-            <ProductDropdown
-              value={filterStatus}
-              onChange={(value) => {
-                setFilterStatus(value as ReturnStatus | '');
-                setCurrentPage(1);
-              }}
-              options={statusOptions}
-              ariaLabel={t.filterStatus}
-              className="w-full"
-            />
-          </div>
-        </div>
-        <div className="mt-4 text-center text-sm text-gray-600 font-medium">
-          {isRtl ? `عدد الطلبات: ${filteredReturns.length}` : `Returns Count: ${filteredReturns.length}`}
+      <div className="p-6 bg-white rounded-xl shadow-sm mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <ProductSearchInput
+            value={searchInput}
+            onChange={handleSearchChange}
+            placeholder={t.searchPlaceholder}
+            className="w-full"
+          />
+          <ProductDropdown
+            value={filterStatus}
+            onChange={(value) => {
+              setFilterStatus(value as ReturnStatus | '');
+              setCurrentPage(1);
+            }}
+            options={statusOptions}
+            className="w-full"
+          />
         </div>
       </div>
 
       {returnsLoading ? (
-        <div className="grid grid-cols-1 gap-6">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="p-5 bg-white rounded-xl shadow-sm border border-gray-100">
-              <div className="space-y-3 animate-pulse">
-                <div className="flex items-center justify-between">
-                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/4"></div>
-                </div>
-                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                <div className="mt-4 flex justify-end">
-                  <div className="h-8 bg-gray-200 rounded-lg w-24"></div>
-                </div>
-              </div>
+        <div className="grid grid-cols-1 gap-4">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="p-5 bg-white rounded-xl shadow-sm animate-pulse">
+              <div className="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
+              <div className="h-3 bg-gray-200 rounded w-1/2 mb-2"></div>
+              <div className="h-3 bg-gray-200 rounded w-1/3"></div>
             </div>
           ))}
         </div>
       ) : paginatedReturns.length === 0 ? (
-        <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="p-8 text-center bg-white rounded-xl shadow-sm">
           <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600 text-sm font-medium">{t.noReturns}</p>
           <button
             onClick={() => setIsCreateModalOpen(true)}
             className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
-            aria-label={t.createReturn}
           >
             {t.createReturn}
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6">
+        <div className="grid grid-cols-1 gap-4">
           <AnimatePresence>
             {paginatedReturns.map((ret) => (
               <ReturnCard key={ret._id} ret={ret} />
@@ -890,47 +811,39 @@ export const BranchReturns: React.FC = () => {
         </div>
       )}
 
-      <div className="mt-6">
-        {totalPages > 1 && (
-          <div className={`flex items-center justify-center gap-3 ${isRtl ? 'flex-row' : ''}`}>
-            <button
-              onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-              disabled={currentPage === 1}
-              aria-label={t.pagination.previous}
-            >
-              {t.pagination.previous}
-            </button>
-            <span className="text-gray-700 font-medium">
-              {t.pagination.page.replace('{current}', currentPage.toString()).replace('{total}', totalPages.toString())}
-            </span>
-            <button
-              onClick={() => setCurrentPage(Math.min(currentPage + 1, totalPages))}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-              disabled={currentPage === totalPages}
-              aria-label={t.pagination.next}
-            >
-              {t.pagination.next}
-            </button>
-          </div>
-        )}
-      </div>
+      {totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-center gap-3">
+          <button
+            onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+            disabled={currentPage === 1}
+          >
+            {t.pagination.previous}
+          </button>
+          <span className="text-gray-700 font-medium">
+            {t.pagination.page.replace('{current}', currentPage.toString()).replace('{total}', totalPages.toString())}
+          </span>
+          <button
+            onClick={() => setCurrentPage(Math.min(currentPage + 1, totalPages))}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+            disabled={currentPage === totalPages}
+          >
+            {t.pagination.next}
+          </button>
+        </div>
+      )}
 
-      {/* Create Return Modal */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isCreateModalOpen ? 1 : 0 }}
-        className={`fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 ${isCreateModalOpen ? '' : 'pointer-events-none'}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t.createReturn}
+        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${isCreateModalOpen ? '' : 'pointer-events-none'}`}
       >
         <motion.div
-          initial={{ scale: 0.95, y: 20 }}
-          animate={{ scale: isCreateModalOpen ? 1 : 0.95, y: isCreateModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-lg w-full"
+          initial={{ scale: 0.95 }}
+          animate={{ scale: isCreateModalOpen ? 1 : 0.95 }}
+          className="bg-white p-6 rounded-xl shadow-xl max-w-lg w-full"
         >
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-gray-900">{t.createReturn}</h2>
             <button
               onClick={() => {
@@ -938,39 +851,36 @@ export const BranchReturns: React.FC = () => {
                 dispatchReturnForm({ type: 'RESET' });
                 setReturnErrors({});
               }}
-              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-              aria-label={t.common.cancel}
+              className="p-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.notesLabel}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t.notesLabel}</label>
               <textarea
                 value={returnForm.notes}
                 onChange={(e) => dispatchReturnForm({ type: 'SET_NOTES', payload: e.target.value })}
                 placeholder={t.notesPlaceholder}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
+                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
                 rows={3}
-                aria-label={t.notesLabel}
               />
               {returnErrors.form && <p className="text-red-600 text-xs mt-1">{returnErrors.form}</p>}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t.items}</label>
               {returnForm.items.map((item, index) => (
-                <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                <div key={index} className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
                   <ProductDropdown
                     value={item.productId}
                     onChange={(value) => handleProductChange(index, value)}
                     options={productOptions}
-                    ariaLabel={`${t.items} ${index + 1}`}
                     placeholder={t.selectProduct}
-                    className="w-full"
+                    className="w-full mb-2"
                   />
                   {returnErrors[`item_${index}_productId`] && (
-                    <p className="text-red-600 text-xs">{returnErrors[`item_${index}_productId`]}</p>
+                    <p className="text-red-600 text-xs mb-2">{returnErrors[`item_${index}_productId`]}</p>
                   )}
                   <div className="flex items-center gap-4">
                     <div className="flex-1">
@@ -992,32 +902,24 @@ export const BranchReturns: React.FC = () => {
                         value={item.reason}
                         onChange={(value) => updateItemInForm(index, 'reason', value)}
                         options={reasonOptions}
-                        ariaLabel={`${t.reason} ${index + 1}`}
                         className="w-full"
                       />
                       {returnErrors[`item_${index}_reason`] && (
                         <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_reason`]}</p>
                       )}
-                      {returnErrors[`item_${index}_reasonEn`] && (
-                        <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_reasonEn`]}</p>
-                      )}
                     </div>
-                    {returnForm.items.length > 1 && (
-                      <button
-                        onClick={() => removeItemFromForm(index)}
-                        className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 mt-6"
-                        aria-label={t.removeItem}
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => removeItemFromForm(index)}
+                      className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg mt-6"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               ))}
               <button
                 onClick={addItemToForm}
                 className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
-                aria-label={t.addItem}
                 disabled={availableItems.length === 0}
               >
                 <Plus className="w-4 h-4" />
@@ -1025,23 +927,21 @@ export const BranchReturns: React.FC = () => {
               </button>
               {returnErrors.items && <p className="text-red-600 text-xs">{returnErrors.items}</p>}
             </div>
-            <div className="flex justify-end gap-3 mt-6">
+            <div className="flex justify-end gap-3">
               <button
                 onClick={() => {
                   setIsCreateModalOpen(false);
                   dispatchReturnForm({ type: 'RESET' });
                   setReturnErrors({});
                 }}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                aria-label={t.common.cancel}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium"
               >
                 {t.common.cancel}
               </button>
               <button
                 onClick={() => createReturnMutation.mutate()}
                 disabled={createReturnMutation.isLoading}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                aria-label={createReturnMutation.isLoading ? t.common.submitting : t.submitReturn}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium disabled:opacity-50"
               >
                 {createReturnMutation.isLoading ? t.common.submitting : t.submitReturn}
               </button>
@@ -1050,26 +950,21 @@ export const BranchReturns: React.FC = () => {
         </motion.div>
       </motion.div>
 
-      {/* View Return Modal */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isViewModalOpen ? 1 : 0 }}
-        className={`fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 ${isViewModalOpen ? '' : 'pointer-events-none'}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t.viewReturn}
+        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${isViewModalOpen ? '' : 'pointer-events-none'}`}
       >
         <motion.div
-          initial={{ scale: 0.95, y: 20 }}
-          animate={{ scale: isViewModalOpen ? 1 : 0.95, y: isViewModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-lg w-full"
+          initial={{ scale: 0.95 }}
+          animate={{ scale: isViewModalOpen ? 1 : 0.95 }}
+          className="bg-white p-6 rounded-xl shadow-xl max-w-lg w-full"
         >
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-gray-900">{t.viewReturn}: {selectedReturn?.returnNumber}</h2>
             <button
               onClick={() => setIsViewModalOpen(false)}
-              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-              aria-label={t.common.close}
+              className="p-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
             >
               <X className="w-4 h-4" />
             </button>
@@ -1109,36 +1004,27 @@ export const BranchReturns: React.FC = () => {
                 {selectedReturn.items.map((item, index) => (
                   <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100 mb-2">
                     <p className="text-sm font-medium text-gray-900">{item.product.displayName}</p>
-                    <p className="text-sm text-gray-600">{t.quantity}: {item.quantity}</p>
-                    <p className="text-sm text-gray-600">{t.unit}: {item.product.displayUnit}</p>
-                    <p className="text-sm text-gray-600">{t.department}: {item.product.department?.displayName || 'N/A'}</p>
+                    <p className="text-sm text-gray-600">{t.quantity}: {item.quantity} {item.product.displayUnit}</p>
                     <p className="text-sm text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
                   </div>
                 ))}
               </div>
               {selectedReturn.notes && (
-                <div className="p-3 bg-amber-50 rounded-md border border-amber-100">
-                  <p className="text-sm text-amber-800">
-                    <strong>{t.notesLabel}:</strong> {selectedReturn.notes}
-                  </p>
+                <div className="p-3 bg-amber-50 rounded-md">
+                  <p className="text-sm text-amber-800">{t.notesLabel}: {selectedReturn.notes}</p>
                 </div>
               )}
               {selectedReturn.reviewNotes && (
-                <div className="pivilian p-3 bg-blue-50 rounded-md border border-blue-100">
-                  <p className="text-sm text-blue-800">
-                    <strong>{t.reviewNotes}:</strong> {selectedReturn.reviewNotes}
-                  </p>
+                <div className="p-3 bg-blue-50 rounded-md">
+                  <p className="text-sm text-blue-800">{t.reviewNotes}: {selectedReturn.reviewNotes}</p>
                 </div>
               )}
-              <div className="flex justify-end">
-                <button
-                  onClick={() => setIsViewModalOpen(false)}
-                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                  aria-label={t.common.close}
-                >
-                  {t.common.close}
-                </button>
-              </div>
+              <button
+                onClick={() => setIsViewModalOpen(false)}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium w-full"
+              >
+                {t.common.close}
+              </button>
             </div>
           )}
         </motion.div>

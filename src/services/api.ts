@@ -1,6 +1,6 @@
 import axios from 'axios';
-import { toast } from 'react-toastify';
 import { notificationsAPI } from './notifications';
+import { returnsAPI } from './returnsAPI';
 import { salesAPI } from './salesAPI';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
@@ -11,21 +11,22 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
+
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-    const language = localStorage.getItem('language') || 'en'; // Default to 'en'
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    const language = localStorage.getItem('language') || 'en';
+    config.params = { ...config.params, lang: language };
     console.log(`[${new Date().toISOString()}] API request:`, {
       url: config.url,
       method: config.method,
       headers: config.headers,
       params: config.params,
-      data: config.data,
     });
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    config.params = { ...config.params, lang: language };
     return config;
   },
   (error) => {
@@ -45,27 +46,17 @@ api.interceptors.response.use(
       data: error.response?.data,
       message: error.message,
     });
-    const language = localStorage.getItem('language') || 'en'; // Default to 'en'
-    const isRtl = language === 'ar';
+    const isRtl = localStorage.getItem('language') === 'ar';
     let message = error.response?.data?.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
-    if (error.code === 'ECONNABORTED') {
-      message = isRtl ? 'انتهت مهلة الطلب، حاول مرة أخرى' : 'Request timed out, please try again';
-    } else if (!error.response) {
-      message = isRtl ? 'فشل الاتصال بالخادم' : 'Failed to connect to server';
-    } else if (error.response.status === 400) {
-      message = error.response.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
-      if (error.response.data?.field) {
+    if (error.response?.status === 400) {
+      message = error.response?.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
+      if (error.response?.data?.field) {
         message = `${message}: ${error.response.data.field} = ${error.response.data.value}`;
       }
-    } else if (error.response.status === 403) {
-      message = error.response.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
-    } else if (error.response.status === 404) {
-      message = error.response.data?.message || (isRtl ? 'المورد غير موجود' : 'Resource not found');
-    } else if (error.response.status === 422) {
-      message = error.response.data?.message || (isRtl ? 'الكمية غير كافية' : 'Insufficient quantity');
-    } else if (error.response.status === 429) {
-      message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
     }
+    if (error.response?.status === 403) message = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
+    if (error.response?.status === 404) message = error.response?.data?.message || (isRtl ? 'المورد غير موجود' : 'Resource not found');
+    if (error.response?.status === 429) message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
@@ -76,11 +67,6 @@ api.interceptors.response.use(
           localStorage.removeItem('user');
           localStorage.removeItem('refreshToken');
           window.location.href = '/login';
-          toast.error(isRtl ? 'التوكن منتهي الصلاحية، يرجى تسجيل الدخول مجددًا' : 'Token expired, please log in again', {
-            position: isRtl ? 'top-right' : 'top-left',
-            autoClose: 3000,
-            pauseOnFocusLoss: true,
-          });
           return Promise.reject({ message: isRtl ? 'التوكن منتهي الصلاحية ولا يوجد توكن منعش' : 'Token expired and no refresh token available', status: 401 });
         }
         const response = await axios.post<{ accessToken: string; refreshToken?: string }>(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
@@ -96,20 +82,12 @@ api.interceptors.response.use(
         localStorage.removeItem('user');
         localStorage.removeItem('refreshToken');
         window.location.href = '/login';
-        toast.error(isRtl ? 'فشل تجديد التوكن، يرجى تسجيل الدخول مجددًا' : 'Failed to refresh token, please log in again', {
-          position: isRtl ? 'top-right' : 'top-left',
-          autoClose: 3000,
-          pauseOnFocusLoss: true,
-        });
         return Promise.reject({ message: isRtl ? 'فشل تجديد التوكن' : 'Failed to refresh token', status: 401 });
       }
     }
-    toast.error(message, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000, pauseOnFocusLoss: true });
-    return Promise.reject({ message, status: error.response?.status, details: error.response?.data });
+    return Promise.reject({ message, status: error.response?.status });
   }
 );
-
-const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 
 export const authAPI = {
   login: async (credentials: { username: string; password: string }) => {
@@ -464,6 +442,21 @@ export const usersAPI = {
     console.log(`[${new Date().toISOString()}] usersAPI.resetPassword - Response:`, response);
     return response;
   },
+};
+
+const createErrorMessage = (errorType: string, isRtl: boolean): string => {
+  const messages: { [key: string]: { ar: string; en: string } } = {
+    invalidBranchId: { ar: 'معرف الفرع غير صالح', en: 'Invalid branch ID' },
+    invalidOrderId: { ar: 'معرف الطلب غير صالح', en: 'Invalid order ID' },
+    invalidDepartmentId: { ar: 'معرف القسم غير صالح', en: 'Invalid department ID' },
+    invalidOrderOrTaskId: { ar: 'معرف الطلب أو المهمة غير صالح', en: 'Invalid order or task ID' },
+    invalidOrderOrItemOrChefId: { ar: 'معرف الطلب، العنصر، أو الشيف غير صالح', en: 'Invalid order, item, or chef ID' },
+    invalidStockQuantity: { ar: 'كمية المخزون يجب أن تكون غير سالبة', en: 'Stock quantity must be non-negative' },
+    invalidMinStockLevel: { ar: 'الحد الأدنى للمخزون يجب أن يكون عددًا صحيحًا غير سالب', en: 'Minimum stock level must be a non-negative integer' },
+    invalidMaxStockLevel: { ar: 'الحد الأقصى للمخزون يجب أن يكون عددًا صحيحًا غير سالب', en: 'Maximum stock level must be a non-negative integer' },
+    maxLessThanMin: { ar: 'الحد الأقصى يجب أن يكون أكبر من الحد الأدنى', en: 'Maximum stock level must be greater than minimum' },
+  };
+  return isRtl ? messages[errorType].ar : messages[errorType].en;
 };
 
 export const ordersAPI = {
@@ -1174,178 +1167,5 @@ export const factoryInventoryAPI = {
   },
 };
 
-export const returnsAPI = {
-  getAll: async (query: {
-    status?: string;
-    branch?: string;
-    search?: string;
-    sort?: string;
-    page?: number;
-    limit?: number;
-  } = {}) => {
-    console.log(`[${new Date().toISOString()}] returnsAPI.getAll - Sending:`, query);
-    try {
-      if (query.branch && !isValidObjectId(query.branch)) {
-        console.error(`[${new Date().toISOString()}] returnsAPI.getAll - Invalid branch ID:`, query.branch);
-        throw new Error('Invalid branch ID');
-      }
-      const response = await api.get('/returns', { params: query });
-      console.log(`[${new Date().toISOString()}] returnsAPI.getAll - Response:`, response);
-      return response;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.getAll - Error:`, {
-        message: error.message,
-        status: error.status,
-        details: error.details,
-        response: error.response,
-      });
-      const language = localStorage.getItem('language') || 'en';
-      const isRtl = language === 'ar';
-      let errorMessage = error.message || (isRtl ? 'خطأ في جلب طلبات الإرجاع' : 'Error fetching return requests');
-      throw new Error(errorMessage);
-    }
-  },
-
-  getBranches: async () => {
-    console.log(`[${new Date().toISOString()}] returnsAPI.getBranches - Sending`);
-    try {
-      const response = await api.get('/branches');
-      console.log(`[${new Date().toISOString()}] returnsAPI.getBranches - Response:`, response);
-      return response;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.getBranches - Error:`, {
-        message: error.message,
-        status: error.status,
-        details: error.details,
-        response: error.response,
-      });
-      const language = localStorage.getItem('language') || 'en';
-      const isRtl = language === 'ar';
-      let errorMessage = error.message || (isRtl ? 'خطأ في جلب الفروع' : 'Error fetching branches');
-      throw new Error(errorMessage);
-    }
-  },
-
-  createReturn: async (data: {
-    branchId: string;
-    items: Array<{
-      product: string;
-      quantity: number;
-      reason: string;
-      reasonEn?: string;
-    }>;
-    notes?: string;
-  }) => {
-    console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Sending:`, data);
-    if (
-      !isValidObjectId(data.branchId) ||
-      !Array.isArray(data.items) ||
-      data.items.length === 0 ||
-      data.items.some(
-        (item) => !isValidObjectId(item.product) || item.quantity < 1 || !item.reason
-      )
-    ) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Invalid data:`, data);
-      throw new Error('Invalid branch ID or item data');
-    }
-    try {
-      const response = await api.post('/returns', {
-        branchId: data.branchId,
-        items: data.items.map(item => ({
-          product: item.product,
-          quantity: Number(item.quantity),
-          reason: item.reason.trim(),
-          reasonEn: item.reasonEn ? item.reasonEn.trim() : undefined,
-        })),
-        notes: data.notes ? data.notes.trim() : undefined,
-      });
-      console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Response:`, response);
-      return response;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Error:`, {
-        message: error.message,
-        status: error.status,
-        details: error.details,
-        response: error.response,
-      });
-      const language = localStorage.getItem('language') || 'en';
-      const isRtl = language === 'ar';
-      let errorMessage = error.message || (isRtl ? 'خطأ في إنشاء طلب الإرجاع' : 'Error creating return request');
-      if (error.status === 400) {
-        errorMessage = error.details?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
-        if (error.details?.field) {
-          errorMessage = `${errorMessage}: ${error.details.field} = ${error.details.value}`;
-        }
-      } else if (error.status === 403) {
-        errorMessage = error.details?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
-      } else if (error.status === 404) {
-        errorMessage = error.details?.message || (isRtl ? 'الفرع أو المنتج غير موجود' : 'Branch or product not found');
-      } else if (error.status === 422) {
-        errorMessage = error.details?.message || (isRtl ? 'الكمية غير كافية' : 'Insufficient quantity');
-      } else if (error.code === 'ECONNABORTED') {
-        errorMessage = isRtl ? 'انتهت مهلة الطلب، حاول مرة أخرى' : 'Request timed out, please try again';
-      } else if (!error.response) {
-        errorMessage = isRtl ? 'فشل الاتصال بالخادم' : 'Failed to connect to server';
-      }
-      throw new Error(errorMessage);
-    }
-  },
-
-  updateReturnStatus: async (
-    returnId: string,
-    data: {
-      status: 'approved' | 'rejected';
-      reviewNotes?: string;
-    }
-  ) => {
-    console.log(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Sending:`, { returnId, data });
-    if (
-      !isValidObjectId(returnId) ||
-      !['approved', 'rejected'].includes(data.status)
-    ) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Invalid data:`, { returnId, data });
-      throw new Error('Invalid return ID or status');
-    }
-    try {
-      const response = await api.put(`/returns/${returnId}`, {
-        status: data.status,
-        reviewNotes: data.reviewNotes ? data.reviewNotes.trim() : undefined,
-      });
-      console.log(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Response:`, response);
-      return response;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Error:`, {
-        message: error.message,
-        status: error.status,
-        details: error.details,
-        response: error.response,
-      });
-      const language = localStorage.getItem('language') || 'en';
-      const isRtl = language === 'ar';
-      let errorMessage = error.message || (isRtl ? 'خطأ في تحديث حالة الإرجاع' : 'Error updating return status');
-      if (error.status === 404) {
-        errorMessage = error.details?.message || (isRtl ? 'الإرجاع غير موجود' : 'Return not found');
-      }
-      throw new Error(errorMessage);
-    }
-  },
-};
-
-const createErrorMessage = (errorType: string, isRtl: boolean): string => {
-  const messages: { [key: string]: { ar: string; en: string } } = {
-    invalidBranchId: { ar: 'معرف الفرع غير صالح', en: 'Invalid branch ID' },
-    invalidOrderId: { ar: 'معرف الطلب غير صالح', en: 'Invalid order ID' },
-    invalidDepartmentId: { ar: 'معرف القسم غير صالح', en: 'Invalid department ID' },
-    invalidOrderOrTaskId: { ar: 'معرف الطلب أو المهمة غير صالح', en: 'Invalid order or task ID' },
-    invalidOrderOrItemOrChefId: { ar: 'معرف الطلب، العنصر، أو الشيف غير صالح', en: 'Invalid order, item, or chef ID' },
-    invalidStockQuantity: { ar: 'كمية المخزون يجب أن تكون غير سالبة', en: 'Stock quantity must be non-negative' },
-    invalidMinStockLevel: { ar: 'الحد الأدنى للمخزون يجب أن يكون عددًا صحيحًا غير سالب', en: 'Minimum stock level must be a non-negative integer' },
-    invalidMaxStockLevel: { ar: 'الحد الأقصى للمخزون يجب أن يكون عددًا صحيحًا غير سالب', en: 'Maximum stock level must be a non-negative integer' },
-    maxLessThanMin: { ar: 'الحد الأقصى للمخزون يجب أن يكون أكبر من الحد الأدنى', en: 'Maximum stock level must be greater than minimum' },
-    invalidProductId: { ar: 'معرف المنتج غير صالح', en: 'Invalid product ID' },
-  };
-  return isRtl ? messages[errorType].ar : messages[errorType].en;
-};
-export { notificationsAPI, salesAPI };
-
+export { notificationsAPI, returnsAPI, salesAPI };
 export default api;
