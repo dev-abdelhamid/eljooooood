@@ -10,6 +10,7 @@ const returnsAxios = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// Configure retry mechanism for network issues or server errors
 axiosRetry(returnsAxios, {
   retries: 3,
   retryDelay: (retryCount) => retryCount * 1000,
@@ -18,6 +19,7 @@ axiosRetry(returnsAxios, {
   },
 });
 
+// Request interceptor to add authorization token and language
 returnsAxios.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -41,8 +43,9 @@ returnsAxios.interceptors.request.use(
   }
 );
 
+// Response interceptor for consistent error handling
 returnsAxios.interceptors.response.use(
-  (response) => response.data,
+  (response) => response, // Return full response instead of response.data
   async (error) => {
     const originalRequest = error.config;
     const language = localStorage.getItem('language') || 'ar';
@@ -57,7 +60,7 @@ returnsAxios.interceptors.response.use(
       message = isRtl ? 'فشل الاتصال بالخادم' : 'Failed to connect to server';
     } else if (error.response.status === 400) {
       message = errors.length
-        ? errors.map(err => err.msg).join(', ')
+        ? errors.map((err: any) => err.msg).join(', ')
         : error.response.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
     } else if (error.response.status === 403) {
       message = error.response.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
@@ -110,11 +113,17 @@ returnsAxios.interceptors.response.use(
       }
     }
 
+    console.error(`[${new Date().toISOString()}] Returns API response error:`, {
+      status: error.response?.status,
+      message,
+      errors,
+    });
     toast.error(message, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000, pauseOnFocusLoss: true });
     return Promise.reject({ message, status: error.response?.status, errors });
   }
 );
 
+// Validate ObjectId
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 
 export const returnsAPI = {
@@ -130,11 +139,11 @@ export const returnsAPI = {
     try {
       if (query.branch && !isValidObjectId(query.branch)) {
         console.error(`[${new Date().toISOString()}] returnsAPI.getAll - Invalid branch ID:`, query.branch);
-        throw new Error('Invalid branch ID');
+        throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
       }
       const response = await returnsAxios.get('/returns', { params: query });
-      console.log(`[${new Date().toISOString()}] returnsAPI.getAll - Response:`, response);
-      return response;
+      console.log(`[${new Date().toISOString()}] returnsAPI.getAll - Response:`, response.data);
+      return response.data; // Return response.data to match original structure
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] returnsAPI.getAll - Error:`, error);
       throw error;
@@ -145,8 +154,8 @@ export const returnsAPI = {
     console.log(`[${new Date().toISOString()}] returnsAPI.getBranches - Sending`);
     try {
       const response = await returnsAxios.get('/branches');
-      console.log(`[${new Date().toISOString()}] returnsAPI.getBranches - Response:`, response);
-      return response;
+      console.log(`[${new Date().toISOString()}] returnsAPI.getBranches - Response:`, response.data);
+      return response.data; // Return response.data to match original structure
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] returnsAPI.getBranches - Error:`, error);
       throw error;
@@ -160,6 +169,7 @@ export const returnsAPI = {
       quantity: number;
       reason: string;
       reasonEn: string;
+      price: number;
     }>;
     notes?: string;
   }) => {
@@ -190,21 +200,30 @@ export const returnsAPI = {
         console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Missing reason at index ${i}`);
         throw new Error(isRtl ? `سبب الإرجاع مفقود في العنصر ${i + 1}` : `Missing return reason at item ${i + 1}`);
       }
+      if (!item.reasonEn) {
+        console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Missing reasonEn at index ${i}`);
+        throw new Error(isRtl ? `سبب الإرجاع بالإنجليزية مفقود في العنصر ${i + 1}` : `Missing English return reason at item ${i + 1}`);
+      }
+      if (typeof item.price !== 'number' || item.price < 0) {
+        console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Invalid price at index ${i}:`, item.price);
+        throw new Error(isRtl ? `السعر غير صالح في العنصر ${i + 1}` : `Invalid price at item ${i + 1}`);
+      }
     }
 
     try {
       const response = await returnsAxios.post('/returns', {
         branchId: data.branchId,
         items: data.items.map((item) => ({
-          productId: item.productId,
+          productId: item.productId, // Use productId instead of product
           quantity: Number(item.quantity),
           reason: item.reason.trim(),
           reasonEn: item.reasonEn.trim(),
+          price: item.price,
         })),
-        notes: data.notes ? data.notes.trim() : undefined,
+        notes: data.notes ? data.notes.trim() : '', // Ensure notes is a string
       });
-      console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Response:`, response);
-      return response;
+      console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Response:`, response.data);
+      return response.data; // Return response.data to match original structure
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Error:`, {
         message: error.message,
@@ -215,14 +234,14 @@ export const returnsAPI = {
       let errorMessage = error.message || (isRtl ? 'خطأ في إنشاء طلب الإرجاع' : 'Error creating return request');
       if (error.status === 400) {
         errorMessage = error.errors?.length
-          ? error.errors.map(err => err.msg).join(', ')
+          ? error.errors.map((err: any) => err.msg).join(', ')
           : error.response?.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
       } else if (error.status === 403) {
         errorMessage = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
       } else if (error.status === 404) {
         errorMessage = error.response?.data?.message || (isRtl ? 'الفرع أو المنتج غير موجود' : 'Branch or product not found');
       } else if (error.status === 422) {
-        errorMessage = error.response?.data?.message || (isRtl ? 'الكمية غير كافية' : 'Insufficient quantity');
+        errorMessage = error.response?.data?.message || (isRtl ? 'الكمية غير كافية أو تتجاوز المسلم' : 'Insufficient quantity or exceeds delivered quantity');
       } else if (error.code === 'ECONNABORTED') {
         errorMessage = isRtl ? 'انتهت مهلة الطلب، حاول مرة أخرى' : 'Request timed out, please try again';
       } else if (!error.response) {
@@ -253,10 +272,10 @@ export const returnsAPI = {
     try {
       const response = await returnsAxios.put(`/returns/${returnId}`, {
         status: data.status,
-        reviewNotes: data.reviewNotes ? data.reviewNotes.trim() : undefined,
+        reviewNotes: data.reviewNotes ? data.reviewNotes.trim() : '', // Ensure reviewNotes is a string
       });
-      console.log(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Response:`, response);
-      return response;
+      console.log(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Response:`, response.data);
+      return response.data; // Return response.data to match original structure
     } catch (error: any) {
       console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Error:`, {
         message: error.message,
@@ -273,5 +292,6 @@ export const returnsAPI = {
     }
   },
 };
+
 
 export default returnsAPI;
