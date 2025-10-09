@@ -57,7 +57,6 @@ interface ReturnItem {
   reason: string;
   reasonEn: string;
   maxQuantity: number;
-  price: number; // Added to match backend schema
 }
 
 interface ReturnFormState {
@@ -162,7 +161,6 @@ const translations = {
       returnApproved: 'تمت الموافقة على طلب الإرجاع',
       returnRejected: 'تم رفض طلب الإرجاع',
       returnCreated: 'تم إنشاء طلب الإرجاع بنجاح',
-      lowStockWarning: 'تحذير: المخزون منخفض للمنتج {productName}',
     },
   },
   en: {
@@ -236,7 +234,6 @@ const translations = {
       returnApproved: 'Return request approved',
       returnRejected: 'Return request rejected',
       returnCreated: 'Return request created successfully',
-      lowStockWarning: 'Warning: Low stock for product {productName}',
     },
   },
 };
@@ -274,7 +271,7 @@ const QuantityInput = ({
     <div className="flex items-center gap-2">
       <button
         onClick={onDecrement}
-        className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
+        className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center"
         aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
         disabled={value <= 1}
       >
@@ -286,12 +283,13 @@ const QuantityInput = ({
         onChange={(e) => handleChange(e.target.value)}
         max={max}
         min={1}
-        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm min-w-[2.75rem] transition-all duration-200 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm min-w-[2.75rem] transition-all duration-200"
+        style={{ appearance: 'none' }}
         aria-label={isRtl ? 'الكمية' : 'Quantity'}
       />
       <button
         onClick={onIncrement}
-        className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
+        className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center"
         aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
         disabled={max !== undefined && value >= max}
       >
@@ -377,20 +375,19 @@ export const BranchInventory: React.FC = () => {
     queryKey: ['inventory', user?.branchId, debouncedSearchQuery, filterStatus, filterDepartment, currentPage, language],
     queryFn: async () => {
       if (!user?.branchId) throw new Error(t.errors.noBranch);
-      const response = await inventoryAPI.getByBranch(user.branchId, {
-        search: debouncedSearchQuery,
-        status: filterStatus,
-        department: filterDepartment,
-        page: currentPage,
-        limit: ITEMS_PER_PAGE,
-      });
-      return response.data.inventory;
+      const response = await inventoryAPI.getByBranch(user.branchId);
+      return response;
     },
     enabled: !!user?.branchId,
     staleTime: 5 * 60 * 1000,
     cacheTime: 10 * 60 * 1000,
-    select: (data) =>
-      data.map((item: InventoryItem) => ({
+    select: (response) => {
+      const inventoryData = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.data)
+        ? response.data
+        : response?.data?.inventory || [];
+      return inventoryData.map((item: InventoryItem) => ({
         ...item,
         product: item.product
           ? {
@@ -417,7 +414,8 @@ export const BranchInventory: React.FC = () => {
             : item.currentStock >= item.maxStockLevel
             ? InventoryStatus.FULL
             : InventoryStatus.NORMAL,
-      })),
+      }));
+    },
     onError: (err) => {
       toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
     },
@@ -429,7 +427,7 @@ export const BranchInventory: React.FC = () => {
     queryFn: async () => {
       if (!selectedProductId || !user?.branchId) throw new Error(t.errors.noBranch);
       const response = await inventoryAPI.getHistory({ productId: selectedProductId, branchId: user.branchId });
-      return response.data.history;
+      return response;
     },
     enabled: isDetailsModalOpen && !!selectedProductId && !!user?.branchId,
     staleTime: 5 * 60 * 1000,
@@ -458,47 +456,16 @@ export const BranchInventory: React.FC = () => {
   useEffect(() => {
     if (!socket || !user?.branchId) return;
 
-    const handleInventoryUpdated = ({ branchId, productId, quantity }: { branchId: string; productId: string; quantity: number }) => {
+    const handleInventoryUpdated = ({ branchId }: { branchId: string }) => {
       if (branchId === user.branchId) {
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
-        toast.info(t.notifications.returnCreated, { position: isRtl ? 'top-right' : 'top-left' });
-      }
-    };
-
-    const handleLowStockWarning = ({
-      branchId,
-      productId,
-      productName,
-      currentStock,
-    }: {
-      branchId: string;
-      productId: string;
-      productName: string;
-      currentStock: number;
-    }) => {
-      if (branchId === user.branchId) {
-        const audio = new Audio('/sounds/low-stock-warning.mp3');
-        audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
-        addNotification({
-          _id: crypto.randomUUID(),
-          type: 'warning',
-          message: t.notifications.lowStockWarning.replace('{productName}', productName),
-          data: { productId, currentStock, eventId: crypto.randomUUID() },
-          read: false,
-          createdAt: new Date().toISOString(),
-          sound: '/sounds/low-stock-warning.mp3',
-          vibrate: [200, 100, 200],
-        });
-        toast.warn(t.notifications.lowStockWarning.replace('{productName}', productName), {
-          position: isRtl ? 'top-right' : 'top-left',
-        });
       }
     };
 
     const handleReturnStatusUpdated = ({ branchId, returnId, status }: { branchId: string; returnId: string; status: string }) => {
       if (branchId === user.branchId) {
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
-        const audio = new Audio('/sounds/notification.mp3');
+        const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
         audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
         addNotification({
           _id: crypto.randomUUID(),
@@ -507,7 +474,7 @@ export const BranchInventory: React.FC = () => {
           data: { returnId, eventId: crypto.randomUUID() },
           read: false,
           createdAt: new Date().toISOString(),
-          sound: '/sounds/notification.mp3',
+          sound: 'https://eljoodia-client.vercel.app/sounds/notification.mp3',
           vibrate: [200, 100, 200],
         });
         toast[status === 'approved' ? 'success' : 'error'](
@@ -518,12 +485,10 @@ export const BranchInventory: React.FC = () => {
     };
 
     socket.on('inventoryUpdated', handleInventoryUpdated);
-    socket.on('lowStockWarning', handleLowStockWarning);
     socket.on('returnStatusUpdated', handleReturnStatusUpdated);
 
     return () => {
       socket.off('inventoryUpdated', handleInventoryUpdated);
-      socket.off('lowStockWarning', handleLowStockWarning);
       socket.off('returnStatusUpdated', handleReturnStatusUpdated);
     };
   }, [socket, user, queryClient, addNotification, t, isRtl]);
@@ -630,13 +595,12 @@ export const BranchInventory: React.FC = () => {
             reason: '',
             reasonEn: '',
             maxQuantity: item.currentStock,
-            price: item.product.price || 0, // Ensure price is included
           },
         });
       } else {
         dispatchReturnForm({
           type: 'ADD_ITEM',
-          payload: { productId: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0, price: 0 },
+          payload: { productId: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0 },
         });
       }
       setReturnErrors({});
@@ -661,14 +625,14 @@ export const BranchInventory: React.FC = () => {
   const addItemToForm = useCallback(() => {
     dispatchReturnForm({
       type: 'ADD_ITEM',
-      payload: { productId: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0, price: 0 },
+      payload: { productId: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0 },
     });
   }, []);
 
   const updateItemInForm = useCallback(
     (index: number, field: keyof ReturnItem, value: string | number) => {
       if (field === 'quantity' && typeof value === 'string') {
-        const numValue = parseInt(value, 10);
+        const numValue = parseInt(value);
         if (isNaN(numValue) || numValue < 1) return;
         value = numValue;
       }
@@ -717,10 +681,6 @@ export const BranchInventory: React.FC = () => {
       dispatchReturnForm({
         type: 'UPDATE_ITEM',
         payload: { index, field: 'quantity', value: 1 },
-      });
-      dispatchReturnForm({
-        type: 'UPDATE_ITEM',
-        payload: { index, field: 'price', value: inventoryItem.product?.price || 0 },
       });
     },
     [inventoryData, t]
@@ -789,13 +749,13 @@ export const BranchInventory: React.FC = () => {
       const data = {
         branchId: user.branchId,
         items: returnForm.items.map((item) => ({
-          productId: item.productId, // Use productId instead of product
-          quantity: Number(item.quantity),
-          reason: item.reason.trim(),
-          reasonEn: item.reasonEn.trim(),
-          price: item.price, // Include price as required by backend
+          productId: item.productId,
+          quantity: item.quantity,
+          reason: item.reason,
+          reasonEn: item.reasonEn,
+          price: 0, // Backend requires price; set to 0 as per schema
         })),
-        notes: returnForm.notes.trim() || '', // Ensure notes is a string
+        notes: returnForm.notes || undefined,
       };
       for (const [index, item] of data.items.entries()) {
         if (!isValidObjectId(item.productId)) {
@@ -873,7 +833,7 @@ export const BranchInventory: React.FC = () => {
   const errorMessage = inventoryError?.message || '';
 
   return (
-    <div className="mx-auto px-4 py-8 min-h-screen bg-gray-50">
+    <div className="mx-auto px-4 py-8 min-h-screen">
       <div className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <Package className="w-7 h-7 text-amber-600" />
@@ -913,16 +873,13 @@ export const BranchInventory: React.FC = () => {
       <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="lg:col-span-1">
-            <div className="relative">
-              <Search className="absolute top-1/2 transform -translate-y-1/2 left-3 w-5 h-5 text-gray-400" />
-              <ProductSearchInput
-                value={searchInput}
-                onChange={handleSearchChange}
-                placeholder={t.search}
-                ariaLabel={t.search}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
-              />
-            </div>
+            <ProductSearchInput
+              value={searchInput}
+              onChange={handleSearchChange}
+              placeholder={t.search}
+              ariaLabel={t.search}
+              className="w-full"
+            />
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 lg:col-span-1">
             <ProductDropdown
@@ -1009,7 +966,7 @@ export const BranchInventory: React.FC = () => {
                       <p className="text-sm text-gray-600">{t.pendingStock}: {item.pendingReturnStock}</p>
                     )}
                     {item.damagedStock > 0 && (
-                      <p className="text-sm text-red-600">{t.damagedStock}: {item.damagedStock}</p>
+                      <p className="text-sm text-red-300">{t.damagedStock}: {item.damagedStock}</p>
                     )}
                     <p className="text-sm text-gray-600">{t.minStock}: {item.minStockLevel}</p>
                     <p className="text-sm text-gray-600">{t.maxStock}: {item.maxStockLevel}</p>
@@ -1057,29 +1014,31 @@ export const BranchInventory: React.FC = () => {
         </div>
       )}
 
-      {totalInventoryPages > 1 && (
-        <div className="mt-6 flex items-center justify-center gap-3">
-          <button
-            onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-            disabled={currentPage === 1}
-            aria-label={isRtl ? 'الصفحة السابقة' : 'Previous page'}
-          >
-            {isRtl ? 'السابق' : 'Previous'}
-          </button>
-          <span className="text-gray-700 font-medium">
-            {isRtl ? `الصفحة ${currentPage} من ${totalInventoryPages}` : `Page ${currentPage} of ${totalInventoryPages}`}
-          </span>
-          <button
-            onClick={() => setCurrentPage(Math.min(currentPage + 1, totalInventoryPages))}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-            disabled={currentPage === totalInventoryPages}
-            aria-label={isRtl ? 'الصفحة التالية' : 'Next page'}
-          >
-            {isRtl ? 'التالي' : 'Next'}
-          </button>
-        </div>
-      )}
+      <div className="mt-6">
+        {totalInventoryPages > 1 && (
+          <div className={`flex items-center justify-center gap-3 ${isRtl ? 'flex-row' : ''}`}>
+            <button
+              onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+              disabled={currentPage === 1}
+              aria-label={isRtl ? 'الصفحة السابقة' : 'Previous page'}
+            >
+              {isRtl ? 'السابق' : 'Previous'}
+            </button>
+            <span className="text-gray-700 font-medium">
+              {isRtl ? `الصفحة ${currentPage} من ${totalInventoryPages}` : `Page ${currentPage} of ${totalInventoryPages}`}
+            </span>
+            <button
+              onClick={() => setCurrentPage(Math.min(currentPage + 1, totalInventoryPages))}
+              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+              disabled={currentPage === totalInventoryPages}
+              aria-label={isRtl ? 'الصفحة التالية' : 'Next page'}
+            >
+              {isRtl ? 'التالي' : 'Next'}
+            </button>
+          </div>
+        )}
+      </div>
 
       <motion.div
         initial={{ opacity: 0 }}
@@ -1112,7 +1071,7 @@ export const BranchInventory: React.FC = () => {
           <div className="space-y-4">
             {selectedItem?.product && (
               <p className="text-sm text-gray-600">
-                {t.items}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
+                {t.products?.title || 'Product'}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
               </p>
             )}
             <div>
