@@ -21,7 +21,7 @@ axiosRetry(returnsAxios, {
 returnsAxios.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-    const language = localStorage.getItem('language') || 'ar'; // Default to 'ar' for consistency with backend
+    const language = localStorage.getItem('language') || 'ar';
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -49,13 +49,16 @@ returnsAxios.interceptors.response.use(
     const isRtl = language === 'ar';
 
     let message = error.response?.data?.message || error.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
+    const errors = error.response?.data?.errors; // Capture detailed validation errors
 
     if (error.code === 'ECONNABORTED') {
       message = isRtl ? 'انتهت مهلة الطلب، حاول مرة أخرى' : 'Request timed out, please try again';
     } else if (!error.response) {
       message = isRtl ? 'فشل الاتصال بالخادم' : 'Failed to connect to server';
     } else if (error.response.status === 400) {
-      message = error.response.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
+      message = errors?.length
+        ? errors.map(err => err.msg).join(', ')
+        : error.response.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
     } else if (error.response.status === 403) {
       message = error.response.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
     } else if (error.response.status === 404) {
@@ -108,7 +111,7 @@ returnsAxios.interceptors.response.use(
     }
 
     toast.error(message, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000, pauseOnFocusLoss: true });
-    return Promise.reject({ message, status: error.response?.status });
+    return Promise.reject({ message, status: error.response?.status, errors });
   }
 );
 
@@ -185,7 +188,7 @@ export const returnsAPI = {
       const response = await returnsAxios.post('/returns', {
         branchId: data.branchId,
         items: data.items.map((item) => ({
-          productId: item.productId, // Changed from 'product' to 'productId'
+          productId: item.productId,
           quantity: Number(item.quantity),
           reason: item.reason.trim(),
           reasonEn: item.reasonEn.trim(),
@@ -199,11 +202,14 @@ export const returnsAPI = {
         message: error.message,
         status: error.status,
         response: error.response,
+        errors: error.errors,
       });
 
       let errorMessage = error.message || (isRtl ? 'خطأ في إنشاء طلب الإرجاع' : 'Error creating return request');
       if (error.status === 400) {
-        errorMessage = error.response.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
+        errorMessage = error.errors?.length
+          ? error.errors.map(err => err.msg).join(', ')
+          : error.response.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
       } else if (error.status === 403) {
         errorMessage = error.response.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
       } else if (error.status === 404) {
