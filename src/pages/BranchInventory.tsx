@@ -38,6 +38,7 @@ interface InventoryItem {
     code: string;
     unit: string;
     unitEn: string;
+    price: number;
     department: { _id: string; name: string; nameEn: string } | null;
     displayName: string;
     displayUnit: string;
@@ -57,7 +58,7 @@ interface ReturnItem {
   reason: string;
   reasonEn: string;
   maxQuantity: number;
-  price: number; // Added to match backend schema
+  price: number;
 }
 
 interface ReturnFormState {
@@ -87,6 +88,7 @@ interface AvailableItem {
   unit: string;
   departmentName: string;
   stock: number;
+  price: number;
 }
 
 // Translations
@@ -157,6 +159,7 @@ const translations = {
       insufficientQuantity: 'الكمية غير كافية للمنتج في المخزون',
       branchNotFound: 'الفرع غير موجود',
       productNotFound: 'المنتج غير موجود',
+      invalidResponse: 'استجابة المخزون غير صالحة',
     },
     notifications: {
       returnApproved: 'تمت الموافقة على طلب الإرجاع',
@@ -231,6 +234,7 @@ const translations = {
       insufficientQuantity: 'Insufficient quantity for the product in inventory',
       branchNotFound: 'Branch not found',
       productNotFound: 'Product not found',
+      invalidResponse: 'Invalid inventory response',
     },
     notifications: {
       returnApproved: 'Return request approved',
@@ -371,7 +375,7 @@ export const BranchInventory: React.FC = () => {
 
   // Inventory Query
   const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError, refetch: refetchInventory } = useQuery<
-    InventoryItem[],
+    { items: InventoryItem[]; total: number; page: number; limit: number },
     Error
   >({
     queryKey: ['inventory', user?.branchId, debouncedSearchQuery, filterStatus, filterDepartment, currentPage, language],
@@ -384,13 +388,14 @@ export const BranchInventory: React.FC = () => {
         page: currentPage,
         limit: ITEMS_PER_PAGE,
       });
-      return response.data.inventory;
+      console.log(`[${new Date().toISOString()}] Inventory query response:`, response);
+      return response;
     },
     enabled: !!user?.branchId,
     staleTime: 5 * 60 * 1000,
     cacheTime: 10 * 60 * 1000,
-    select: (data) =>
-      data.map((item: InventoryItem) => ({
+    select: (data) => ({
+      items: data.items.map((item: InventoryItem) => ({
         ...item,
         product: item.product
           ? {
@@ -418,7 +423,12 @@ export const BranchInventory: React.FC = () => {
             ? InventoryStatus.FULL
             : InventoryStatus.NORMAL,
       })),
+      total: data.total,
+      page: data.page,
+      limit: data.limit,
+    }),
     onError: (err) => {
+      console.error(`[${new Date().toISOString()}] Inventory query error:`, err);
       toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
     },
   });
@@ -429,7 +439,8 @@ export const BranchInventory: React.FC = () => {
     queryFn: async () => {
       if (!selectedProductId || !user?.branchId) throw new Error(t.errors.noBranch);
       const response = await inventoryAPI.getHistory({ productId: selectedProductId, branchId: user.branchId });
-      return response.data.history;
+      console.log(`[${new Date().toISOString()}] Product history response:`, response);
+      return response.history;
     },
     enabled: isDetailsModalOpen && !!selectedProductId && !!user?.branchId,
     staleTime: 5 * 60 * 1000,
@@ -437,8 +448,8 @@ export const BranchInventory: React.FC = () => {
 
   // Update available items
   useEffect(() => {
-    if (inventoryData) {
-      const items: AvailableItem[] = inventoryData
+    if (inventoryData?.items) {
+      const items: AvailableItem[] = inventoryData.items
         .filter((item) => item.currentStock > 0 && item.product)
         .map((item) => ({
           productId: item.product!._id,
@@ -449,6 +460,7 @@ export const BranchInventory: React.FC = () => {
             ? item.product!.department?.name || 'غير معروف'
             : item.product!.department?.nameEn || item.product!.department?.name || 'Unknown',
           stock: item.currentStock,
+          price: item.product!.price || 0,
         }));
       setAvailableItems(items);
     }
@@ -532,7 +544,7 @@ export const BranchInventory: React.FC = () => {
   const departmentOptions = useMemo(() => {
     const depts = new Set<string>();
     const deptMap: Record<string, { _id: string; name: string }> = {};
-    inventoryData?.forEach((item) => {
+    inventoryData?.items?.forEach((item) => {
       if (item.product?.department?._id) {
         const deptKey = item.product.department._id;
         if (!deptMap[deptKey]) {
@@ -592,7 +604,7 @@ export const BranchInventory: React.FC = () => {
   // Filtered and paginated inventory
   const filteredInventory = useMemo(
     () =>
-      (inventoryData || []).filter(
+      (inventoryData?.items || []).filter(
         (item) =>
           item.product &&
           (!filterStatus || item.status === filterStatus) &&
@@ -609,773 +621,662 @@ export const BranchInventory: React.FC = () => {
     [filteredInventory, currentPage]
   );
 
-  const totalInventoryPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
+  const totalInventoryPages = Math.ceil((filteredInventory.length || 0) / ITEMS_PER_PAGE);
 
-  // Handlers
-  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchInput(e.target.value);
-    setCurrentPage(1);
-  }, []);
+// Create Return Mutation
+const createReturnMutation = useMutation({
+  mutationFn: async () => {
+    if (!user?.branchId) throw new Error(t.errors.noBranch);
+    if (returnForm.items.length === 0) throw new Error(t.errors.noItemSelected);
 
-  const handleOpenReturnModal = useCallback((item?: InventoryItem) => {
-    refetchInventory().then(() => {
-      setSelectedItem(item || null);
-      dispatchReturnForm({ type: 'RESET' });
-      if (item?.product) {
-        dispatchReturnForm({
-          type: 'ADD_ITEM',
-          payload: {
-            productId: item.product._id,
-            quantity: 1,
-            reason: '',
-            reasonEn: '',
-            maxQuantity: item.currentStock,
-            price: item.product.price || 0, // Ensure price is included
-          },
-        });
-      } else {
-        dispatchReturnForm({
-          type: 'ADD_ITEM',
-          payload: { productId: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0, price: 0 },
-        });
-      }
-      setReturnErrors({});
-      setIsReturnModalOpen(true);
-    });
-  }, [refetchInventory]);
-
-  const handleOpenEditModal = useCallback((item: InventoryItem) => {
-    setSelectedItem(item);
-    setEditForm({ minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
-    setEditErrors({});
-    setIsEditModalOpen(true);
-  }, []);
-
-  const handleOpenDetailsModal = useCallback((item: InventoryItem) => {
-    if (item.product) {
-      setSelectedProductId(item.product._id);
-      setIsDetailsModalOpen(true);
-    }
-  }, []);
-
-  const addItemToForm = useCallback(() => {
-    dispatchReturnForm({
-      type: 'ADD_ITEM',
-      payload: { productId: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0, price: 0 },
-    });
-  }, []);
-
-  const updateItemInForm = useCallback(
-    (index: number, field: keyof ReturnItem, value: string | number) => {
-      if (field === 'quantity' && typeof value === 'string') {
-        const numValue = parseInt(value, 10);
-        if (isNaN(numValue) || numValue < 1) return;
-        value = numValue;
-      }
-      if (field === 'reason') {
-        const selectedReason = reasonOptions.find((opt) => opt.value === value);
-        dispatchReturnForm({
-          type: 'UPDATE_ITEM',
-          payload: { index, field: 'reason', value },
-        });
-        dispatchReturnForm({
-          type: 'UPDATE_ITEM',
-          payload: { index, field: 'reasonEn', value: selectedReason?.enValue || '' },
-        });
-      } else {
-        dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
-      }
-    },
-    [reasonOptions]
-  );
-
-  const handleProductChange = useCallback(
-    (index: number, productId: string) => {
-      if (!isValidObjectId(productId)) {
-        setReturnErrors((prev) => ({
-          ...prev,
-          [`item_${index}_productId`]: t.errors.invalidProductId,
-        }));
-        return;
-      }
-      const inventoryItem = inventoryData?.find((inv) => inv.product?._id === productId);
-      if (!inventoryItem) {
-        setReturnErrors((prev) => ({
-          ...prev,
-          [`item_${index}_productId`]: t.errors.productNotFound,
-        }));
-        return;
-      }
-      dispatchReturnForm({
-        type: 'UPDATE_ITEM',
-        payload: { index, field: 'productId', value: productId },
-      });
-      dispatchReturnForm({
-        type: 'UPDATE_ITEM',
-        payload: { index, field: 'maxQuantity', value: inventoryItem.currentStock },
-      });
-      dispatchReturnForm({
-        type: 'UPDATE_ITEM',
-        payload: { index, field: 'quantity', value: 1 },
-      });
-      dispatchReturnForm({
-        type: 'UPDATE_ITEM',
-        payload: { index, field: 'price', value: inventoryItem.product?.price || 0 },
-      });
-    },
-    [inventoryData, t]
-  );
-
-  const removeItemFromForm = useCallback((index: number) => {
-    dispatchReturnForm({ type: 'REMOVE_ITEM', payload: index });
-  }, []);
-
-  const validateReturnForm = useCallback(() => {
     const errors: Record<string, string> = {};
-    if (!user?.branchId || !isValidObjectId(user.branchId)) {
-      errors.form = t.errors.noBranch;
-    }
-    if (returnForm.items.length === 0) {
-      errors.items = t.errors.required.replace('{field}', t.items);
-    }
     returnForm.items.forEach((item, index) => {
-      if (!item.productId) {
-        errors[`item_${index}_productId`] = t.errors.required.replace('{field}', t.items);
-      } else if (!isValidObjectId(item.productId)) {
-        errors[`item_${index}_productId`] = t.errors.invalidProductId;
+      if (!item.productId || !isValidObjectId(item.productId)) {
+        errors[`items[${index}].productId`] = t.errors.invalidProductId;
+      }
+      if (item.quantity < 1) {
+        errors[`items[${index}].quantity`] = t.errors.invalidQuantityMax.replace('{max}', item.maxQuantity.toString());
       }
       if (!item.reason) {
-        errors[`item_${index}_reason`] = t.errors.required.replace('{field}', t.reason);
+        errors[`items[${index}].reason`] = t.errors.required.replace('{field}', t.reason);
       }
       if (!item.reasonEn) {
-        errors[`item_${index}_reasonEn`] = t.errors.required.replace('{field}', t.reason);
+        errors[`items[${index}].reasonEn`] = t.errors.required.replace('{field}', t.reason);
       }
-      const reasonMap = {
-        [ReturnReason.DAMAGED_AR]: ReturnReason.DAMAGED_EN,
-        [ReturnReason.WRONG_ITEM_AR]: ReturnReason.WRONG_ITEM_EN,
-        [ReturnReason.EXCESS_QUANTITY_AR]: ReturnReason.EXCESS_QUANTITY_EN,
-        [ReturnReason.OTHER_AR]: ReturnReason.OTHER_EN,
-      };
-      if (item.reason && reasonMap[item.reason] !== item.reasonEn) {
-        errors[`item_${index}_reasonEn`] = isRtl ? 'سبب الإرجاع بالإنجليزية غير متطابق' : 'English reason does not match Arabic reason';
-      }
-      if (item.quantity < 1 || item.quantity > item.maxQuantity || isNaN(item.quantity)) {
-        errors[`item_${index}_quantity`] = t.errors.invalidQuantityMax.replace('{max}', item.maxQuantity.toString());
-      }
-      const inventoryItem = inventoryData?.find((inv) => inv.product?._id === item.productId);
-      if (!inventoryItem) {
-        errors[`item_${index}_productId`] = t.errors.productNotFound;
-      } else if (item.quantity > inventoryItem.currentStock) {
-        errors[`item_${index}_quantity`] = t.errors.insufficientQuantity;
+      if (typeof item.price !== 'number' || item.price < 0) {
+        errors[`items[${index}].price`] = t.errors.nonNegative.replace('{field}', 'Price');
       }
     });
-    setReturnErrors(errors);
-    return Object.keys(errors).length === 0;
-  }, [returnForm, t, inventoryData, user, isRtl]);
 
-  const validateEditForm = useCallback(() => {
-    const errors: Record<string, string> = {};
-    if (editForm.minStockLevel < 0) errors.minStockLevel = t.errors.nonNegative.replace('{field}', t.minStock);
-    if (editForm.maxStockLevel < 0) errors.maxStockLevel = t.errors.nonNegative.replace('{field}', t.maxStock);
-    if (editForm.maxStockLevel <= editForm.minStockLevel) errors.maxStockLevel = t.errors.maxGreaterMin;
+    if (Object.keys(errors).length > 0) {
+      setReturnErrors(errors);
+      throw new Error(t.errors.invalidForm);
+    }
+
+    return await returnsAPI.createReturn({
+      branchId: user.branchId,
+      items: returnForm.items.map((item) => ({
+        productId: item.productId,
+        quantity: Number(item.quantity),
+        reason: item.reason,
+        reasonEn: item.reasonEn,
+        price: item.price,
+      })),
+      notes: returnForm.notes || '',
+    });
+  },
+  onSuccess: () => {
+    dispatchReturnForm({ type: 'RESET' });
+    setIsReturnModalOpen(false);
+    setReturnErrors({});
+    queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    toast.success(t.notifications.returnCreated, { position: isRtl ? 'top-right' : 'top-left' });
+  },
+  onError: (error: any) => {
+    console.error(`[${new Date().toISOString()}] Create return error:`, error);
+    toast.error(error.message || t.errors.createReturn, { position: isRtl ? 'top-right' : 'top-left' });
+  },
+});
+
+// Update Inventory Mutation
+const updateInventoryMutation = useMutation({
+  mutationFn: async () => {
+    if (!selectedItem?._id || !user?.branchId) throw new Error(t.errors.noBranch);
+    if (editForm.minStockLevel < 0 || editForm.maxStockLevel < 0) {
+      throw new Error(t.errors.nonNegative.replace('{field}', t.minStock));
+    }
+    if (editForm.maxStockLevel <= editForm.minStockLevel) {
+      throw new Error(t.errors.maxGreaterMin);
+    }
+    return await inventoryAPI.updateStock(selectedItem._id, {
+      minStockLevel: editForm.minStockLevel,
+      maxStockLevel: editForm.maxStockLevel,
+      branchId: user.branchId,
+    });
+  },
+  onSuccess: () => {
+    setIsEditModalOpen(false);
+    setEditErrors({});
+    queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    toast.success(t.editStockLimits, { position: isRtl ? 'top-right' : 'top-left' });
+  },
+  onError: (error: any) => {
+    console.error(`[${new Date().toISOString()}] Update inventory error:`, error);
+    toast.error(error.message || t.errors.updateInventory, { position: isRtl ? 'top-right' : 'top-left' });
+  },
+});
+
+// Handlers
+const handleOpenReturnModal = () => {
+  setIsReturnModalOpen(true);
+  dispatchReturnForm({ type: 'RESET' });
+};
+
+const handleOpenEditModal = (item: InventoryItem) => {
+  setSelectedItem(item);
+  setEditForm({
+    minStockLevel: item.minStockLevel,
+    maxStockLevel: item.maxStockLevel,
+  });
+  setIsEditModalOpen(true);
+};
+
+const handleOpenDetailsModal = (item: InventoryItem) => {
+  setSelectedItem(item);
+  setSelectedProductId(item.product?._id || '');
+  setIsDetailsModalOpen(true);
+};
+
+const handleAddItem = () => {
+  const selectedProduct = availableItems.find((item) => item.productId === selectedProductId);
+  if (!selectedProductId || !selectedProduct) {
+    setReturnErrors({ selectedProduct: t.errors.noItemSelected });
+    return;
+  }
+  dispatchReturnForm({
+    type: 'ADD_ITEM',
+    payload: {
+      productId: selectedProductId,
+      quantity: 1,
+      reason: '',
+      reasonEn: '',
+      maxQuantity: selectedProduct.available,
+      price: selectedProduct.price,
+    },
+  });
+  setSelectedProductId('');
+  setReturnErrors({});
+};
+
+const handleUpdateItem = (index: number, field: keyof ReturnItem, value: string | number) => {
+  dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
+  setReturnErrors((prev) => {
+    const newErrors = { ...prev };
+    delete newErrors[`items[${index}].${field}`];
+    return newErrors;
+  });
+};
+
+const handleReasonChange = (index: number, value: string) => {
+  const selectedReason = reasonOptions.find((opt) => opt.value === value);
+  handleUpdateItem(index, 'reason', value);
+  handleUpdateItem(index, 'reasonEn', selectedReason?.enValue || '');
+};
+
+const handleRemoveItem = (index: number) => {
+  dispatchReturnForm({ type: 'REMOVE_ITEM', payload: index });
+  setReturnErrors((prev) => {
+    const newErrors = { ...prev };
+    Object.keys(newErrors).forEach((key) => {
+      if (key.startsWith(`items[${index}]`)) {
+        delete newErrors[key];
+      }
+    });
+    return newErrors;
+  });
+};
+
+const handleSubmitReturn = () => {
+  createReturnMutation.mutate();
+};
+
+const handleSubmitEdit = () => {
+  const errors: Record<string, string> = {};
+  if (editForm.minStockLevel < 0) {
+    errors.minStockLevel = t.errors.nonNegative.replace('{field}', t.minStock);
+  }
+  if (editForm.maxStockLevel < 0) {
+    errors.maxStockLevel = t.errors.nonNegative.replace('{field}', t.maxStock);
+  }
+  if (editForm.maxStockLevel <= editForm.minStockLevel) {
+    errors.maxStockLevel = t.errors.maxGreaterMin;
+  }
+  if (Object.keys(errors).length > 0) {
     setEditErrors(errors);
-    return Object.keys(errors).length === 0;
-  }, [editForm, t]);
+    return;
+  }
+  updateInventoryMutation.mutate();
+};
 
-  const createReturnMutation = useMutation<{ returnId: string }, Error, void>({
-    mutationFn: async () => {
-      if (!validateReturnForm()) throw new Error(t.errors.invalidForm);
-      if (!user?.branchId) throw new Error(t.errors.noBranch);
-      const data = {
-        branchId: user.branchId,
-        items: returnForm.items.map((item) => ({
-          productId: item.productId, // Use productId instead of product
-          quantity: Number(item.quantity),
-          reason: item.reason.trim(),
-          reasonEn: item.reasonEn.trim(),
-          price: item.price, // Include price as required by backend
-        })),
-        notes: returnForm.notes.trim() || '', // Ensure notes is a string
-      };
-      for (const [index, item] of data.items.entries()) {
-        if (!isValidObjectId(item.productId)) {
-          throw new Error(t.errors.invalidProductId + ` at item ${index + 1}`);
-        }
-      }
-      const response = await returnsAPI.createReturn(data);
-      return { returnId: response?.returnRequest?._id || crypto.randomUUID() };
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      setIsReturnModalOpen(false);
-      dispatchReturnForm({ type: 'RESET' });
-      setReturnErrors({});
-      setSelectedItem(null);
-      toast.success(t.notifications.returnCreated, { position: isRtl ? 'top-right' : 'top-left' });
-      socket?.emit('returnCreated', {
-        branchId: user?.branchId,
-        returnId: data.returnId,
-        status: 'pending_approval',
-        eventId: crypto.randomUUID(),
-      });
-    },
-    onError: (err) => {
-      let errorMessage = err.message || t.errors.createReturn;
-      if (err.message.includes('الفرع غير موجود') || err.message.includes('Branch not found')) {
-        errorMessage = t.errors.noBranch;
-      } else if (err.message.includes('الكمية غير كافية') || err.message.includes('Insufficient quantity')) {
-        errorMessage = t.errors.insufficientQuantity;
-      } else if (err.message.includes('بيانات العنصر غير صالحة') || err.message.includes('Invalid item data')) {
-        errorMessage = t.errors.invalidForm;
-      } else if (err.message.includes('معرف المنتج غير صالح') || err.message.includes('Invalid product ID')) {
-        errorMessage = t.errors.invalidProductId;
-      } else if (err.message.includes('المنتج غير موجود') || err.message.includes('Product not found')) {
-        errorMessage = t.errors.productNotFound;
-      }
-      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
-      setReturnErrors({ form: errorMessage });
-    },
-  });
+// Pagination Handlers
+const handlePageChange = (page: number) => {
+  setCurrentPage(page);
+};
 
-  const updateInventoryMutation = useMutation<void, Error, void>({
-    mutationFn: async () => {
-      if (!validateEditForm()) throw new Error(t.errors.invalidForm);
-      if (!selectedItem) throw new Error(t.errors.noItemSelected);
-      if (!user?.branchId && !selectedItem.branch?._id) throw new Error(t.errors.noBranch);
-      await inventoryAPI.updateStock(selectedItem._id, {
-        minStockLevel: editForm.minStockLevel,
-        maxStockLevel: editForm.maxStockLevel,
-        branchId: selectedItem.branch?._id || user?.branchId,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      setIsEditModalOpen(false);
-      setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
-      setEditErrors({});
-      setSelectedItem(null);
-      toast.success(t.save, { position: isRtl ? 'top-right' : 'top-left' });
-      socket?.emit('inventoryUpdated', {
-        branchId: selectedItem?.branch?._id || user?.branchId,
-        productId: selectedItem?.product?._id,
-        minStockLevel: editForm.minStockLevel,
-        maxStockLevel: editForm.maxStockLevel,
-        eventId: crypto.randomUUID(),
-      });
-    },
-    onError: (err) => {
-      const errorMessage = err.message || t.errors.updateInventory;
-      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
-      setEditErrors({ form: errorMessage });
-    },
-  });
+// Render
+return (
+  <div className="container mx-auto p-4 md:p-6 bg-gray-50 min-h-screen">
+    <motion.div
+      initial={{ opacity: 0, y: -20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="bg-white rounded-lg shadow-lg p-6 mb-6"
+    >
+      <h1 className="text-2xl font-bold text-gray-800 mb-2">{t.title}</h1>
+      <p className="text-gray-600 mb-4">{t.description}</p>
 
-  const errorMessage = inventoryError?.message || '';
-
-  return (
-    <div className="mx-auto px-4 py-8 min-h-screen bg-gray-50">
-      <div className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
-        <div className="flex items-center gap-3">
-          <Package className="w-7 h-7 text-amber-600" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
-            <p className="text-gray-600 text-sm">{t.description}</p>
-          </div>
+      {/* Filters */}
+      <div className="flex flex-col md:flex-row gap-4 mb-6">
+        <div className="flex-1">
+          <ProductSearchInput
+            value={searchInput}
+            onChange={setSearchInput}
+            placeholder={t.search}
+            isRtl={isRtl}
+          />
         </div>
-        <button
-          onClick={() => handleOpenReturnModal()}
-          className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2 shadow-sm"
-          aria-label={t.create}
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value as InventoryStatus | '')}
+          className="w-full md:w-40 p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+          aria-label={t.filterByStatus}
         >
-          <Plus className="w-4 h-4" />
+          {statusOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filterDepartment}
+          onChange={(e) => setFilterDepartment(e.target.value)}
+          className="w-full md:w-40 p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+          aria-label={t.filterByDepartment}
+        >
+          {departmentOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={handleOpenReturnModal}
+          className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center gap-2"
+        >
+          <Plus className="w-5 h-5" />
           {t.create}
         </button>
       </div>
 
-      {errorMessage && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3"
-        >
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <span className="text-red-600 text-sm font-medium">{errorMessage}</span>
+      {/* Inventory Table */}
+      {inventoryLoading ? (
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
+        </div>
+      ) : inventoryError ? (
+        <div className="flex flex-col items-center justify-center h-64 text-red-600">
+          <AlertCircle className="w-8 h-8 mb-2" />
+          <p>{inventoryError.message || t.errors.fetchInventory}</p>
           <button
             onClick={() => refetchInventory()}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
-            aria-label={t.retry}
+            className="mt-4 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg"
           >
             {t.retry}
           </button>
-        </motion.div>
-      )}
-
-      <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="lg:col-span-1">
-            <div className="relative">
-              <Search className="absolute top-1/2 transform -translate-y-1/2 left-3 w-5 h-5 text-gray-400" />
-              <ProductSearchInput
-                value={searchInput}
-                onChange={handleSearchChange}
-                placeholder={t.search}
-                ariaLabel={t.search}
-                className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 lg:col-span-1">
-            <ProductDropdown
-              value={filterStatus}
-              onChange={(value) => {
-                setFilterStatus(value as InventoryStatus | '');
-                setCurrentPage(1);
-              }}
-              options={statusOptions}
-              ariaLabel={t.filterByStatus}
-              className="w-full"
-            />
-            <ProductDropdown
-              value={filterDepartment}
-              onChange={(value) => {
-                setFilterDepartment(value);
-                setCurrentPage(1);
-              }}
-              options={departmentOptions}
-              ariaLabel={t.filterByDepartment}
-              className="w-full"
-            />
-          </div>
-        </div>
-        <div className="mt-4 text-center text-sm text-gray-600 font-medium">
-          {isRtl ? `عدد العناصر: ${filteredInventory.length}` : `Items Count: ${filteredInventory.length}`}
-        </div>
-      </div>
-
-      {inventoryLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="p-5 bg-white rounded-xl shadow-sm border border-gray-100">
-              <div className="space-y-3 animate-pulse">
-                <div className="flex items-center justify-between">
-                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/4"></div>
-                </div>
-                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                <div className="mt-4 flex justify-end">
-                  <div className="h-8 bg-gray-200 rounded-lg w-24"></div>
-                </div>
-              </div>
-            </div>
-          ))}
         </div>
       ) : paginatedInventory.length === 0 ? (
-        <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
-          <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600 text-sm font-medium">{t.noItems}</p>
-          <button
-            onClick={() => handleOpenReturnModal()}
-            className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
-            aria-label={t.create}
-          >
-            {t.create}
-          </button>
+        <div className="flex flex-col items-center justify-center h-64 text-gray-600">
+          <Package className="w-12 h-12 mb-2" />
+          <p>{t.noItems}</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          <AnimatePresence>
-            {paginatedInventory.map((item) =>
-              item.product ? (
-                <motion.div
-                  key={item._id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.3 }}
-                  className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>
-                        {item.product.displayName}
-                      </h3>
-                      <p className="text-sm text-gray-500">{item.product.code}</p>
-                    </div>
-                    <p className="text-sm text-amber-600">{t.filterByDepartment}: {item.product.department?.displayName || 'N/A'}</p>
-                    <p className="text-sm text-gray-600">{t.stock}: {item.currentStock}</p>
-                    {item.pendingReturnStock > 0 && (
-                      <p className="text-sm text-gray-600">{t.pendingStock}: {item.pendingReturnStock}</p>
-                    )}
-                    {item.damagedStock > 0 && (
-                      <p className="text-sm text-red-600">{t.damagedStock}: {item.damagedStock}</p>
-                    )}
-                    <p className="text-sm text-gray-600">{t.minStock}: {item.minStockLevel}</p>
-                    <p className="text-sm text-gray-600">{t.maxStock}: {item.maxStockLevel}</p>
-                    <p className="text-sm text-gray-600">{t.unit}: {item.product.displayUnit}</p>
-                    <p
-                      className={`text-sm font-medium ${
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-gray-800">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="p-3 text-left">{t.productDetails}</th>
+                <th className="p-3 text-left">{t.stock}</th>
+                <th className="p-3 text-left">{t.pendingStock}</th>
+                <th className="p-3 text-left">{t.damagedStock}</th>
+                <th className="p-3 text-left">{t.minStock}</th>
+                <th className="p-3 text-left">{t.maxStock}</th>
+                <th className="p-3 text-left">{t.unit}</th>
+                <th className="p-3 text-left">{t.actions}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedInventory.map((item) => (
+                <tr key={item._id} className="border-b hover:bg-gray-50">
+                  <td className="p-3">
+                    {item.product?.displayName || 'N/A'}<br />
+                    <span className="text-xs text-gray-500">{item.product?.code || 'N/A'}</span><br />
+                    <span className="text-xs text-gray-500">{item.product?.department?.displayName || 'N/A'}</span>
+                  </td>
+                  <td className="p-3">
+                    <span
+                      className={
                         item.status === InventoryStatus.LOW
                           ? 'text-red-600'
                           : item.status === InventoryStatus.FULL
-                          ? 'text-yellow-600'
-                          : 'text-green-600'
-                      }`}
+                          ? 'text-green-600'
+                          : 'text-gray-800'
+                      }
                     >
-                      {t[item.status]}
-                    </p>
-                  </div>
-                  <div className="mt-4 flex justify-end gap-2">
+                      {item.currentStock}
+                    </span>
+                  </td>
+                  <td className="p-3">{item.pendingReturnStock}</td>
+                  <td className="p-3">{item.damagedStock}</td>
+                  <td className="p-3">{item.minStockLevel}</td>
+                  <td className="p-3">{item.maxStockLevel}</td>
+                  <td className="p-3">{item.product?.displayUnit || 'N/A'}</td>
+                  <td className="p-3 flex gap-2">
                     <button
                       onClick={() => handleOpenDetailsModal(item)}
-                      className="px-3 py-1.5 text-green-600 hover:text-green-800 rounded-lg text-sm transition-colors duration-200"
+                      className="text-amber-600 hover:text-amber-800"
                       aria-label={t.viewDetails}
                     >
-                      <Eye className="w-4 h-4" />
+                      <Eye className="w-5 h-5" />
                     </button>
                     <button
                       onClick={() => handleOpenEditModal(item)}
-                      className="px-3 py-1.5 text-blue-600 hover:text-blue-800 rounded-lg text-sm transition-colors duration-200"
+                      className="text-amber-600 hover:text-amber-800"
                       aria-label={t.editStockLimits}
                     >
-                      <Edit className="w-4 h-4" />
+                      <Edit className="w-5 h-5" />
                     </button>
-                    <button
-                      onClick={() => handleOpenReturnModal(item)}
-                      disabled={item.currentStock <= 0}
-                      className="px-3 py-1.5 text-red-600 hover:text-red-800 rounded-lg text-sm transition-colors duration-200 disabled:opacity-50"
-                      aria-label={t.create}
-                    >
-                      <Plus className="w-4 h-4" />
-                    </button>
-                  </div>
-                </motion.div>
-              ) : null
-            )}
-          </AnimatePresence>
-        </div>
-      )}
-
-      {totalInventoryPages > 1 && (
-        <div className="mt-6 flex items-center justify-center gap-3">
-          <button
-            onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-            disabled={currentPage === 1}
-            aria-label={isRtl ? 'الصفحة السابقة' : 'Previous page'}
-          >
-            {isRtl ? 'السابق' : 'Previous'}
-          </button>
-          <span className="text-gray-700 font-medium">
-            {isRtl ? `الصفحة ${currentPage} من ${totalInventoryPages}` : `Page ${currentPage} of ${totalInventoryPages}`}
-          </span>
-          <button
-            onClick={() => setCurrentPage(Math.min(currentPage + 1, totalInventoryPages))}
-            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-            disabled={currentPage === totalInventoryPages}
-            aria-label={isRtl ? 'الصفحة التالية' : 'Next page'}
-          >
-            {isRtl ? 'التالي' : 'Next'}
-          </button>
-        </div>
-      )}
-
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: isReturnModalOpen ? 1 : 0 }}
-        className={`fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 ${isReturnModalOpen ? '' : 'pointer-events-none'}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t.create}
-      >
-        <motion.div
-          initial={{ scale: 0.95, y: 20 }}
-          animate={{ scale: isReturnModalOpen ? 1 : 0.95, y: isReturnModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-lg w-full"
-        >
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-gray-900">{t.create}</h2>
-            <button
-              onClick={() => {
-                setIsReturnModalOpen(false);
-                dispatchReturnForm({ type: 'RESET' });
-                setReturnErrors({});
-                setSelectedItem(null);
-              }}
-              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-              aria-label={t.cancel}
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="space-y-4">
-            {selectedItem?.product && (
-              <p className="text-sm text-gray-600">
-                {t.items}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
-              </p>
-            )}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.notes}</label>
-              <textarea
-                value={returnForm.notes}
-                onChange={(e) => dispatchReturnForm({ type: 'SET_NOTES', payload: e.target.value })}
-                placeholder={t.notesPlaceholder}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
-                rows={3}
-                aria-label={t.notes}
-              />
-              {returnErrors.form && <p className="text-red-600 text-xs mt-1">{returnErrors.form}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
-              {returnForm.items.map((item, index) => (
-                <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                  {!selectedItem && (
-                    <ProductDropdown
-                      value={item.productId}
-                      onChange={(value) => handleProductChange(index, value)}
-                      options={productOptions}
-                      ariaLabel={`${t.items} ${index + 1}`}
-                      placeholder={t.selectProduct}
-                      className="w-full"
-                    />
-                  )}
-                  {returnErrors[`item_${index}_productId`] && (
-                    <p className="text-red-600 text-xs">{returnErrors[`item_${index}_productId`]}</p>
-                  )}
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.quantity}</label>
-                      <QuantityInput
-                        value={item.quantity}
-                        onChange={(val) => updateItemInForm(index, 'quantity', val)}
-                        onIncrement={() => updateItemInForm(index, 'quantity', item.quantity + 1)}
-                        onDecrement={() => updateItemInForm(index, 'quantity', item.quantity - 1)}
-                        max={item.maxQuantity}
-                      />
-                      {returnErrors[`item_${index}_quantity`] && (
-                        <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_quantity`]}</p>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.reason}</label>
-                      <ProductDropdown
-                        value={item.reason}
-                        onChange={(value) => updateItemInForm(index, 'reason', value)}
-                        options={reasonOptions}
-                        ariaLabel={`${t.reason} ${index + 1}`}
-                        className="w-full"
-                      />
-                      {returnErrors[`item_${index}_reason`] && (
-                        <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_reason`]}</p>
-                      )}
-                      {returnErrors[`item_${index}_reasonEn`] && (
-                        <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_reasonEn`]}</p>
-                      )}
-                    </div>
-                    {!selectedItem && returnForm.items.length > 1 && (
-                      <button
-                        onClick={() => removeItemFromForm(index)}
-                        className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 mt-6"
-                        aria-label={t.removeItem}
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
+                  </td>
+                </tr>
               ))}
-              {!selectedItem && (
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalInventoryPages > 1 && (
+        <div className="flex justify-center mt-4 gap-2">
+          {Array.from({ length: totalInventoryPages }, (_, i) => i + 1).map((page) => (
+            <button
+              key={page}
+              onClick={() => handlePageChange(page)}
+              className={`px-3 py-1 rounded-lg ${
+                currentPage === page ? 'bg-amber-600 text-white' : 'bg-gray-200 hover:bg-gray-300'
+              }`}
+            >
+              {page}
+            </button>
+          ))}
+        </div>
+      )}
+    </motion.div>
+
+    {/* Return Modal */}
+    <AnimatePresence>
+      {isReturnModalOpen && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        >
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            className="bg-white rounded-lg p-6 w-full max-w-lg"
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">{t.create}</h2>
+              <button
+                onClick={() => setIsReturnModalOpen(false)}
+                className="text-gray-600 hover:text-gray-800"
+                aria-label={t.cancel}
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">{t.selectProduct}</label>
+                <ProductDropdown
+                  options={productOptions}
+                  value={selectedProductId}
+                  onChange={(val) => {
+                    setSelectedProductId(val);
+                    setReturnErrors((prev) => ({ ...prev, selectedProduct: '' }));
+                  }}
+                  isRtl={isRtl}
+                />
+                {returnErrors.selectedProduct && (
+                  <p className="text-red-600 text-sm mt-1">{returnErrors.selectedProduct}</p>
+                )}
                 <button
-                  onClick={addItemToForm}
-                  className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
-                  aria-label={t.addItem}
+                  onClick={handleAddItem}
+                  className="mt-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg flex items-center gap-2"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-5 h-5" />
                   {t.addItem}
                 </button>
+              </div>
+              {returnForm.items.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-medium">{t.items}</h3>
+                  {returnForm.items.map((item, index) => {
+                    const product = availableItems.find((p) => p.productId === item.productId);
+                    return (
+                      <div key={index} className="border-t pt-2 mt-2 flex flex-col gap-2">
+                        <div className="flex justify-between items-center">
+                          <span>{product?.productName || 'N/A'}</span>
+                          <button
+                            onClick={() => handleRemoveItem(index)}
+                            className="text-red-600 hover:text-red-800"
+                            aria-label={t.removeItem}
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">{t.quantity}</label>
+                          <QuantityInput
+                            value={item.quantity}
+                            onChange={(val) => handleUpdateItem(index, 'quantity', parseInt(val, 10))}
+                            onIncrement={() => handleUpdateItem(index, 'quantity', item.quantity + 1)}
+                            onDecrement={() => handleUpdateItem(index, 'quantity', item.quantity - 1)}
+                            max={item.maxQuantity}
+                          />
+                          {returnErrors[`items[${index}].quantity`] && (
+                            <p className="text-red-600 text-sm mt-1">{returnErrors[`items[${index}].quantity`]}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">{t.reason}</label>
+                          <select
+                            value={item.reason}
+                            onChange={(e) => handleReasonChange(index, e.target.value)}
+                            className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                          >
+                            {reasonOptions.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                          {returnErrors[`items[${index}].reason`] && (
+                            <p className="text-red-600 text-sm mt-1">{returnErrors[`items[${index}].reason`]}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Price</label>
+                          <input
+                            type="number"
+                            value={item.price}
+                            onChange={(e) => handleUpdateItem(index, 'price', parseFloat(e.target.value))}
+                            min={0}
+                            step="0.01"
+                            className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                          />
+                          {returnErrors[`items[${index}].price`] && (
+                            <p className="text-red-600 text-sm mt-1">{returnErrors[`items[${index}].price`]}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               )}
-              {returnErrors.items && <p className="text-red-600 text-xs">{returnErrors.items}</p>}
-            </div>
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setIsReturnModalOpen(false);
-                  dispatchReturnForm({ type: 'RESET' });
-                  setReturnErrors({});
-                  setSelectedItem(null);
-                }}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                {t.cancel}
-              </button>
-              <button
-                onClick={() => createReturnMutation.mutate()}
-                disabled={createReturnMutation.isLoading}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                aria-label={createReturnMutation.isLoading ? t.submitting : t.submit}
-              >
-                {createReturnMutation.isLoading ? t.submitting : t.submit}
-              </button>
-            </div>
-          </div>
-        </motion.div>
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: isEditModalOpen ? 1 : 0 }}
-        className={`fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 ${isEditModalOpen ? '' : 'pointer-events-none'}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t.editStockLimits}
-      >
-        <motion.div
-          initial={{ scale: 0.95, y: 20 }}
-          animate={{ scale: isEditModalOpen ? 1 : 0.95, y: isEditModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-lg w-full"
-        >
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-gray-900">{t.editStockLimits}</h2>
-            <button
-              onClick={() => {
-                setIsEditModalOpen(false);
-                setEditErrors({});
-                setSelectedItem(null);
-              }}
-              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-              aria-label={t.cancel}
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.minStock}</label>
-              <input
-                type="number"
-                value={editForm.minStockLevel}
-                onChange={(e) => setEditForm({ ...editForm, minStockLevel: parseInt(e.target.value) || 0 })}
-                min={0}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
-                aria-label={t.minStock}
-              />
-              {editErrors.minStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.minStockLevel}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.maxStock}</label>
-              <input
-                type="number"
-                value={editForm.maxStockLevel}
-                onChange={(e) => setEditForm({ ...editForm, maxStockLevel: parseInt(e.target.value) || 0 })}
-                min={0}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
-                aria-label={t.maxStock}
-              />
-              {editErrors.maxStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.maxStockLevel}</p>}
-            </div>
-            {editErrors.form && <p className="text-red-600 text-xs">{editErrors.form}</p>}
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setIsEditModalOpen(false);
-                  setEditErrors({});
-                  setSelectedItem(null);
-                }}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                {t.cancel}
-              </button>
-              <button
-                onClick={() => updateInventoryMutation.mutate()}
-                disabled={updateInventoryMutation.isLoading}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                aria-label={updateInventoryMutation.isLoading ? t.saving : t.save}
-              >
-                {updateInventoryMutation.isLoading ? t.saving : t.save}
-              </button>
-            </div>
-          </div>
-        </motion.div>
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: isDetailsModalOpen ? 1 : 0 }}
-        className={`fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 ${isDetailsModalOpen ? '' : 'pointer-events-none'}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t.productDetails}
-      >
-        <motion.div
-          initial={{ scale: 0.95, y: 20 }}
-          animate={{ scale: isDetailsModalOpen ? 1 : 0.95, y: isDetailsModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-2xl w-full"
-        >
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
-            <button
-              onClick={() => {
-                setIsDetailsModalOpen(false);
-                setSelectedProductId('');
-              }}
-              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-              aria-label={t.cancel}
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="space-y-4">
-            {historyLoading ? (
-              <div className="space-y-3 animate-pulse">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-4 bg-gray-200 rounded w-full"></div>
-                ))}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">{t.notes}</label>
+                <textarea
+                  value={returnForm.notes}
+                  onChange={(e) => dispatchReturnForm({ type: 'SET_NOTES', payload: e.target.value })}
+                  placeholder={t.notesPlaceholder}
+                  className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                />
               </div>
-            ) : productHistory && productHistory.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-gray-700">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="py-2 px-4 text-left font-medium">{t.date}</th>
-                      <th className="py-2 px-4 text-left font-medium">{t.type}</th>
-                      <th className="py-2 px-4 text-left font-medium">{t.quantity}</th>
-                      <th className="py-2 px-4 text-left font-medium">{t.description}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {productHistory.map((entry) => (
-                      <tr key={entry._id} className="border-b border-gray-100">
-                        <td className="py-2 px-4">{new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
-                        <td className="py-2 px-4">{t[entry.type]}</td>
-                        <td className="py-2 px-4">{entry.quantity}</td>
-                        <td className="py-2 px-4">{entry.description}</td>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setIsReturnModalOpen(false)}
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  onClick={handleSubmitReturn}
+                  disabled={createReturnMutation.isLoading}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg disabled:opacity-50"
+                >
+                  {createReturnMutation.isLoading ? t.submitting : t.submit}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+    {/* Edit Stock Limits Modal */}
+    <AnimatePresence>
+      {isEditModalOpen && selectedItem && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        >
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            className="bg-white rounded-lg p-6 w-full max-w-md"
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">{t.editStockLimits}</h2>
+              <button
+                onClick={() => setIsEditModalOpen(false)}
+                className="text-gray-600 hover:text-gray-800"
+                aria-label={t.cancel}
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">{t.minStock}</label>
+                <input
+                  type="number"
+                  value={editForm.minStockLevel}
+                  onChange={(e) => {
+                    setEditForm({ ...editForm, minStockLevel: parseInt(e.target.value, 10) });
+                    setEditErrors((prev) => ({ ...prev, minStockLevel: '' }));
+                  }}
+                  min={0}
+                  className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                />
+                {editErrors.minStockLevel && (
+                  <p className="text-red-600 text-sm mt-1">{editErrors.minStockLevel}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700">{t.maxStock}</label>
+                <input
+                  type="number"
+                  value={editForm.maxStockLevel}
+                  onChange={(e) => {
+                    setEditForm({ ...editForm, maxStockLevel: parseInt(e.target.value, 10) });
+                    setEditErrors((prev) => ({ ...prev, maxStockLevel: '' }));
+                  }}
+                  min={0}
+                  className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                />
+                {editErrors.maxStockLevel && (
+                  <p className="text-red-600 text-sm mt-1">{editErrors.maxStockLevel}</p>
+                )}
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
+                >
+                  {t.cancel}
+                </button>
+                <button
+                  onClick={handleSubmitEdit}
+                  disabled={updateInventoryMutation.isLoading}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg disabled:opacity-50"
+                >
+                  {updateInventoryMutation.isLoading ? t.saving : t.save}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+    {/* Product Details Modal */}
+    <AnimatePresence>
+      {isDetailsModalOpen && selectedItem && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        >
+          <motion.div
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            className="bg-white rounded-lg p-6 w-full max-w-2xl"
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">{t.productDetails}</h2>
+              <button
+                onClick={() => setIsDetailsModalOpen(false)}
+                className="text-gray-600 hover:text-gray-800"
+                aria-label={t.cancel}
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <p>
+                <strong>{t.productDetails}:</strong> {selectedItem.product?.displayName || 'N/A'}
+              </p>
+              <p>
+                <strong>{t.unit}:</strong> {selectedItem.product?.displayUnit || 'N/A'}
+              </p>
+              <p>
+                <strong>{t.stock}:</strong> {selectedItem.currentStock}
+              </p>
+              <p>
+                <strong>{t.pendingStock}:</strong> {selectedItem.pendingReturnStock}
+              </p>
+              <p>
+                <strong>{t.damagedStock}:</strong> {selectedItem.damagedStock}
+              </p>
+              <p>
+                <strong>{t.minStock}:</strong> {selectedItem.minStockLevel}
+              </p>
+              <p>
+                <strong>{t.maxStock}:</strong> {selectedItem.maxStockLevel}
+              </p>
+              <h3 className="text-lg font-medium">{t.history}</h3>
+              {historyLoading ? (
+                <div className="flex justify-center items-center h-32">
+                  <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-amber-600"></div>
+                </div>
+              ) : productHistory && productHistory.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-gray-800">
+                    <thead>
+                      <tr className="bg-gray-100">
+                        <th className="p-2 text-left">{t.date}</th>
+                        <th className="p-2 text-left">{t.type}</th>
+                        <th className="p-2 text-left">{t.quantity}</th>
+                        <th className="p-2 text-left">{t.description}</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {productHistory.map((entry) => (
+                        <tr key={entry._id} className="border-b">
+                          <td className="p-2">{new Date(entry.date).toLocaleDateString()}</td>
+                          <td className="p-2">{t[entry.type]}</td>
+                          <td className="p-2">{entry.quantity}</td>
+                          <td className="p-2">{entry.description}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-gray-600">{t.noHistory}</p>
+              )}
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setIsDetailsModalOpen(false)}
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
+                >
+                  {t.cancel}
+                </button>
               </div>
-            ) : (
-              <p className="text-gray-600 text-sm font-medium">{t.noHistory}</p>
-            )}
-            <div className="flex justify-end mt-6">
-              <button
-                onClick={() => {
-                  setIsDetailsModalOpen(false);
-                  setSelectedProductId('');
-                }}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                {t.cancel}
-              </button>
             </div>
-          </div>
+          </motion.div>
         </motion.div>
-      </motion.div>
-    </div>
-  );
+      )}
+    </AnimatePresence>
+  </div>
+);
 };
+
+export default BranchInventory;
