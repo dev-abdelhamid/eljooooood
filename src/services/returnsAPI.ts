@@ -49,14 +49,14 @@ returnsAxios.interceptors.response.use(
     const isRtl = language === 'ar';
 
     let message = error.response?.data?.message || error.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
-    const errors = error.response?.data?.errors; // Capture detailed validation errors
+    const errors = error.response?.data?.errors || [];
 
     if (error.code === 'ECONNABORTED') {
       message = isRtl ? 'انتهت مهلة الطلب، حاول مرة أخرى' : 'Request timed out, please try again';
     } else if (!error.response) {
       message = isRtl ? 'فشل الاتصال بالخادم' : 'Failed to connect to server';
     } else if (error.response.status === 400) {
-      message = errors?.length
+      message = errors.length
         ? errors.map(err => err.msg).join(', ')
         : error.response.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
     } else if (error.response.status === 403) {
@@ -168,20 +168,28 @@ export const returnsAPI = {
     const isRtl = language === 'ar';
 
     // Validate input data
-    if (
-      !isValidObjectId(data.branchId) ||
-      !Array.isArray(data.items) ||
-      data.items.length === 0 ||
-      data.items.some(
-        (item) =>
-          !isValidObjectId(item.productId) ||
-          item.quantity < 1 ||
-          !item.reason ||
-          !item.reasonEn
-      )
-    ) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Invalid data:`, data);
-      throw new Error(isRtl ? 'بيانات غير صالحة لإنشاء طلب الإرجاع' : 'Invalid data for creating return request');
+    if (!isValidObjectId(data.branchId)) {
+      console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Invalid branchId:`, data.branchId);
+      throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
+    }
+    if (!Array.isArray(data.items) || data.items.length === 0) {
+      console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - No items provided`);
+      throw new Error(isRtl ? 'يجب إدخال عنصر واحد على الأقل' : 'At least one item is required');
+    }
+    for (let i = 0; i < data.items.length; i++) {
+      const item = data.items[i];
+      if (!item.productId || !isValidObjectId(item.productId)) {
+        console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Invalid productId at index ${i}:`, item.productId);
+        throw new Error(isRtl ? `معرف المنتج غير صالح في العنصر ${i + 1}` : `Invalid product ID at item ${i + 1}`);
+      }
+      if (item.quantity < 1) {
+        console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Invalid quantity at index ${i}:`, item.quantity);
+        throw new Error(isRtl ? `الكمية غير صالحة في العنصر ${i + 1}` : `Invalid quantity at item ${i + 1}`);
+      }
+      if (!item.reason) {
+        console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Missing reason at index ${i}`);
+        throw new Error(isRtl ? `سبب الإرجاع مفقود في العنصر ${i + 1}` : `Missing return reason at item ${i + 1}`);
+      }
     }
 
     try {
@@ -201,21 +209,20 @@ export const returnsAPI = {
       console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Error:`, {
         message: error.message,
         status: error.status,
-        response: error.response,
         errors: error.errors,
+        response: error.response,
       });
-
       let errorMessage = error.message || (isRtl ? 'خطأ في إنشاء طلب الإرجاع' : 'Error creating return request');
       if (error.status === 400) {
         errorMessage = error.errors?.length
           ? error.errors.map(err => err.msg).join(', ')
-          : error.response.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
+          : error.response?.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
       } else if (error.status === 403) {
-        errorMessage = error.response.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
+        errorMessage = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
       } else if (error.status === 404) {
-        errorMessage = error.response.data?.message || (isRtl ? 'الفرع أو المنتج غير موجود' : 'Branch or product not found');
+        errorMessage = error.response?.data?.message || (isRtl ? 'الفرع أو المنتج غير موجود' : 'Branch or product not found');
       } else if (error.status === 422) {
-        errorMessage = error.response.data?.message || (isRtl ? 'الكمية غير كافية أو تتجاوز المسلم' : 'Insufficient quantity or exceeds delivered quantity');
+        errorMessage = error.response?.data?.message || (isRtl ? 'الكمية غير كافية' : 'Insufficient quantity');
       } else if (error.code === 'ECONNABORTED') {
         errorMessage = isRtl ? 'انتهت مهلة الطلب، حاول مرة أخرى' : 'Request timed out, please try again';
       } else if (!error.response) {
@@ -223,7 +230,6 @@ export const returnsAPI = {
       } else if (error.status === 500) {
         errorMessage = isRtl ? 'خطأ في الخادم، حاول مرة أخرى لاحقًا' : 'Server error, please try again later';
       }
-
       throw new Error(errorMessage);
     }
   },
@@ -239,10 +245,7 @@ export const returnsAPI = {
     const language = localStorage.getItem('language') || 'ar';
     const isRtl = language === 'ar';
 
-    if (
-      !isValidObjectId(returnId) ||
-      !['approved', 'rejected'].includes(data.status)
-    ) {
+    if (!isValidObjectId(returnId) || !['approved', 'rejected'].includes(data.status)) {
       console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Invalid data:`, { returnId, data });
       throw new Error(isRtl ? 'معرف الإرجاع أو الحالة غير صالح' : 'Invalid return ID or status');
     }
@@ -260,14 +263,12 @@ export const returnsAPI = {
         status: error.status,
         response: error.response,
       });
-
       let errorMessage = error.message || (isRtl ? 'خطأ في تحديث حالة الإرجاع' : 'Error updating return status');
       if (error.status === 404) {
-        errorMessage = error.response.data?.message || (isRtl ? 'الإرجاع غير موجود' : 'Return not found');
+        errorMessage = error.response?.data?.message || (isRtl ? 'الإرجاع غير موجود' : 'Return not found');
       } else if (error.status === 500) {
         errorMessage = isRtl ? 'خطأ في الخادم، حاول مرة أخرى لاحقًا' : 'Server error, please try again later';
       }
-
       throw new Error(errorMessage);
     }
   },
