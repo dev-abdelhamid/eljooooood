@@ -185,7 +185,7 @@ export const returnsAPI = {
       const response = await returnsAxios.post('/returns', {
         branchId: data.branchId,
         items: data.items.map((item) => ({
-          product: item.productId,
+          productId: item.productId, // Changed from 'product' to 'productId'
           quantity: Number(item.quantity),
           reason: item.reason.trim(),
           reasonEn: item.reasonEn.trim(),
@@ -203,13 +203,13 @@ export const returnsAPI = {
 
       let errorMessage = error.message || (isRtl ? 'خطأ في إنشاء طلب الإرجاع' : 'Error creating return request');
       if (error.status === 400) {
-        errorMessage = error.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
+        errorMessage = error.response.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
       } else if (error.status === 403) {
-        errorMessage = error.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
+        errorMessage = error.response.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
       } else if (error.status === 404) {
-        errorMessage = error.message || (isRtl ? 'الفرع أو المنتج غير موجود' : 'Branch or product not found');
+        errorMessage = error.response.data?.message || (isRtl ? 'الفرع أو المنتج غير موجود' : 'Branch or product not found');
       } else if (error.status === 422) {
-        errorMessage = error.message || (isRtl ? 'الكمية غير كافية أو تتجاوز المسلم' : 'Insufficient quantity or exceeds delivered quantity');
+        errorMessage = error.response.data?.message || (isRtl ? 'الكمية غير كافية أو تتجاوز المسلم' : 'Insufficient quantity or exceeds delivered quantity');
       } else if (error.code === 'ECONNABORTED') {
         errorMessage = isRtl ? 'انتهت مهلة الطلب، حاول مرة أخرى' : 'Request timed out, please try again';
       } else if (!error.response) {
@@ -257,7 +257,7 @@ export const returnsAPI = {
 
       let errorMessage = error.message || (isRtl ? 'خطأ في تحديث حالة الإرجاع' : 'Error updating return status');
       if (error.status === 404) {
-        errorMessage = error.message || (isRtl ? 'الإرجاع غير موجود' : 'Return not found');
+        errorMessage = error.response.data?.message || (isRtl ? 'الإرجاع غير موجود' : 'Return not found');
       } else if (error.status === 500) {
         errorMessage = isRtl ? 'خطأ في الخادم، حاول مرة أخرى لاحقًا' : 'Server error, please try again later';
       }
