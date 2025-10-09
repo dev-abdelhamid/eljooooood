@@ -41,6 +41,7 @@ interface InventoryItem {
     department: { _id: string; name: string; nameEn: string } | null;
     displayName: string;
     displayUnit: string;
+    price: number;
   } | null;
   branch: { _id: string; name: string; nameEn: string; displayName: string } | null;
   currentStock: number;
@@ -52,11 +53,12 @@ interface InventoryItem {
 }
 
 interface ReturnItem {
-  product: string; // Changed from productId to product to match backend schema
+  product: string;
   quantity: number;
   reason: string;
   reasonEn: string;
   maxQuantity: number;
+  price?: number; // Optional, as backend will handle it
 }
 
 interface ReturnFormState {
@@ -86,6 +88,7 @@ interface AvailableItem {
   unit: string;
   departmentName: string;
   stock: number;
+  price: number;
 }
 
 // Translations
@@ -101,6 +104,7 @@ const translations = {
     minStock: 'الحد الأدنى للمخزون',
     maxStock: 'الحد الأقصى للمخزون',
     unit: 'الوحدة',
+    price: 'السعر',
     lowStock: 'مخزون منخفض',
     normal: 'عادي',
     full: 'مخزون ممتلئ',
@@ -156,6 +160,7 @@ const translations = {
       insufficientQuantity: 'الكمية غير كافية للمنتج في المخزون',
       branchNotFound: 'الفرع غير موجود',
       productNotFound: 'المنتج غير موجود',
+      serverError: 'فشل الاتصال بالخادم، يرجى المحاولة لاحقًا',
     },
     notifications: {
       returnApproved: 'تمت الموافقة على طلب الإرجاع',
@@ -174,6 +179,7 @@ const translations = {
     minStock: 'Minimum Stock',
     maxStock: 'Maximum Stock',
     unit: 'Unit',
+    price: 'Price',
     lowStock: 'Low Stock',
     normal: 'Normal',
     full: 'Full Stock',
@@ -229,6 +235,7 @@ const translations = {
       insufficientQuantity: 'Insufficient quantity for the product in inventory',
       branchNotFound: 'Branch not found',
       productNotFound: 'Product not found',
+      serverError: 'Failed to connect to the server, please try again later',
     },
     notifications: {
       returnApproved: 'Return request approved',
@@ -417,6 +424,7 @@ export const BranchInventory: React.FC = () => {
       }));
     },
     onError: (err) => {
+      console.error(`[${new Date().toISOString()}] Inventory fetch error:`, err);
       toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
     },
   });
@@ -447,12 +455,13 @@ export const BranchInventory: React.FC = () => {
             ? item.product!.department?.name || 'غير معروف'
             : item.product!.department?.nameEn || item.product!.department?.name || 'Unknown',
           stock: item.currentStock,
+          price: item.product!.price || 0,
         }));
       setAvailableItems(items);
     }
   }, [inventoryData, isRtl, t]);
 
-  // Socket Events
+  // Socket Events with reconnection handling
   useEffect(() => {
     if (!socket || !user?.branchId) return;
 
@@ -484,12 +493,26 @@ export const BranchInventory: React.FC = () => {
       }
     };
 
+    const handleSocketDisconnect = (reason: string) => {
+      console.warn(`[${new Date().toISOString()}] Socket disconnected:`, reason);
+      // Attempt to reconnect manually if needed
+      socket.connect();
+    };
+
+    const handleSocketConnectError = (err: Error) => {
+      console.error(`[${new Date().toISOString()}] Socket connect error:`, err);
+    };
+
     socket.on('inventoryUpdated', handleInventoryUpdated);
     socket.on('returnStatusUpdated', handleReturnStatusUpdated);
+    socket.on('disconnect', handleSocketDisconnect);
+    socket.on('connect_error', handleSocketConnectError);
 
     return () => {
       socket.off('inventoryUpdated', handleInventoryUpdated);
       socket.off('returnStatusUpdated', handleReturnStatusUpdated);
+      socket.off('disconnect', handleSocketDisconnect);
+      socket.off('connect_error', handleSocketConnectError);
     };
   }, [socket, user, queryClient, addNotification, t, isRtl]);
 
@@ -590,7 +613,7 @@ export const BranchInventory: React.FC = () => {
         dispatchReturnForm({
           type: 'ADD_ITEM',
           payload: {
-            product: item.product._id, // Changed from productId to product
+            product: item.product._id,
             quantity: 1,
             reason: '',
             reasonEn: '',
@@ -672,7 +695,7 @@ export const BranchInventory: React.FC = () => {
       }
       dispatchReturnForm({
         type: 'UPDATE_ITEM',
-        payload: { index, field: 'product', value: productId }, // Changed from productId to product
+        payload: { index, field: 'product', value: productId },
       });
       dispatchReturnForm({
         type: 'UPDATE_ITEM',
@@ -749,11 +772,11 @@ export const BranchInventory: React.FC = () => {
       const data = {
         branchId: user.branchId,
         items: returnForm.items.map((item) => ({
-          product: item.product, // Changed from productId to product
+          product: item.product,
           quantity: item.quantity,
           reason: item.reason,
           reasonEn: item.reasonEn,
-          price: 0, // Backend requires price; set to 0 as per schema
+          price: 0, // Backend will handle price calculation
         })),
         notes: returnForm.notes || undefined,
       };
@@ -762,9 +785,17 @@ export const BranchInventory: React.FC = () => {
           throw new Error(t.errors.invalidProductId + ` at item ${index + 1}`);
         }
       }
-      const response = await returnsAPI.createReturn(data);
-      return { returnId: response?.returnRequest?._id || crypto.randomUUID() };
+      console.log(`[${new Date().toISOString()}] Sending return request:`, data);
+      try {
+        const response = await returnsAPI.createReturn(data);
+        return { returnId: response?.returnRequest?._id || crypto.randomUUID() };
+      } catch (err: any) {
+        console.error(`[${new Date().toISOString()}] Returns API request error:`, err);
+        throw err;
+      }
     },
+    retry: 3, // Retry up to 3 times for transient errors
+    retryDelay: (attempt) => Math.min(attempt * 1000, 5000), // Backoff: 1s, 2s, 5s
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       setIsReturnModalOpen(false);
@@ -781,10 +812,13 @@ export const BranchInventory: React.FC = () => {
     },
     onError: (err: any) => {
       let errorMessage = err.message || t.errors.createReturn;
-      const errors = err.errors || [];
-      if (errors.length > 0) {
-        const errorDetails = errors.map((e: any) => e.msg).join(', ');
-        errorMessage = errorDetails;
+      const errors = err.response?.data?.errors || [];
+      if (err.response?.status === 502) {
+        errorMessage = t.errors.serverError;
+      } else if (err.message.includes('CORS')) {
+        errorMessage = t.errors.serverError; // Treat CORS errors as server issues
+      } else if (errors.length > 0) {
+        errorMessage = errors.map((e: any) => e.msg).join(', ');
         errors.forEach((e: any, index: number) => {
           setReturnErrors((prev) => ({
             ...prev,
@@ -802,6 +836,11 @@ export const BranchInventory: React.FC = () => {
       } else if (err.message.includes('المنتج غير موجود') || err.message.includes('Product not found')) {
         errorMessage = t.errors.productNotFound;
       }
+      console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Error:`, {
+        message: errorMessage,
+        status: err.response?.status,
+        errors,
+      });
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       setReturnErrors((prev) => ({ ...prev, form: errorMessage }));
     },
@@ -835,6 +874,7 @@ export const BranchInventory: React.FC = () => {
     },
     onError: (err) => {
       const errorMessage = err.message || t.errors.updateInventory;
+      console.error(`[${new Date().toISOString()}] updateInventoryMutation - Error:`, err);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       setEditErrors({ form: errorMessage });
     },
@@ -848,503 +888,484 @@ export const BranchInventory: React.FC = () => {
         <div className="flex items-center gap-3">
           <Package className="w-7 h-7 text-amber-600" />
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
-            <p className="text-gray-600 text-sm">{t.description}</p>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{t.title}</h1>
+            <p className="text-sm text-gray-600 dark:text-gray-400">{t.description}</p>
           </div>
         </div>
-        <button
-          onClick={() => handleOpenReturnModal()}
-          className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2 shadow-sm"
-          aria-label={t.create}
-        >
-          <Plus className="w-4 h-4" />
-          {t.create}
-        </button>
-      </div>
-
-      {errorMessage && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3"
-        >
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <span className="text-red-600 text-sm font-medium">{errorMessage}</span>
-          <button
-            onClick={() => refetchInventory()}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
-            aria-label={t.retry}
-          >
-            {t.retry}
-          </button>
-        </motion.div>
-      )}
-
-      <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="lg:col-span-1">
-            <ProductSearchInput
+        <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute top-2.5 left-3 w-5 h-5 text-gray-400" />
+            <input
+              type="text"
               value={searchInput}
               onChange={handleSearchChange}
               placeholder={t.search}
-              ariaLabel={t.search}
-              className="w-full"
+              className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white shadow-sm"
             />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 lg:col-span-1">
-            <ProductDropdown
-              value={filterStatus}
-              onChange={(value) => {
-                setFilterStatus(value as InventoryStatus | '');
-                setCurrentPage(1);
-              }}
-              options={statusOptions}
-              ariaLabel={t.filterByStatus}
-              className="w-full"
-            />
-            <ProductDropdown
-              value={filterDepartment}
-              onChange={(value) => {
-                setFilterDepartment(value);
-                setCurrentPage(1);
-              }}
-              options={departmentOptions}
-              ariaLabel={t.filterByDepartment}
-              className="w-full"
-            />
-          </div>
-        </div>
-        <div className="mt-4 text-center text-sm text-gray-600 font-medium">
-          {isRtl ? `عدد العناصر: ${filteredInventory.length}` : `Items Count: ${filteredInventory.length}`}
-        </div>
-      </div>
-
-      {inventoryLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="p-5 bg-white rounded-xl shadow-sm border border-gray-100">
-              <div className="space-y-3 animate-pulse">
-                <div className="flex items-center justify-between">
-                  <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                  <div className="h-3 bg-gray-200 rounded w-1/4"></div>
-                </div>
-                <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                <div className="h-3 bg-gray-200 rounded w-1/3"></div>
-                <div className="mt-4 flex justify-end">
-                  <div className="h-8 bg-gray-200 rounded-lg w-24"></div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : paginatedInventory.length === 0 ? (
-        <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
-          <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600 text-sm font-medium">{t.noItems}</p>
+          <select
+            value={filterStatus}
+            onChange={(e) => {
+              setFilterStatus(e.target.value as InventoryStatus | '');
+              setCurrentPage(1);
+            }}
+            className="px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white shadow-sm"
+          >
+            {statusOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={filterDepartment}
+            onChange={(e) => {
+              setFilterDepartment(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white shadow-sm"
+          >
+            {departmentOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
           <button
             onClick={() => handleOpenReturnModal()}
-            className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
-            aria-label={t.create}
+            className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors duration-200 flex items-center gap-2"
           >
+            <Plus className="w-5 h-5" />
             {t.create}
           </button>
         </div>
+      </div>
+
+      {/* Inventory Table */}
+      {inventoryLoading ? (
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
+        </div>
+      ) : errorMessage ? (
+        <div className="flex flex-col items-center justify-center h-64 text-red-600 dark:text-red-400">
+          <AlertCircle className="w-12 h-12 mb-4" />
+          <p>{errorMessage}</p>
+          <button
+            onClick={() => refetchInventory()}
+            className="mt-4 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+          >
+            {t.retry}
+          </button>
+        </div>
+      ) : paginatedInventory.length === 0 ? (
+        <p className="text-center text-gray-600 dark:text-gray-400">{t.noItems}</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          <AnimatePresence>
-            {paginatedInventory.map((item) =>
-              item.product ? (
-                <motion.div
-                  key={item._id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.3 }}
-                  className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>
-                        {item.product.displayName}
-                      </h3>
-                      <p className="text-sm text-gray-500">{item.product.code}</p>
-                    </div>
-                    <p className="text-sm text-amber-600">{t.filterByDepartment}: {item.product.department?.displayName || 'N/A'}</p>
-                    <p className="text-sm text-gray-600">{t.stock}: {item.currentStock}</p>
-                    {item.pendingReturnStock > 0 && (
-                      <p className="text-sm text-gray-600">{t.pendingStock}: {item.pendingReturnStock}</p>
-                    )}
-                    {item.damagedStock > 0 && (
-                      <p className="text-sm text-red-300">{t.damagedStock}: {item.damagedStock}</p>
-                    )}
-                    <p className="text-sm text-gray-600">{t.minStock}: {item.minStockLevel}</p>
-                    <p className="text-sm text-gray-600">{t.maxStock}: {item.maxStockLevel}</p>
-                    <p className="text-sm text-gray-600">{t.unit}: {item.product.displayUnit}</p>
-                    <p
-                      className={`text-sm font-medium ${
+        <div className="overflow-x-auto">
+          <table className="w-full table-auto border-collapse">
+            <thead>
+              <tr className="bg-gray-100 dark:bg-gray-800">
+                <th className="px-4 py-2 text-left text-gray-700 dark:text-gray-300">{t.items}</th>
+                <th className="px-4 py-2 text-left text-gray-700 dark:text-gray-300">{t.unit}</th>
+                <th className="px-4 py-2 text-left text-gray-700 dark:text-gray-300">{t.stock}</th>
+                <th className="px-4 py-2 text-left text-gray-700 dark:text-gray-300">{t.pendingStock}</th>
+                <th className="px-4 py-2 text-left text-gray-700 dark:text-gray-300">{t.damagedStock}</th>
+                <th className="px-4 py-2 text-left text-gray-700 dark:text-gray-300">{t.minStock}</th>
+                <th className="px-4 py-2 text-left text-gray-700 dark:text-gray-300">{t.maxStock}</th>
+                <th className="px-4 py-2 text-left text-gray-700 dark:text-gray-300">{t.price}</th>
+                <th className="px-4 py-2 text-left text-gray-700 dark:text-gray-300"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {paginatedInventory.map((item) => (
+                <tr key={item._id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700">
+                  <td className="px-4 py-2 text-gray-900 dark:text-white">{item.product?.displayName || 'N/A'}</td>
+                  <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{item.product?.displayUnit || 'N/A'}</td>
+                  <td className="px-4 py-2">
+                    <span
+                      className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
                         item.status === InventoryStatus.LOW
-                          ? 'text-red-600'
+                          ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
                           : item.status === InventoryStatus.FULL
-                          ? 'text-yellow-600'
-                          : 'text-green-600'
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                          : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
                       }`}
                     >
-                      {t[item.status]}
-                    </p>
-                  </div>
-                  <div className="mt-4 flex justify-end gap-2">
+                      {item.currentStock}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{item.pendingReturnStock}</td>
+                  <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{item.damagedStock}</td>
+                  <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{item.minStockLevel}</td>
+                  <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{item.maxStockLevel}</td>
+                  <td className="px-4 py-2 text-gray-600 dark:text-gray-400">
+                    {item.product?.price ? `${item.product.price.toFixed(2)}` : 'N/A'}
+                  </td>
+                  <td className="px-4 py-2 flex gap-2">
                     <button
                       onClick={() => handleOpenDetailsModal(item)}
-                      className="px-3 py-1.5 text-green-600 hover:text-green-800 rounded-lg text-sm transition-colors duration-200"
-                      aria-label={t.viewDetails}
+                      className="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300"
+                      title={t.viewDetails}
                     >
-                      <Eye className="w-4 h-4" />
+                      <Eye className="w-5 h-5" />
                     </button>
                     <button
                       onClick={() => handleOpenEditModal(item)}
-                      className="px-3 py-1.5 text-blue-600 hover:text-blue-800 rounded-lg text-sm transition-colors duration-200"
-                      aria-label={t.editStockLimits}
+                      className="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300"
+                      title={t.editStockLimits}
                     >
-                      <Edit className="w-4 h-4" />
+                      <Edit className="w-5 h-5" />
                     </button>
                     <button
                       onClick={() => handleOpenReturnModal(item)}
-                      disabled={item.currentStock <= 0}
-                      className="px-3 py-1.5 text-red-600 hover:text-red-800 rounded-lg text-sm transition-colors duration-200 disabled:opacity-50"
-                      aria-label={t.create}
+                      className="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300"
+                      title={t.create}
                     >
-                      <Plus className="w-4 h-4" />
+                      <Plus className="w-5 h-5" />
                     </button>
-                  </div>
-                </motion.div>
-              ) : null
-            )}
-          </AnimatePresence>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {/* Pagination */}
+          <div className="mt-4 flex justify-center gap-2">
+            {Array.from({ length: totalInventoryPages }, (_, i) => i + 1).map((page) => (
+              <button
+                key={page}
+                onClick={() => setCurrentPage(page)}
+                className={`px-3 py-1 rounded-lg ${
+                  currentPage === page
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-amber-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-amber-900'
+                }`}
+              >
+                {page}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
-      <div className="mt-6">
-        {totalInventoryPages > 1 && (
-          <div className={`flex items-center justify-center gap-3 ${isRtl ? 'flex-row' : ''}`}>
-            <button
-              onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-              disabled={currentPage === 1}
-              aria-label={isRtl ? 'الصفحة السابقة' : 'Previous page'}
+      {/* Return Request Modal */}
+      <AnimatePresence>
+        {isReturnModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto"
             >
-              {isRtl ? 'السابق' : 'Previous'}
-            </button>
-            <span className="text-gray-700 font-medium">
-              {isRtl ? `الصفحة ${currentPage} من ${totalInventoryPages}` : `Page ${currentPage} of ${totalInventoryPages}`}
-            </span>
-            <button
-              onClick={() => setCurrentPage(Math.min(currentPage + 1, totalInventoryPages))}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-              disabled={currentPage === totalInventoryPages}
-              aria-label={isRtl ? 'الصفحة التالية' : 'Next page'}
-            >
-              {isRtl ? 'التالي' : 'Next'}
-            </button>
-          </div>
-        )}
-      </div>
-
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: isReturnModalOpen ? 1 : 0 }}
-        className={`fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 ${isReturnModalOpen ? '' : 'pointer-events-none'}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t.create}
-      >
-        <motion.div
-          initial={{ scale: 0.95, y: 20 }}
-          animate={{ scale: isReturnModalOpen ? 1 : 0.95, y: isReturnModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-lg w-full"
-        >
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-gray-900">{t.create}</h2>
-            <button
-              onClick={() => {
-                setIsReturnModalOpen(false);
-                dispatchReturnForm({ type: 'RESET' });
-                setReturnErrors({});
-                setSelectedItem(null);
-              }}
-              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-              aria-label={t.cancel}
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="space-y-4">
-            {selectedItem?.product && (
-              <p className="text-sm text-gray-600">
-                {t.products?.title || 'Product'}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
-              </p>
-            )}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.notes}</label>
-              <textarea
-                value={returnForm.notes}
-                onChange={(e) => dispatchReturnForm({ type: 'SET_NOTES', payload: e.target.value })}
-                placeholder={t.notesPlaceholder}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
-                rows={3}
-                aria-label={t.notes}
-              />
-              {returnErrors.form && <p className="text-red-600 text-xs mt-1">{returnErrors.form}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
-              {returnForm.items.map((item, index) => (
-                <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                  {!selectedItem && (
-                    <ProductDropdown
-                      value={item.product}
-                      onChange={(value) => handleProductChange(index, value)}
-                      options={productOptions}
-                      ariaLabel={`${t.items} ${index + 1}`}
-                      placeholder={t.selectProduct}
-                      className="w-full"
-                    />
-                  )}
-                  {returnErrors[`item_${index}_product`] && (
-                    <p className="text-red-600 text-xs">{returnErrors[`item_${index}_product`]}</p>
-                  )}
-                  <div className="flex items-center gap-4">
-                    <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.quantity}</label>
-                      <QuantityInput
-                        value={item.quantity}
-                        onChange={(val) => updateItemInForm(index, 'quantity', val)}
-                        onIncrement={() => updateItemInForm(index, 'quantity', item.quantity + 1)}
-                        onDecrement={() => updateItemInForm(index, 'quantity', item.quantity - 1)}
-                        max={item.maxQuantity}
-                      />
-                      {returnErrors[`item_${index}_quantity`] && (
-                        <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_quantity`]}</p>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.reason}</label>
-                      <ProductDropdown
-                        value={item.reason}
-                        onChange={(value) => updateItemInForm(index, 'reason', value)}
-                        options={reasonOptions}
-                        ariaLabel={`${t.reason} ${index + 1}`}
-                        className="w-full"
-                      />
-                      {returnErrors[`item_${index}_reason`] && (
-                        <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_reason`]}</p>
-                      )}
-                      {returnErrors[`item_${index}_reasonEn`] && (
-                        <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_reasonEn`]}</p>
-                      )}
-                    </div>
-                    {!selectedItem && returnForm.items.length > 1 && (
-                      <button
-                        onClick={() => removeItemFromForm(index)}
-                        className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 mt-6"
-                        aria-label={t.removeItem}
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {!selectedItem && (
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t.create}</h2>
                 <button
-                  onClick={addItemToForm}
-                  className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
-                  aria-label={t.addItem}
+                  onClick={() => {
+                    setIsReturnModalOpen(false);
+                    dispatchReturnForm({ type: 'RESET' });
+                    setReturnErrors({});
+                  }}
+                  className="text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
                 >
-                  <Plus className="w-4 h-4" />
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              {returnErrors.form && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="mb-4 p-3 bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 rounded-lg flex items-center gap-2"
+                >
+                  <AlertCircle className="w-5 h-5" />
+                  <span>{returnErrors.form}</span>
+                  {(returnErrors.form.includes('فشل الاتصال بالخادم') ||
+                    returnErrors.form.includes('Failed to connect to the server') ||
+                    returnErrors.form.includes('CORS')) && (
+                    <button
+                      onClick={() => createReturnMutation.mutate()}
+                      className="px-3 py-1 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors"
+                    >
+                      {t.retry}
+                    </button>
+                  )}
+                </motion.div>
+              )}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  createReturnMutation.mutate();
+                }}
+              >
+                {returnForm.items.map((item, index) => (
+                  <div key={index} className="mb-4 p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
+                    <div className="flex justify-between items-center mb-2">
+                      <h3 className="font-medium text-gray-900 dark:text-white">{`${t.items} ${index + 1}`}</h3>
+                      {returnForm.items.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeItemFromForm(index)}
+                          className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                          title={t.removeItem}
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.selectProduct}</label>
+                        <select
+                          value={item.product}
+                          onChange={(e) => handleProductChange(index, e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white shadow-sm"
+                        >
+                          {productOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        {returnErrors[`item_${index}_product`] && (
+                          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{returnErrors[`item_${index}_product`]}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.quantity}</label>
+                        <QuantityInput
+                          value={item.quantity}
+                          onChange={(val) => updateItemInForm(index, 'quantity', val)}
+                          onIncrement={() => updateItemInForm(index, 'quantity', Math.min(item.quantity + 1, item.maxQuantity))}
+                          onDecrement={() => updateItemInForm(index, 'quantity', Math.max(item.quantity - 1, 1))}
+                          max={item.maxQuantity}
+                        />
+                        {returnErrors[`item_${index}_quantity`] && (
+                          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{returnErrors[`item_${index}_quantity`]}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.reason}</label>
+                        <select
+                          value={item.reason}
+                          onChange={(e) => updateItemInForm(index, 'reason', e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white shadow-sm"
+                        >
+                          {reasonOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        {returnErrors[`item_${index}_reason`] && (
+                          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{returnErrors[`item_${index}_reason`]}</p>
+                        )}
+                        {returnErrors[`item_${index}_reasonEn`] && (
+                          <p className="mt-1 text-sm text-red-600 dark:text-red-400">{returnErrors[`item_${index}_reasonEn`]}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.price}</label>
+                        <p className="px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded-lg text-gray-900 dark:text-white">
+                          {availableItems.find((avail) => avail.productId === item.product)?.price?.toFixed(2) || 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={addItemToForm}
+                  className="mb-4 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors flex items-center gap-2"
+                >
+                  <Plus className="w-5 h-5" />
                   {t.addItem}
                 </button>
-              )}
-              {returnErrors.items && <p className="text-red-600 text-xs">{returnErrors.items}</p>}
-            </div>
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setIsReturnModalOpen(false);
-                  dispatchReturnForm({ type: 'RESET' });
-                  setReturnErrors({});
-                  setSelectedItem(null);
-                }}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                {t.cancel}
-              </button>
-              <button
-                onClick={() => createReturnMutation.mutate()}
-                disabled={createReturnMutation.isLoading}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                aria-label={createReturnMutation.isLoading ? t.submitting : t.submit}
-              >
-                {createReturnMutation.isLoading ? t.submitting : t.submit}
-              </button>
-            </div>
-          </div>
-        </motion.div>
-      </motion.div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.notes}</label>
+                  <textarea
+                    value={returnForm.notes}
+                    onChange={(e) => dispatchReturnForm({ type: 'SET_NOTES', payload: e.target.value })}
+                    placeholder={t.notesPlaceholder}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white shadow-sm"
+                    rows={4}
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsReturnModalOpen(false);
+                      dispatchReturnForm({ type: 'RESET' });
+                      setReturnErrors({});
+                    }}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    {t.cancel}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={createReturnMutation.isLoading}
+                    className={`px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors ${
+                      createReturnMutation.isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    {createReturnMutation.isLoading ? t.submitting : t.submit}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: isEditModalOpen ? 1 : 0 }}
-        className={`fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 ${isEditModalOpen ? '' : 'pointer-events-none'}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t.editStockLimits}
-      >
-        <motion.div
-          initial={{ scale: 0.95, y: 20 }}
-          animate={{ scale: isEditModalOpen ? 1 : 0.95, y: isEditModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-lg w-full"
-        >
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-gray-900">{t.editStockLimits}</h2>
-            <button
-              onClick={() => {
-                setIsEditModalOpen(false);
-                setEditErrors({});
-                setSelectedItem(null);
-              }}
-              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-              aria-label={t.cancel}
+      {/* Edit Stock Limits Modal */}
+      <AnimatePresence>
+        {isEditModalOpen && selectedItem && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md"
             >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.minStock}</label>
-              <input
-                type="number"
-                value={editForm.minStockLevel}
-                onChange={(e) => setEditForm({ ...editForm, minStockLevel: parseInt(e.target.value) || 0 })}
-                min={0}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
-                aria-label={t.minStock}
-              />
-              {editErrors.minStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.minStockLevel}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.maxStock}</label>
-              <input
-                type="number"
-                value={editForm.maxStockLevel}
-                onChange={(e) => setEditForm({ ...editForm, maxStockLevel: parseInt(e.target.value) || 0 })}
-                min={0}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
-                aria-label={t.maxStock}
-              />
-              {editErrors.maxStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.maxStockLevel}</p>}
-            </div>
-            {editErrors.form && <p className="text-red-600 text-xs">{editErrors.form}</p>}
-            <div className="flex justify-end gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setIsEditModalOpen(false);
-                  setEditErrors({});
-                  setSelectedItem(null);
-                }}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                {t.cancel}
-              </button>
-              <button
-                onClick={() => updateInventoryMutation.mutate()}
-                disabled={updateInventoryMutation.isLoading}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                aria-label={updateInventoryMutation.isLoading ? t.saving : t.save}
-              >
-                {updateInventoryMutation.isLoading ? t.saving : t.save}
-              </button>
-            </div>
-          </div>
-        </motion.div>
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: isDetailsModalOpen ? 1 : 0 }}
-        className={`fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 ${isDetailsModalOpen ? '' : 'pointer-events-none'}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t.productDetails}
-      >
-        <motion.div
-          initial={{ scale: 0.95, y: 20 }}
-          animate={{ scale: isDetailsModalOpen ? 1 : 0.95, y: isDetailsModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-2xl w-full"
-        >
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
-            <button
-              onClick={() => {
-                setIsDetailsModalOpen(false);
-                setSelectedProductId('');
-              }}
-              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-              aria-label={t.cancel}
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="space-y-4">
-            {historyLoading ? (
-              <div className="space-y-3 animate-pulse">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-4 bg-gray-200 rounded w-full"></div>
-                ))}
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t.editStockLimits}</h2>
+                <button
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  <X className="w-6 h-6" />
+                </button>
               </div>
-            ) : productHistory && productHistory.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-gray-700">
+              {editErrors.form && (
+                <div className="mb-4 p-3 bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 rounded-lg flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5" />
+                  {editErrors.form}
+                </div>
+              )}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  updateInventoryMutation.mutate();
+                }}
+              >
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.minStock}</label>
+                  <input
+                    type="number"
+                    value={editForm.minStockLevel}
+                    onChange={(e) => setEditForm({ ...editForm, minStockLevel: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white shadow-sm"
+                  />
+                  {editErrors.minStockLevel && (
+                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">{editErrors.minStockLevel}</p>
+                  )}
+                </div>
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{t.maxStock}</label>
+                  <input
+                    type="number"
+                    value={editForm.maxStockLevel}
+                    onChange={(e) => setEditForm({ ...editForm, maxStockLevel: parseInt(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white dark:bg-gray-800 dark:border-gray-700 dark:text-white shadow-sm"
+                  />
+                  {editErrors.maxStockLevel && (
+                    <p className="mt-1 text-sm text-red-600 dark:text-red-400">{editErrors.maxStockLevel}</p>
+                  )}
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(false)}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    {t.cancel}
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={updateInventoryMutation.isLoading}
+                    className={`px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors ${
+                      updateInventoryMutation.isLoading ? 'opacity-50 cursor-not-allowed' : ''
+                    }`}
+                  >
+                    {updateInventoryMutation.isLoading ? t.saving : t.save}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Product Details Modal */}
+      <AnimatePresence>
+        {isDetailsModalOpen && selectedProductId && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto"
+            >
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">{t.productDetails}</h2>
+                <button
+                  onClick={() => {
+                    setIsDetailsModalOpen(false);
+                    setSelectedProductId('');
+                  }}
+                  className="text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              {historyLoading ? (
+                <div className="flex justify-center items-center h-64">
+                  <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
+                </div>
+              ) : productHistory && productHistory.length > 0 ? (
+                <table className="w-full table-auto border-collapse">
                   <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="py-2 px-4 text-left font-medium">{t.date}</th>
-                      <th className="py-2 px-4 text-left font-medium">{t.type}</th>
-                      <th className="py-2 px-4 text-left font-medium">{t.quantity}</th>
-                      <th className="py-2 px-4 text-left font-medium">{t.description}</th>
+                    <tr className="bg-gray-100 dark:bg-gray-800">
+                      <th className="px-4 py-2 text-left text-gray-700 dark:text-gray-300">{t.date}</th>
+                      <th className="px-4 py-2 text-left text-gray-700 dark:text-gray-300">{t.type}</th>
+                      <th className="px-4 py-2 text-left text-gray-700 dark:text-gray-300">{t.quantity}</th>
+                      <th className="px-4 py-2 text-left text-gray-700 dark:text-gray-300">{t.description}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {productHistory.map((entry) => (
-                      <tr key={entry._id} className="border-b border-gray-100">
-                        <td className="py-2 px-4">{new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
-                        <td className="py-2 px-4">{t[entry.type]}</td>
-                        <td className="py-2 px-4">{entry.quantity}</td>
-                        <td className="py-2 px-4">{entry.description}</td>
+                      <tr key={entry._id} className="border-b dark:border-gray-700">
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-400">
+                          {new Date(entry.date).toLocaleDateString(language)}
+                        </td>
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{t[entry.type] || entry.type}</td>
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{entry.quantity}</td>
+                        <td className="px-4 py-2 text-gray-600 dark:text-gray-400">{entry.description}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
-            ) : (
-              <p className="text-gray-600 text-sm font-medium">{t.noHistory}</p>
-            )}
-            <div className="flex justify-end mt-6">
-              <button
-                onClick={() => {
-                  setIsDetailsModalOpen(false);
-                  setSelectedProductId('');
-                }}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                {t.cancel}
-              </button>
-            </div>
-          </div>
-        </motion.div>
-      </motion.div>
+              ) : (
+                <p className="text-center text-gray-600 dark:text-gray-400">{t.noHistory}</p>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
