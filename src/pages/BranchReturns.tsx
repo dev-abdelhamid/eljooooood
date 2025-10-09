@@ -1045,3 +1045,4 @@ export const BranchReturns: React.FC = () => {
   );
 };
 
+export default BranchReturns;

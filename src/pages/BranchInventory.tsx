@@ -10,7 +10,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
 
-
 // Enums for type safety
 enum InventoryStatus {
   LOW = 'low',
@@ -27,6 +26,12 @@ enum ReturnReason {
   WRONG_ITEM_EN = 'Wrong Item',
   EXCESS_QUANTITY_EN = 'Excess Quantity',
   OTHER_EN = 'Other',
+}
+
+enum ReturnStatus {
+  PENDING = 'pending_approval',
+  APPROVED = 'approved',
+  REJECTED = 'rejected',
 }
 
 // Interfaces aligned with backend
@@ -157,6 +162,7 @@ const translations = {
       returnApproved: 'تمت الموافقة على طلب الإرجاع',
       returnRejected: 'تم رفض طلب الإرجاع',
       returnCreated: 'تم إنشاء طلب الإرجاع بنجاح',
+      inventoryUpdated: 'تم تحديث المخزون بنجاح',
     },
   },
   en: {
@@ -227,6 +233,7 @@ const translations = {
       returnApproved: 'Return request approved',
       returnRejected: 'Return request rejected',
       returnCreated: 'Return request created successfully',
+      inventoryUpdated: 'Inventory updated successfully',
     },
   },
 };
@@ -344,7 +351,6 @@ export const BranchInventory: React.FC = () => {
   const [returnErrors, setReturnErrors] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
-  
 
   const ITEMS_PER_PAGE = 10;
 
@@ -453,26 +459,39 @@ export const BranchInventory: React.FC = () => {
     const handleInventoryUpdated = ({ branchId }: { branchId: string }) => {
       if (branchId === user.branchId) {
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
+        toast.success(t.notifications.inventoryUpdated, { position: isRtl ? 'top-right' : 'top-left' });
       }
     };
 
-    const handleReturnStatusUpdated = ({ branchId, returnId, status }: { branchId: string; returnId: string; status: string }) => {
+    const handleReturnStatusUpdated = ({
+      branchId,
+      returnId,
+      status,
+      items,
+    }: {
+      branchId: string;
+      returnId: string;
+      status: ReturnStatus;
+      items: Array<{ productId: string; quantity: number; status: 'approved' | 'rejected'; reviewNotes?: string }>;
+    }) => {
       if (branchId === user.branchId) {
         queryClient.invalidateQueries({ queryKey: ['inventory'] });
+        queryClient.invalidateQueries({ queryKey: ['productHistory'] });
         const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
         audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
-        addNotification({
+        const notification = {
           _id: crypto.randomUUID(),
-          type: status === 'approved' ? 'success' : 'error',
-          message: status === 'approved' ? t.notifications.returnApproved : t.notifications.returnRejected,
-          data: { returnId, eventId: crypto.randomUUID() },
+          type: status === ReturnStatus.APPROVED ? 'success' : 'error',
+          message: status === ReturnStatus.APPROVED ? t.notifications.returnApproved : t.notifications.returnRejected,
+          data: { returnId, eventId: crypto.randomUUID(), items },
           read: false,
           createdAt: new Date().toISOString(),
           sound: 'https://eljoodia-client.vercel.app/sounds/notification.mp3',
           vibrate: [200, 100, 200],
-        });
-        toast[status === 'approved' ? 'success' : 'error'](
-          status === 'approved' ? t.notifications.returnApproved : t.notifications.returnRejected,
+        };
+        addNotification(notification);
+        toast[status === ReturnStatus.APPROVED ? 'success' : 'error'](
+          status === ReturnStatus.APPROVED ? t.notifications.returnApproved : t.notifications.returnRejected,
           { position: isRtl ? 'top-right' : 'top-left' }
         );
       }
@@ -714,12 +733,13 @@ export const BranchInventory: React.FC = () => {
       const data = {
         branchId: user.branchId,
         items: returnForm.items.map((item) => ({
-          product: item.productId,
+          productId: item.productId,
           quantity: item.quantity,
           reason: item.reason,
           reasonEn: item.reasonEn,
         })),
         notes: returnForm.notes || undefined,
+        status: ReturnStatus.PENDING,
       };
       const response = await returnsAPI.createReturn(data);
       return { returnId: response?.returnRequest?._id || crypto.randomUUID() };
@@ -734,7 +754,7 @@ export const BranchInventory: React.FC = () => {
       socket?.emit('returnCreated', {
         branchId: user?.branchId,
         returnId: data.returnId,
-        status: 'pending_approval',
+        status: ReturnStatus.PENDING,
         eventId: crypto.randomUUID(),
       });
     },
@@ -771,7 +791,7 @@ export const BranchInventory: React.FC = () => {
       setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
       setEditErrors({});
       setSelectedItem(null);
-      toast.success(t.save, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.success(t.notifications.inventoryUpdated, { position: isRtl ? 'top-right' : 'top-left' });
       socket?.emit('inventoryUpdated', {
         branchId: selectedItem?.branch?._id || user?.branchId,
         productId: selectedItem?.product?._id,
@@ -790,10 +810,7 @@ export const BranchInventory: React.FC = () => {
   const errorMessage = inventoryError?.message || '';
 
   return (
-    <div
-      className=" mx-auto px-4 py-8 min-h-screen "
-    
-    >
+    <div className="mx-auto px-4 py-8 min-h-screen">
       <div className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <Package className="w-7 h-7 text-amber-600" />
