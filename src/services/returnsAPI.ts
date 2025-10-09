@@ -6,20 +6,21 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-p
 
 const returnsAxios = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 20000, // Reduced to 20 seconds for faster feedback
+  timeout: 20000,
   headers: { 'Content-Type': 'application/json' },
 });
 
 // Configure axios-retry for automatic retries
 axiosRetry(returnsAxios, {
-  retries: 3,
-  retryDelay: (retryCount) => retryCount * 1000,
+  retries: 5, // Increased retries to handle write conflicts
+  retryDelay: (retryCount) => Math.min(retryCount * 2000, 10000), // Exponential backoff with cap
   retryCondition: (error) => {
     return (
       axios.isCancel(error) ||
       error.code === 'ECONNABORTED' ||
       !error.response ||
-      error.response.status >= 500
+      error.response.status >= 500 ||
+      error.message.includes('Write conflict') // Retry on write conflict
     );
   },
 });
@@ -48,7 +49,6 @@ returnsAxios.interceptors.response.use(
 
     let message = error.response?.data?.message || error.message || (isRtl ? 'خطأ غير متوقع' : 'Unexpected error');
 
-    // Simplified error handling
     if (error.code === 'ECONNABORTED') {
       message = isRtl ? 'انتهت مهلة الطلب' : 'Request timed out';
     } else if (!error.response) {
@@ -101,6 +101,13 @@ returnsAxios.interceptors.response.use(
         case 429:
           message = isRtl ? 'طلبات كثيرة جدًا' : 'Too many requests';
           break;
+        case 500:
+          if (error.message.includes('Write conflict')) {
+            message = isRtl ? 'تعارض في الكتابة، جاري المحاولة مجددًا' : 'Write conflict, retrying';
+          } else {
+            message = isRtl ? 'خطأ في السيرفر' : 'Server error';
+          }
+          break;
       }
     }
 
@@ -138,6 +145,7 @@ export const returnsAPI = {
       reasonEn?: string;
     }>;
     notes?: string;
+    orders?: string[];
   }) => {
     if (
       !isValidObjectId(data.branchId) ||
@@ -145,7 +153,9 @@ export const returnsAPI = {
       data.items.length === 0 ||
       data.items.some(
         (item) => !isValidObjectId(item.product) || item.quantity < 1 || !item.reason
-      )
+      ) ||
+      (data.orders && !Array.isArray(data.orders)) ||
+      (data.orders && data.orders.some((id) => !isValidObjectId(id)))
     ) {
       throw new Error('Invalid return data');
     }
@@ -155,9 +165,10 @@ export const returnsAPI = {
         product: item.product,
         quantity: Number(item.quantity),
         reason: item.reason.trim(),
-        reasonEn: item.reasonEn?.trim(),
+        reasonEn: item.reasonEn?.trim() || undefined,
       })),
       notes: data.notes?.trim(),
+      orders: data.orders || [],
     });
   },
 
