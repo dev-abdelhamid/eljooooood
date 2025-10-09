@@ -4,6 +4,7 @@ import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Package, Eye, Clock, Check, AlertCircle, MinusCircle, Plus, X } from 'lucide-react';
 import { returnsAPI, inventoryAPI } from '../services/api';
+import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
@@ -58,7 +59,6 @@ interface Return {
     quantity: number;
     reason: string;
     reasonEn: string;
-    reasonDisplay: string;
   }>;
   status: ReturnStatus;
   createdAt: string;
@@ -71,7 +71,6 @@ interface AvailableItem {
   productId: string;
   productName: string;
   available: number;
-  pending: number;
   unit: string;
   displayUnit: string;
   departmentName: string;
@@ -112,7 +111,6 @@ const translations = {
     createSuccess: 'تم إنشاء طلب الإرجاع بنجاح',
     newReturnNotification: 'تم إنشاء طلب إرجاع جديد: {returnNumber}',
     quantity: 'الكمية',
-    pending: 'معلق',
     unit: 'الوحدة',
     department: 'القسم',
     product: 'المنتج',
@@ -184,7 +182,6 @@ const translations = {
     createSuccess: 'Return request created successfully',
     newReturnNotification: 'New return request created: {returnNumber}',
     quantity: 'Quantity',
-    pending: 'Pending',
     unit: 'Unit',
     department: 'Department',
     product: 'Product',
@@ -396,7 +393,6 @@ export const BranchReturns: React.FC = () => {
                 quantity: item.quantity || 1,
                 reason: item.reason || '',
                 reasonEn: item.reasonEn || '',
-                reasonDisplay: isRtl ? item.reason : item.reasonEn || item.reason,
               }))
             : [],
           status: ret.status || ReturnStatus.PENDING,
@@ -426,13 +422,12 @@ export const BranchReturns: React.FC = () => {
         .map((item: any) => ({
           productId: item.product._id,
           productName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
-          available: item.currentStock - (item.pendingStock || 0),
-          pending: item.pendingStock || 0,
+          available: item.currentStock,
           unit: item.product.unit || t.unit,
           displayUnit: isRtl ? item.product.unit : item.product.unitEn || item.product.unit || t.unit,
           departmentName: item.product.department
             ? (isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name)
-            : t.department,
+            : 'Unknown',
           stock: item.currentStock,
         }));
     },
@@ -446,12 +441,14 @@ export const BranchReturns: React.FC = () => {
       if (!user?.branchId || !returnForm.items.length) return [];
       const productIds = returnForm.items.map((item) => item.productId).filter((id) => isValidObjectId(id));
       if (!productIds.length) return [];
-      const response = await returnsAPI.getAll({
-        branch: user.branchId,
-        status: 'delivered',
-        'items.product': { $in: productIds },
+      const response = await returnsAxios.get('/orders', {
+        params: {
+          branch: user.branchId,
+          status: 'delivered',
+          'items.product': { $in: productIds },
+        },
       });
-      return response.returns.map((order: any) => order._id);
+      return response.data.orders.map((order: any) => order._id);
     },
     enabled: !!user?.branchId && returnForm.items.length > 0,
     staleTime: 5 * 60 * 1000,
@@ -468,16 +465,16 @@ export const BranchReturns: React.FC = () => {
 
     const handleReturnCreated = ({ branchId, returnNumber }: { branchId: string; returnNumber: string }) => {
       if (branchId === user.branchId) {
-        queryClient.invalidateQueries({ queryKey: ['returns', 'inventory'] });
+        queryClient.invalidateQueries({ queryKey: ['returns'] });
         toast.success(t.newReturnNotification.replace('{returnNumber}', returnNumber), {
           position: isRtl ? 'top-right' : 'top-left',
         });
       }
     };
 
-    const handleReturnStatusUpdated = ({ branchId, status, returnNumber }: { branchId: string; status: string; returnNumber: string }) => {
+    const handleReturnStatusUpdated = ({ branchId, status }: { branchId: string; status: string }) => {
       if (branchId === user.branchId) {
-        queryClient.invalidateQueries({ queryKey: ['returns', 'inventory'] });
+        queryClient.invalidateQueries({ queryKey: ['returns'] });
         toast.info(t.socket.returnStatusUpdated.replace('{status}', t.status[status as keyof typeof t.status] || status), {
           position: isRtl ? 'top-right' : 'top-left',
         });
@@ -497,36 +494,6 @@ export const BranchReturns: React.FC = () => {
       socket.off('returnStatusUpdated', handleReturnStatusUpdated);
     };
   }, [socket, user, queryClient, t, isRtl]);
-
-  const createReturnMutation = useMutation({
-    mutationFn: async (data: ReturnFormState) => {
-      if (!user?.branchId) throw new Error(t.errors.noBranch);
-      return returnsAPI.createReturn({
-        branchId: user.branchId,
-        items: data.items,
-        notes: data.notes,
-        orders: data.orders,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['returns', 'inventory'] });
-      dispatchReturnForm({ type: 'RESET' });
-      setIsCreateModalOpen(false);
-      setReturnErrors({});
-      toast.success(t.createSuccess, { position: isRtl ? 'top-right' : 'top-left' });
-    },
-    onError: (error: any) => {
-      const message = error.message || t.errors.createReturn;
-      if (error.message.includes('Write conflict') && retryCount < 3) {
-        setRetryCount(retryCount + 1);
-        setTimeout(() => createReturnMutation.mutate(returnForm), 2000 * (retryCount + 1));
-        toast.warn(t.errors.writeConflict, { position: isRtl ? 'top-right' : 'top-left' });
-      } else {
-        setRetryCount(0);
-        toast.error(message, { position: isRtl ? 'top-right' : 'top-left' });
-      }
-    },
-  });
 
   const statusOptions = useMemo(
     () => [
@@ -554,7 +521,7 @@ export const BranchReturns: React.FC = () => {
       { value: '', label: t.selectProduct },
       ...availableItems.map((item) => ({
         value: item.productId,
-        label: `${item.productName} (${t.quantity}: ${item.available}, ${t.pending}: ${item.pending} ${item.displayUnit})`,
+        label: `${item.productName} (${t.quantity}: ${item.available} ${item.displayUnit})`,
       })),
     ],
     [availableItems, t]
@@ -599,7 +566,7 @@ export const BranchReturns: React.FC = () => {
   const updateItemInForm = useCallback(
     (index: number, field: keyof ReturnItem, value: string | number) => {
       if (field === 'quantity' && typeof value === 'string') {
-        const numValue = parseInt(value, 10);
+        const numValue = parseInt(value);
         if (isNaN(numValue) || numValue < 1) return;
         value = numValue;
       }
@@ -613,434 +580,499 @@ export const BranchReturns: React.FC = () => {
           type: 'UPDATE_ITEM',
           payload: { index, field: 'reasonEn', value: selectedReason?.enValue || '' },
         });
-      } else if (field === 'productId') {
-        const selectedItem = availableItems.find((item) => item.productId === value);
-        if (selectedItem) {
-          dispatchReturnForm({
-            type: 'UPDATE_ITEM',
-            payload: { index, field: 'productId', value },
-          });
-          dispatchReturnForm({
-            type: 'UPDATE_ITEM',
-            payload: { index, field: 'maxQuantity', value: selectedItem.available },
-          });
-          if (returnForm.items[index]?.quantity > selectedItem.available) {
-            dispatchReturnForm({
-              type: 'UPDATE_ITEM',
-              payload: { index, field: 'quantity', value: selectedItem.available },
-            });
-          }
-        }
       } else {
         dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
       }
     },
-    [reasonOptions, availableItems, returnForm.items]
+    [reasonOptions]
+  );
+
+  const handleProductChange = useCallback(
+    (index: number, productId: string) => {
+      const inventoryItem = inventoryData?.find((inv) => inv.productId === productId);
+      dispatchReturnForm({
+        type: 'UPDATE_ITEM',
+        payload: { index, field: 'productId', value: productId },
+      });
+      dispatchReturnForm({
+        type: 'UPDATE_ITEM',
+        payload: { index, field: 'maxQuantity', value: inventoryItem?.available || 0 },
+      });
+      dispatchReturnForm({
+        type: 'UPDATE_ITEM',
+        payload: { index, field: 'quantity', value: 1 },
+      });
+      dispatchReturnForm({
+        type: 'UPDATE_ITEM',
+        payload: { index, field: 'reason', value: '' },
+      });
+      dispatchReturnForm({
+        type: 'UPDATE_ITEM',
+        payload: { index, field: 'reasonEn', value: '' },
+      });
+    },
+    [inventoryData]
   );
 
   const removeItemFromForm = useCallback((index: number) => {
     dispatchReturnForm({ type: 'REMOVE_ITEM', payload: index });
   }, []);
 
-  const validateForm = useCallback(() => {
+  const validateReturnForm = useCallback(() => {
     const errors: Record<string, string> = {};
-    if (!returnForm.items.length) {
-      errors.items = t.errors.noItemSelected;
+    if (!user?.branchId) {
+      errors.form = t.errors.noBranch;
+    }
+    if (returnForm.items.length === 0) {
+      errors.items = t.errors.required.replace('{field}', t.items);
     }
     returnForm.items.forEach((item, index) => {
       if (!item.productId) {
-        errors[`product_${index}`] = t.errors.required.replace('{field}', t.product);
+        errors[`item_${index}_productId`] = t.errors.required.replace('{field}', t.product);
+      } else if (!isValidObjectId(item.productId)) {
+        errors[`item_${index}_productId`] = t.errors.productNotFound;
       }
       if (!item.reason) {
-        errors[`reason_${index}`] = t.errors.required.replace('{field}', t.reason);
+        errors[`item_${index}_reason`] = t.errors.required.replace('{field}', t.reason);
       }
-      if (item.quantity < 1 || item.quantity > item.maxQuantity) {
-        errors[`quantity_${index}`] = t.errors.invalidQuantityMax.replace('{max}', item.maxQuantity.toString());
+      if (item.quantity < 1 || item.quantity > item.maxQuantity || isNaN(item.quantity)) {
+        errors[`item_${index}_quantity`] = t.errors.invalidQuantityMax.replace('{max}', item.maxQuantity.toString());
       }
-      const selectedItem = availableItems.find((ai) => ai.productId === item.productId);
-      if (selectedItem && item.quantity > selectedItem.available) {
-        errors[`quantity_${index}`] = t.errors.insufficientQuantity;
+      const inventoryItem = inventoryData?.find((inv) => inv.productId === item.productId);
+      if (!inventoryItem) {
+        errors[`item_${index}_productId`] = t.errors.productNotFound;
+      } else if (item.quantity > inventoryItem.available) {
+        errors[`item_${index}_quantity`] = t.errors.insufficientQuantity;
       }
     });
     setReturnErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [returnForm.items, availableItems, t]);
+  }, [returnForm, t, inventoryData, user]);
 
-  const handleSubmitReturn = useCallback(() => {
-    if (!validateForm()) {
-      toast.error(t.errors.invalidForm, { position: isRtl ? 'top-right' : 'top-left' });
-      return;
-    }
-    createReturnMutation.mutate(returnForm);
-  }, [validateForm, createReturnMutation, returnForm, t, isRtl]);
+  const createReturnMutation = useMutation<{ returnId: string }, Error, void>({
+    mutationFn: async () => {
+      if (!validateReturnForm()) throw new Error(t.errors.invalidForm);
+      if (!user?.branchId) throw new Error(t.errors.noBranch);
+      const data = {
+        branchId: user.branchId,
+        items: returnForm.items.map((item) => ({
+          product: item.productId,
+          quantity: item.quantity,
+          reason: item.reason,
+          reasonEn: item.reasonEn,
+        })),
+        notes: returnForm.notes || undefined,
+        orders: returnForm.orders || [],
+      };
+      const response = await returnsAPI.createReturn(data);
+      return { returnId: response?._id || crypto.randomUUID() };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['returns'] });
+      setIsCreateModalOpen(false);
+      dispatchReturnForm({ type: 'RESET' });
+      setReturnErrors({});
+      setRetryCount(0);
+      toast.success(t.createSuccess, { position: isRtl ? 'top-right' : 'top-left' });
+      socket?.emit('returnCreated', {
+        branchId: user?.branchId,
+        returnId: data.returnId,
+        returnNumber: `RET-${data.returnId.slice(-6)}`,
+        status: 'pending_approval',
+        eventId: crypto.randomUUID(),
+      });
+    },
+    onError: (err) => {
+      if (err.message.includes('Write conflict') && retryCount < 3) {
+        setRetryCount(retryCount + 1);
+        setTimeout(() => createReturnMutation.mutate(), 2000 * (retryCount + 1));
+        toast.info(t.errors.writeConflict, { position: isRtl ? 'top-right' : 'top-left' });
+      } else {
+        toast.error(err.message || t.errors.createReturn, { position: isRtl ? 'top-right' : 'top-left' });
+        setReturnErrors({ form: err.message });
+      }
+    },
+  });
 
-  const handleViewReturn = useCallback((ret: Return) => {
-    setSelectedReturn(ret);
-    setIsViewModalOpen(true);
-  }, []);
+  const ReturnCard = useCallback(
+    ({ ret }: { ret: Return }) => {
+      const statusInfo = {
+        [ReturnStatus.PENDING]: { color: 'bg-amber-100 text-amber-800', icon: Clock, label: t.status.pending },
+        [ReturnStatus.APPROVED]: { color: 'bg-green-100 text-green-800', icon: Check, label: t.status.approved },
+        [ReturnStatus.REJECTED]: { color: 'bg-red-100 text-red-800', icon: AlertCircle, label: t.status.rejected },
+      }[ret.status] || { color: 'bg-gray-100 text-gray-800', icon: Clock, label: t.status.pending };
+      const StatusIcon = statusInfo.icon;
 
-  const handleCloseModal = useCallback(() => {
-    setIsCreateModalOpen(false);
-    setIsViewModalOpen(false);
-    setSelectedReturn(null);
-    dispatchReturnForm({ type: 'RESET' });
-    setReturnErrors({});
-    setRetryCount(0);
-  }, []);
-
-  const handleStatusFilterChange = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
-    setFilterStatus(e.target.value as ReturnStatus | '');
-    setCurrentPage(1);
-  }, []);
-
-  const handlePageChange = useCallback((newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
-    }
-  }, [totalPages]);
+      return (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="flex flex-col"
+        >
+          <div className="p-5 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-200 border border-gray-100">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <h3 className="text-lg font-semibold text-gray-900">{t.returnNumber}: {ret.returnNumber}</h3>
+                <span className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${statusInfo.color}`}>
+                  <StatusIcon className="w-5 h-5" />
+                  {statusInfo.label}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm text-gray-500">{t.date}</p>
+                  <p className="text-sm font-medium text-gray-900">{new Date(ret.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">{t.itemsCount}</p>
+                  <p className="text-sm font-medium text-gray-900">{ret.items.length} {t.items}</p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2">
+                {ret.items.map((item, index) => (
+                  <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100">
+                    <p className="text-sm font-medium text-gray-900">{item.product.displayName}</p>
+                    <p className="text-sm text-gray-600">{t.quantity}: {item.quantity} {item.product.displayUnit}</p>
+                    <p className="text-sm text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
+                  </div>
+                ))}
+              </div>
+              {ret.notes && (
+                <div className="p-3 bg-amber-50 rounded-md">
+                  <p className="text-sm text-amber-800">{t.notesLabel}: {ret.notes}</p>
+                </div>
+              )}
+              {ret.reviewNotes && (
+                <div className="p-3 bg-blue-50 rounded-md">
+                  <p className="text-sm text-blue-800">{t.reviewNotes}: {ret.reviewNotes}</p>
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  setSelectedReturn(ret);
+                  setIsViewModalOpen(true);
+                }}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 self-end"
+              >
+                <Eye className="w-4 h-4 inline mr-2" />
+                {t.view}
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      );
+    },
+    [t, isRtl]
+  );
 
   return (
-    <div className={`container mx-auto p-4 ${isRtl ? 'font-arabic' : 'font-sans'}`}>
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="mb-8"
-      >
-        <h1 className="text-2xl font-bold text-gray-800">{t.title}</h1>
-        <p className="text-gray-600">{t.subtitle}</p>
-      </motion.div>
-
-      {/* Filters and Search */}
-      <div className="flex flex-col sm:flex-row gap-4 mb-6">
-        <input
-          type="text"
-          value={searchInput}
-          onChange={handleSearchChange}
-          placeholder={t.searchPlaceholder}
-          className="flex-1 p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-          dir={isRtl ? 'rtl' : 'ltr'}
-        />
-        <select
-          value={filterStatus}
-          onChange={handleStatusFilterChange}
-          className="p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-          dir={isRtl ? 'rtl' : 'ltr'}
-        >
-          {statusOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+    <div className="mx-auto px-4 py-8 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
+      <div className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+        <div className="flex items-center gap-3">
+          <Package className="w-7 h-7 text-amber-600" />
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
+            <p className="text-gray-600 text-sm">{t.subtitle}</p>
+          </div>
+        </div>
         <button
           onClick={() => setIsCreateModalOpen(true)}
-          className="bg-amber-600 text-white px-4 py-2 rounded-lg hover:bg-amber-700 transition-colors duration-200"
+          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
         >
+          <Plus className="w-4 h-4" />
           {t.createReturn}
         </button>
       </div>
 
-      {/* Returns Table */}
-      {returnsLoading ? (
-        <div className="flex justify-center items-center h-64">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-500"></div>
-        </div>
-      ) : returnsError ? (
-        <div className="text-red-500 text-center">{returnsError.message || t.errors.fetchReturns}</div>
-      ) : paginatedReturns.length === 0 ? (
-        <div className="text-center text-gray-500">{t.noReturns}</div>
-      ) : (
+      {returnsError && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5 }}
-          className="overflow-x-auto"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3"
         >
-          <table className="min-w-full bg-white shadow-md rounded-lg overflow-hidden">
-            <thead className="bg-gray-100">
-              <tr>
-                <th className={`px-4 py-2 text-${isRtl ? 'right' : 'left'} text-sm font-medium text-gray-700`}>{t.returnNumber}</th>
-                <th className={`px-4 py-2 text-${isRtl ? 'right' : 'left'} text-sm font-medium text-gray-700`}>{t.statusLabel}</th>
-                <th className={`px-4 py-2 text-${isRtl ? 'right' : 'left'} text-sm font-medium text-gray-700`}>{t.date}</th>
-                <th className={`px-4 py-2 text-${isRtl ? 'right' : 'left'} text-sm font-medium text-gray-700`}>{t.itemsCount}</th>
-                <th className={`px-4 py-2 text-${isRtl ? 'right' : 'left'} text-sm font-medium text-gray-700`}>{t.branch}</th>
-                <th className={`px-4 py-2 text-${isRtl ? 'right' : 'left'} text-sm font-medium text-gray-700`}>{t.actions}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {paginatedReturns.map((ret) => (
-                <motion.tr
-                  key={ret._id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="border-b"
-                >
-                  <td className={`px-4 py-3 text-${isRtl ? 'right' : 'left'}`}>{ret.returnNumber}</td>
-                  <td className={`px-4 py-3 text-${isRtl ? 'right' : 'left'}`}>
-                    <span
-                      className={`inline-flex items-center px-2 py-1 rounded-full text-sm ${
-                        ret.status === ReturnStatus.PENDING
-                          ? 'bg-yellow-100 text-yellow-800'
-                          : ret.status === ReturnStatus.APPROVED
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}
-                    >
-                      {ret.status === ReturnStatus.PENDING && <Clock className="w-4 h-4 mr-1" />}
-                      {ret.status === ReturnStatus.APPROVED && <Check className="w-4 h-4 mr-1" />}
-                      {ret.status === ReturnStatus.REJECTED && <AlertCircle className="w-4 h-4 mr-1" />}
-                      {t.status[ret.status as keyof typeof t.status]}
-                    </span>
-                  </td>
-                  <td className={`px-4 py-3 text-${isRtl ? 'right' : 'left'}`}>
-                    {new Date(ret.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
-                  </td>
-                  <td className={`px-4 py-3 text-${isRtl ? 'right' : 'left'}`}>{ret.items.length}</td>
-                  <td className={`px-4 py-3 text-${isRtl ? 'right' : 'left'}`}>{ret.branch?.displayName || t.noNotes}</td>
-                  <td className={`px-4 py-3 text-${isRtl ? 'right' : 'left'}`}>
-                    <button
-                      onClick={() => handleViewReturn(ret)}
-                      className="text-amber-600 hover:text-amber-800 transition-colors duration-200"
-                      aria-label={t.view}
-                    >
-                      <Eye className="w-5 h-5" />
-                    </button>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <span className="text-red-600 text-sm font-medium">{returnsError.message}</span>
+          <button
+            onClick={() => refetchReturns()}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+          >
+            {t.common.retry}
+          </button>
         </motion.div>
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex justify-between items-center mt-4">
+      <div className="p-6 bg-white rounded-xl shadow-sm mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <ProductSearchInput
+            value={searchInput}
+            onChange={handleSearchChange}
+            placeholder={t.searchPlaceholder}
+            className="w-full"
+          />
+          <ProductDropdown
+            value={filterStatus}
+            onChange={(value) => {
+              setFilterStatus(value as ReturnStatus | '');
+              setCurrentPage(1);
+            }}
+            options={statusOptions}
+            className="w-full"
+          />
+        </div>
+      </div>
+
+      {returnsLoading ? (
+        <div className="grid grid-cols-1 gap-4">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="p-5 bg-white rounded-xl shadow-sm animate-pulse">
+              <div className="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
+              <div className="h-3 bg-gray-200 rounded w-1/2 mb-2"></div>
+              <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+            </div>
+          ))}
+        </div>
+      ) : paginatedReturns.length === 0 ? (
+        <div className="p-8 text-center bg-white rounded-xl shadow-sm">
+          <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <p className="text-gray-600 text-sm font-medium">{t.noReturns}</p>
           <button
-            onClick={() => handlePageChange(currentPage - 1)}
+            onClick={() => setIsCreateModalOpen(true)}
+            className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+          >
+            {t.createReturn}
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4">
+          <AnimatePresence>
+            {paginatedReturns.map((ret) => (
+              <ReturnCard key={ret._id} ret={ret} />
+            ))}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="mt-6 flex items-center justify-center gap-3">
+          <button
+            onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
             disabled={currentPage === 1}
-            className="px-4 py-2 bg-gray-200 rounded-lg disabled:opacity-50 hover:bg-gray-300 transition-colors duration-200"
           >
             {t.pagination.previous}
           </button>
-          <span>{t.pagination.page.replace('{current}', currentPage.toString()).replace('{total}', totalPages.toString())}</span>
+          <span className="text-gray-700 font-medium">
+            {t.pagination.page.replace('{current}', currentPage.toString()).replace('{total}', totalPages.toString())}
+          </span>
           <button
-            onClick={() => handlePageChange(currentPage + 1)}
+            onClick={() => setCurrentPage(Math.min(currentPage + 1, totalPages))}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
             disabled={currentPage === totalPages}
-            className="px-4 py-2 bg-gray-200 rounded-lg disabled:opacity-50 hover:bg-gray-300 transition-colors duration-200"
           >
             {t.pagination.next}
           </button>
         </div>
       )}
 
-      {/* Create Return Modal */}
-      <AnimatePresence>
-        {isCreateModalOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          >
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto"
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: isCreateModalOpen ? 1 : 0 }}
+        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${isCreateModalOpen ? '' : 'pointer-events-none'}`}
+      >
+        <motion.div
+          initial={{ scale: 0.95 }}
+          animate={{ scale: isCreateModalOpen ? 1 : 0.95 }}
+          className="bg-white p-6 rounded-xl shadow-xl max-w-lg w-full"
+        >
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-gray-900">{t.createReturn}</h2>
+            <button
+              onClick={() => {
+                setIsCreateModalOpen(false);
+                dispatchReturnForm({ type: 'RESET' });
+                setReturnErrors({});
+                setRetryCount(0);
+              }}
+              className="p-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
             >
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold">{t.createReturn}</h2>
-                <button onClick={handleCloseModal} className="text-gray-500 hover:text-gray-700">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">{t.items}</label>
-                  {returnForm.items.map((item, index) => (
-                    <div key={index} className="flex flex-col sm:flex-row gap-2 mb-2 border-b pb-2">
-                      <div className="flex-1">
-                        <select
-                          value={item.productId}
-                          onChange={(e) => updateItemInForm(index, 'productId', e.target.value)}
-                          className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500"
-                          dir={isRtl ? 'rtl' : 'ltr'}
-                        >
-                          {productOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                        {returnErrors[`product_${index}`] && (
-                          <p className="text-red-500 text-xs mt-1">{returnErrors[`product_${index}`]}</p>
-                        )}
-                      </div>
-                      <div className="w-32">
-                        <QuantityInput
-                          value={item.quantity}
-                          onChange={(val) => updateItemInForm(index, 'quantity', val)}
-                          onIncrement={() => updateItemInForm(index, 'quantity', item.quantity + 1)}
-                          onDecrement={() => updateItemInForm(index, 'quantity', item.quantity - 1)}
-                          max={item.maxQuantity}
-                        />
-                        {returnErrors[`quantity_${index}`] && (
-                          <p className="text-red-500 text-xs mt-1">{returnErrors[`quantity_${index}`]}</p>
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <select
-                          value={item.reason}
-                          onChange={(e) => updateItemInForm(index, 'reason', e.target.value)}
-                          className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500"
-                          dir={isRtl ? 'rtl' : 'ltr'}
-                        >
-                          {reasonOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                        {returnErrors[`reason_${index}`] && (
-                          <p className="text-red-500 text-xs mt-1">{returnErrors[`reason_${index}`]}</p>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => removeItemFromForm(index)}
-                        className="text-red-500 hover:text-red-700"
-                        aria-label={t.removeItem}
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
-                    </div>
-                  ))}
-                  {returnErrors.items && <p className="text-red-500 text-xs mt-1">{returnErrors.items}</p>}
-                  <button
-                    onClick={addItemToForm}
-                    className="mt-2 text-amber-600 hover:text-amber-800 flex items-center"
-                  >
-                    <Plus className="w-4 h-4 mr-1" /> {t.addItem}
-                  </button>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">{t.notesLabel}</label>
-                  <textarea
-                    value={returnForm.notes}
-                    onChange={(e) => dispatchReturnForm({ type: 'SET_NOTES', payload: e.target.value })}
-                    placeholder={t.notesPlaceholder}
-                    className="w-full p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500"
-                    rows={4}
-                    dir={isRtl ? 'rtl' : 'ltr'}
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t.notesLabel}</label>
+              <textarea
+                value={returnForm.notes}
+                onChange={(e) => dispatchReturnForm({ type: 'SET_NOTES', payload: e.target.value })}
+                placeholder={t.notesPlaceholder}
+                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                rows={3}
+              />
+              {returnErrors.form && <p className="text-red-600 text-xs mt-1">{returnErrors.form}</p>}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t.items}</label>
+              {returnForm.items.map((item, index) => (
+                <div key={index} className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                  <ProductDropdown
+                    value={item.productId}
+                    onChange={(value) => handleProductChange(index, value)}
+                    options={productOptions}
+                    placeholder={t.selectProduct}
+                    className="w-full mb-2"
                   />
+                  {returnErrors[`item_${index}_productId`] && (
+                    <p className="text-red-600 text-xs mb-2">{returnErrors[`item_${index}_productId`]}</p>
+                  )}
+                  <div className="flex items-center gap-4">
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.quantity}</label>
+                      <QuantityInput
+                        value={item.quantity}
+                        onChange={(val) => updateItemInForm(index, 'quantity', val)}
+                        onIncrement={() => updateItemInForm(index, 'quantity', item.quantity + 1)}
+                        onDecrement={() => updateItemInForm(index, 'quantity', item.quantity - 1)}
+                        max={item.maxQuantity}
+                      />
+                      {returnErrors[`item_${index}_quantity`] && (
+                        <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_quantity`]}</p>
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.reason}</label>
+                      <ProductDropdown
+                        value={item.reason}
+                        onChange={(value) => updateItemInForm(index, 'reason', value)}
+                        options={reasonOptions}
+                        className="w-full"
+                      />
+                      {returnErrors[`item_${index}_reason`] && (
+                        <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_reason`]}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => removeItemFromForm(index)}
+                      className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg mt-6"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex justify-end gap-2">
-                  <button
-                    onClick={handleCloseModal}
-                    className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors duration-200"
-                  >
-                    {t.common.cancel}
-                  </button>
-                  <button
-                    onClick={handleSubmitReturn}
-                    disabled={createReturnMutation.isLoading}
-                    className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors duration-200 disabled:opacity-50"
-                  >
-                    {createReturnMutation.isLoading ? t.common.submitting : t.submitReturn}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              ))}
+              <button
+                onClick={addItemToForm}
+                className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
+                disabled={availableItems.length === 0}
+              >
+                <Plus className="w-4 h-4" />
+                {t.addItem}
+              </button>
+              {returnErrors.items && <p className="text-red-600 text-xs">{returnErrors.items}</p>}
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setIsCreateModalOpen(false);
+                  dispatchReturnForm({ type: 'RESET' });
+                  setReturnErrors({});
+                  setRetryCount(0);
+                }}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium"
+              >
+                {t.common.cancel}
+              </button>
+              <button
+                onClick={() => createReturnMutation.mutate()}
+                disabled={createReturnMutation.isLoading}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                {createReturnMutation.isLoading ? t.common.submitting : t.submitReturn}
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
 
-      {/* View Return Modal */}
-      <AnimatePresence>
-        {isViewModalOpen && selectedReturn && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          >
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              transition={{ duration: 0.3 }}
-              className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto"
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: isViewModalOpen ? 1 : 0 }}
+        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${isViewModalOpen ? '' : 'pointer-events-none'}`}
+      >
+        <motion.div
+          initial={{ scale: 0.95 }}
+          animate={{ scale: isViewModalOpen ? 1 : 0.95 }}
+          className="bg-white p-6 rounded-xl shadow-xl max-w-lg w-full"
+        >
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-gray-900">{t.viewReturn}: {selectedReturn?.returnNumber}</h2>
+            <button
+              onClick={() => setIsViewModalOpen(false)}
+              className="p-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
             >
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold">{t.viewReturn}</h2>
-                <button onClick={handleCloseModal} className="text-gray-500 hover:text-gray-700">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-              <div className="space-y-4">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {selectedReturn && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t.returnNumber}</label>
-                  <p>{selectedReturn.returnNumber}</p>
+                  <p className="text-sm text-gray-500">{t.returnNumber}</p>
+                  <p className="text-sm font-medium text-gray-900">{selectedReturn.returnNumber}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t.statusLabel}</label>
-                  <p>{t.status[selectedReturn.status as keyof typeof t.status]}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">{t.date}</label>
-                  <p>{new Date(selectedReturn.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">{t.branch}</label>
-                  <p>{selectedReturn.branch?.displayName || t.noNotes}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">{t.items}</label>
-                  <table className="min-w-full bg-gray-50 rounded-lg">
-                    <thead>
-                      <tr>
-                        <th className={`px-4 py-2 text-${isRtl ? 'right' : 'left'} text-sm font-medium text-gray-700`}>{t.product}</th>
-                        <th className={`px-4 py-2 text-${isRtl ? 'right' : 'left'} text-sm font-medium text-gray-700`}>{t.quantity}</th>
-                        <th className={`px-4 py-2 text-${isRtl ? 'right' : 'left'} text-sm font-medium text-gray-700`}>{t.unit}</th>
-                        <th className={`px-4 py-2 text-${isRtl ? 'right' : 'left'} text-sm font-medium text-gray-700`}>{t.reason}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedReturn.items.map((item) => (
-                        <tr key={item.itemId}>
-                          <td className={`px-4 py-2 text-${isRtl ? 'right' : 'left'}`}>{item.product.displayName}</td>
-                          <td className={`px-4 py-2 text-${isRtl ? 'right' : 'left'}`}>{item.quantity}</td>
-                          <td className={`px-4 py-2 text-${isRtl ? 'right' : 'left'}`}>{item.product.displayUnit}</td>
-                          <td className={`px-4 py-2 text-${isRtl ? 'right' : 'left'}`}>{item.reasonDisplay}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">{t.notesLabel}</label>
-                  <p>{selectedReturn.notes || t.noNotes}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">{t.reviewNotes}</label>
-                  <p>{selectedReturn.reviewNotes || t.noNotes}</p>
-                </div>
-                <div className="flex justify-end">
-                  <button
-                    onClick={handleCloseModal}
-                    className="px-4 py-2 bg-gray-200 rounded-lg hover:bg-gray-300 transition-colors duration-200"
+                  <p className="text-sm text-gray-500">{t.statusLabel}</p>
+                  <span
+                    className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
+                      selectedReturn.status === ReturnStatus.PENDING
+                        ? 'bg-amber-100 text-amber-800'
+                        : selectedReturn.status === ReturnStatus.APPROVED
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}
                   >
-                    {t.common.close}
-                  </button>
+                    {t.status[selectedReturn.status as keyof typeof t.status] || selectedReturn.status}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">{t.date}</p>
+                  <p className="text-sm font-medium text-gray-900">{new Date(selectedReturn.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">{t.branch}</p>
+                  <p className="text-sm font-medium text-gray-900">{selectedReturn.branch?.displayName || t.branch}</p>
                 </div>
               </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">{t.items}</p>
+                {selectedReturn.items.map((item, index) => (
+                  <div key={index} className="p-3 bg-gray-50 rounded-md border border-gray-100 mb-2">
+                    <p className="text-sm font-medium text-gray-900">{item.product.displayName}</p>
+                    <p className="text-sm text-gray-600">{t.quantity}: {item.quantity} {item.product.displayUnit}</p>
+                    <p className="text-sm text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
+                  </div>
+                ))}
+              </div>
+              {selectedReturn.notes && (
+                <div className="p-3 bg-amber-50 rounded-md">
+                  <p className="text-sm text-amber-800">{t.notesLabel}: {selectedReturn.notes}</p>
+                </div>
+              )}
+              {selectedReturn.reviewNotes && (
+                <div className="p-3 bg-blue-50 rounded-md">
+                  <p className="text-sm text-blue-800">{t.reviewNotes}: {selectedReturn.reviewNotes}</p>
+                </div>
+              )}
+              <button
+                onClick={() => setIsViewModalOpen(false)}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium w-full"
+              >
+                {t.common.close}
+              </button>
+            </div>
+          )}
+        </motion.div>
+      </motion.div>
     </div>
   );
 };
