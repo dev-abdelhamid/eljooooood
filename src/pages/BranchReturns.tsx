@@ -37,6 +37,7 @@ interface ReturnItem {
 interface ReturnFormState {
   notes: string;
   items: ReturnItem[];
+  orders: string[];
 }
 
 interface Return {
@@ -63,6 +64,7 @@ interface Return {
   createdAt: string;
   notes: string;
   reviewNotes: string;
+  orders: string[];
 }
 
 interface AvailableItem {
@@ -134,6 +136,7 @@ const translations = {
       insufficientQuantity: 'الكمية غير كافية للمنتج في المخزون',
       productNotFound: 'المنتج غير موجود',
       invalidReasonPair: 'سبب الإرجاع وسبب الإرجاع بالإنجليزية غير متطابقين',
+      writeConflict: 'تعارض في الكتابة، حاول مرة أخرى',
     },
     socket: {
       connected: 'تم الاتصال بالخادم',
@@ -204,6 +207,7 @@ const translations = {
       insufficientQuantity: 'Insufficient quantity for the product in inventory',
       productNotFound: 'Product not found',
       invalidReasonPair: 'Return reason and English reason do not match',
+      writeConflict: 'Write conflict, please try again',
     },
     socket: {
       connected: 'Connected to server',
@@ -282,6 +286,7 @@ type ReturnFormAction =
   | { type: 'ADD_ITEM'; payload: ReturnItem }
   | { type: 'UPDATE_ITEM'; payload: { index: number; field: keyof ReturnItem; value: string | number } }
   | { type: 'REMOVE_ITEM'; payload: number }
+  | { type: 'SET_ORDERS'; payload: string[] }
   | { type: 'RESET' };
 
 const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): ReturnFormState => {
@@ -296,8 +301,10 @@ const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): Re
       return { ...state, items: newItems };
     case 'REMOVE_ITEM':
       return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
+    case 'SET_ORDERS':
+      return { ...state, orders: action.payload };
     case 'RESET':
-      return { notes: '', items: [] };
+      return { notes: '', items: [], orders: [] };
     default:
       return state;
   }
@@ -318,9 +325,10 @@ export const BranchReturns: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedReturn, setSelectedReturn] = useState<Return | null>(null);
-  const [returnForm, dispatchReturnForm] = useReducer(returnFormReducer, { notes: '', items: [] });
+  const [returnForm, dispatchReturnForm] = useReducer(returnFormReducer, { notes: '', items: [], orders: [] });
   const [returnErrors, setReturnErrors] = useState<Record<string, string>>({});
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
+  const [retryCount, setRetryCount] = useState(0);
 
   const RETURNS_PER_PAGE = 10;
 
@@ -391,6 +399,7 @@ export const BranchReturns: React.FC = () => {
           createdAt: ret.createdAt || new Date().toISOString(),
           notes: ret.notes || '',
           reviewNotes: ret.reviewNotes || '',
+          orders: ret.orders || [],
         })),
         total: response.total || 0,
       };
@@ -425,6 +434,31 @@ export const BranchReturns: React.FC = () => {
     enabled: !!user?.branchId,
     staleTime: 5 * 60 * 1000,
   });
+
+  const { data: ordersData } = useQuery<string[], Error>({
+    queryKey: ['orders', user?.branchId, returnForm.items, language],
+    queryFn: async () => {
+      if (!user?.branchId || !returnForm.items.length) return [];
+      const productIds = returnForm.items.map((item) => item.productId).filter((id) => isValidObjectId(id));
+      if (!productIds.length) return [];
+      const response = await returnsAxios.get('/orders', {
+        params: {
+          branch: user.branchId,
+          status: 'delivered',
+          'items.product': { $in: productIds },
+        },
+      });
+      return response.data.orders.map((order: any) => order._id);
+    },
+    enabled: !!user?.branchId && returnForm.items.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  useEffect(() => {
+    if (ordersData) {
+      dispatchReturnForm({ type: 'SET_ORDERS', payload: ordersData });
+    }
+  }, [ordersData]);
 
   useEffect(() => {
     if (!socket || !user?.branchId) return;
@@ -628,6 +662,7 @@ export const BranchReturns: React.FC = () => {
           reasonEn: item.reasonEn,
         })),
         notes: returnForm.notes || undefined,
+        orders: returnForm.orders || [],
       };
       const response = await returnsAPI.createReturn(data);
       return { returnId: response?._id || crypto.randomUUID() };
@@ -637,6 +672,7 @@ export const BranchReturns: React.FC = () => {
       setIsCreateModalOpen(false);
       dispatchReturnForm({ type: 'RESET' });
       setReturnErrors({});
+      setRetryCount(0);
       toast.success(t.createSuccess, { position: isRtl ? 'top-right' : 'top-left' });
       socket?.emit('returnCreated', {
         branchId: user?.branchId,
@@ -647,8 +683,14 @@ export const BranchReturns: React.FC = () => {
       });
     },
     onError: (err) => {
-      toast.error(err.message || t.errors.createReturn, { position: isRtl ? 'top-right' : 'top-left' });
-      setReturnErrors({ form: err.message });
+      if (err.message.includes('Write conflict') && retryCount < 3) {
+        setRetryCount(retryCount + 1);
+        setTimeout(() => createReturnMutation.mutate(), 2000 * (retryCount + 1));
+        toast.info(t.errors.writeConflict, { position: isRtl ? 'top-right' : 'top-left' });
+      } else {
+        toast.error(err.message || t.errors.createReturn, { position: isRtl ? 'top-right' : 'top-left' });
+        setReturnErrors({ form: err.message });
+      }
     },
   });
 
@@ -850,6 +892,7 @@ export const BranchReturns: React.FC = () => {
                 setIsCreateModalOpen(false);
                 dispatchReturnForm({ type: 'RESET' });
                 setReturnErrors({});
+                setRetryCount(0);
               }}
               className="p-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
             >
@@ -933,6 +976,7 @@ export const BranchReturns: React.FC = () => {
                   setIsCreateModalOpen(false);
                   dispatchReturnForm({ type: 'RESET' });
                   setReturnErrors({});
+                  setRetryCount(0);
                 }}
                 className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium"
               >
