@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { notificationsAPI } from './notifications';
+import { returnsAPI } from './returnsAPI';
 import { salesAPI } from './salesAPI';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
@@ -592,147 +593,6 @@ export const ordersAPI = {
   },
 };
 
-
-export const returnsAPI = {
-  getAll: async (query: {
-    status?: string;
-    branch?: string;
-    search?: string;
-    sort?: string;
-    page?: number;
-    limit?: number;
-  } = {}) => {
-    console.log(`[${new Date().toISOString()}] returnsAPI.getAll - Sending:`, query);
-    try {
-      if (query.branch && !isValidObjectId(query.branch)) {
-        console.error(`[${new Date().toISOString()}] returnsAPI.getAll - Invalid branch ID:`, query.branch);
-        throw new Error('Invalid branch ID');
-      }
-      const response = await returnsAxios.get('/returns', { params: query });
-      console.log(`[${new Date().toISOString()}] returnsAPI.getAll - Response:`, response);
-      return response;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.getAll - Error:`, error);
-      throw error;
-    }
-  },
-
-  getBranches: async () => {
-    console.log(`[${new Date().toISOString()}] returnsAPI.getBranches - Sending`);
-    try {
-      const response = await returnsAxios.get('/branches');
-      console.log(`[${new Date().toISOString()}] returnsAPI.getBranches - Response:`, response);
-      return response;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.getBranches - Error:`, error);
-      throw error;
-    }
-  },
-
-  createReturn: async (data: {
-    branchId: string;
-    items: Array<{
-      product: string;
-      quantity: number;
-      reason: string;
-      reasonEn?: string;
-    }>;
-    notes?: string ;
-  }) => {
-    console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Sending:`, data);
-    if (
-      !isValidObjectId(data.branchId) ||
-      !Array.isArray(data.items) ||
-      data.items.length === 0 ||
-      data.items.some(
-        (item) => !isValidObjectId(item.product) || item.quantity < 1 || !item.reason
-      )
-    ) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Invalid data:`, data);
-      throw new Error('Invalid branch ID or item data');
-    }
-    try {
-    
-      const response = await returnsAxios.post('/returns', {
-        branchId: data.branchId,
-        items: data.items.map(item => ({
-          product: item.product,
-          quantity: Number(item.quantity),
-          reason: item.reason.trim(),
-          reasonEn: item.reasonEn,
-        })),
-        notes: data.notes ? data.notes.trim() : undefined,
-      });
-      console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Response:`, response);
-      return response;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Error:`, {
-        message: error.message,
-        status: error.status,
-        details: error.details,
-        response: error.response,
-      });
-      const isRtl = localStorage.getItem('language') === 'ar';
-      let errorMessage = error.message || (isRtl ? 'خطأ في إنشاء طلب الإرجاع' : 'Error creating return request');
-      if (error.status === 400) {
-        errorMessage = error.details?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
-        if (error.details?.field) {
-          errorMessage = `${errorMessage}: ${error.details.field} = ${error.details.value}`;
-        }
-      } else if (error.status === 403) {
-        errorMessage = error.details?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
-      } else if (error.status === 404) {
-        errorMessage = error.details?.message || (isRtl ? 'الفرع أو المنتج غير موجود' : 'Branch or product not found');
-      } else if (error.status === 422) {
-        errorMessage = error.details?.message || (isRtl ? 'الكمية غير كافية' : 'Insufficient quantity');
-      } else if (error.code === 'ECONNABORTED') {
-        errorMessage = isRtl ? 'انتهت مهلة الطلب، حاول مرة أخرى' : 'Request timed out, please try again';
-      } else if (!error.response) {
-        errorMessage = isRtl ? 'فشل الاتصال بالخادم' : 'Failed to connect to server';
-      }
-      throw new Error(errorMessage);
-    }
-  },
-
-  updateReturnStatus: async (
-    returnId: string,
-    data: {
-      status: 'approved' | 'rejected';
-      reviewNotes?: string;
-    }
-  ) => {
-    console.log(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Sending:`, { returnId, data });
-    if (
-      !isValidObjectId(returnId) ||
-      !['approved', 'rejected'].includes(data.status)
-    ) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Invalid data:`, { returnId, data });
-      throw new Error('Invalid return ID or status');
-    }
-    try {
-      const response = await returnsAxios.put(`/returns/${returnId}`, {
-        status: data.status,
-        reviewNotes: data.reviewNotes ? data.reviewNotes.trim() : undefined,
-      });
-      console.log(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Response:`, response);
-      return response;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Error:`, {
-        message: error.message,
-        status: error.status,
-        details: error.details,
-        response: error.response,
-      });
-      const isRtl = localStorage.getItem('language') === 'ar';
-      let errorMessage = error.message || (isRtl ? 'خطأ في تحديث حالة الإرجاع' : 'Error updating return status');
-      if (error.status === 404) {
-        errorMessage = error.details?.message || (isRtl ? 'الإرجاع غير موجود' : 'Return not found');
-      }
-      throw new Error(errorMessage);
-    }
-  },
-};
-
 export const departmentAPI = {
   getAll: async (params: { page?: number; limit?: number; search?: string } = {}) => {
     const response = await api.get('/departments', { params });
@@ -1307,5 +1167,5 @@ export const factoryInventoryAPI = {
   },
 };
 
-export { notificationsAPI, salesAPI };
+export { notificationsAPI, returnsAPI, salesAPI };
 export default api;
