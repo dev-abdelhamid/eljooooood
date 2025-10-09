@@ -663,13 +663,20 @@ export const BranchInventory: React.FC = () => {
         return;
       }
       const inventoryItem = inventoryData?.find((inv) => inv.product?._id === productId);
+      if (!inventoryItem) {
+        setReturnErrors((prev) => ({
+          ...prev,
+          [`item_${index}_productId`]: t.errors.productNotFound,
+        }));
+        return;
+      }
       dispatchReturnForm({
         type: 'UPDATE_ITEM',
         payload: { index, field: 'productId', value: productId },
       });
       dispatchReturnForm({
         type: 'UPDATE_ITEM',
-        payload: { index, field: 'maxQuantity', value: inventoryItem?.currentStock || 0 },
+        payload: { index, field: 'maxQuantity', value: inventoryItem.currentStock },
       });
       dispatchReturnForm({
         type: 'UPDATE_ITEM',
@@ -746,10 +753,10 @@ export const BranchInventory: React.FC = () => {
           quantity: item.quantity,
           reason: item.reason,
           reasonEn: item.reasonEn,
+          price: 0, // Backend requires price; set to 0 as per schema
         })),
         notes: returnForm.notes || undefined,
       };
-      // Additional validation before sending
       for (const [index, item] of data.items.entries()) {
         if (!isValidObjectId(item.productId)) {
           throw new Error(t.errors.invalidProductId + ` at item ${index + 1}`);
