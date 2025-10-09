@@ -139,7 +139,6 @@ export const returnsAPI = {
     try {
       if (query.branch && !isValidObjectId(query.branch)) {
         console.error(`[${new Date().toISOString()}] returnsAPI.getAll - Invalid branch ID:`, query.branch);
-        throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
       }
       const response = await returnsAxios.get('/returns', { params: query });
       console.log(`[${new Date().toISOString()}] returnsAPI.getAll - Response:`, response.data);
