@@ -52,7 +52,7 @@ interface InventoryItem {
 }
 
 interface ReturnItem {
-  productId: string;
+  product: string; // Changed from productId to product to match backend schema
   quantity: number;
   reason: string;
   reasonEn: string;
@@ -590,7 +590,7 @@ export const BranchInventory: React.FC = () => {
         dispatchReturnForm({
           type: 'ADD_ITEM',
           payload: {
-            productId: item.product._id,
+            product: item.product._id, // Changed from productId to product
             quantity: 1,
             reason: '',
             reasonEn: '',
@@ -600,7 +600,7 @@ export const BranchInventory: React.FC = () => {
       } else {
         dispatchReturnForm({
           type: 'ADD_ITEM',
-          payload: { productId: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0 },
+          payload: { product: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0 },
         });
       }
       setReturnErrors({});
@@ -625,7 +625,7 @@ export const BranchInventory: React.FC = () => {
   const addItemToForm = useCallback(() => {
     dispatchReturnForm({
       type: 'ADD_ITEM',
-      payload: { productId: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0 },
+      payload: { product: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0 },
     });
   }, []);
 
@@ -658,7 +658,7 @@ export const BranchInventory: React.FC = () => {
       if (!isValidObjectId(productId)) {
         setReturnErrors((prev) => ({
           ...prev,
-          [`item_${index}_productId`]: t.errors.invalidProductId,
+          [`item_${index}_product`]: t.errors.invalidProductId,
         }));
         return;
       }
@@ -666,13 +666,13 @@ export const BranchInventory: React.FC = () => {
       if (!inventoryItem) {
         setReturnErrors((prev) => ({
           ...prev,
-          [`item_${index}_productId`]: t.errors.productNotFound,
+          [`item_${index}_product`]: t.errors.productNotFound,
         }));
         return;
       }
       dispatchReturnForm({
         type: 'UPDATE_ITEM',
-        payload: { index, field: 'productId', value: productId },
+        payload: { index, field: 'product', value: productId }, // Changed from productId to product
       });
       dispatchReturnForm({
         type: 'UPDATE_ITEM',
@@ -699,10 +699,10 @@ export const BranchInventory: React.FC = () => {
       errors.items = t.errors.required.replace('{field}', t.items);
     }
     returnForm.items.forEach((item, index) => {
-      if (!item.productId) {
-        errors[`item_${index}_productId`] = t.errors.required.replace('{field}', t.items);
-      } else if (!isValidObjectId(item.productId)) {
-        errors[`item_${index}_productId`] = t.errors.invalidProductId;
+      if (!item.product) {
+        errors[`item_${index}_product`] = t.errors.required.replace('{field}', t.items);
+      } else if (!isValidObjectId(item.product)) {
+        errors[`item_${index}_product`] = t.errors.invalidProductId;
       }
       if (!item.reason) {
         errors[`item_${index}_reason`] = t.errors.required.replace('{field}', t.reason);
@@ -722,9 +722,9 @@ export const BranchInventory: React.FC = () => {
       if (item.quantity < 1 || item.quantity > item.maxQuantity || isNaN(item.quantity)) {
         errors[`item_${index}_quantity`] = t.errors.invalidQuantityMax.replace('{max}', item.maxQuantity.toString());
       }
-      const inventoryItem = inventoryData?.find((inv) => inv.product?._id === item.productId);
+      const inventoryItem = inventoryData?.find((inv) => inv.product?._id === item.product);
       if (!inventoryItem) {
-        errors[`item_${index}_productId`] = t.errors.productNotFound;
+        errors[`item_${index}_product`] = t.errors.productNotFound;
       } else if (item.quantity > inventoryItem.currentStock) {
         errors[`item_${index}_quantity`] = t.errors.insufficientQuantity;
       }
@@ -749,7 +749,7 @@ export const BranchInventory: React.FC = () => {
       const data = {
         branchId: user.branchId,
         items: returnForm.items.map((item) => ({
-          productId: item.productId,
+          product: item.product, // Changed from productId to product
           quantity: item.quantity,
           reason: item.reason,
           reasonEn: item.reasonEn,
@@ -758,7 +758,7 @@ export const BranchInventory: React.FC = () => {
         notes: returnForm.notes || undefined,
       };
       for (const [index, item] of data.items.entries()) {
-        if (!isValidObjectId(item.productId)) {
+        if (!isValidObjectId(item.product)) {
           throw new Error(t.errors.invalidProductId + ` at item ${index + 1}`);
         }
       }
@@ -779,9 +779,19 @@ export const BranchInventory: React.FC = () => {
         eventId: crypto.randomUUID(),
       });
     },
-    onError: (err) => {
+    onError: (err: any) => {
       let errorMessage = err.message || t.errors.createReturn;
-      if (err.message.includes('الفرع غير موجود') || err.message.includes('Branch not found')) {
+      const errors = err.errors || [];
+      if (errors.length > 0) {
+        const errorDetails = errors.map((e: any) => e.msg).join(', ');
+        errorMessage = errorDetails;
+        errors.forEach((e: any, index: number) => {
+          setReturnErrors((prev) => ({
+            ...prev,
+            [`item_${index}_${e.path}`]: e.msg,
+          }));
+        });
+      } else if (err.message.includes('الفرع غير موجود') || err.message.includes('Branch not found')) {
         errorMessage = t.errors.noBranch;
       } else if (err.message.includes('الكمية غير كافية') || err.message.includes('Insufficient quantity')) {
         errorMessage = t.errors.insufficientQuantity;
@@ -793,7 +803,7 @@ export const BranchInventory: React.FC = () => {
         errorMessage = t.errors.productNotFound;
       }
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
-      setReturnErrors({ form: errorMessage });
+      setReturnErrors((prev) => ({ ...prev, form: errorMessage }));
     },
   });
 
@@ -1092,7 +1102,7 @@ export const BranchInventory: React.FC = () => {
                 <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
                   {!selectedItem && (
                     <ProductDropdown
-                      value={item.productId}
+                      value={item.product}
                       onChange={(value) => handleProductChange(index, value)}
                       options={productOptions}
                       ariaLabel={`${t.items} ${index + 1}`}
@@ -1100,8 +1110,8 @@ export const BranchInventory: React.FC = () => {
                       className="w-full"
                     />
                   )}
-                  {returnErrors[`item_${index}_productId`] && (
-                    <p className="text-red-600 text-xs">{returnErrors[`item_${index}_productId`]}</p>
+                  {returnErrors[`item_${index}_product`] && (
+                    <p className="text-red-600 text-xs">{returnErrors[`item_${index}_product`]}</p>
                   )}
                   <div className="flex items-center gap-4">
                     <div className="flex-1">
