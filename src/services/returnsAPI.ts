@@ -57,14 +57,14 @@ returnsAxios.interceptors.response.use(
       message = isRtl ? 'فشل الاتصال بالخادم' : 'Failed to connect to server';
     } else if (error.response.status === 400) {
       message = errors.length
-        ? errors.map(err => err.msg).join(', ')
+        ? errors.map((err: any) => err.msg).join(', ')
         : error.response.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
     } else if (error.response.status === 403) {
       message = error.response.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
     } else if (error.response.status === 404) {
       message = error.response.data?.message || (isRtl ? 'الفرع أو المنتج غير موجود' : 'Branch or product not found');
     } else if (error.response.status === 422) {
-      message = error.response.data?.message || (isRtl ? 'الكمية غير كافية أو تتجاوز المسلم' : 'Insufficient quantity or exceeds delivered quantity');
+      message = error.response.data?.message || (isRtl ? 'الكمية غير كافية أو بيانات غير صالحة' : 'Insufficient quantity or invalid data');
     } else if (error.response.status === 429) {
       message = isRtl ? 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا' : 'Too many requests, try again later';
     } else if (error.response.status === 500) {
@@ -190,13 +190,17 @@ export const returnsAPI = {
         console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Missing reason at index ${i}`);
         throw new Error(isRtl ? `سبب الإرجاع مفقود في العنصر ${i + 1}` : `Missing return reason at item ${i + 1}`);
       }
+      if (!item.reasonEn) {
+        console.error(`[${new Date().toISOString()}] returnsAPI.createReturn - Missing reasonEn at index ${i}`);
+        throw new Error(isRtl ? `سبب الإرجاع بالإنجليزية مفقود في العنصر ${i + 1}` : `Missing English return reason at item ${i + 1}`);
+      }
     }
 
     try {
       const response = await returnsAxios.post('/returns', {
         branchId: data.branchId,
         items: data.items.map((item) => ({
-          productId: item.productId,
+          product: item.productId,
           quantity: Number(item.quantity),
           reason: item.reason.trim(),
           reasonEn: item.reasonEn.trim(),
@@ -215,14 +219,14 @@ export const returnsAPI = {
       let errorMessage = error.message || (isRtl ? 'خطأ في إنشاء طلب الإرجاع' : 'Error creating return request');
       if (error.status === 400) {
         errorMessage = error.errors?.length
-          ? error.errors.map(err => err.msg).join(', ')
+          ? error.errors.map((err: any) => err.msg).join(', ')
           : error.response?.data?.message || (isRtl ? 'بيانات غير صالحة' : 'Invalid data');
       } else if (error.status === 403) {
         errorMessage = error.response?.data?.message || (isRtl ? 'عملية غير مصرح بها' : 'Unauthorized operation');
       } else if (error.status === 404) {
         errorMessage = error.response?.data?.message || (isRtl ? 'الفرع أو المنتج غير موجود' : 'Branch or product not found');
       } else if (error.status === 422) {
-        errorMessage = error.response?.data?.message || (isRtl ? 'الكمية غير كافية' : 'Insufficient quantity');
+        errorMessage = error.response?.data?.message || (isRtl ? 'الكمية غير كافية أو بيانات غير صالحة' : 'Insufficient quantity or invalid data');
       } else if (error.code === 'ECONNABORTED') {
         errorMessage = isRtl ? 'انتهت مهلة الطلب، حاول مرة أخرى' : 'Request timed out, please try again';
       } else if (!error.response) {
