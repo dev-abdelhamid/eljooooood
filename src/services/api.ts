@@ -971,13 +971,10 @@ export const inventoryAPI = {
     console.log(`[${new Date().toISOString()}] inventoryAPI.updateStock - Response:`, response);
     return response.inventory;
   },
- processReturnItems: async (returnId: string, data: {
+  processReturnItems: async (returnId: string, data: {
     branchId: string;
     items: Array<{ productId: string; quantity: number; status: 'approved' | 'rejected'; reviewNotes?: string }>;
   }) => {
-    const language = localStorage.getItem('language') || 'en';
-    const isRtl = language === 'ar';
-
     if (
       !isValidObjectId(returnId) ||
       !isValidObjectId(data.branchId) ||
@@ -986,92 +983,19 @@ export const inventoryAPI = {
       data.items.some(item => !isValidObjectId(item.productId) || item.quantity < 1 || !['approved', 'rejected'].includes(item.status))
     ) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.processReturnItems - Invalid data:`, { returnId, data });
-      throw new Error(createErrorMessage('invalidBranchId', isRtl));
+      throw new Error(createErrorMessage('invalidBranchId', localStorage.getItem('language') === 'ar'));
     }
-
-    try {
-      const response = await api.patch(`/inventory/returns/${returnId}/process`, {
-        branchId: data.branchId,
-        items: data.items.map(item => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          status: item.status,
-          reviewNotes: item.reviewNotes?.trim(),
-        })),
-      });
-      console.log(`[${new Date().toISOString()}] inventoryAPI.processReturnItems - Response:`, response);
-      return response.returnRequest;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] inventoryAPI.processReturnItems - Error:`, {
-        message: error.message,
-        status: error.status,
-        details: error.details,
-        response: error.response,
-      });
-      let errorMessage = error.message || (isRtl ? 'خطأ في معالجة عناصر الإرجاع' : 'Error processing return items');
-      if (error.status === 500) {
-        errorMessage = isRtl ? 'خطأ في الخادم، حاول مرة أخرى لاحقًا' : 'Server error, please try again later';
-      }
-      throw new Error(errorMessage);
-    }
-  },
-
-  createReturn: async (data: {
-    orderId: string;
-    branchId: string;
-    reason: string;
-    items: Array<{ itemId?: string; productId: string; quantity: number; reason: string; reasonEn?: string }>;
-    notes?: string;
-  }) => {
-    const language = localStorage.getItem('language') || 'en';
-    const isRtl = language === 'ar';
-
-    if (
-      !isValidObjectId(data.orderId) ||
-      !isValidObjectId(data.branchId) ||
-      !data.reason ||
-      !Array.isArray(data.items) ||
-      data.items.length === 0 ||
-      data.items.some(item => 
-        (item.itemId && !isValidObjectId(item.itemId)) || 
-        !isValidObjectId(item.productId) || 
-        item.quantity < 1 || 
-        !item.reason
-      )
-    ) {
-      console.error(`[${new Date().toISOString()}] inventoryAPI.createReturn - Invalid data:`, data);
-      throw new Error(createErrorMessage('invalidBranchId', isRtl));
-    }
-
-    try {
-      const response = await api.post('/inventory/returns', {
-        orderId: data.orderId,
-        branchId: data.branchId,
-        reason: data.reason.trim(),
-        items: data.items.map(item => ({
-          itemId: item.itemId,
-          productId: item.productId,
-          quantity: item.quantity,
-          reason: item.reason.trim(),
-          reasonEn: item.reasonEn?.trim(),
-        })),
-        notes: data.notes?.trim(),
-      });
-      console.log(`[${new Date().toISOString()}] inventoryAPI.createReturn - Response:`, response);
-      return response.returnRequest;
-    } catch (error: any) {
-      console.error(`[${new Date().toISOString()}] inventoryAPI.createReturn - Error:`, {
-        message: error.message,
-        status: error.status,
-        details: error.details,
-        response: error.response,
-      });
-      let errorMessage = error.message || (isRtl ? 'خطأ في إنشاء طلب الإرجاع' : 'Error creating return request');
-      if (error.status === 500) {
-        errorMessage = isRtl ? 'خطأ في الخادم، حاول مرة أخرى لاحقًا' : 'Server error, please try again later';
-      }
-      throw new Error(errorMessage);
-    }
+    const response = await api.patch(`/inventory/returns/${returnId}/process`, {
+      branchId: data.branchId,
+      items: data.items.map(item => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        status: item.status,
+        reviewNotes: item.reviewNotes?.trim(),
+      })),
+    });
+    console.log(`[${new Date().toISOString()}] inventoryAPI.processReturnItems - Response:`, response);
+    return response.returnRequest;
   },
   createRestockRequest: async (data: {
     productId: string;
