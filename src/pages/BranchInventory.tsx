@@ -10,7 +10,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
 
-
 // Enums for type safety
 enum InventoryStatus {
   LOW = 'low',
@@ -45,6 +44,8 @@ interface InventoryItem {
   } | null;
   branch: { _id: string; name: string; nameEn: string; displayName: string } | null;
   currentStock: number;
+  pendingReturnStock: number;
+  damagedStock: number;
   minStockLevel: number;
   maxStockLevel: number;
   status: InventoryStatus;
@@ -95,6 +96,8 @@ const translations = {
     noItems: 'لا توجد عناصر في المخزون',
     noHistory: 'لا يوجد سجل لهذا المنتج',
     stock: 'المخزون الحالي',
+    pendingStock: 'المخزون المعلق للإرجاع',
+    damagedStock: 'المخزون التالف',
     minStock: 'الحد الأدنى للمخزون',
     maxStock: 'الحد الأقصى للمخزون',
     unit: 'الوحدة',
@@ -165,6 +168,8 @@ const translations = {
     noItems: 'No items found in inventory',
     noHistory: 'No history available for this product',
     stock: 'Current Stock',
+    pendingStock: 'Pending Return Stock',
+    damagedStock: 'Damaged Stock',
     minStock: 'Minimum Stock',
     maxStock: 'Maximum Stock',
     unit: 'Unit',
@@ -344,7 +349,6 @@ export const BranchInventory: React.FC = () => {
   const [returnErrors, setReturnErrors] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
-  
 
   const ITEMS_PER_PAGE = 10;
 
@@ -438,8 +442,8 @@ export const BranchInventory: React.FC = () => {
           available: item.currentStock,
           unit: isRtl ? item.product!.unit || t.unit : item.product!.unitEn || item.product!.unit || 'N/A',
           departmentName: isRtl
-            ? item.product!.department?.name || t.departments?.unknown || 'Unknown'
-            : item.product!.department?.nameEn || item.product!.department?.name || t.departments?.unknown || 'Unknown',
+            ? item.product!.department?.name || 'غير معروف'
+            : item.product!.department?.nameEn || item.product!.department?.name || 'Unknown',
           stock: item.currentStock,
         }));
       setAvailableItems(items);
@@ -508,7 +512,7 @@ export const BranchInventory: React.FC = () => {
       { value: '', label: t.allDepartments },
       ...uniqueDepts.map((dept) => ({
         value: dept._id,
-        label: dept.name || t.departments?.unknown || 'Unknown',
+        label: dept.name || 'غير معروف',
       })),
     ];
   }, [inventoryData, isRtl, t]);
@@ -583,7 +587,13 @@ export const BranchInventory: React.FC = () => {
       if (item?.product) {
         dispatchReturnForm({
           type: 'ADD_ITEM',
-          payload: { productId: item.product._id, quantity: 1, reason: '', reasonEn: '', maxQuantity: item.currentStock },
+          payload: {
+            productId: item.product._id,
+            quantity: 1,
+            reason: '',
+            reasonEn: '',
+            maxQuantity: item.currentStock,
+          },
         });
       } else {
         dispatchReturnForm({
@@ -684,6 +694,15 @@ export const BranchInventory: React.FC = () => {
       if (!item.reasonEn) {
         errors[`item_${index}_reasonEn`] = t.errors.required.replace('{field}', t.reason);
       }
+      const reasonMap = {
+        [ReturnReason.DAMAGED_AR]: ReturnReason.DAMAGED_EN,
+        [ReturnReason.WRONG_ITEM_AR]: ReturnReason.WRONG_ITEM_EN,
+        [ReturnReason.EXCESS_QUANTITY_AR]: ReturnReason.EXCESS_QUANTITY_EN,
+        [ReturnReason.OTHER_AR]: ReturnReason.OTHER_EN,
+      };
+      if (item.reason && reasonMap[item.reason] !== item.reasonEn) {
+        errors[`item_${index}_reasonEn`] = isRtl ? 'سبب الإرجاع بالإنجليزية غير متطابق' : 'English reason does not match Arabic reason';
+      }
       if (item.quantity < 1 || item.quantity > item.maxQuantity || isNaN(item.quantity)) {
         errors[`item_${index}_quantity`] = t.errors.invalidQuantityMax.replace('{max}', item.maxQuantity.toString());
       }
@@ -696,7 +715,7 @@ export const BranchInventory: React.FC = () => {
     });
     setReturnErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [returnForm, t, inventoryData, user]);
+  }, [returnForm, t, inventoryData, user, isRtl]);
 
   const validateEditForm = useCallback(() => {
     const errors: Record<string, string> = {};
@@ -714,7 +733,7 @@ export const BranchInventory: React.FC = () => {
       const data = {
         branchId: user.branchId,
         items: returnForm.items.map((item) => ({
-          product: item.productId,
+          productId: item.productId,
           quantity: item.quantity,
           reason: item.reason,
           reasonEn: item.reasonEn,
@@ -790,10 +809,7 @@ export const BranchInventory: React.FC = () => {
   const errorMessage = inventoryError?.message || '';
 
   return (
-    <div
-      className=" mx-auto px-4 py-8 min-h-screen "
-    
-    >
+    <div className="mx-auto px-4 py-8 min-h-screen">
       <div className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <Package className="w-7 h-7 text-amber-600" />
@@ -922,6 +938,8 @@ export const BranchInventory: React.FC = () => {
                     </div>
                     <p className="text-sm text-amber-600">{t.filterByDepartment}: {item.product.department?.displayName || 'N/A'}</p>
                     <p className="text-sm text-gray-600">{t.stock}: {item.currentStock}</p>
+                    <p className="text-sm text-gray-600">{t.pendingStock}: {item.pendingReturnStock}</p>
+                    <p className="text-sm text-gray-600">{t.damagedStock}: {item.damagedStock}</p>
                     <p className="text-sm text-gray-600">{t.minStock}: {item.minStockLevel}</p>
                     <p className="text-sm text-gray-600">{t.maxStock}: {item.maxStockLevel}</p>
                     <p className="text-sm text-gray-600">{t.unit}: {item.product.displayUnit}</p>
@@ -1184,12 +1202,12 @@ export const BranchInventory: React.FC = () => {
                 value={editForm.maxStockLevel}
                 onChange={(e) => setEditForm({ ...editForm, maxStockLevel: parseInt(e.target.value) || 0 })}
                 min={0}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
+                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2         focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
                 aria-label={t.maxStock}
               />
               {editErrors.maxStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.maxStockLevel}</p>}
             </div>
-            {editErrors.form && <p className="text-red-600 text-xs">{editErrors.form}</p>}
+            {editErrors.form && <p className="text-red-600 text-xs mt-1">{editErrors.form}</p>}
             <div className="flex justify-end gap-3 mt-6">
               <button
                 onClick={() => {
@@ -1231,7 +1249,10 @@ export const BranchInventory: React.FC = () => {
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
             <button
-              onClick={() => setIsDetailsModalOpen(false)}
+              onClick={() => {
+                setIsDetailsModalOpen(false);
+                setSelectedProductId('');
+              }}
               className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
               aria-label={t.cancel}
             >
@@ -1240,24 +1261,27 @@ export const BranchInventory: React.FC = () => {
           </div>
           {historyLoading ? (
             <div className="space-y-3 animate-pulse">
-              {[...Array(3)].map((_, i) => (
+              {[...Array(5)].map((_, i) => (
                 <div key={i} className="h-4 bg-gray-200 rounded w-full"></div>
               ))}
             </div>
           ) : productHistory && productHistory.length > 0 ? (
             <div className="space-y-4">
-              <div className="grid grid-cols-4 gap-4 text-sm font-medium text-gray-700 border-b border-gray-200 pb-2">
-                <span>{t.date}</span>
-                <span>{t.type}</span>
-                <span>{t.quantity}</span>
-                <span>{t.description}</span>
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm font-medium text-gray-700">
+                <div>{t.date}</div>
+                <div>{t.type}</div>
+                <div>{t.quantity}</div>
+                <div>{t.description}</div>
               </div>
               {productHistory.map((entry) => (
-                <div key={entry._id} className="grid grid-cols-4 gap-4 text-sm text-gray-600 border-b border-gray-100 py-2">
-                  <span>{new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</span>
-                  <span>{t[entry.type]}</span>
-                  <span>{entry.quantity}</span>
-                  <span>{entry.description}</span>
+                <div
+                  key={entry._id}
+                  className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-sm text-gray-600 border-t border-gray-100 pt-2"
+                >
+                  <div>{new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</div>
+                  <div>{t[entry.type]}</div>
+                  <div>{entry.quantity}</div>
+                  <div>{entry.description}</div>
                 </div>
               ))}
             </div>
@@ -1269,5 +1293,3 @@ export const BranchInventory: React.FC = () => {
     </div>
   );
 };
-
-export default BranchInventory;
