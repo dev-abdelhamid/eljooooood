@@ -615,12 +615,6 @@ export const BranchOrders: React.FC = () => {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
       });
-    } catch (err: any) {
-      console.error('Confirm delivery error:', err.message, err.response?.data);
-      toast.error(isRtl ? `فشل في تأكيد التسليم: ${err.message}` : `Failed to confirm delivery: ${err.message}`, {
-        position: isRtl ? 'top-left' : 'top-right',
-        autoClose: 3000,
-      });
     } finally {
       dispatch({ type: 'SET_SUBMITTING', payload: null });
     }
