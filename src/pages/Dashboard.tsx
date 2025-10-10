@@ -11,10 +11,8 @@ import { debounce } from 'lodash';
 import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 
-// In-memory cache
 const cache = new Map<string, any>();
 
-// تعريف الأنواع
 interface Stats {
   totalOrders: number;
   pendingOrders: number;
@@ -121,14 +119,12 @@ const timeFilterOptions = [
   { value: 'year', label: 'هذا العام', enLabel: 'This Year' },
 ];
 
-// مكون مؤشر التحميل
 const Loader: React.FC = () => (
   <div className="flex justify-center items-center h-screen">
     <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-amber-600"></div>
   </div>
 );
 
-// مكون بطاقة الإحصائيات
 const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color: string; ariaLabel: string }> = React.memo(
   ({ title, value, icon: Icon, color, ariaLabel }) => (
     <div className={`p-4 bg-${color}-50 rounded-lg border border-${color}-100 cursor-pointer hover:bg-${color}-100 transition-colors duration-200`} aria-label={ariaLabel}>
@@ -143,7 +139,6 @@ const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color:
   )
 );
 
-// مكون لوحة تحكم الشيف
 const ChefDashboard: React.FC<{
   stats: Stats;
   tasks: Task[];
@@ -299,13 +294,12 @@ const ChefDashboard: React.FC<{
   );
 });
 
-// مكون لوحة التحكم الرئيسية
 export const Dashboard: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
   const { socket, isConnected } = useSocket();
-  const { addNotification } = useNotifications();
+  const { addNotification, refreshTasks } = useNotifications();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -329,10 +323,8 @@ export const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // مفتاح الكاش
   const cacheKey = useMemo(() => `${user?.id || user?._id}-${user?.role}-${timeFilter}`, [user, timeFilter]);
 
-  // دالة جلب البيانات
   const fetchDashboardData = useCallback(
     debounce(async (forceRefresh = false) => {
       if (!user?.id && !user?._id) {
@@ -463,7 +455,7 @@ export const Dashboard: React.FC = () => {
           productNameEn: task.product?.nameEn || task.product?.name || 'Unknown',
           quantity: Number(task.quantity) || 0,
           unit: task.product?.unit || 'unit',
-          unitEn: task.product?.unitEn || task.product?.unit || 'N/A',
+          unitEn: task.product?.unitEn || task.product?.unit || 'unit',
           status: task.status || 'pending',
           branchName: task.order?.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
           branchNameEn: task.order?.branch?.nameEn || task.order?.branch?.name || 'Unknown',
@@ -574,6 +566,10 @@ export const Dashboard: React.FC = () => {
   }, [fetchDashboardData, timeFilter]);
 
   useEffect(() => {
+    fetchDashboardData();
+  }, [refreshTasks, fetchDashboardData]);
+
+  useEffect(() => {
     if (!socket || !user || !isConnected) return;
 
     socket.on('connect_error', () => {
@@ -589,72 +585,80 @@ export const Dashboard: React.FC = () => {
     });
 
     socket.on('taskAssigned', (data: any) => {
-      if (!data.taskId || !data.orderId || !data.productName || !data.orderNumber || !data.branchName || !data.quantity || !data.eventId) return;
-
-      if (data.chefId === (user?.id || user?._id) || ['admin', 'production'].includes(user.role)) {
-        fetchDashboardData(true);
-        const notification = {
-          _id: data.taskId,
-          type: 'info' as const,
-          message: isRtl
-            ? `تم تعيين مهمة: ${data.productName} (${data.quantity} ${data.unit}) للطلب ${data.orderNumber} - ${data.branchName}`
-            : `Task assigned: ${data.productName} (${data.quantity} ${data.unit}) for order ${data.orderNumber} - ${data.branchName}`,
-          data: {
-            orderId: data.orderId,
-            taskId: data.taskId,
-            chefId: data.chefId,
-            eventId: data.eventId,
-          },
-          read: false,
-          createdAt: formatDate(new Date(), language),
-          sound: '/sounds/task-assigned.mp3',
-          vibrate: [400, 100, 400],
-          path: '/dashboard',
-        };
-        addNotification(notification);
-        if (user.role === 'chef') {
-          setTasks((prev) => [
-            {
-              id: data.taskId,
-              orderId: data.orderId,
-              orderNumber: data.orderNumber,
-              productName: data.productName,
-              quantity: Number(data.quantity) || 0,
-              unit: data.unit || 'unit',
-              status: data.status || 'assigned',
-              branchName: data.branchName,
-              createdAt: formatDate(new Date(), language),
-            },
-            ...prev.filter((t) => t.id !== data.taskId),
-          ]);
-        }
+      if (!data.taskId || !data.orderId || !data.productName || !data.orderNumber || !data.branchName || !data.quantity || !data.eventId) {
+        console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, data);
+        return;
       }
+      if (data.chefId !== (user?.id || user?._id) || !['admin', 'production', 'chef'].includes(user.role)) return;
+
+      const notification = {
+        _id: data.eventId,
+        type: 'info' as const,
+        message: isRtl
+          ? `تم تعيين مهمة: ${data.productName} (${data.quantity} ${data.unit}) للطلب ${data.orderNumber} - ${data.branchName}`
+          : `Task assigned: ${data.productName} (${data.quantity} ${data.unit}) for order ${data.orderNumber} - ${data.branchName}`,
+        data: {
+          orderId: data.orderId,
+          taskId: data.taskId,
+          chefId: data.chefId,
+          eventId: data.eventId,
+        },
+        read: false,
+        createdAt: formatDate(new Date(), language),
+        sound: '/sounds/task-assigned.mp3',
+        vibrate: [400, 100, 400],
+        path: '/dashboard',
+      };
+      addNotification(notification);
+      if (user.role === 'chef') {
+        setTasks((prev) => [
+          {
+            id: data.taskId,
+            orderId: data.orderId,
+            orderNumber: data.orderNumber,
+            productName: data.productName,
+            productNameEn: data.productNameEn || data.productName,
+            quantity: Number(data.quantity) || 0,
+            unit: data.unit || 'unit',
+            unitEn: data.unitEn || data.unit || 'unit',
+            status: data.status || 'assigned',
+            branchName: data.branchName,
+            branchNameEn: data.branchNameEn || data.branchName,
+            createdAt: formatDate(new Date(), language),
+          },
+          ...prev.filter((t) => t.id !== data.taskId),
+        ]);
+      }
+      fetchDashboardData(true);
     });
 
     socket.on('orderCompleted', (data: any) => {
       if (!data.orderId || !data.orderNumber || !data.branchName || !data.eventId) return;
+      if (!['admin', 'branch', 'production'].includes(user.role)) return;
 
-      if (['admin', 'branch', 'production'].includes(user.role)) {
-        fetchDashboardData(true);
-        addNotification({
-          _id: data._id || crypto.randomUUID(),
-          type: 'success' as const,
-          message: isRtl ? `تم إكمال الطلب ${data.orderNumber} - ${data.branchName}` : `Order completed: ${data.orderNumber} - ${data.branchName}`,
-          data: {
-            orderId: data.orderId,
-            eventId: data.eventId,
-          },
-          read: false,
-          createdAt: formatDate(new Date(), language),
-          sound: '/sounds/order-completed.mp3',
-          vibrate: [400, 100, 400],
-          path: '/dashboard',
-        });
-      }
+      addNotification({
+        _id: data.eventId,
+        type: 'success' as const,
+        message: isRtl ? `تم إكمال الطلب ${data.orderNumber} - ${data.branchName}` : `Order completed: ${data.orderNumber} - ${data.branchName}`,
+        data: {
+          orderId: data.orderId,
+          eventId: data.eventId,
+        },
+        read: false,
+        createdAt: formatDate(new Date(), language),
+        sound: '/sounds/order-completed.mp3',
+        vibrate: [400, 100, 400],
+        path: '/dashboard',
+      });
+      fetchDashboardData(true);
     });
 
     socket.on('itemStatusUpdated', (data: any) => {
-      if (!data.orderId || !data.itemId || !data.status || !data.eventId) return;
+      if (!data.orderId || !data.itemId || !data.status || !data.orderNumber || !data.branchName || !data.productName || !data.eventId) {
+        console.warn(`[${new Date().toISOString()}] Invalid item status update data:`, data);
+        return;
+      }
+      if (!['admin', 'production', 'chef'].includes(user.role) || (user.role === 'chef' && data.chefId !== user._id)) return;
 
       setTasks((prev) =>
         prev.map((task) =>
@@ -667,10 +671,14 @@ export const Dashboard: React.FC = () => {
         message: isRtl
           ? `تم تحديث حالة المهمة: ${data.productName} للطلب ${data.orderNumber} إلى ${data.status === 'in_progress' ? 'قيد التنفيذ' : 'مكتمل'}`
           : `Task status updated: ${data.productName} for order ${data.orderNumber} to ${data.status}`,
+        data: { orderId: data.orderId, taskId: data.itemId, eventId: data.eventId, chefId: data.chefId },
         read: false,
         createdAt: formatDate(new Date(), language),
         path: '/dashboard',
+        sound: '/sounds/task-status-updated.mp3',
+        vibrate: [200, 100, 200],
       });
+      fetchDashboardData(true);
     });
 
     return () => {
@@ -697,8 +705,8 @@ export const Dashboard: React.FC = () => {
 
       try {
         await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'in_progress' });
-        setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, status: 'in_progress' } : task)));
         const task = tasks.find((t) => t.id === taskId);
+        setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: 'in_progress' } : t)));
         const eventId = crypto.randomUUID();
         socket.emit('itemStatusUpdated', {
           orderId,
@@ -708,9 +716,12 @@ export const Dashboard: React.FC = () => {
           eventId,
           orderNumber: task?.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
           branchName: task?.branchName || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
+          branchNameEn: task?.branchNameEn || task?.branchName || 'Unknown',
           productName: task?.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+          productNameEn: task?.productNameEn || task?.productName || 'Unknown',
           quantity: task?.quantity || 0,
           unit: task?.unit || 'unit',
+          unitEn: task?.unitEn || task?.unit || 'unit',
         });
         addNotification({
           _id: `success-task-${taskId}-${Date.now()}`,
@@ -754,8 +765,8 @@ export const Dashboard: React.FC = () => {
 
       try {
         await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'completed' });
-        setTasks((prev) => prev.map((task) => (task.id === taskId ? { ...task, status: 'completed' } : task)));
         const task = tasks.find((t) => t.id === taskId);
+        setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: 'completed' } : t)));
         const eventId = crypto.randomUUID();
         socket.emit('itemStatusUpdated', {
           orderId,
@@ -765,9 +776,12 @@ export const Dashboard: React.FC = () => {
           eventId,
           orderNumber: task?.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
           branchName: task?.branchName || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
+          branchNameEn: task?.branchNameEn || task?.branchName || 'Unknown',
           productName: task?.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+          productNameEn: task?.productNameEn || task?.productName || 'Unknown',
           quantity: task?.quantity || 0,
           unit: task?.unit || 'unit',
+          unitEn: task?.unitEn || task?.unit || 'unit',
         });
         addNotification({
           _id: `success-complete-${taskId}-${Date.now()}`,
@@ -826,263 +840,235 @@ export const Dashboard: React.FC = () => {
       <StatsCard
         title={isRtl ? 'الطلبات قيد الإنتاج' : 'In Production'}
         value={stats.inProductionOrders.toString()}
-        icon={BarChart3}
+        icon={Package}
         color="blue"
         ariaLabel={isRtl ? 'الطلبات قيد الإنتاج' : 'In Production'}
       />
       <StatsCard
-        title={isRtl ? 'الطلبات قيد النقل' : 'In Transit'}
-        value={stats.inTransitOrders.toString()}
-        icon={Package}
-        color="teal"
-        ariaLabel={isRtl ? 'الطلبات قيد النقل' : 'In Transit'}
-      />
-      <StatsCard
         title={isRtl ? 'الطلبات المسلمة' : 'Delivered Orders'}
         value={stats.deliveredOrders.toString()}
-        icon={ShoppingCart}
+        icon={CheckCircle}
         color="green"
         ariaLabel={isRtl ? 'الطلبات المسلمة' : 'Delivered Orders'}
       />
-      <StatsCard
-        title={isRtl ? 'إجمالي المبيعات' : 'Total Sales'}
-        value={stats.totalSales.toLocaleString(language, { style: 'currency', currency: 'SAR' })}
-        icon={DollarSign}
-        color="purple"
-        ariaLabel={isRtl ? 'إجمالي المبيعات' : 'Total Sales'}
-      />
-      <StatsCard
-        title={isRtl ? 'المرتجعات' : 'Returns'}
-        value={stats.returns.toString()}
-        icon={AlertCircle}
-        color="pink"
-        ariaLabel={isRtl ? 'المرتجعات' : 'Returns'}
-      />
-      <StatsCard
-        title={isRtl ? 'متوسط قيمة الطلب' : 'Avg Order Value'}
-        value={stats.averageOrderValue.toLocaleString(language, { style: 'currency', currency: 'SAR' })}
-        icon={DollarSign}
-        color="amber"
-        ariaLabel={isRtl ? 'متوسط قيمة الطلب' : 'Avg Order Value'}
-      />
+      {user.role !== 'chef' && (
+        <>
+          <StatsCard
+            title={isRtl ? 'إجمالي المبيعات' : 'Total Sales'}
+            value={stats.totalSales.toFixed(2)}
+            icon={DollarSign}
+            color="purple"
+            ariaLabel={isRtl ? 'إجمالي المبيعات' : 'Total Sales'}
+          />
+          <StatsCard
+            title={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
+            value={stats.completedTasks.toString()}
+            icon={CheckCircle}
+            color="green"
+            ariaLabel={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
+          />
+          <StatsCard
+            title={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
+            value={stats.inProgressTasks.toString()}
+            icon={Clock}
+            color="blue"
+            ariaLabel={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
+          />
+          <StatsCard
+            title={isRtl ? 'المرتجعات' : 'Returns'}
+            value={stats.returns.toString()}
+            icon={Package}
+            color="orange"
+            ariaLabel={isRtl ? 'المرتجعات' : 'Returns'}
+          />
+        </>
+      )}
     </motion.div>
   );
 
-  const renderPendingItems = () => (
-    <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-gray-100">
-      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 text-gray-800">
-        <Clock className="w-5 h-5 text-gray-600" />
-        {isRtl ? 'أحدث الطلبات المعلقة' : 'Latest Pending Orders'}
+  const renderBranchPerformance = () => (
+    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mt-4">
+      <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+        <BarChart3 className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+        {isRtl ? 'أداء الفروع' : 'Branch Performance'}
       </h3>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {sortedPendingOrders.length === 0 && (
-          <p className="text-center text-gray-600 col-span-full text-sm">{isRtl ? 'لا توجد طلبات معلقة' : 'No pending orders'}</p>
-        )}
+      <div className="space-y-3 max-h-64 overflow-y-auto">
         <AnimatePresence>
-          {sortedPendingOrders.map((order, index) => (
-            <motion.div
-              key={order.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ delay: index * 0.1 }}
-              onClick={() => navigate(`/orders/${order.id}`)}
-              className="p-3 bg-gray-50 rounded-lg border border-gray-100 cursor-pointer hover:bg-gray-100 transition-colors duration-200 shadow-sm"
-            >
-              <h4 className="font-semibold text-sm text-gray-800 mb-2 truncate">
-                {order.orderNumber} - {isRtl ? order.branchName : order.branchNameEn || order.branchName}
-              </h4>
-              <span
-                className={`px-2 py-1 rounded-full text-xs font-medium ${
-                  order.status === 'pending'
-                    ? 'bg-amber-100 text-amber-800'
-                    : order.status === 'approved'
-                    ? 'bg-blue-100 text-blue-800'
-                    : 'bg-purple-100 text-purple-800'
-                }`}
+          {branchPerformance.length === 0 ? (
+            <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد بيانات أداء' : 'No performance data available'}</p>
+          ) : (
+            branchPerformance.map((branch, index) => (
+              <motion.div
+                key={branch.branchName}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2, delay: index * 0.1 }}
+                className="flex items-center justify-between p-2 border-b border-gray-100"
               >
-                {isRtl
-                  ? order.status === 'pending'
-                    ? 'معلق'
-                    : order.status === 'approved'
-                    ? 'معتمد'
-                    : 'قيد الإنتاج'
-                  : order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-              </span>
-              <p className="text-sm text-gray-600 mt-2">
-                {isRtl ? 'الإجمالي' : 'Total'}: {order.totalAmount.toLocaleString(language, { style: 'currency', currency: 'SAR' })}
-              </p>
-              <p className="text-sm text-gray-600">{isRtl ? 'المنتجات' : 'Products'}: {order.items.reduce((sum, item) => sum + item.quantity, 0)}</p>
-              <p className="text-xs text-gray-500 mt-2">{isRtl ? 'تاريخ الإنشاء' : 'Created At'}: {order.date}</p>
-            </motion.div>
-          ))}
+                <div>
+                  <p className="text-sm font-medium text-gray-800">{isRtl ? branch.branchName : branch.branchNameEn || branch.branchName}</p>
+                  <p className="text-xs text-gray-500">
+                    {isRtl ? `${branch.totalOrders} طلبات` : `${branch.totalOrders} Orders`} -{' '}
+                    {isRtl ? `${branch.completedOrders} مكتمل` : `${branch.completedOrders} Completed`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-24 bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-amber-600 h-2 rounded-full"
+                      style={{ width: `${Math.min(branch.performance, 100)}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-xs text-gray-600">{branch.performance.toFixed(1)}%</span>
+                </div>
+              </motion.div>
+            ))
+          )}
         </AnimatePresence>
       </div>
     </div>
   );
 
-  const renderBranchPerformance = () => (
-    <div className="bg-white p-4 rounded-lg shadow-sm mb-4 border border-gray-100">
-      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 text-gray-800">
-        <BarChart3 className="w-5 h-5 text-gray-600" />
-        {isRtl ? 'أداء الفروع' : 'Branch Performance'}
-      </h3>
-      <div className="space-y-3">
-        {branchPerformance.map((branch, index) => (
-          <div key={index} className="flex items-center gap-3">
-            <span className="w-28 text-sm font-medium text-gray-700 truncate">{isRtl ? branch.branchName : branch.branchNameEn}</span>
-            <div className="flex-1 bg-gray-200 rounded-full h-3">
-              <motion.div
-                className="bg-amber-600 h-3 rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: `${branch.performance}%` }}
-                transition={{ duration: 0.8, ease: 'easeOut' }}
-              />
-            </div>
-            <span className="w-20 text-right text-sm text-gray-600">
-              {branch.performance.toFixed(0)}% ({branch.completedOrders}/{branch.totalOrders})
-            </span>
-          </div>
-        ))}
-        {branchPerformance.length === 0 && <p className="text-center text-gray-600 text-sm">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>}
-      </div>
-    </div>
-  );
-
   const renderChefPerformance = () => (
-    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-      <h3 className="text-lg font-semibold mb-3 flex items-center gap-2 text-gray-800">
-        <BarChart3 className="w-5 h-5 text-gray-600" />
+    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mt-4">
+      <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+        <ChefHat className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
         {isRtl ? 'أداء الطهاة' : 'Chef Performance'}
       </h3>
-      <div className="space-y-3">
-        {chefPerformance.map((chef, index) => (
-          <div key={index} className="flex items-center gap-3">
-            <span className="w-28 text-sm font-medium text-gray-700 truncate">{isRtl ? chef.chefName : chef.chefNameEn}</span>
-            <div className="flex-1 bg-gray-200 rounded-full h-3">
+      <div className="space-y-3 max-h-64 overflow-y-auto">
+        <AnimatePresence>
+          {chefPerformance.length === 0 ? (
+            <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد بيانات أداء' : 'No performance data available'}</p>
+          ) : (
+            chefPerformance.map((chef, index) => (
               <motion.div
-                className="bg-green-600 h-3 rounded-full"
-                initial={{ width: 0 }}
-                animate={{ width: `${chef.performance}%` }}
-                transition={{ duration: 0.8, ease: 'easeOut' }}
-              />
-            </div>
-            <span className="w-20 text-right text-sm text-gray-600">
-              {chef.performance.toFixed(0)}% ({chef.completedTasks}/{chef.totalTasks})
-            </span>
-          </div>
-        ))}
-        {chefPerformance.length === 0 && <p className="text-center text-gray-600 text-sm">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>}
+                key={chef.chefName}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2, delay: index * 0.1 }}
+                className="flex items-center justify-between p-2 border-b border-gray-100"
+              >
+                <div>
+                  <p className="text-sm font-medium text-gray-800">{isRtl ? chef.chefName : chef.chefNameEn || chef.chefName}</p>
+                  <p className="text-xs text-gray-500">
+                    {isRtl ? `${chef.totalTasks} مهام` : `${chef.totalTasks} Tasks`} -{' '}
+                    {isRtl ? `${chef.completedTasks} مكتمل` : `${chef.completedTasks} Completed`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-24 bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-amber-600 h-2 rounded-full"
+                      style={{ width: `${Math.min(chef.performance, 100)}%` }}
+                    ></div>
+                  </div>
+                  <span className="text-xs text-gray-600">{chef.performance.toFixed(1)}%</span>
+                </div>
+              </motion.div>
+            ))
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
 
-  const renderContent = () => {
-    if (loading) {
-      return <Loader />;
-    }
-
-    if (error) {
-      return (
-        <div className="p-4 text-center bg-red-50 rounded-lg shadow-sm border border-red-100">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <AlertCircle className="w-6 h-6 text-red-600" />
-            <p className="text-red-600 text-lg font-medium">{error}</p>
-          </div>
-          <button
-            onClick={() => {
-              localStorage.removeItem('token');
-              localStorage.removeItem('refreshToken');
-              navigate('/login');
-            }}
-            className="bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-4 py-2 text-sm shadow-sm transition-colors duration-200"
-          >
-            {isRtl ? 'تسجيل الدخول' : 'Log In'}
-          </button>
-        </div>
-      );
-    }
-
-    switch (user?.role) {
-      case 'chef':
-        return (
-          <div className="space-y-4">
-            <div className="flex justify-end mb-4">
-              <select
-                className="w-full sm:w-36 p-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-amber-500 bg-white"
-                value={timeFilter}
-                onChange={(e) => setTimeFilter(e.target.value)}
-                aria-label={isRtl ? 'الفترة الزمنية' : 'Time Period'}
-              >
-                {timeFilterOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {isRtl ? opt.label : opt.enLabel}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <ChefDashboard
-              stats={stats}
-              tasks={tasks}
-              isRtl={isRtl}
-              language={language}
-              handleStartTask={handleStartTask}
-              handleCompleteTask={handleCompleteTask}
-            />
-          </div>
-        );
-      case 'branch':
-        return (
-          <div className="space-y-4">
-            <div className="flex justify-end mb-4">
-              <select
-                className="w-full sm:w-36 p-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-amber-500 bg-white"
-                value={timeFilter}
-                onChange={(e) => setTimeFilter(e.target.value)}
-                aria-label={isRtl ? 'الفترة الزمنية' : 'Time Period'}
-              >
-                {timeFilterOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {isRtl ? opt.label : opt.enLabel}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {renderStats()}
-            {renderPendingItems()}
-          </div>
-        );
-      default:
-        return (
-          <div className="space-y-4">
-            <div className="flex justify-end mb-4">
-              <select
-                className="w-full sm:w-36 p-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-amber-500 bg-white"
-                value={timeFilter}
-                onChange={(e) => setTimeFilter(e.target.value)}
-                aria-label={isRtl ? 'الفترة الزمنية' : 'Time Period'}
-              >
-                {timeFilterOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {isRtl ? opt.label : opt.enLabel}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {renderStats()}
-            {renderPendingItems()}
-            {['admin'].includes(user?.role) && renderBranchPerformance()}
-            {['admin', 'production'].includes(user?.role) && renderChefPerformance()}
-          </div>
-        );
-    }
-  };
+  if (loading) return <Loader />;
+  if (error) return <div className="text-center text-red-600 p-4">{error}</div>;
 
   return (
-    <div className="mx-auto px-2 sm:px-3 lg:px-4 py-3 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
-      {renderContent()}
+    <div className={`p-4 md:p-6 ${isRtl ? 'text-right' : 'text-left'}`}>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+          <BarChart3 className="w-6 h-6 text-amber-600" />
+          {isRtl ? 'لوحة التحكم' : 'Dashboard'}
+        </h1>
+        <select
+          value={timeFilter}
+          onChange={(e) => setTimeFilter(e.target.value)}
+          className="p-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+          aria-label={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
+        >
+          {timeFilterOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {isRtl ? option.label : option.enLabel}
+            </option>
+          ))}
+        </select>
+      </div>
+      {user.role === 'chef' ? (
+        <ChefDashboard
+          stats={stats}
+          tasks={tasks}
+          isRtl={isRtl}
+          language={language}
+          handleStartTask={handleStartTask}
+          handleCompleteTask={handleCompleteTask}
+        />
+      ) : (
+        <>
+          {renderStats()}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                <ShoppingCart className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+                {isRtl ? 'أحدث الطلبات' : 'Latest Orders'}
+              </h3>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                <AnimatePresence>
+                  {sortedPendingOrders.length === 0 ? (
+                    <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد طلبات' : 'No orders available'}</p>
+                  ) : (
+                    sortedPendingOrders.map((order) => (
+                      <motion.div
+                        key={order.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                        className="border border-amber-100 rounded-lg p-3 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
+                        onClick={() => navigate(`/orders/${order.id}`)}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-semibold text-sm text-gray-800 truncate">
+                            {isRtl ? `طلب رقم ${order.orderNumber}` : `Order #${order.orderNumber}`}
+                          </h4>
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              order.status === 'pending'
+                                ? 'bg-amber-100 text-amber-800'
+                                : order.status === 'in_production'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-green-100 text-green-800'
+                            }`}
+                          >
+                            {isRtl
+                              ? order.status === 'pending'
+                                ? 'معلق'
+                                : order.status === 'in_production'
+                                ? 'قيد الإنتاج'
+                                : 'مكتمل'
+                              : order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-2 truncate">{isRtl ? order.branchName : order.branchNameEn || order.branchName}</p>
+                        <p className="text-xs text-gray-500">{isRtl ? `تم الإنشاء في: ${order.date}` : `Created At: ${order.date}`}</p>
+                      </motion.div>
+                    ))
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+            {['admin', 'production'].includes(user.role) && (
+              <>
+                {renderBranchPerformance()}
+                {renderChefPerformance()}
+              </>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 };
-
-export default Dashboard;
