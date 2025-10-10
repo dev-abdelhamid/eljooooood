@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect, useReducer } from 're
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Eye, Clock, Check, AlertCircle, MinusCircle, Plus, X, CheckCircle, XCircle } from 'lucide-react';
+import { Package, Eye, Clock, Check, AlertCircle, MinusCircle, Plus, X, CheckCircle, XCircle, Currency } from 'lucide-react';
 import { returnsAPI, inventoryAPI } from '../services/api';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -122,6 +122,7 @@ const translations = {
     unit: 'الوحدة',
     department: 'القسم',
     product: 'المنتج',
+    Currency : 'ريال' ,
     price: 'السعر',
     status: {
       pending: 'قيد الانتظار',
@@ -195,6 +196,7 @@ const translations = {
     reviewNotesPlaceholder: 'Enter review notes (optional)',
     items: 'Items',
     addItem: 'Add Item',
+    Currency: 'SAR',
     removeItem: 'Remove Item',
     submitReturn: 'Submit Return Request',
     approve: 'Approve',
@@ -830,7 +832,7 @@ export const BranchReturns: React.FC = () => {
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">{t.totalPrice}</p>
-                  <p className="text-sm font-medium text-gray-900">{totalPrice} SAR</p>
+                  <p className="text-sm font-medium text-gray-900">{totalPrice} {t.Currency} </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">{t.branch}</p>
@@ -908,7 +910,7 @@ export const BranchReturns: React.FC = () => {
   );
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
+    <div className="mx-auto  px-4 py-8 ">
       <div className="mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div className="flex items-center gap-4">
           <Package className="w-8 h-8 text-amber-600" />
