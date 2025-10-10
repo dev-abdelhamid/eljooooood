@@ -208,17 +208,10 @@ const getDisplayName = (name: string | undefined | null, nameEn: string | undefi
   return nameEn || name || 'Unknown';
 };
 
-const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return window.btoa(binary);
-};
+
 
 // Main component
-const BranchOrders: React.FC = () => {
+export const BranchOrders: React.FC = () => {
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
