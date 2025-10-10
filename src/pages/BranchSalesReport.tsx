@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotifications } from '../contexts/NotificationContext';
 import { salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, DollarSign, Trash2, Search, X, ChevronDown } from 'lucide-react';
@@ -68,6 +69,7 @@ const translations = {
       fetch_sales: 'خطأ أثناء جلب المبيعات',
       delete_sale_failed: 'فشل حذف المبيعة',
       sale_not_found: 'المبيعة غير موجودة',
+      network_error: 'خطأ في الشبكة، يرجى المحاولة لاحقًا',
     },
     currency: 'ريال',
     branches: { all_branches: 'كل الفروع', select_branch: 'اختر الفرع', unknown: 'غير معروف' },
@@ -83,6 +85,9 @@ const translations = {
     total: 'الإجمالي',
     notes: 'ملاحظات',
     units: { default: 'غير محدد' },
+    notifications: {
+      sale_created: 'تم إنشاء مبيعة جديدة #{saleNumber} في {branchName}',
+    },
   },
   en: {
     title: 'Sales Report',
@@ -110,6 +115,7 @@ const translations = {
       fetch_sales: 'Error fetching sales',
       delete_sale_failed: 'Failed to delete sale',
       sale_not_found: 'Sale not found',
+      network_error: 'Network error, please try again later',
     },
     currency: 'SAR',
     branches: { all_branches: 'All Branches', select_branch: 'Select Branch', unknown: 'Unknown' },
@@ -125,6 +131,9 @@ const translations = {
     total: 'Total',
     notes: 'Notes',
     units: { default: 'N/A' },
+    notifications: {
+      sale_created: 'New sale #{saleNumber} created in {branchName}',
+    },
   },
 };
 
@@ -258,10 +267,11 @@ const SaleSkeletonCard = React.memo(() => (
   </div>
 ));
 
-// المكون الرئيسي لصفحة المبيعات (متابعة المبيعات فقط)
+// المكون الرئيسي لصفحة المبيعات
 export const BranchSalesReport: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
+  const { addNotification, notifications } = useNotifications();
   const navigate = useNavigate();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'] || translations.en;
@@ -297,13 +307,12 @@ export const BranchSalesReport: React.FC = () => {
       newStartDate = newEndDate;
     } else if (filterPeriod === 'week') {
       const firstDayOfWeek = new Date(today);
-      firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1); // افتراضيًا الأسبوع يبدأ من الاثنين
+      firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1);
       newStartDate = firstDayOfWeek.toISOString().split('T')[0];
     } else if (filterPeriod === 'month') {
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
       newStartDate = firstDayOfMonth.toISOString().split('T')[0];
     } else if (filterPeriod === 'custom') {
-      // الحفاظ على القيم الحالية للمستخدم
       return;
     } else {
       newStartDate = '';
@@ -340,7 +349,7 @@ export const BranchSalesReport: React.FC = () => {
 
       try {
         const salesParams: any = { page: pageNum, limit: 20, sort: '-createdAt', branch: user.branchId };
-        if ((filterPeriod !== 'all') && startDate && endDate) {
+        if (filterPeriod !== 'all' && startDate && endDate) {
           salesParams.startDate = startDate;
           salesParams.endDate = endDate;
         }
@@ -418,7 +427,7 @@ export const BranchSalesReport: React.FC = () => {
         setHasMore(salesResponse.total > pageNum * 20);
       } catch (err: any) {
         console.error(`[${new Date().toISOString()}] Fetch error:`, err);
-        const errorMessage = err.response?.status === 403 ? t.errors.unauthorized_access : err.message || t.errors.fetch_sales;
+        const errorMessage = err.response?.status === 403 ? t.errors.unauthorized_access : err.message.includes('Network Error') ? t.errors.network_error : t.errors.fetch_sales;
         setError(errorMessage);
         toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
         setSales([]);
@@ -430,9 +439,62 @@ export const BranchSalesReport: React.FC = () => {
     [filterPeriod, startDate, endDate, user, t, isRtl]
   );
 
+  // الاستماع إلى إشعارات saleCreated
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    const handleSaleCreated = (notification: any) => {
+      if (notification.type === 'saleCreated' && notification.data?.saleId && user?.branchId === notification.data.branchId) {
+        // جلب بيانات المبيعة الجديدة
+        salesAPI.getById(notification.data.saleId).then((sale) => {
+          if (sale) {
+            const newSale: Sale = {
+              _id: sale._id,
+              saleNumber: sale.saleNumber || 'N/A',
+              branch: {
+                _id: sale.branch?._id || 'unknown',
+                name: sale.branch?.name || t.branches.unknown,
+                nameEn: sale.branch?.nameEn,
+                displayName: isRtl ? sale.branch?.name : (sale.branch?.nameEn || sale.branch?.name || t.branches.unknown),
+              },
+              items: Array.isArray(sale.items)
+                ? sale.items.map((item: any) => ({
+                    productId: item.product?._id || item.productId,
+                    productName: item.product?.name || t.departments.unknown,
+                    productNameEn: item.product?.nameEn,
+                    unit: item.product?.unit,
+                    unitEn: item.product?.unitEn,
+                    displayName: isRtl ? (item.product?.name || t.departments.unknown) : (item.product?.nameEn || item.product?.name || t.departments.unknown),
+                    displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice,
+                    department: item.product?.department
+                      ? {
+                          _id: item.product.department._id,
+                          name: item.product.department.name,
+                          nameEn: item.product.department.nameEn,
+                          displayName: isRtl ? item.product.department.name : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
+                        }
+                      : undefined,
+                  }))
+                : [],
+              totalAmount: sale.totalAmount || 0,
+              createdAt: formatDate(new Date(sale.createdAt), isRtl ? 'ar' : 'en'),
+              notes: sale.notes,
+              paymentMethod: sale.paymentMethod,
+              customerName: sale.customerName,
+              customerPhone: sale.customerPhone,
+              returns: [],
+            };
+            setSales((prev) => [newSale, ...prev]);
+          }
+        }).catch((err) => {
+          console.error(`[${new Date().toISOString()}] Error fetching new sale:`, err);
+          toast.error(t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left' });
+        });
+      }
+    };
+
+    notifications.forEach(handleSaleCreated);
+  }, [notifications, user, t, isRtl]);
 
   // تحميل المزيد من المبيعات
   const loadMoreSales = useCallback(() => {
@@ -483,7 +545,7 @@ export const BranchSalesReport: React.FC = () => {
   );
 
   return (
-    <div className={`mx-auto px-4 py-8 min-h-screen`} >
+    <div className={`mx-auto px-4 py-8 min-h-screen`}>
       <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <DollarSign className="w-7 h-7 text-amber-600" />
