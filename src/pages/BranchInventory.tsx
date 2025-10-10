@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect, useReducer } from 're
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Plus, X, Eye, Edit, AlertCircle, Search } from 'lucide-react';
+import { Package, Plus, X, Eye, Edit, AlertCircle, Minus } from 'lucide-react';
 import { returnsAPI, inventoryAPI } from '../services/api';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
