@@ -1340,3 +1340,5 @@ export const BranchReturns: React.FC = () => {
     </div>
   );
 };
+
+export default BranchReturns;
