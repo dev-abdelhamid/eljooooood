@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect, useReducer } from 're
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Eye, Clock, Check, AlertCircle, MinusCircle, Plus, X } from 'lucide-react';
+import { Package, Eye, Clock, Check, AlertCircle, MinusCircle, Plus, X, CheckCircle, XCircle } from 'lucide-react';
 import { returnsAPI, inventoryAPI } from '../services/api';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -32,11 +32,6 @@ interface ReturnItem {
   reason: string;
   reasonEn: string;
   maxQuantity: number;
-}
-
-interface ReturnFormState {
-  notes: string;
-  items: ReturnItem[];
 }
 
 interface Return {
@@ -75,10 +70,15 @@ interface AvailableItem {
   stock: number;
 }
 
+interface ReturnFormState {
+  notes: string;
+  items: ReturnItem[];
+}
+
 const translations = {
   ar: {
     title: 'إدارة طلبات الإرجاع',
-    subtitle: 'إنشاء ومتابعة طلبات الإرجاع للفرع',
+    subtitle: 'إنشاء ومتابعة وإدارة طلبات الإرجاع',
     noReturns: 'لا توجد طلبات إرجاع',
     returnNumber: 'رقم الإرجاع',
     statusLabel: 'الحالة',
@@ -90,6 +90,8 @@ const translations = {
     noNotes: 'لا توجد ملاحظات',
     createReturn: 'إنشاء طلب إرجاع',
     viewReturn: 'عرض طلب الإرجاع',
+    approveReturn: 'الموافقة على الإرجاع',
+    rejectReturn: 'رفض الإرجاع',
     view: 'عرض',
     searchPlaceholder: 'البحث برقم الإرجاع أو الملاحظات...',
     filterStatus: 'تصفية حسب الحالة',
@@ -102,11 +104,15 @@ const translations = {
     excessQuantity: 'كمية زائدة',
     other: 'أخرى',
     notesPlaceholder: 'أدخل ملاحظات إضافية (اختياري)',
+    reviewNotesPlaceholder: 'أدخل ملاحظات المراجعة (اختياري)',
     items: 'العناصر',
     addItem: 'إضافة عنصر',
     removeItem: 'إزالة العنصر',
     submitReturn: 'إرسال طلب الإرجاع',
+    approve: 'موافقة',
+    reject: 'رفض',
     createSuccess: 'تم إنشاء طلب الإرجاع بنجاح',
+    updateSuccess: 'تم تحديث حالة الإرجاع بنجاح',
     newReturnNotification: 'تم إنشاء طلب إرجاع جديد: {returnNumber}',
     quantity: 'الكمية',
     unit: 'الوحدة',
@@ -127,6 +133,7 @@ const translations = {
       noBranch: 'لم يتم العثور على فرع',
       fetchReturns: 'خطأ في جلب طلبات الإرجاع',
       createReturn: 'خطأ في إنشاء طلب الإرجاع',
+      updateReturn: 'خطأ في تحديث حالة الإرجاع',
       invalidForm: 'البيانات المدخلة غير صالحة',
       required: 'حقل {field} مطلوب',
       invalidQuantityMax: 'الكمية يجب أن تكون بين 1 و{max}',
@@ -149,7 +156,7 @@ const translations = {
   },
   en: {
     title: 'Return Requests Management',
-    subtitle: 'Create and track return requests for the branch',
+    subtitle: 'Create, track, and manage return requests',
     noReturns: 'No return requests found',
     returnNumber: 'Return Number',
     statusLabel: 'Status',
@@ -161,6 +168,8 @@ const translations = {
     noNotes: 'No notes available',
     createReturn: 'Create Return Request',
     viewReturn: 'View Return Request',
+    approveReturn: 'Approve Return',
+    rejectReturn: 'Reject Return',
     view: 'View',
     searchPlaceholder: 'Search by return number or notes...',
     filterStatus: 'Filter by Status',
@@ -173,11 +182,15 @@ const translations = {
     excessQuantity: 'Excess Quantity',
     other: 'Other',
     notesPlaceholder: 'Enter additional notes (optional)',
+    reviewNotesPlaceholder: 'Enter review notes (optional)',
     items: 'Items',
     addItem: 'Add Item',
     removeItem: 'Remove Item',
     submitReturn: 'Submit Return Request',
+    approve: 'Approve',
+    reject: 'Reject',
     createSuccess: 'Return request created successfully',
+    updateSuccess: 'Return status updated successfully',
     newReturnNotification: 'New return request created: {returnNumber}',
     quantity: 'Quantity',
     unit: 'Unit',
@@ -198,6 +211,7 @@ const translations = {
       noBranch: 'No branch found',
       fetchReturns: 'Error fetching return requests',
       createReturn: 'Error creating return request',
+      updateReturn: 'Error updating return status',
       invalidForm: 'Invalid form data',
       required: '{field} is required',
       invalidQuantityMax: 'Quantity must be between 1 and {max}',
@@ -319,11 +333,13 @@ export const BranchReturns: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
   const [selectedReturn, setSelectedReturn] = useState<Return | null>(null);
   const [returnForm, dispatchReturnForm] = useReducer(returnFormReducer, { notes: '', items: [] });
   const [returnErrors, setReturnErrors] = useState<Record<string, string>>({});
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
   const [retryCount, setRetryCount] = useState(0);
+  const [reviewNotes, setReviewNotes] = useState('');
 
   const RETURNS_PER_PAGE = 10;
 
@@ -345,14 +361,15 @@ export const BranchReturns: React.FC = () => {
   >({
     queryKey: ['returns', user?.branchId, filterStatus, debouncedSearchQuery, currentPage, language],
     queryFn: async () => {
-      if (!user?.branchId) throw new Error(t.errors.noBranch);
       const query = {
-        branch: user.branchId,
         status: filterStatus,
         search: debouncedSearchQuery,
         page: currentPage,
         limit: RETURNS_PER_PAGE,
       };
+      if (user?.role === 'branch' && user.branchId) {
+        query.branch = user.branchId;
+      }
       const response = await returnsAPI.getAll(query);
       return {
         returns: response.returns.map((ret: any) => ({
@@ -398,7 +415,7 @@ export const BranchReturns: React.FC = () => {
         total: response.total || 0,
       };
     },
-    enabled: !!user?.branchId,
+    enabled: !!user,
     staleTime: 5 * 60 * 1000,
     cacheTime: 10 * 60 * 1000,
     onError: (err) => {
@@ -421,7 +438,7 @@ export const BranchReturns: React.FC = () => {
           displayUnit: isRtl ? item.product.unit : item.product.unitEn || item.product.unit || t.unit,
           departmentName: item.product.department
             ? (isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name)
-            : 'Unknown',
+            : t.department,
           stock: item.currentStock,
         }));
     },
@@ -430,24 +447,22 @@ export const BranchReturns: React.FC = () => {
   });
 
   useEffect(() => {
-    if (!socket || !user?.branchId) return;
+    if (!socket || !user) return;
 
     const handleReturnCreated = ({ branchId, returnNumber }: { branchId: string; returnNumber: string }) => {
-      if (branchId === user.branchId) {
-        queryClient.invalidateQueries({ queryKey: ['returns'] });
-        toast.success(t.newReturnNotification.replace('{returnNumber}', returnNumber), {
-          position: isRtl ? 'top-right' : 'top-left',
-        });
-      }
+      if (user.role === 'branch' && branchId !== user.branchId) return;
+      queryClient.invalidateQueries({ queryKey: ['returns'] });
+      toast.success(t.newReturnNotification.replace('{returnNumber}', returnNumber), {
+        position: isRtl ? 'top-right' : 'top-left',
+      });
     };
 
     const handleReturnStatusUpdated = ({ branchId, status }: { branchId: string; status: string }) => {
-      if (branchId === user.branchId) {
-        queryClient.invalidateQueries({ queryKey: ['returns'] });
-        toast.info(t.socket.returnStatusUpdated.replace('{status}', t.status[status as keyof typeof t.status] || status), {
-          position: isRtl ? 'top-right' : 'top-left',
-        });
-      }
+      if (user.role === 'branch' && branchId !== user.branchId) return;
+      queryClient.invalidateQueries({ queryKey: ['returns'] });
+      toast.info(t.socket.returnStatusUpdated.replace('{status}', t.status[status as keyof typeof t.status] || status), {
+        position: isRtl ? 'top-right' : 'top-left',
+      });
     };
 
     socket.on('connect', () => {
@@ -589,7 +604,7 @@ export const BranchReturns: React.FC = () => {
 
   const validateReturnForm = useCallback(() => {
     const errors: Record<string, string> = {};
-    if (!user?.branchId) {
+    if (!user?.branchId && user?.role === 'branch') {
       errors.form = t.errors.noBranch;
     }
     if (returnForm.items.length === 0) {
@@ -662,6 +677,31 @@ export const BranchReturns: React.FC = () => {
     },
   });
 
+  const updateReturnStatusMutation = useMutation<void, Error, { returnId: string; status: string; reviewNotes?: string }>({
+    mutationFn: async ({ returnId, status, reviewNotes }) => {
+      if (!['approved', 'rejected'].includes(status)) {
+        throw new Error(t.errors.invalidForm);
+      }
+      await returnsAPI.updateReturnStatus(returnId, status, reviewNotes);
+    },
+    onSuccess: (_, { returnId, status }) => {
+      queryClient.invalidateQueries({ queryKey: ['returns'] });
+      setIsApproveModalOpen(false);
+      setReviewNotes('');
+      setSelectedReturn(null);
+      toast.success(t.updateSuccess, { position: isRtl ? 'top-right' : 'top-left' });
+      socket?.emit('returnStatusUpdated', {
+        branchId: selectedReturn?.branch?._id,
+        returnId,
+        status,
+        eventId: crypto.randomUUID(),
+      });
+    },
+    onError: (err) => {
+      toast.error(err.message || t.errors.updateReturn, { position: isRtl ? 'top-right' : 'top-left' });
+    },
+  });
+
   const ReturnCard = useCallback(
     ({ ret }: { ret: Return }) => {
       const statusInfo = {
@@ -696,6 +736,10 @@ export const BranchReturns: React.FC = () => {
                   <p className="text-sm text-gray-500">{t.itemsCount}</p>
                   <p className="text-sm font-medium text-gray-900">{ret.items.length} {t.items}</p>
                 </div>
+                <div>
+                  <p className="text-sm text-gray-500">{t.branch}</p>
+                  <p className="text-sm font-medium text-gray-900">{ret.branch?.displayName || t.branch}</p>
+                </div>
               </div>
               <div className="flex flex-col gap-2">
                 {ret.items.map((item, index) => (
@@ -716,22 +760,48 @@ export const BranchReturns: React.FC = () => {
                   <p className="text-sm text-blue-800">{t.reviewNotes}: {ret.reviewNotes}</p>
                 </div>
               )}
-              <button
-                onClick={() => {
-                  setSelectedReturn(ret);
-                  setIsViewModalOpen(true);
-                }}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 self-end"
-              >
-                <Eye className="w-4 h-4 inline mr-2" />
-                {t.view}
-              </button>
+              <div className="flex justify-end gap-3">
+                {(user?.role === 'admin' || user?.role === 'production') && ret.status === ReturnStatus.PENDING && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setSelectedReturn(ret);
+                        setIsApproveModalOpen(true);
+                      }}
+                      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+                    >
+                      <CheckCircle className="w-4 h-4" />
+                      {t.approve}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedReturn(ret);
+                        setIsApproveModalOpen(true);
+                      }}
+                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+                    >
+                      <XCircle className="w-4 h-4" />
+                      {t.reject}
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => {
+                    setSelectedReturn(ret);
+                    setIsViewModalOpen(true);
+                  }}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+                >
+                  <Eye className="w-4 h-4" />
+                  {t.view}
+                </button>
+              </div>
             </div>
           </div>
         </motion.div>
       );
     },
-    [t, isRtl]
+    [t, isRtl, user]
   );
 
   return (
@@ -744,13 +814,15 @@ export const BranchReturns: React.FC = () => {
             <p className="text-gray-600 text-sm">{t.subtitle}</p>
           </div>
         </div>
-        <button
-          onClick={() => setIsCreateModalOpen(true)}
-          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          {t.createReturn}
-        </button>
+        {(user?.role === 'branch' || user?.role === 'admin') && (
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+          >
+            <Plus className="w-4 h-4" />
+            {t.createReturn}
+          </button>
+        )}
       </div>
 
       {returnsError && (
@@ -804,12 +876,14 @@ export const BranchReturns: React.FC = () => {
         <div className="p-8 text-center bg-white rounded-xl shadow-sm">
           <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600 text-sm font-medium">{t.noReturns}</p>
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
-          >
-            {t.createReturn}
-          </button>
+          {(user?.role === 'branch' || user?.role === 'admin') && (
+            <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+            >
+              {t.createReturn}
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4">
@@ -851,7 +925,7 @@ export const BranchReturns: React.FC = () => {
         <motion.div
           initial={{ scale: 0.95 }}
           animate={{ scale: isCreateModalOpen ? 1 : 0.95 }}
-          className="bg-white p-6 rounded-xl shadow-xl max-w-lg w-full"
+          className="bg-white p-6 rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto"
         >
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-gray-900">{t.createReturn}</h2>
@@ -970,7 +1044,7 @@ export const BranchReturns: React.FC = () => {
         <motion.div
           initial={{ scale: 0.95 }}
           animate={{ scale: isViewModalOpen ? 1 : 0.95 }}
-          className="bg-white p-6 rounded-xl shadow-xl max-w-lg w-full"
+          className="bg-white p-6 rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto"
         >
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-gray-900">{t.viewReturn}: {selectedReturn?.returnNumber}</h2>
@@ -1037,6 +1111,93 @@ export const BranchReturns: React.FC = () => {
               >
                 {t.common.close}
               </button>
+            </div>
+          )}
+        </motion.div>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: isApproveModalOpen ? 1 : 0 }}
+        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 ${isApproveModalOpen ? '' : 'pointer-events-none'}`}
+      >
+        <motion.div
+          initial={{ scale: 0.95 }}
+          animate={{ scale: isApproveModalOpen ? 1 : 0.95 }}
+          className="bg-white p-6 rounded-xl shadow-xl max-w-lg w-full"
+        >
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-gray-900">
+              {selectedReturn ? (selectedReturn.status === ReturnStatus.PENDING ? t.approveReturn : t.rejectReturn) : t.approveReturn}
+            </h2>
+            <button
+              onClick={() => {
+                setIsApproveModalOpen(false);
+                setReviewNotes('');
+                setSelectedReturn(null);
+              }}
+              className="p-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          {selectedReturn && (
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm font-medium text-gray-700 mb-2">{t.returnNumber}: {selectedReturn.returnNumber}</p>
+                <p className="text-sm text-gray-600">{t.itemsCount}: {selectedReturn.items.length}</p>
+                <p className="text-sm text-gray-600">{t.branch}: {selectedReturn.branch?.displayName || t.branch}</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t.reviewNotes}</label>
+                <textarea
+                  value={reviewNotes}
+                  onChange={(e) => setReviewNotes(e.target.value)}
+                  placeholder={t.reviewNotesPlaceholder}
+                  className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500"
+                  rows={3}
+                />
+              </div>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    setIsApproveModalOpen(false);
+                    setReviewNotes('');
+                    setSelectedReturn(null);
+                  }}
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium"
+                >
+                  {t.common.cancel}
+                </button>
+                <button
+                  onClick={() => {
+                    updateReturnStatusMutation.mutate({
+                      returnId: selectedReturn._id,
+                      status: 'approved',
+                      reviewNotes: reviewNotes.trim(),
+                    });
+                  }}
+                  disabled={updateReturnStatusMutation.isLoading}
+                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  {updateReturnStatusMutation.isLoading ? t.common.submitting : t.approve}
+                </button>
+                <button
+                  onClick={() => {
+                    updateReturnStatusMutation.mutate({
+                      returnId: selectedReturn._id,
+                      status: 'rejected',
+                      reviewNotes: reviewNotes.trim(),
+                    });
+                  }}
+                  disabled={updateReturnStatusMutation.isLoading}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+                >
+                  <XCircle className="w-4 h-4" />
+                  {updateReturnStatusMutation.isLoading ? t.common.submitting : t.reject}
+                </button>
+              </div>
             </div>
           )}
         </motion.div>
