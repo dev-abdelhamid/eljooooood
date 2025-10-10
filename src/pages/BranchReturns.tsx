@@ -8,6 +8,7 @@ import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
+import { useNotifications } from '../contexts/NotificationContext';
 
 enum ReturnStatus {
   PENDING = 'pending_approval',
@@ -340,7 +341,8 @@ export const BranchReturns: React.FC = () => {
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   const { user } = useAuth();
-  const { socket } = useSocket();
+  const { socket, isConnected } = useSocket();
+  const { addNotification } = useNotifications();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<ReturnStatus | ''>('');
@@ -434,7 +436,10 @@ export const BranchReturns: React.FC = () => {
     staleTime: 5 * 60 * 1000,
     cacheTime: 10 * 60 * 1000,
     onError: (err) => {
-      toast.error(err.message || t.errors.fetchReturns, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(err.message || t.errors.fetchReturns, {
+        position: isRtl ? 'top-right' : 'top-left',
+        toastId: `fetch-returns-${Date.now()}`,
+      });
     },
   });
 
@@ -463,31 +468,62 @@ export const BranchReturns: React.FC = () => {
   });
 
   useEffect(() => {
-    if (!socket || !user) return;
+    if (!socket || !user || !isConnected) return;
 
-    const handleReturnCreated = ({ branchId, returnNumber, branchName }: { branchId: string; returnNumber: string; branchName?: string }) => {
-      if (user.role === 'branch' && branchId !== user.branchId) return;
+    const handleReturnCreated = (data: { branchId: string; returnId: string; returnNumber: string; branchName?: string; eventId: string }) => {
+      if (user.role === 'branch' && data.branchId !== user.branchId) return;
       queryClient.invalidateQueries({ queryKey: ['returns'] });
-      toast.success(t.notifications.return_created.replace('{returnNumber}', returnNumber).replace('{branchName}', branchName || t.branch), {
-        position: isRtl ? 'top-right' : 'top-left',
+      addNotification({
+        _id: data.eventId,
+        type: 'success',
+        message: t.notifications.return_created
+          .replace('{returnNumber}', data.returnNumber)
+          .replace('{branchName}', data.branchName || t.branch),
+        data: { returnId: data.returnId, branchId: data.branchId, eventId: data.eventId },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: '/sounds/notification.mp3',
+        vibrate: [200, 100, 200],
       });
     };
 
-    const handleReturnStatusUpdated = ({ branchId, status, returnNumber, branchName }: { branchId: string; status: string; returnNumber: string; branchName?: string }) => {
-      if (user.role === 'branch' && branchId !== user.branchId) return;
+    const handleReturnStatusUpdated = (data: {
+      branchId: string;
+      returnId: string;
+      status: string;
+      returnNumber: string;
+      branchName?: string;
+      eventId: string;
+    }) => {
+      if (user.role === 'branch' && data.branchId !== user.branchId) return;
       queryClient.invalidateQueries({ queryKey: ['returns'] });
-      toast.info(
-        t.notifications.return_status_updated
-          .replace('{returnNumber}', returnNumber)
-          .replace('{status}', t.status[status as keyof typeof t.status] || status)
-          .replace('{branchName}', branchName || t.branch),
-        { position: isRtl ? 'top-right' : 'top-left' }
-      );
+      addNotification({
+        _id: data.eventId,
+        type: 'info',
+        message: t.notifications.return_status_updated
+          .replace('{returnNumber}', data.returnNumber)
+          .replace('{status}', t.status[data.status as keyof typeof t.status] || data.status)
+          .replace('{branchName}', data.branchName || t.branch),
+        data: { returnId: data.returnId, branchId: data.branchId, eventId: data.eventId },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: '/sounds/notification.mp3',
+        vibrate: [200, 100, 200],
+      });
     };
 
     socket.on('connect', () => {
       socket.emit('joinRoom', { role: user?.role, branchId: user?.branchId, userId: user?._id });
-      toast.info(t.socket.connected, { position: isRtl ? 'top-right' : 'top-left' });
+      addNotification({
+        _id: crypto.randomUUID(),
+        type: 'info',
+        message: t.socket.connected,
+        data: { eventId: crypto.randomUUID() },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: '/sounds/notification.mp3',
+        vibrate: [200, 100, 200],
+      });
     });
     socket.on('returnCreated', handleReturnCreated);
     socket.on('returnStatusUpdated', handleReturnStatusUpdated);
@@ -497,7 +533,7 @@ export const BranchReturns: React.FC = () => {
       socket.off('returnCreated', handleReturnCreated);
       socket.off('returnStatusUpdated', handleReturnStatusUpdated);
     };
-  }, [socket, user, queryClient, t, isRtl]);
+  }, [socket, user, isConnected, queryClient, t, isRtl, addNotification]);
 
   const statusOptions = useMemo(
     () => [
@@ -653,7 +689,7 @@ export const BranchReturns: React.FC = () => {
     return Object.keys(errors).length === 0;
   }, [returnForm, t, inventoryData, user]);
 
-  const createReturnMutation = useMutation<{ returnId: string }, Error, void>({
+  const createReturnMutation = useMutation<{ returnId: string; returnNumber: string }, Error, void>({
     mutationFn: async () => {
       if (!validateReturnForm()) throw new Error(t.errors.invalidForm);
       if (!user?.branchId) throw new Error(t.errors.noBranch);
@@ -668,7 +704,10 @@ export const BranchReturns: React.FC = () => {
         notes: returnForm.notes || undefined,
       };
       const response = await returnsAPI.createReturn(data);
-      return { returnId: response?._id || crypto.randomUUID() };
+      return {
+        returnId: response?._id || crypto.randomUUID(),
+        returnNumber: response?.returnNumber || `RET-${response?._id.slice(-6)}`,
+      };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['returns'] });
@@ -676,29 +715,44 @@ export const BranchReturns: React.FC = () => {
       dispatchReturnForm({ type: 'RESET' });
       setReturnErrors({});
       setRetryCount(0);
-      toast.success(t.createSuccess, { position: isRtl ? 'top-right' : 'top-left' });
-      socket?.emit('returnCreated', {
-        branchId: user?.branchId,
-        returnId: data.returnId,
-        returnNumber: `RET-${data.returnId.slice(-6)}`,
-        branchName: user?.branch?.displayName,
-        status: 'pending_approval',
-        eventId: crypto.randomUUID(),
+      toast.success(t.createSuccess, {
+        position: isRtl ? 'top-right' : 'top-left',
+        toastId: `create-return-${data.returnId}`,
       });
+      if (isConnected) {
+        socket?.emit('returnCreated', {
+          branchId: user?.branchId,
+          returnId: data.returnId,
+          returnNumber: data.returnNumber,
+          branchName: user?.branch?.displayName,
+          status: ReturnStatus.PENDING,
+          eventId: crypto.randomUUID(),
+        });
+      }
     },
     onError: (err) => {
       if (err.message.includes('Write conflict') && retryCount < 3) {
         setRetryCount(retryCount + 1);
         setTimeout(() => createReturnMutation.mutate(), 2000 * (retryCount + 1));
-        toast.info(t.errors.writeConflict, { position: isRtl ? 'top-right' : 'top-left' });
+        toast.info(t.errors.writeConflict, {
+          position: isRtl ? 'top-right' : 'top-left',
+          toastId: `write-conflict-${Date.now()}`,
+        });
       } else {
-        toast.error(err.message || t.errors.createReturn, { position: isRtl ? 'top-right' : 'top-left' });
+        toast.error(err.message || t.errors.createReturn, {
+          position: isRtl ? 'top-right' : 'top-left',
+          toastId: `create-error-${Date.now()}`,
+        });
         setReturnErrors({ form: err.message });
       }
     },
   });
 
-  const updateReturnStatusMutation = useMutation<void, Error, { returnId: string; status: string; reviewNotes?: string }>({
+  const updateReturnStatusMutation = useMutation<
+    void,
+    Error,
+    { returnId: string; status: ReturnStatus; reviewNotes?: string }
+  >({
     mutationFn: async ({ returnId, status, reviewNotes }) => {
       if (!['approved', 'rejected'].includes(status)) {
         throw new Error(t.errors.invalidForm);
@@ -710,18 +764,26 @@ export const BranchReturns: React.FC = () => {
       setIsApproveModalOpen(false);
       setReviewNotes('');
       setSelectedReturn(null);
-      toast.success(t.updateSuccess, { position: isRtl ? 'top-right' : 'top-left' });
-      socket?.emit('returnStatusUpdated', {
-        branchId: selectedReturn?.branch?._id,
-        returnId,
-        status,
-        returnNumber: selectedReturn?.returnNumber,
-        branchName: selectedReturn?.branch?.displayName,
-        eventId: crypto.randomUUID(),
+      toast.success(t.updateSuccess, {
+        position: isRtl ? 'top-right' : 'top-left',
+        toastId: `update-return-${returnId}`,
       });
+      if (isConnected) {
+        socket?.emit('returnStatusUpdated', {
+          branchId: selectedReturn?.branch?._id,
+          returnId,
+          status,
+          returnNumber: selectedReturn?.returnNumber,
+          branchName: selectedReturn?.branch?.displayName,
+          eventId: crypto.randomUUID(),
+        });
+      }
     },
     onError: (err) => {
-      toast.error(err.message || t.errors.updateReturn, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(err.message || t.errors.updateReturn, {
+        position: isRtl ? 'top-right' : 'top-left',
+        toastId: `update-error-${Date.now()}`,
+      });
     },
   });
 
@@ -735,7 +797,7 @@ export const BranchReturns: React.FC = () => {
       const StatusIcon = statusInfo.icon;
 
       const totalQuantity = ret.items.reduce((sum, item) => sum + item.quantity, 0);
-      const totalPrice = ret.items.reduce((sum, item) => sum + (item.quantity * item.product.price), 0).toFixed(2);
+      const totalPrice = ret.items.reduce((sum, item) => sum + item.quantity * item.product.price, 0).toFixed(2);
 
       return (
         <motion.div
@@ -756,11 +818,15 @@ export const BranchReturns: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                   <p className="text-sm text-gray-500">{t.date}</p>
-                  <p className="text-sm font-medium text-gray-900">{new Date(ret.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {new Date(ret.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">{t.totalQuantity}</p>
-                  <p className="text-sm font-medium text-gray-900">{totalQuantity} {t.items}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {totalQuantity} {t.items}
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">{t.totalPrice}</p>
@@ -776,8 +842,12 @@ export const BranchReturns: React.FC = () => {
                   <div key={index} className="p-4 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors duration-200">
                     <p className="text-sm font-semibold text-gray-900">{item.product.displayName}</p>
                     <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
-                      <p className="text-sm text-gray-600">{t.quantity}: {item.quantity} {item.product.displayUnit}</p>
-                      <p className="text-sm text-gray-600">{t.price}: {(item.quantity * item.product.price).toFixed(2)} SAR</p>
+                      <p className="text-sm text-gray-600">
+                        {t.quantity}: {item.quantity} {item.product.displayUnit}
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        {t.price}: {(item.quantity * item.product.price).toFixed(2)} SAR
+                      </p>
                       <p className="text-sm text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
                     </div>
                   </div>
@@ -794,7 +864,7 @@ export const BranchReturns: React.FC = () => {
                 </div>
               )}
               <div className="flex justify-end gap-3">
-                {(user?.role === 'admin' || user?.role === 'production') && ret.status === ReturnStatus.PENDING && (
+                {user?.role === 'admin' && ret.status === ReturnStatus.PENDING && (
                   <>
                     <button
                       onClick={() => {
@@ -847,7 +917,7 @@ export const BranchReturns: React.FC = () => {
             <p className="text-gray-600 text-sm">{t.subtitle}</p>
           </div>
         </div>
-        {(user?.role === 'branch' || user?.role === 'admin') && (
+        {user?.role === 'branch' && (
           <button
             onClick={() => setIsCreateModalOpen(true)}
             className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
@@ -1031,9 +1101,7 @@ export const BranchReturns: React.FC = () => {
                     </button>
                   </div>
                 ))}
-                {returnErrors.items && (
-                  <p className="text-red-600 text-sm">{returnErrors.items}</p>
-                )}
+                {returnErrors.items && <p className="text-red-600 text-sm">{returnErrors.items}</p>}
                 <button
                   onClick={addItemToForm}
                   className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
@@ -1107,11 +1175,15 @@ export const BranchReturns: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">{t.statusLabel}</p>
-                    <p className="text-sm font-medium text-gray-900">{t.status[selectedReturn.status as keyof typeof t.status]}</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      {t.status[selectedReturn.status as keyof typeof t.status]}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">{t.date}</p>
-                    <p className="text-sm font-medium text-gray-900">{new Date(selectedReturn.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      {new Date(selectedReturn.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">{t.branch}</p>
@@ -1119,11 +1191,15 @@ export const BranchReturns: React.FC = () => {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">{t.totalQuantity}</p>
-                    <p className="text-sm font-medium text-gray-900">{selectedReturn.items.reduce((sum, item) => sum + item.quantity, 0)} {t.items}</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      {selectedReturn.items.reduce((sum, item) => sum + item.quantity, 0)} {t.items}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">{t.totalPrice}</p>
-                    <p className="text-sm font-medium text-gray-900">{selectedReturn.items.reduce((sum, item) => sum + (item.quantity * item.product.price), 0).toFixed(2)} SAR</p>
+                    <p className="text-sm font-medium text-gray-900">
+                      {selectedReturn.items.reduce((sum, item) => sum + item.quantity * item.product.price, 0).toFixed(2)} SAR
+                    </p>
                   </div>
                 </div>
                 <div className="flex flex-col gap-2">
@@ -1132,8 +1208,12 @@ export const BranchReturns: React.FC = () => {
                     <div key={index} className="p-4 bg-gray-50 rounded-lg border border-gray-100">
                       <p className="text-sm font-semibold text-gray-900">{item.product.displayName}</p>
                       <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
-                        <p className="text-sm text-gray-600">{t.quantity}: {item.quantity} {item.product.displayUnit}</p>
-                        <p className="text-sm text-gray-600">{t.price}: {(item.quantity * item.product.price).toFixed(2)} SAR</p>
+                        <p className="text-sm text-gray-600">
+                          {t.quantity}: {item.quantity} {item.product.displayUnit}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          {t.price}: {(item.quantity * item.product.price).toFixed(2)} SAR
+                        </p>
                         <p className="text-sm text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
                       </div>
                     </div>
@@ -1185,7 +1265,9 @@ export const BranchReturns: React.FC = () => {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold text-gray-900">{selectedReturn.status === ReturnStatus.PENDING ? t.approveReturn : t.rejectReturn}</h2>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {selectedReturn.status === ReturnStatus.PENDING ? t.approveReturn : t.rejectReturn}
+                </h2>
                 <button
                   onClick={() => {
                     setIsApproveModalOpen(false);
@@ -1234,7 +1316,7 @@ export const BranchReturns: React.FC = () => {
                     disabled={updateReturnStatusMutation.isLoading}
                     className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
                   >
-                    {updateReturnStatusMutation.isLoading && selectedReturn.status === ReturnStatus.PENDING ? t.common.submitting : t.approve}
+                    {updateReturnStatusMutation.isLoading ? t.common.submitting : t.approve}
                   </button>
                   <button
                     onClick={() =>
@@ -1247,7 +1329,7 @@ export const BranchReturns: React.FC = () => {
                     disabled={updateReturnStatusMutation.isLoading}
                     className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
                   >
-                    {updateReturnStatusMutation.isLoading && selectedReturn.status === ReturnStatus.PENDING ? t.common.submitting : t.reject}
+                    {updateReturnStatusMutation.isLoading ? t.common.submitting : t.reject}
                   </button>
                 </div>
               </div>
