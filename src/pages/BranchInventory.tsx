@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect, useReducer } from 're
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Plus, X, Eye, Edit, AlertCircle, Search, Minus } from 'lucide-react';
+import { Package, Plus, X, Eye, Edit, AlertCircle, Search } from 'lucide-react';
 import { returnsAPI, inventoryAPI } from '../services/api';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -52,7 +52,7 @@ interface InventoryItem {
 }
 
 interface ReturnItem {
-  product: string; // Changed from productId to product to match backend schema
+  product: string;
   quantity: number;
   reason: string;
   reasonEn: string;
@@ -70,8 +70,6 @@ interface ProductHistoryEntry {
   type: 'delivery' | 'return_pending' | 'return_rejected' | 'return_approved' | 'sale' | 'adjustment';
   quantity: number;
   description: string;
-  referenceType?: 'return' | 'sale' | 'adjustment';
-  referenceId?: string;
 }
 
 interface EditForm {
@@ -129,11 +127,11 @@ const translations = {
     cancel: 'إلغاء',
     save: 'حفظ',
     saving: 'جاري الحفظ...',
-    retry: 'إعادة المحاولة',
     productDetails: 'تفاصيل المنتج',
     date: 'التاريخ',
     type: 'النوع',
     quantity: 'الكمية',
+    description: 'الوصف',
     delivery: 'تسليم',
     return_pending: 'إرجاع قيد الانتظار',
     return_rejected: 'إرجاع مرفوض',
@@ -156,6 +154,7 @@ const translations = {
       insufficientQuantity: 'الكمية غير كافية للمنتج في المخزون',
       branchNotFound: 'الفرع غير موجود',
       productNotFound: 'المنتج غير موجود',
+      tooManyRequests: 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا',
     },
     notifications: {
       returnApproved: 'تمت الموافقة على طلب الإرجاع',
@@ -202,11 +201,11 @@ const translations = {
     cancel: 'Cancel',
     save: 'Save',
     saving: 'Saving...',
-    retry: 'Retry',
     productDetails: 'Product Details',
     date: 'Date',
     type: 'Type',
     quantity: 'Quantity',
+    description: 'Description',
     delivery: 'Delivery',
     return_pending: 'Return Pending',
     return_rejected: 'Return Rejected',
@@ -229,6 +228,7 @@ const translations = {
       insufficientQuantity: 'Insufficient quantity for the product in inventory',
       branchNotFound: 'Branch not found',
       productNotFound: 'Product not found',
+      tooManyRequests: 'Too many requests, please try again later',
     },
     notifications: {
       returnApproved: 'Return request approved',
@@ -271,7 +271,7 @@ const QuantityInput = ({
     <div className="flex items-center gap-2">
       <button
         onClick={onDecrement}
-        className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center"
+        className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
         aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
         disabled={value <= 1}
       >
@@ -283,13 +283,13 @@ const QuantityInput = ({
         onChange={(e) => handleChange(e.target.value)}
         max={max}
         min={1}
-        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm min-w-[2.75rem] transition-all duration-200"
-        style={{ appearance: 'none' }}
+        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
+        style={{ appearance: 'none', MozAppearance: 'textfield' }}
         aria-label={isRtl ? 'الكمية' : 'Quantity'}
       />
       <button
         onClick={onIncrement}
-        className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center"
+        className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
         aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
         disabled={max !== undefined && value >= max}
       >
@@ -368,7 +368,7 @@ export const BranchInventory: React.FC = () => {
   const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
 
   // Inventory Query
-  const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError, refetch: refetchInventory } = useQuery<
+  const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError } = useQuery<
     InventoryItem[],
     Error
   >({
@@ -530,7 +530,7 @@ export const BranchInventory: React.FC = () => {
     [t]
   );
 
-  // Reason options with fixed reasonEn mapping
+  // Reason options
   const reasonOptions = useMemo(
     () => [
       { value: '', label: t.selectReason, enValue: '' },
@@ -542,7 +542,7 @@ export const BranchInventory: React.FC = () => {
     [t]
   );
 
-  // Product options with default "Select Product"
+  // Product options
   const productOptions = useMemo(
     () => [
       { value: '', label: t.selectProduct },
@@ -583,30 +583,28 @@ export const BranchInventory: React.FC = () => {
   }, []);
 
   const handleOpenReturnModal = useCallback((item?: InventoryItem) => {
-    refetchInventory().then(() => {
-      setSelectedItem(item || null);
-      dispatchReturnForm({ type: 'RESET' });
-      if (item?.product) {
-        dispatchReturnForm({
-          type: 'ADD_ITEM',
-          payload: {
-            product: item.product._id, // Changed from productId to product
-            quantity: 1,
-            reason: '',
-            reasonEn: '',
-            maxQuantity: item.currentStock,
-          },
-        });
-      } else {
-        dispatchReturnForm({
-          type: 'ADD_ITEM',
-          payload: { product: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0 },
-        });
-      }
-      setReturnErrors({});
-      setIsReturnModalOpen(true);
-    });
-  }, [refetchInventory]);
+    setSelectedItem(item || null);
+    dispatchReturnForm({ type: 'RESET' });
+    if (item?.product) {
+      dispatchReturnForm({
+        type: 'ADD_ITEM',
+        payload: {
+          product: item.product._id,
+          quantity: 1,
+          reason: '',
+          reasonEn: '',
+          maxQuantity: item.currentStock,
+        },
+      });
+    } else {
+      dispatchReturnForm({
+        type: 'ADD_ITEM',
+        payload: { product: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0 },
+      });
+    }
+    setReturnErrors({});
+    setIsReturnModalOpen(true);
+  }, []);
 
   const handleOpenEditModal = useCallback((item: InventoryItem) => {
     setSelectedItem(item);
@@ -672,7 +670,7 @@ export const BranchInventory: React.FC = () => {
       }
       dispatchReturnForm({
         type: 'UPDATE_ITEM',
-        payload: { index, field: 'product', value: productId }, // Changed from productId to product
+        payload: { index, field: 'product', value: productId },
       });
       dispatchReturnForm({
         type: 'UPDATE_ITEM',
@@ -742,28 +740,26 @@ export const BranchInventory: React.FC = () => {
     return Object.keys(errors).length === 0;
   }, [editForm, t]);
 
-  const createReturnMutation = useMutation<{ returnId: string }, Error, void>({
+  const createReturnMutation = useMutation<{ returnId: string; returnNumber: string }, Error, void>({
     mutationFn: async () => {
       if (!validateReturnForm()) throw new Error(t.errors.invalidForm);
       if (!user?.branchId) throw new Error(t.errors.noBranch);
       const data = {
         branchId: user.branchId,
         items: returnForm.items.map((item) => ({
-          product: item.product, // Changed from productId to product
+          product: item.product,
           quantity: item.quantity,
           reason: item.reason,
           reasonEn: item.reasonEn,
-          price: 0, // Backend requires price; set to 0 as per schema
+          price: 0,
         })),
         notes: returnForm.notes || undefined,
       };
-      for (const [index, item] of data.items.entries()) {
-        if (!isValidObjectId(item.product)) {
-          throw new Error(t.errors.invalidProductId + ` at item ${index + 1}`);
-        }
-      }
       const response = await returnsAPI.createReturn(data);
-      return { returnId: response?.returnRequest?._id || crypto.randomUUID() };
+      return {
+        returnId: response?.returnRequest?._id || crypto.randomUUID(),
+        returnNumber: response?.returnRequest?.returnNumber || `RET-${response?._id.slice(-6)}`,
+      };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
@@ -775,17 +771,18 @@ export const BranchInventory: React.FC = () => {
       socket?.emit('returnCreated', {
         branchId: user?.branchId,
         returnId: data.returnId,
+        returnNumber: data.returnNumber,
         status: 'pending_approval',
         eventId: crypto.randomUUID(),
       });
     },
     onError: (err: any) => {
       let errorMessage = err.message || t.errors.createReturn;
-      const errors = err.errors || [];
-      if (errors.length > 0) {
-        const errorDetails = errors.map((e: any) => e.msg).join(', ');
-        errorMessage = errorDetails;
-        errors.forEach((e: any, index: number) => {
+      if (err.status === 429) {
+        errorMessage = t.errors.tooManyRequests;
+      } else if (err.errors?.length > 0) {
+        errorMessage = err.errors.map((e: any) => e.msg).join(', ');
+        err.errors.forEach((e: any, index: number) => {
           setReturnErrors((prev) => ({
             ...prev,
             [`item_${index}_${e.path}`]: e.msg,
@@ -834,7 +831,7 @@ export const BranchInventory: React.FC = () => {
       });
     },
     onError: (err) => {
-      const errorMessage = err.message || t.errors.updateInventory;
+      const errorMessage = err.status === 429 ? t.errors.tooManyRequests : err.message || t.errors.updateInventory;
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       setEditErrors({ form: errorMessage });
     },
@@ -843,8 +840,8 @@ export const BranchInventory: React.FC = () => {
   const errorMessage = inventoryError?.message || '';
 
   return (
-    <div className="mx-auto px-4 py-8 min-h-screen">
-      <div className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
+    <div className="container mx-auto px-4 py-8 max-w-7xl">
+      <div className="mb-8 flex flex-col items-start gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <Package className="w-7 h-7 text-amber-600" />
           <div>
@@ -854,7 +851,7 @@ export const BranchInventory: React.FC = () => {
         </div>
         <button
           onClick={() => handleOpenReturnModal()}
-          className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2 shadow-sm"
+          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
           aria-label={t.create}
         >
           <Plus className="w-4 h-4" />
@@ -870,19 +867,12 @@ export const BranchInventory: React.FC = () => {
         >
           <AlertCircle className="w-5 h-5 text-red-600" />
           <span className="text-red-600 text-sm font-medium">{errorMessage}</span>
-          <button
-            onClick={() => refetchInventory()}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
-            aria-label={t.retry}
-          >
-            {t.retry}
-          </button>
         </motion.div>
       )}
 
       <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="lg:col-span-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
             <ProductSearchInput
               value={searchInput}
               onChange={handleSearchChange}
@@ -891,7 +881,7 @@ export const BranchInventory: React.FC = () => {
               className="w-full"
             />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 lg:col-span-1">
+          <div>
             <ProductDropdown
               value={filterStatus}
               onChange={(value) => {
@@ -902,6 +892,8 @@ export const BranchInventory: React.FC = () => {
               ariaLabel={t.filterByStatus}
               className="w-full"
             />
+          </div>
+          <div>
             <ProductDropdown
               value={filterDepartment}
               onChange={(value) => {
@@ -920,9 +912,9 @@ export const BranchInventory: React.FC = () => {
       </div>
 
       {inventoryLoading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[...Array(6)].map((_, i) => (
-            <div key={i} className="p-5 bg-white rounded-xl shadow-sm border border-gray-100">
+            <div key={i} className="p-4 bg-white rounded-xl shadow-sm border border-gray-100">
               <div className="space-y-3 animate-pulse">
                 <div className="flex items-center justify-between">
                   <div className="h-4 bg-gray-200 rounded w-3/4"></div>
@@ -951,7 +943,7 @@ export const BranchInventory: React.FC = () => {
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <AnimatePresence>
             {paginatedInventory.map((item) =>
               item.product ? (
@@ -961,7 +953,7 @@ export const BranchInventory: React.FC = () => {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={{ duration: 0.3 }}
-                  className="p-5 bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 border border-gray-100 hover:border-amber-200"
+                  className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 hover:border-amber-200"
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between gap-3">
@@ -976,7 +968,7 @@ export const BranchInventory: React.FC = () => {
                       <p className="text-sm text-gray-600">{t.pendingStock}: {item.pendingReturnStock}</p>
                     )}
                     {item.damagedStock > 0 && (
-                      <p className="text-sm text-red-300">{t.damagedStock}: {item.damagedStock}</p>
+                      <p className="text-sm text-red-600">{t.damagedStock}: {item.damagedStock}</p>
                     )}
                     <p className="text-sm text-gray-600">{t.minStock}: {item.minStockLevel}</p>
                     <p className="text-sm text-gray-600">{t.maxStock}: {item.maxStockLevel}</p>
@@ -996,14 +988,14 @@ export const BranchInventory: React.FC = () => {
                   <div className="mt-4 flex justify-end gap-2">
                     <button
                       onClick={() => handleOpenDetailsModal(item)}
-                      className="px-3 py-1.5 text-green-600 hover:text-green-800 rounded-lg text-sm transition-colors duration-200"
+                      className="p-2 text-green-600 hover:text-green-800 rounded-lg text-sm transition-colors duration-200"
                       aria-label={t.viewDetails}
                     >
                       <Eye className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => handleOpenEditModal(item)}
-                      className="px-3 py-1.5 text-blue-600 hover:text-blue-800 rounded-lg text-sm transition-colors duration-200"
+                      className="p-2 text-blue-600 hover:text-blue-800 rounded-lg text-sm transition-colors duration-200"
                       aria-label={t.editStockLimits}
                     >
                       <Edit className="w-4 h-4" />
@@ -1011,7 +1003,7 @@ export const BranchInventory: React.FC = () => {
                     <button
                       onClick={() => handleOpenReturnModal(item)}
                       disabled={item.currentStock <= 0}
-                      className="px-3 py-1.5 text-red-600 hover:text-red-800 rounded-lg text-sm transition-colors duration-200 disabled:opacity-50"
+                      className="p-2 text-red-600 hover:text-red-800 rounded-lg text-sm transition-colors duration-200 disabled:opacity-50"
                       aria-label={t.create}
                     >
                       <Plus className="w-4 h-4" />
@@ -1024,36 +1016,36 @@ export const BranchInventory: React.FC = () => {
         </div>
       )}
 
-      <div className="mt-6">
-        {totalInventoryPages > 1 && (
-          <div className={`flex items-center justify-center gap-3 ${isRtl ? 'flex-row' : ''}`}>
-            <button
-              onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-              disabled={currentPage === 1}
-              aria-label={isRtl ? 'الصفحة السابقة' : 'Previous page'}
-            >
-              {isRtl ? 'السابق' : 'Previous'}
-            </button>
-            <span className="text-gray-700 font-medium">
-              {isRtl ? `الصفحة ${currentPage} من ${totalInventoryPages}` : `Page ${currentPage} of ${totalInventoryPages}`}
-            </span>
-            <button
-              onClick={() => setCurrentPage(Math.min(currentPage + 1, totalInventoryPages))}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-              disabled={currentPage === totalInventoryPages}
-              aria-label={isRtl ? 'الصفحة التالية' : 'Next page'}
-            >
-              {isRtl ? 'التالي' : 'Next'}
-            </button>
-          </div>
-        )}
-      </div>
+      {totalInventoryPages > 1 && (
+        <div className="mt-6 flex items-center justify-center gap-3">
+          <button
+            onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+            disabled={currentPage === 1}
+            aria-label={isRtl ? 'الصفحة السابقة' : 'Previous page'}
+          >
+            {isRtl ? 'السابق' : 'Previous'}
+          </button>
+          <span className="text-gray-700 font-medium">
+            {isRtl ? `الصفحة ${currentPage} من ${totalInventoryPages}` : `Page ${currentPage} of ${totalInventoryPages}`}
+          </span>
+          <button
+            onClick={() => setCurrentPage(Math.min(currentPage + 1, totalInventoryPages))}
+            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+            disabled={currentPage === totalInventoryPages}
+            aria-label={isRtl ? 'الصفحة التالية' : 'Next page'}
+          >
+            {isRtl ? 'التالي' : 'Next'}
+          </button>
+        </div>
+      )}
 
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isReturnModalOpen ? 1 : 0 }}
-        className={`fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 ${isReturnModalOpen ? '' : 'pointer-events-none'}`}
+        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
+          isReturnModalOpen ? '' : 'pointer-events-none'
+        }`}
         role="dialog"
         aria-modal="true"
         aria-label={t.create}
@@ -1061,9 +1053,9 @@ export const BranchInventory: React.FC = () => {
         <motion.div
           initial={{ scale: 0.95, y: 20 }}
           animate={{ scale: isReturnModalOpen ? 1 : 0.95, y: isReturnModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-lg w-full"
+          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-lg max-h-[90vh] overflow-y-auto"
         >
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-gray-900">{t.create}</h2>
             <button
               onClick={() => {
@@ -1081,7 +1073,7 @@ export const BranchInventory: React.FC = () => {
           <div className="space-y-4">
             {selectedItem?.product && (
               <p className="text-sm text-gray-600">
-                {t.products?.title || 'Product'}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
+                {t.items}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
               </p>
             )}
             <div>
@@ -1113,7 +1105,7 @@ export const BranchInventory: React.FC = () => {
                   {returnErrors[`item_${index}_product`] && (
                     <p className="text-red-600 text-xs">{returnErrors[`item_${index}_product`]}</p>
                   )}
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-col sm:flex-row gap-4">
                     <div className="flex-1">
                       <label className="block text-sm font-medium text-gray-700 mb-1">{t.quantity}</label>
                       <QuantityInput
@@ -1146,7 +1138,7 @@ export const BranchInventory: React.FC = () => {
                     {!selectedItem && returnForm.items.length > 1 && (
                       <button
                         onClick={() => removeItemFromForm(index)}
-                        className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 mt-6"
+                        className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 self-start sm:self-end"
                         aria-label={t.removeItem}
                       >
                         <X className="w-4 h-4" />
@@ -1167,7 +1159,7 @@ export const BranchInventory: React.FC = () => {
               )}
               {returnErrors.items && <p className="text-red-600 text-xs">{returnErrors.items}</p>}
             </div>
-            <div className="flex justify-end gap-3 mt-6">
+            <div className="flex justify-end gap-3">
               <button
                 onClick={() => {
                   setIsReturnModalOpen(false);
@@ -1196,7 +1188,9 @@ export const BranchInventory: React.FC = () => {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isEditModalOpen ? 1 : 0 }}
-        className={`fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 ${isEditModalOpen ? '' : 'pointer-events-none'}`}
+        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
+          isEditModalOpen ? '' : 'pointer-events-none'
+        }`}
         role="dialog"
         aria-modal="true"
         aria-label={t.editStockLimits}
@@ -1204,9 +1198,9 @@ export const BranchInventory: React.FC = () => {
         <motion.div
           initial={{ scale: 0.95, y: 20 }}
           animate={{ scale: isEditModalOpen ? 1 : 0.95, y: isEditModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-lg w-full"
+          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
         >
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-gray-900">{t.editStockLimits}</h2>
             <button
               onClick={() => {
@@ -1246,7 +1240,7 @@ export const BranchInventory: React.FC = () => {
               {editErrors.maxStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.maxStockLevel}</p>}
             </div>
             {editErrors.form && <p className="text-red-600 text-xs">{editErrors.form}</p>}
-            <div className="flex justify-end gap-3 mt-6">
+            <div className="flex justify-end gap-3">
               <button
                 onClick={() => {
                   setIsEditModalOpen(false);
@@ -1274,7 +1268,9 @@ export const BranchInventory: React.FC = () => {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isDetailsModalOpen ? 1 : 0 }}
-        className={`fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 ${isDetailsModalOpen ? '' : 'pointer-events-none'}`}
+        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
+          isDetailsModalOpen ? '' : 'pointer-events-none'
+        }`}
         role="dialog"
         aria-modal="true"
         aria-label={t.productDetails}
@@ -1282,9 +1278,9 @@ export const BranchInventory: React.FC = () => {
         <motion.div
           initial={{ scale: 0.95, y: 20 }}
           animate={{ scale: isDetailsModalOpen ? 1 : 0.95, y: isDetailsModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl max-w-[95vw] sm:max-w-2xl w-full"
+          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-2xl max-h-[90vh] overflow-y-auto"
         >
-          <div className="flex justify-between items-center mb-6">
+          <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
             <button
               onClick={() => {
@@ -1301,36 +1297,41 @@ export const BranchInventory: React.FC = () => {
             {historyLoading ? (
               <div className="space-y-3 animate-pulse">
                 {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-4 bg-gray-200 rounded w-full"></div>
+                  <div key={i} className="h-24 bg-gray-200 rounded-lg"></div>
                 ))}
               </div>
             ) : productHistory && productHistory.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-gray-700">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className="py-2 px-4 text-left font-medium">{t.date}</th>
-                      <th className="py-2 px-4 text-left font-medium">{t.type}</th>
-                      <th className="py-2 px-4 text-left font-medium">{t.quantity}</th>
-                      <th className="py-2 px-4 text-left font-medium">{t.description}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {productHistory.map((entry) => (
-                      <tr key={entry._id} className="border-b border-gray-100">
-                        <td className="py-2 px-4">{new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
-                        <td className="py-2 px-4">{t[entry.type]}</td>
-                        <td className="py-2 px-4">{entry.quantity}</td>
-                        <td className="py-2 px-4">{entry.description}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="space-y-4">
+                {productHistory.map((entry) => (
+                  <div
+                    key={entry._id}
+                    className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex flex-col gap-2"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
+                      <span className="text-sm font-medium text-gray-700">{t.date}</span>
+                      <span className="text-sm text-gray-600">
+                        {new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
+                      </span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
+                      <span className="text-sm font-medium text-gray-700">{t.type}</span>
+                      <span className="text-sm text-gray-600">{t[entry.type]}</span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
+                      <span className="text-sm font-medium text-gray-700">{t.quantity}</span>
+                      <span className="text-sm text-gray-600">{entry.quantity}</span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
+                      <span className="text-sm font-medium text-gray-700">{t.description}</span>
+                      <span className="text-sm text-gray-600">{entry.description}</span>
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : (
               <p className="text-gray-600 text-sm font-medium">{t.noHistory}</p>
             )}
-            <div className="flex justify-end mt-6">
+            <div className="flex justify-end mt-4">
               <button
                 onClick={() => {
                   setIsDetailsModalOpen(false);
@@ -1348,3 +1349,5 @@ export const BranchInventory: React.FC = () => {
     </div>
   );
 };
+
+export default BranchInventory;
