@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo, useReducer } from 're
 import { useParams } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useNotifications } from '../contexts/NotificationContext'; // Added for notifications
 import { inventoryAPI, salesAPI } from '../services/api';
 import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 
-// واجهات TypeScript
+// TypeScript interfaces
 interface InventoryItem {
   _id: string;
   product: {
@@ -71,6 +72,7 @@ const translations = {
     customerPhone: 'هاتف العميل',
     submitSale: 'إرسال المبيعة',
     updateSale: 'تحديث المبيعة',
+    resetCart: 'إعادة تعيين السلة',
     searchPlaceholder: 'ابحث عن المنتجات...',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
@@ -95,6 +97,9 @@ const translations = {
       credit_card: 'بطاقة ائتمان',
       bank_transfer: 'تحويل بنكي',
     },
+    notifications: {
+      saleCreated: 'تم إنشاء بيع جديد: {saleNumber}',
+    },
   },
   en: {
     title: 'Create New Sale',
@@ -115,6 +120,7 @@ const translations = {
     customerPhone: 'Customer Phone',
     submitSale: 'Submit Sale',
     updateSale: 'Update Sale',
+    resetCart: 'Reset Cart',
     searchPlaceholder: 'Search products...',
     errors: {
       unauthorized_access: 'You are not authorized to access',
@@ -139,10 +145,13 @@ const translations = {
       credit_card: 'Credit Card',
       bank_transfer: 'Bank Transfer',
     },
+    notifications: {
+      saleCreated: 'New sale created: {saleNumber}',
+    },
   },
 };
 
-// إجراءات السلة
+// Cart reducer actions
 type CartAction =
   | { type: 'ADD_ITEM'; payload: CartItem }
   | { type: 'UPDATE_QUANTITY'; payload: { productId: string; quantity: number } }
@@ -164,7 +173,7 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
           ...state,
           items: state.items.map((item) =>
             item.productId === action.payload.productId
-              ? { ...item, quantity: item.quantity + 1 }
+              ? { ...item, quantity: item.quantity + action.payload.quantity }
               : item
           ),
         };
@@ -173,11 +182,13 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
     case 'UPDATE_QUANTITY':
       return {
         ...state,
-        items: state.items.map((item) =>
-          item.productId === action.payload.productId
-            ? { ...item, quantity: action.payload.quantity }
-            : item
-        ).filter((item) => item.quantity > 0),
+        items: state.items
+          .map((item) =>
+            item.productId === action.payload.productId
+              ? { ...item, quantity: action.payload.quantity }
+              : item
+          )
+          .filter((item) => item.quantity > 0),
       };
     case 'REMOVE_ITEM':
       return { ...state, items: state.items.filter((item) => item.productId !== action.payload) };
@@ -207,7 +218,7 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
   }
 };
 
-// مكونات فرعية (بدون تغيير)
+// Sub-components (unchanged from original, optimized with React.memo)
 const ProductSearchInput = React.memo<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -218,13 +229,19 @@ const ProductSearchInput = React.memo<{
   const isRtl = language === 'ar';
   return (
     <div className="relative group">
-      <Search className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`} />
+      <Search
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${
+          value ? 'opacity-0' : 'opacity-100'
+        }`}
+      />
       <input
         type="text"
         value={value}
         onChange={onChange}
         placeholder={placeholder}
-        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${isRtl ? 'text-right' : 'text-left'}`}
+        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 ${
+          isRtl ? 'text-right' : 'text-left'
+        }`}
         aria-label={ariaLabel}
       />
       {value && (
@@ -256,11 +273,15 @@ const ProductDropdown = React.memo<{
     <div className={`relative group ${className || ''}`}>
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${
+          isRtl ? 'text-right' : 'text-left'
+        } flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         aria-label={ariaLabel}
       >
         <span className="truncate">{selectedOption.label}</span>
-        <ChevronDown className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200 w-5 h-5 text-gray-400 group-focus-within:text-amber-500`} />
+        <ChevronDown
+          className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200 w-5 h-5 text-gray-400 group-focus-within:text-amber-500`}
+        />
       </button>
       {isOpen && !disabled && (
         <div className="absolute w-full mt-2 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none">
@@ -337,8 +358,12 @@ const ProductCard = React.memo<{
       <div className="space-y-2">
         <h3 className="font-bold text-gray-900 text-base truncate">{product.displayName}</h3>
         <p className="text-sm text-amber-600">{t.department}: {product.product.department?.displayName || t.departments.unknown}</p>
-        <p className="text-sm text-gray-600">{t.availableStock}: {product.currentStock} {product.displayUnit || t.units.default}</p>
-        <p className="font-semibold text-gray-900 text-sm">{t.unitPrice}: {product.product.price} {t.currency}</p>
+        <p className="text-sm text-gray-600">
+          {t.availableStock}: {product.currentStock} {product.displayUnit || t.units.default}
+        </p>
+        <p className="font-semibold text-gray-900 text-sm">
+          {t.unitPrice}: {product.product.price} {t.currency}
+        </p>
       </div>
       <div className="mt-4 flex justify-end">
         {cartItem ? (
@@ -386,11 +411,12 @@ const ProductSkeletonCard = React.memo(() => (
   </div>
 ));
 
-// المكون الرئيسي لصفحة إنشاء/تعديل المبيعة
-export const CreateSale: React.FC = () => {
+// Main CreateSale component
+const CreateSale: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const { id } = useParams<{ id?: string }>();
+  const { subscribe, unsubscribe } = useNotifications(); // Added for notifications
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'] || translations.en;
 
@@ -401,16 +427,54 @@ export const CreateSale: React.FC = () => {
     customerName: '',
     customerPhone: undefined,
   });
-
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false); // Added for submit button loading state
   const [error, setError] = useState('');
+  const [processedEventIds, setProcessedEventIds] = useState<string[]>([]); // Track processed notification eventIds
 
-  // التحقق من الصلاحيات
+  // Handle saleCreated notifications
+  useEffect(() => {
+    if (!subscribe) return;
+
+    const handleSaleCreated = (data: {
+      saleId: string;
+      saleNumber: string;
+      branchId: string;
+      branchName: string;
+      totalAmount: number;
+      createdAt: string;
+      eventId: string;
+    }) => {
+      if (processedEventIds.includes(data.eventId)) return; // Prevent duplicate notifications
+      setProcessedEventIds((prev) => [...prev, data.eventId]);
+
+      // Show notification
+      const message = t.notifications.saleCreated.replace('{saleNumber}', data.saleNumber);
+      toast.info(message, {
+        position: isRtl ? 'top-right' : 'top-left',
+        autoClose: 5000,
+      });
+
+      // Trigger refresh in BranchSalesReport
+      const refreshEvent = new CustomEvent('saleCreated', {
+        detail: { saleId: data.saleId, branchId: data.branchId },
+      });
+      window.dispatchEvent(refreshEvent);
+    };
+
+    subscribe('saleCreated', handleSaleCreated);
+
+    return () => {
+      unsubscribe('saleCreated', handleSaleCreated);
+    };
+  }, [subscribe, unsubscribe, t, isRtl, processedEventIds]);
+
+  // Check authorization
   useEffect(() => {
     if (!user?.role || user.role !== 'branch') {
       setError(t.errors.unauthorized_access);
@@ -418,7 +482,7 @@ export const CreateSale: React.FC = () => {
     }
   }, [user, t, isRtl]);
 
-  // البحث المؤخر
+  // Debounced search
   const debouncedSearch = useCallback(
     debounce((value: string) => setSearchTerm(value.trim()), 300),
     []
@@ -430,7 +494,7 @@ export const CreateSale: React.FC = () => {
     debouncedSearch(value);
   };
 
-  // تصفية المخزون
+  // Filter inventory
   const filteredInventory = useMemo(() => {
     const lowerSearchTerm = searchTerm.toLowerCase();
     return inventory.filter((item) => {
@@ -440,7 +504,7 @@ export const CreateSale: React.FC = () => {
     });
   }, [inventory, searchTerm, selectedDepartment]);
 
-  // جلب المخزون (إرجاع تعيين displayName و displayUnit زي الأصلي)
+  // Fetch inventory
   const fetchInventory = useCallback(async () => {
     if (!user?.branchId) {
       setError(t.errors.no_branch_assigned);
@@ -475,13 +539,19 @@ export const CreateSale: React.FC = () => {
                       _id: item.product.department._id || 'unknown',
                       name: item.product.department.name || t.departments.unknown,
                       nameEn: item.product.department.nameEn,
-                      displayName: isRtl ? (item.product.department.name || t.departments.unknown) : (item.product.department.nameEn || item.product.department.name || t.departments.unknown),
+                      displayName: isRtl
+                        ? item.product.department.name || t.departments.unknown
+                        : item.product.department.nameEn || item.product.department.name || t.departments.unknown,
                     }
                   : undefined,
               },
               currentStock: item.currentStock || 0,
-              displayName: isRtl ? (item.product?.name || t.departments.unknown) : (item.product?.nameEn || item.product?.name || t.departments.unknown),
-              displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
+              displayName: isRtl
+                ? item.product?.name || t.departments.unknown
+                : item.product?.nameEn || item.product?.name || t.departments.unknown,
+              displayUnit: isRtl
+                ? item.product?.unit || t.units.default
+                : item.product?.unitEn || item.product?.unit || t.units.default,
             }))
         : [];
 
@@ -497,7 +567,9 @@ export const CreateSale: React.FC = () => {
                 _id: item.product.department!._id,
                 name: item.product.department!.name,
                 nameEn: item.product.department!.nameEn,
-                displayName: isRtl ? (item.product.department!.name || t.departments.unknown) : (item.product.department!.nameEn || item.product.department!.name || t.departments.unknown),
+                displayName: isRtl
+                  ? item.product.department!.name || t.departments.unknown
+                  : item.product.department!.nameEn || item.product.department!.name || t.departments.unknown,
               },
             ])
         ).values()
@@ -512,7 +584,8 @@ export const CreateSale: React.FC = () => {
       }
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Fetch error:`, err);
-      const errorMessage = err.response?.status === 403 ? t.errors.unauthorized_access : err.message || t.errors.fetch_inventory;
+      const errorMessage =
+        err.response?.status === 403 ? t.errors.unauthorized_access : err.message || t.errors.fetch_inventory;
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       setInventory([]);
@@ -525,7 +598,7 @@ export const CreateSale: React.FC = () => {
     fetchInventory();
   }, [fetchInventory]);
 
-  // جلب بيانات المبيعة للتعديل إذا كان id موجود
+  // Fetch sale data for editing
   useEffect(() => {
     if (id) {
       const fetchSale = async () => {
@@ -535,13 +608,17 @@ export const CreateSale: React.FC = () => {
             type: 'LOAD_SALE',
             payload: {
               items: sale.items.map((item: any) => ({
-                productId: item.product?._id || item.productId,
-                productName: item.product?.name,
-                productNameEn: item.product?.nameEn,
-                unit: item.product?.unit,
-                unitEn: item.product?.unitEn,
-                displayName: isRtl ? (item.product?.name || t.departments.unknown) : (item.product?.nameEn || item.product?.name || t.departments.unknown),
-                displayUnit: isRtl ? (item.product?.unit || t.units.default) : (item.product?.unitEn || item.product?.unit || t.units.default),
+                productId: item.product?._id || item.product,
+                productName: item.product?.name || item.productName,
+                productNameEn: item.product?.nameEn || item.productNameEn,
+                unit: item.product?.unit || item.unit,
+                unitEn: item.product?.unitEn || item.unitEn,
+                displayName: isRtl
+                  ? item.product?.name || item.productName || t.errors.deleted_product
+                  : item.product?.nameEn || item.product?.name || item.productName || t.errors.deleted_product,
+                displayUnit: isRtl
+                  ? item.product?.unit || item.unit || t.units.default
+                  : item.product?.unitEn || item.product?.unit || item.unitEn || item.unit || t.units.default,
                 quantity: item.quantity,
                 unitPrice: item.unitPrice,
               })),
@@ -552,6 +629,7 @@ export const CreateSale: React.FC = () => {
             },
           });
         } catch (err) {
+          console.error(`[${new Date().toISOString()}] Fetch sale error:`, err);
           toast.error(t.errors.fetch_sale, { position: isRtl ? 'top-right' : 'top-left' });
         }
       };
@@ -559,11 +637,15 @@ export const CreateSale: React.FC = () => {
     }
   }, [id, t, isRtl]);
 
-  // تحديث display للitems في السلة عند تغيير اللغة
+  // Update cart items' display on language change
   useEffect(() => {
     cartState.items.forEach((item) => {
-      const newDisplayName = isRtl ? (item.productName || t.errors.deleted_product) : (item.productNameEn || item.productName || t.errors.deleted_product);
-      const newDisplayUnit = isRtl ? (item.unit || t.units.default) : (item.unitEn || item.unit || t.units.default);
+      const newDisplayName = isRtl
+        ? item.productName || t.errors.deleted_product
+        : item.productNameEn || item.productName || t.errors.deleted_product;
+      const newDisplayUnit = isRtl
+        ? item.unit || t.units.default
+        : item.unitEn || item.unit || t.units.default;
       if (item.displayName !== newDisplayName || item.displayUnit !== newDisplayUnit) {
         dispatchCart({
           type: 'UPDATE_DISPLAY',
@@ -577,7 +659,7 @@ export const CreateSale: React.FC = () => {
     });
   }, [language, cartState.items, isRtl, t]);
 
-  // إضافة إلى السلة
+  // Add to cart
   const addToCart = useCallback(
     (product: InventoryItem) => {
       if (product.currentStock < 1) {
@@ -599,7 +681,7 @@ export const CreateSale: React.FC = () => {
           unitEn: product.product.unitEn,
           displayName: product.displayName,
           displayUnit: product.displayUnit,
-          quantity: 1,
+          quantity: existingItem ? existingItem.quantity + 1 : 1,
           unitPrice: product.product.price,
         },
       });
@@ -607,7 +689,7 @@ export const CreateSale: React.FC = () => {
     [t, isRtl, cartState.items]
   );
 
-  // تحديث كمية المنتج
+  // Update cart quantity
   const updateCartQuantity = useCallback(
     (productId: string, quantity: number) => {
       const product = inventory.find((item) => item.product._id === productId);
@@ -619,6 +701,10 @@ export const CreateSale: React.FC = () => {
         toast.error(t.errors.exceeds_max_quantity, { position: isRtl ? 'top-right' : 'top-left' });
         return;
       }
+      if (quantity <= 0) {
+        dispatchCart({ type: 'REMOVE_ITEM', payload: productId });
+        return;
+      }
       dispatchCart({
         type: 'UPDATE_QUANTITY',
         payload: { productId, quantity },
@@ -627,22 +713,30 @@ export const CreateSale: React.FC = () => {
     [inventory, t, isRtl]
   );
 
-  // إزالة من السلة
+  // Remove from cart
   const removeFromCart = useCallback((productId: string) => {
     dispatchCart({ type: 'REMOVE_ITEM', payload: productId });
   }, []);
 
-  // إرسال أو تحديث المبيعة (بدون navigate)
+  // Reset cart
+  const handleResetCart = useCallback(() => {
+    dispatchCart({ type: 'RESET' });
+    toast.info(isRtl ? 'تم إعادة تعيين السلة' : 'Cart has been reset', {
+      position: isRtl ? 'top-right' : 'top-left',
+    });
+  }, [isRtl]);
+
+  // Submit or update sale
   const handleSubmitSale = useCallback(async () => {
     if (cartState.items.length === 0) {
       toast.error(t.errors.empty_cart, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
-    if (cartState.customerPhone && !/^\+?\d{7,15}$/.test(cartState.customerPhone)) {
+    if (cartState.customerPhone && !/^\+?\d{9,15}$/.test(cartState.customerPhone)) {
       toast.error(t.errors.invalid_customer_phone, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
-    if (cartState.paymentMethod && !['cash', 'credit_card', 'bank_transfer'].includes(cartState.paymentMethod)) {
+    if (!['cash', 'credit_card', 'bank_transfer'].includes(cartState.paymentMethod)) {
       toast.error(t.errors.invalid_payment_method, { position: isRtl ? 'top-right' : 'top-left' });
       return;
     }
@@ -655,29 +749,40 @@ export const CreateSale: React.FC = () => {
         unitPrice: item.unitPrice,
       })),
       notes: cartState.notes.trim() || undefined,
-      paymentMethod: cartState.paymentMethod || undefined,
+      paymentMethod: cartState.paymentMethod,
       customerName: cartState.customerName.trim() || undefined,
       customerPhone: cartState.customerPhone?.trim() || undefined,
+      lang: language,
     };
 
+    setSubmitting(true);
     try {
       if (id) {
         await salesAPI.update(id, saleData);
         toast.success(t.updateSale, { position: isRtl ? 'top-right' : 'top-left' });
       } else {
-        await salesAPI.create(saleData);
+        const response = await salesAPI.create(saleData);
         toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
+        // Reset cart only on create, not update
+        dispatchCart({ type: 'RESET' });
       }
-      dispatchCart({ type: 'RESET' });
-      // بدون navigate، بس reset وtoast
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Sale ${id ? 'update' : 'submission'} error:`, err);
-      const errorMessage = err.response?.status === 403 ? t.errors.unauthorized_access : (id ? t.errors.update_sale_failed : t.errors.create_sale_failed);
+      const errorMessage =
+        err.response?.status === 403
+          ? t.errors.unauthorized_access
+          : err.response?.data?.error === 'insufficient_stock'
+          ? t.errors.insufficient_stock
+          : id
+          ? t.errors.update_sale_failed
+          : t.errors.create_sale_failed;
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+    } finally {
+      setSubmitting(false);
     }
-  }, [cartState, user, t, isRtl, id]);
+  }, [cartState, user, t, isRtl, id, language]);
 
-  // خيارات الأقسام
+  // Department options
   const departmentOptions = useMemo(
     () => [
       { value: '', label: t.allDepartments },
@@ -686,7 +791,7 @@ export const CreateSale: React.FC = () => {
     [departments, t]
   );
 
-  // خيارات طرق الدفع
+  // Payment method options
   const paymentMethodOptions = useMemo(
     () => [
       { value: 'cash', label: t.paymentMethods.cash },
@@ -696,13 +801,13 @@ export const CreateSale: React.FC = () => {
     [t.paymentMethods]
   );
 
-  // إجمالي السلة
+  // Total cart amount
   const totalCartAmount = useMemo(() => {
     return cartState.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0).toFixed(2);
   }, [cartState.items]);
 
   return (
-    <div className={`mx-auto px-4  py-8 min-h-screen  `}>
+    <div className={`mx-auto px-4 py-8 min-h-screen ${isRtl ? 'font-arabic' : 'font-sans'}`}>
       <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <DollarSign className="w-7 h-7 text-amber-600" />
@@ -772,7 +877,10 @@ export const CreateSale: React.FC = () => {
               <h3 className="text-xl font-bold text-gray-900 mb-6">{t.cart}</h3>
               <div className="space-y-4">
                 {cartState.items.map((item) => (
-                  <div key={item.productId} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100">
+                  <div
+                    key={item.productId}
+                    className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-100"
+                  >
                     <div className="flex-1">
                       <p className="font-semibold text-gray-900 text-sm">{item.displayName || t.errors.deleted_product}</p>
                       <p className="text-sm text-gray-600">
@@ -799,7 +907,9 @@ export const CreateSale: React.FC = () => {
                 <div className="border-t pt-4">
                   <div className="flex justify-between font-bold text-gray-900 text-sm">
                     <span>{t.total}:</span>
-                    <span className="text-amber-600">{totalCartAmount} {t.currency}</span>
+                    <span className="text-amber-600">
+                      {totalCartAmount} {t.currency}
+                    </span>
                   </div>
                 </div>
                 <div className="mt-4 space-y-4">
@@ -808,7 +918,9 @@ export const CreateSale: React.FC = () => {
                     value={cartState.customerName}
                     onChange={(e) => dispatchCart({ type: 'SET_CUSTOMER_NAME', payload: e.target.value })}
                     placeholder={t.customerName}
-                    className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                    className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${
+                      isRtl ? 'text-right' : 'text-left'
+                    }`}
                     aria-label={t.customerName}
                   />
                   <input
@@ -816,7 +928,9 @@ export const CreateSale: React.FC = () => {
                     value={cartState.customerPhone || ''}
                     onChange={(e) => dispatchCart({ type: 'SET_CUSTOMER_PHONE', payload: e.target.value })}
                     placeholder={t.customerPhone}
-                    className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${isRtl ? 'text-right' : 'text-left'}`}
+                    className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm ${
+                      isRtl ? 'text-right' : 'text-left'
+                    }`}
                     aria-label={t.customerPhone}
                   />
                   <ProductDropdown
@@ -829,18 +943,29 @@ export const CreateSale: React.FC = () => {
                     value={cartState.notes}
                     onChange={(e) => dispatchCart({ type: 'SET_NOTES', payload: e.target.value })}
                     placeholder={t.notes}
-                    className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm resize-none h-24 ${isRtl ? 'text-right' : 'text-left'}`}
+                    className={`w-full ${isRtl ? 'pr-4' : 'pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm resize-none h-24 ${
+                      isRtl ? 'text-right' : 'text-left'
+                    }`}
                     aria-label={t.notes}
                   />
                 </div>
-                <button
-                  onClick={handleSubmitSale}
-                  className="w-full mt-4 px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                  disabled={cartState.items.length === 0}
-                  aria-label={id ? t.updateSale : t.submitSale}
-                >
-                  {id ? t.updateSale : t.submitSale}
-                </button>
+                <div className="flex gap-4 mt-4">
+                  <button
+                    onClick={handleResetCart}
+                    className="flex-1 px-6 py-2.5 bg-gray-600 hover:bg-gray-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+                    aria-label={t.resetCart}
+                  >
+                    {t.resetCart}
+                  </button>
+                  <button
+                    onClick={handleSubmitSale}
+                    className="flex-1 px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={cartState.items.length === 0 || submitting}
+                    aria-label={id ? t.updateSale : t.submitSale}
+                  >
+                    {submitting ? (isRtl ? 'جارٍ الإرسال...' : 'Submitting...') : id ? t.updateSale : t.submitSale}
+                  </button>
+                </div>
               </div>
             </div>
           </aside>
