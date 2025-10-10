@@ -841,14 +841,14 @@ export const BranchReturns: React.FC = () => {
               </div>
               <div className="flex flex-col gap-2">
                 {ret.items.map((item, index) => (
-                  <div key={index} className="p-4 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors duration-200">
+                  <div key={index} className="p-4 bg-gray-50 rounded-lg flex flex-col sm:flex-row sm:items-center sm:gap-4 justify-between  border border-gray-100 hover:bg-gray-100 transition-colors duration-200">
                     <p className="text-sm font-semibold text-gray-900">{item.product.displayName}</p>
                     <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
                       <p className="text-sm text-gray-600">
                         {t.quantity}: {item.quantity} {item.product.displayUnit}
                       </p>
                       <p className="text-sm text-gray-600">
-                        {t.price}: {(item.quantity * item.product.price).toFixed(2)} SAR
+                        {t.price}: {(item.quantity * item.product.price).toFixed(2)} {t.Currency}
                       </p>
                       <p className="text-sm text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
                     </div>
