@@ -8,6 +8,7 @@ interface Props {
   isOpen: boolean;
   onClose: () => void;
   order: Order | null;
+  
   t: (key: string, params?: any) => string;
   isRtl: boolean;
   confirmDelivery: (orderId: string) => void;
@@ -64,5 +65,7 @@ const ConfirmDeliveryModal: React.FC<Props> = memo(({ isOpen, onClose, order, t,
     </Modal>
   );
 });
+
+ConfirmDeliveryModal.displayName = 'ConfirmDeliveryModal';
 
 export default ConfirmDeliveryModal;

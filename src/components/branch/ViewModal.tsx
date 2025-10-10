@@ -9,10 +9,9 @@ interface Props {
   order: Order | null;
   t: (key: string, params?: any) => string;
   isRtl: boolean;
-  calculateAdjustedTotal: (order: Order) => string;
 }
 
-const ViewModal: React.FC<Props> = memo(({ isOpen, onClose, order, t, isRtl, calculateAdjustedTotal }) => {
+const ViewModal: React.FC<Props> = memo(({ isOpen, onClose, order, t, isRtl }) => {
   if (!order) return null;
 
   return (
@@ -32,27 +31,13 @@ const ViewModal: React.FC<Props> = memo(({ isOpen, onClose, order, t, isRtl, cal
           </div>
           <div>
             <p className="text-sm font-medium text-gray-700">{isRtl ? 'الحالة' : 'Status'}</p>
-            <p className="text-base text-gray-900">
-              {isRtl
-                ? order.status === 'pending'
-                  ? 'معلق'
-                  : order.status === 'approved'
-                  ? 'معتمد'
-                  : order.status === 'in_production'
-                  ? 'قيد الإنتاج'
-                  : order.status === 'completed'
-                  ? 'مكتمل'
-                  : order.status === 'in_transit'
-                  ? 'في النقل'
-                  : order.status === 'delivered'
-                  ? 'تم التسليم'
-                  : 'ملغى'
-                : t(`orders.status_${order.status}`)}
-            </p>
+            <p className="text-base text-gray-900">{t(`orders.status_${order.status}`)}</p>
           </div>
           <div>
             <p className="text-sm font-medium text-gray-700">{isRtl ? 'إجمالي المبلغ' : 'Total Amount'}</p>
-            <p className="text-base font-semibold text-teal-600">{calculateAdjustedTotal(order)}</p>
+            <p className="text-base font-semibold text-teal-600">
+              {order.totalAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
+            </p>
           </div>
           <div>
             <p className="text-sm font-medium text-gray-700">{isRtl ? 'التاريخ' : 'Date'}</p>
@@ -64,12 +49,12 @@ const ViewModal: React.FC<Props> = memo(({ isOpen, onClose, order, t, isRtl, cal
           </div>
           <div>
             <p className="text-sm font-medium text-gray-700">{isRtl ? 'الفرع' : 'Branch'}</p>
-            <p className="text-base text-gray-900">{order.branchName}</p>
+            <p className="text-base text-gray-900">{order.branch.displayName}</p>
           </div>
         </div>
         <div>
           <p className="text-sm font-medium text-gray-700 mb-2">{isRtl ? 'المنتجات' : 'Products'}</p>
-          <div className="border border-gray-200 rounded-md  overflow-x-scroll overflow-hidden">
+          <div className="border border-gray-200 rounded-md overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
@@ -96,37 +81,6 @@ const ViewModal: React.FC<Props> = memo(({ isOpen, onClose, order, t, isRtl, cal
             </table>
           </div>
         </div>
-        {order.returns?.length > 0 && (
-          <div>
-            <p className="text-sm font-medium text-gray-700 mb-2">{isRtl ? 'المرتجعات' : 'Returns'}</p>
-            <div className="border border-amber-200 rounded-md overflow-x-scroll overflow-hidden">
-              <table className="min-w-full divide-y divide-amber-100">
-                <thead className="bg-amber-50">
-                  <tr>
-                    <th className="px-4 py-2 text-sm font-medium text-amber-600 text-right">{isRtl ? 'المنتج' : 'Product'}</th>
-                    <th className="px-4 py-2 text-sm font-medium text-amber-600 text-right">{isRtl ? 'الكمية' : 'Quantity'}</th>
-                    <th className="px-4 py-2 text-sm font-medium text-amber-600 text-right">{isRtl ? 'السبب' : 'Reason'}</th>
-                    <th className="px-4 py-2 text-sm font-medium text-amber-600 text-right">{isRtl ? 'الحالة' : 'Status'}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-amber-100">
-                  {order.returns.map((ret, i) =>
-                    ret.items.map((item, j) => (
-                      <tr key={`${i}-${j}`}>
-                        <td className="px-4 py-2 text-sm text-gray-600 text-right">
-                          {order.items.find(o => o.productId === item.productId)?.productName || (isRtl ? 'غير معروف' : 'Unknown')}
-                        </td>
-                        <td className="px-4 py-2 text-sm text-gray-600 text-right">{item.quantity}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600 text-right">{t(`orders.return_reasons_${item.reason}`)}</td>
-                        <td className="px-4 py-2 text-sm text-gray-600 text-right">{t(`orders.return_status_${ret.status}`)}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
         {order.notes && (
           <div>
             <p className="text-sm font-medium text-gray-700">{isRtl ? 'ملاحظات' : 'Notes'}</p>
@@ -140,22 +94,7 @@ const ViewModal: React.FC<Props> = memo(({ isOpen, onClose, order, t, isRtl, cal
               {order.statusHistory.map((history, i) => (
                 <div key={i} className="flex flex-col gap-1 mb-2 last:mb-0">
                   <p className="text-sm text-gray-600">
-                    <strong>{isRtl ? 'الحالة' : 'Status'}:</strong>{' '}
-                    {isRtl
-                      ? history.status === 'pending'
-                        ? 'معلق'
-                        : history.status === 'approved'
-                        ? 'معتمد'
-                        : history.status === 'in_production'
-                        ? 'قيد الإنتاج'
-                        : history.status === 'completed'
-                        ? 'مكتمل'
-                        : history.status === 'in_transit'
-                        ? 'في النقل'
-                        : history.status === 'delivered'
-                        ? 'تم التسليم'
-                        : 'ملغى'
-                      : t(`orders.status_${history.status}`)}
+                    <strong>{isRtl ? 'الحالة' : 'Status'}:</strong> {t(`orders.status_${history.status}`)}
                   </p>
                   <p className="text-sm text-gray-600">
                     <strong>{isRtl ? 'تم التغيير بواسطة' : 'Changed By'}:</strong> {history.changedBy}
@@ -177,5 +116,7 @@ const ViewModal: React.FC<Props> = memo(({ isOpen, onClose, order, t, isRtl, cal
     </Modal>
   );
 });
+
+ViewModal.displayName = 'ViewModal';
 
 export default ViewModal;
