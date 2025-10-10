@@ -82,9 +82,8 @@ function AppContent() {
                   <Route path="/orders/:id" element={<OrderDetailsPage />} />
                   <Route path="/orders/new" element={<NewOrder />} />
                   <Route path="/orders/review" element={<Orders />} />
-                  <Route path="/returns" element={<AdminReturns />} />
-                  <Route path="/returns/new" element={<AdminReturns />} />
-                  <Route path="/returns/review" element={<AdminReturns />} />
+                  <Route path="/returns" element={<BranchReturns />} />
+           
                   <Route path="/production-tasks" element={<ChefTasks />} />
                   <Route path="/branches" element={<Branches />} />
                   <Route path="/branch-inventory" element={<BranchInventory />} />
