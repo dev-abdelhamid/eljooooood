@@ -1,5 +1,4 @@
 import axios from 'axios';
-import axiosRetry from 'axios-retry';
 import { toast } from 'react-toastify';
 
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
@@ -8,15 +7,6 @@ const returnsAxios = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
-});
-
-// Configure retry mechanism for network issues or server errors
-axiosRetry(returnsAxios, {
-  retries: 3,
-  retryDelay: (retryCount) => retryCount * 1000,
-  retryCondition: (error) => {
-    return axios.isCancel(error) || error.code === 'ECONNABORTED' || !error.response || error.response.status >= 500;
-  },
 });
 
 // Request interceptor to add authorization token and language
@@ -75,8 +65,7 @@ returnsAxios.interceptors.response.use(
       message = isRtl ? 'خطأ في الخادم، حاول مرة أخرى لاحقًا' : 'Server error, please try again later';
     }
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
+    if (error.response?.status === 401) {
       try {
         const refreshToken = localStorage.getItem('refreshToken');
         if (!refreshToken) {
