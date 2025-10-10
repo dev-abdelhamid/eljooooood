@@ -9,7 +9,7 @@ const returnsAxios = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Request interceptor to add authorization token and language
+// معترض الطلبات لإضافة التوكن واللغة
 returnsAxios.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
@@ -34,11 +34,10 @@ returnsAxios.interceptors.request.use(
   }
 );
 
-// Response interceptor for consistent error handling
+// معترض الاستجابات لإدارة الأخطاء
 returnsAxios.interceptors.response.use(
   (response) => response,
-  async (error) => {
-    const originalRequest = error.config;
+  (error) => {
     const language = localStorage.getItem('language') || 'ar';
     const isRtl = language === 'ar';
 
@@ -66,41 +65,17 @@ returnsAxios.interceptors.response.use(
     }
 
     if (error.response?.status === 401) {
-      try {
-        const refreshToken = localStorage.getItem('refreshToken');
-        if (!refreshToken) {
-          console.error(`[${new Date().toISOString()}] No refresh token available`);
-          localStorage.removeItem('token');
-          localStorage.removeItem('user');
-          localStorage.removeItem('refreshToken');
-          window.location.href = '/login';
-          toast.error(isRtl ? 'التوكن منتهي الصلاحية، يرجى تسجيل الدخول مجددًا' : 'Token expired, please log in again', {
-            position: isRtl ? 'top-right' : 'top-left',
-            autoClose: 3000,
-            pauseOnFocusLoss: true,
-          });
-          return Promise.reject({ message: isRtl ? 'التوكن منتهي الصلاحية ولا يوجد توكن منعش' : 'Token expired and no refresh token available', status: 401 });
-        }
-        const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
-        const { accessToken, refreshToken: newRefreshToken } = response.data;
-        localStorage.setItem('token', accessToken);
-        if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
-        console.log(`[${new Date().toISOString()}] Token refreshed successfully`);
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-        return returnsAxios(originalRequest);
-      } catch (refreshError) {
-        console.error(`[${new Date().toISOString()}] Refresh token failed:`, refreshError);
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        localStorage.removeItem('refreshToken');
-        window.location.href = '/login';
-        toast.error(isRtl ? 'فشل تجديد التوكن، يرجى تسجيل الدخول مجددًا' : 'Failed to refresh token, please log in again', {
-          position: isRtl ? 'top-right' : 'top-left',
-          autoClose: 3000,
-          pauseOnFocusLoss: true,
-        });
-        return Promise.reject({ message: isRtl ? 'فشل تجديد التوكن' : 'Failed to refresh token', status: 401 });
-      }
+      console.error(`[${new Date().toISOString()}] Unauthorized:`, error);
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      localStorage.removeItem('refreshToken');
+      window.location.href = '/login';
+      toast.error(isRtl ? 'التوكن منتهي الصلاحية، يرجى تسجيل الدخول مجددًا' : 'Token expired, please log in again', {
+        position: isRtl ? 'top-right' : 'top-left',
+        autoClose: 3000,
+        pauseOnFocusLoss: true,
+      });
+      return Promise.reject({ message: isRtl ? 'التوكن منتهي الصلاحية' : 'Token expired', status: 401 });
     }
 
     console.error(`[${new Date().toISOString()}] Returns API response error:`, {
@@ -113,7 +88,7 @@ returnsAxios.interceptors.response.use(
   }
 );
 
-// Validate ObjectId
+// التحقق من معرف الكائن
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 
 export const returnsAPI = {
