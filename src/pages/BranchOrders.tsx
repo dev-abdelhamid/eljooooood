@@ -567,62 +567,145 @@ export const BranchOrders: React.FC = () => {
     dispatch({ type: 'SET_MODAL', modal: 'confirmDelivery', isOpen: true });
   }, []);
 
- const confirmDelivery = useCallback(
-  debounce(async (orderId: string) => {
-    if (!user?.branchId || !user?.id) {
-      console.log('Confirm delivery - Missing user or branch:', { user });
-      toast.error(isRtl ? 'لا يوجد فرع أو مستخدم مرتبط' : 'No branch or user associated', {
-        position: isRtl ? 'top-left' : 'top-right',
-        autoClose: 3000,
-      });
-      return;
-    }
-    dispatch({ type: 'SET_SUBMITTING', payload: orderId });
-    try {
-      const order = await ordersAPI.getById(orderId);
-      if (!order || !Array.isArray(order.items)) {
-        throw new Error(isRtl ? 'بيانات الطلب غير صالحة' : 'Invalid order data');
+  const confirmDelivery = useCallback(
+    async (orderId: string) => {
+      if (!user?.branchId || !user?.id) {
+        console.log('Confirm delivery - Missing user or branch:', { user });
+        toast.error(isRtl ? 'لا يوجد فرع أو مستخدم مرتبط' : 'No branch or user associated', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+        return;
       }
+      dispatch({ type: 'SET_SUBMITTING', payload: orderId });
+      try {
+        const order = await ordersAPI.getById(orderId);
+        if (!order || !Array.isArray(order.items)) {
+          throw new Error(isRtl ? 'بيانات الطلب غير صالحة' : 'Invalid order data');
+        }
 
-      const invalidItems = order.items.filter(item => !item.product?._id);
-      if (invalidItems.length > 0) {
-        throw new Error(isRtl ? 'بعض العناصر تحتوي على معرفات منتجات غير صالحة' : 'Some items have invalid product IDs');
+        // Validate product IDs
+        const invalidItems = order.items.filter(item => !item.product?._id);
+        if (invalidItems.length > 0) {
+          throw new Error(isRtl ? 'بعض العناصر تحتوي على معرفات منتجات غير صالحة' : 'Some items have invalid product IDs');
+        }
+
+        // Confirm delivery
+        await ordersAPI.confirmDelivery(orderId, user.id);
+
+        // Update inventory using bulkCreate
+        const inventoryItems = order.items.map(item => ({
+          productId: item.product._id,
+          currentStock: item.quantity,
+          minStockLevel: 0,
+          maxStockLevel: 1000,
+        }));
+
+        try {
+          await inventoryAPI.bulkCreate({
+            branchId: user.branchId,
+            userId: user.id,
+            orderId,
+            items: inventoryItems,
+          });
+        } catch (bulkError: any) {
+          console.warn(`Bulk create failed: ${bulkError.message}. Falling back to individual updates.`);
+          for (const item of order.items) {
+            try {
+              let inventoryItem;
+              try {
+                const inventory = await inventoryAPI.getByBranch(user.branchId);
+                inventoryItem = inventory.find((inv: any) => inv.productId === item.product._id);
+              } catch (getError: any) {
+                if (getError.status === 403) {
+                  console.warn(`Permission denied for getting inventory for branch ${user.branchId}. Proceeding to create new inventory entry.`);
+                  inventoryItem = null;
+                } else {
+                  throw getError;
+                }
+              }
+
+              if (inventoryItem) {
+                try {
+                  await inventoryAPI.updateStock(inventoryItem._id, {
+                    currentStock: (inventoryItem.currentStock || 0) + item.quantity,
+                  });
+                } catch (updateError: any) {
+                  if (updateError.status === 403) {
+                    console.warn(`Permission denied for updating inventory item ${inventoryItem._id}. Creating new inventory entry.`);
+                    await inventoryAPI.create({
+                      branchId: user.branchId,
+                      productId: item.product._id,
+                      currentStock: item.quantity,
+                      minStockLevel: 0,
+                      maxStockLevel: 1000,
+                      userId: user.id,
+                      orderId,
+                    });
+                  } else {
+                    throw updateError;
+                  }
+                }
+              } else {
+                await inventoryAPI.create({
+                  branchId: user.branchId,
+                  productId: item.product._id,
+                  currentStock: item.quantity,
+                  minStockLevel: 0,
+                  maxStockLevel: 1000,
+                  userId: user.id,
+                  orderId,
+                });
+              }
+            } catch (itemError: any) {
+              console.warn(`Failed to update inventory for product ${item.product._id}:`, itemError.message);
+             
+              continue;
+            }
+          }
+        }
+
+        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: OrderStatus.Delivered });
+        if (socket && isConnected) {
+          emit('orderStatusUpdated', { orderId, status: OrderStatus.Delivered });
+        }
+        dispatch({ type: 'SET_MODAL', modal: 'confirmDelivery', isOpen: false });
+        playNotificationSound('/sounds/order-delivered.mp3', [400, 100, 400]);
+        toast.success(isRtl ? 'تم تأكيد التسليم' : 'Delivery confirmed successfully', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+      } catch (err: any) {
+        console.error('Confirm delivery error:', err.message, err.response?.data);
+        toast.error(isRtl ? `فشل في تأكيد التسليم: ${err.message}` : `Failed to confirm delivery: ${err.message}`, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+      } finally {
+        dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
+    },
+    [t, isRtl, playNotificationSound, user, socket, isConnected, emit]
+  );
 
-      await ordersAPI.confirmDelivery(orderId, user.id);
-
-      const inventoryItems = order.items.map(item => ({
-        productId: item.product._id,
-        currentStock: item.quantity,
-        minStockLevel: 0,
-        maxStockLevel: 1000,
-      }));
-
-      await inventoryAPI.bulkCreate({
-        branchId: user.branchId,
-        userId: user.id,
-        orderId,
-        items: inventoryItems,
-      });
-
-      dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: OrderStatus.Delivered });
-      if (socket && isConnected) {
-        emit('orderStatusUpdated', { orderId, status: OrderStatus.Delivered });
-      }
-      dispatch({ type: 'SET_MODAL', modal: 'confirmDelivery', isOpen: false });
-      playNotificationSound('/sounds/order-delivered.mp3', [400, 100, 400]);
-      toast.success(isRtl ? 'تم تأكيد التسليم' : 'Delivery confirmed successfully', {
-        position: isRtl ? 'top-left' : 'top-right',
-        autoClose: 3000,
-      });
-    } finally {
-      dispatch({ type: 'SET_SUBMITTING', payload: null });
-    }
-  }, 500, { leading: true, trailing: false }),
-  [user, isRtl, socket, isConnected, emit, playNotificationSound]
-);
   // Update order status
- 
+  const updateOrderStatus = useCallback(
+    async (orderId: string, status: OrderStatus) => {
+      if (!user?.branchId) {
+        toast.error(isRtl ? 'لا يوجد فرع مرتبط' : 'No branch associated', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+        return;
+      }
+      dispatch({ type: 'SET_SUBMITTING', payload: orderId });
+      try {
+        await ordersAPI.updateStatus(orderId, { status });
+        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
+        if (socket && isConnected) {
+          emit('orderStatusUpdated', { orderId, status });
+        }
+        toast.success(
+          isRtl ? `تم تحديث حالة الطلب إلى: ${t(`orders.status_${status}`)}` : `Order status updated to: ${t(`orders.status_${status}`)}`,
+          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
+        );
+      } catch (err: any) {
+        console.error('Update order status error:', err.message, err.response?.data);
+        toast.error(isRtl ? `فشل في تحديث الحالة: ${err.message}` : `Failed to update status: ${err.message}`, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+      } finally {
+        dispatch({ type: 'SET_SUBMITTING', payload: null });
+      }
+    },
+    [t, isRtl, user, socket, isConnected, emit]
+  );
 
   // Clear cache on user or branch change
   useEffect(() => {
