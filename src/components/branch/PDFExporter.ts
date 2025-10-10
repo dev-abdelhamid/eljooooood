@@ -1,106 +1,9 @@
-import { jsPDF } from 'jspdf';
+import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Order } from '../../types/types';
+import { Order } from '../../components/branch/types';
+import { formatDate } from '../../utils/formatDate';
+import { toast } from 'react-toastify';
 
-
-
-
-
-
-const loadFont = async (fontName: string, fontUrl: string): Promise<string | null> => {
-  try {
-    const response = await fetch(fontUrl);
-    if (!response.ok) {
-      console.error(`Failed to fetch font ${fontName}: ${response.statusText}`);
-      return null;
-    }
-    const arrayBuffer = await response.arrayBuffer();
-    return Buffer.from(arrayBuffer).toString('base64');
-  } catch (error) {
-    console.error(`Error loading font ${fontName}:`, error);
-    return null;
-  }
-};
-
-const generatePDFHeader = (doc: jsPDF, isRtl: boolean, filterStatus: string, filterBranch: string) => {
-  doc.setFontSize(12);
-  doc.setFont(isRtl ? 'Alexandria' : 'helvetica', 'bold');
-  const title = isRtl ? 'تقرير الطلبات' : 'Orders Report';
-  const titleWidth = doc.getTextWidth(title);
-  const xPosition = isRtl ? doc.internal.pageSize.width - 20 - titleWidth : 20;
-  doc.text(title, xPosition, 15, { align: isRtl ? 'right' : 'left' });
-  
-  doc.setFontSize(8);
-  doc.setFont(isRtl ? 'Alexandria' : 'helvetica', 'normal');
-  const filters = [
-    isRtl ? `الحالة: ${filterStatus || 'الكل'}` : `Status: ${filterStatus || 'All'}`,
-    isRtl ? `الفرع: ${filterBranch || 'الكل'}` : `Branch: ${filterBranch || 'All'}`,
-  ].filter(Boolean).join(' | ');
-  const filtersWidth = doc.getTextWidth(filters);
-  const filtersXPosition = isRtl ? doc.internal.pageSize.width - 20 - filtersWidth : 20;
-  doc.text(filters, filtersXPosition, 25, { align: isRtl ? 'right' : 'left' });
-};
-
-const generatePDFTable = (
-  doc: jsPDF,
-  orders: Order[],
-  isRtl: boolean,
-  calculateAdjustedTotal: (order: Order) => string,
-  calculateTotalQuantity: (order: Order) => number,
-  translateUnit: (unit: string) => string
-) => {
-  const headers = [
-    isRtl ? 'رقم الطلب' : 'Order Number',
-    isRtl ? 'الحالة' : 'Status',
-    isRtl ? 'المنتجات' : 'Products',
-    isRtl ? 'إجمالي المبلغ' : 'Total Amount',
-    isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
-    isRtl ? 'التاريخ' : 'Date',
-    isRtl ? 'الأولوية' : 'Priority',
-  ];
-
-  const body = orders.map(order => [
-    order.orderNumber,
-    t(`orders.status_${order.status}`) || order.status,
-    order.items.map(item => `(${item.quantity} ${t(`${item.unit || 'unit'}`) || item.unit} × ${getFirstTwoWords(item.productName)})`).join(' + '),
-    calculateAdjustedTotal(order),
-    calculateTotalQuantity(order).toString(),
-    order.date,
-    t(`orders.priority_${order.priority}`) || order.priority,
-  ]);
-
-  autoTable(doc, {
-    head: [headers],
-    body,
-    startY: 30,
-    styles: {
-      font: isRtl ? 'Alexandria' : 'helvetica',
-      fontSize: 9,
-      cellPadding: 4,
-      overflow: 'linebreak',
-      halign: isRtl ? 'right' : 'left',
-      valign: 'middle',
-    },
-    headStyles: {
-      fillColor: [255, 193, 7],
-      textColor: 255,
-      fontStyle: 'bold',
-    },
-    alternateRowStyles: {
-      fillColor: [245, 245, 245],
-    },
-    columnStyles: {
-      0: { cellWidth: 30 },
-      1: { cellWidth: 25 },
-      2: { cellWidth: 100 },
-      3: { cellWidth: 30 },
-      4: { cellWidth: 25 },
-      5: { cellWidth: 35 },
-      6: { cellWidth: 25 },
-    },
-    margin: { top: 30, right: 15, bottom: 15, left: 15 },
-  });
-};
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   let binary = '';
@@ -112,24 +15,13 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return window.btoa(binary);
 }
 
-export const exportToPDF = async (
-  orders: Order[],
-  isRtl: boolean,
-  calculateAdjustedTotal: (order: Order) => string,
-  calculateTotalQuantity: (order: Order) => number,
-  translateUnit: (unit: string) => string,
-  filterStatus: string,
-  filterBranch: string
-) => {
-  const doc = new jsPDF({
-    orientation: 'landscape',
-    unit: 'mm',
-    format: 'a4',
-  });
-
+export const exportToPDF = async (orders: Order[], t: (key: string) => string, isRtl: boolean, language: string, calculateTotalQuantity: (order: Order) => number) => {
   try {
-    const fontUrl = '/fonts/Alexandria-Regular.ttf';
-    const fontName = 'Alexandria';
+    const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
+    doc.setLanguage(isRtl ? 'ar' : 'en');
+
+    const fontUrl = '/fonts/Amiri-Regular.ttf';
+    const fontName = 'Amiri';
     const fontBytes = await fetch(fontUrl).then(res => {
       if (!res.ok) throw new Error('Failed to fetch font');
       return res.arrayBuffer();
@@ -139,13 +31,76 @@ export const exportToPDF = async (
     doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
     doc.setFont(fontName);
 
-    doc.setLanguage('ar');
-    generatePDFHeader(doc, isRtl, filterStatus, filterBranch);
-    generatePDFTable(doc, orders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit);
+    doc.setFontSize(16);
+    doc.text(isRtl ? 'الطلبات' : 'Orders', isRtl ? doc.internal.pageSize.width - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
 
-    doc.save('Orders.pdf');
-  } catch (error) {
-    console.error('PDF export error:', error);
-    throw new Error('Failed to export PDF');
+    const headers = [
+      isRtl ? 'رقم الطلب' : 'Order Number',
+      isRtl ? 'الحالة' : 'Status',
+      isRtl ? 'المنتجات' : 'Products',
+      isRtl ? 'إجمالي المبلغ' : 'Total Amount',
+      isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
+      isRtl ? 'التاريخ' : 'Date',
+      isRtl ? 'الأولوية' : 'Priority',
+      isRtl ? 'الفرع' : 'Branch',
+    ];
+
+    const data = orders.map(order => [
+      order.orderNumber,
+      t(`orders.status_${order.status}`) || order.status,
+      order.items.map(item => `(${item.quantity} ${t(`units.${item.unit}`) || item.unit} × ${item.productName})`).join(' + '),
+      order.totalAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR', minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+      calculateTotalQuantity(order).toString(),
+      order.date,
+      t(`orders.priority_${order.priority}`) || order.priority,
+      order.branch?.displayName || (isRtl ? 'غير معروف' : 'Unknown'),
+    ]);
+
+    autoTable(doc, {
+      head: [isRtl ? headers.reverse() : headers],
+      body: isRtl ? data.map(row => row.reverse()) : data,
+      theme: 'grid',
+      headStyles: { fillColor: [255, 193, 7], textColor: 255, fontSize: 10, halign: isRtl ? 'right' : 'left', font: fontName, cellPadding: 3 },
+      bodyStyles: { fontSize: 8, halign: isRtl ? 'right' : 'left', font: fontName, cellPadding: 3, textColor: [33, 33, 33] },
+      margin: { top: 25, left: 10, right: 10 },
+      columnStyles: {
+        0: { cellWidth: 25 },
+        1: { cellWidth: 20 },
+        2: { cellWidth: 80 },
+        3: { cellWidth: 25 },
+        4: { cellWidth: 20 },
+        5: { cellWidth: 30 },
+        6: { cellWidth: 20 },
+        7: { cellWidth: 30 },
+      },
+      didParseCell: data => {
+        if (data.section === 'body' && data.column.index === 3 && isRtl) {
+          data.cell.text = [data.cell.text.toString().replace(/(\d+\.\d{2})/, ' $1 ر.س')];
+        }
+      },
+      didDrawPage: data => {
+        doc.setFont(fontName);
+        doc.setFontSize(8);
+        doc.text(
+          isRtl ? `تم الإنشاء في: ${formatDate(new Date(), language)}` : `Generated on: ${formatDate(new Date(), language)}`,
+          isRtl ? doc.internal.pageSize.width - 10 : 10,
+          doc.internal.pageSize.height - 10,
+          { align: isRtl ? 'right' : 'left' }
+        );
+        doc.text(
+          isRtl ? `الصفحة ${data.pageNumber}` : `Page ${data.pageNumber}`,
+          isRtl ? 10 : doc.internal.pageSize.width - 30,
+          doc.internal.pageSize.height - 10,
+          { align: isRtl ? 'left' : 'right' }
+        );
+      },
+      styles: { overflow: 'linebreak', font: fontName, fontSize: 8, cellPadding: 3, halign: isRtl ? 'right' : 'left' },
+    });
+
+    doc.save('BranchOrders.pdf');
+    toast.success(isRtl ? 'تم تصدير PDF بنجاح' : 'PDF export successful', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+  } catch (err) {
+    console.error('PDF export error:', err);
+    toast.error(isRtl ? 'خطأ في تصدير PDF' : 'PDF export error', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
   }
 };
