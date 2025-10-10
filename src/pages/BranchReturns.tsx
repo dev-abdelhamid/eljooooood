@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect, useReducer } from 're
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Eye, Clock, Check, AlertCircle, MinusCircle, Plus, X, CheckCircle, XCircle, Currency } from 'lucide-react';
+import { Package, Eye, Clock, Check, AlertCircle, MinusCircle, Plus, X, CheckCircle, XCircle } from 'lucide-react';
 import { returnsAPI, inventoryAPI } from '../services/api';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -122,8 +122,8 @@ const translations = {
     unit: 'الوحدة',
     department: 'القسم',
     product: 'المنتج',
-    Currency : 'ريال' ,
     price: 'السعر',
+    Currency: 'ريال',
     status: {
       pending: 'قيد الانتظار',
       approved: 'موافق عليه',
@@ -152,6 +152,7 @@ const translations = {
       productNotFound: 'المنتج غير موجود',
       invalidReasonPair: 'سبب الإرجاع وسبب الإرجاع بالإنجليزية غير متطابقين',
       writeConflict: 'تعارض في الكتابة، حاول مرة أخرى',
+      accessDenied: 'غير مصرح لك بالوصول إلى هذه الصفحة',
     },
     socket: {
       connected: 'تم الاتصال بالخادم',
@@ -196,7 +197,6 @@ const translations = {
     reviewNotesPlaceholder: 'Enter review notes (optional)',
     items: 'Items',
     addItem: 'Add Item',
-    Currency: 'SAR',
     removeItem: 'Remove Item',
     submitReturn: 'Submit Return Request',
     approve: 'Approve',
@@ -209,6 +209,7 @@ const translations = {
     department: 'Department',
     product: 'Product',
     price: 'Price',
+    Currency: 'SAR',
     status: {
       pending: 'Pending',
       approved: 'Approved',
@@ -237,6 +238,7 @@ const translations = {
       productNotFound: 'Product not found',
       invalidReasonPair: 'Return reason and English reason do not match',
       writeConflict: 'Write conflict, please try again',
+      accessDenied: 'You are not authorized to access this page',
     },
     socket: {
       connected: 'Connected to server',
@@ -283,7 +285,7 @@ const QuantityInput = ({
     <div className="flex items-center gap-2">
       <button
         onClick={onDecrement}
-        className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
+        className="w-7 h-7 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
         aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
         disabled={value <= 1}
       >
@@ -295,12 +297,12 @@ const QuantityInput = ({
         onChange={(e) => handleChange(e.target.value)}
         max={max}
         min={1}
-        className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
+        className="w-10 h-7 text-center border border-gray-200 rounded-md text-xs focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
         aria-label={isRtl ? 'الكمية' : 'Quantity'}
       />
       <button
         onClick={onIncrement}
-        className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
+        className="w-7 h-7 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
         aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
         disabled={max !== undefined && value >= max}
       >
@@ -360,6 +362,17 @@ export const BranchReturns: React.FC = () => {
   const [reviewNotes, setReviewNotes] = useState('');
 
   const RETURNS_PER_PAGE = 10;
+
+  // Check if user is authorized
+  if (user?.role === 'chef') {
+    return (
+      <div className="mx-auto max-w-7xl px-4 py-8">
+        <div className="p-6 bg-red-50 rounded-xl shadow-sm border border-red-200">
+          <p className="text-red-600 text-sm font-medium">{t.errors.accessDenied}</p>
+        </div>
+      </div>
+    );
+  }
 
   const useDebouncedState = <T,>(initialValue: T, delay: number) => {
     const [value, setValue] = useState<T>(initialValue);
@@ -434,7 +447,7 @@ export const BranchReturns: React.FC = () => {
         total: response.total || 0,
       };
     },
-    enabled: !!user,
+    enabled: !!user && user.role !== 'chef',
     staleTime: 5 * 60 * 1000,
     cacheTime: 10 * 60 * 1000,
     onError: (err) => {
@@ -465,14 +478,26 @@ export const BranchReturns: React.FC = () => {
           price: item.product.price || 0,
         }));
     },
-    enabled: !!user?.branchId,
+    enabled: !!user?.branchId && user?.role === 'branch',
     staleTime: 5 * 60 * 1000,
   });
 
   useEffect(() => {
     if (!socket || !user || !isConnected) return;
 
-    const handleReturnCreated = (data: { branchId: string; returnId: string; returnNumber: string; branchName?: string; eventId: string }) => {
+    socket.emit('joinRoom', {
+      role: user.role,
+      branchId: user.branchId,
+      userId: user._id,
+    });
+
+    const handleReturnCreated = (data: {
+      branchId: string;
+      returnId: string;
+      returnNumber: string;
+      branchName?: string;
+      eventId: string;
+    }) => {
       if (user.role === 'branch' && data.branchId !== user.branchId) return;
       queryClient.invalidateQueries({ queryKey: ['returns'] });
       addNotification({
@@ -515,18 +540,12 @@ export const BranchReturns: React.FC = () => {
     };
 
     socket.on('connect', () => {
-      socket.emit('joinRoom', { role: user?.role, branchId: user?.branchId, userId: user?._id });
-      addNotification({
-        _id: crypto.randomUUID(),
-        type: 'info',
-        message: t.socket.connected,
-        data: { eventId: crypto.randomUUID() },
-        read: false,
-        createdAt: new Date().toISOString(),
-        sound: '/sounds/notification.mp3',
-        vibrate: [200, 100, 200],
+      toast.info(t.socket.connected, {
+        position: isRtl ? 'top-right' : 'top-left',
+        toastId: `socket-connect-${Date.now()}`,
       });
     });
+
     socket.on('returnCreated', handleReturnCreated);
     socket.on('returnStatusUpdated', handleReturnStatusUpdated);
 
@@ -563,7 +582,7 @@ export const BranchReturns: React.FC = () => {
       { value: '', label: t.selectProduct },
       ...availableItems.map((item) => ({
         value: item.productId,
-        label: `${item.productName} (${t.quantity}: ${item.available} ${item.displayUnit}, ${t.price}: ${item.price.toFixed(2)} SAR)`,
+        label: `${item.productName} (${t.quantity}: ${item.available} ${item.displayUnit}, ${t.price}: ${item.price.toFixed(2)} ${t.Currency})`,
       })),
     ],
     [availableItems, t]
@@ -806,101 +825,105 @@ export const BranchReturns: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="flex flex-col"
+          className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 overflow-hidden"
         >
-          <div className="p-6 bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100">
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <h3 className="text-xl font-bold text-gray-900">{t.returnNumber}: {ret.returnNumber}</h3>
-                <span className={`flex items-center gap-2 px-4 py-1 rounded-full text-sm font-semibold ${statusInfo.color}`}>
-                  <StatusIcon className="w-5 h-5" />
-                  {statusInfo.label}
-                </span>
+          <div className="p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+              <h3 className="text-lg font-semibold text-gray-900">{t.returnNumber}: {ret.returnNumber}</h3>
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
+                <StatusIcon className="w-4 h-4" />
+                {statusInfo.label}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+              <div>
+                <p className="text-xs text-gray-500">{t.date}</p>
+                <p className="text-xs font-medium text-gray-900">
+                  {new Date(ret.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
+                </p>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">{t.date}</p>
-                  <p className="text-sm font-medium text-gray-900">
-                    {new Date(ret.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">{t.totalQuantity}</p>
-                  <p className="text-sm font-medium text-gray-900">
-                    {totalQuantity} {t.items}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">{t.totalPrice}</p>
-                  <p className="text-sm font-medium text-gray-900">{totalPrice} {t.Currency} </p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">{t.branch}</p>
-                  <p className="text-sm font-medium text-gray-900">{ret.branch?.displayName || t.branch}</p>
-                </div>
+              <div>
+                <p className="text-xs text-gray-500">{t.totalQuantity}</p>
+                <p className="text-xs font-medium text-gray-900">
+                  {totalQuantity} {t.items}
+                </p>
               </div>
-              <div className="flex flex-col gap-2">
-                {ret.items.map((item, index) => (
-                  <div key={index} className="p-4 bg-gray-50 rounded-lg flex flex-col sm:flex-row sm:items-center sm:gap-4 justify-between  border border-gray-100 hover:bg-gray-100 transition-colors duration-200">
-                    <p className="text-sm font-semibold text-gray-900">{item.product.displayName}</p>
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
-                      <p className="text-sm text-gray-600">
-                        {t.quantity}: {item.quantity} {item.product.displayUnit}
-                      </p>
-                      <p className="text-sm text-gray-600">
-                        {t.price}: {(item.quantity * item.product.price).toFixed(2)} {t.Currency}
-                      </p>
-                      <p className="text-sm text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
-                    </div>
-                  </div>
-                ))}
+              <div>
+                <p className="text-xs text-gray-500">{t.totalPrice}</p>
+                <p className="text-xs font-medium text-gray-900">{totalPrice} {t.Currency}</p>
               </div>
-              {ret.notes && (
-                <div className="p-4 bg-amber-50 rounded-lg">
-                  <p className="text-sm font-medium text-amber-800">{t.notesLabel}: {ret.notes}</p>
-                </div>
-              )}
-              {ret.reviewNotes && (
-                <div className="p-4 bg-blue-50 rounded-lg">
-                  <p className="text-sm font-medium text-blue-800">{t.reviewNotes}: {ret.reviewNotes}</p>
-                </div>
-              )}
-              <div className="flex justify-end gap-3">
-                {user?.role === 'admin' && ret.status === ReturnStatus.PENDING && (
-                  <>
-                    <button
-                      onClick={() => {
-                        setSelectedReturn(ret);
-                        setIsApproveModalOpen(true);
-                      }}
-                      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
-                    >
-                      <CheckCircle className="w-4 h-4" />
-                      {t.approve}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedReturn(ret);
-                        setIsApproveModalOpen(true);
-                      }}
-                      className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
-                    >
-                      <XCircle className="w-4 h-4" />
-                      {t.reject}
-                    </button>
-                  </>
-                )}
-                <button
-                  onClick={() => {
-                    setSelectedReturn(ret);
-                    setIsViewModalOpen(true);
-                  }}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+              <div>
+                <p className="text-xs text-gray-500">{t.branch}</p>
+                <p className="text-xs font-medium text-gray-900">{ret.branch?.displayName || t.branch}</p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 mb-3">
+              {ret.items.map((item, index) => (
+                <div
+                  key={index}
+                  className="p-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors duration-200"
                 >
-                  <Eye className="w-4 h-4" />
-                  {t.view}
-                </button>
+                  <p className="text-xs font-semibold text-gray-900">{item.product.displayName}</p>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">
+                    <p className="text-xs text-gray-600">
+                      {t.quantity}: {item.quantity} {item.product.displayUnit}
+                    </p>
+                    <p className="text-xs text-gray-600">
+                      {t.price}: {(item.quantity * item.product.price).toFixed(2)} {t.Currency}
+                    </p>
+                    <p className="text-xs text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            {ret.notes && (
+              <div className="p-3 bg-amber-50 rounded-lg">
+                <p className="text-xs font-medium text-amber-800">{t.notesLabel}: {ret.notes}</p>
               </div>
+            )}
+            {ret.reviewNotes && (
+              <div className="p-3 bg-blue-50 rounded-lg mt-2">
+                <p className="text-xs font-medium text-blue-800">{t.reviewNotes}: {ret.reviewNotes}</p>
+              </div>
+            )}
+            <div className="flex justify-end gap-2 mt-3">
+              {['admin', 'production'].includes(user?.role || '') && ret.status === ReturnStatus.PENDING && (
+                <>
+                  <button
+                    onClick={() => {
+                      setSelectedReturn(ret);
+                      setIsApproveModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-medium transition-colors duration-200 flex items-center gap-1.5"
+                    aria-label={t.approve}
+                  >
+                    <CheckCircle className="w-4 h-4" />
+                    {t.approve}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedReturn(ret);
+                      setIsApproveModalOpen(true);
+                    }}
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-medium transition-colors duration-200 flex items-center gap-1.5"
+                    aria-label={t.reject}
+                  >
+                    <XCircle className="w-4 h-4" />
+                    {t.reject}
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => {
+                  setSelectedReturn(ret);
+                  setIsViewModalOpen(true);
+                }}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-medium transition-colors duration-200 flex items-center gap-1.5"
+                aria-label={t.view}
+              >
+                <Eye className="w-4 h-4" />
+                {t.view}
+              </button>
             </div>
           </div>
         </motion.div>
@@ -910,19 +933,20 @@ export const BranchReturns: React.FC = () => {
   );
 
   return (
-    <div className="mx-auto  px-4 py-8 ">
-      <div className="mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-        <div className="flex items-center gap-4">
-          <Package className="w-8 h-8 text-amber-600" />
+    <div className="mx-auto max-w-7xl px-4 py-6">
+      <div className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+        <div className="flex items-center gap-3">
+          <Package className="w-7 h-7 text-amber-600" />
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">{t.title}</h1>
-            <p className="text-gray-600 text-sm">{t.subtitle}</p>
+            <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
+            <p className="text-gray-600 text-xs">{t.subtitle}</p>
           </div>
         </div>
         {user?.role === 'branch' && (
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-medium transition-colors duration-200 flex items-center gap-1.5"
+            aria-label={t.createReturn}
           >
             <Plus className="w-4 h-4" />
             {t.createReturn}
@@ -936,24 +960,24 @@ export const BranchReturns: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3"
         >
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <span className="text-red-600 text-sm font-medium">{returnsError.message}</span>
+          <AlertCircle className="w-4 h-4 text-red-600" />
+          <span className="text-red-600 text-xs font-medium">{returnsError.message}</span>
           <button
             onClick={() => refetchReturns()}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
+            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-medium transition-colors duration-200"
           >
             {t.common.retry}
           </button>
         </motion.div>
       )}
 
-      <div className="p-6 bg-white rounded-2xl shadow-sm mb-6">
+      <div className="p-5 bg-white rounded-xl shadow-sm mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <ProductSearchInput
             value={searchInput}
             onChange={handleSearchChange}
             placeholder={t.searchPlaceholder}
-            className="w-full rounded-lg border-gray-200 focus:ring-amber-500"
+            className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs"
           />
           <ProductDropdown
             value={filterStatus}
@@ -962,7 +986,7 @@ export const BranchReturns: React.FC = () => {
               setCurrentPage(1);
             }}
             options={statusOptions}
-            className="w-full rounded-lg border-gray-200 focus:ring-amber-500"
+            className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs"
           />
         </div>
       </div>
@@ -970,19 +994,19 @@ export const BranchReturns: React.FC = () => {
       {returnsLoading ? (
         <div className="grid grid-cols-1 gap-4">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="p-6 bg-white rounded-2xl shadow-sm animate-pulse">
-              <div className="h-5 bg-gray-200 rounded w-3/4 mb-4"></div>
-              <div className="h-4 bg-gray-200 rounded w-1/2 mb-2"></div>
-              <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+            <div key={i} className="p-5 bg-white rounded-xl shadow-sm animate-pulse">
+              <div className="h-4 bg-gray-200 rounded w-3/4 mb-3"></div>
+              <div className="h-3 bg-gray-200 rounded w-1/2 mb-2"></div>
+              <div className="h-3 bg-gray-200 rounded w-1/3"></div>
             </div>
           ))}
         </div>
       ) : paginatedReturns.length === 0 ? (
-        <div className="p-8 text-center bg-white rounded-2xl shadow-sm">
-          <p className="text-gray-500">{t.noReturns}</p>
+        <div className="p-6 text-center bg-white rounded-xl shadow-sm">
+          <p className="text-gray-500 text-xs">{t.noReturns}</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6">
+        <div className="grid grid-cols-1 gap-4">
           {paginatedReturns.map((ret) => (
             <ReturnCard key={ret._id} ret={ret} />
           ))}
@@ -990,22 +1014,22 @@ export const BranchReturns: React.FC = () => {
       )}
 
       {totalPages > 1 && (
-        <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="text-sm text-gray-600">
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="text-xs text-gray-600">
             {t.pagination.page.replace('{current}', currentPage.toString()).replace('{total}', totalPages.toString())}
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
               disabled={currentPage === 1}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+              className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-md text-xs font-medium transition-colors duration-200 disabled:opacity-50"
             >
               {t.pagination.previous}
             </button>
             <button
               onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
               disabled={currentPage === totalPages}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+              className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-md text-xs font-medium transition-colors duration-200 disabled:opacity-50"
             >
               {t.pagination.next}
             </button>
@@ -1031,45 +1055,45 @@ export const BranchReturns: React.FC = () => {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold text-gray-900">{t.createReturn}</h2>
+              <div className="flex justify-between items-center mb-3">
+                <h2 className="text-xl font-bold text-gray-900">{t.createReturn}</h2>
                 <button
                   onClick={() => {
                     setIsCreateModalOpen(false);
                     dispatchReturnForm({ type: 'RESET' });
                     setReturnErrors({});
                   }}
-                  className="p-2 hover:bg-gray-100 rounded-full"
+                  className="p-1.5 hover:bg-gray-100 rounded-full"
                 >
-                  <X className="w-5 h-5 text-gray-600" />
+                  <X className="w-4 h-4 text-gray-600" />
                 </button>
               </div>
               {returnErrors.form && (
-                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
-                  <AlertCircle className="w-5 h-5 text-red-600" />
-                  <span className="text-red-600 text-sm">{returnErrors.form}</span>
+                <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600" />
+                  <span className="text-red-600 text-xs">{returnErrors.form}</span>
                 </div>
               )}
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3">
                 {returnForm.items.map((item, index) => (
-                  <div key={index} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div key={index} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="grid grid-cols-1 gap-3">
                       <div>
                         <ProductDropdown
                           value={item.productId}
                           onChange={(value) => handleProductChange(index, value)}
                           options={productOptions}
                           placeholder={t.selectProduct}
-                          className="w-full rounded-lg border-gray-200 focus:ring-amber-500"
+                          className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs"
                         />
                         {returnErrors[`item_${index}_productId`] && (
                           <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_productId`]}</p>
                         )}
                       </div>
-                      <div>
+                      <div className="flex items-center gap-3">
                         <QuantityInput
                           value={item.quantity}
                           onChange={(val) => updateItemInForm(index, 'quantity', val)}
@@ -1087,7 +1111,7 @@ export const BranchReturns: React.FC = () => {
                           onChange={(value) => updateItemInForm(index, 'reason', value)}
                           options={reasonOptions}
                           placeholder={t.selectReason}
-                          className="w-full rounded-lg border-gray-200 focus:ring-amber-500"
+                          className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs"
                         />
                         {returnErrors[`item_${index}_reason`] && (
                           <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_reason`]}</p>
@@ -1096,46 +1120,50 @@ export const BranchReturns: React.FC = () => {
                     </div>
                     <button
                       onClick={() => removeItemFromForm(index)}
-                      className="mt-2 text-red-600 hover:text-red-800 text-sm flex items-center gap-1"
+                      className="mt-2 text-red-600 hover:text-red-800 text-xs flex items-center gap-1"
+                      aria-label={t.removeItem}
                     >
                       <XCircle className="w-4 h-4" />
                       {t.removeItem}
                     </button>
                   </div>
                 ))}
-                {returnErrors.items && <p className="text-red-600 text-sm">{returnErrors.items}</p>}
+                {returnErrors.items && <p className="text-red-600 text-xs">{returnErrors.items}</p>}
                 <button
                   onClick={addItemToForm}
-                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-medium transition-colors duration-200 flex items-center gap-1.5"
+                  aria-label={t.addItem}
                 >
                   <Plus className="w-4 h-4" />
                   {t.addItem}
                 </button>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t.notesLabel}</label>
+                  <label className="block text-xs font-medium text-gray-700">{t.notesLabel}</label>
                   <textarea
                     value={returnForm.notes}
                     onChange={(e) => dispatchReturnForm({ type: 'SET_NOTES', payload: e.target.value })}
                     placeholder={t.notesPlaceholder}
-                    className="w-full mt-1 p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                    rows={4}
+                    className="w-full mt-1 p-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent text-xs"
+                    rows={3}
                   />
                 </div>
-                <div className="flex justify-end gap-3">
+                <div className="flex justify-end gap-2">
                   <button
                     onClick={() => {
                       setIsCreateModalOpen(false);
                       dispatchReturnForm({ type: 'RESET' });
                       setReturnErrors({});
                     }}
-                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm font-medium transition-colors duration-200"
+                    className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-md text-xs font-medium transition-colors duration-200"
+                    aria-label={t.common.cancel}
                   >
                     {t.common.cancel}
                   </button>
                   <button
                     onClick={() => createReturnMutation.mutate()}
                     disabled={createReturnMutation.isLoading}
-                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-medium transition-colors duration-200 disabled:opacity-50"
+                    aria-label={t.submitReturn}
                   >
                     {createReturnMutation.isLoading ? t.common.submitting : t.submitReturn}
                   </button>
@@ -1160,81 +1188,82 @@ export const BranchReturns: React.FC = () => {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold text-gray-900">{t.viewReturn}</h2>
-                <button onClick={() => setIsViewModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full">
-                  <X className="w-5 h-5 text-gray-600" />
+              <div className="flex justify-between items-center mb-3">
+                <h2 className="text-xl font-bold text-gray-900">{t.viewReturn}</h2>
+                <button onClick={() => setIsViewModalOpen(false)} className="p-1.5 hover:bg-gray-100 rounded-full">
+                  <X className="w-4 h-4 text-gray-600" />
                 </button>
               </div>
-              <div className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <p className="text-sm text-gray-500">{t.returnNumber}</p>
-                    <p className="text-sm font-medium text-gray-900">{selectedReturn.returnNumber}</p>
+                    <p className="text-xs text-gray-500">{t.returnNumber}</p>
+                    <p className="text-xs font-medium text-gray-900">{selectedReturn.returnNumber}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">{t.statusLabel}</p>
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-xs text-gray-500">{t.statusLabel}</p>
+                    <p className="text-xs font-medium text-gray-900">
                       {t.status[selectedReturn.status as keyof typeof t.status]}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">{t.date}</p>
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-xs text-gray-500">{t.date}</p>
+                    <p className="text-xs font-medium text-gray-900">
                       {new Date(selectedReturn.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">{t.branch}</p>
-                    <p className="text-sm font-medium text-gray-900">{selectedReturn.branch?.displayName || t.branch}</p>
+                    <p className="text-xs text-gray-500">{t.branch}</p>
+                    <p className="text-xs font-medium text-gray-900">{selectedReturn.branch?.displayName || t.branch}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">{t.totalQuantity}</p>
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-xs text-gray-500">{t.totalQuantity}</p>
+                    <p className="text-xs font-medium text-gray-900">
                       {selectedReturn.items.reduce((sum, item) => sum + item.quantity, 0)} {t.items}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">{t.totalPrice}</p>
-                    <p className="text-sm font-medium text-gray-900">
-                      {selectedReturn.items.reduce((sum, item) => sum + item.quantity * item.product.price, 0).toFixed(2)} SAR
+                    <p className="text-xs text-gray-500">{t.totalPrice}</p>
+                    <p className="text-xs font-medium text-gray-900">
+                      {selectedReturn.items.reduce((sum, item) => sum + item.quantity * item.product.price, 0).toFixed(2)} {t.Currency}
                     </p>
                   </div>
                 </div>
                 <div className="flex flex-col gap-2">
-                  <p className="text-sm font-medium text-gray-700">{t.items}</p>
+                  <p className="text-xs font-medium text-gray-700">{t.items}</p>
                   {selectedReturn.items.map((item, index) => (
-                    <div key={index} className="p-4 bg-gray-50 rounded-lg border border-gray-100">
-                      <p className="text-sm font-semibold text-gray-900">{item.product.displayName}</p>
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
-                        <p className="text-sm text-gray-600">
+                    <div key={index} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                      <p className="text-xs font-semibold text-gray-900">{item.product.displayName}</p>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">
+                        <p className="text-xs text-gray-600">
                           {t.quantity}: {item.quantity} {item.product.displayUnit}
                         </p>
-                        <p className="text-sm text-gray-600">
-                          {t.price}: {(item.quantity * item.product.price).toFixed(2)} SAR
+                        <p className="text-xs text-gray-600">
+                          {t.price}: {(item.quantity * item.product.price).toFixed(2)} {t.Currency}
                         </p>
-                        <p className="text-sm text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
+                        <p className="text-xs text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
                       </div>
                     </div>
                   ))}
                 </div>
                 {selectedReturn.notes && (
-                  <div className="p-4 bg-amber-50 rounded-lg">
-                    <p className="text-sm font-medium text-amber-800">{t.notesLabel}: {selectedReturn.notes}</p>
+                  <div className="p-3 bg-amber-50 rounded-lg">
+                    <p className="text-xs font-medium text-amber-800">{t.notesLabel}: {selectedReturn.notes}</p>
                   </div>
                 )}
                 {selectedReturn.reviewNotes && (
-                  <div className="p-4 bg-blue-50 rounded-lg">
-                    <p className="text-sm font-medium text-blue-800">{t.reviewNotes}: {selectedReturn.reviewNotes}</p>
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <p className="text-xs font-medium text-blue-800">{t.reviewNotes}: {selectedReturn.reviewNotes}</p>
                   </div>
                 )}
                 <div className="flex justify-end">
                   <button
                     onClick={() => setIsViewModalOpen(false)}
-                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm font-medium transition-colors duration-200"
+                    className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-md text-xs font-medium transition-colors duration-200"
+                    aria-label={t.common.close}
                   >
                     {t.common.close}
                   </button>
@@ -1263,47 +1292,46 @@ export const BranchReturns: React.FC = () => {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-2xl p-6 w-full max-w-md"
+              className="bg-white rounded-xl p-5 w-full max-w-md"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold text-gray-900">
-                  {selectedReturn.status === ReturnStatus.PENDING ? t.approveReturn : t.rejectReturn}
-                </h2>
+              <div className="flex justify-between items-center mb-3">
+                <h2 className="text-xl font-bold text-gray-900">{t.approveReturn}</h2>
                 <button
                   onClick={() => {
                     setIsApproveModalOpen(false);
                     setReviewNotes('');
                     setSelectedReturn(null);
                   }}
-                  className="p-2 hover:bg-gray-100 rounded-full"
+                  className="p-1.5 hover:bg-gray-100 rounded-full"
                 >
-                  <X className="w-5 h-5 text-gray-600" />
+                  <X className="w-4 h-4 text-gray-600" />
                 </button>
               </div>
-              <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-3">
                 <div>
-                  <p className="text-sm text-gray-500">{t.returnNumber}</p>
-                  <p className="text-sm font-medium text-gray-900">{selectedReturn.returnNumber}</p>
+                  <p className="text-xs text-gray-500">{t.returnNumber}</p>
+                  <p className="text-xs font-medium text-gray-900">{selectedReturn.returnNumber}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700">{t.reviewNotes}</label>
+                  <label className="block text-xs font-medium text-gray-700">{t.reviewNotes}</label>
                   <textarea
                     value={reviewNotes}
                     onChange={(e) => setReviewNotes(e.target.value)}
                     placeholder={t.reviewNotesPlaceholder}
-                    className="w-full mt-1 p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-                    rows={4}
+                    className="w-full mt-1 p-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent text-xs"
+                    rows={3}
                   />
                 </div>
-                <div className="flex justify-end gap-3">
+                <div className="flex justify-end gap-2">
                   <button
                     onClick={() => {
                       setIsApproveModalOpen(false);
                       setReviewNotes('');
                       setSelectedReturn(null);
                     }}
-                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm font-medium transition-colors duration-200"
+                    className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-md text-xs font-medium transition-colors duration-200"
+                    aria-label={t.common.cancel}
                   >
                     {t.common.cancel}
                   </button>
@@ -1316,7 +1344,8 @@ export const BranchReturns: React.FC = () => {
                       })
                     }
                     disabled={updateReturnStatusMutation.isLoading}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                    className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-medium transition-colors duration-200 disabled:opacity-50"
+                    aria-label={t.approve}
                   >
                     {updateReturnStatusMutation.isLoading ? t.common.submitting : t.approve}
                   </button>
@@ -1329,7 +1358,8 @@ export const BranchReturns: React.FC = () => {
                       })
                     }
                     disabled={updateReturnStatusMutation.isLoading}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-medium transition-colors duration-200 disabled:opacity-50"
+                    aria-label={t.reject}
                   >
                     {updateReturnStatusMutation.isLoading ? t.common.submitting : t.reject}
                   </button>
