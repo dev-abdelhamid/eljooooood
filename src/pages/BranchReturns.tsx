@@ -37,7 +37,6 @@ interface ReturnItem {
 interface ReturnFormState {
   notes: string;
   items: ReturnItem[];
-  orders: string[];
 }
 
 interface Return {
@@ -64,7 +63,6 @@ interface Return {
   createdAt: string;
   notes: string;
   reviewNotes: string;
-  orders: string[];
 }
 
 interface AvailableItem {
@@ -286,7 +284,6 @@ type ReturnFormAction =
   | { type: 'ADD_ITEM'; payload: ReturnItem }
   | { type: 'UPDATE_ITEM'; payload: { index: number; field: keyof ReturnItem; value: string | number } }
   | { type: 'REMOVE_ITEM'; payload: number }
-  | { type: 'SET_ORDERS'; payload: string[] }
   | { type: 'RESET' };
 
 const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): ReturnFormState => {
@@ -301,10 +298,8 @@ const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): Re
       return { ...state, items: newItems };
     case 'REMOVE_ITEM':
       return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
-    case 'SET_ORDERS':
-      return { ...state, orders: action.payload };
     case 'RESET':
-      return { notes: '', items: [], orders: [] };
+      return { notes: '', items: [] };
     default:
       return state;
   }
@@ -325,7 +320,7 @@ export const BranchReturns: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [selectedReturn, setSelectedReturn] = useState<Return | null>(null);
-  const [returnForm, dispatchReturnForm] = useReducer(returnFormReducer, { notes: '', items: [], orders: [] });
+  const [returnForm, dispatchReturnForm] = useReducer(returnFormReducer, { notes: '', items: [] });
   const [returnErrors, setReturnErrors] = useState<Record<string, string>>({});
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
   const [retryCount, setRetryCount] = useState(0);
@@ -399,7 +394,6 @@ export const BranchReturns: React.FC = () => {
           createdAt: ret.createdAt || new Date().toISOString(),
           notes: ret.notes || '',
           reviewNotes: ret.reviewNotes || '',
-          orders: ret.orders || [],
         })),
         total: response.total || 0,
       };
@@ -434,31 +428,6 @@ export const BranchReturns: React.FC = () => {
     enabled: !!user?.branchId,
     staleTime: 5 * 60 * 1000,
   });
-
-  const { data: ordersData } = useQuery<string[], Error>({
-    queryKey: ['orders', user?.branchId, returnForm.items, language],
-    queryFn: async () => {
-      if (!user?.branchId || !returnForm.items.length) return [];
-      const productIds = returnForm.items.map((item) => item.productId).filter((id) => isValidObjectId(id));
-      if (!productIds.length) return [];
-      const response = await returnsAxios.get('/orders', {
-        params: {
-          branch: user.branchId,
-          status: 'delivered',
-          'items.product': { $in: productIds },
-        },
-      });
-      return response.data.orders.map((order: any) => order._id);
-    },
-    enabled: !!user?.branchId && returnForm.items.length > 0,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  useEffect(() => {
-    if (ordersData) {
-      dispatchReturnForm({ type: 'SET_ORDERS', payload: ordersData });
-    }
-  }, [ordersData]);
 
   useEffect(() => {
     if (!socket || !user?.branchId) return;
@@ -662,7 +631,6 @@ export const BranchReturns: React.FC = () => {
           reasonEn: item.reasonEn,
         })),
         notes: returnForm.notes || undefined,
-        orders: returnForm.orders || [],
       };
       const response = await returnsAPI.createReturn(data);
       return { returnId: response?._id || crypto.randomUUID() };
