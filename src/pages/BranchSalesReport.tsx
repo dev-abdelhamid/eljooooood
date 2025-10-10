@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useSocket } from '../contexts/SocketContext';
 import { salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, DollarSign, Trash2, Search, X, ChevronDown } from 'lucide-react';
@@ -62,6 +63,7 @@ const translations = {
     month: 'الشهر',
     custom: 'مخصص',
     deleteSale: 'حذف المبيعة',
+    saleCreated: 'تم إنشاء مبيعة جديدة',
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       no_branch_assigned: 'لم يتم تعيين فرع',
@@ -104,6 +106,7 @@ const translations = {
     month: 'Month',
     custom: 'Custom',
     deleteSale: 'Delete Sale',
+    saleCreated: 'New sale created',
     errors: {
       unauthorized_access: 'You are not authorized to access',
       no_branch_assigned: 'No branch assigned',
@@ -262,6 +265,7 @@ const SaleSkeletonCard = React.memo(() => (
 export const BranchSalesReport: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
+  const { socket } = useSocket();
   const navigate = useNavigate();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'] || translations.en;
@@ -297,13 +301,12 @@ export const BranchSalesReport: React.FC = () => {
       newStartDate = newEndDate;
     } else if (filterPeriod === 'week') {
       const firstDayOfWeek = new Date(today);
-      firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1); // افتراضيًا الأسبوع يبدأ من الاثنين
+      firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1);
       newStartDate = firstDayOfWeek.toISOString().split('T')[0];
     } else if (filterPeriod === 'month') {
       const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
       newStartDate = firstDayOfMonth.toISOString().split('T')[0];
     } else if (filterPeriod === 'custom') {
-      // الحفاظ على القيم الحالية للمستخدم
       return;
     } else {
       newStartDate = '';
@@ -429,6 +432,24 @@ export const BranchSalesReport: React.FC = () => {
     },
     [filterPeriod, startDate, endDate, user, t, isRtl]
   );
+
+  // Handle sale creation notifications
+  useEffect(() => {
+    if (!socket || !user?.branchId) return;
+
+    socket.on('saleCreated', (data: any) => {
+      if (user.role === 'branch' && data.branchId !== user.branchId) return;
+      toast.info(t.saleCreated + `: ${data.saleNumber}`, {
+        position: isRtl ? 'top-right' : 'top-left',
+        onClick: () => navigate('/branch-sales'),
+      });
+      fetchData(1, false); // Refresh sales list
+    });
+
+    return () => {
+      socket.off('saleCreated');
+    };
+  }, [socket, user, t, isRtl, navigate, fetchData]);
 
   useEffect(() => {
     fetchData();
