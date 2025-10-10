@@ -6,7 +6,7 @@ import { ordersAPI, inventoryAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
-import { ShoppingCart, Download, Table2, Grid, AlertCircle } from 'lucide-react';
+import { ShoppingCart, Upload, Table2, Grid, AlertCircle } from 'lucide-react';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -53,8 +53,6 @@ interface Action {
   isOpen?: boolean;
   orderId?: string;
   status?: string;
-  itemId?: string;
-  items?: any[];
   by?: 'date' | 'totalAmount';
   order?: 'asc' | 'desc';
 }
@@ -229,7 +227,6 @@ const BranchOrders: React.FC = () => {
   const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
   const cacheRef = useRef<Map<string, Order[]>>(new Map());
-  const notificationCache = useRef<Set<string>>(new Set()); // For deduplicating notifications
   const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
 
   // Update stateRef when state changes
@@ -245,47 +242,24 @@ const BranchOrders: React.FC = () => {
       return;
     }
 
-    if (!socket || !isConnected) {
-      dispatch({ type: 'SET_SOCKET_ERROR', payload: t('socket.connection_error') || (isRtl ? 'خطأ في الاتصال' : 'Connection error') });
-      return;
-    }
-
-    socket.emit('joinRoom', {
-      role: user.role,
-      branchId: user.branchId,
-      userId: user._id,
-    });
+    if (!socket) return;
 
     socket.on('connect', () => {
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
       dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
-      toast.info(t('socket.connected') || (isRtl ? 'تم الاتصال' : 'Connected'), {
-        position: isRtl ? 'top-left' : 'top-right',
-        toastId: `socket-connect-${Date.now()}`,
-      });
-      socket.emit('joinRoom', {
-        role: user.role,
-        branchId: user.branchId,
-        userId: user._id,
-      });
     });
 
     socket.on('connect_error', (err) => {
-      console.error(`[${new Date().toISOString()}] Socket connect error:`, err.message);
+      console.error('Socket connect error:', err.message);
       dispatch({ type: 'SET_SOCKET_ERROR', payload: t('socket.connection_error') || (isRtl ? 'خطأ في الاتصال' : 'Connection error') });
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
-      toast.error(t('socket.connection_error') || (isRtl ? 'خطأ في الاتصال' : 'Connection error'), {
-        position: isRtl ? 'top-left' : 'top-right',
-        toastId: `socket-error-${Date.now()}`,
-      });
     });
 
     socket.on('newOrder', (order: any) => {
-      if (!order || !order._id || !order.branch || !order.branch._id || notificationCache.current.has(`${order._id}-newOrder`)) {
-        console.warn(`[${new Date().toISOString()}] Invalid or duplicate new order data:`, order);
+      if (!order || !order._id || !order.branch || !order.branch._id) {
+        console.warn('Invalid new order data:', order);
         return;
       }
-      notificationCache.current.add(`${order._id}-newOrder`);
       const mappedOrder: Order = {
         id: order._id,
         orderNumber: order.orderNumber || 'N/A',
@@ -333,16 +307,15 @@ const BranchOrders: React.FC = () => {
       playNotificationSound('/sounds/new-order.mp3', [200, 100, 200]);
       toast.success(
         isRtl ? `تم استلام طلب جديد: ${order.orderNumber}` : `New order received: ${order.orderNumber}`,
-        { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000, toastId: `${order._id}-newOrder` }
+        { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
       );
     });
 
-    socket.on('orderStatusUpdated', async ({ orderId, status, eventId }: { orderId: string; status: OrderStatus; eventId?: string }) => {
-      if (!orderId || !status || (eventId && notificationCache.current.has(eventId))) {
-        console.warn(`[${new Date().toISOString()}] Invalid or duplicate order status update data:`, { orderId, status, eventId });
+    socket.on('orderStatusUpdated', async ({ orderId, status }: { orderId: string; status: OrderStatus }) => {
+      if (!orderId || !status) {
+        console.warn('Invalid order status update data:', { orderId, status });
         return;
       }
-      if (eventId) notificationCache.current.add(eventId);
       try {
         const updatedOrder = await ordersAPI.getById(orderId);
         if (updatedOrder && updatedOrder._id && updatedOrder.branch && updatedOrder.branch._id) {
@@ -391,58 +364,48 @@ const BranchOrders: React.FC = () => {
           };
           dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status, payload: mappedOrder });
         } else {
-          console.warn(`[${new Date().toISOString()}] Invalid updated order data:`, updatedOrder);
+          console.warn('Invalid updated order data:', updatedOrder);
           dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
         }
         toast.info(
           isRtl ? `تم تحديث حالة الطلب إلى: ${t(`orders.status_${status}`)}` : `Order status updated to: ${t(`orders.status_${status}`)}`,
-          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000, toastId: eventId || `${orderId}-status-${status}` }
+          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
         );
       } catch (err) {
-        console.error(`[${new Date().toISOString()}] Failed to fetch updated order:`, err);
+        console.error('Failed to fetch updated order:', err);
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
       }
     });
 
-    socket.on('taskAssigned', ({ orderId, items, eventId }: { orderId: string; items: { _id: string; assignedTo: { _id: string; username: string } }[]; eventId?: string }) => {
-      if (eventId && notificationCache.current.has(eventId)) return;
-      if (eventId) notificationCache.current.add(eventId);
+    socket.on('taskAssigned', ({ orderId, items }: { orderId: string; items: { _id: string; assignedTo: { _id: string; username: string } }[] }) => {
       dispatch({ type: 'TASK_ASSIGNED', orderId, items });
-      toast.info(isRtl ? 'تم تعيين المهام' : 'Tasks assigned', {
-        position: isRtl ? 'top-left' : 'top-right',
-        autoClose: 3000,
-        toastId: eventId || `${orderId}-taskAssigned`,
-      });
+      toast.info(isRtl ? 'تم تعيين المهام' : 'Tasks assigned', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
     });
 
-    socket.on('missingAssignments', ({ orderId, itemId, productName, eventId }: { orderId: string; itemId: string; productName: string; eventId?: string }) => {
-      if (eventId && notificationCache.current.has(eventId)) return;
-      if (eventId) notificationCache.current.add(eventId);
+    socket.on('missingAssignments', ({ orderId, itemId, productName }: { orderId: string; itemId: string; productName: string }) => {
       dispatch({ type: 'MISSING_ASSIGNMENTS', orderId, itemId });
       toast.warn(
         isRtl ? `المنتج ${getDisplayName(productName, productName, isRtl)} بحاجة إلى تعيين` : `Product ${getDisplayName(productName, productName, isRtl)} needs assignment`,
-        { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000, toastId: eventId || `${orderId}-missing-${itemId}` }
+        { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
       );
     });
 
-    socket.on('inventoryUpdated', ({ branchId, productId, quantity, type, eventId }: { branchId: string; productId: string; quantity: number; type: string; eventId?: string }) => {
-      if (branchId === user?.branchId && (!eventId || !notificationCache.current.has(eventId))) {
-        if (eventId) notificationCache.current.add(eventId);
+    socket.on('inventoryUpdated', ({ branchId, productId, quantity, type }) => {
+      if (branchId === user?.branchId) {
         dispatch({ type: 'UPDATE_INVENTORY', payload: { productId, quantity, type } });
         toast.info(
           isRtl ? `تم تحديث المخزون للمنتج ${productId} بكمية ${quantity}` : `Inventory updated for product ${productId} with quantity ${quantity}`,
-          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000, toastId: eventId || `${productId}-inventory-${Date.now()}` }
+          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
         );
       }
     });
 
-    socket.on('restockApproved', ({ requestId, branchId, productId, quantity, eventId }: { requestId: string; branchId: string; productId: string; quantity: number; eventId?: string }) => {
-      if (branchId === user?.branchId && (!eventId || !notificationCache.current.has(eventId))) {
-        if (eventId) notificationCache.current.add(eventId);
+    socket.on('restockApproved', ({ requestId, branchId, productId, quantity }) => {
+      if (branchId === user?.branchId) {
         dispatch({ type: 'UPDATE_INVENTORY', payload: { productId, quantity, type: 'restock' } });
         toast.success(
           isRtl ? `تمت الموافقة على طلب إعادة التخزين ${requestId}` : `Restock request ${requestId} approved`,
-          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000, toastId: eventId || `${requestId}-restock` }
+          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
         );
       }
     });
@@ -457,7 +420,7 @@ const BranchOrders: React.FC = () => {
       socket.off('inventoryUpdated');
       socket.off('restockApproved');
     };
-  }, [user, t, isRtl, language, socket, isConnected, emit, playNotificationSound]);
+  }, [user, t, isRtl, language, socket, emit, playNotificationSound]);
 
   // Fetch orders with caching
   const fetchData = useCallback(
@@ -471,7 +434,7 @@ const BranchOrders: React.FC = () => {
       }
 
       dispatch({ type: 'SET_LOADING', payload: true });
-      const cacheKey = `${user.branchId}-${state.filterStatus}-${state.currentPage}-${state.viewMode}-${state.searchQuery}-${state.sortBy}-${state.sortOrder}`;
+      const cacheKey = `${user.branchId}-${state.filterStatus}-${state.currentPage}-${state.viewMode}`;
       if (cacheRef.current.has(cacheKey)) {
         dispatch({ type: 'SET_ORDERS', payload: cacheRef.current.get(cacheKey)! });
         dispatch({ type: 'SET_LOADING', payload: false });
@@ -538,7 +501,7 @@ const BranchOrders: React.FC = () => {
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
         dispatch({ type: 'SET_ERROR', payload: '' });
       } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Fetch orders error:`, err.message, err.response?.data);
+        console.error('Fetch orders error:', err.message, err.response?.data);
         if (retryCount < 2) {
           console.log(`Retrying fetchData (attempt ${retryCount + 1})`);
           setTimeout(() => fetchData(retryCount + 1), 1000);
@@ -576,8 +539,7 @@ const BranchOrders: React.FC = () => {
       doc.addFont(`${fontName}-Regular.ttf`, fontName, 'normal');
       doc.setFont(fontName);
 
-      doc.setFontSize(18);
-      doc.setTextColor(33, 33, 33);
+      doc.setFontSize(16);
       doc.text(isRtl ? 'الطلبات' : 'Orders', isRtl ? doc.internal.pageSize.width - 20 : 20, 15, { align: isRtl ? 'right' : 'left' });
 
       const headers = [
@@ -605,23 +567,9 @@ const BranchOrders: React.FC = () => {
       autoTable(doc, {
         head: [isRtl ? headers.reverse() : headers],
         body: isRtl ? data.map(row => row.reverse()) : data,
-        theme: 'striped',
-        headStyles: {
-          fillColor: [255, 193, 7],
-          textColor: 255,
-          fontSize: 10,
-          halign: isRtl ? 'right' : 'left',
-          font: fontName,
-          cellPadding: 4,
-        },
-        bodyStyles: {
-          fontSize: 9,
-          halign: isRtl ? 'right' : 'left',
-          font: fontName,
-          cellPadding: 4,
-          textColor: [33, 33, 33],
-          lineColor: [200, 200, 200],
-        },
+        theme: 'grid',
+        headStyles: { fillColor: [255, 193, 7], textColor: 255, fontSize: 10, halign: isRtl ? 'right' : 'left', font: fontName, cellPadding: 3 },
+        bodyStyles: { fontSize: 8, halign: isRtl ? 'right' : 'left', font: fontName, cellPadding: 3, textColor: [33, 33, 33] },
         margin: { top: 25, left: 10, right: 10 },
         columnStyles: {
           0: { cellWidth: 25 },
@@ -641,7 +589,6 @@ const BranchOrders: React.FC = () => {
         didDrawPage: data => {
           doc.setFont(fontName);
           doc.setFontSize(8);
-          doc.setTextColor(100, 100, 100);
           doc.text(
             isRtl ? `تم الإنشاء في: ${formatDate(new Date(), language)}` : `Generated on: ${formatDate(new Date(), language)}`,
             isRtl ? doc.internal.pageSize.width - 10 : 10,
@@ -655,13 +602,13 @@ const BranchOrders: React.FC = () => {
             { align: isRtl ? 'left' : 'right' }
           );
         },
-        styles: { overflow: 'linebreak', font: fontName, fontSize: 9, cellPadding: 4, halign: isRtl ? 'right' : 'left' },
+        styles: { overflow: 'linebreak', font: fontName, fontSize: 8, cellPadding: 3, halign: isRtl ? 'right' : 'left' },
       });
 
       doc.save('BranchOrders.pdf');
       toast.success(isRtl ? 'تم تصدير PDF بنجاح' : 'PDF export successful', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
     } catch (err) {
-      console.error(`[${new Date().toISOString()}] PDF export error:`, err);
+      console.error('PDF export error:', err);
       toast.error(isRtl ? 'خطأ في تصدير PDF' : 'PDF export error', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
     }
   }, [state.orders, t, isRtl, language, calculateTotalQuantity]);
@@ -722,7 +669,7 @@ const BranchOrders: React.FC = () => {
   const confirmDelivery = useCallback(
     async (orderId: string) => {
       if (!user?.branchId || !user?.id) {
-        console.log(`[${new Date().toISOString()}] Confirm delivery - Missing user or branch:`, { user });
+        console.log('Confirm delivery - Missing user or branch:', { user });
         toast.error(isRtl ? 'لا يوجد فرع أو مستخدم مرتبط' : 'No branch or user associated', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
         return;
       }
@@ -758,7 +705,7 @@ const BranchOrders: React.FC = () => {
             items: inventoryItems,
           });
         } catch (bulkError: any) {
-          console.warn(`[${new Date().toISOString()}] Bulk create failed: ${bulkError.message}. Falling back to individual updates.`);
+          console.warn(`Bulk create failed: ${bulkError.message}. Falling back to individual updates.`);
           for (const item of order.items) {
             try {
               let inventoryItem;
@@ -767,7 +714,7 @@ const BranchOrders: React.FC = () => {
                 inventoryItem = inventory.find((inv: any) => inv.productId === item.product._id);
               } catch (getError: any) {
                 if (getError.status === 403) {
-                  console.warn(`[${new Date().toISOString()}] Permission denied for getting inventory for branch ${user.branchId}. Proceeding to create new inventory entry.`);
+                  console.warn(`Permission denied for getting inventory for branch ${user.branchId}. Proceeding to create new inventory entry.`);
                   inventoryItem = null;
                 } else {
                   throw getError;
@@ -781,7 +728,7 @@ const BranchOrders: React.FC = () => {
                   });
                 } catch (updateError: any) {
                   if (updateError.status === 403) {
-                    console.warn(`[${new Date().toISOString()}] Permission denied for updating inventory item ${inventoryItem._id}. Creating new inventory entry.`);
+                    console.warn(`Permission denied for updating inventory item ${inventoryItem._id}. Creating new inventory entry.`);
                     await inventoryAPI.create({
                       branchId: user.branchId,
                       productId: item.product._id,
@@ -807,7 +754,7 @@ const BranchOrders: React.FC = () => {
                 });
               }
             } catch (itemError: any) {
-              console.warn(`[${new Date().toISOString()}] Failed to update inventory for product ${item.product._id}:`, itemError.message);
+              console.warn(`Failed to update inventory for product ${item.product._id}:`, itemError.message);
               toast.warn(
                 isRtl ? `فشل تحديث المخزون للمنتج ${getDisplayName(item.productName, item.productName, isRtl)}: ${itemError.message}` : `Failed to update inventory for product ${getDisplayName(item.productName, item.productName, isRtl)}: ${itemError.message}`,
                 { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
@@ -819,13 +766,13 @@ const BranchOrders: React.FC = () => {
 
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: OrderStatus.Delivered });
         if (socket && isConnected) {
-          emit('orderStatusUpdated', { orderId, status: OrderStatus.Delivered, eventId: `${orderId}-orderDelivered-${Date.now()}` });
+          emit('orderStatusUpdated', { orderId, status: OrderStatus.Delivered });
         }
         dispatch({ type: 'SET_MODAL', modal: 'confirmDelivery', isOpen: false });
         playNotificationSound('/sounds/order-delivered.mp3', [400, 100, 400]);
         toast.success(isRtl ? 'تم تأكيد التسليم' : 'Delivery confirmed successfully', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Confirm delivery error:`, err.message, err.response?.data);
+        console.error('Confirm delivery error:', err.message, err.response?.data);
         toast.error(isRtl ? `فشل في تأكيد التسليم: ${err.message}` : `Failed to confirm delivery: ${err.message}`, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
@@ -846,14 +793,14 @@ const BranchOrders: React.FC = () => {
         await ordersAPI.updateStatus(orderId, { status });
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
         if (socket && isConnected) {
-          emit('orderStatusUpdated', { orderId, status, eventId: `${orderId}-status-${status}-${Date.now()}` });
+          emit('orderStatusUpdated', { orderId, status });
         }
         toast.success(
           isRtl ? `تم تحديث حالة الطلب إلى: ${t(`orders.status_${status}`)}` : `Order status updated to: ${t(`orders.status_${status}`)}`,
-          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000, toastId: `${orderId}-status-${status}` }
+          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
         );
       } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Update order status error:`, err.message, err.response?.data);
+        console.error('Update order status error:', err.message, err.response?.data);
         toast.error(isRtl ? `فشل في تحديث الحالة: ${err.message}` : `Failed to update status: ${err.message}`, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
@@ -870,94 +817,75 @@ const BranchOrders: React.FC = () => {
 
   // Render
   return (
-    <div className="px-4 py-6 min-h-screen bg-gray-50" dir={isRtl ? 'rtl' : 'ltr'}>
-      <Suspense fallback={<LoadingSpinner size="lg" className="mx-auto mt-12" />}>
+    <div className="px-4 py-6 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
+      <Suspense fallback={<LoadingSpinner size="lg" />}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-8">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 flex items-center gap-3">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-800 flex items-center gap-3">
                 <ShoppingCart className="w-8 h-8 text-amber-600" />
                 {isRtl ? 'الطلبات' : 'Orders'}
               </h1>
-              <p className="text-sm text-gray-600 mt-1">{isRtl ? 'إدارة طلبات الفرع' : 'Manage branch orders'}</p>
+              <p className="text-sm text-gray-500 mt-1">{isRtl ? 'إدارة طلبات الفرع' : 'Manage branch orders'}</p>
             </div>
             <div className="flex gap-3 flex-wrap">
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
                 onClick={state.orders.length > 0 ? exportToPDF : undefined}
                 className={`flex items-center gap-2 ${
-                  state.orders.length > 0
-                    ? 'bg-amber-600 hover:bg-amber-700 text-white'
-                    : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-lg px-4 py-2 text-sm font-medium shadow-sm transition-colors duration-200`}
+                  state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                } rounded-lg px-4 py-2 text-sm shadow-sm`}
                 disabled={state.orders.length === 0}
               >
-                <Download className="w-5 h-5" />
+                <Upload className="w-5 h-5" />
                 {isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
               </Button>
               <Button
                 variant="secondary"
                 onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' })}
-                className="flex items-center gap-2 bg-white hover:bg-gray-100 text-gray-800 rounded-lg px-4 py-2 text-sm font-medium shadow-sm border border-gray-200 transition-colors duration-200"
+                className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg px-4 py-2 text-sm shadow-sm"
               >
                 {state.viewMode === 'card' ? <Table2 className="w-5 h-5" /> : <Grid className="w-5 h-5" />}
                 {isRtl ? (state.viewMode === 'card' ? 'عرض كجدول' : 'عرض كبطاقات') : state.viewMode === 'card' ? 'View as Table' : 'View as Cards'}
               </Button>
             </div>
           </div>
-          {!state.socketConnected && (
-            <motion.div
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center gap-3"
-            >
-              <AlertCircle className="w-5 h-5 text-yellow-600" />
-              <span className="text-sm text-yellow-600 font-medium">
-                {t('socket.connection_error') || (isRtl ? 'غير متصل بالتحديثات المباشرة' : 'Not connected to real-time updates')}
-              </span>
-              <Button
-                variant="secondary"
-                onClick={() => socket?.connect()}
-                className="ml-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-3 py-1.5 text-xs font-medium"
-              >
-                {isRtl ? 'إعادة المحاولة' : 'Retry'}
-              </Button>
-            </motion.div>
-          )}
-          <Card className="p-4 sm:p-6 mt-6 bg-white shadow-lg rounded-xl border border-gray-100">
-            <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-              <div className="sm:col-span-3 lg:col-span-3">
+          <Card className="p-4 sm:p-6 mt-6 bg-white shadow-lg rounded-lg border border-gray-100">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
                 <ProductSearchInput
                   value={state.searchQuery}
                   onChange={handleSearchChange}
                   placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 focus:border-amber-500 shadow-sm text-sm py-2.5"
+                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
                 />
               </div>
-              <div className="sm:col-span-1 lg:col-span-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
-                <ProductDropdown
-                  options={statusOptions.map(opt => ({
-                    value: opt.value,
-                    label: t(`orders.status_${opt.value}`) || (isRtl ? 'كل الحالات' : 'All Statuses'),
-                  }))}
-                  value={state.filterStatus || ''}
-                  onChange={(value: string) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 focus:border-amber-500 shadow-sm text-sm py-2.5"
-                />
-              </div>
-              <div className="sm:col-span-1 lg:col-span-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
-                <ProductDropdown
-                  options={sortOptions.map(opt => ({
-                    value: opt.value,
-                    label: t(`orders.${opt.label}`) || opt.label,
-                  }))}
-                  value={state.sortBy}
-                  onChange={(value: string) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
-                  className="w-full rounded-lg border-gray-200 focus:ring-amber-500 focus:border-amber-500 shadow-sm text-sm py-2.5"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
+                  <ProductDropdown
+                    options={statusOptions.map(opt => ({
+                      value: opt.value,
+                      label: t(`orders.status_${opt.value}`) || (isRtl ? 'كل الحالات' : 'All Statuses'),
+                    }))}
+                    value={state.filterStatus || ''}
+                    onChange={(value: string) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
+                    className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
+                  <ProductDropdown
+                    options={sortOptions.map(opt => ({
+                      value: opt.value,
+                      label: t(`orders.${opt.label}`) || opt.label,
+                    }))}
+                    value={state.sortBy}
+                    onChange={(value: string) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
+                    className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                  />
+                </div>
               </div>
             </div>
             <div className="text-sm text-center text-gray-500 mt-4">
@@ -974,7 +902,7 @@ const BranchOrders: React.FC = () => {
             </motion.div>
           ) : state.error && state.orders.length === 0 ? (
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="mt-6">
-              <Card className="p-6 max-w-md mx-auto text-center bg-red-50 shadow-lg rounded-xl border border-red-100">
+              <Card className="p-6 max-w-md mx-auto text-center bg-red-50 shadow-lg rounded-lg border border-red-100">
                 <div className={`flex items-center justify-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <AlertCircle className="w-6 h-6 text-red-600" />
                   <p className="text-lg font-medium text-red-600">{state.error}</p>
@@ -982,7 +910,7 @@ const BranchOrders: React.FC = () => {
                 <Button
                   variant="primary"
                   onClick={() => fetchData()}
-                  className="mt-4 bg-amber-600 hover:bg-amber-700 text-white rounded-lg px-6 py-2 text-sm font-medium shadow-sm transition-colors duration-200"
+                  className="mt-4 bg-amber-500 hover:bg-amber-600 text-white rounded-lg px-6 py-2 text-sm shadow-sm"
                 >
                   {isRtl ? 'إعادة المحاولة' : 'Retry'}
                 </Button>
@@ -992,7 +920,7 @@ const BranchOrders: React.FC = () => {
             <AnimatePresence>
               {paginatedOrders.length === 0 ? (
                 <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-6">
-                  <Card className="p-8 sm:p-12 text-center bg-white shadow-lg rounded-xl border border-gray-100">
+                  <Card className="p-8 sm:p-12 text-center bg-white shadow-lg rounded-lg border border-gray-100">
                     <ShoppingCart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-800 mb-2">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
                     <p className="text-sm text-gray-500">
