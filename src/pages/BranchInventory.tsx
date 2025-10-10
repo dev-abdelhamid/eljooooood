@@ -155,6 +155,7 @@ const translations = {
       branchNotFound: 'الفرع غير موجود',
       productNotFound: 'المنتج غير موجود',
       tooManyRequests: 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا',
+      duplicateProduct: 'لا يمكن إضافة نفس المنتج أكثر من مرة',
     },
     notifications: {
       returnApproved: 'تمت الموافقة على طلب الإرجاع',
@@ -229,6 +230,7 @@ const translations = {
       branchNotFound: 'Branch not found',
       productNotFound: 'Product not found',
       tooManyRequests: 'Too many requests, please try again later',
+      duplicateProduct: 'Cannot add the same product multiple times',
     },
     notifications: {
       returnApproved: 'Return request approved',
@@ -328,6 +330,24 @@ const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): Re
 
 // Validate ObjectId
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
+
+// Aggregate items by product
+const aggregateItemsByProduct = (items: ReturnItem[]): ReturnItem[] => {
+  const aggregated: Record<string, ReturnItem> = {};
+  items.forEach((item) => {
+    if (!aggregated[item.product]) {
+      aggregated[item.product] = {
+        product: item.product,
+        quantity: 0,
+        reason: item.reason,
+        reasonEn: item.reasonEn,
+        maxQuantity: item.maxQuantity,
+      };
+    }
+    aggregated[item.product].quantity += item.quantity;
+  });
+  return Object.values(aggregated);
+};
 
 export const BranchInventory: React.FC = () => {
   const { t: languageT, language } = useLanguage();
@@ -660,6 +680,14 @@ export const BranchInventory: React.FC = () => {
         }));
         return;
       }
+      // Check for duplicate products
+      if (returnForm.items.some((item, i) => i !== index && item.product === productId)) {
+        setReturnErrors((prev) => ({
+          ...prev,
+          [`item_${index}_product`]: t.errors.duplicateProduct,
+        }));
+        return;
+      }
       const inventoryItem = inventoryData?.find((inv) => inv.product?._id === productId);
       if (!inventoryItem) {
         setReturnErrors((prev) => ({
@@ -681,7 +709,7 @@ export const BranchInventory: React.FC = () => {
         payload: { index, field: 'quantity', value: 1 },
       });
     },
-    [inventoryData, t]
+    [inventoryData, t, returnForm.items]
   );
 
   const removeItemFromForm = useCallback((index: number) => {
@@ -744,9 +772,21 @@ export const BranchInventory: React.FC = () => {
     mutationFn: async () => {
       if (!validateReturnForm()) throw new Error(t.errors.invalidForm);
       if (!user?.branchId) throw new Error(t.errors.noBranch);
+      // Aggregate items by product before sending
+      const aggregatedItems = aggregateItemsByProduct(returnForm.items);
+      // Validate aggregated quantities
+      for (const item of aggregatedItems) {
+        const inventoryItem = inventoryData?.find((inv) => inv.product?._id === item.product);
+        if (!inventoryItem) {
+          throw new Error(`${t.errors.productNotFound}: ${item.product}`);
+        }
+        if (item.quantity > inventoryItem.currentStock) {
+          throw new Error(`${t.errors.insufficientQuantity}: ${item.product}`);
+        }
+      }
       const data = {
         branchId: user.branchId,
-        items: returnForm.items.map((item) => ({
+        items: aggregatedItems.map((item) => ({
           product: item.product,
           quantity: item.quantity,
           reason: item.reason,
@@ -755,6 +795,7 @@ export const BranchInventory: React.FC = () => {
         })),
         notes: returnForm.notes || undefined,
       };
+      console.log(`[${new Date().toISOString()}] Aggregated return items:`, data);
       const response = await returnsAPI.createReturn(data);
       return {
         returnId: response?.returnRequest?._id || crypto.randomUUID(),
@@ -798,6 +839,13 @@ export const BranchInventory: React.FC = () => {
         errorMessage = t.errors.invalidProductId;
       } else if (err.message.includes('المنتج غير موجود') || err.message.includes('Product not found')) {
         errorMessage = t.errors.productNotFound;
+      } else if (err.message.includes('تضارب في تحديث المخزون') || err.message.includes('Conflict in updating inventory stock')) {
+        errorMessage = t.errors.createReturn;
+        console.error(`[${new Date().toISOString()}] Inventory update conflict:`, {
+          branchId: user?.branchId,
+          items: returnForm.items,
+          error: err.message,
+        });
       }
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       setReturnErrors((prev) => ({ ...prev, form: errorMessage }));
