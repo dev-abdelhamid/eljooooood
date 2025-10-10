@@ -1,7 +1,6 @@
-// Now, the corrected OrderCard component
 import React, { memo } from 'react';
 import { Button } from '../UI/Button';
-import { Eye, Truck, Clock, Package, Check, AlertCircle } from 'lucide-react';
+import { Eye, Clock, Package, Check, Truck, AlertCircle } from 'lucide-react';
 import { Order } from '../../types/types';
 import { motion } from 'framer-motion';
 
@@ -25,17 +24,15 @@ interface Props {
   order: Order;
   t: (key: string, params?: any) => string;
   isRtl: boolean;
-  calculateAdjustedTotal: (order: Order) => string;
   calculateTotalQuantity: (order: Order) => number;
   viewOrder: (order: Order) => void;
   openConfirmDeliveryModal: (order: Order) => void;
-  openReturnModal: (order: Order) => void;
   user: any;
   submitting: string | null;
 }
 
 const OrderCard: React.FC<Props> = memo(
-  ({ order, t, isRtl, calculateAdjustedTotal, calculateTotalQuantity, viewOrder, openConfirmDeliveryModal, openReturnModal, user, submitting }) => {
+  ({ order, t, isRtl, calculateTotalQuantity, viewOrder, openConfirmDeliveryModal, user, submitting }) => {
     const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS.pending;
     const StatusIcon = statusInfo.icon;
 
@@ -69,7 +66,9 @@ const OrderCard: React.FC<Props> = memo(
               </div>
               <div>
                 <p className="text-xs leading-relaxed text-gray-500">{t('orders.total_amount')}</p>
-                <p className="text-sm font-semibold text-teal-600">{calculateAdjustedTotal(order)}</p>
+                <p className="text-sm font-semibold text-teal-600">
+                  {order.totalAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
+                </p>
               </div>
               <div>
                 <p className="text-xs leading-relaxed text-gray-500">{t('orders.date')}</p>
@@ -82,22 +81,6 @@ const OrderCard: React.FC<Props> = memo(
                 {order.items.map(item => `(${item.quantity} ${t(`${item.unit || 'unit'}`)} × ${getFirstTwoWords(item.productName)})`).join(' + ')}
               </p>
             </div>
-            {order.returns?.length > 0 && (
-              <div className="mt-2 p-2 bg-amber-50 rounded-md">
-                <p className="text-xs font-medium text-amber-800">{t('orders.returns')}:</p>
-                {order.returns.map((r, i) => (
-                  <p key={i} className="text-xs text-amber-700">
-                    {isRtl
-                      ? `${t('orders.return')} ${r.items
-                          .map(item => `${item.quantity} ${t(`units.${item.unit || 'unit'}`)} × ${getFirstTwoWords(item.productName)} (${t(`orders.return_reasons_${item.reason}`)})`)
-                          .join(', ')} - ${t(`orders.return_status_${r.status}`)}`
-                      : `${t('orders.return')} ${r.items
-                          .map(item => `${item.quantity} ${t(`units.${item.unit || 'unit'}`)} × ${getFirstTwoWords(item.productName)} (${t(`orders.return_reasons_${item.reason}`)})`)
-                          .join(', ')} - ${t(`orders.return_status_${r.status}`)}`}
-                  </p>
-                ))}
-              </div>
-            )}
             {order.notes && (
               <div className="mt-2 p-2 bg-amber-50 rounded-md">
                 <p className="text-xs text-amber-800">
@@ -125,18 +108,6 @@ const OrderCard: React.FC<Props> = memo(
                   aria-label={t('orders.confirm_delivery', { orderNumber: order.orderNumber })}
                 >
                   {t('orders.confirm_delivery')}
-                </Button>
-              )}
-              {order.status === 'delivered' && user?.role === 'branch' && order.branch?._id === user.branchId && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => openReturnModal(order)}
-                  className="bg-red-500 hover:bg-red-600 text-white rounded-full px-3 py-1 text-xs"
-                  disabled={submitting === 'return'}
-                  aria-label={t('orders.return_order', { orderNumber: order.orderNumber })}
-                >
-                  {t('orders.return')}
                 </Button>
               )}
             </div>

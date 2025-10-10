@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { Button } from '../UI/Button';
-import { Eye, Truck } from 'lucide-react';
+import { Eye } from 'lucide-react';
 import { Order } from '../../types/types';
 
 const STATUS_COLORS = {
@@ -23,18 +23,16 @@ interface Props {
   orders: Order[];
   t: (key: string, params?: any) => string;
   isRtl: boolean;
-  calculateAdjustedTotal: (order: Order) => string;
   calculateTotalQuantity: (order: Order) => number;
   startIndex: number;
   viewOrder: (order: Order) => void;
   openConfirmDeliveryModal: (order: Order) => void;
-  openReturnModal: (order: Order, itemId: string) => void;
   user: any;
   submitting: string | null;
 }
 
 const OrderTable: React.FC<Props> = memo(
-  ({ orders, t, isRtl, calculateAdjustedTotal, calculateTotalQuantity, startIndex, viewOrder, openConfirmDeliveryModal, openReturnModal, user, submitting }) => (
+  ({ orders, t, isRtl, calculateTotalQuantity, startIndex, viewOrder, openConfirmDeliveryModal, user, submitting }) => (
     <div className="overflow-x-auto rounded-lg shadow-md border border-gray-200">
       <table className="min-w-full divide-y divide-gray-200 table-auto bg-white">
         <thead className="bg-gray-50">
@@ -61,10 +59,12 @@ const OrderTable: React.FC<Props> = memo(
                     {t(`orders.status_${statusInfo.label}`)}
                   </span>
                 </td>
-                <td className="px-4 py-2 leading-6 whitespace-nowrap text-sm text-gray-600 text-right ">
+                <td className="px-4 py-2 leading-6 whitespace-nowrap text-sm text-gray-600 text-right">
                   {order.items.map(item => `(${item.quantity} ${t(`${item.unit || 'unit'}`)} × ${getFirstTwoWords(item.productName)})`).join(' + ')}
                 </td>
-                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{calculateAdjustedTotal(order)}</td>
+                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">
+                  {order.totalAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
+                </td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{calculateTotalQuantity(order)}</td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600 text-right">{order.date}</td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-right">
@@ -88,18 +88,6 @@ const OrderTable: React.FC<Props> = memo(
                         aria-label={t('orders.confirm_delivery', { orderNumber: order.orderNumber })}
                       >
                         {t('orders.confirm_delivery')}
-                      </Button>
-                    )}
-                    {order.status === 'delivered' && user?.role === 'branch' && order.branch._id === user.branchId && (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => openReturnModal(order, order.items[0].itemId)}
-                        className="bg-red-500 hover:bg-red-600 text-white rounded-full px-3 py-1 text-xs"
-                        disabled={submitting === 'return'}
-                        aria-label={t('orders.return_order', { orderNumber: order.orderNumber })}
-                      >
-                        {t('orders.return')}
                       </Button>
                     )}
                   </div>
