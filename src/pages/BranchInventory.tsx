@@ -1349,5 +1349,3 @@ export const BranchInventory: React.FC = () => {
     </div>
   );
 };
-
-export default BranchInventory;
