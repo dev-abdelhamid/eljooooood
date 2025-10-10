@@ -32,6 +32,7 @@ interface ReturnItem {
   reason: string;
   reasonEn: string;
   maxQuantity: number;
+  price?: number;
 }
 
 interface ReturnFormState {
@@ -136,7 +137,8 @@ const translations = {
       insufficientQuantity: 'الكمية غير كافية للمنتج في المخزون',
       productNotFound: 'المنتج غير موجود',
       invalidReasonPair: 'سبب الإرجاع وسبب الإرجاع بالإنجليزية غير متطابقين',
-      writeConflict: 'تعارض في الكتابة، حاول مرة أخرى',
+      writeConflict: 'تعارض في الكتابة، جاري إعادة المحاولة...',
+      duplicateProduct: 'لا يمكن إضافة نفس المنتج أكثر من مرة في طلب الإرجاع',
     },
     socket: {
       connected: 'تم الاتصال بالخادم',
@@ -207,7 +209,8 @@ const translations = {
       insufficientQuantity: 'Insufficient quantity for the product in inventory',
       productNotFound: 'Product not found',
       invalidReasonPair: 'Return reason and English reason do not match',
-      writeConflict: 'Write conflict, please try again',
+      writeConflict: 'Write conflict, retrying...',
+      duplicateProduct: 'Cannot add the same product multiple times in one return request',
     },
     socket: {
       connected: 'Connected to server',
@@ -412,7 +415,7 @@ export const BranchReturns: React.FC = () => {
     },
   });
 
-  const { data: inventoryData } = useQuery<AvailableItem[], Error>({
+  const { data: inventoryData, refetch: refetchInventory } = useQuery<AvailableItem[], Error>({
     queryKey: ['inventory', user?.branchId, language],
     queryFn: async () => {
       if (!user?.branchId) return [];
@@ -441,14 +444,12 @@ export const BranchReturns: React.FC = () => {
       if (!user?.branchId || !returnForm.items.length) return [];
       const productIds = returnForm.items.map((item) => item.productId).filter((id) => isValidObjectId(id));
       if (!productIds.length) return [];
-      const response = await returnsAxios.get('/orders', {
-        params: {
-          branch: user.branchId,
-          status: 'delivered',
-          'items.product': { $in: productIds },
-        },
+      const response = await returnsAPI.getAll({
+        branch: user.branchId,
+        status: 'delivered',
+        'items.product': { $in: productIds },
       });
-      return response.data.orders.map((order: any) => order._id);
+      return response.orders.map((order: any) => order._id);
     },
     enabled: !!user?.branchId && returnForm.items.length > 0,
     staleTime: 5 * 60 * 1000,
@@ -460,12 +461,40 @@ export const BranchReturns: React.FC = () => {
     }
   }, [ordersData]);
 
+  // Fetch real-time available stock before submitting
+  const validateStock = useCallback(async () => {
+    if (!user?.branchId || !returnForm.items.length) return true;
+    const productIds = returnForm.items.map((item) => item.productId).filter((id) => isValidObjectId(id));
+    if (!productIds.length) return false;
+    try {
+      const response = await returnsAPI.getAvailableStock(user.branchId, productIds);
+      const stockMap = new Map(response.map((item: any) => [item.productId, item.available]));
+      const errors: Record<string, string> = {};
+      returnForm.items.forEach((item, index) => {
+        const available = stockMap.get(item.productId) || 0;
+        if (item.quantity > available) {
+          errors[`item_${index}_quantity`] = t.errors.insufficientQuantity;
+        }
+        dispatchReturnForm({
+          type: 'UPDATE_ITEM',
+          payload: { index, field: 'maxQuantity', value: available },
+        });
+      });
+      setReturnErrors((prev) => ({ ...prev, ...errors }));
+      return Object.keys(errors).length === 0;
+    } catch (err) {
+      toast.error(t.errors.insufficientQuantity, { position: isRtl ? 'top-right' : 'top-left' });
+      return false;
+    }
+  }, [returnForm.items, user?.branchId, t, isRtl]);
+
   useEffect(() => {
     if (!socket || !user?.branchId) return;
 
     const handleReturnCreated = ({ branchId, returnNumber }: { branchId: string; returnNumber: string }) => {
       if (branchId === user.branchId) {
         queryClient.invalidateQueries({ queryKey: ['returns'] });
+        queryClient.invalidateQueries({ queryKey: ['inventory'] });
         toast.success(t.newReturnNotification.replace('{returnNumber}', returnNumber), {
           position: isRtl ? 'top-right' : 'top-left',
         });
@@ -475,6 +504,7 @@ export const BranchReturns: React.FC = () => {
     const handleReturnStatusUpdated = ({ branchId, status }: { branchId: string; status: string }) => {
       if (branchId === user.branchId) {
         queryClient.invalidateQueries({ queryKey: ['returns'] });
+        queryClient.invalidateQueries({ queryKey: ['inventory'] });
         toast.info(t.socket.returnStatusUpdated.replace('{status}', t.status[status as keyof typeof t.status] || status), {
           position: isRtl ? 'top-right' : 'top-left',
         });
@@ -519,12 +549,14 @@ export const BranchReturns: React.FC = () => {
   const productOptions = useMemo(
     () => [
       { value: '', label: t.selectProduct },
-      ...availableItems.map((item) => ({
-        value: item.productId,
-        label: `${item.productName} (${t.quantity}: ${item.available} ${item.displayUnit})`,
-      })),
+      ...availableItems
+        .filter((item) => !returnForm.items.some((i) => i.productId === item.productId)) // Exclude already selected products
+        .map((item) => ({
+          value: item.productId,
+          label: `${item.productName} (${t.quantity}: ${item.available} ${item.displayUnit})`,
+        })),
     ],
-    [availableItems, t]
+    [availableItems, t, returnForm.items]
   );
 
   useEffect(() => {
@@ -559,7 +591,7 @@ export const BranchReturns: React.FC = () => {
   const addItemToForm = useCallback(() => {
     dispatchReturnForm({
       type: 'ADD_ITEM',
-      payload: { productId: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0 },
+      payload: { productId: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0, price: 0 },
     });
   }, []);
 
@@ -589,6 +621,10 @@ export const BranchReturns: React.FC = () => {
 
   const handleProductChange = useCallback(
     (index: number, productId: string) => {
+      if (returnForm.items.some((item, i) => i !== index && item.productId === productId)) {
+        toast.error(t.errors.duplicateProduct, { position: isRtl ? 'top-right' : 'top-left' });
+        return;
+      }
       const inventoryItem = inventoryData?.find((inv) => inv.productId === productId);
       dispatchReturnForm({
         type: 'UPDATE_ITEM',
@@ -610,21 +646,31 @@ export const BranchReturns: React.FC = () => {
         type: 'UPDATE_ITEM',
         payload: { index, field: 'reasonEn', value: '' },
       });
+      dispatchReturnForm({
+        type: 'UPDATE_ITEM',
+        payload: { index, field: 'price', value: inventoryItem?.price || 0 },
+      });
     },
-    [inventoryData]
+    [inventoryData, returnForm.items, t, isRtl]
   );
 
   const removeItemFromForm = useCallback((index: number) => {
     dispatchReturnForm({ type: 'REMOVE_ITEM', payload: index });
   }, []);
 
-  const validateReturnForm = useCallback(() => {
+  const validateReturnForm = useCallback(async () => {
     const errors: Record<string, string> = {};
     if (!user?.branchId) {
       errors.form = t.errors.noBranch;
     }
     if (returnForm.items.length === 0) {
       errors.items = t.errors.required.replace('{field}', t.items);
+    }
+    // Check for duplicate products
+    const productIds = returnForm.items.map((item) => item.productId);
+    const duplicates = productIds.filter((id, index) => id && productIds.indexOf(id) !== index);
+    if (duplicates.length > 0) {
+      errors.items = t.errors.duplicateProduct;
     }
     returnForm.items.forEach((item, index) => {
       if (!item.productId) {
@@ -641,17 +687,25 @@ export const BranchReturns: React.FC = () => {
       const inventoryItem = inventoryData?.find((inv) => inv.productId === item.productId);
       if (!inventoryItem) {
         errors[`item_${index}_productId`] = t.errors.productNotFound;
-      } else if (item.quantity > inventoryItem.available) {
-        errors[`item_${index}_quantity`] = t.errors.insufficientQuantity;
+      }
+    });
+    // Validate reason pairs
+    returnForm.items.forEach((item, index) => {
+      const reasonPair = reasonOptions.find((opt) => opt.value === item.reason);
+      if (reasonPair && item.reasonEn !== reasonPair.enValue) {
+        errors[`item_${index}_reason`] = t.errors.invalidReasonPair;
       }
     });
     setReturnErrors(errors);
-    return Object.keys(errors).length === 0;
-  }, [returnForm, t, inventoryData, user]);
+    if (Object.keys(errors).length > 0) return false;
+    // Validate stock in real-time
+    return await validateStock();
+  }, [returnForm, t, inventoryData, user, validateStock, reasonOptions]);
 
-  const createReturnMutation = useMutation<{ returnId: string }, Error, void>({
+  const createReturnMutation = useMutation<{ returnId: string; returnNumber: string }, Error, void>({
     mutationFn: async () => {
-      if (!validateReturnForm()) throw new Error(t.errors.invalidForm);
+      const isValid = await validateReturnForm();
+      if (!isValid) throw new Error(t.errors.invalidForm);
       if (!user?.branchId) throw new Error(t.errors.noBranch);
       const data = {
         branchId: user.branchId,
@@ -660,15 +714,17 @@ export const BranchReturns: React.FC = () => {
           quantity: item.quantity,
           reason: item.reason,
           reasonEn: item.reasonEn,
+          price: item.price || 0,
         })),
         notes: returnForm.notes || undefined,
         orders: returnForm.orders || [],
       };
       const response = await returnsAPI.createReturn(data);
-      return { returnId: response?._id || crypto.randomUUID() };
+      return { returnId: response?.returnRequest?._id || crypto.randomUUID(), returnNumber: response?.returnRequest?.returnNumber || `RET-${response?._id.slice(-6)}` };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['returns'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
       setIsCreateModalOpen(false);
       dispatchReturnForm({ type: 'RESET' });
       setReturnErrors({});
@@ -677,19 +733,19 @@ export const BranchReturns: React.FC = () => {
       socket?.emit('returnCreated', {
         branchId: user?.branchId,
         returnId: data.returnId,
-        returnNumber: `RET-${data.returnId.slice(-6)}`,
+        returnNumber: data.returnNumber,
         status: 'pending_approval',
         eventId: crypto.randomUUID(),
       });
     },
     onError: (err) => {
-      if (err.message.includes('Write conflict') && retryCount < 3) {
+      if (err.message.includes('conflict') && retryCount < 3) {
         setRetryCount(retryCount + 1);
-        setTimeout(() => createReturnMutation.mutate(), 2000 * (retryCount + 1));
         toast.info(t.errors.writeConflict, { position: isRtl ? 'top-right' : 'top-left' });
+        setTimeout(() => createReturnMutation.mutate(), 2000 * (retryCount + 1));
       } else {
         toast.error(err.message || t.errors.createReturn, { position: isRtl ? 'top-right' : 'top-left' });
-        setReturnErrors({ form: err.message });
+        setReturnErrors({ form: err.message || t.errors.createReturn });
       }
     },
   });
@@ -777,7 +833,10 @@ export const BranchReturns: React.FC = () => {
           </div>
         </div>
         <button
-          onClick={() => setIsCreateModalOpen(true)}
+          onClick={() => {
+            setIsCreateModalOpen(true);
+            refetchInventory(); // Refresh inventory before opening modal
+          }}
           className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
@@ -963,7 +1022,7 @@ export const BranchReturns: React.FC = () => {
               <button
                 onClick={addItemToForm}
                 className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
-                disabled={availableItems.length === 0}
+                disabled={availableItems.length === 0 || productOptions.length <= 1}
               >
                 <Plus className="w-4 h-4" />
                 {t.addItem}

@@ -23,9 +23,9 @@ axiosRetry(returnsAxios, {
 returnsAxios.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token');
-   const language = localStorage.getItem('language') || 'ar';
+    const language = localStorage.getItem('language') || 'ar';
     const isRtl = language === 'ar';
-        if (token) {
+    if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     config.params = { ...config.params, lang: language };
@@ -46,7 +46,7 @@ returnsAxios.interceptors.request.use(
 
 // Response interceptor for consistent error handling
 returnsAxios.interceptors.response.use(
-  (response) => response, // Return full response instead of response.data
+  (response) => response,
   async (error) => {
     const originalRequest = error.config;
     const language = localStorage.getItem('language') || 'ar';
@@ -140,6 +140,7 @@ export const returnsAPI = {
     try {
       if (query.branch && !isValidObjectId(query.branch)) {
         console.error(`[${new Date().toISOString()}] returnsAPI.getAll - Invalid branch ID:`, query.branch);
+        throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
       }
       const response = await returnsAxios.get('/returns', { params: query });
       console.log(`[${new Date().toISOString()}] returnsAPI.getAll - Response:`, response.data);
@@ -162,16 +163,39 @@ export const returnsAPI = {
     }
   },
 
+  getAvailableStock: async (branchId: string, productIds: string[]) => {
+    console.log(`[${new Date().toISOString()}] returnsAPI.getAvailableStock - Sending:`, { branchId, productIds });
+    try {
+      if (!isValidObjectId(branchId)) {
+        console.error(`[${new Date().toISOString()}] returnsAPI.getAvailableStock - Invalid branch ID:`, branchId);
+        throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
+      }
+      if (productIds.some((id) => !isValidObjectId(id))) {
+        console.error(`[${new Date().toISOString()}] returnsAPI.getAvailableStock - Invalid product ID in:`, productIds);
+        throw new Error(isRtl ? 'معرف منتج غير صالح' : 'Invalid product ID');
+      }
+      const response = await returnsAxios.get('/inventory/available', {
+        params: { branchId, productIds: productIds.join(',') },
+      });
+      console.log(`[${new Date().toISOString()}] returnsAPI.getAvailableStock - Response:`, response.data);
+      return response.data;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] returnsAPI.getAvailableStock - Error:`, error);
+      throw error;
+    }
+  },
+
   createReturn: async (data: {
     branchId: string;
     items: Array<{
-      product: string; // Changed from productId to product
+      product: string;
       quantity: number;
       reason: string;
-            reasonEn: string;
-      price: number;
+      reasonEn: string;
+      price?: number;
     }>;
     notes?: string;
+    orders?: string[];
   }) => {
     console.log(`[${new Date().toISOString()}] returnsAPI.createReturn - Sending:`, data);
     try {
@@ -194,14 +218,14 @@ export const returnsAPI = {
     }
   },
 
-  updateReturnStatus: async (returnId: string, status: string) => {
-    console.log(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Sending:`, { returnId, status });
+  updateReturnStatus: async (returnId: string, status: string, reviewNotes?: string) => {
+    console.log(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Sending:`, { returnId, status, reviewNotes });
     try {
       if (!isValidObjectId(returnId)) {
         console.error(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Invalid return ID:`, returnId);
         throw new Error(isRtl ? 'معرف الإرجاع غير صالح' : 'Invalid return ID');
       }
-      const response = await returnsAxios.patch(`/returns/${returnId}/status`, { status });
+      const response = await returnsAxios.put(`/returns/${returnId}`, { status, reviewNotes });
       console.log(`[${new Date().toISOString()}] returnsAPI.updateReturnStatus - Response:`, response.data);
       return response.data;
     } catch (error: any) {
