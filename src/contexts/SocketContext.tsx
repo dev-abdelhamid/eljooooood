@@ -66,10 +66,9 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   useEffect(() => {
-    if (!user || !user.id || !user._id || !user.role) {
+    if (!user) {
       socket.disconnect();
       setIsConnected(false);
-      console.warn(`[${new Date().toISOString()}] Cannot connect socket: Invalid user data`, user);
       return;
     }
 
@@ -78,12 +77,12 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     const joinRoomOnConnect = () => {
-      if (socket.connected && user.role) {
+      if (socket.connected) {
         emit('joinRoom', {
           role: user.role,
-          branchId: user.branchId || undefined,
-          chefId: user.role === 'chef' ? (user._id || user.id) : undefined,
-          departmentId: user.role === 'production' ? (user.departmentId || user._id) : undefined,
+          branchId: user.branchId,
+          chefId: user.role === 'chef' ? user._id || user.id : null,
+          departmentId: user.role === 'production' ? user._id || user.departmentId : null,
           userId: user._id || user.id,
         });
       }
