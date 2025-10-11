@@ -1,3 +1,4 @@
+// Modified frontend code (SalesAnalytics.jsx)
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,6 +20,7 @@ interface SalesAnalytics {
     displayName: string;
     totalSales: number;
     saleCount: number;
+    averageOrderValue: number;
   }>;
   leastBranchSales: Array<{
     branchId: string;
@@ -27,6 +29,7 @@ interface SalesAnalytics {
     displayName: string;
     totalSales: number;
     saleCount: number;
+    averageOrderValue: number;
   }>;
   productSales: Array<{
     productId: string;
@@ -187,6 +190,35 @@ const SearchInput: React.FC<{
   );
 });
 
+const BranchTable: React.FC<{ data: SalesAnalytics['branchSales']; title: string; language: string; currency: string }> = React.memo(({ data, title, language, currency }) => {
+  const isRtl = language === 'ar';
+  return (
+    <div className="overflow-x-auto mt-4">
+      <h4 className="text-sm font-medium text-gray-700 mb-2">{title}</h4>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-gray-50">
+            <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'}`}>{translations[language].branchSales}</th>
+            <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'}`}>{translations[language].totalSales} ({currency})</th>
+            <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'}`}>{translations[language].totalCount}</th>
+            <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'}`}>{translations[language].averageOrderValue} ({currency})</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((branch, index) => (
+            <tr key={index} className="border-t">
+              <td className="p-2">{branch.displayName}</td>
+              <td className="p-2">{safeNumber(branch.totalSales).toFixed(2)}</td>
+              <td className="p-2">{safeNumber(branch.saleCount)}</td>
+              <td className="p-2">{safeNumber(branch.averageOrderValue).toFixed(2)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+});
+
 const SalesAnalytics: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
@@ -251,6 +283,7 @@ const SalesAnalytics: React.FC = () => {
           displayName: isRtl ? safeString(bs.branchName, 'فرع غير معروف') : safeString(bs.branchNameEn || bs.branchName, 'Unknown Branch'),
           totalSales: safeNumber(bs.totalSales),
           saleCount: safeNumber(bs.saleCount),
+          averageOrderValue: safeNumber(bs.averageOrderValue),
         })),
         leastBranchSales: (response.leastBranchSales || []).map((bs: any) => ({
           branchId: safeString(bs.branchId),
@@ -259,6 +292,7 @@ const SalesAnalytics: React.FC = () => {
           displayName: isRtl ? safeString(bs.branchName, 'فرع غير معروف') : safeString(bs.branchNameEn || bs.branchName, 'Unknown Branch'),
           totalSales: safeNumber(bs.totalSales),
           saleCount: safeNumber(bs.saleCount),
+          averageOrderValue: safeNumber(bs.averageOrderValue),
         })),
         productSales: (response.productSales || []).map((ps: any) => ({
           productId: safeString(ps.productId),
@@ -376,32 +410,32 @@ const SalesAnalytics: React.FC = () => {
   const chartData = useMemo(() => ({
     productSales: {
       labels: filteredData.productSales.slice(0, 5).map((p) => p.displayName),
-      datasets: [{ label: `${t.totalSales} (${t.currency})`, data: filteredData.productSales.slice(0, 5).map((p) => safeNumber(p.totalRevenue)), backgroundColor: '#FBBF24' }],
+      datasets: [{ label: `${t.totalSales} (${t.currency})`, data: filteredData.productSales.slice(0, 5).map((p) => p.totalRevenue), backgroundColor: '#FBBF24' }],
     },
     leastProductSales: {
       labels: filteredData.leastProductSales.slice(0, 5).map((p) => p.displayName),
-      datasets: [{ label: `${t.totalSales} (${t.currency})`, data: filteredData.leastProductSales.slice(0, 5).map((p) => safeNumber(p.totalRevenue)), backgroundColor: '#3B82F6' }],
+      datasets: [{ label: `${t.totalSales} (${t.currency})`, data: filteredData.leastProductSales.slice(0, 5).map((p) => p.totalRevenue), backgroundColor: '#3B82F6' }],
     },
     departmentSales: {
       labels: filteredData.departmentSales.slice(0, 5).map((d) => d.displayName),
-      datasets: [{ label: `${t.totalSales} (${t.currency})`, data: filteredData.departmentSales.slice(0, 5).map((d) => safeNumber(d.totalRevenue)), backgroundColor: '#FF6384' }],
+      datasets: [{ label: `${t.totalSales} (${t.currency})`, data: filteredData.departmentSales.slice(0, 5).map((d) => d.totalRevenue), backgroundColor: '#FF6384' }],
     },
     leastDepartmentSales: {
       labels: filteredData.leastDepartmentSales.slice(0, 5).map((d) => d.displayName),
-      datasets: [{ label: `${t.totalSales} (${t.currency})`, data: filteredData.leastDepartmentSales.slice(0, 5).map((d) => safeNumber(d.totalRevenue)), backgroundColor: '#4BC0C0' }],
+      datasets: [{ label: `${t.totalSales} (${t.currency})`, data: filteredData.leastDepartmentSales.slice(0, 5).map((d) => d.totalRevenue), backgroundColor: '#4BC0C0' }],
     },
     branchSales: {
       labels: filteredData.branchSales.slice(0, 5).map((b) => b.displayName),
-      datasets: [{ label: `${t.totalSales} (${t.currency})`, data: filteredData.branchSales.slice(0, 5).map((b) => safeNumber(b.totalSales)), backgroundColor: '#9966FF' }],
+      datasets: [{ label: `${t.totalSales} (${t.currency})`, data: filteredData.branchSales.slice(0, 5).map((b) => b.totalSales), backgroundColor: '#9966FF' }],
     },
     leastBranchSales: {
       labels: filteredData.leastBranchSales.slice(0, 5).map((b) => b.displayName),
-      datasets: [{ label: `${t.totalSales} (${t.currency})`, data: filteredData.leastBranchSales.slice(0, 5).map((b) => safeNumber(b.totalSales)), backgroundColor: '#FBBF24' }],
+      datasets: [{ label: `${t.totalSales} (${t.currency})`, data: filteredData.leastBranchSales.slice(0, 5).map((b) => b.totalSales), backgroundColor: '#FBBF24' }],
     },
     salesTrends: {
       labels: analytics.salesTrends.slice(0, 10).map((trend) => trend.period),
       datasets: [
-        { label: t.totalCount, data: analytics.salesTrends.slice(0, 10).map((trend) => safeNumber(trend.saleCount)), borderColor: '#3B82F6', fill: false, tension: 0.4 },
+        { label: t.totalCount, data: analytics.salesTrends.slice(0, 10).map((trend) => trend.saleCount), borderColor: '#3B82F6', fill: false, tension: 0.4 },
       ],
     },
   }), [filteredData, t, analytics]);
@@ -470,20 +504,20 @@ const SalesAnalytics: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
               <h3 className="text-sm font-medium text-gray-700">{t.totalSales}</h3>
-              <p className="text-lg font-bold text-amber-600">{safeNumber(analytics.totalSales).toFixed(2)} {t.currency}</p>
-              <p className="text-xs text-gray-500">{t.totalCount}: {safeNumber(analytics.totalCount)}</p>
+              <p className="text-lg font-bold text-amber-600">{analytics.totalSales.toFixed(2)} {t.currency}</p>
+              <p className="text-xs text-gray-500">{t.totalCount}: {analytics.totalCount}</p>
             </div>
             <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
               <h3 className="text-sm font-medium text-gray-700">{t.averageOrderValue}</h3>
-              <p className="text-lg font-bold text-amber-600">{safeNumber(analytics.averageOrderValue).toFixed(2)} {t.currency}</p>
+              <p className="text-lg font-bold text-amber-600">{analytics.averageOrderValue.toFixed(2)} {t.currency}</p>
             </div>
             <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
               <h3 className="text-sm font-medium text-gray-700">{t.topProduct}</h3>
               {analytics.topProduct?.productId ? (
                 <div className="mt-2 space-y-1">
                   <p className="text-sm">{analytics.topProduct.displayName}</p>
-                  <p className="text-xs text-gray-500">{t.totalSales}: {safeNumber(analytics.topProduct.totalRevenue).toFixed(2)} {t.currency}</p>
-                  <p className="text-xs text-gray-500">{t.totalCount}: {safeNumber(analytics.topProduct.totalQuantity)}</p>
+                  <p className="text-xs text-gray-500">{t.totalSales}: {analytics.topProduct.totalRevenue.toFixed(2)} {t.currency}</p>
+                  <p className="text-xs text-gray-500">{t.totalCount}: {analytics.topProduct.totalQuantity}</p>
                 </div>
               ) : (
                 <NoDataMessage message={t.noData} />
@@ -506,8 +540,8 @@ const SalesAnalytics: React.FC = () => {
                     {analytics.topCustomers.map((customer, index) => (
                       <tr key={index} className="border-t">
                         <td className="p-2">{customer.customerName || t.noCustomers}</td>
-                        <td className="p-2">{safeNumber(customer.totalSpent).toFixed(2)} {t.currency}</td>
-                        <td className="p-2">{safeNumber(customer.purchaseCount)}</td>
+                        <td className="p-2">{customer.totalSpent.toFixed(2)} {t.currency}</td>
+                        <td className="p-2">{customer.purchaseCount}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -571,9 +605,12 @@ const SalesAnalytics: React.FC = () => {
             <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
               <h3 className="text-sm font-medium text-gray-700 mb-3">{t.branchSales}</h3>
               {filteredData.branchSales.length > 0 ? (
-                <div className="h-48">
-                  <Bar data={chartData.branchSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.branchSales } } }} />
-                </div>
+                <>
+                  <div className="h-48">
+                    <Bar data={chartData.branchSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.branchSales } } }} />
+                  </div>
+                  <BranchTable data={filteredData.branchSales} title={t.branchSales} language={language} currency={t.currency} />
+                </>
               ) : (
                 <NoDataMessage message={t.noData} />
               )}
@@ -581,9 +618,12 @@ const SalesAnalytics: React.FC = () => {
             <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
               <h3 className="text-sm font-medium text-gray-700 mb-3">{t.leastBranchSales}</h3>
               {filteredData.leastBranchSales.length > 0 ? (
-                <div className="h-48">
-                  <Bar data={chartData.leastBranchSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.leastBranchSales } } }} />
-                </div>
+                <>
+                  <div className="h-48">
+                    <Bar data={chartData.leastBranchSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.leastBranchSales } } }} />
+                  </div>
+                  <BranchTable data={filteredData.leastBranchSales} title={t.leastBranchSales} language={language} currency={t.currency} />
+                </>
               ) : (
                 <NoDataMessage message={t.noData} />
               )}
