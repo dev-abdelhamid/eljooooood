@@ -83,7 +83,7 @@ const reducer = (state: State, action: Action): State => {
     case 'SET_SELECTED_ORDER':
       return { ...state, selectedOrder: action.payload };
     case 'SET_MODAL':
-      return { ...state, [action.modal!]: action.isOpen };
+      return { ...state, [`is${action.modal!.charAt(0).toUpperCase() + action.modal!.slice(1)}ModalOpen`]: action.isOpen };
     case 'SET_SEARCH_QUERY':
       return { ...state, searchQuery: action.payload, currentPage: 1 };
     case 'SET_FILTER_STATUS':
