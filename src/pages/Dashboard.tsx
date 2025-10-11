@@ -4,13 +4,12 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { ShoppingCart, Clock, BarChart3, CheckCircle, AlertCircle, Package, DollarSign, ChefHat, RotateCcw, Archive } from 'lucide-react';
+import { ShoppingCart, Clock, BarChart3, CheckCircle, AlertCircle, Package, DollarSign, ChefHat, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
-import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, returnsAPI, salesAPI, inventoryAPI } from '../services/api';
+import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, returnsAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
-import { v4 as uuidv4 } from 'uuid';
 
 // تعريف الواجهات
 interface Stats {
@@ -19,8 +18,7 @@ interface Stats {
   inProductionOrders: number;
   inTransitOrders: number;
   deliveredOrders: number;
-  totalOrderValue: number;
-  totalInventoryValue: number; // إضافة إجمالي قيمة المخزون
+  totalOrderValue: number; // تم تغيير الاسم من totalSales إلى totalOrderValue
   completedTasks: number;
   inProgressTasks: number;
   totalReturns: number;
@@ -28,7 +26,6 @@ interface Stats {
   approvedReturns: number;
   rejectedReturns: number;
   averageOrderValue: number;
-  totalSalesValue: number; // إضافة إجمالي قيمة المبيعات
 }
 
 interface Task {
@@ -125,62 +122,14 @@ interface Chef {
 interface FilterState {
   status: string;
   search: string;
-  branch: string;
 }
 
-// مكون ProductDropdown
-const ProductDropdown: React.FC<{
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-  ariaLabel: string;
-  disabled?: boolean;
-}> = React.memo(({ value, onChange, options, ariaLabel, disabled = false }) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  const [isOpen, setIsOpen] = useState(false);
-  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
-
-  return (
-    <div className="relative group">
-      <button
-        onClick={() => !disabled && setIsOpen(!isOpen)}
-        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-        aria-label={ariaLabel}
-      >
-        <span className="truncate">{selectedOption.label}</span>
-        <svg
-          className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200 w-5 h-5 text-gray-400 group-focus-within:text-amber-500`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
-      {isOpen && !disabled && (
-        <div className="absolute w-full mt-2 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none">
-          {options.length > 0 ? (
-            options.map((option) => (
-              <div
-                key={option.value}
-                onClick={() => {
-                  onChange(option.value);
-                  setIsOpen(false);
-                }}
-                className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
-              >
-                {option.label}
-              </div>
-            ))
-          ) : (
-            <div className="px-4 py-2.5 text-sm text-gray-500">{isRtl ? 'لا توجد خيارات متاحة' : 'No options available'}</div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-});
+const timeFilterOptions = [
+  { value: 'day', label: 'اليوم', enLabel: 'Today' },
+  { value: 'week', label: 'هذا الأسبوع', enLabel: 'This Week' },
+  { value: 'month', label: 'هذا الشهر', enLabel: 'This Month' },
+  { value: 'year', label: 'هذا العام', enLabel: 'This Year' },
+];
 
 // مكون تحميل محسن
 const Loader: React.FC = () => (
@@ -189,7 +138,7 @@ const Loader: React.FC = () => (
   </div>
 );
 
-// مكون بطاقة الإحصائيات
+// مكون بطاقة الإحصائيات مع تحسينات في الأسلوب
 const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color: string; ariaLabel: string }> = React.memo(
   ({ title, value, icon: Icon, color, ariaLabel }) => (
     <div
@@ -216,24 +165,11 @@ const ChefDashboard: React.FC<{
   handleStartTask: (taskId: string, orderId: string) => void;
   handleCompleteTask: (taskId: string, orderId: string) => void;
 }> = React.memo(({ stats, tasks, isRtl, language, handleStartTask, handleCompleteTask }) => {
-  const [filter, setFilter] = useState<FilterState>({ status: 'all', search: '', branch: 'all' });
-  const { branches } = useAuth();
-
-  const branchOptions = useMemo(
-    () => [
-      { value: 'all', label: isRtl ? 'جميع الفروع' : 'All Branches' },
-      ...branches.map((branch) => ({
-        value: branch._id,
-        label: isRtl ? branch.name : branch.nameEn || branch.name,
-      })),
-    ],
-    [branches, isRtl]
-  );
+  const [filter, setFilter] = useState<FilterState>({ status: 'all', search: '' });
 
   const filteredTasks = useMemo(() => {
     return tasks
       .filter((task) => filter.status === 'all' || task.status === filter.status)
-      .filter((task) => filter.branch === 'all' || task.branchId === filter.branch)
       .filter(
         (task) =>
           (isRtl ? task.productName : task.productNameEn || task.productName).toLowerCase().includes(filter.search.toLowerCase()) ||
@@ -241,7 +177,7 @@ const ChefDashboard: React.FC<{
       )
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 6);
-  }, [tasks, filter.status, filter.search, filter.branch, isRtl]);
+  }, [tasks, filter.status, filter.search, isRtl]);
 
   return (
     <div className="space-y-4">
@@ -294,12 +230,6 @@ const ChefDashboard: React.FC<{
               <option value="in_progress">{isRtl ? 'قيد التنفيذ' : 'In Progress'}</option>
               <option value="completed">{isRtl ? 'مكتمل' : 'Completed'}</option>
             </select>
-            <ProductDropdown
-              value={filter.branch}
-              onChange={(value) => setFilter((prev) => ({ ...prev, branch: value }))}
-              options={branchOptions}
-              ariaLabel={isRtl ? 'اختيار الفرع' : 'Select Branch'}
-            />
             <input
               type="text"
               value={filter.search}
@@ -382,13 +312,6 @@ const ChefDashboard: React.FC<{
   );
 });
 
-const timeFilterOptions = [
-  { value: 'day', label: 'اليوم', enLabel: 'Today' },
-  { value: 'week', label: 'هذا الأسبوع', enLabel: 'This Week' },
-  { value: 'month', label: 'هذا الشهر', enLabel: 'This Month' },
-  { value: 'year', label: 'هذا العام', enLabel: 'This Year' },
-];
-
 export const Dashboard: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
@@ -409,8 +332,7 @@ export const Dashboard: React.FC = () => {
     inProductionOrders: 0,
     inTransitOrders: 0,
     deliveredOrders: 0,
-    totalOrderValue: 0,
-    totalInventoryValue: 0,
+    totalOrderValue: 0, // تغيير من totalSales إلى totalOrderValue
     completedTasks: 0,
     inProgressTasks: 0,
     totalReturns: 0,
@@ -418,7 +340,6 @@ export const Dashboard: React.FC = () => {
     approvedReturns: 0,
     rejectedReturns: 0,
     averageOrderValue: 0,
-    totalSalesValue: 0,
   });
   const [timeFilter, setTimeFilter] = useState('week');
   const [loading, setLoading] = useState(true);
@@ -431,16 +352,6 @@ export const Dashboard: React.FC = () => {
 
   const fetchDashboardData = useCallback(
     debounce(async (forceRefresh = false) => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        const errorMessage = isRtl ? 'لم يتم العثور على التوكن، يرجى تسجيل الدخول' : 'No token found, please log in';
-        setError(errorMessage);
-        setLoading(false);
-        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
-        navigate('/login');
-        return;
-      }
-
       if (!user?.id && !user?._id) {
         const errorMessage = isRtl ? 'الوصول غير مصرح به' : 'Unauthorized access';
         setError(errorMessage);
@@ -502,8 +413,6 @@ export const Dashboard: React.FC = () => {
         let chefsResponse: any[] = [];
         let branchesResponse: any[] = [];
         let returnsResponse: any = { returns: [], total: 0 };
-        let salesResponse: any = { totalSales: 0, sales: [] };
-        let inventoryResponse: any = { totalValue: 0, items: [] };
 
         if (user.role === 'chef') {
           const chefProfile = await chefsAPI.getByUserId(user.id || user._id);
@@ -526,30 +435,18 @@ export const Dashboard: React.FC = () => {
                   return { returns: [], total: 0 };
                 })
               : Promise.resolve({ returns: [], total: 0 }),
-            ['admin', 'branch'].includes(user.role)
-              ? salesAPI.getAnalytics(query).catch((err) => {
-                  console.warn(`[${new Date().toISOString()}] Error fetching sales:`, err);
-                  return { totalSales: 0, sales: [] };
-                })
-              : Promise.resolve({ totalSales: 0, sales: [] }),
-            ['admin', 'branch'].includes(user.role)
-              ? inventoryAPI.getAnalytics(query).catch((err) => {
-                  console.warn(`[${new Date().toISOString()}] Error fetching inventory:`, err);
-                  return { totalValue: 0, items: [] };
-                })
-              : Promise.resolve({ totalValue: 0, items: [] }),
           ];
-          [ordersResponse, tasksResponse, chefsResponse, branchesResponse, returnsResponse, salesResponse, inventoryResponse] = await Promise.all(promises);
+          [ordersResponse, tasksResponse, chefsResponse, branchesResponse, returnsResponse] = await Promise.all(promises);
         }
 
         const mappedOrders = ordersResponse.map((order: any) => ({
-          id: order._id || uuidv4(),
+          id: order._id || crypto.randomUUID(),
           orderNumber: order.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
           branchName: order.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
           branchNameEn: order.branch?.nameEn || order.branch?.name || 'Unknown',
           branchId: order.branch?._id || 'unknown',
           items: (order.items || []).map((item: any) => ({
-            _id: item._id || uuidv4(),
+            _id: item._id || crypto.randomUUID(),
             productId: item.product?._id || 'unknown',
             productName: item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
             productNameEn: item.product?.nameEn || item.product?.name || 'Unknown',
@@ -573,7 +470,7 @@ export const Dashboard: React.FC = () => {
         }));
 
         const mappedTasks = tasksResponse.map((task: any) => ({
-          id: task._id || uuidv4(),
+          id: task._id || crypto.randomUUID(),
           orderId: task.order?._id || 'unknown',
           orderNumber: task.order?.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
           productName: task.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
@@ -588,7 +485,7 @@ export const Dashboard: React.FC = () => {
         }));
 
         const mappedChefs = chefsResponse.map((chef: any) => ({
-          _id: chef._id || uuidv4(),
+          _id: chef._id || crypto.randomUUID(),
           userId: chef.user?._id || chef._id,
           username: chef.user?.username || chef.username || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'),
           name: chef.user?.name || chef.name || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'),
@@ -598,14 +495,14 @@ export const Dashboard: React.FC = () => {
 
         const mappedBranches = branchesResponse
           .map((branch: any) => ({
-            _id: branch._id || uuidv4(),
+            _id: branch._id || crypto.randomUUID(),
             name: branch.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
             nameEn: branch.nameEn || branch.name || 'Unknown',
           }))
           .sort((a: any, b: any) => a.name.localeCompare(b.name));
 
         const mappedReturns = returnsResponse.returns.map((ret: any) => ({
-          id: ret._id || uuidv4(),
+          id: ret._id || crypto.randomUUID(),
           returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
           branchName: ret.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
           branchNameEn: ret.branch?.nameEn || ret.branch?.name || 'Unknown',
@@ -660,7 +557,6 @@ export const Dashboard: React.FC = () => {
         const inTransitOrders = mappedOrders.filter((o) => o.status === 'in_transit').length;
         const deliveredOrders = mappedOrders.filter((o) => o.status === 'delivered').length;
         const totalOrderValue = mappedOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
-        const totalInventoryValue = Number(inventoryResponse.totalValue) || 0;
         const completedTasks = mappedTasks.filter((task) => task.status === 'completed').length;
         const inProgressTasks = mappedTasks.filter((task) => task.status === 'in_progress').length;
         const totalReturns = mappedReturns.length;
@@ -668,7 +564,6 @@ export const Dashboard: React.FC = () => {
         const approvedReturns = mappedReturns.filter((r) => r.status === 'approved').length;
         const rejectedReturns = mappedReturns.filter((r) => r.status === 'rejected').length;
         const averageOrderValue = totalOrders > 0 ? totalOrderValue / totalOrders : 0;
-        const totalSalesValue = Number(salesResponse.totalSales) || 0;
 
         const newData = {
           orders: mappedOrders,
@@ -685,7 +580,6 @@ export const Dashboard: React.FC = () => {
             inTransitOrders,
             deliveredOrders,
             totalOrderValue,
-            totalInventoryValue,
             completedTasks,
             inProgressTasks,
             totalReturns,
@@ -693,7 +587,6 @@ export const Dashboard: React.FC = () => {
             approvedReturns,
             rejectedReturns,
             averageOrderValue,
-            totalSalesValue,
           },
         };
 
@@ -724,21 +617,13 @@ export const Dashboard: React.FC = () => {
         setLoading(false);
       }
     }, 100),
-    [user, isRtl, language, cacheKey, addNotification, navigate]
+    [user, isRtl, language, cacheKey, addNotification]
   );
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      const errorMessage = isRtl ? 'لم يتم العثور على التوكن، يرجى تسجيل الدخول' : 'No token found, please log in';
-      setError(errorMessage);
-      toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
-      navigate('/login');
-      return;
-    }
     fetchDashboardData();
     return () => fetchDashboardData.cancel();
-  }, [fetchDashboardData, timeFilter, navigate, isRtl]);
+  }, [fetchDashboardData, timeFilter]);
 
   useEffect(() => {
     if (refreshTasks) {
@@ -749,20 +634,8 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     if (!socket || !user || !isConnected) return;
 
-    socket.on('connect', () => {
-      socket.emit('joinRoom', {
-        role: user.role,
-        branchId: user.branchId,
-        chefId: user.role === 'chef' ? user._id : undefined,
-        departmentId: user.role === 'production' ? user.department?._id : undefined,
-        userId: user._id,
-        token: localStorage.getItem('token'),
-      });
-    });
-
-    socket.on('connect_error', (err) => {
+    socket.on('connect_error', () => {
       const errorMessage = isRtl ? 'خطأ في الاتصال بالسوكت' : 'Socket connection error';
-      console.error(`[${new Date().toISOString()}] Socket connect error:`, err);
       addNotification({
         _id: `socket-error-${Date.now()}`,
         type: 'error',
@@ -771,21 +644,6 @@ export const Dashboard: React.FC = () => {
         createdAt: new Date().toLocaleString(language),
         path: '/dashboard',
       });
-      if (err.message.includes('Authentication error')) {
-        const token = localStorage.getItem('token');
-        if (token) {
-          socket.emit('joinRoom', {
-            role: user.role,
-            branchId: user.branchId,
-            chefId: user.role === 'chef' ? user._id : undefined,
-            departmentId: user.role === 'production' ? user.department?._id : undefined,
-            userId: user._id,
-            token,
-          });
-        } else {
-          navigate('/login');
-        }
-      }
     });
 
     socket.on('taskAssigned', (data: any) => {
@@ -936,40 +794,15 @@ export const Dashboard: React.FC = () => {
       fetchDashboardData(true);
     });
 
-    socket.on('saleCreated', (data: any) => {
-      if (!data._id || !data.saleNumber || !data.branch?._id || !data.eventId) {
-        console.warn(`[${new Date().toISOString()}] Invalid sale created data:`, data);
-        return;
-      }
-      if (!['admin', 'branch'].includes(user.role) || (user.role === 'branch' && data.branch?._id !== user.branchId)) return;
-
-      addNotification({
-        _id: data.eventId,
-        type: 'success',
-        message: isRtl
-          ? `تم إنشاء مبيعة جديدة: ${data.saleNumber} من ${data.branch?.name}`
-          : `New sale created: ${data.saleNumber} from ${data.branch?.nameEn || data.branch?.name}`,
-        data: { saleId: data._id, branchId: data.branch?._id, eventId: data.eventId },
-        read: false,
-        createdAt: formatDate(new Date(), language),
-        sound: '/sounds/sale-created.mp3',
-        vibrate: [200, 100, 200],
-        path: '/sales',
-      });
-      fetchDashboardData(true);
-    });
-
     return () => {
-      socket.off('connect');
       socket.off('connect_error');
       socket.off('taskAssigned');
       socket.off('orderCompleted');
       socket.off('itemStatusUpdated');
       socket.off('returnCreated');
       socket.off('returnStatusUpdated');
-      socket.off('saleCreated');
     };
-  }, [socket, user, isRtl, language, addNotification, fetchDashboardData, isConnected, navigate]);
+  }, [socket, user, isRtl, language, addNotification, fetchDashboardData, isConnected]);
 
   const handleStartTask = useCallback(
     async (taskId: string, orderId: string) => {
@@ -989,7 +822,7 @@ export const Dashboard: React.FC = () => {
         await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'in_progress' });
         const task = tasks.find((t) => t.id === taskId);
         setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: 'in_progress' } : t)));
-        const eventId = uuidv4();
+        const eventId = crypto.randomUUID();
         socket.emit('itemStatusUpdated', {
           orderId,
           itemId: taskId,
@@ -1049,7 +882,7 @@ export const Dashboard: React.FC = () => {
         await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'completed' });
         const task = tasks.find((t) => t.id === taskId);
         setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: 'completed' } : t)));
-        const eventId = uuidv4();
+        const eventId = crypto.randomUUID();
         socket.emit('itemStatusUpdated', {
           orderId,
           itemId: taskId,
@@ -1142,25 +975,11 @@ export const Dashboard: React.FC = () => {
       {['admin', 'production', 'branch'].includes(user.role) && (
         <>
           <StatsCard
-            title={isRtl ? 'إجمالي قيمة الطلبات' : 'Total Order Value'}
+            title={isRtl ? 'إجمالي قيمة الطلبات' : 'Total Order Value'} // تغيير من Total Sales إلى Total Order Value
             value={stats.totalOrderValue.toFixed(2)}
             icon={DollarSign}
             color="purple"
             ariaLabel={isRtl ? 'إجمالي قيمة الطلبات' : 'Total Order Value'}
-          />
-          <StatsCard
-            title={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
-            value={stats.totalInventoryValue.toFixed(2)}
-            icon={Archive}
-            color="teal"
-            ariaLabel={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
-          />
-          <StatsCard
-            title={isRtl ? 'إجمالي قيمة المبيعات' : 'Total Sales Value'}
-            value={stats.totalSalesValue.toFixed(2)}
-            icon={DollarSign}
-            color="indigo"
-            ariaLabel={isRtl ? 'إجمالي قيمة المبيعات' : 'Total Sales Value'}
           />
           <StatsCard
             title={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
@@ -1354,23 +1173,24 @@ export const Dashboard: React.FC = () => {
   if (error) return <div className="text-center text-red-600 p-4">{error}</div>;
 
   return (
-    <div className={`py-6 px-4 mx-auto max-w-7xl`}>
+    <div className={`py-6 px-4 mx-auto`}>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl md:text-2xl font-bold text-gray-800 flex items-center gap-2">
           <BarChart3 className="w-5 h-5 text-amber-600" />
           {isRtl ? 'لوحة التحكم' : 'Dashboard'}
         </h1>
-        <div className="flex items-center gap-2">
-          <ProductDropdown
-            value={timeFilter}
-            onChange={setTimeFilter}
-            options={timeFilterOptions.map((opt) => ({
-              value: opt.value,
-              label: isRtl ? opt.label : opt.enLabel,
-            }))}
-            ariaLabel={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
-          />
-        </div>
+        <select
+          value={timeFilter}
+          onChange={(e) => setTimeFilter(e.target.value)}
+          className="p-1.5 rounded-lg border border-gray-200 text-xs focus:ring-2 focus:ring-blue-500 bg-white"
+          aria-label={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
+        >
+          {timeFilterOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {isRtl ? option.label : option.enLabel}
+            </option>
+          ))}
+        </select>
       </div>
       {user.role === 'chef' ? (
         <ChefDashboard
@@ -1384,7 +1204,7 @@ export const Dashboard: React.FC = () => {
       ) : (
         <>
           {renderStats()}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2  gap-3">
             <div className="space-y-3">
               <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
