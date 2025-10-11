@@ -90,7 +90,7 @@ const translations = {
 
 const COLORS = ['#FFC107', '#4CAF50', '#F44336'];
 
-const ReturnStats: React.FC = () => {
+export const ReturnStats: React.FC = () => {
   const { t: languageT, language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
