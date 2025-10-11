@@ -1,7 +1,8 @@
-import React, { useReducer, useEffect, useMemo, useCallback, lazy, Suspense, useRef } from 'react';
+import React, { useReducer, useEffect, useMemo, useCallback, Suspense, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
+import { useNotifications } from '../contexts/NotificationContext';
 import { ordersAPI, inventoryAPI } from '../services/api';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
@@ -12,16 +13,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { exportToPDF } from '../components/branch/PDFExporter';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
-import { useOrderNotifications } from '../hooks/useOrderNotifications';
-import { Order, OrderStatus, ItemStatus } from '../components/branch/types';
-import { formatDate } from '../utils/formatDate';
 import OrderCardSkeleton from '../components/branch/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/branch/OrderTableSkeleton';
 import OrderCard from '../components/branch/OrderCard';
 import OrderTable from '../components/branch/OrderTable';
 import ConfirmDeliveryModal from '../components/branch/ConfirmDeliveryModal';
 import ViewModal from '../components/branch/ViewModal';
-import Pagination from '../components/Shared/Pagination';
+import Pagination from '../components/branch/Pagination';
+import { Order, OrderStatus, ItemStatus } from '../components/branch/types';
+import { formatDate } from '../utils/formatDate';
 
 // State and Action interfaces
 interface State {
@@ -50,10 +50,9 @@ interface Action {
   isOpen?: boolean;
   orderId?: string;
   status?: string;
+  itemId?: string;
   by?: 'date' | 'totalAmount';
   order?: 'asc' | 'desc';
-  itemId?: string;
-  items?: any[];
 }
 
 // Initial state
@@ -80,7 +79,7 @@ const initialState: State = {
 const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case 'SET_ORDERS':
-      return { ...state, orders: action.payload, error: '' };
+      return { ...state, orders: action.payload, error: '', loading: false };
     case 'SET_SELECTED_ORDER':
       return { ...state, selectedOrder: action.payload };
     case 'SET_MODAL':
@@ -96,7 +95,7 @@ const reducer = (state: State, action: Action): State => {
     case 'SET_LOADING':
       return { ...state, loading: action.payload };
     case 'SET_ERROR':
-      return { ...state, error: action.payload };
+      return { ...state, error: action.payload, loading: false };
     case 'SET_SUBMITTING':
       return { ...state, submitting: action.payload };
     case 'SET_SOCKET_CONNECTED':
@@ -108,8 +107,8 @@ const reducer = (state: State, action: Action): State => {
     case 'UPDATE_ORDER_STATUS':
       return {
         ...state,
-        orders: state.orders.map(o => (o.id === action.orderId ? { ...o, ...action.payload, status: action.status as OrderStatus } : o)),
-        selectedOrder: state.selectedOrder?.id === action.orderId ? { ...state.selectedOrder, ...action.payload, status: action.status as OrderStatus } : state.selectedOrder,
+        orders: state.orders.map(o => (o.id === action.orderId ? { ...o, status: action.status as OrderStatus } : o)),
+        selectedOrder: state.selectedOrder?.id === action.orderId ? { ...state.selectedOrder, status: action.status as OrderStatus } : state.selectedOrder,
       };
     case 'UPDATE_ITEM_STATUS':
       return {
@@ -147,8 +146,8 @@ const reducer = (state: State, action: Action): State => {
             ? {
                 ...order,
                 items: order.items.map(item =>
-                  action.items!.some((task: any) => task._id === item.itemId)
-                    ? { ...item, assignedTo: action.items!.find((task: any) => task._id === item.itemId)?.assignedTo, status: ItemStatus.Assigned }
+                  action.payload.items.some((task: any) => task._id === item.itemId)
+                    ? { ...item, assignedTo: action.payload.items.find((task: any) => task._id === item.itemId)?.assignedTo, status: ItemStatus.Assigned }
                     : item
                 ),
               }
@@ -204,8 +203,7 @@ const sortOptions = [
 
 // Utility functions
 const getDisplayName = (name: string | undefined | null, nameEn: string | undefined | null, isRtl: boolean): string => {
-  if (isRtl) return name || 'غير معروف';
-  return nameEn || name || 'Unknown';
+  return isRtl ? (name || 'غير معروف') : (nameEn || name || 'Unknown');
 };
 
 // Main component
@@ -214,10 +212,11 @@ export const BranchOrders: React.FC = () => {
   const isRtl = language === 'ar';
   const { user } = useAuth();
   const { socket, isConnected, emit } = useSocket();
+  const { addNotification } = useNotifications();
   const [state, dispatch] = useReducer(reducer, initialState);
   const stateRef = useRef(state);
   const cacheRef = useRef<Map<string, Order[]>>(new Map());
-  const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
+  const notificationIds = useRef(new Set<string>());
 
   // Update stateRef when state changes
   useEffect(() => {
@@ -234,9 +233,16 @@ export const BranchOrders: React.FC = () => {
 
     if (!socket) return;
 
+    const playNotificationSound = (soundUrl: string, vibrate?: number[]) => {
+      const audio = new Audio(soundUrl);
+      audio.play().catch(err => console.error(`[${new Date().toISOString()}] Audio play failed:`, err));
+      if (navigator.vibrate && vibrate) navigator.vibrate(vibrate);
+    };
+
     socket.on('connect', () => {
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
       dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
+      socket.emit('joinRoom', { role: 'branch', branchId: user.branchId, userId: user.id });
     });
 
     socket.on('connect_error', (err) => {
@@ -246,10 +252,15 @@ export const BranchOrders: React.FC = () => {
     });
 
     socket.on('newOrder', (order: any) => {
-      if (!order || !order._id || !order.branch || !order.branch._id) {
+      if (!order?._id || !order.branch?._id) {
         console.warn('Invalid new order data:', order);
         return;
       }
+      if (order.branch._id !== user.branchId) return;
+      const eventId = order.eventId || crypto.randomUUID();
+      if (notificationIds.current.has(eventId)) return;
+
+      notificationIds.current.add(eventId);
       const mappedOrder: Order = {
         id: order._id,
         orderNumber: order.orderNumber || 'N/A',
@@ -262,7 +273,7 @@ export const BranchOrders: React.FC = () => {
         },
         items: Array.isArray(order.items)
           ? order.items
-              .filter((item: any) => item && item.product && item.product._id)
+              .filter((item: any) => item?.product?._id)
               .map((item: any) => ({
                 itemId: item._id || `temp-${Math.random().toString(36).substring(2)}`,
                 productId: item.product._id,
@@ -293,22 +304,33 @@ export const BranchOrders: React.FC = () => {
             }))
           : [],
       };
+
       dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
+      addNotification({
+        _id: eventId,
+        type: 'success',
+        message: isRtl ? `تم استلام طلب جديد: ${order.orderNumber}` : `New order received: ${order.orderNumber}`,
+        data: { orderId: order._id, eventId },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: '/sounds/new-order.mp3',
+        vibrate: [200, 100, 200],
+      });
       playNotificationSound('/sounds/new-order.mp3', [200, 100, 200]);
-      toast.success(
-        isRtl ? `تم استلام طلب جديد: ${order.orderNumber}` : `New order received: ${order.orderNumber}`,
-        { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
-      );
     });
 
-    socket.on('orderStatusUpdated', async ({ orderId, status }: { orderId: string; status: OrderStatus }) => {
+    socket.on('orderStatusUpdated', async ({ orderId, status, branchName }: { orderId: string; status: OrderStatus; branchName?: string }) => {
       if (!orderId || !status) {
         console.warn('Invalid order status update data:', { orderId, status });
         return;
       }
+      const eventId = crypto.randomUUID();
+      if (notificationIds.current.has(eventId)) return;
+      notificationIds.current.add(eventId);
+
       try {
         const updatedOrder = await ordersAPI.getById(orderId);
-        if (updatedOrder && updatedOrder._id && updatedOrder.branch && updatedOrder.branch._id) {
+        if (updatedOrder?._id && updatedOrder.branch?._id === user.branchId) {
           const mappedOrder: Order = {
             id: updatedOrder._id,
             orderNumber: updatedOrder.orderNumber || 'N/A',
@@ -321,7 +343,7 @@ export const BranchOrders: React.FC = () => {
             },
             items: Array.isArray(updatedOrder.items)
               ? updatedOrder.items
-                  .filter((item: any) => item && item.product && item.product._id)
+                  .filter((item: any) => item?.product?._id)
                   .map((item: any) => ({
                     itemId: item._id || `temp-${Math.random().toString(36).substring(2)}`,
                     productId: item.product._id,
@@ -354,50 +376,111 @@ export const BranchOrders: React.FC = () => {
           };
           dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status, payload: mappedOrder });
         } else {
-          console.warn('Invalid updated order data:', updatedOrder);
-          dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status, payload: {} }); // التعديل: أضفنا payload: {}
+          dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
         }
-        toast.info(
-          isRtl ? `تم تحديث حالة الطلب إلى: ${t(`orders.status_${status}`)}` : `Order status updated to: ${t(`orders.status_${status}`)}`,
-          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
-        );
+        addNotification({
+          _id: eventId,
+          type: 'info',
+          message: isRtl
+            ? `تم تحديث حالة الطلب إلى: ${t(`orders.status_${status}`)}`
+            : `Order status updated to: ${t(`orders.status_${status}`)}`,
+          data: { orderId, eventId },
+          read: false,
+          createdAt: new Date().toISOString(),
+          sound: '/sounds/notification.mp3',
+          vibrate: [200, 100, 200],
+        });
+        playNotificationSound('/sounds/notification.mp3', [200, 100, 200]);
       } catch (err) {
         console.error('Failed to fetch updated order:', err);
-        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status, payload: {} }); // التعديل: أضفنا payload: {}
+        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
       }
     });
 
     socket.on('taskAssigned', ({ orderId, items }: { orderId: string; items: { _id: string; assignedTo: { _id: string; username: string } }[] }) => {
-      dispatch({ type: 'TASK_ASSIGNED', orderId, items });
-      toast.info(isRtl ? 'تم تعيين المهام' : 'Tasks assigned', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+      if (!orderId || !Array.isArray(items)) return;
+      const eventId = crypto.randomUUID();
+      if (notificationIds.current.has(eventId)) return;
+      notificationIds.current.add(eventId);
+
+      dispatch({ type: 'TASK_ASSIGNED', orderId, payload: { items } });
+      addNotification({
+        _id: eventId,
+        type: 'info',
+        message: isRtl ? 'تم تعيين المهام' : 'Tasks assigned',
+        data: { orderId, eventId },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: '/sounds/notification.mp3',
+        vibrate: [400, 100, 400],
+      });
+      playNotificationSound('/sounds/notification.mp3', [400, 100, 400]);
     });
 
     socket.on('missingAssignments', ({ orderId, itemId, productName }: { orderId: string; itemId: string; productName: string }) => {
+      if (!orderId || !itemId || !productName) return;
+      const eventId = crypto.randomUUID();
+      if (notificationIds.current.has(eventId)) return;
+      notificationIds.current.add(eventId);
+
       dispatch({ type: 'MISSING_ASSIGNMENTS', orderId, itemId });
-      toast.warn(
-        isRtl ? `المنتج ${getDisplayName(productName, productName, isRtl)} بحاجة إلى تعيين` : `Product ${getDisplayName(productName, productName, isRtl)} needs assignment`,
-        { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
-      );
+      addNotification({
+        _id: eventId,
+        type: 'warning',
+        message: isRtl
+          ? `المنتج ${getDisplayName(productName, productName, isRtl)} بحاجة إلى تعيين`
+          : `Product ${getDisplayName(productName, productName, isRtl)} needs assignment`,
+        data: { orderId, itemId, eventId },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: '/sounds/notification.mp3',
+        vibrate: [300, 100, 300],
+      });
+      playNotificationSound('/sounds/notification.mp3', [300, 100, 300]);
     });
 
     socket.on('inventoryUpdated', ({ branchId, productId, quantity, type }) => {
-      if (branchId === user?.branchId) {
-        dispatch({ type: 'UPDATE_INVENTORY', payload: { productId, quantity, type } });
-        toast.info(
-          isRtl ? `تم تحديث المخزون للمنتج ${productId} بكمية ${quantity}` : `Inventory updated for product ${productId} with quantity ${quantity}`,
-          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
-        );
-      }
+      if (branchId !== user?.branchId || !productId || quantity == null) return;
+      const eventId = crypto.randomUUID();
+      if (notificationIds.current.has(eventId)) return;
+      notificationIds.current.add(eventId);
+
+      dispatch({ type: 'UPDATE_INVENTORY', payload: { productId, quantity, type } });
+      addNotification({
+        _id: eventId,
+        type: 'info',
+        message: isRtl
+          ? `تم تحديث المخزون للمنتج ${productId} بكمية ${quantity}`
+          : `Inventory updated for product ${productId} with quantity ${quantity}`,
+        data: { productId, eventId },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: '/sounds/notification.mp3',
+        vibrate: [200, 100, 200],
+      });
+      playNotificationSound('/sounds/notification.mp3', [200, 100, 200]);
     });
 
     socket.on('restockApproved', ({ requestId, branchId, productId, quantity }) => {
-      if (branchId === user?.branchId) {
-        dispatch({ type: 'UPDATE_INVENTORY', payload: { productId, quantity, type: 'restock' } });
-        toast.success(
-          isRtl ? `تمت الموافقة على طلب إعادة التخزين ${requestId}` : `Restock request ${requestId} approved`,
-          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
-        );
-      }
+      if (branchId !== user?.branchId || !requestId || !productId || quantity == null) return;
+      const eventId = crypto.randomUUID();
+      if (notificationIds.current.has(eventId)) return;
+      notificationIds.current.add(eventId);
+
+      dispatch({ type: 'UPDATE_INVENTORY', payload: { productId, quantity, type: 'restock' } });
+      addNotification({
+        _id: eventId,
+        type: 'success',
+        message: isRtl
+          ? `تمت الموافقة على طلب إعادة التخزين ${requestId}`
+          : `Restock request ${requestId} approved`,
+        data: { requestId, productId, eventId },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: '/sounds/notification.mp3',
+        vibrate: [200, 100, 200],
+      });
+      playNotificationSound('/sounds/notification.mp3', [200, 100, 200]);
     });
 
     return () => {
@@ -410,7 +493,7 @@ export const BranchOrders: React.FC = () => {
       socket.off('inventoryUpdated');
       socket.off('restockApproved');
     };
-  }, [user, t, isRtl, language, socket, emit, playNotificationSound]);
+  }, [user, t, isRtl, language, socket, emit, addNotification]);
 
   // Fetch orders with caching
   const fetchData = useCallback(
@@ -424,7 +507,7 @@ export const BranchOrders: React.FC = () => {
       }
 
       dispatch({ type: 'SET_LOADING', payload: true });
-      const cacheKey = `${user.branchId}-${state.filterStatus}-${state.currentPage}-${state.viewMode}`;
+      const cacheKey = `${user.branchId}-${state.filterStatus}-${state.currentPage}-${state.viewMode}-${state.searchQuery}-${state.sortBy}-${state.sortOrder}`;
       if (cacheRef.current.has(cacheKey)) {
         dispatch({ type: 'SET_ORDERS', payload: cacheRef.current.get(cacheKey)! });
         dispatch({ type: 'SET_LOADING', payload: false });
@@ -441,9 +524,10 @@ export const BranchOrders: React.FC = () => {
           sortBy: state.sortBy,
           sortOrder: state.sortOrder,
         });
+
         if (!Array.isArray(response)) throw new Error('Invalid response format');
         const mappedOrders: Order[] = response
-          .filter((order: any) => order && order._id && order.branch && order.branch._id)
+          .filter((order: any) => order?._id && order.branch?._id)
           .map((order: any) => ({
             id: order._id,
             orderNumber: order.orderNumber || 'N/A',
@@ -456,7 +540,7 @@ export const BranchOrders: React.FC = () => {
             },
             items: Array.isArray(order.items)
               ? order.items
-                  .filter((item: any) => item && item.product && item.product._id)
+                  .filter((item: any) => item?.product?._id)
                   .map((item: any) => ({
                     itemId: item._id || `temp-${Math.random().toString(36).substring(2)}`,
                     productId: item.product._id,
@@ -487,9 +571,9 @@ export const BranchOrders: React.FC = () => {
                 }))
               : [],
           }));
+
         cacheRef.current.set(cacheKey, mappedOrders);
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
-        dispatch({ type: 'SET_ERROR', payload: '' });
       } catch (err: any) {
         console.error('Fetch orders error:', err.message, err.response?.data);
         if (retryCount < 2) {
@@ -497,7 +581,9 @@ export const BranchOrders: React.FC = () => {
           setTimeout(() => fetchData(retryCount + 1), 1000);
           return;
         }
-        const errorMessage = err.response?.status === 404 ? (isRtl ? 'لم يتم العثور على طلبات' : 'No orders found') : (isRtl ? `خطأ في جلب الطلبات: ${err.message}` : `Error fetching orders: ${err.message}`);
+        const errorMessage = err.response?.status === 404
+          ? (isRtl ? 'لم يتم العثور على طلبات' : 'No orders found')
+          : (isRtl ? `خطأ في جلب الطلبات: ${err.message}` : `Error fetching orders: ${err.message}`);
         dispatch({ type: 'SET_ERROR', payload: errorMessage });
         toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       } finally {
@@ -525,8 +611,7 @@ export const BranchOrders: React.FC = () => {
     () =>
       state.orders.filter(
         order =>
-          order.branch &&
-          order.branch._id &&
+          order.branch?._id &&
           (order.orderNumber.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
             order.branch.displayName.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
             (order.notes || '').toLowerCase().includes(state.searchQuery.toLowerCase()) ||
@@ -568,33 +653,23 @@ export const BranchOrders: React.FC = () => {
   const confirmDelivery = useCallback(
     async (orderId: string) => {
       if (!user?.branchId || !user?.id) {
-        console.log('Confirm delivery - Missing user or branch:', { user });
         toast.error(isRtl ? 'لا يوجد فرع أو مستخدم مرتبط' : 'No branch or user associated', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
         return;
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        // Fetch the order to ensure it's in the correct state
         const order = await ordersAPI.getById(orderId);
         if (!order || !Array.isArray(order.items)) {
           throw new Error(isRtl ? 'بيانات الطلب غير صالحة' : 'Invalid order data');
         }
 
-        // Check if the order is already delivered to prevent duplicate updates
-        if (order.status === OrderStatus.Delivered) {
-          throw new Error(isRtl ? 'الطلب تم تسليمه بالفعل' : 'Order is already delivered');
-        }
-
-        // Validate product IDs
         const invalidItems = order.items.filter(item => !item.product?._id);
         if (invalidItems.length > 0) {
           throw new Error(isRtl ? 'بعض العناصر تحتوي على معرفات منتجات غير صالحة' : 'Some items have invalid product IDs');
         }
 
-        // Confirm delivery
         await ordersAPI.confirmDelivery(orderId, user.id);
 
-        // Update inventory using bulkCreate
         const inventoryItems = order.items.map(item => ({
           productId: item.product._id,
           currentStock: item.quantity,
@@ -603,20 +678,13 @@ export const BranchOrders: React.FC = () => {
         }));
 
         try {
-          const bulkCreateResponse = await inventoryAPI.bulkCreate({
+          await inventoryAPI.bulkCreate({
             branchId: user.branchId,
             userId: user.id,
             orderId,
             items: inventoryItems,
           });
-          // Update local inventory state if response contains inventories
-          if (bulkCreateResponse.inventories && Array.isArray(bulkCreateResponse.inventories)) {
-            dispatch({ type: 'SET_INVENTORY', payload: bulkCreateResponse.inventories });
-          }
         } catch (bulkError: any) {
-          if (bulkError.response?.status === 400 && bulkError.response?.data?.message.includes('المخزون محدث بالفعل')) {
-            throw new Error(isRtl ? 'المخزون محدث بالفعل لهذا الطلب' : 'Inventory already updated for this order');
-          }
           console.warn(`Bulk create failed: ${bulkError.message}. Falling back to individual updates.`);
           for (const item of order.items) {
             try {
@@ -672,38 +740,32 @@ export const BranchOrders: React.FC = () => {
           }
         }
 
-        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: OrderStatus.Delivered, payload: {} }); // التعديل: أضفنا payload: {}
+        const eventId = crypto.randomUUID();
+        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: OrderStatus.Delivered });
         if (socket && isConnected) {
-          emit('orderStatusUpdated', { orderId, status: OrderStatus.Delivered });
-        } else {
-          console.warn('Socket not connected, cannot emit orderStatusUpdated event');
-          toast.warn(isRtl ? 'الاتصال بالسوكيت غير متوفر، تحديث الحالة محلي فقط' : 'Socket connection unavailable, status updated locally only', {
-            position: isRtl ? 'top-left' : 'top-right',
-            autoClose: 3000,
-          });
+          emit('orderDelivered', { orderId, orderNumber: order.orderNumber, branchId: user.branchId, branchName: user.branch?.name });
         }
         dispatch({ type: 'SET_MODAL', modal: 'confirmDelivery', isOpen: false });
-        dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
-        playNotificationSound('/sounds/order-delivered.mp3', [400, 100, 400]);
-        toast.success(isRtl ? 'تم تأكيد التسليم' : 'Delivery confirmed successfully', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+        addNotification({
+          _id: eventId,
+          type: 'success',
+          message: isRtl ? `تم تأكيد تسليم الطلب ${order.orderNumber}` : `Order ${order.orderNumber} delivery confirmed`,
+          data: { orderId, eventId },
+          read: false,
+          createdAt: new Date().toISOString(),
+          sound: '/sounds/order-delivered.mp3',
+          vibrate: [400, 100, 400],
+        });
       } catch (err: any) {
         console.error('Confirm delivery error:', err.message, err.response?.data);
-        let errorMessage = err.message;
-        if (err.response?.status === 400 && err.response?.data?.message.includes('المخزون محدث بالفعل')) {
-          errorMessage = isRtl ? 'الطلب تم تحديث مخزونه مسبقاً' : 'Order inventory already updated';
-        }
-        toast.error(isRtl ? `فشل في تأكيد التسليم: ${errorMessage}` : `Failed to confirm delivery: ${errorMessage}`, {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        });
+        toast.error(isRtl ? `فشل في تأكيد التسليم: ${err.message}` : `Failed to confirm delivery: ${err.message}`, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     },
-    [t, isRtl, playNotificationSound, user, socket, isConnected, emit]
+    [user, socket, isConnected, emit, isRtl, t, addNotification]
   );
 
-  // Update order status
   const updateOrderStatus = useCallback(
     async (orderId: string, status: OrderStatus) => {
       if (!user?.branchId) {
@@ -712,21 +774,25 @@ export const BranchOrders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
+        const order = await ordersAPI.getById(orderId);
         await ordersAPI.updateStatus(orderId, { status });
-        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status, payload: {} }); // التعديل: أضفنا payload: {}
+        const eventId = crypto.randomUUID();
+        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
         if (socket && isConnected) {
-          emit('orderStatusUpdated', { orderId, status });
-        } else {
-          console.warn('Socket not connected, cannot emit orderStatusUpdated event');
-          toast.warn(isRtl ? 'الاتصال بالسوكيت غير متوفر، تحديث الحالة محلي فقط' : 'Socket connection unavailable, status updated locally only', {
-            position: isRtl ? 'top-left' : 'top-right',
-            autoClose: 3000,
-          });
+          emit('orderStatusUpdated', { orderId, status, orderNumber: order.orderNumber, branchId: user.branchId, branchName: user.branch?.name });
         }
-        toast.success(
-          isRtl ? `تم تحديث حالة الطلب إلى: ${t(`orders.status_${status}`)}` : `Order status updated to: ${t(`orders.status_${status}`)}`,
-          { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 }
-        );
+        addNotification({
+          _id: eventId,
+          type: 'info',
+          message: isRtl
+            ? `تم تحديث حالة الطلب ${order.orderNumber} إلى: ${t(`orders.status_${status}`)}`
+            : `Order ${order.orderNumber} status updated to: ${t(`orders.status_${status}`)}`,
+          data: { orderId, eventId },
+          read: false,
+          createdAt: new Date().toISOString(),
+          sound: '/sounds/notification.mp3',
+          vibrate: [200, 100, 200],
+        });
       } catch (err: any) {
         console.error('Update order status error:', err.message, err.response?.data);
         toast.error(isRtl ? `فشل في تحديث الحالة: ${err.message}` : `Failed to update status: ${err.message}`, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
@@ -734,20 +800,38 @@ export const BranchOrders: React.FC = () => {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     },
-    [t, isRtl, user, socket, isConnected, emit]
+    [user, socket, isConnected, emit, isRtl, t, addNotification]
   );
 
-  // Clear cache on user or branch change
+  // Fetch inventory
+  const fetchInventory = useCallback(async () => {
+    if (!user?.branchId) return;
+    try {
+      const inventory = await inventoryAPI.getByBranch(user.branchId);
+      dispatch({ type: 'SET_INVENTORY', payload: inventory });
+    } catch (err: any) {
+      console.error('Fetch inventory error:', err.message);
+      toast.error(isRtl ? `خطأ في جلب المخزون: ${err.message}` : `Error fetching inventory: ${err.message}`, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+    }
+  }, [user, isRtl, t]);
+
+  // Initial data fetch
   useEffect(() => {
     cacheRef.current.clear();
     fetchData();
-  }, [user?.branchId, fetchData]);
+    fetchInventory();
+  }, [user?.branchId, fetchData, fetchInventory]);
 
   // Render
   return (
     <div className="px-4 py-6 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
-      <Suspense fallback={<LoadingSpinner size="lg" />}>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className="mb-8">
+      <Suspense fallback={<LoadingSpinner size="lg" className="flex justify-center mt-12" />}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="mb-8"
+        >
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-gray-800 flex items-center gap-3">
@@ -760,9 +844,9 @@ export const BranchOrders: React.FC = () => {
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
                 onClick={state.orders.length > 0 ? () => exportToPDF(state.orders, t, isRtl, language, calculateTotalQuantity) : undefined}
-                className={`flex items-center gap-2 ${
+                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm shadow-sm ${
                   state.orders.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                } rounded-lg px-4 py-2 text-sm shadow-sm`}
+                }`}
                 disabled={state.orders.length === 0}
               >
                 <Upload className="w-5 h-5" />
@@ -797,7 +881,7 @@ export const BranchOrders: React.FC = () => {
                       value: opt.value,
                       label: opt.value ? t(`orders.status_${opt.value}`) : t('orders.all_statuses'),
                     }))}
-                    value={state.filterStatus || ''}
+                    value={state.filterStatus}
                     onChange={(value: string) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
                     className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
                   />
@@ -821,7 +905,12 @@ export const BranchOrders: React.FC = () => {
             </div>
           </Card>
           {state.loading ? (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-4 mt-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-4 mt-6"
+            >
               {state.viewMode === 'card' ? (
                 Array(6).fill(null).map((_, i) => <OrderCardSkeleton key={i} isRtl={isRtl} />)
               ) : (
@@ -829,7 +918,12 @@ export const BranchOrders: React.FC = () => {
               )}
             </motion.div>
           ) : state.error && state.orders.length === 0 ? (
-            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.3 }} className="mt-6">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3 }}
+              className="mt-6"
+            >
               <Card className="p-6 max-w-md mx-auto text-center bg-red-50 shadow-lg rounded-lg border border-red-100">
                 <div className={`flex items-center justify-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <AlertCircle className="w-6 h-6 text-red-600" />
@@ -847,7 +941,14 @@ export const BranchOrders: React.FC = () => {
           ) : (
             <AnimatePresence>
               {paginatedOrders.length === 0 ? (
-                <motion.div key="no-orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-6">
+                <motion.div
+                  key="no-orders"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="mt-6"
+                >
                   <Card className="p-8 sm:p-12 text-center bg-white shadow-lg rounded-lg border border-gray-100">
                     <ShoppingCart className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-800 mb-2">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
@@ -863,9 +964,16 @@ export const BranchOrders: React.FC = () => {
                   </Card>
                 </motion.div>
               ) : state.viewMode === 'table' ? (
-                <motion.div key="table-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="mt-6">
+                <motion.div
+                  key="table-view"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="mt-6"
+                >
                   <OrderTable
-                    orders={paginatedOrders.filter(o => o && o.id && o.branch && o.branch._id)}
+                    orders={paginatedOrders.filter(o => o?.id && o.branch?._id)}
                     t={t}
                     isRtl={isRtl}
                     calculateTotalQuantity={calculateTotalQuantity}
@@ -874,11 +982,19 @@ export const BranchOrders: React.FC = () => {
                     openConfirmDeliveryModal={openConfirmDeliveryModal}
                     user={user}
                     submitting={state.submitting}
+                    updateOrderStatus={updateOrderStatus}
                   />
                 </motion.div>
               ) : (
-                <motion.div key="card-view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="space-y-4 mt-6">
-                  {paginatedOrders.filter(o => o && o.id && o.branch && o.branch._id).map(order => (
+                <motion.div
+                  key="card-view"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-4 mt-6"
+                >
+                  {paginatedOrders.filter(o => o?.id && o.branch?._id).map(order => (
                     <OrderCard
                       key={order.id}
                       order={order}
@@ -889,6 +1005,7 @@ export const BranchOrders: React.FC = () => {
                       openConfirmDeliveryModal={openConfirmDeliveryModal}
                       user={user}
                       submitting={state.submitting}
+                      updateOrderStatus={updateOrderStatus}
                     />
                   ))}
                 </motion.div>
@@ -896,7 +1013,12 @@ export const BranchOrders: React.FC = () => {
             </AnimatePresence>
           )}
           {paginatedOrders.length > 0 && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="mt-6">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.3 }}
+              className="mt-6"
+            >
               <Pagination
                 currentPage={state.currentPage}
                 totalPages={Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode])}
