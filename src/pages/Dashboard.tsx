@@ -8,7 +8,7 @@ import { ShoppingCart, Clock, BarChart3, CheckCircle, AlertCircle, Package, Doll
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
-import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, returnsAPI, departmentsAPI } from '../services/api';
+import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, returnsAPI, departmentAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 
 // واجهات البيانات
