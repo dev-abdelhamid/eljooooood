@@ -297,7 +297,7 @@ const DataTable: React.FC<{
   </div>
 ));
 
-const SalesAnalytics: React.FC = () => {
+export const SalesAnalytics: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
