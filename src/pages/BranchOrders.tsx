@@ -10,7 +10,7 @@ import { ShoppingCart, Upload, Table2, Grid, AlertCircle } from 'lucide-react';
 import { debounce } from 'lodash';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { exportToPDF } from '../components/branch/PDFExporter'; // Import the new PDFExporter
+import { exportToPDF } from '../components/branch/PDFExporter';
 import { LoadingSpinner } from '../components/UI/LoadingSpinner';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { Order, OrderStatus, ItemStatus } from '../components/branch/types';
@@ -22,7 +22,6 @@ import OrderTable from '../components/branch/OrderTable';
 import ConfirmDeliveryModal from '../components/branch/ConfirmDeliveryModal';
 import ViewModal from '../components/branch/ViewModal';
 import Pagination from '../components/Shared/Pagination';
-
 
 // State and Action interfaces
 interface State {
@@ -206,8 +205,6 @@ const getDisplayName = (name: string | undefined | null, nameEn: string | undefi
   if (isRtl) return name || 'غير معروف';
   return nameEn || name || 'Unknown';
 };
-
-
 
 // Main component
 export const BranchOrders: React.FC = () => {
@@ -575,9 +572,15 @@ export const BranchOrders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
+        // Fetch the order to ensure it's in the correct state
         const order = await ordersAPI.getById(orderId);
         if (!order || !Array.isArray(order.items)) {
           throw new Error(isRtl ? 'بيانات الطلب غير صالحة' : 'Invalid order data');
+        }
+
+        // Check if the order is already delivered to prevent duplicate updates
+        if (order.status === OrderStatus.Delivered) {
+          throw new Error(isRtl ? 'الطلب تم تسليمه بالفعل' : 'Order is already delivered');
         }
 
         // Validate product IDs
@@ -586,10 +589,10 @@ export const BranchOrders: React.FC = () => {
           throw new Error(isRtl ? 'بعض العناصر تحتوي على معرفات منتجات غير صالحة' : 'Some items have invalid product IDs');
         }
 
-        // Confirm delivery
+        // Confirm delivery and update status to delivered
         await ordersAPI.confirmDelivery(orderId, user.id);
 
-        // Update inventory using bulkCreate
+        // Update inventory only for delivered status
         const inventoryItems = order.items.map(item => ({
           productId: item.product._id,
           currentStock: item.quantity,
@@ -598,6 +601,7 @@ export const BranchOrders: React.FC = () => {
         }));
 
         try {
+          // Attempt bulk create for inventory
           await inventoryAPI.bulkCreate({
             branchId: user.branchId,
             userId: user.id,
@@ -605,62 +609,11 @@ export const BranchOrders: React.FC = () => {
             items: inventoryItems,
           });
         } catch (bulkError: any) {
-          console.warn(`Bulk create failed: ${bulkError.message}. Falling back to individual updates.`);
-          for (const item of order.items) {
-            try {
-              let inventoryItem;
-              try {
-                const inventory = await inventoryAPI.getByBranch(user.branchId);
-                inventoryItem = inventory.find((inv: any) => inv.productId === item.product._id);
-              } catch (getError: any) {
-                if (getError.status === 403) {
-                  console.warn(`Permission denied for getting inventory for branch ${user.branchId}. Proceeding to create new inventory entry.`);
-                  inventoryItem = null;
-                } else {
-                  throw getError;
-                }
-              }
-
-              if (inventoryItem) {
-                try {
-                  await inventoryAPI.updateStock(inventoryItem._id, {
-                    currentStock: (inventoryItem.currentStock || 0) + item.quantity,
-                  });
-                } catch (updateError: any) {
-                  if (updateError.status === 403) {
-                    console.warn(`Permission denied for updating inventory item ${inventoryItem._id}. Creating new inventory entry.`);
-                    await inventoryAPI.create({
-                      branchId: user.branchId,
-                      productId: item.product._id,
-                      currentStock: item.quantity,
-                      minStockLevel: 0,
-                      maxStockLevel: 1000,
-                      userId: user.id,
-                      orderId,
-                    });
-                  } else {
-                    throw updateError;
-                  }
-                }
-              } else {
-                await inventoryAPI.create({
-                  branchId: user.branchId,
-                  productId: item.product._id,
-                  currentStock: item.quantity,
-                  minStockLevel: 0,
-                  maxStockLevel: 1000,
-                  userId: user.id,
-                  orderId,
-                });
-              }
-            } catch (itemError: any) {
-              console.warn(`Failed to update inventory for product ${item.product._id}:`, itemError.message);
-             
-              continue;
-            }
-          }
+          console.error(`Bulk create failed: ${bulkError.message}`);
+          throw new Error(isRtl ? 'فشل في تحديث المخزون: تحقق من البيانات' : 'Failed to update inventory: Check the data');
         }
 
+        // Update order status in state
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: OrderStatus.Delivered });
         if (socket && isConnected) {
           emit('orderStatusUpdated', { orderId, status: OrderStatus.Delivered });
