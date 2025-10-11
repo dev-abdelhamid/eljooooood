@@ -4,23 +4,21 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { ShoppingCart, Clock, BarChart3, CheckCircle, AlertCircle, Package, DollarSign, ChefHat, RotateCcw } from 'lucide-react';
+import { ShoppingCart, Clock, BarChart3, CheckCircle, AlertCircle, Package, DollarSign, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
-import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, returnsAPI } from '../services/api';
+import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, returnsAPI, departmentsAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 
-// تعريف الواجهات
+// واجهات البيانات
 interface Stats {
   totalOrders: number;
   pendingOrders: number;
   inProductionOrders: number;
   inTransitOrders: number;
   deliveredOrders: number;
-  totalOrderValue: number; // تم تغيير الاسم من totalSales إلى totalOrderValue
-  completedTasks: number;
-  inProgressTasks: number;
+  totalInventoryValue: number; // تغيير من totalOrderValue إلى totalInventoryValue
   totalReturns: number;
   pendingReturns: number;
   approvedReturns: number;
@@ -119,9 +117,16 @@ interface Chef {
   department: { _id: string; name: string; nameEn?: string } | null;
 }
 
+interface Department {
+  _id: string;
+  name: string;
+  nameEn?: string;
+}
+
 interface FilterState {
   status: string;
   search: string;
+  department: string;
 }
 
 const timeFilterOptions = [
@@ -131,14 +136,14 @@ const timeFilterOptions = [
   { value: 'year', label: 'هذا العام', enLabel: 'This Year' },
 ];
 
-// مكون تحميل محسن
+// مكون تحميل
 const Loader: React.FC = () => (
   <div className="flex justify-center items-center h-screen">
     <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
   </div>
 );
 
-// مكون بطاقة الإحصائيات مع تحسينات في الأسلوب
+// مكون بطاقة الإحصائيات
 const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color: string; ariaLabel: string }> = React.memo(
   ({ title, value, icon: Icon, color, ariaLabel }) => (
     <div
@@ -156,16 +161,39 @@ const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color:
   )
 );
 
+// مكون قائمة منسدلة للأقسام
+const ProductDropdown: React.FC<{
+  departments: Department[];
+  selectedDepartment: string;
+  onChange: (value: string) => void;
+  isRtl: boolean;
+}> = React.memo(({ departments, selectedDepartment, onChange, isRtl }) => (
+  <select
+    value={selectedDepartment}
+    onChange={(e) => onChange(e.target.value)}
+    className="w-full sm:w-40 p-1.5 rounded-lg border border-gray-200 text-xs focus:ring-2 focus:ring-blue-500 bg-white"
+    aria-label={isRtl ? 'تصفية حسب القسم' : 'Filter by Department'}
+  >
+    <option value="all">{isRtl ? 'جميع الأقسام' : 'All Departments'}</option>
+    {departments.map((dept) => (
+      <option key={dept._id} value={dept._id}>
+        {isRtl ? dept.name : dept.nameEn || dept.name}
+      </option>
+    ))}
+  </select>
+));
+
 // مكون لوحة تحكم الشيف
 const ChefDashboard: React.FC<{
   stats: Stats;
   tasks: Task[];
   isRtl: boolean;
   language: string;
+  departments: Department[];
   handleStartTask: (taskId: string, orderId: string) => void;
   handleCompleteTask: (taskId: string, orderId: string) => void;
-}> = React.memo(({ stats, tasks, isRtl, language, handleStartTask, handleCompleteTask }) => {
-  const [filter, setFilter] = useState<FilterState>({ status: 'all', search: '' });
+}> = React.memo(({ stats, tasks, isRtl, language, departments, handleStartTask, handleCompleteTask }) => {
+  const [filter, setFilter] = useState<FilterState>({ status: 'all', search: '', department: 'all' });
 
   const filteredTasks = useMemo(() => {
     return tasks
@@ -190,31 +218,31 @@ const ChefDashboard: React.FC<{
           ariaLabel={isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
         />
         <StatsCard
-          title={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
-          value={stats.completedTasks.toString()}
-          icon={CheckCircle}
-          color="green"
-          ariaLabel={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
-        />
-        <StatsCard
-          title={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
-          value={stats.inProgressTasks.toString()}
-          icon={Clock}
-          color="blue"
-          ariaLabel={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
-        />
-        <StatsCard
           title={isRtl ? 'الطلبات المعلقة' : 'Pending Orders'}
           value={stats.pendingOrders.toString()}
           icon={AlertCircle}
           color="red"
           ariaLabel={isRtl ? 'الطلبات المعلقة' : 'Pending Orders'}
         />
+        <StatsCard
+          title={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
+          value={stats.totalInventoryValue.toFixed(2)}
+          icon={DollarSign}
+          color="purple"
+          ariaLabel={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
+        />
+        <StatsCard
+          title={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
+          value={stats.totalReturns.toString()}
+          icon={RotateCcw}
+          color="orange"
+          ariaLabel={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
+        />
       </div>
       <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
         <div className="flex flex-col sm:flex-row items-center justify-between mb-3 gap-3">
           <h3 className="text-base font-semibold text-gray-800 flex items-center">
-            <ChefHat className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+            <Package className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
             {isRtl ? 'أحدث الطلبات قيد الإنتاج' : 'Latest In Production'}
           </h3>
           <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -237,6 +265,12 @@ const ChefDashboard: React.FC<{
               placeholder={isRtl ? 'ابحث عن اسم المنتج أو رقم الطلب' : 'Search by product name or order number'}
               className="w-full sm:w-40 p-1.5 rounded-lg border border-gray-200 text-xs focus:ring-2 focus:ring-blue-500 bg-white"
               aria-label={isRtl ? 'البحث' : 'Search'}
+            />
+            <ProductDropdown
+              departments={departments}
+              selectedDepartment={filter.department}
+              onChange={(value) => setFilter((prev) => ({ ...prev, department: value }))}
+              isRtl={isRtl}
             />
           </div>
         </div>
@@ -324,6 +358,7 @@ export const Dashboard: React.FC = () => {
   const [chefs, setChefs] = useState<Chef[]>([]);
   const [branches, setBranches] = useState<{ _id: string; name: string; nameEn?: string }[]>([]);
   const [returns, setReturns] = useState<Return[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [branchPerformance, setBranchPerformance] = useState<BranchPerformance[]>([]);
   const [chefPerformance, setChefPerformance] = useState<ChefPerformance[]>([]);
   const [stats, setStats] = useState<Stats>({
@@ -332,9 +367,7 @@ export const Dashboard: React.FC = () => {
     inProductionOrders: 0,
     inTransitOrders: 0,
     deliveredOrders: 0,
-    totalOrderValue: 0, // تغيير من totalSales إلى totalOrderValue
-    completedTasks: 0,
-    inProgressTasks: 0,
+    totalInventoryValue: 0,
     totalReturns: 0,
     pendingReturns: 0,
     approvedReturns: 0,
@@ -375,6 +408,7 @@ export const Dashboard: React.FC = () => {
         setChefs(cachedData.chefs);
         setBranches(cachedData.branches);
         setReturns(cachedData.returns);
+        setDepartments(cachedData.departments);
         setBranchPerformance(cachedData.branchPerformance);
         setChefPerformance(cachedData.chefPerformance);
         setStats(cachedData.stats);
@@ -413,6 +447,7 @@ export const Dashboard: React.FC = () => {
         let chefsResponse: any[] = [];
         let branchesResponse: any[] = [];
         let returnsResponse: any = { returns: [], total: 0 };
+        let departmentsResponse: any[] = [];
 
         if (user.role === 'chef') {
           const chefProfile = await chefsAPI.getByUserId(user.id || user._id);
@@ -435,8 +470,9 @@ export const Dashboard: React.FC = () => {
                   return { returns: [], total: 0 };
                 })
               : Promise.resolve({ returns: [], total: 0 }),
+            departmentsAPI.getAll().catch(() => []),
           ];
-          [ordersResponse, tasksResponse, chefsResponse, branchesResponse, returnsResponse] = await Promise.all(promises);
+          [ordersResponse, tasksResponse, chefsResponse, branchesResponse, returnsResponse, departmentsResponse] = await Promise.all(promises);
         }
 
         const mappedOrders = ordersResponse.map((order: any) => ({
@@ -523,6 +559,12 @@ export const Dashboard: React.FC = () => {
           createdAt: formatDate(ret.createdAt || new Date(), language),
         }));
 
+        const mappedDepartments = departmentsResponse.map((dept: any) => ({
+          _id: dept._id || crypto.randomUUID(),
+          name: dept.name || (isRtl ? 'قسم غير معروف' : 'Unknown Department'),
+          nameEn: dept.nameEn || dept.name || 'Unknown',
+        }));
+
         const branchPerf = mappedBranches.map((branch: any) => {
           const branchOrders = mappedOrders.filter((o) => o.branchId === branch._id);
           const total = branchOrders.length;
@@ -549,6 +591,16 @@ export const Dashboard: React.FC = () => {
           };
         }).filter((c: any) => c.totalTasks > 0);
 
+        // حساب إجمالي قيمة المخزون (الطلبات المستلمة - المبيعات - المرتجعات)
+        const receivedOrders = mappedOrders.filter((o) => o.status === 'delivered').reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
+        const sales = await salesAPI.getAll({ startDate: startDate.toISOString(), endDate: now.toISOString() }).then((res) =>
+          res.sales.reduce((sum: number, sale: any) => sum + Number(sale.totalAmount || 0), 0)
+        );
+        const returnsValue = mappedReturns
+          .filter((r) => r.status === 'approved')
+          .reduce((sum, ret) => sum + ret.items.reduce((itemSum, item) => itemSum + Number(item.quantity || 0) * Number(item.price || 0), 0), 0);
+        const totalInventoryValue = receivedOrders - sales - returnsValue;
+
         const totalOrders = user.role === 'chef' ? mappedTasks.length : mappedOrders.length;
         const pendingOrders = user.role === 'chef'
           ? mappedTasks.filter((task) => task.status === 'pending' || task.status === 'assigned').length
@@ -556,14 +608,11 @@ export const Dashboard: React.FC = () => {
         const inProductionOrders = mappedOrders.filter((o) => o.status === 'in_production').length;
         const inTransitOrders = mappedOrders.filter((o) => o.status === 'in_transit').length;
         const deliveredOrders = mappedOrders.filter((o) => o.status === 'delivered').length;
-        const totalOrderValue = mappedOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
-        const completedTasks = mappedTasks.filter((task) => task.status === 'completed').length;
-        const inProgressTasks = mappedTasks.filter((task) => task.status === 'in_progress').length;
         const totalReturns = mappedReturns.length;
         const pendingReturns = mappedReturns.filter((r) => r.status === 'pending_approval').length;
         const approvedReturns = mappedReturns.filter((r) => r.status === 'approved').length;
         const rejectedReturns = mappedReturns.filter((r) => r.status === 'rejected').length;
-        const averageOrderValue = totalOrders > 0 ? totalOrderValue / totalOrders : 0;
+        const averageOrderValue = totalOrders > 0 ? totalInventoryValue / totalOrders : 0;
 
         const newData = {
           orders: mappedOrders,
@@ -571,6 +620,7 @@ export const Dashboard: React.FC = () => {
           chefs: mappedChefs,
           branches: mappedBranches,
           returns: mappedReturns,
+          departments: mappedDepartments,
           branchPerformance: branchPerf,
           chefPerformance: chefPerf,
           stats: {
@@ -579,9 +629,7 @@ export const Dashboard: React.FC = () => {
             inProductionOrders,
             inTransitOrders,
             deliveredOrders,
-            totalOrderValue,
-            completedTasks,
-            inProgressTasks,
+            totalInventoryValue,
             totalReturns,
             pendingReturns,
             approvedReturns,
@@ -596,6 +644,7 @@ export const Dashboard: React.FC = () => {
         setChefs(newData.chefs);
         setBranches(newData.branches);
         setReturns(newData.returns);
+        setDepartments(newData.departments);
         setBranchPerformance(newData.branchPerformance);
         setChefPerformance(newData.chefPerformance);
         setStats(newData.stats);
@@ -634,8 +683,9 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     if (!socket || !user || !isConnected) return;
 
-    socket.on('connect_error', () => {
-      const errorMessage = isRtl ? 'خطأ في الاتصال بالسوكت' : 'Socket connection error';
+    socket.on('connect_error', (err) => {
+      const errorMessage = isRtl ? `فشل الاتصال بالسوكت: ${err.message}` : `Socket connection error: ${err.message}`;
+      console.error(`[${new Date().toISOString()}] Socket connect error:`, err);
       addNotification({
         _id: `socket-error-${Date.now()}`,
         type: 'error',
@@ -644,6 +694,7 @@ export const Dashboard: React.FC = () => {
         createdAt: new Date().toLocaleString(language),
         path: '/dashboard',
       });
+      toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
     });
 
     socket.on('taskAssigned', (data: any) => {
@@ -972,15 +1023,36 @@ export const Dashboard: React.FC = () => {
         color="green"
         ariaLabel={isRtl ? 'الطلبات المسلمة' : 'Delivered Orders'}
       />
-      {['admin', 'production', 'branch'].includes(user.role) && (
+      <StatsCard
+        title={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
+        value={stats.totalInventoryValue.toFixed(2)}
+        icon={DollarSign}
+        color="purple"
+        ariaLabel={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
+      />
+      <StatsCard
+        title={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
+        value={stats.totalReturns.toString()}
+        icon={RotateCcw}
+        color="orange"
+        ariaLabel={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
+      />
+      <StatsCard
+        title={isRtl ? 'المرتجعات المعلقة' : 'Pending Returns'}
+        value={stats.pendingReturns.toString()}
+        icon={AlertCircle}
+        color="red"
+        ariaLabel={isRtl ? 'المرتجعات المعلقة' : 'Pending Returns'}
+      />
+      <StatsCard
+        title={isRtl ? 'المرتجعات الموافق عليها' : 'Approved Returns'}
+        value={stats.approvedReturns.toString()}
+        icon={CheckCircle}
+        color="green"
+        ariaLabel={isRtl ? 'المرتجعات الموافق عليها' : 'Approved Returns'}
+      />
+      {user.role !== 'branch' && (
         <>
-          <StatsCard
-            title={isRtl ? 'إجمالي قيمة الطلبات' : 'Total Order Value'} // تغيير من Total Sales إلى Total Order Value
-            value={stats.totalOrderValue.toFixed(2)}
-            icon={DollarSign}
-            color="purple"
-            ariaLabel={isRtl ? 'إجمالي قيمة الطلبات' : 'Total Order Value'}
-          />
           <StatsCard
             title={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
             value={stats.completedTasks.toString()}
@@ -994,34 +1066,6 @@ export const Dashboard: React.FC = () => {
             icon={Clock}
             color="blue"
             ariaLabel={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
-          />
-          <StatsCard
-            title={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
-            value={stats.totalReturns.toString()}
-            icon={RotateCcw}
-            color="orange"
-            ariaLabel={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
-          />
-          <StatsCard
-            title={isRtl ? 'المرتجعات المعلقة' : 'Pending Returns'}
-            value={stats.pendingReturns.toString()}
-            icon={AlertCircle}
-            color="red"
-            ariaLabel={isRtl ? 'المرتجعات المعلقة' : 'Pending Returns'}
-          />
-          <StatsCard
-            title={isRtl ? 'المرتجعات الموافق عليها' : 'Approved Returns'}
-            value={stats.approvedReturns.toString()}
-            icon={CheckCircle}
-            color="green"
-            ariaLabel={isRtl ? 'المرتجعات الموافق عليها' : 'Approved Returns'}
-          />
-          <StatsCard
-            title={isRtl ? 'المرتجعات المرفوضة' : 'Rejected Returns'}
-            value={stats.rejectedReturns.toString()}
-            icon={AlertCircle}
-            color="red"
-            ariaLabel={isRtl ? 'المرتجعات المرفوضة' : 'Rejected Returns'}
           />
         </>
       )}
@@ -1075,7 +1119,7 @@ export const Dashboard: React.FC = () => {
   const renderChefPerformance = () => (
     <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 mt-4">
       <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
-        <ChefHat className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+        <BarChart3 className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
         {isRtl ? 'أداء الطهاة' : 'Chef Performance'}
       </h3>
       <div className="space-y-2 max-h-64 overflow-y-auto">
@@ -1198,13 +1242,14 @@ export const Dashboard: React.FC = () => {
           tasks={tasks}
           isRtl={isRtl}
           language={language}
+          departments={departments}
           handleStartTask={handleStartTask}
           handleCompleteTask={handleCompleteTask}
         />
       ) : (
         <>
           {renderStats()}
-          <div className="grid grid-cols-1 md:grid-cols-2  gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-3">
               <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
