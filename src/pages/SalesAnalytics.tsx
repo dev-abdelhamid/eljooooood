@@ -1,13 +1,25 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { salesAPI, branchesAPI } from '../services/api'; // Assume branchesAPI exists for fetching branches
+import { salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, BarChart2, Search, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
 import { debounce } from 'lodash';
+import {
+  ResponsiveContainer,
+  LineChart,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+  Tooltip as RechartsTooltip,
+  Legend as RechartsLegend,
+  Line as RechartsLine,
+  BarChart as RechartsBarChart,
+  Bar as RechartsBar,
+} from 'recharts';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend);
 
@@ -77,13 +89,6 @@ interface SalesAnalytics {
   topCustomers: Array<{ customerName: string; customerPhone: string; totalSpent: number; purchaseCount: number }>;
 }
 
-interface Branch {
-  _id: string;
-  name: string;
-  nameEn?: string;
-  displayName: string;
-}
-
 const translations = {
   ar: {
     title: 'إحصائيات المبيعات',
@@ -101,7 +106,6 @@ const translations = {
     salesTrends: 'اتجاهات المبيعات',
     topCustomers: 'أفضل العملاء',
     searchPlaceholder: 'ابحث عن منتجات أو أقسام...',
-    branchFilterPlaceholder: 'اختر فرعًا',
     noAnalytics: 'لا توجد إحصائيات متاحة',
     noData: 'لا توجد بيانات',
     noCustomers: 'لا توجد عملاء',
@@ -113,7 +117,6 @@ const translations = {
       network_error: 'خطأ في الاتصال بالشبكة',
       invalid_data: 'بيانات غير صالحة من الخادم',
       invalid_dates: 'تاريخ البداية يجب أن يكون قبل تاريخ النهاية',
-      fetch_branches: 'خطأ أثناء جلب الفروع',
     },
     currency: 'ريال',
   },
@@ -133,7 +136,6 @@ const translations = {
     salesTrends: 'Sales Trends',
     topCustomers: 'Top Customers',
     searchPlaceholder: 'Search products or departments...',
-    branchFilterPlaceholder: 'Select a branch',
     noAnalytics: 'No analytics available',
     noData: 'No data available',
     noCustomers: 'No customers',
@@ -145,7 +147,6 @@ const translations = {
       network_error: 'Network connection error',
       invalid_data: 'Invalid data from server',
       invalid_dates: 'Start date must be before end date',
-      fetch_branches: 'Error fetching branches',
     },
     currency: 'SAR',
   },
@@ -200,7 +201,7 @@ const SearchInput: React.FC<{
   );
 });
 
-const Dropdown: React.FC<{
+const ProductDropdown: React.FC<{
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
@@ -555,7 +556,7 @@ const SalesAnalytics: React.FC = () => {
         </div>
         <div className="flex flex-col sm:flex-row gap-3">
           <SearchInput value={searchTerm} onChange={debouncedSearch} />
-          <Dropdown value={selectedBranch} onChange={setSelectedBranch} options={branchOptions} placeholder={t.branchFilterPlaceholder} />
+          <ProductDropdown value={selectedBranch} onChange={setSelectedBranch} options={branchOptions} placeholder={t.branchFilterPlaceholder} />
           <div className="flex gap-3">
             <div>
               <label className="block text-sm text-gray-700">{t.startDate}</label>
@@ -592,13 +593,48 @@ const SalesAnalytics: React.FC = () => {
           <NoDataMessage message={t.noAnalytics} />
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+              <h3 className="text-sm font-medium text-gray-700">{t.totalSales}</h3>
+              <p className="text-lg font-bold text-amber-600">{analytics.totalSales.toFixed(2)} {t.currency}</p>
+              <p className="text-xs text-gray-500">{t.totalCount}: {analytics.totalCount}</p>
+            </div>
+            <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+              <h3 className="text-sm font-medium text-gray-700">{t.averageOrderValue}</h3>
+              <p className="text-lg font-bold text-amber-600">{analytics.averageOrderValue.toFixed(2)} {t.currency}</p>
+            </div>
+            <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+              <h3 className="text-sm font-medium text-gray-700">{t.topProduct}</h3>
+              {analytics.topProduct?.productId ? (
+                <div className="mt-2 space-y-1">
+                  <p className="text-sm">{analytics.topProduct.displayName}</p>
+                  <p className="text-xs text-gray-500">{t.totalSales}: {analytics.topProduct.totalRevenue.toFixed(2)} {t.currency}</p>
+                  <p className="text-xs text-gray-500">{t.totalCount}: {analytics.topProduct.totalQuantity}</p>
+                </div>
+              ) : (
+                <NoDataMessage message={t.noData} />
+              )}
+            </div>
+          </div>
           <div className="col-span-1 md:col-span-2 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-700 mb-3">{t.salesTrends}</h3>
             {analytics.salesTrends.length > 0 ? (
-              <div className="h-48">
-                <Line data={chartData.salesTrends} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.salesTrends } } }} />
-              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart
+                  data={analytics.salesTrends}
+                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                  layout={isRtl ? 'vertical' : 'horizontal'}
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="period" angle={isRtl ? 45 : -45} textAnchor={isRtl ? 'start' : 'end'} height={60} reversed={isRtl} />
+                  <YAxis reversed={isRtl} />
+                  <RechartsTooltip />
+                  <RechartsLegend />
+                  <RechartsLine type="monotone" dataKey="totalSales" stroke="#8884d8" activeDot={{ r: 8 }} />
+                  <RechartsLine type="monotone" dataKey="saleCount" stroke="#82ca9d" />
+                </LineChart>
+              </ResponsiveContainer>
             ) : (
               <NoDataMessage message={t.noData} />
             )}
@@ -606,132 +642,106 @@ const SalesAnalytics: React.FC = () => {
           <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-700 mb-3">{t.productSales}</h3>
             {filteredData.productSales.length > 0 ? (
-              <div className="h-48">
-                <Bar data={chartData.productSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.productSales } } }} />
-              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <RechartsBarChart data={filteredData.productSales.slice(0, 5)} barSize={30}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="displayName" angle={isRtl ? 45 : -45} textAnchor={isRtl ? 'start' : 'end'} height={60} reversed={isRtl} />
+                  <YAxis reversed={isRtl} />
+                  <RechartsTooltip />
+                  <RechartsLegend />
+                  <RechartsBar dataKey="totalRevenue" fill="#8884d8" />
+                </RechartsBarChart>
+              </ResponsiveContainer>
             ) : (
               <NoDataMessage message={t.noData} />
             )}
-            <DataTable
-              title={t.productSales}
-              data={filteredData.productSales}
-              columns={[
-                { key: 'displayName', label: isRtl ? 'المنتج' : 'Product' },
-                { key: 'totalRevenue', label: t.totalSales, width: 'w-1/4' },
-                { key: 'totalQuantity', label: t.totalCount, width: 'w-1/4' },
-              ]}
-              isRtl={isRtl}
-              currency={t.currency}
-            />
           </div>
           <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-700 mb-3">{t.leastProductSales}</h3>
             {filteredData.leastProductSales.length > 0 ? (
-              <div className="h-48">
-                <Bar data={chartData.leastProductSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.leastProductSales } } }} />
-              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <RechartsBarChart data={filteredData.leastProductSales.slice(0, 5)} barSize={30}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="displayName" angle={isRtl ? 45 : -45} textAnchor={isRtl ? 'start' : 'end'} height={60} reversed={isRtl} />
+                  <YAxis reversed={isRtl} />
+                  <RechartsTooltip />
+                  <RechartsLegend />
+                  <RechartsBar dataKey="totalRevenue" fill="#82ca9d" />
+                </RechartsBarChart>
+              </ResponsiveContainer>
             ) : (
               <NoDataMessage message={t.noData} />
             )}
-            <DataTable
-              title={t.leastProductSales}
-              data={filteredData.leastProductSales}
-              columns={[
-                { key: 'displayName', label: isRtl ? 'المنتج' : 'Product' },
-                { key: 'totalRevenue', label: t.totalSales, width: 'w-1/4' },
-                { key: 'totalQuantity', label: t.totalCount, width: 'w-1/4' },
-              ]}
-              isRtl={isRtl}
-              currency={t.currency}
-            />
           </div>
           <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-700 mb-3">{t.departmentSales}</h3>
             {filteredData.departmentSales.length > 0 ? (
-              <div className="h-48">
-                <Bar data={chartData.departmentSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.departmentSales } } }} />
-              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <RechartsBarChart data={filteredData.departmentSales.slice(0, 5)} barSize={30}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="displayName" angle={isRtl ? 45 : -45} textAnchor={isRtl ? 'start' : 'end'} height={60} reversed={isRtl} />
+                  <YAxis reversed={isRtl} />
+                  <RechartsTooltip />
+                  <RechartsLegend />
+                  <RechartsBar dataKey="totalRevenue" fill="#8884d8" />
+                </RechartsBarChart>
+              </ResponsiveContainer>
             ) : (
               <NoDataMessage message={t.noData} />
             )}
-            <DataTable
-              title={t.departmentSales}
-              data={filteredData.departmentSales}
-              columns={[
-                { key: 'displayName', label: isRtl ? 'القسم' : 'Department' },
-                { key: 'totalRevenue', label: t.totalSales, width: 'w-1/4' },
-                { key: 'totalQuantity', label: t.totalCount, width: 'w-1/4' },
-              ]}
-              isRtl={isRtl}
-              currency={t.currency}
-            />
           </div>
           <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-700 mb-3">{t.leastDepartmentSales}</h3>
             {filteredData.leastDepartmentSales.length > 0 ? (
-              <div className="h-48">
-                <Bar data={chartData.leastDepartmentSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.leastDepartmentSales } } }} />
-              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <RechartsBarChart data={filteredData.leastDepartmentSales.slice(0, 5)} barSize={30}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="displayName" angle={isRtl ? 45 : -45} textAnchor={isRtl ? 'start' : 'end'} height={60} reversed={isRtl} />
+                  <YAxis reversed={isRtl} />
+                  <RechartsTooltip />
+                  <RechartsLegend />
+                  <RechartsBar dataKey="totalRevenue" fill="#82ca9d" />
+                </RechartsBarChart>
+              </ResponsiveContainer>
             ) : (
               <NoDataMessage message={t.noData} />
             )}
-            <DataTable
-              title={t.leastDepartmentSales}
-              data={filteredData.leastDepartmentSales}
-              columns={[
-                { key: 'displayName', label: isRtl ? 'القسم' : 'Department' },
-                { key: 'totalRevenue', label: t.totalSales, width: 'w-1/4' },
-                { key: 'totalQuantity', label: t.totalCount, width: 'w-1/4' },
-              ]}
-              isRtl={isRtl}
-              currency={t.currency}
-            />
           </div>
           <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-700 mb-3">{t.branchSales}</h3>
             {filteredData.branchSales.length > 0 ? (
-              <div className="h-48">
-                <Bar data={chartData.branchSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.branchSales } } }} />
-              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <RechartsBarChart data={filteredData.branchSales.slice(0, 5)} barSize={30}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="displayName" angle={isRtl ? 45 : -45} textAnchor={isRtl ? 'start' : 'end'} height={60} reversed={isRtl} />
+                  <YAxis reversed={isRtl} />
+                  <RechartsTooltip />
+                  <RechartsLegend />
+                  <RechartsBar dataKey="totalSales" fill="#8884d8" />
+                </RechartsBarChart>
+              </ResponsiveContainer>
             ) : (
               <NoDataMessage message={t.noData} />
             )}
-            <DataTable
-              title={t.branchSales}
-              data={filteredData.branchSales}
-              columns={[
-                { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch', width: 'w-1/4' },
-                { key: 'totalSales', label: t.totalSales, width: 'w-1/4' },
-                { key: 'saleCount', label: t.totalCount, width: 'w-1/4' },
-                { key: 'averageOrderValue', label: t.averageOrderValue, width: 'w-1/4' },
-              ]}
-              isRtl={isRtl}
-              currency={t.currency}
-            />
           </div>
           <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-700 mb-3">{t.leastBranchSales}</h3>
             {filteredData.leastBranchSales.length > 0 ? (
-              <div className="h-48">
-                <Bar data={chartData.leastBranchSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.leastBranchSales } } }} />
-              </div>
+              <ResponsiveContainer width="100%" height={300}>
+                <RechartsBarChart data={filteredData.leastBranchSales.slice(0, 5)} barSize={30}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="displayName" angle={isRtl ? 45 : -45} textAnchor={isRtl ? 'start' : 'end'} height={60} reversed={isRtl} />
+                  <YAxis reversed={isRtl} />
+                  <RechartsTooltip />
+                  <RechartsLegend />
+                  <RechartsBar dataKey="totalSales" fill="#82ca9d" />
+                </RechartsBarChart>
+              </ResponsiveContainer>
             ) : (
               <NoDataMessage message={t.noData} />
             )}
-            <DataTable
-              title={t.leastBranchSales}
-              data={filteredData.leastBranchSales}
-              columns={[
-                { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch', width: 'w-1/4' },
-                { key: 'totalSales', label: t.totalSales, width: 'w-1/4' },
-                { key: 'saleCount', label: t.totalCount, width: 'w-1/4' },
-                { key: 'averageOrderValue', label: t.averageOrderValue, width: 'w-1/4' },
-              ]}
-              isRtl={isRtl}
-              currency={t.currency}
-            />
           </div>
-          <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+          <div className="col-span-1 md:col-span-2 p-4 bg-white rounded-lg shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-700 mb-3">{t.topCustomers}</h3>
             {analytics.topCustomers.length > 0 ? (
               <div className="overflow-x-auto">
@@ -765,3 +775,4 @@ const SalesAnalytics: React.FC = () => {
 };
 
 export default React.memo(SalesAnalytics);
+
