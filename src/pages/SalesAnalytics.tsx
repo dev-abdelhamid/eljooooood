@@ -768,12 +768,12 @@ const SalesAnalytics: React.FC = () => {
                 <DataTable
                   title={t.leastBranchSales}
                   data={filteredData.leastBranchSales}
-                  columns=[
+                  columns={[
                     { key: 'displayName', label: isRtl ? 'الفرع' : 'Branch', width: 'w-1/4' },
                     { key: 'totalSales', label: t.totalSales, width: 'w-1/4' },
                     { key: 'saleCount', label: t.totalCount, width: 'w-1/4' },
                     { key: 'averageOrderValue', label: t.averageOrderValue, width: 'w-1/4' },
-                  ]
+                  ]}
                   isRtl={isRtl}
                   currency={t.currency}
                 />
