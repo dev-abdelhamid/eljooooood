@@ -15,6 +15,12 @@ const salesAxios = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// دالة للتحقق من صلاحية التاريخ
+const isValidDate = (date: string | undefined): boolean => {
+  if (!date) return true; // التاريخ اختياري
+  return !isNaN(new Date(date).getTime());
+};
+
 // Error handling
 const handleError = async (error: AxiosError, originalRequest: AxiosRequestConfig): Promise<never> => {
   const errorDetails = {
@@ -181,11 +187,11 @@ export const salesAPI = {
       console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid branch ID:`, params.branch);
       throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
     }
-    if (params.startDate && isNaN(new Date(params.startDate).getTime())) {
+    if (params.startDate && !isValidDate(params.startDate)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid start date:`, params.startDate);
       throw new Error(isRtl ? 'تاريخ البدء غير صالح' : 'Invalid start date');
     }
-    if (params.endDate && isNaN(new Date(params.endDate).getTime())) {
+    if (params.endDate && !isValidDate(params.endDate)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAll - Invalid end date:`, params.endDate);
       throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
     }
@@ -204,7 +210,33 @@ export const salesAPI = {
     }
     const response = await salesAxios.get(`/sales/${id}`);
     console.log(`[${new Date().toISOString()}] salesAPI.getById - Success:`, response);
-    return response.sale;
+    return response;
+  },
+  update: async (id: string, saleData: Partial<SaleData>) => {
+    console.log(`[${new Date().toISOString()}] salesAPI.update - Sending:`, { id, saleData });
+    if (!isValidObjectId(id)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid sale ID:`, id);
+      throw new Error(isRtl ? 'معرف المبيعة غير صالح' : 'Invalid sale ID');
+    }
+    if (saleData.items?.some((item) => !isValidObjectId(item.productId) || item.quantity < 1 || item.unitPrice < 0)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid items:`, saleData.items);
+      throw new Error(isRtl ? 'بيانات المنتجات غير صالحة' : 'Invalid product data');
+    }
+    if (!isValidPhone(saleData.customerPhone)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid customer phone:`, saleData.customerPhone);
+      throw new Error(isRtl ? 'رقم هاتف العميل غير صالح' : 'Invalid customer phone');
+    }
+    if (!isValidPaymentMethod(saleData.paymentMethod)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid payment method:`, saleData.paymentMethod);
+      throw new Error(isRtl ? 'طريقة الدفع غير صالحة' : 'Invalid payment method');
+    }
+    if (!isValidPaymentStatus(saleData.paymentStatus)) {
+      console.error(`[${new Date().toISOString()}] salesAPI.update - Invalid payment status:`, saleData.paymentStatus);
+      throw new Error(isRtl ? 'حالة الدفع غير صالحة' : 'Invalid payment status');
+    }
+    const response = await salesAxios.put(`/sales/${id}`, saleData);
+    console.log(`[${new Date().toISOString()}] salesAPI.update - Success:`, response);
+    return response;
   },
   delete: async (id: string) => {
     console.log(`[${new Date().toISOString()}] salesAPI.delete - Sending:`, { id });
@@ -222,36 +254,44 @@ export const salesAPI = {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid branch ID:`, params.branch);
       throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
     }
-    if (params.startDate && isNaN(new Date(params.startDate).getTime())) {
+    if (params.startDate && !isValidDate(params.startDate)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid start date:`, params.startDate);
       throw new Error(isRtl ? 'تاريخ البدء غير صالح' : 'Invalid start date');
     }
-    if (params.endDate && isNaN(new Date(params.endDate).getTime())) {
+    if (params.endDate && !isValidDate(params.endDate)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getAnalytics - Invalid end date:`, params.endDate);
       throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
     }
-    const response = await salesAxios.get('/sales/analytics', { params });
+    // تحويل التواريخ إلى تنسيق ISO8601
+    const formattedParams = {
+      ...params,
+      startDate: params.startDate ? new Date(params.startDate).toISOString() : undefined,
+      endDate: params.endDate ? new Date(params.endDate).toISOString() : undefined,
+    };
+    const response = await salesAxios.get('/sales/analytics', { params: formattedParams });
     console.log(`[${new Date().toISOString()}] salesAPI.getAnalytics - Success:`, {
       totalSales: response.totalSales,
       totalCount: response.totalCount,
     });
     return response;
   },
-   getBranchAnalytics: async (params: AnalyticsParams) => {
+  getBranchAnalytics: async (params: AnalyticsParams) => {
     console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Sending:`, params);
-    if (params.branch && !isValidObjectId(params.branch)) {
-      console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid branch ID:`, params.branch);
-      throw new Error(isRtl ? 'معرف الفرع غير صالح' : 'Invalid branch ID');
-    }
-    if (params.startDate && isNaN(new Date(params.startDate).getTime())) {
+    if (params.startDate && !isValidDate(params.startDate)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid start date:`, params.startDate);
       throw new Error(isRtl ? 'تاريخ البدء غير صالح' : 'Invalid start date');
     }
-    if (params.endDate && isNaN(new Date(params.endDate).getTime())) {
+    if (params.endDate && !isValidDate(params.endDate)) {
       console.error(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Invalid end date:`, params.endDate);
       throw new Error(isRtl ? 'تاريخ الانتهاء غير صالح' : 'Invalid end date');
     }
-    const response = await salesAxios.get('/sales/branch-analytics', { params });
+    // تحويل التواريخ إلى تنسيق ISO8601
+    const formattedParams = {
+      ...params,
+      startDate: params.startDate ? new Date(params.startDate).toISOString() : undefined,
+      endDate: params.endDate ? new Date(params.endDate).toISOString() : undefined,
+    };
+    const response = await salesAxios.get('/sales/branch-analytics', { params: formattedParams });
     console.log(`[${new Date().toISOString()}] salesAPI.getBranchAnalytics - Success:`, {
       totalSales: response.totalSales,
       totalCount: response.totalCount,
@@ -259,5 +299,3 @@ export const salesAPI = {
     return response;
   },
 };
-
-export default salesAPI;
