@@ -8,19 +8,40 @@ import { ShoppingCart, Clock, BarChart3, CheckCircle, AlertCircle, Package, Doll
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
-import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, returnsAPI } from '../services/api';
+import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, returnsAPI, inventoryAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 
-// تعريف الواجهات
+// Placeholder ProductDropdown component (replace with your actual implementation if available)
+const ProductDropdown: React.FC<{
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string; enLabel: string }[];
+  isRtl: boolean;
+}> = ({ value, onChange, options, isRtl }) => (
+  <select
+    value={value}
+    onChange={(e) => onChange(e.target.value)}
+    className="w-full sm:w-40 p-1.5 rounded-lg border border-gray-200 text-xs focus:ring-2 focus:ring-blue-500 bg-white"
+    aria-label={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
+  >
+    {options.map((option) => (
+      <option key={option.value} value={option.value}>
+        {isRtl ? option.label : option.enLabel}
+      </option>
+    ))}
+  </select>
+);
+
+// Interfaces
 interface Stats {
   totalOrders: number;
   pendingOrders: number;
   inProductionOrders: number;
   inTransitOrders: number;
   deliveredOrders: number;
-  totalOrderValue: number; // تم تغيير الاسم من totalSales إلى totalOrderValue
-  completedTasks: number;
-  inProgressTasks: number;
+  totalInventoryValue: number; // Changed from totalOrderValue
+  completedTasks: number; // Only for admin, production, chef
+  inProgressTasks: number; // Only for admin, production, chef
   totalReturns: number;
   pendingReturns: number;
   approvedReturns: number;
@@ -131,14 +152,14 @@ const timeFilterOptions = [
   { value: 'year', label: 'هذا العام', enLabel: 'This Year' },
 ];
 
-// مكون تحميل محسن
+// Loader component
 const Loader: React.FC = () => (
   <div className="flex justify-center items-center h-screen">
     <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
   </div>
 );
 
-// مكون بطاقة الإحصائيات مع تحسينات في الأسلوب
+// StatsCard component
 const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color: string; ariaLabel: string }> = React.memo(
   ({ title, value, icon: Icon, color, ariaLabel }) => (
     <div
@@ -156,7 +177,7 @@ const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color:
   )
 );
 
-// مكون لوحة تحكم الشيف
+// ChefDashboard component
 const ChefDashboard: React.FC<{
   stats: Stats;
   tasks: Task[];
@@ -166,7 +187,6 @@ const ChefDashboard: React.FC<{
   handleCompleteTask: (taskId: string, orderId: string) => void;
 }> = React.memo(({ stats, tasks, isRtl, language, handleStartTask, handleCompleteTask }) => {
   const [filter, setFilter] = useState<FilterState>({ status: 'all', search: '' });
-
   const filteredTasks = useMemo(() => {
     return tasks
       .filter((task) => filter.status === 'all' || task.status === filter.status)
@@ -332,7 +352,7 @@ export const Dashboard: React.FC = () => {
     inProductionOrders: 0,
     inTransitOrders: 0,
     deliveredOrders: 0,
-    totalOrderValue: 0, // تغيير من totalSales إلى totalOrderValue
+    totalInventoryValue: 0, // Changed from totalOrderValue
     completedTasks: 0,
     inProgressTasks: 0,
     totalReturns: 0,
@@ -345,9 +365,7 @@ export const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isInitialLoad, setIsInitialLoad] = useState(true);
-
   const cache = useMemo(() => new Map<string, any>(), []);
-
   const cacheKey = useMemo(() => `${user?.id || user?._id}-${user?.role}-${timeFilter}`, [user, timeFilter]);
 
   const fetchDashboardData = useCallback(
@@ -413,6 +431,7 @@ export const Dashboard: React.FC = () => {
         let chefsResponse: any[] = [];
         let branchesResponse: any[] = [];
         let returnsResponse: any = { returns: [], total: 0 };
+        let inventoryValue: number = 0;
 
         if (user.role === 'chef') {
           const chefProfile = await chefsAPI.getByUserId(user.id || user._id);
@@ -424,6 +443,7 @@ export const Dashboard: React.FC = () => {
         } else {
           if (user.role === 'branch') query.branch = user.id || user._id;
           if (user.role === 'production' && user.department) query.departmentId = user.department._id;
+
           const promises = [
             ordersAPI.getAll(query).catch(() => []),
             productionAssignmentsAPI.getAllTasks(query).catch(() => []),
@@ -435,8 +455,11 @@ export const Dashboard: React.FC = () => {
                   return { returns: [], total: 0 };
                 })
               : Promise.resolve({ returns: [], total: 0 }),
+            user.role === 'branch' || user.role === 'production'
+              ? inventoryAPI.getTotalValue({ branchId: user.branchId, departmentId: user.department?._id }).catch(() => 0)
+              : Promise.resolve(0),
           ];
-          [ordersResponse, tasksResponse, chefsResponse, branchesResponse, returnsResponse] = await Promise.all(promises);
+          [ordersResponse, tasksResponse, chefsResponse, branchesResponse, returnsResponse, inventoryValue] = await Promise.all(promises);
         }
 
         const mappedOrders = ordersResponse.map((order: any) => ({
@@ -556,14 +579,14 @@ export const Dashboard: React.FC = () => {
         const inProductionOrders = mappedOrders.filter((o) => o.status === 'in_production').length;
         const inTransitOrders = mappedOrders.filter((o) => o.status === 'in_transit').length;
         const deliveredOrders = mappedOrders.filter((o) => o.status === 'delivered').length;
-        const totalOrderValue = mappedOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
+        const totalInventoryValue = Number(inventoryValue) || 0;
         const completedTasks = mappedTasks.filter((task) => task.status === 'completed').length;
         const inProgressTasks = mappedTasks.filter((task) => task.status === 'in_progress').length;
         const totalReturns = mappedReturns.length;
         const pendingReturns = mappedReturns.filter((r) => r.status === 'pending_approval').length;
         const approvedReturns = mappedReturns.filter((r) => r.status === 'approved').length;
         const rejectedReturns = mappedReturns.filter((r) => r.status === 'rejected').length;
-        const averageOrderValue = totalOrders > 0 ? totalOrderValue / totalOrders : 0;
+        const averageOrderValue = totalOrders > 0 ? totalInventoryValue / totalOrders : 0;
 
         const newData = {
           orders: mappedOrders,
@@ -579,7 +602,7 @@ export const Dashboard: React.FC = () => {
             inProductionOrders,
             inTransitOrders,
             deliveredOrders,
-            totalOrderValue,
+            totalInventoryValue,
             completedTasks,
             inProgressTasks,
             totalReturns,
@@ -652,7 +675,6 @@ export const Dashboard: React.FC = () => {
         return;
       }
       if (data.chefId !== (user?.id || user?._id) || !['admin', 'production', 'chef'].includes(user.role)) return;
-
       const notification = {
         _id: data.eventId,
         type: 'info' as const,
@@ -697,7 +719,6 @@ export const Dashboard: React.FC = () => {
     socket.on('orderCompleted', (data: any) => {
       if (!data.orderId || !data.orderNumber || !data.branchName || !data.eventId) return;
       if (!['admin', 'branch', 'production'].includes(user.role)) return;
-
       addNotification({
         _id: data.eventId,
         type: 'success' as const,
@@ -721,7 +742,6 @@ export const Dashboard: React.FC = () => {
         return;
       }
       if (!['admin', 'production', 'chef'].includes(user.role) || (user.role === 'chef' && data.chefId !== user._id)) return;
-
       setTasks((prev) =>
         prev.map((task) =>
           task.id === data.itemId && task.orderId === data.orderId ? { ...task, status: data.status } : task
@@ -749,7 +769,6 @@ export const Dashboard: React.FC = () => {
         return;
       }
       if (!['admin', 'production', 'branch'].includes(user.role) || (user.role === 'branch' && data.branchId !== user.branchId)) return;
-
       addNotification({
         _id: data.eventId,
         type: 'info',
@@ -772,7 +791,6 @@ export const Dashboard: React.FC = () => {
         return;
       }
       if (!['admin', 'production', 'branch'].includes(user.role) || (user.role === 'branch' && data.branchId !== user.branchId)) return;
-
       setReturns((prev) =>
         prev.map((ret) =>
           ret.id === data.returnId ? { ...ret, status: data.status, reviewNotes: data.reviewNotes || '', reviewNotesEn: data.reviewNotesEn || data.reviewNotes || '' } : ret
@@ -817,7 +835,6 @@ export const Dashboard: React.FC = () => {
         });
         return;
       }
-
       try {
         await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'in_progress' });
         const task = tasks.find((t) => t.id === taskId);
@@ -877,7 +894,6 @@ export const Dashboard: React.FC = () => {
         });
         return;
       }
-
       try {
         await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'completed' });
         const task = tasks.find((t) => t.id === taskId);
@@ -973,14 +989,16 @@ export const Dashboard: React.FC = () => {
         ariaLabel={isRtl ? 'الطلبات المسلمة' : 'Delivered Orders'}
       />
       {['admin', 'production', 'branch'].includes(user.role) && (
+        <StatsCard
+          title={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'} // Changed from Total Order Value
+          value={stats.totalInventoryValue.toFixed(2)}
+          icon={DollarSign}
+          color="purple"
+          ariaLabel={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
+        />
+      )}
+      {['admin', 'production', 'chef'].includes(user.role) && (
         <>
-          <StatsCard
-            title={isRtl ? 'إجمالي قيمة الطلبات' : 'Total Order Value'} // تغيير من Total Sales إلى Total Order Value
-            value={stats.totalOrderValue.toFixed(2)}
-            icon={DollarSign}
-            color="purple"
-            ariaLabel={isRtl ? 'إجمالي قيمة الطلبات' : 'Total Order Value'}
-          />
           <StatsCard
             title={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
             value={stats.completedTasks.toString()}
@@ -995,6 +1013,10 @@ export const Dashboard: React.FC = () => {
             color="blue"
             ariaLabel={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
           />
+        </>
+      )}
+      {['admin', 'production', 'branch'].includes(user.role) && (
+        <>
           <StatsCard
             title={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
             value={stats.totalReturns.toString()}
@@ -1179,18 +1201,12 @@ export const Dashboard: React.FC = () => {
           <BarChart3 className="w-5 h-5 text-amber-600" />
           {isRtl ? 'لوحة التحكم' : 'Dashboard'}
         </h1>
-        <select
+        <ProductDropdown
           value={timeFilter}
-          onChange={(e) => setTimeFilter(e.target.value)}
-          className="p-1.5 rounded-lg border border-gray-200 text-xs focus:ring-2 focus:ring-blue-500 bg-white"
-          aria-label={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
-        >
-          {timeFilterOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {isRtl ? option.label : option.enLabel}
-            </option>
-          ))}
-        </select>
+          onChange={setTimeFilter}
+          options={timeFilterOptions}
+          isRtl={isRtl}
+        />
       </div>
       {user.role === 'chef' ? (
         <ChefDashboard
@@ -1204,7 +1220,7 @@ export const Dashboard: React.FC = () => {
       ) : (
         <>
           {renderStats()}
-          <div className="grid grid-cols-1 md:grid-cols-2  gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-3">
               <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
