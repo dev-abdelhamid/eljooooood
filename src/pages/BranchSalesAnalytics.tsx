@@ -269,8 +269,7 @@ const AnalyticsSkeletonCard = React.memo(() => (
       <div className="h-4 bg-gray-200 rounded w-1/3"></div>
     </div>
   </motion.div>
-);
-
+));
 const NoDataMessage = React.memo<{ message: string }>(({ message }) => (
   <motion.p
     initial={{ opacity: 0 }}
