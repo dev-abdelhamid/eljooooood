@@ -27,6 +27,13 @@ enum ReturnReason {
   OTHER_EN = 'Other',
 }
 
+interface Branch {
+  _id: string;
+  name: string;
+  nameEn: string;
+  displayName: string;
+}
+
 interface ReturnItem {
   productId: string;
   quantity: number;
@@ -38,7 +45,7 @@ interface ReturnItem {
 interface Return {
   _id: string;
   returnNumber: string;
-  branch: { _id: string; name: string; nameEn: string; displayName: string } | null;
+  branch: Branch | null;
   items: Array<{
     itemId: string;
     product: {
@@ -89,6 +96,7 @@ const translations = {
     totalQuantity: 'إجمالي الكمية',
     totalPrice: 'إجمالي السعر',
     branch: 'الفرع',
+    selectBranch: 'اختر الفرع',
     notesLabel: 'ملاحظات',
     reviewNotes: 'ملاحظات المراجعة',
     noNotes: 'لا توجد ملاحظات',
@@ -97,7 +105,7 @@ const translations = {
     approveReturn: 'الموافقة على الإرجاع',
     rejectReturn: 'رفض الإرجاع',
     view: 'عرض',
-    searchPlaceholder: 'البحث برقم الإرجاع أو الملاحظات...',
+    searchPlaceholder: 'البحث برقم الإرجاع، الملاحظات، الفرع، المنتج، أو السبب...',
     filterStatus: 'تصفية حسب الحالة',
     allStatuses: 'جميع الحالات',
     selectProduct: 'اختر منتج',
@@ -142,6 +150,7 @@ const translations = {
     errors: {
       noBranch: 'لم يتم العثور على فرع',
       fetchReturns: 'خطأ في جلب طلبات الإرجاع',
+      fetchBranches: 'خطأ في جلب الفروع',
       createReturn: 'خطأ في إنشاء طلب الإرجاع',
       updateReturn: 'خطأ في تحديث حالة الإرجاع',
       invalidForm: 'البيانات المدخلة غير صالحة',
@@ -175,6 +184,7 @@ const translations = {
     totalQuantity: 'Total Quantity',
     totalPrice: 'Total Price',
     branch: 'Branch',
+    selectBranch: 'Select Branch',
     notesLabel: 'Notes',
     reviewNotes: 'Review Notes',
     noNotes: 'No notes available',
@@ -183,7 +193,7 @@ const translations = {
     approveReturn: 'Approve Return',
     rejectReturn: 'Reject Return',
     view: 'View',
-    searchPlaceholder: 'Search by return number or notes...',
+    searchPlaceholder: 'Search by return number, notes, branch, product, or reason...',
     filterStatus: 'Filter by Status',
     allStatuses: 'All Statuses',
     selectProduct: 'Select Product',
@@ -228,6 +238,7 @@ const translations = {
     errors: {
       noBranch: 'No branch found',
       fetchReturns: 'Error fetching return requests',
+      fetchBranches: 'Error fetching branches',
       createReturn: 'Error creating return request',
       updateReturn: 'Error updating return status',
       invalidForm: 'Invalid form data',
@@ -350,6 +361,8 @@ export const BranchReturns: React.FC = () => {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<ReturnStatus | ''>('');
+  const [filterReason, setFilterReason] = useState<string>('');
+  const [filterBranch, setFilterBranch] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -366,7 +379,7 @@ export const BranchReturns: React.FC = () => {
   // Check if user is authorized
   if (user?.role === 'chef') {
     return (
-      <div className="mx-auto max-w-7xl px-4 py-8">
+      <div className={`p-4 md:p-6 ${isRtl ? 'text-right' : 'text-left'}`}>
         <div className="p-6 bg-red-50 rounded-xl shadow-sm border border-red-200">
           <p className="text-red-600 text-sm font-medium">{t.errors.accessDenied}</p>
         </div>
@@ -386,20 +399,48 @@ export const BranchReturns: React.FC = () => {
 
   const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
 
+  const { data: branchesData, isLoading: branchesLoading, error: branchesError, refetch: refetchBranches } = useQuery<
+    Branch[],
+    Error
+  >({
+    queryKey: ['branches', language],
+    queryFn: async () => {
+      const response = await returnsAPI.getBranches();
+      return response.branches.map((branch: any) => ({
+        _id: branch._id,
+        name: branch.name,
+        nameEn: branch.nameEn || branch.name,
+        displayName: isRtl ? branch.name : branch.nameEn || branch.name,
+      }));
+    },
+    enabled: user?.role === 'admin' || user?.role === 'production',
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+    onError: (err) => {
+      toast.error(err.message || t.errors.fetchBranches, {
+        position: isRtl ? 'top-right' : 'top-left',
+        toastId: `fetch-branches-${Date.now()}`,
+      });
+    },
+  });
+
   const { data: returnsData, isLoading: returnsLoading, error: returnsError, refetch: refetchReturns } = useQuery<
     { returns: Return[]; total: number },
     Error
   >({
-    queryKey: ['returns', user?.branchId, filterStatus, debouncedSearchQuery, currentPage, language],
+    queryKey: ['returns', user?.branchId, filterStatus, filterReason, filterBranch, debouncedSearchQuery, currentPage, language],
     queryFn: async () => {
-      const query = {
+      const query: any = {
         status: filterStatus,
+        reason: filterReason,
         search: debouncedSearchQuery,
         page: currentPage,
         limit: RETURNS_PER_PAGE,
       };
       if (user?.role === 'branch' && user.branchId) {
         query.branch = user.branchId;
+      } else if (filterBranch) {
+        query.branch = filterBranch;
       }
       const response = await returnsAPI.getAll(query);
       return {
@@ -556,6 +597,17 @@ export const BranchReturns: React.FC = () => {
     };
   }, [socket, user, isConnected, queryClient, t, isRtl, addNotification]);
 
+  const branchOptions = useMemo(
+    () => [
+      { value: '', label: t.selectBranch },
+      ...(branchesData || []).map((branch) => ({
+        value: branch._id,
+        label: branch.displayName,
+      })),
+    ],
+    [branchesData, t]
+  );
+
   const statusOptions = useMemo(
     () => [
       { value: '', label: t.status.all },
@@ -600,9 +652,11 @@ export const BranchReturns: React.FC = () => {
         (ret) =>
           ret.returnNumber.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
           (ret.notes || '').toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-          (ret.branch?.displayName || '').toLowerCase().includes(debouncedSearchQuery.toLowerCase())
+          (ret.branch?.displayName || '').toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+          ret.items.some((item) => item.product.displayName.toLowerCase().includes(debouncedSearchQuery.toLowerCase())) ||
+          ret.items.some((item) => (isRtl ? item.reason : item.reasonEn).toLowerCase().includes(debouncedSearchQuery.toLowerCase()))
       ),
-    [returnsData, debouncedSearchQuery]
+    [returnsData, debouncedSearchQuery, isRtl]
   );
 
   const paginatedReturns = useMemo(
@@ -933,15 +987,12 @@ export const BranchReturns: React.FC = () => {
   );
 
   return (
-    <div className="mx-auto px-4 py-6">
-      <div className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
-        <div className="flex items-center gap-3">
-          <Package className="w-7 h-7 text-amber-600" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
-            <p className="text-gray-600 text-xs">{t.subtitle}</p>
-          </div>
-        </div>
+    <div className={`p-4 md:p-6 ${isRtl ? 'text-right' : 'text-left'}`}>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+          <Package className="w-6 h-6 text-amber-600" />
+          {t.title}
+        </h1>
         {user?.role === 'branch' && (
           <button
             onClick={() => setIsCreateModalOpen(true)}
@@ -971,27 +1022,67 @@ export const BranchReturns: React.FC = () => {
         </motion.div>
       )}
 
-      <div className="p-5 bg-white rounded-xl shadow-sm mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <ProductSearchInput
-            value={searchInput}
-            onChange={handleSearchChange}
-            placeholder={t.searchPlaceholder}
-            className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs"
-          />
-          <ProductDropdown
-            value={filterStatus}
-            onChange={(value) => {
-              setFilterStatus(value as ReturnStatus | '');
-              setCurrentPage(1);
-            }}
-            options={statusOptions}
-            className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs"
-          />
+      {branchesError && (
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3"
+        >
+          <AlertCircle className="w-4 h-4 text-red-600" />
+          <span className="text-red-600 text-xs font-medium">{branchesError.message}</span>
+          <button
+            onClick={() => refetchBranches()}
+            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-medium transition-colors duration-200"
+          >
+            {t.common.retry}
+          </button>
+        </motion.div>
+      )}
+
+      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mb-6">
+        <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-4">
+          <h3 className="text-lg font-semibold text-gray-800 flex items-center">{t.subtitle}</h3>
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <ProductSearchInput
+              value={searchInput}
+              onChange={handleSearchChange}
+              placeholder={t.searchPlaceholder}
+              className="w-full sm:w-48 p-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-amber-500 bg-white"
+            />
+            <ProductDropdown
+              value={filterStatus}
+              onChange={(value) => {
+                setFilterStatus(value as ReturnStatus | '');
+                setCurrentPage(1);
+              }}
+              options={statusOptions}
+              className="w-full sm:w-48 p-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-amber-500 bg-white"
+            />
+            <ProductDropdown
+              value={filterReason}
+              onChange={(value) => {
+                setFilterReason(value);
+                setCurrentPage(1);
+              }}
+              options={reasonOptions.map((opt) => ({ value: opt.enValue, label: opt.label }))}
+              className="w-full sm:w-48 p-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-amber-500 bg-white"
+            />
+            {(user?.role === 'admin' || user?.role === 'production') && branchOptions && (
+              <ProductDropdown
+                value={filterBranch}
+                onChange={(value) => {
+                  setFilterBranch(value);
+                  setCurrentPage(1);
+                }}
+                options={branchOptions}
+                className="w-full sm:w-48 p-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-amber-500 bg-white"
+              />
+            )}
+          </div>
         </div>
       </div>
 
-      {returnsLoading ? (
+      {returnsLoading || branchesLoading ? (
         <div className="grid grid-cols-1 gap-4">
           {[...Array(3)].map((_, i) => (
             <div key={i} className="p-5 bg-white rounded-xl shadow-sm animate-pulse">
@@ -1002,7 +1093,7 @@ export const BranchReturns: React.FC = () => {
           ))}
         </div>
       ) : paginatedReturns.length === 0 ? (
-        <div className="p-6 text-center bg-white rounded-xl shadow-sm">
+        <div className="p-6 text-center bg-white rounded-xl shadow-sm border border-gray-100">
           <p className="text-gray-500 text-xs">{t.noReturns}</p>
         </div>
       ) : (
@@ -1059,7 +1150,7 @@ export const BranchReturns: React.FC = () => {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center mb-3">
-                <h2 className="text-xl font-bold text-gray-900">{t.createReturn}</h2>
+                <h2 className="text-lg font-bold text-gray-900">{t.createReturn}</h2>
                 <button
                   onClick={() => {
                     setIsCreateModalOpen(false);
@@ -1079,7 +1170,7 @@ export const BranchReturns: React.FC = () => {
               )}
               <div className="flex flex-col gap-3">
                 {returnForm.items.map((item, index) => (
-                  <div key={index} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                  <div key={index} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
                     <div className="grid grid-cols-1 gap-3">
                       <div>
                         <ProductDropdown
@@ -1087,7 +1178,7 @@ export const BranchReturns: React.FC = () => {
                           onChange={(value) => handleProductChange(index, value)}
                           options={productOptions}
                           placeholder={t.selectProduct}
-                          className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs"
+                          className="w-full p-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-amber-500 bg-white"
                         />
                         {returnErrors[`item_${index}_productId`] && (
                           <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_productId`]}</p>
@@ -1111,7 +1202,7 @@ export const BranchReturns: React.FC = () => {
                           onChange={(value) => updateItemInForm(index, 'reason', value)}
                           options={reasonOptions}
                           placeholder={t.selectReason}
-                          className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs"
+                          className="w-full p-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-amber-500 bg-white"
                         />
                         {returnErrors[`item_${index}_reason`] && (
                           <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_reason`]}</p>
@@ -1143,7 +1234,7 @@ export const BranchReturns: React.FC = () => {
                     value={returnForm.notes}
                     onChange={(e) => dispatchReturnForm({ type: 'SET_NOTES', payload: e.target.value })}
                     placeholder={t.notesPlaceholder}
-                    className="w-full mt-1 p-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent text-xs"
+                    className="w-full mt-1 p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
                     rows={3}
                   />
                 </div>
@@ -1192,7 +1283,7 @@ export const BranchReturns: React.FC = () => {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center mb-3">
-                <h2 className="text-xl font-bold text-gray-900">{t.viewReturn}</h2>
+                <h2 className="text-lg font-bold text-gray-900">{t.viewReturn}</h2>
                 <button onClick={() => setIsViewModalOpen(false)} className="p-1.5 hover:bg-gray-100 rounded-full">
                   <X className="w-4 h-4 text-gray-600" />
                 </button>
@@ -1296,7 +1387,7 @@ export const BranchReturns: React.FC = () => {
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center mb-3">
-                <h2 className="text-xl font-bold text-gray-900">{t.approveReturn}</h2>
+                <h2 className="text-lg font-bold text-gray-900">{t.approveReturn}</h2>
                 <button
                   onClick={() => {
                     setIsApproveModalOpen(false);
@@ -1319,7 +1410,7 @@ export const BranchReturns: React.FC = () => {
                     value={reviewNotes}
                     onChange={(e) => setReviewNotes(e.target.value)}
                     placeholder={t.reviewNotesPlaceholder}
-                    className="w-full mt-1 p-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent text-xs"
+                    className="w-full mt-1 p-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
                     rows={3}
                   />
                 </div>
