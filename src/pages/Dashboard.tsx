@@ -22,7 +22,7 @@ interface Stats {
   inProductionOrders: number;
   inTransitOrders: number;
   deliveredOrders: number;
-  totalInventoryValue: number; // Replaced totalOrderValue
+  totalInventoryValue: number;
   completedTasks: number;
   inProgressTasks: number;
   totalReturns: number;
@@ -616,7 +616,7 @@ export const Dashboard: React.FC = () => {
     inProductionOrders: 0,
     inTransitOrders: 0,
     deliveredOrders: 0,
-    totalInventoryValue: 0, // Replaced totalOrderValue
+    totalInventoryValue: 0,
     completedTasks: 0,
     inProgressTasks: 0,
     totalReturns: 0,
@@ -726,9 +726,24 @@ export const Dashboard: React.FC = () => {
             ['admin', 'production'].includes(user.role)
               ? salesAPI.getAnalytics(query).catch((err) => {
                   console.warn(`[${new Date().toISOString()}] Error fetching sales analytics:`, err);
-                  return {};
+                  // Return fallback data for 403 or other errors
+                  return {
+                    totalSales: 0,
+                    totalCount: 0,
+                    averageOrderValue: 0,
+                    returnRate: '0.00',
+                    topProduct: { productId: null, productName: '', displayName: '', totalQuantity: 0, totalRevenue: 0 },
+                    productSales: [],
+                  };
                 })
-              : Promise.resolve({}),
+              : Promise.resolve({
+                  totalSales: 0,
+                  totalCount: 0,
+                  averageOrderValue: 0,
+                  returnRate: '0.00',
+                  topProduct: { productId: null, productName: '', displayName: '', totalQuantity: 0, totalRevenue: 0 },
+                  productSales: [],
+                }),
             inventoryAPI.getTotalValue(query).catch(() => 0),
           ];
           [ordersResponse, tasksResponse, chefsResponse, branchesResponse, returnsResponse, salesResponse, inventoryValue] = await Promise.all(promises);
@@ -764,20 +779,27 @@ export const Dashboard: React.FC = () => {
           createdAt: order.createdAt || new Date().toISOString(),
         }));
 
-        const uniqueTasks = Array.from(new Map(tasksResponse.map((task: any) => [task._id, {
-          id: task._id || crypto.randomUUID(),
-          orderId: task.order?._id || 'unknown',
-          orderNumber: task.order?.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
-          productName: task.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
-          productNameEn: task.product?.nameEn || task.product?.name || 'Unknown',
-          quantity: Number(task.quantity) || 0,
-          unit: task.product?.unit || 'unit',
-          unitEn: task.product?.unitEn || task.product?.unit || 'unit',
-          status: task.status || 'pending',
-          branchName: task.order?.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
-          branchNameEn: task.order?.branch?.nameEn || task.order?.branch?.name || 'Unknown',
-          createdAt: formatDate(task.createdAt || new Date(), language),
-        }])).values());
+        const uniqueTasks = Array.from(
+          new Map(
+            tasksResponse.map((task: any) => [
+              task._id,
+              {
+                id: task._id || crypto.randomUUID(),
+                orderId: task.order?._id || 'unknown',
+                orderNumber: task.order?.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
+                productName: task.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+                productNameEn: task.product?.nameEn || task.product?.name || 'Unknown',
+                quantity: Number(task.quantity) || 0,
+                unit: task.product?.unit || 'unit',
+                unitEn: task.product?.unitEn || task.product?.unit || 'unit',
+                status: task.status || 'pending',
+                branchName: task.order?.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
+                branchNameEn: task.order?.branch?.nameEn || task.order?.branch?.name || 'Unknown',
+                createdAt: formatDate(task.createdAt || new Date(), language),
+              },
+            ])
+          )
+        ).values();
 
         const mappedChefs = chefsResponse.map((chef: any) => ({
           _id: chef._id || crypto.randomUUID(),
@@ -818,35 +840,42 @@ export const Dashboard: React.FC = () => {
           createdAt: formatDate(ret.createdAt || new Date(), language),
         }));
 
-        const branchPerf = mappedBranches.map((branch: any) => {
-          const branchOrders = mappedOrders.filter((o) => o.branchId === branch._id);
-          const total = branchOrders.length;
-          const completed = branchOrders.filter((o) => o.status === 'completed' || o.status === 'delivered').length;
-          const perf = total > 0 ? (completed / total) * 100 : 0;
-          return { branchName: branch.name, branchNameEn: branch.nameEn, performance: perf, totalOrders: total, completedOrders: completed };
-        }).filter((b: any) => b.totalOrders > 0);
+        const branchPerf = mappedBranches
+          .map((branch: any) => {
+            const branchOrders = mappedOrders.filter((o) => o.branchId === branch._id);
+            const total = branchOrders.length;
+            const completed = branchOrders.filter((o) => o.status === 'completed' || o.status === 'delivered').length;
+            const perf = total > 0 ? (completed / total) * 100 : 0;
+            return { branchName: branch.name, branchNameEn: branch.nameEn, performance: perf, totalOrders: total, completedOrders: completed };
+          })
+          .filter((b: any) => b.totalOrders > 0);
 
-        const chefPerf = mappedChefs.map((chef: any) => {
-          const chefTasks = uniqueTasks.filter((task) => {
-            const order = mappedOrders.find((o) => o.id === task.orderId);
-            return order?.items.some((i) => i.assignedTo?._id === chef.userId);
-          });
-          const total = chefTasks.length;
-          const completed = chefTasks.filter((t) => t.status === 'completed').length;
-          const perf = total > 0 ? (completed / total) * 100 : 0;
-          return {
-            chefId: chef.userId,
-            chefName: chef.name,
-            chefNameEn: chef.nameEn,
-            performance: perf,
-            totalTasks: total,
-            completedTasks: completed,
-          };
-        }).filter((c: any) => c.totalTasks > 0);
+        const chefPerf = mappedChefs
+          .map((chef: any) => {
+            const chefTasks = uniqueTasks.filter((task) => {
+              const order = mappedOrders.find((o) => o.id === task.orderId);
+              return order?.items.some((i) => i.assignedTo?._id === chef.userId);
+            });
+            const total = chefTasks.length;
+            const completed = chefTasks.filter((t) => t.status === 'completed').length;
+            const perf = total > 0 ? (completed / total) * 100 : 0;
+            return {
+              chefId: chef.userId,
+              chefName: chef.name,
+              chefNameEn: chef.nameEn,
+              performance: perf,
+              totalTasks: total,
+              completedTasks: completed,
+            };
+          })
+          .filter((c: any) => c.totalTasks > 0);
+
+        const completedTasks = uniqueTasks.filter((t: any) => t.status === 'completed').length;
+        const inProgressTasks = uniqueTasks.filter((t: any) => t.status === 'in_progress').length;
 
         const totalOrders = user.role === 'chef' ? uniqueTasks.length : mappedOrders.length;
         const pendingOrders = user.role === 'chef'
-          ? uniqueTasks.filter((task) => task.status === 'pending' || task.status === 'assigned').length
+          ? uniqueTasks.filter((task: any) => task.status === 'pending' || task.status === 'assigned').length
           : mappedOrders.filter((o) => o.status === 'pending').length;
         const inProductionOrders = mappedOrders.filter((o) => o.status === 'in_production').length;
         const inTransitOrders = mappedOrders.filter((o) => o.status === 'in_transit').length;
@@ -921,6 +950,7 @@ export const Dashboard: React.FC = () => {
         setError('');
         setIsInitialLoad(false);
       } catch (err: any) {
+        console.error(`[${new Date().toISOString()}] Error in fetchDashboardData:`, err);
         const errorMessage = err.status === 403 ? t.errors.unauthorized : t.errors.serverError;
         setError(errorMessage);
         toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
@@ -1043,9 +1073,9 @@ export const Dashboard: React.FC = () => {
       if (!['admin', 'production', 'chef'].includes(user.role) || (user.role === 'chef' && data.chefId !== user._id)) return;
 
       setTasks((prev) =>
-        prev.map((task) =>
-          task.id === data.itemId && task.orderId === data.orderId ? { ...task, status: data.status } : task
-        ).filter((task, index, self) => index === self.findIndex((t) => t.id === task.id))
+        prev
+          .map((task) => (task.id === data.itemId && task.orderId === data.orderId ? { ...task, status: data.status } : task))
+          .filter((task, index, self) => index === self.findIndex((t) => t.id === task.id))
       );
 
       addNotification({
@@ -1511,7 +1541,7 @@ export const Dashboard: React.FC = () => {
         <TimeFilterDropdown value={timeFilter} onChange={setTimeFilter} isRtl={isRtl} />
       </div>
       {user.role === 'chef' ? (
-           <ChefDashboard
+        <ChefDashboard
           stats={stats}
           tasks={tasks}
           isRtl={isRtl}
