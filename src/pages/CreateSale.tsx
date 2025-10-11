@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo, useReducer } from 're
 import { useParams } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useNotifications } from '../contexts/NotificationContext'; // Added for notifications
+import { useNotifications } from '../contexts/NotificationContext';
 import { inventoryAPI, salesAPI } from '../services/api';
 import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -88,6 +88,7 @@ const translations = {
       deleted_product: 'منتج محذوف',
       invalid_customer_phone: 'رقم هاتف العميل غير صالح',
       invalid_payment_method: 'طريقة الدفع غير صالحة',
+      cors_error: 'فشل الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت أو إعدادات CORS.',
     },
     currency: 'ريال',
     units: { default: 'غير محدد' },
@@ -136,6 +137,7 @@ const translations = {
       deleted_product: 'Deleted Product',
       invalid_customer_phone: 'Invalid customer phone',
       invalid_payment_method: 'Invalid payment method',
+      cors_error: 'Failed to connect to the server. Please check your internet connection or CORS settings.',
     },
     currency: 'SAR',
     units: { default: 'N/A' },
@@ -218,7 +220,7 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
   }
 };
 
-// Sub-components (unchanged from original, optimized with React.memo)
+// Sub-components (unchanged)
 const ProductSearchInput = React.memo<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -416,7 +418,7 @@ const CreateSale: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const { id } = useParams<{ id?: string }>();
-  const { subscribe, unsubscribe } = useNotifications(); // Added for notifications
+  const { subscribe, unsubscribe } = useNotifications();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'] || translations.en;
 
@@ -433,9 +435,9 @@ const CreateSale: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState('');
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false); // Added for submit button loading state
+  const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [processedEventIds, setProcessedEventIds] = useState<string[]>([]); // Track processed notification eventIds
+  const [processedEventIds, setProcessedEventIds] = useState<string[]>([]);
 
   // Handle saleCreated notifications
   useEffect(() => {
@@ -450,17 +452,15 @@ const CreateSale: React.FC = () => {
       createdAt: string;
       eventId: string;
     }) => {
-      if (processedEventIds.includes(data.eventId)) return; // Prevent duplicate notifications
+      if (processedEventIds.includes(data.eventId)) return;
       setProcessedEventIds((prev) => [...prev, data.eventId]);
 
-      // Show notification
       const message = t.notifications.saleCreated.replace('{saleNumber}', data.saleNumber);
       toast.info(message, {
         position: isRtl ? 'top-right' : 'top-left',
         autoClose: 5000,
       });
 
-      // Trigger refresh in BranchSalesReport
       const refreshEvent = new CustomEvent('saleCreated', {
         detail: { saleId: data.saleId, branchId: data.branchId },
       });
@@ -585,7 +585,11 @@ const CreateSale: React.FC = () => {
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Fetch error:`, err);
       const errorMessage =
-        err.response?.status === 403 ? t.errors.unauthorized_access : err.message || t.errors.fetch_inventory;
+        err.response?.status === 403
+          ? t.errors.unauthorized_access
+          : err.message.includes('CORS')
+          ? t.errors.cors_error
+          : t.errors.fetch_inventory;
       setError(errorMessage);
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       setInventory([]);
@@ -608,7 +612,7 @@ const CreateSale: React.FC = () => {
             type: 'LOAD_SALE',
             payload: {
               items: sale.items.map((item: any) => ({
-                productId: item.product?._id || item.product,
+                productId: item.productId || item.product?._id,
                 productName: item.product?.name || item.productName,
                 productNameEn: item.product?.nameEn || item.productNameEn,
                 unit: item.product?.unit || item.unit,
@@ -628,9 +632,10 @@ const CreateSale: React.FC = () => {
               customerPhone: sale.customerPhone || undefined,
             },
           });
-        } catch (err) {
+        } catch (err: any) {
           console.error(`[${new Date().toISOString()}] Fetch sale error:`, err);
-          toast.error(t.errors.fetch_sale, { position: isRtl ? 'top-right' : 'top-left' });
+          const errorMessage = err.message.includes('CORS') ? t.errors.cors_error : t.errors.fetch_sale;
+          toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
         }
       };
       fetchSale();
@@ -763,15 +768,14 @@ const CreateSale: React.FC = () => {
       } else {
         const response = await salesAPI.create(saleData);
         toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
-        // Reset cart only on create, not update
         dispatchCart({ type: 'RESET' });
       }
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Sale ${id ? 'update' : 'submission'} error:`, err);
       const errorMessage =
-        err.response?.status === 403
-          ? t.errors.unauthorized_access
-          : err.response?.data?.error === 'insufficient_stock'
+        err.message.includes('CORS')
+          ? t.errors.cors_error
+          : err.message.includes('insufficient_stock')
           ? t.errors.insufficient_stock
           : id
           ? t.errors.update_sale_failed
