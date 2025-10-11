@@ -3,11 +3,11 @@ import { useParams } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { inventoryAPI, salesAPI } from '../services/api';
-import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown } from 'lucide-react';
+import { AlertCircle, DollarSign, Plus, Minus, Trash2, Package, Search, X, ChevronDown, RefreshCw } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 
-// واجهات TypeScript
+// واجهات TypeScript (بدون تغيير)
 interface InventoryItem {
   _id: string;
   product: {
@@ -51,6 +51,7 @@ interface CartState {
   customerPhone?: string;
 }
 
+// الترجمات (بدون تغيير، لكن أضفت رسالة لتحديث المخزون)
 const translations = {
   ar: {
     title: 'إنشاء مبيعة جديدة',
@@ -72,6 +73,8 @@ const translations = {
     submitSale: 'إرسال المبيعة',
     updateSale: 'تحديث المبيعة',
     searchPlaceholder: 'ابحث عن المنتجات...',
+    refreshInventory: 'إعادة تحميل المخزون', // جديد
+    inventoryUpdated: 'تم تحديث المخزون بنجاح', // جديد
     errors: {
       unauthorized_access: 'غير مصرح لك بالوصول',
       no_branch_assigned: 'لم يتم تعيين فرع',
@@ -116,6 +119,8 @@ const translations = {
     submitSale: 'Submit Sale',
     updateSale: 'Update Sale',
     searchPlaceholder: 'Search products...',
+    refreshInventory: 'Refresh Inventory', // جديد
+    inventoryUpdated: 'Inventory updated successfully', // جديد
     errors: {
       unauthorized_access: 'You are not authorized to access',
       no_branch_assigned: 'No branch assigned',
@@ -142,7 +147,7 @@ const translations = {
   },
 };
 
-// إجراءات السلة
+// إجراءات السلة (بدون تغيير)
 type CartAction =
   | { type: 'ADD_ITEM'; payload: CartItem }
   | { type: 'UPDATE_QUANTITY'; payload: { productId: string; quantity: number } }
@@ -401,7 +406,6 @@ export const CreateSale: React.FC = () => {
     customerName: '',
     customerPhone: undefined,
   });
-
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [searchInput, setSearchInput] = useState('');
@@ -440,7 +444,7 @@ export const CreateSale: React.FC = () => {
     });
   }, [inventory, searchTerm, selectedDepartment]);
 
-  // جلب المخزون (إرجاع تعيين displayName و displayUnit زي الأصلي)
+  // جلب المخزون
   const fetchInventory = useCallback(async () => {
     if (!user?.branchId) {
       setError(t.errors.no_branch_assigned);
@@ -449,7 +453,6 @@ export const CreateSale: React.FC = () => {
     }
 
     setLoading(true);
-
     try {
       const inventoryParams: any = { lowStock: false, branch: user.branchId };
       const inventoryResponse = await inventoryAPI.getInventory(inventoryParams).catch((err) => {
@@ -619,6 +622,10 @@ export const CreateSale: React.FC = () => {
         toast.error(t.errors.exceeds_max_quantity, { position: isRtl ? 'top-right' : 'top-left' });
         return;
       }
+      if (quantity < 0) {
+        toast.error(t.errors.invalid_quantity, { position: isRtl ? 'top-right' : 'top-left' });
+        return;
+      }
       dispatchCart({
         type: 'UPDATE_QUANTITY',
         payload: { productId, quantity },
@@ -632,7 +639,28 @@ export const CreateSale: React.FC = () => {
     dispatchCart({ type: 'REMOVE_ITEM', payload: productId });
   }, []);
 
-  // إرسال أو تحديث المبيعة (بدون navigate)
+  // تحديث المخزون المحلي بعد المبيعة
+  const updateLocalInventory = useCallback((soldItems: CartItem[]) => {
+    setInventory((prevInventory) =>
+      prevInventory.map((item) => {
+        const soldItem = soldItems.find((sold) => sold.productId === item.product._id);
+        if (soldItem) {
+          const newStock = Math.max(0, item.currentStock - soldItem.quantity);
+          return { ...item, currentStock: newStock };
+        }
+        return item;
+      }).filter((item) => item.currentStock > 0)
+    );
+    toast.info(t.inventoryUpdated, { position: isRtl ? 'top-right' : 'top-left', autoClose: 2000 });
+  }, [t, isRtl]);
+
+  // زر إعادة جلب المخزون يدويًا
+  const handleRefreshInventory = useCallback(() => {
+    fetchInventory();
+    toast.info(t.refreshInventory, { position: isRtl ? 'top-right' : 'top-left' });
+  }, [fetchInventory, t, isRtl]);
+
+  // إرسال أو تحديث المبيعة
   const handleSubmitSale = useCallback(async () => {
     if (cartState.items.length === 0) {
       toast.error(t.errors.empty_cart, { position: isRtl ? 'top-right' : 'top-left' });
@@ -645,6 +673,17 @@ export const CreateSale: React.FC = () => {
     if (cartState.paymentMethod && !['cash', 'credit_card', 'bank_transfer'].includes(cartState.paymentMethod)) {
       toast.error(t.errors.invalid_payment_method, { position: isRtl ? 'top-right' : 'top-left' });
       return;
+    }
+
+    // التحقق من المخزون قبل الإرسال
+    for (const item of cartState.items) {
+      const inventoryItem = inventory.find((inv) => inv.product._id === item.productId);
+      if (!inventoryItem || inventoryItem.currentStock < item.quantity) {
+        toast.error(`${t.errors.insufficient_stock} للمنتج ${item.displayName}`, {
+          position: isRtl ? 'top-right' : 'top-left',
+        });
+        return;
+      }
     }
 
     const saleData = {
@@ -668,14 +707,23 @@ export const CreateSale: React.FC = () => {
         await salesAPI.create(saleData);
         toast.success(t.submitSale, { position: isRtl ? 'top-right' : 'top-left' });
       }
+      // تحديث المخزون المحلي
+      updateLocalInventory(cartState.items);
+      // إعادة تعيين السلة
       dispatchCart({ type: 'RESET' });
-      // بدون navigate، بس reset وtoast
     } catch (err: any) {
       console.error(`[${new Date().toISOString()}] Sale ${id ? 'update' : 'submission'} error:`, err);
-      const errorMessage = err.response?.status === 403 ? t.errors.unauthorized_access : (id ? t.errors.update_sale_failed : t.errors.create_sale_failed);
+      const errorMessage =
+        err.status === 400 && err.message.includes('insufficient_stock')
+          ? t.errors.insufficient_stock
+          : err.status === 403
+          ? t.errors.unauthorized_access
+          : id
+          ? t.errors.update_sale_failed
+          : t.errors.create_sale_failed;
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
     }
-  }, [cartState, user, t, isRtl, id]);
+  }, [cartState, user, t, isRtl, id, inventory, updateLocalInventory]);
 
   // خيارات الأقسام
   const departmentOptions = useMemo(
@@ -702,7 +750,7 @@ export const CreateSale: React.FC = () => {
   }, [cartState.items]);
 
   return (
-    <div className={`mx-auto px-4  py-8 min-h-screen  `}>
+    <div className={`mx-auto px-4 py-8 min-h-screen bg-gradient-to-br from-gray-50 to-gray-100`}>
       <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <DollarSign className="w-7 h-7 text-amber-600" />
@@ -711,6 +759,14 @@ export const CreateSale: React.FC = () => {
             <p className="text-gray-600 text-sm">{t.subtitle}</p>
           </div>
         </div>
+        <button
+          onClick={handleRefreshInventory}
+          className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+          aria-label={t.refreshInventory}
+        >
+          <RefreshCw className="w-4 h-4" />
+          {t.refreshInventory}
+        </button>
       </header>
       {error && (
         <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
