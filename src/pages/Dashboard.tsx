@@ -11,37 +11,70 @@ import { debounce } from 'lodash';
 import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, returnsAPI, inventoryAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 
-// Placeholder ProductDropdown component (replace with your actual implementation if available)
+// مكون ProductDropdown
 const ProductDropdown: React.FC<{
+  options: { value: string; label: string; enLabel: string }[];
   value: string;
   onChange: (value: string) => void;
-  options: { value: string; label: string; enLabel: string }[];
   isRtl: boolean;
-}> = ({ value, onChange, options, isRtl }) => (
-  <select
-    value={value}
-    onChange={(e) => onChange(e.target.value)}
-    className="w-full sm:w-40 p-1.5 rounded-lg border border-gray-200 text-xs focus:ring-2 focus:ring-blue-500 bg-white"
-    aria-label={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
-  >
-    {options.map((option) => (
-      <option key={option.value} value={option.value}>
-        {isRtl ? option.label : option.enLabel}
-      </option>
-    ))}
-  </select>
-);
+  label: string;
+}> = ({ options, value, onChange, isRtl, label }) => {
+  const [isOpen, setIsOpen] = useState(false);
 
-// Interfaces
+  return (
+    <div className="relative w-40">
+      <label className="text-xs text-gray-600 mb-1 block">{label}</label>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full p-1.5 rounded-lg border border-gray-200 text-xs bg-white hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 flex justify-between items-center"
+        aria-label={label}
+      >
+        <span>{options.find((opt) => opt.value === value)?.[isRtl ? 'label' : 'enLabel'] || 'Select'}</span>
+        <svg
+          className={`w-4 h-4 transform ${isOpen ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {isOpen && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg"
+        >
+          {options.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => {
+                onChange(option.value);
+                setIsOpen(false);
+              }}
+              className="w-full text-left px-3 py-2 text-xs hover:bg-amber-50"
+            >
+              {isRtl ? option.label : option.enLabel}
+            </button>
+          ))}
+        </motion.div>
+      )}
+    </div>
+  );
+};
+
+// تعريف الواجهات
 interface Stats {
   totalOrders: number;
   pendingOrders: number;
   inProductionOrders: number;
   inTransitOrders: number;
   deliveredOrders: number;
-  totalInventoryValue: number; // Changed from totalOrderValue
-  completedTasks: number; // Only for admin, production, chef
-  inProgressTasks: number; // Only for admin, production, chef
+  totalInventoryValue: number; // تغيير من totalOrderValue إلى totalInventoryValue
+  completedTasks: number;
+  inProgressTasks: number;
   totalReturns: number;
   pendingReturns: number;
   approvedReturns: number;
@@ -152,14 +185,14 @@ const timeFilterOptions = [
   { value: 'year', label: 'هذا العام', enLabel: 'This Year' },
 ];
 
-// Loader component
+// مكون تحميل محسن
 const Loader: React.FC = () => (
   <div className="flex justify-center items-center h-screen">
     <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
   </div>
 );
 
-// StatsCard component
+// مكون بطاقة الإحصائيات
 const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color: string; ariaLabel: string }> = React.memo(
   ({ title, value, icon: Icon, color, ariaLabel }) => (
     <div
@@ -177,7 +210,7 @@ const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color:
   )
 );
 
-// ChefDashboard component
+// مكون لوحة تحكم الشيف
 const ChefDashboard: React.FC<{
   stats: Stats;
   tasks: Task[];
@@ -187,6 +220,7 @@ const ChefDashboard: React.FC<{
   handleCompleteTask: (taskId: string, orderId: string) => void;
 }> = React.memo(({ stats, tasks, isRtl, language, handleStartTask, handleCompleteTask }) => {
   const [filter, setFilter] = useState<FilterState>({ status: 'all', search: '' });
+
   const filteredTasks = useMemo(() => {
     return tasks
       .filter((task) => filter.status === 'all' || task.status === filter.status)
@@ -352,7 +386,7 @@ export const Dashboard: React.FC = () => {
     inProductionOrders: 0,
     inTransitOrders: 0,
     deliveredOrders: 0,
-    totalInventoryValue: 0, // Changed from totalOrderValue
+    totalInventoryValue: 0, // تغيير من totalOrderValue إلى totalInventoryValue
     completedTasks: 0,
     inProgressTasks: 0,
     totalReturns: 0,
@@ -365,11 +399,45 @@ export const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isInitialLoad, setIsInitialLoad] = useState(true);
+
   const cache = useMemo(() => new Map<string, any>(), []);
+
   const cacheKey = useMemo(() => `${user?.id || user?._id}-${user?.role}-${timeFilter}`, [user, timeFilter]);
+
+  // فحص صحة الـ API
+  const checkAPIHealth = async () => {
+    try {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/health`, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      return response.ok;
+    } catch (err) {
+      console.error(`[${new Date().toISOString()}] API health check failed:`, err);
+      return false;
+    }
+  };
 
   const fetchDashboardData = useCallback(
     debounce(async (forceRefresh = false) => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        const errorMessage = isRtl ? 'لم يتم العثور على توكن المصادقة' : 'No authentication token found';
+        setError(errorMessage);
+        setLoading(false);
+        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
+        addNotification({
+          _id: `error-noToken-${Date.now()}`,
+          type: 'error',
+          message: errorMessage,
+          read: false,
+          createdAt: new Date().toLocaleString(language),
+          path: '/login',
+        });
+        navigate('/login');
+        return;
+      }
+
       if (!user?.id && !user?._id) {
         const errorMessage = isRtl ? 'الوصول غير مصرح به' : 'Unauthorized access';
         setError(errorMessage);
@@ -377,6 +445,23 @@ export const Dashboard: React.FC = () => {
         toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
         addNotification({
           _id: `error-noUserId-${Date.now()}`,
+          type: 'error',
+          message: errorMessage,
+          read: false,
+          createdAt: new Date().toLocaleString(language),
+          path: '/dashboard',
+        });
+        return;
+      }
+
+      const isAPIHealthy = await checkAPIHealth();
+      if (!isAPIHealthy) {
+        const errorMessage = isRtl ? 'الخادم غير متاح حاليًا' : 'Server is currently unavailable';
+        setError(errorMessage);
+        setLoading(false);
+        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
+        addNotification({
+          _id: `error-api-${Date.now()}`,
           type: 'error',
           message: errorMessage,
           read: false,
@@ -431,7 +516,7 @@ export const Dashboard: React.FC = () => {
         let chefsResponse: any[] = [];
         let branchesResponse: any[] = [];
         let returnsResponse: any = { returns: [], total: 0 };
-        let inventoryValue: number = 0;
+        let inventoryResponse: any = { totalValue: 0 };
 
         if (user.role === 'chef') {
           const chefProfile = await chefsAPI.getByUserId(user.id || user._id);
@@ -443,7 +528,6 @@ export const Dashboard: React.FC = () => {
         } else {
           if (user.role === 'branch') query.branch = user.id || user._id;
           if (user.role === 'production' && user.department) query.departmentId = user.department._id;
-
           const promises = [
             ordersAPI.getAll(query).catch(() => []),
             productionAssignmentsAPI.getAllTasks(query).catch(() => []),
@@ -455,11 +539,11 @@ export const Dashboard: React.FC = () => {
                   return { returns: [], total: 0 };
                 })
               : Promise.resolve({ returns: [], total: 0 }),
-            user.role === 'branch' || user.role === 'production'
-              ? inventoryAPI.getTotalValue({ branchId: user.branchId, departmentId: user.department?._id }).catch(() => 0)
-              : Promise.resolve(0),
+            ['admin', 'production', 'branch'].includes(user.role)
+              ? inventoryAPI.getTotalValue(query).catch(() => ({ totalValue: 0 }))
+              : Promise.resolve({ totalValue: 0 }),
           ];
-          [ordersResponse, tasksResponse, chefsResponse, branchesResponse, returnsResponse, inventoryValue] = await Promise.all(promises);
+          [ordersResponse, tasksResponse, chefsResponse, branchesResponse, returnsResponse, inventoryResponse] = await Promise.all(promises);
         }
 
         const mappedOrders = ordersResponse.map((order: any) => ({
@@ -579,7 +663,7 @@ export const Dashboard: React.FC = () => {
         const inProductionOrders = mappedOrders.filter((o) => o.status === 'in_production').length;
         const inTransitOrders = mappedOrders.filter((o) => o.status === 'in_transit').length;
         const deliveredOrders = mappedOrders.filter((o) => o.status === 'delivered').length;
-        const totalInventoryValue = Number(inventoryValue) || 0;
+        const totalInventoryValue = Number(inventoryResponse.totalValue) || 0;
         const completedTasks = mappedTasks.filter((task) => task.status === 'completed').length;
         const inProgressTasks = mappedTasks.filter((task) => task.status === 'in_progress').length;
         const totalReturns = mappedReturns.length;
@@ -625,7 +709,18 @@ export const Dashboard: React.FC = () => {
         setError('');
         setIsInitialLoad(false);
       } catch (err: any) {
-        const errorMessage = err.status === 403 ? (isRtl ? 'الوصول غير مصرح به' : 'Unauthorized access') : (isRtl ? 'خطأ في الخادم' : 'Server error');
+        const errorMessage =
+          err.status === 401
+            ? isRtl
+              ? 'خطأ في المصادقة، يرجى تسجيل الدخول مرة أخرى'
+              : 'Authentication error, please log in again'
+            : err.status === 403
+            ? isRtl
+              ? 'الوصول غير مصرح به'
+              : 'Unauthorized access'
+            : isRtl
+            ? 'خطأ في الخادم'
+            : 'Server error';
         setError(errorMessage);
         toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
         addNotification({
@@ -636,11 +731,15 @@ export const Dashboard: React.FC = () => {
           createdAt: new Date().toLocaleString(language),
           path: '/dashboard',
         });
+        if (err.status === 401) {
+          localStorage.removeItem('token');
+          navigate('/login');
+        }
       } finally {
         setLoading(false);
       }
     }, 100),
-    [user, isRtl, language, cacheKey, addNotification]
+    [user, isRtl, language, cacheKey, addNotification, navigate]
   );
 
   useEffect(() => {
@@ -655,10 +754,37 @@ export const Dashboard: React.FC = () => {
   }, [refreshTasks, fetchDashboardData]);
 
   useEffect(() => {
-    if (!socket || !user || !isConnected) return;
+    if (!socket || !user || !isConnected) {
+      if (!isConnected && socket) {
+        const errorMessage = isRtl ? 'الاتصال بالسوكت غير متاح، جاري إعادة المحاولة...' : 'Socket disconnected, retrying...';
+        addNotification({
+          _id: `socket-error-${Date.now()}`,
+          type: 'warning',
+          message: errorMessage,
+          read: false,
+          createdAt: new Date().toLocaleString(language),
+          path: '/dashboard',
+        });
+        setTimeout(() => socket.connect(), 2000);
+      }
+      return;
+    }
 
-    socket.on('connect_error', () => {
-      const errorMessage = isRtl ? 'خطأ في الاتصال بالسوكت' : 'Socket connection error';
+    const token = localStorage.getItem('token');
+    socket.on('connect', () => {
+      socket.emit('joinRoom', {
+        role: user.role,
+        branchId: user.branchId,
+        chefId: user.role === 'chef' ? user._id || user.id : undefined,
+        departmentId: user.role === 'production' ? user.department?._id : undefined,
+        userId: user._id || user.id,
+        token,
+      });
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error(`[${new Date().toISOString()}] Socket connect error:`, err);
+      const errorMessage = isRtl ? `فشل الاتصال بالسوكت: ${err.message}` : `Socket connection error: ${err.message}`;
       addNotification({
         _id: `socket-error-${Date.now()}`,
         type: 'error',
@@ -667,6 +793,10 @@ export const Dashboard: React.FC = () => {
         createdAt: new Date().toLocaleString(language),
         path: '/dashboard',
       });
+      if (err.message.includes('Authentication error')) {
+        localStorage.removeItem('token');
+        navigate('/login');
+      }
     });
 
     socket.on('taskAssigned', (data: any) => {
@@ -675,6 +805,7 @@ export const Dashboard: React.FC = () => {
         return;
       }
       if (data.chefId !== (user?.id || user?._id) || !['admin', 'production', 'chef'].includes(user.role)) return;
+
       const notification = {
         _id: data.eventId,
         type: 'info' as const,
@@ -719,6 +850,7 @@ export const Dashboard: React.FC = () => {
     socket.on('orderCompleted', (data: any) => {
       if (!data.orderId || !data.orderNumber || !data.branchName || !data.eventId) return;
       if (!['admin', 'branch', 'production'].includes(user.role)) return;
+
       addNotification({
         _id: data.eventId,
         type: 'success' as const,
@@ -742,6 +874,7 @@ export const Dashboard: React.FC = () => {
         return;
       }
       if (!['admin', 'production', 'chef'].includes(user.role) || (user.role === 'chef' && data.chefId !== user._id)) return;
+
       setTasks((prev) =>
         prev.map((task) =>
           task.id === data.itemId && task.orderId === data.orderId ? { ...task, status: data.status } : task
@@ -769,6 +902,7 @@ export const Dashboard: React.FC = () => {
         return;
       }
       if (!['admin', 'production', 'branch'].includes(user.role) || (user.role === 'branch' && data.branchId !== user.branchId)) return;
+
       addNotification({
         _id: data.eventId,
         type: 'info',
@@ -791,6 +925,7 @@ export const Dashboard: React.FC = () => {
         return;
       }
       if (!['admin', 'production', 'branch'].includes(user.role) || (user.role === 'branch' && data.branchId !== user.branchId)) return;
+
       setReturns((prev) =>
         prev.map((ret) =>
           ret.id === data.returnId ? { ...ret, status: data.status, reviewNotes: data.reviewNotes || '', reviewNotesEn: data.reviewNotesEn || data.reviewNotes || '' } : ret
@@ -813,6 +948,7 @@ export const Dashboard: React.FC = () => {
     });
 
     return () => {
+      socket.off('connect');
       socket.off('connect_error');
       socket.off('taskAssigned');
       socket.off('orderCompleted');
@@ -820,7 +956,7 @@ export const Dashboard: React.FC = () => {
       socket.off('returnCreated');
       socket.off('returnStatusUpdated');
     };
-  }, [socket, user, isRtl, language, addNotification, fetchDashboardData, isConnected]);
+  }, [socket, user, isRtl, language, addNotification, fetchDashboardData, isConnected, navigate]);
 
   const handleStartTask = useCallback(
     async (taskId: string, orderId: string) => {
@@ -835,6 +971,7 @@ export const Dashboard: React.FC = () => {
         });
         return;
       }
+
       try {
         await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'in_progress' });
         const task = tasks.find((t) => t.id === taskId);
@@ -894,6 +1031,7 @@ export const Dashboard: React.FC = () => {
         });
         return;
       }
+
       try {
         await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'completed' });
         const task = tasks.find((t) => t.id === taskId);
@@ -989,34 +1127,32 @@ export const Dashboard: React.FC = () => {
         ariaLabel={isRtl ? 'الطلبات المسلمة' : 'Delivered Orders'}
       />
       {['admin', 'production', 'branch'].includes(user.role) && (
-        <StatsCard
-          title={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'} // Changed from Total Order Value
-          value={stats.totalInventoryValue.toFixed(2)}
-          icon={DollarSign}
-          color="purple"
-          ariaLabel={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
-        />
-      )}
-      {['admin', 'production', 'chef'].includes(user.role) && (
         <>
           <StatsCard
-            title={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
-            value={stats.completedTasks.toString()}
-            icon={CheckCircle}
-            color="green"
-            ariaLabel={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
+            title={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
+            value={stats.totalInventoryValue.toFixed(2)}
+            icon={DollarSign}
+            color="purple"
+            ariaLabel={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
           />
-          <StatsCard
-            title={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
-            value={stats.inProgressTasks.toString()}
-            icon={Clock}
-            color="blue"
-            ariaLabel={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
-          />
-        </>
-      )}
-      {['admin', 'production', 'branch'].includes(user.role) && (
-        <>
+          {['admin', 'production'].includes(user.role) && (
+            <>
+              <StatsCard
+                title={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
+                value={stats.completedTasks.toString()}
+                icon={CheckCircle}
+                color="green"
+                ariaLabel={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
+              />
+              <StatsCard
+                title={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
+                value={stats.inProgressTasks.toString()}
+                icon={Clock}
+                color="blue"
+                ariaLabel={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
+              />
+            </>
+          )}
           <StatsCard
             title={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
             value={stats.totalReturns.toString()}
@@ -1195,17 +1331,18 @@ export const Dashboard: React.FC = () => {
   if (error) return <div className="text-center text-red-600 p-4">{error}</div>;
 
   return (
-    <div className={`py-6 px-4 mx-auto`}>
+    <div className={`py-6 px-4 mx-auto ${isRtl ? 'rtl' : 'ltr'}`}>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl md:text-2xl font-bold text-gray-800 flex items-center gap-2">
           <BarChart3 className="w-5 h-5 text-amber-600" />
           {isRtl ? 'لوحة التحكم' : 'Dashboard'}
         </h1>
         <ProductDropdown
+          options={timeFilterOptions}
           value={timeFilter}
           onChange={setTimeFilter}
-          options={timeFilterOptions}
           isRtl={isRtl}
+          label={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
         />
       </div>
       {user.role === 'chef' ? (
