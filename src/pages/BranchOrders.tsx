@@ -52,6 +52,8 @@ interface Action {
   status?: string;
   by?: 'date' | 'totalAmount';
   order?: 'asc' | 'desc';
+  itemId?: string;
+  items?: any[];
 }
 
 // Initial state
@@ -353,7 +355,7 @@ export const BranchOrders: React.FC = () => {
           dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status, payload: mappedOrder });
         } else {
           console.warn('Invalid updated order data:', updatedOrder);
-          dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
+          dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status, payload: {} }); // التعديل: أضفنا payload: {}
         }
         toast.info(
           isRtl ? `تم تحديث حالة الطلب إلى: ${t(`orders.status_${status}`)}` : `Order status updated to: ${t(`orders.status_${status}`)}`,
@@ -361,7 +363,7 @@ export const BranchOrders: React.FC = () => {
         );
       } catch (err) {
         console.error('Failed to fetch updated order:', err);
-        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
+        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status, payload: {} }); // التعديل: أضفنا payload: {}
       }
     });
 
@@ -589,10 +591,10 @@ export const BranchOrders: React.FC = () => {
           throw new Error(isRtl ? 'بعض العناصر تحتوي على معرفات منتجات غير صالحة' : 'Some items have invalid product IDs');
         }
 
-        // Confirm delivery and update status to delivered
+        // Confirm delivery
         await ordersAPI.confirmDelivery(orderId, user.id);
 
-        // Update inventory only for delivered status
+        // Update inventory using bulkCreate
         const inventoryItems = order.items.map(item => ({
           productId: item.product._id,
           currentStock: item.quantity,
@@ -601,29 +603,99 @@ export const BranchOrders: React.FC = () => {
         }));
 
         try {
-          // Attempt bulk create for inventory
-          await inventoryAPI.bulkCreate({
+          const bulkCreateResponse = await inventoryAPI.bulkCreate({
             branchId: user.branchId,
             userId: user.id,
             orderId,
             items: inventoryItems,
           });
+          // Update local inventory state if response contains inventories
+          if (bulkCreateResponse.inventories && Array.isArray(bulkCreateResponse.inventories)) {
+            dispatch({ type: 'SET_INVENTORY', payload: bulkCreateResponse.inventories });
+          }
         } catch (bulkError: any) {
-          console.error(`Bulk create failed: ${bulkError.message}`);
-          throw new Error(isRtl ? 'فشل في تحديث المخزون: تحقق من البيانات' : 'Failed to update inventory: Check the data');
+          if (bulkError.response?.status === 400 && bulkError.response?.data?.message.includes('المخزون محدث بالفعل')) {
+            throw new Error(isRtl ? 'المخزون محدث بالفعل لهذا الطلب' : 'Inventory already updated for this order');
+          }
+          console.warn(`Bulk create failed: ${bulkError.message}. Falling back to individual updates.`);
+          for (const item of order.items) {
+            try {
+              let inventoryItem;
+              try {
+                const inventory = await inventoryAPI.getByBranch(user.branchId);
+                inventoryItem = inventory.find((inv: any) => inv.productId === item.product._id);
+              } catch (getError: any) {
+                if (getError.status === 403) {
+                  console.warn(`Permission denied for getting inventory for branch ${user.branchId}. Proceeding to create new inventory entry.`);
+                  inventoryItem = null;
+                } else {
+                  throw getError;
+                }
+              }
+
+              if (inventoryItem) {
+                try {
+                  await inventoryAPI.updateStock(inventoryItem._id, {
+                    currentStock: (inventoryItem.currentStock || 0) + item.quantity,
+                  });
+                } catch (updateError: any) {
+                  if (updateError.status === 403) {
+                    console.warn(`Permission denied for updating inventory item ${inventoryItem._id}. Creating new inventory entry.`);
+                    await inventoryAPI.create({
+                      branchId: user.branchId,
+                      productId: item.product._id,
+                      currentStock: item.quantity,
+                      minStockLevel: 0,
+                      maxStockLevel: 1000,
+                      userId: user.id,
+                      orderId,
+                    });
+                  } else {
+                    throw updateError;
+                  }
+                }
+              } else {
+                await inventoryAPI.create({
+                  branchId: user.branchId,
+                  productId: item.product._id,
+                  currentStock: item.quantity,
+                  minStockLevel: 0,
+                  maxStockLevel: 1000,
+                  userId: user.id,
+                  orderId,
+                });
+              }
+            } catch (itemError: any) {
+              console.warn(`Failed to update inventory for product ${item.product._id}:`, itemError.message);
+              continue;
+            }
+          }
         }
 
-        // Update order status in state
-        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: OrderStatus.Delivered });
+        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: OrderStatus.Delivered, payload: {} }); // التعديل: أضفنا payload: {}
         if (socket && isConnected) {
           emit('orderStatusUpdated', { orderId, status: OrderStatus.Delivered });
+        } else {
+          console.warn('Socket not connected, cannot emit orderStatusUpdated event');
+          toast.warn(isRtl ? 'الاتصال بالسوكيت غير متوفر، تحديث الحالة محلي فقط' : 'Socket connection unavailable, status updated locally only', {
+            position: isRtl ? 'top-left' : 'top-right',
+            autoClose: 3000,
+          });
         }
         dispatch({ type: 'SET_MODAL', modal: 'confirmDelivery', isOpen: false });
+        dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
         playNotificationSound('/sounds/order-delivered.mp3', [400, 100, 400]);
         toast.success(isRtl ? 'تم تأكيد التسليم' : 'Delivery confirmed successfully', { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
       } catch (err: any) {
         console.error('Confirm delivery error:', err.message, err.response?.data);
-        toast.error(isRtl ? `فشل في تأكيد التسليم: ${err.message}` : `Failed to confirm delivery: ${err.message}`, { position: isRtl ? 'top-left' : 'top-right', autoClose: 3000 });
+        let errorMessage = err.message;
+        if (err.response?.status === 400 && err.response?.data?.message.includes('المخزون محدث بالفعل')) {
+          errorMessage = isRtl ? 'الطلب تم تحديث مخزونه مسبقاً' : 'Order inventory already updated';
+        }
+        toast.error(isRtl ? `فشل في تأكيد التسليم: ${errorMessage}` : `Failed to confirm delivery: ${errorMessage}`, {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 3000,
+        });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
@@ -641,9 +713,15 @@ export const BranchOrders: React.FC = () => {
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
         await ordersAPI.updateStatus(orderId, { status });
-        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
+        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status, payload: {} }); // التعديل: أضفنا payload: {}
         if (socket && isConnected) {
           emit('orderStatusUpdated', { orderId, status });
+        } else {
+          console.warn('Socket not connected, cannot emit orderStatusUpdated event');
+          toast.warn(isRtl ? 'الاتصال بالسوكيت غير متوفر، تحديث الحالة محلي فقط' : 'Socket connection unavailable, status updated locally only', {
+            position: isRtl ? 'top-left' : 'top-right',
+            autoClose: 3000,
+          });
         }
         toast.success(
           isRtl ? `تم تحديث حالة الطلب إلى: ${t(`orders.status_${status}`)}` : `Order status updated to: ${t(`orders.status_${status}`)}`,
