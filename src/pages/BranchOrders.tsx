@@ -17,13 +17,11 @@ import { Order, OrderStatus, ItemStatus } from '../components/branch/types';
 import { formatDate } from '../utils/formatDate';
 import OrderCardSkeleton from '../components/branch/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/branch/OrderTableSkeleton';
+import OrderCard from '../components/branch/OrderCard';
+import OrderTable from '../components/branch/OrderTable';
+import ConfirmDeliveryModal from '../components/branch/ConfirmDeliveryModal';
+import ViewModal from '../components/branch/ViewModal';
 
-// Lazy-loaded components
-const OrderTable = lazy(() => import('../components/branch/OrderTable'));
-const OrderCard = lazy(() => import('../components/branch/OrderCard'));
-const Pagination = lazy(() => import('../components/branch/Pagination'));
-const ViewModal = lazy(() => import('../components/branch/ViewModal'));
-const ConfirmDeliveryModal = lazy(() => import('../components/branch/ConfirmDeliveryModal'));
 
 // State and Action interfaces
 interface State {
