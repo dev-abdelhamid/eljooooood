@@ -414,7 +414,7 @@ const ProductSkeletonCard = React.memo(() => (
 ));
 
 // Main CreateSale component
-const CreateSale: React.FC = () => {
+export const CreateSale: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const { id } = useParams<{ id?: string }>();
