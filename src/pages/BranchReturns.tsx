@@ -933,7 +933,7 @@ export const BranchReturns: React.FC = () => {
   );
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6">
+    <div className="mx-auto px-4 py-6">
       <div className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div className="flex items-center gap-3">
           <Package className="w-7 h-7 text-amber-600" />

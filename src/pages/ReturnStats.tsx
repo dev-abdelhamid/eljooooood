@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PieChart, Pie, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
-import { Calendar, AlertCircle, Package, Filter, Search } from 'lucide-react';
+import { Calendar, AlertCircle, Package, Filter } from 'lucide-react';
 import { returnsAPI } from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -29,7 +29,7 @@ interface StatsData {
   returnsByBranch: Array<{ branchId: string; branchName: string; count: number; totalQuantity: number; totalValue: number }>;
   statusDistribution: Array<{ name: string; value: number }>;
   reasonDistribution: Array<{ name: string; value: number }>;
-  productDistribution: Array<{ productId: string; productName: string; totalQuantity: number }>;
+  topProducts: Array<{ productId: string; productName: string; count: number; totalQuantity: number }>;
 }
 
 interface Return {
@@ -51,15 +51,10 @@ interface Branch {
   displayName: string;
 }
 
-interface Product {
-  _id: string;
-  displayName: string;
-}
-
 const translations = {
   ar: {
     title: 'إحصائيات المرتجعات',
-    subtitle: 'عرض إحصائيات طلبات الإرجاع حسب الفرع والحالة والسبب والمنتج',
+    subtitle: 'عرض إحصائيات طلبات الإرجاع حسب الفرع والحالة والسبب',
     totalReturns: 'إجمالي المرتجعات',
     pending: 'قيد الانتظار',
     approved: 'موافق عليه',
@@ -68,7 +63,7 @@ const translations = {
     totalValue: 'القيمة الإجمالية',
     statusDistribution: 'توزيع الحالات',
     reasonDistribution: 'توزيع الأسباب',
-    productDistribution: 'توزيع المنتجات',
+    topProducts: 'أكثر المنتجات إرجاعًا',
     returnsByBranch: 'المرتجعات حسب الفرع',
     filterByBranch: 'تصفية حسب الفرع',
     selectBranch: 'اختر الفرع',
@@ -77,16 +72,12 @@ const translations = {
     selectStatus: 'اختر الحالة',
     filterByReason: 'تصفية حسب السبب',
     selectReason: 'اختر السبب',
-    filterByProduct: 'تصفية حسب المنتج',
-    selectProduct: 'اختر المنتج',
     clearFilters: 'مسح الفلاتر',
     noData: 'لا توجد بيانات متاحة',
     errors: {
       fetchStats: 'خطأ في جلب الإحصائيات',
       fetchBranches: 'خطأ في جلب الفروع',
-      fetchProducts: 'خطأ في جلب المنتجات',
       accessDenied: 'غير مصرح لك بالوصول إلى هذه الصفحة',
-      retryFetchBranches: 'جاري إعادة المحاولة لجلب الفروع...',
     },
     currency: 'ريال',
     reasons: {
@@ -98,7 +89,7 @@ const translations = {
   },
   en: {
     title: 'Returns Statistics',
-    subtitle: 'View statistics of return requests by branch, status, reason, and product',
+    subtitle: 'View statistics of return requests by branch, status, and reason',
     totalReturns: 'Total Returns',
     pending: 'Pending',
     approved: 'Approved',
@@ -107,7 +98,7 @@ const translations = {
     totalValue: 'Total Value',
     statusDistribution: 'Status Distribution',
     reasonDistribution: 'Reason Distribution',
-    productDistribution: 'Product Distribution',
+    topProducts: 'Top Returned Products',
     returnsByBranch: 'Returns by Branch',
     filterByBranch: 'Filter by Branch',
     selectBranch: 'Select Branch',
@@ -116,16 +107,12 @@ const translations = {
     selectStatus: 'Select Status',
     filterByReason: 'Filter by Reason',
     selectReason: 'Select Reason',
-    filterByProduct: 'Filter by Product',
-    selectProduct: 'Select Product',
     clearFilters: 'Clear Filters',
     noData: 'No data available',
     errors: {
       fetchStats: 'Error fetching statistics',
       fetchBranches: 'Error fetching branches',
-      fetchProducts: 'Error fetching products',
       accessDenied: 'You are not authorized to access this page',
-      retryFetchBranches: 'Retrying to fetch branches...',
     },
     currency: 'SAR',
     reasons: {
@@ -200,11 +187,8 @@ export const ReturnStats: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState<string>('');
   const [selectedStatus, setSelectedStatus] = useState<string>('');
   const [selectedReason, setSelectedReason] = useState<string>('');
-  const [selectedProduct, setSelectedProduct] = useState<string>('');
   const [dateRange, setDateRange] = useState<[Date | null, Date | null]>([null, null]);
   const [startDate, endDate] = dateRange;
-  const [retryCount, setRetryCount] = useState(0);
-  const maxRetries = 3;
 
   // Check if user is authorized
   if (!user || user.role === 'chef') {
@@ -218,7 +202,7 @@ export const ReturnStats: React.FC = () => {
   }
 
   // Fetch branches for admin
-  const { data: branchesData, isLoading: branchesLoading, error: branchesError, refetch: refetchBranches } = useQuery<
+  const { data: branchesData, isLoading: branchesLoading, error: branchesError } = useQuery<
     Branch[],
     Error
   >({
@@ -232,53 +216,20 @@ export const ReturnStats: React.FC = () => {
         }));
       } catch (err: any) {
         console.error(`[${new Date().toISOString()}] Error fetching branches:`, err);
-        if (err.status === 404 && retryCount < maxRetries) {
-          setRetryCount((prev) => prev + 1);
-          toast.info(t.errors.retryFetchBranches, {
-            position: isRtl ? 'top-right' : 'top-left',
-            toastId: `retry-branches-${Date.now()}`,
-          });
-          setTimeout(() => refetchBranches(), 1000 * Math.pow(2, retryCount));
-        } else {
-          toast.error(t.errors.fetchBranches, {
-            position: isRtl ? 'top-right' : 'top-left',
-            toastId: `fetch-branches-${Date.now()}`,
-          });
-        }
+        toast.error(t.errors.fetchBranches, {
+          position: isRtl ? 'top-right' : 'top-left',
+          toastId: `fetch-branches-${Date.now()}`,
+        });
         throw err;
       }
     },
     enabled: user.role === 'admin',
     staleTime: 10 * 60 * 1000,
-    retry: false,
-  });
-
-  // Fetch products for filtering
-  const { data: productsData, isLoading: productsLoading, error: productsError } = useQuery<Product[], Error>({
-    queryKey: ['products', language],
-    queryFn: async () => {
-      try {
-        const response = await returnsAPI.getProducts(); // Assuming an API endpoint to fetch products
-        return response.products.map((product: any) => ({
-          _id: product._id,
-          displayName: isRtl ? (product.name || 'غير معروف') : (product.nameEn || product.name || 'Unknown'),
-        }));
-      } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Error fetching products:`, err);
-        toast.error(t.errors.fetchProducts, {
-          position: isRtl ? 'top-right' : 'top-left',
-          toastId: `fetch-products-${Date.now()}`,
-        });
-        throw err;
-      }
-    },
-    enabled: !!user,
-    staleTime: 10 * 60 * 1000,
   });
 
   // Fetch stats data
   const { data: statsData, isLoading: statsLoading, error: statsError } = useQuery<StatsData, Error>({
-    queryKey: ['returnStats', user?.branchId, selectedBranch, selectedStatus, selectedReason, selectedProduct, startDate, endDate, language],
+    queryKey: ['returnStats', user?.branchId, selectedBranch, selectedStatus, selectedReason, startDate, endDate, language],
     queryFn: async () => {
       const query: any = { limit: 1000 };
       if (user.role === 'branch' && user.branchId) {
@@ -288,7 +239,6 @@ export const ReturnStats: React.FC = () => {
       }
       if (selectedStatus) query.status = selectedStatus;
       if (selectedReason) query['items.reasonEn'] = selectedReason;
-      if (selectedProduct) query['items.product'] = selectedProduct;
       if (startDate) query.startDate = startDate.toISOString();
       if (endDate) query.endDate = endDate.toISOString();
 
@@ -316,7 +266,7 @@ export const ReturnStats: React.FC = () => {
           { name: t.reasons['Excess Quantity'], value: returns.filter((r) => r.items.some((i) => i.reasonEn === 'Excess Quantity')).length },
           { name: t.reasons.Other, value: returns.filter((r) => r.items.some((i) => i.reasonEn === 'Other')).length },
         ],
-        productDistribution: [],
+        topProducts: [],
       };
 
       // Calculate returns by branch
@@ -353,21 +303,23 @@ export const ReturnStats: React.FC = () => {
         ];
       }
 
-      // Calculate product distribution
-      const productMap = new Map<string, { productId: string; productName: string; totalQuantity: number }>();
+      // Calculate top 5 returned products
+      const productMap = new Map<string, { productId: string; productName: string; count: number; totalQuantity: number }>();
       returns.forEach((ret) => {
         ret.items.forEach((item) => {
           const productId = item.product._id;
           const existing = productMap.get(productId) || {
             productId,
             productName: isRtl ? (item.product.name || 'غير معروف') : (item.product.nameEn || item.product.name || 'Unknown'),
+            count: 0,
             totalQuantity: 0,
           };
+          existing.count += 1;
           existing.totalQuantity += item.quantity;
           productMap.set(productId, existing);
         });
       });
-      stats.productDistribution = Array.from(productMap.values())
+      stats.topProducts = Array.from(productMap.values())
         .sort((a, b) => b.totalQuantity - a.totalQuantity)
         .slice(0, 5);
 
@@ -459,14 +411,6 @@ export const ReturnStats: React.FC = () => {
     [branchesData, t]
   );
 
-  const productOptions = useMemo(
-    () => [
-      { value: '', label: t.selectProduct },
-      ...(productsData?.map((product) => ({ value: product._id, label: product.displayName })) || []),
-    ],
-    [productsData, t]
-  );
-
   const statusOptions = useMemo(
     () => (isRtl ? STATUS_OPTIONS : STATUS_OPTIONS_EN),
     [isRtl]
@@ -481,7 +425,6 @@ export const ReturnStats: React.FC = () => {
     setSelectedBranch('');
     setSelectedStatus('');
     setSelectedReason('');
-    setSelectedProduct('');
     setDateRange([null, null]);
   }, []);
 
@@ -513,7 +456,7 @@ export const ReturnStats: React.FC = () => {
         </div>
       </div>
 
-      {(statsError || branchesError || productsError) && (
+      {(statsError || branchesError) && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -521,13 +464,13 @@ export const ReturnStats: React.FC = () => {
         >
           <AlertCircle className="w-4 h-4 text-red-600" />
           <span className="text-red-600 text-xs font-medium">
-            {statsError?.message || branchesError?.message || productsError?.message || t.errors.fetchStats}
+            {statsError?.message || branchesError?.message || t.errors.fetchStats}
           </span>
         </motion.div>
       )}
 
       <div className="p-5 bg-white rounded-xl shadow-sm mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {user.role === 'admin' && (
             <div className="flex items-center gap-2">
               <Filter className="w-4 h-4 text-gray-600" />
@@ -565,18 +508,6 @@ export const ReturnStats: React.FC = () => {
             />
           </div>
           <div className="flex items-center gap-2">
-            <Search className="w-4 h-4 text-gray-600" />
-            <ProductDropdown
-              value={selectedProduct}
-              onChange={(value) => setSelectedProduct(value)}
-              options={productOptions}
-              placeholder={t.filterByProduct}
-              className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs"
-              disabled={productsLoading}
-              aria-label={t.filterByProduct}
-            />
-          </div>
-          <div className="flex items-center gap-2">
             <Calendar className="w-4 h-4 text-gray-600" />
             <DatePicker
               selectsRange
@@ -591,7 +522,7 @@ export const ReturnStats: React.FC = () => {
           </div>
           <button
             onClick={handleClearFilters}
-            className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-md text-xs font-medium transition-colors duration-200 col-span-1 sm:col-span-2 lg:col-span-5"
+            className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-md text-xs font-medium transition-colors duration-200 col-span-1 sm:col-span-2 lg:col-span-4"
             aria-label={t.clearFilters}
           >
             {t.clearFilters}
@@ -750,9 +681,9 @@ export const ReturnStats: React.FC = () => {
               transition={{ duration: 0.5, delay: 0.6 }}
               className="p-5 bg-white rounded-xl shadow-sm"
             >
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.productDistribution}</h3>
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">{t.topProducts}</h3>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={statsData.productDistribution} layout={isRtl ? 'vertical' : 'horizontal'}>
+                <BarChart data={statsData.topProducts} layout={isRtl ? 'vertical' : 'horizontal'}>
                   <XAxis
                     type={isRtl ? 'category' : 'category'}
                     dataKey="productName"
