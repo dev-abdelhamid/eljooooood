@@ -15,7 +15,7 @@ import { Orders } from './pages/Orders';
 import { OrderDetailsPage } from './pages/OrderDetailsPage';
 import { NewOrder } from './pages/NewOrder';
 import { ChefTasks } from './pages/ChefTasks';
-import AdminReturns from './pages/AdminReturns';
+import AdminReturns from './pages/ReturnStats';
 import { Chefs } from './pages/Chefs';
 import { Departments } from './pages/Departments';
 import { Branches } from './pages/Branches';
@@ -37,6 +37,7 @@ import BranchProfile from './pages/BranchProfile';
 import { ChefDetails } from './pages/ChefDetails';
 import BranchSalesAnalytics from './pages/BranchSalesAnalytics';
 import SalesAnalytics from './pages/SalesAnalytics';
+import ReturnStats from './pages/ReturnStats';
 
 
 // إعداد QueryClient لإدارة الاستعلامات
@@ -92,6 +93,8 @@ function AppContent() {
                   <Route path="/branch-sales/new" element={<CreateSale />} />
                   <Route path="/branch-sales/analytics" element={<BranchSalesAnalytics />} />
                   <Route path="/sales/analytics" element={<SalesAnalytics />} />
+                  <Route path="/admin-sales" element={<AdminSalesReport />} />
+                  <Route path="/returnStats" element={<ReturnStats />} />
 
 
                   <Route path="/branch-orders" element={<BranchOrders />} />
