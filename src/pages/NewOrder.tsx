@@ -125,9 +125,9 @@ export const ProductSearchInput = ({
   return (
     <div className="relative group">
       <div
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
+        className={`absolute flex items-center align-center ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
       >
-        <Search />
+        <Search className="w-4 h-4" /> 
       </div>
       <input
         type="text"
@@ -144,7 +144,7 @@ export const ProductSearchInput = ({
           onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </button>
       </div>
     </div>
