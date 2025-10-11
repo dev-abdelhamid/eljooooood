@@ -828,6 +828,8 @@ export const inventoryAPI = {
     console.log(`[${new Date().toISOString()}] inventoryAPI.getByBranch - Response:`, response);
     return response.inventory;
   },
+
+  
   getAll: async (params: { branch?: string; product?: string; search?: string; page?: number; limit?: number } = {}) => {
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getAll - Invalid branch ID:`, params.branch);
