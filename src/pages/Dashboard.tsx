@@ -1173,7 +1173,7 @@ export const Dashboard: React.FC = () => {
   if (error) return <div className="text-center text-red-600 p-4">{error}</div>;
 
   return (
-    <div className={`p-3 md:p-5 lg:p-6 ${isRtl ? 'text-right' : 'text-left'} max-w-7xl mx-auto`}>
+    <div className={`py-6 px-4 mx-auto`}>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl md:text-2xl font-bold text-gray-800 flex items-center gap-2">
           <BarChart3 className="w-5 h-5 text-amber-600" />
@@ -1204,7 +1204,7 @@ export const Dashboard: React.FC = () => {
       ) : (
         <>
           {renderStats()}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2  gap-3">
             <div className="space-y-3">
               <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
