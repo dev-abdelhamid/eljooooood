@@ -11,15 +11,14 @@ import { debounce } from 'lodash';
 import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, returnsAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 
-const cache = new Map<string, any>();
-
+// تعريف الواجهات
 interface Stats {
   totalOrders: number;
   pendingOrders: number;
   inProductionOrders: number;
   inTransitOrders: number;
   deliveredOrders: number;
-  totalSales: number;
+  totalOrderValue: number; // تم تغيير الاسم من totalSales إلى totalOrderValue
   completedTasks: number;
   inProgressTasks: number;
   totalReturns: number;
@@ -53,6 +52,7 @@ interface BranchPerformance {
 }
 
 interface ChefPerformance {
+  chefId: string;
   chefName: string;
   chefNameEn?: string;
   performance: number;
@@ -74,7 +74,7 @@ interface Order {
     quantity: number;
     price: number;
     department: { _id: string; name: string; nameEn?: string };
-    assignedTo?: { _id: string; username: string; nameEn?: string };
+    assignedTo?: { _id: string; username: string; name: string; nameEn?: string };
     status: 'pending' | 'assigned' | 'in_progress' | 'completed';
     returnedQuantity?: number;
     returnReason?: string;
@@ -131,26 +131,32 @@ const timeFilterOptions = [
   { value: 'year', label: 'هذا العام', enLabel: 'This Year' },
 ];
 
+// مكون تحميل محسن
 const Loader: React.FC = () => (
   <div className="flex justify-center items-center h-screen">
-    <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-amber-600"></div>
+    <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
   </div>
 );
 
+// مكون بطاقة الإحصائيات مع تحسينات في الأسلوب
 const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color: string; ariaLabel: string }> = React.memo(
   ({ title, value, icon: Icon, color, ariaLabel }) => (
-    <div className={`p-4 bg-${color}-50 rounded-lg border border-${color}-100 cursor-pointer hover:bg-${color}-100 transition-colors duration-200`} aria-label={ariaLabel}>
-      <div className="flex items-center gap-3">
-        <Icon className={`w-6 h-6 text-${color}-600`} />
+    <div
+      className={`p-3 bg-${color}-50 rounded-lg border border-${color}-100 cursor-pointer hover:bg-${color}-100 transition-colors duration-200`}
+      aria-label={ariaLabel}
+    >
+      <div className="flex items-center gap-2">
+        <Icon className={`w-5 h-5 text-${color}-600`} />
         <div>
-          <p className="text-sm text-gray-600">{title}</p>
-          <p className="text-lg font-semibold text-gray-900">{value}</p>
+          <p className="text-xs text-gray-600">{title}</p>
+          <p className="text-sm font-semibold text-gray-900">{value}</p>
         </div>
       </div>
     </div>
   )
 );
 
+// مكون لوحة تحكم الشيف
 const ChefDashboard: React.FC<{
   stats: Stats;
   tasks: Task[];
@@ -175,7 +181,7 @@ const ChefDashboard: React.FC<{
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatsCard
           title={isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
           value={stats.totalOrders.toString()}
@@ -205,17 +211,17 @@ const ChefDashboard: React.FC<{
           ariaLabel={isRtl ? 'الطلبات المعلقة' : 'Pending Orders'}
         />
       </div>
-      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-        <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-4">
-          <h3 className="text-lg font-semibold text-gray-800 flex items-center">
-            <ChefHat className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+      <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+        <div className="flex flex-col sm:flex-row items-center justify-between mb-3 gap-3">
+          <h3 className="text-base font-semibold text-gray-800 flex items-center">
+            <ChefHat className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
             {isRtl ? 'أحدث الطلبات قيد الإنتاج' : 'Latest In Production'}
           </h3>
-          <div className="flex items-center gap-3 w-full sm:w-auto">
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <select
               value={filter.status}
               onChange={(e) => setFilter((prev) => ({ ...prev, status: e.target.value }))}
-              className="w-full sm:w-48 p-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+              className="w-full sm:w-40 p-1.5 rounded-lg border border-gray-200 text-xs focus:ring-2 focus:ring-blue-500 bg-white"
               aria-label={isRtl ? 'حالة المهمة' : 'Task Status'}
             >
               <option value="all">{isRtl ? 'الكل' : 'All'}</option>
@@ -229,15 +235,15 @@ const ChefDashboard: React.FC<{
               value={filter.search}
               onChange={(e) => setFilter((prev) => ({ ...prev, search: e.target.value }))}
               placeholder={isRtl ? 'ابحث عن اسم المنتج أو رقم الطلب' : 'Search by product name or order number'}
-              className="w-full sm:w-48 p-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+              className="w-full sm:w-40 p-1.5 rounded-lg border border-gray-200 text-xs focus:ring-2 focus:ring-blue-500 bg-white"
               aria-label={isRtl ? 'البحث' : 'Search'}
             />
           </div>
         </div>
-        <div className="space-y-3 overflow-y-auto max-h-96">
+        <div className="space-y-2 overflow-y-auto max-h-80">
           <AnimatePresence>
             {filteredTasks.length === 0 ? (
-              <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد مهام' : 'No tasks available'}</p>
+              <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد مهام' : 'No tasks available'}</p>
             ) : (
               filteredTasks.map((task) => (
                 <motion.div
@@ -246,14 +252,14 @@ const ChefDashboard: React.FC<{
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ duration: 0.2 }}
-                  className="border border-amber-100 rounded-lg p-3 bg-amber-50 shadow-sm"
+                  className="border border-amber-100 rounded-lg p-2 bg-amber-50 shadow-sm"
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-semibold text-sm text-gray-800 truncate">
+                    <h4 className="font-semibold text-xs text-gray-800 truncate">
                       {isRtl ? `طلب رقم ${task.orderNumber}` : `Order #${task.orderNumber}`}
                     </h4>
                     <span
-                      className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
                         task.status === 'pending' || task.status === 'assigned'
                           ? 'bg-amber-100 text-amber-800'
                           : task.status === 'in_progress'
@@ -272,15 +278,15 @@ const ChefDashboard: React.FC<{
                         : task.status.charAt(0).toUpperCase() + task.status.slice(1)}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-600 mb-2 truncate">
+                  <p className="text-xs text-gray-600 mb-2 truncate">
                     {`${task.quantity} ${isRtl ? task.productName : task.productNameEn || task.productName} (${isRtl ? task.unit : task.unitEn || task.unit})`}
                   </p>
-                  <p className="text-xs text-gray-500 mb-3">{isRtl ? `تم الإنشاء في: ${task.createdAt}` : `Created At: ${task.createdAt}`}</p>
-                  <div className="flex items-center gap-3">
+                  <p className="text-xs text-gray-500 mb-2">{isRtl ? `تم الإنشاء في: ${task.createdAt}` : `Created At: ${task.createdAt}`}</p>
+                  <div className="flex items-center gap-2">
                     {(task.status === 'pending' || task.status === 'assigned') && (
                       <button
                         onClick={() => handleStartTask(task.id, task.orderId)}
-                        className="bg-amber-600 text-white px-3 py-1.5 rounded text-sm hover:bg-amber-700 transition-colors duration-200"
+                        className="bg-amber-600 text-white px-2 py-1 rounded text-xs hover:bg-amber-700 transition-colors duration-200"
                         aria-label={isRtl ? 'بدء المهمة' : 'Start Task'}
                       >
                         {isRtl ? 'بدء' : 'Start'}
@@ -289,7 +295,7 @@ const ChefDashboard: React.FC<{
                     {task.status === 'in_progress' && (
                       <button
                         onClick={() => handleCompleteTask(task.id, task.orderId)}
-                        className="bg-green-600 text-white px-3 py-1.5 rounded text-sm hover:bg-green-700 transition-colors duration-200"
+                        className="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition-colors duration-200"
                         aria-label={isRtl ? 'إكمال المهمة' : 'Complete Task'}
                       >
                         {isRtl ? 'إكمال' : 'Complete'}
@@ -326,7 +332,7 @@ export const Dashboard: React.FC = () => {
     inProductionOrders: 0,
     inTransitOrders: 0,
     deliveredOrders: 0,
-    totalSales: 0,
+    totalOrderValue: 0, // تغيير من totalSales إلى totalOrderValue
     completedTasks: 0,
     inProgressTasks: 0,
     totalReturns: 0,
@@ -338,6 +344,9 @@ export const Dashboard: React.FC = () => {
   const [timeFilter, setTimeFilter] = useState('week');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+
+  const cache = useMemo(() => new Map<string, any>(), []);
 
   const cacheKey = useMemo(() => `${user?.id || user?._id}-${user?.role}-${timeFilter}`, [user, timeFilter]);
 
@@ -370,6 +379,7 @@ export const Dashboard: React.FC = () => {
         setChefPerformance(cachedData.chefPerformance);
         setStats(cachedData.stats);
         setLoading(false);
+        setIsInitialLoad(false);
         return;
       }
 
@@ -414,7 +424,7 @@ export const Dashboard: React.FC = () => {
         } else {
           if (user.role === 'branch') query.branch = user.id || user._id;
           if (user.role === 'production' && user.department) query.departmentId = user.department._id;
-          [ordersResponse, tasksResponse, chefsResponse, branchesResponse, returnsResponse] = await Promise.all([
+          const promises = [
             ordersAPI.getAll(query).catch(() => []),
             productionAssignmentsAPI.getAllTasks(query).catch(() => []),
             ['admin', 'production'].includes(user.role) ? chefsAPI.getAll().catch(() => []) : Promise.resolve([]),
@@ -425,7 +435,8 @@ export const Dashboard: React.FC = () => {
                   return { returns: [], total: 0 };
                 })
               : Promise.resolve({ returns: [], total: 0 }),
-          ]);
+          ];
+          [ordersResponse, tasksResponse, chefsResponse, branchesResponse, returnsResponse] = await Promise.all(promises);
         }
 
         const mappedOrders = ordersResponse.map((order: any) => ({
@@ -444,7 +455,7 @@ export const Dashboard: React.FC = () => {
             department: item.product?.department || { _id: 'unknown', name: isRtl ? 'قسم غير معروف' : 'Unknown Department', nameEn: 'Unknown' },
             status: item.status || 'pending',
             assignedTo: item.assignedTo
-              ? { _id: item.assignedTo._id, username: item.assignedTo.username || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'), nameEn: item.assignedTo.nameEn || item.assignedTo.name || 'Unknown' }
+              ? { _id: item.assignedTo._id, username: item.assignedTo.username, name: item.assignedTo.name || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'), nameEn: item.assignedTo.nameEn || item.assignedTo.name || 'Unknown' }
               : undefined,
             returnedQuantity: Number(item.returnedQuantity) || 0,
             returnReason: item.returnReason || '',
@@ -528,7 +539,14 @@ export const Dashboard: React.FC = () => {
           const total = chefTasks.length;
           const completed = chefTasks.filter((t) => t.status === 'completed').length;
           const perf = total > 0 ? (completed / total) * 100 : 0;
-          return { chefName: chef.name, chefNameEn: chef.nameEn, performance: perf, totalTasks: total, completedTasks: completed };
+          return {
+            chefId: chef.userId,
+            chefName: chef.name,
+            chefNameEn: chef.nameEn,
+            performance: perf,
+            totalTasks: total,
+            completedTasks: completed,
+          };
         }).filter((c: any) => c.totalTasks > 0);
 
         const totalOrders = user.role === 'chef' ? mappedTasks.length : mappedOrders.length;
@@ -538,14 +556,14 @@ export const Dashboard: React.FC = () => {
         const inProductionOrders = mappedOrders.filter((o) => o.status === 'in_production').length;
         const inTransitOrders = mappedOrders.filter((o) => o.status === 'in_transit').length;
         const deliveredOrders = mappedOrders.filter((o) => o.status === 'delivered').length;
-        const totalSales = mappedOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
+        const totalOrderValue = mappedOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
         const completedTasks = mappedTasks.filter((task) => task.status === 'completed').length;
         const inProgressTasks = mappedTasks.filter((task) => task.status === 'in_progress').length;
         const totalReturns = mappedReturns.length;
         const pendingReturns = mappedReturns.filter((r) => r.status === 'pending_approval').length;
         const approvedReturns = mappedReturns.filter((r) => r.status === 'approved').length;
         const rejectedReturns = mappedReturns.filter((r) => r.status === 'rejected').length;
-        const averageOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
+        const averageOrderValue = totalOrders > 0 ? totalOrderValue / totalOrders : 0;
 
         const newData = {
           orders: mappedOrders,
@@ -561,7 +579,7 @@ export const Dashboard: React.FC = () => {
             inProductionOrders,
             inTransitOrders,
             deliveredOrders,
-            totalSales,
+            totalOrderValue,
             completedTasks,
             inProgressTasks,
             totalReturns,
@@ -582,6 +600,7 @@ export const Dashboard: React.FC = () => {
         setChefPerformance(newData.chefPerformance);
         setStats(newData.stats);
         setError('');
+        setIsInitialLoad(false);
       } catch (err: any) {
         const errorMessage = err.status === 403 ? (isRtl ? 'الوصول غير مصرح به' : 'Unauthorized access') : (isRtl ? 'خطأ في الخادم' : 'Server error');
         setError(errorMessage);
@@ -607,7 +626,9 @@ export const Dashboard: React.FC = () => {
   }, [fetchDashboardData, timeFilter]);
 
   useEffect(() => {
-    fetchDashboardData();
+    if (refreshTasks) {
+      fetchDashboardData(true);
+    }
   }, [refreshTasks, fetchDashboardData]);
 
   useEffect(() => {
@@ -921,7 +942,7 @@ export const Dashboard: React.FC = () => {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-4"
+      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-4"
     >
       <StatsCard
         title={isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
@@ -954,11 +975,11 @@ export const Dashboard: React.FC = () => {
       {['admin', 'production', 'branch'].includes(user.role) && (
         <>
           <StatsCard
-            title={isRtl ? 'إجمالي المبيعات' : 'Total Sales'}
-            value={stats.totalSales.toFixed(2)}
+            title={isRtl ? 'إجمالي قيمة الطلبات' : 'Total Order Value'} // تغيير من Total Sales إلى Total Order Value
+            value={stats.totalOrderValue.toFixed(2)}
             icon={DollarSign}
             color="purple"
-            ariaLabel={isRtl ? 'إجمالي المبيعات' : 'Total Sales'}
+            ariaLabel={isRtl ? 'إجمالي قيمة الطلبات' : 'Total Order Value'}
           />
           <StatsCard
             title={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
@@ -1008,15 +1029,15 @@ export const Dashboard: React.FC = () => {
   );
 
   const renderBranchPerformance = () => (
-    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mt-4">
-      <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
-        <BarChart3 className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+    <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 mt-4">
+      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
+        <BarChart3 className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
         {isRtl ? 'أداء الفروع' : 'Branch Performance'}
       </h3>
-      <div className="space-y-3 max-h-64 overflow-y-auto">
+      <div className="space-y-2 max-h-64 overflow-y-auto">
         <AnimatePresence>
           {branchPerformance.length === 0 ? (
-            <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد بيانات أداء' : 'No performance data available'}</p>
+            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد بيانات أداء' : 'No performance data available'}</p>
           ) : (
             branchPerformance.map((branch, index) => (
               <motion.div
@@ -1028,16 +1049,16 @@ export const Dashboard: React.FC = () => {
                 className="flex items-center justify-between p-2 border-b border-gray-100"
               >
                 <div>
-                  <p className="text-sm font-medium text-gray-800">{isRtl ? branch.branchName : branch.branchNameEn || branch.branchName}</p>
+                  <p className="text-xs font-medium text-gray-800">{isRtl ? branch.branchName : branch.branchNameEn || branch.branchName}</p>
                   <p className="text-xs text-gray-500">
                     {isRtl ? `${branch.totalOrders} طلبات` : `${branch.totalOrders} Orders`} -{' '}
                     {isRtl ? `${branch.completedOrders} مكتمل` : `${branch.completedOrders} Completed`}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-24 bg-gray-200 rounded-full h-2">
+                  <div className="w-20 bg-gray-200 rounded-full h-1.5">
                     <div
-                      className="bg-amber-600 h-2 rounded-full"
+                      className="bg-amber-600 h-1.5 rounded-full"
                       style={{ width: `${Math.min(branch.performance, 100)}%` }}
                     ></div>
                   </div>
@@ -1052,19 +1073,19 @@ export const Dashboard: React.FC = () => {
   );
 
   const renderChefPerformance = () => (
-    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mt-4">
-      <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
-        <ChefHat className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+    <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 mt-4">
+      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
+        <ChefHat className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
         {isRtl ? 'أداء الطهاة' : 'Chef Performance'}
       </h3>
-      <div className="space-y-3 max-h-64 overflow-y-auto">
+      <div className="space-y-2 max-h-64 overflow-y-auto">
         <AnimatePresence>
           {chefPerformance.length === 0 ? (
-            <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد بيانات أداء' : 'No performance data available'}</p>
+            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد بيانات أداء' : 'No performance data available'}</p>
           ) : (
             chefPerformance.map((chef, index) => (
               <motion.div
-                key={chef.chefName}
+                key={chef.chefId}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
@@ -1072,16 +1093,16 @@ export const Dashboard: React.FC = () => {
                 className="flex items-center justify-between p-2 border-b border-gray-100"
               >
                 <div>
-                  <p className="text-sm font-medium text-gray-800">{isRtl ? chef.name : chef.nameEn || chef.name}</p>
+                  <p className="text-xs font-medium text-gray-800">{isRtl ? chef.chefName : chef.chefNameEn || chef.chefName}</p>
                   <p className="text-xs text-gray-500">
                     {isRtl ? `${chef.totalTasks} مهام` : `${chef.totalTasks} Tasks`} -{' '}
                     {isRtl ? `${chef.completedTasks} مكتمل` : `${chef.completedTasks} Completed`}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="w-24 bg-gray-200 rounded-full h-2">
+                  <div className="w-20 bg-gray-200 rounded-full h-1.5">
                     <div
-                      className="bg-amber-600 h-2 rounded-full"
+                      className="bg-amber-600 h-1.5 rounded-full"
                       style={{ width: `${Math.min(chef.performance, 100)}%` }}
                     ></div>
                   </div>
@@ -1096,15 +1117,15 @@ export const Dashboard: React.FC = () => {
   );
 
   const renderLatestReturns = () => (
-    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-      <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
-        <RotateCcw className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+    <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
+        <RotateCcw className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
         {isRtl ? 'أحدث المرتجعات' : 'Latest Returns'}
       </h3>
-      <div className="space-y-3 max-h-96 overflow-y-auto">
+      <div className="space-y-2 max-h-80 overflow-y-auto">
         <AnimatePresence>
           {sortedLatestReturns.length === 0 ? (
-            <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد مرتجعات' : 'No returns available'}</p>
+            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد مرتجعات' : 'No returns available'}</p>
           ) : (
             sortedLatestReturns.map((ret) => (
               <motion.div
@@ -1113,15 +1134,15 @@ export const Dashboard: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
-                className="border border-amber-100 rounded-lg p-3 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
+                className="border border-amber-100 rounded-lg p-2 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
                 onClick={() => navigate(`/returns/${ret.id}`)}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-semibold text-sm text-gray-800 truncate">
+                  <h4 className="font-semibold text-xs text-gray-800 truncate">
                     {isRtl ? `مرتجع رقم ${ret.returnNumber}` : `Return #${ret.returnNumber}`}
                   </h4>
                   <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
                       ret.status === 'pending_approval'
                         ? 'bg-amber-100 text-amber-800'
                         : ret.status === 'approved'
@@ -1138,7 +1159,7 @@ export const Dashboard: React.FC = () => {
                       : ret.status.charAt(0).toUpperCase() + ret.status.slice(1)}
                   </span>
                 </div>
-                <p className="text-sm text-gray-600 mb-2 truncate">{isRtl ? ret.branchName : ret.branchNameEn || ret.branchName}</p>
+                <p className="text-xs text-gray-600 mb-2 truncate">{isRtl ? ret.branchName : ret.branchNameEn || ret.branchName}</p>
                 <p className="text-xs text-gray-500">{isRtl ? `تم الإنشاء في: ${ret.createdAt}` : `Created At: ${ret.createdAt}`}</p>
               </motion.div>
             ))
@@ -1148,20 +1169,20 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 
-  if (loading) return <Loader />;
+  if (loading && isInitialLoad) return <Loader />;
   if (error) return <div className="text-center text-red-600 p-4">{error}</div>;
 
   return (
-    <div className={`p-4 md:p-6 ${isRtl ? 'text-right' : 'text-left'}`}>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-          <BarChart3 className="w-6 h-6 text-amber-600" />
+    <div className={`p-3 md:p-5 lg:p-6 ${isRtl ? 'text-right' : 'text-left'} max-w-7xl mx-auto`}>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl md:text-2xl font-bold text-gray-800 flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-amber-600" />
           {isRtl ? 'لوحة التحكم' : 'Dashboard'}
         </h1>
         <select
           value={timeFilter}
           onChange={(e) => setTimeFilter(e.target.value)}
-          className="p-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 bg-white"
+          className="p-1.5 rounded-lg border border-gray-200 text-xs focus:ring-2 focus:ring-blue-500 bg-white"
           aria-label={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
         >
           {timeFilterOptions.map((option) => (
@@ -1183,18 +1204,17 @@ export const Dashboard: React.FC = () => {
       ) : (
         <>
           {renderStats()}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div className="space-y-4">
-              
-              <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-                <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
-                  <ShoppingCart className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="space-y-3">
+              <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
+                  <ShoppingCart className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
                   {isRtl ? 'أحدث الطلبات' : 'Latest Orders'}
                 </h3>
-                <div className="space-y-3 max-h-96 overflow-y-auto">
+                <div className="space-y-2 max-h-80 overflow-y-auto">
                   <AnimatePresence>
                     {sortedPendingOrders.length === 0 ? (
-                      <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد طلبات' : 'No orders available'}</p>
+                      <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد طلبات' : 'No orders available'}</p>
                     ) : (
                       sortedPendingOrders.map((order) => (
                         <motion.div
@@ -1203,15 +1223,15 @@ export const Dashboard: React.FC = () => {
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, y: -10 }}
                           transition={{ duration: 0.2 }}
-                          className="border border-amber-100 rounded-lg p-3 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
+                          className="border border-amber-100 rounded-lg p-2 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
                           onClick={() => navigate(`/orders/${order.id}`)}
                         >
                           <div className="flex items-center justify-between mb-2">
-                            <h4 className="font-semibold text-sm text-gray-800 truncate">
+                            <h4 className="font-semibold text-xs text-gray-800 truncate">
                               {isRtl ? `طلب رقم ${order.orderNumber}` : `Order #${order.orderNumber}`}
                             </h4>
                             <span
-                              className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
                                 order.status === 'pending'
                                   ? 'bg-amber-100 text-amber-800'
                                   : order.status === 'in_production'
@@ -1228,7 +1248,7 @@ export const Dashboard: React.FC = () => {
                                 : order.status.charAt(0).toUpperCase() + order.status.slice(1)}
                             </span>
                           </div>
-                          <p className="text-sm text-gray-600 mb-2 truncate">{isRtl ? order.branchName : order.branchNameEn || order.branchName}</p>
+                          <p className="text-xs text-gray-600 mb-2 truncate">{isRtl ? order.branchName : order.branchNameEn || order.branchName}</p>
                           <p className="text-xs text-gray-500">{isRtl ? `تم الإنشاء في: ${order.date}` : `Created At: ${order.date}`}</p>
                         </motion.div>
                       ))
@@ -1237,7 +1257,6 @@ export const Dashboard: React.FC = () => {
                 </div>
               </div>
             </div>
-
             {renderLatestReturns()}
             {['admin', 'production'].includes(user.role) && (
               <>
