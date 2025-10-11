@@ -1,3 +1,4 @@
+```tsx
 import React, { useReducer, useEffect, useMemo, useCallback, Suspense, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -19,7 +20,7 @@ import OrderCard from '../components/branch/OrderCard';
 import OrderTable from '../components/branch/OrderTable';
 import ConfirmDeliveryModal from '../components/branch/ConfirmDeliveryModal';
 import ViewModal from '../components/branch/ViewModal';
-import Pagination from '../components/branch/Pagination';
+import Pagination from '../components/Shared/Pagination';
 import { Order, OrderStatus, ItemStatus } from '../components/branch/types';
 import { formatDate } from '../utils/formatDate';
 
@@ -668,6 +669,13 @@ export const BranchOrders: React.FC = () => {
           throw new Error(isRtl ? 'بعض العناصر تحتوي على معرفات منتجات غير صالحة' : 'Some items have invalid product IDs');
         }
 
+        // Check if inventory has already been updated for this order
+        const existingHistory = await inventoryAPI.checkOrderHistory(orderId);
+        if (existingHistory) {
+          console.log(`[${new Date().toISOString()}] Inventory already updated for order ${orderId}`);
+          throw new Error(isRtl ? 'المخزون تم تحديثه بالفعل لهذا الطلب' : 'Inventory already updated for this order');
+        }
+
         await ordersAPI.confirmDelivery(orderId, user.id);
 
         const inventoryItems = order.items.map(item => ({
@@ -677,68 +685,12 @@ export const BranchOrders: React.FC = () => {
           maxStockLevel: 1000,
         }));
 
-        try {
-          await inventoryAPI.bulkCreate({
-            branchId: user.branchId,
-            userId: user.id,
-            orderId,
-            items: inventoryItems,
-          });
-        } catch (bulkError: any) {
-          console.warn(`Bulk create failed: ${bulkError.message}. Falling back to individual updates.`);
-          for (const item of order.items) {
-            try {
-              let inventoryItem;
-              try {
-                const inventory = await inventoryAPI.getByBranch(user.branchId);
-                inventoryItem = inventory.find((inv: any) => inv.productId === item.product._id);
-              } catch (getError: any) {
-                if (getError.status === 403) {
-                  console.warn(`Permission denied for getting inventory for branch ${user.branchId}. Proceeding to create new inventory entry.`);
-                  inventoryItem = null;
-                } else {
-                  throw getError;
-                }
-              }
-
-              if (inventoryItem) {
-                try {
-                  await inventoryAPI.updateStock(inventoryItem._id, {
-                    currentStock: (inventoryItem.currentStock || 0) + item.quantity,
-                  });
-                } catch (updateError: any) {
-                  if (updateError.status === 403) {
-                    console.warn(`Permission denied for updating inventory item ${inventoryItem._id}. Creating new inventory entry.`);
-                    await inventoryAPI.create({
-                      branchId: user.branchId,
-                      productId: item.product._id,
-                      currentStock: item.quantity,
-                      minStockLevel: 0,
-                      maxStockLevel: 1000,
-                      userId: user.id,
-                      orderId,
-                    });
-                  } else {
-                    throw updateError;
-                  }
-                }
-              } else {
-                await inventoryAPI.create({
-                  branchId: user.branchId,
-                  productId: item.product._id,
-                  currentStock: item.quantity,
-                  minStockLevel: 0,
-                  maxStockLevel: 1000,
-                  userId: user.id,
-                  orderId,
-                });
-              }
-            } catch (itemError: any) {
-              console.warn(`Failed to update inventory for product ${item.product._id}:`, itemError.message);
-              continue;
-            }
-          }
-        }
+        await inventoryAPI.bulkCreate({
+          branchId: user.branchId,
+          userId: user.id,
+          orderId,
+          items: inventoryItems,
+        });
 
         const eventId = crypto.randomUUID();
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: OrderStatus.Delivered });
@@ -1057,3 +1009,4 @@ export const BranchOrders: React.FC = () => {
 };
 
 export default BranchOrders;
+```
