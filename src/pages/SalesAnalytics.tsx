@@ -355,7 +355,7 @@ export const SalesAnalytics: React.FC = () => {
 
   const fetchDepartments = useCallback(async () => {
     try {
-      const response = await departmentsAPI.getAll(); // Assumes endpoint /api/departments
+      const response = await departmentAPI.getAll(); // Assumes endpoint /api/departments
       if (!response?.success || !Array.isArray(response.departments)) {
         throw new Error(t.errors.invalid_data);
       }
