@@ -131,7 +131,6 @@ const translations = {
     date: 'التاريخ',
     type: 'النوع',
     quantity: 'الكمية',
-    description: 'الوصف',
     delivery: 'تسليم',
     return_pending: 'إرجاع قيد الانتظار',
     return_rejected: 'إرجاع مرفوض',
@@ -206,7 +205,6 @@ const translations = {
     date: 'Date',
     type: 'Type',
     quantity: 'Quantity',
-    description: 'Description',
     delivery: 'Delivery',
     return_pending: 'Return Pending',
     return_rejected: 'Return Rejected',
@@ -888,7 +886,7 @@ export const BranchInventory: React.FC = () => {
   const errorMessage = inventoryError?.message || '';
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-7xl">
+    <div className=" mx-auto px-4 py-4">
       <div className="mb-8 flex flex-col items-start gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <Package className="w-7 h-7 text-amber-600" />
