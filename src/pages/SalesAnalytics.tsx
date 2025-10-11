@@ -3,10 +3,11 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { salesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
-import { AlertCircle, BarChart2 } from 'lucide-react';
+import { AlertCircle, BarChart2, Search } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend } from 'chart.js';
 import { Bar, Line } from 'react-chartjs-2';
+import { debounce } from 'lodash';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend);
 
@@ -90,7 +91,7 @@ const translations = {
     leastBranchSales: 'أقل الفروع مبيعًا',
     salesTrends: 'اتجاهات المبيعات',
     topCustomers: 'أفضل العملاء',
-    unknownCustomers: 'عملاء غير معروفين',
+    searchPlaceholder: 'ابحث عن منتجات أو أقسام...',
     noAnalytics: 'لا توجد إحصائيات متاحة',
     noData: 'لا توجد بيانات',
     noCustomers: 'لا توجد عملاء',
@@ -101,6 +102,7 @@ const translations = {
       fetch_analytics: 'خطأ أثناء جلب الإحصائيات',
       network_error: 'خطأ في الاتصال بالشبكة',
       invalid_data: 'بيانات غير صالحة من الخادم',
+      invalid_dates: 'تاريخ البداية يجب أن يكون قبل تاريخ النهاية',
     },
     currency: 'ريال',
   },
@@ -119,7 +121,7 @@ const translations = {
     leastBranchSales: 'Least Sold Branches',
     salesTrends: 'Sales Trends',
     topCustomers: 'Top Customers',
-    unknownCustomers: 'Unknown Customers',
+    searchPlaceholder: 'Search products or departments...',
     noAnalytics: 'No analytics available',
     noData: 'No data available',
     noCustomers: 'No customers',
@@ -130,36 +132,60 @@ const translations = {
       fetch_analytics: 'Error fetching analytics',
       network_error: 'Network connection error',
       invalid_data: 'Invalid data from server',
+      invalid_dates: 'Start date must be before end date',
     },
     currency: 'SAR',
   },
 };
 
-// دالة مساعدة للتأكد من أن القيمة عدد صالح
-const safeNumber = (value: any, defaultValue: number = 0): number => {
-  return typeof value === 'number' && !isNaN(value) ? value : defaultValue;
-};
+const safeNumber = (value: any, defaultValue: number = 0): number =>
+  typeof value === 'number' && !isNaN(value) ? value : defaultValue;
 
-const AnalyticsSkeleton = React.memo(() => (
-  <div className="space-y-6 animate-pulse">
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+const safeString = (value: any, defaultValue: string = ''): string =>
+  typeof value === 'string' ? value : defaultValue;
+
+const isValidDate = (date: string): boolean => !isNaN(new Date(date).getTime());
+
+const AnalyticsSkeleton: React.FC = React.memo(() => (
+  <div className="space-y-4 animate-pulse">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       {[...Array(3)].map((_, index) => (
         <div key={index} className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-          <div className="h-4 bg-gray-200 rounded w-3/4 mb-3"></div>
-          <div className="h-6 bg-gray-200 rounded w-1/2"></div>
+          <div className="h-4 bg-gray-200 rounded w-3/4 mb-2" />
+          <div className="h-6 bg-gray-200 rounded w-1/2" />
         </div>
       ))}
     </div>
     <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-      <div className="h-4 bg-gray-200 rounded w-1/2 mb-3"></div>
-      <div className="h-48 bg-gray-200 rounded"></div>
+      <div className="h-4 bg-gray-200 rounded w-1/2 mb-2" />
+      <div className="h-40 bg-gray-200 rounded" />
     </div>
   </div>
 ));
 
-const NoDataMessage = ({ message }: { message: string }) => (
-  <p className="text-center text-gray-500 py-6 text-sm font-alexandria">{message}</p>
+const NoDataMessage: React.FC<{ message: string }> = ({ message }) => (
+  <p className="text-center text-gray-500 py-4 text-sm font-alexandria">{message}</p>
 );
+
+const SearchInput: React.FC<{
+  value: string;
+  onChange: (value: string) => void;
+}> = React.memo(({ value, onChange }) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  return (
+    <div className="relative">
+      <Search className={`absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400`} />
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={translations[language].searchPlaceholder}
+        className={`w-full py-2 ${isRtl ? 'pr-10 pl-4' : 'pl-10 pr-4'} text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all`}
+      />
+    </div>
+  );
+});
 
 const SalesAnalytics: React.FC = () => {
   const { language } = useLanguage();
@@ -186,64 +212,83 @@ const SalesAnalytics: React.FC = () => {
     new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim().toLowerCase()), 300), []);
 
   const fetchAnalytics = useCallback(async () => {
     if (user?.role !== 'admin') {
       setError(t.errors.unauthorized_access);
-      toast.error(t.errors.unauthorized_access, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(t.errors.unauthorized_access, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
       setLoading(false);
       return;
     }
+
+    if (!isValidDate(startDate) || !isValidDate(endDate) || new Date(startDate) > new Date(endDate)) {
+      setError(t.errors.invalid_dates);
+      toast.error(t.errors.invalid_dates, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
-      const params: any = { startDate, endDate };
+      const params: any = {
+        startDate: new Date(startDate).toISOString(),
+        endDate: new Date(endDate).toISOString(),
+        lang: language,
+      };
+      console.log(`[${new Date().toISOString()}] Fetching analytics with params:`, params);
       const response = await salesAPI.getAnalytics(params);
-      console.log(`[${new Date().toISOString()}] Full response from salesAPI.getAnalytics:`, response);
+      console.log(`[${new Date().toISOString()}] Response:`, response);
       if (!response || typeof response !== 'object') {
         throw new Error(t.errors.invalid_data);
       }
       setAnalytics({
         branchSales: (response.branchSales || []).map((bs: any) => ({
-          ...bs,
-          displayName: isRtl ? bs.branchName : bs.branchNameEn || bs.branchName || t.errors.departments.unknown,
+          branchId: safeString(bs.branchId),
+          branchName: safeString(bs.branchName),
+          branchNameEn: safeString(bs.branchNameEn),
+          displayName: isRtl ? safeString(bs.branchName, 'فرع غير معروف') : safeString(bs.branchNameEn || bs.branchName, 'Unknown Branch'),
           totalSales: safeNumber(bs.totalSales),
           saleCount: safeNumber(bs.saleCount),
         })),
         leastBranchSales: (response.leastBranchSales || []).map((bs: any) => ({
-          ...bs,
-          displayName: isRtl ? bs.branchName : bs.branchNameEn || bs.branchName || t.errors.departments.unknown,
+          branchId: safeString(bs.branchId),
+          branchName: safeString(bs.branchName),
+          branchNameEn: safeString(bs.branchNameEn),
+          displayName: isRtl ? safeString(bs.branchName, 'فرع غير معروف') : safeString(bs.branchNameEn || bs.branchName, 'Unknown Branch'),
           totalSales: safeNumber(bs.totalSales),
           saleCount: safeNumber(bs.saleCount),
         })),
         productSales: (response.productSales || []).map((ps: any) => ({
-          ...ps,
-          displayName: isRtl
-            ? ps.productName || t.errors.deleted_product
-            : ps.productNameEn || ps.productName || t.errors.deleted_product,
+          productId: safeString(ps.productId),
+          productName: safeString(ps.productName),
+          productNameEn: safeString(ps.productNameEn),
+          displayName: isRtl ? safeString(ps.productName, 'منتج محذوف') : safeString(ps.productNameEn || ps.productName, 'Deleted Product'),
           totalQuantity: safeNumber(ps.totalQuantity),
           totalRevenue: safeNumber(ps.totalRevenue),
         })),
         leastProductSales: (response.leastProductSales || []).map((ps: any) => ({
-          ...ps,
-          displayName: isRtl
-            ? ps.productName || t.errors.deleted_product
-            : ps.productNameEn || ps.productName || t.errors.deleted_product,
+          productId: safeString(ps.productId),
+          productName: safeString(ps.productName),
+          productNameEn: safeString(ps.productNameEn),
+          displayName: isRtl ? safeString(ps.productName, 'منتج محذوف') : safeString(ps.productNameEn || ps.productName, 'Deleted Product'),
           totalQuantity: safeNumber(ps.totalQuantity),
           totalRevenue: safeNumber(ps.totalRevenue),
         })),
         departmentSales: (response.departmentSales || []).map((ds: any) => ({
-          ...ds,
-          displayName: isRtl
-            ? ds.departmentName
-            : ds.departmentNameEn || ds.departmentName || t.errors.departments.unknown,
+          departmentId: safeString(ds.departmentId),
+          departmentName: safeString(ds.departmentName),
+          departmentNameEn: safeString(ds.departmentNameEn),
+          displayName: isRtl ? safeString(ds.departmentName, 'قسم غير معروف') : safeString(ds.departmentNameEn || ds.departmentName, 'Unknown Department'),
           totalRevenue: safeNumber(ds.totalRevenue),
           totalQuantity: safeNumber(ds.totalQuantity),
         })),
         leastDepartmentSales: (response.leastDepartmentSales || []).map((ds: any) => ({
-          ...ds,
-          displayName: isRtl
-            ? ds.departmentName
-            : ds.departmentNameEn || ds.departmentName || t.errors.departments.unknown,
+          departmentId: safeString(ds.departmentId),
+          departmentName: safeString(ds.departmentName),
+          departmentNameEn: safeString(ds.departmentNameEn),
+          displayName: isRtl ? safeString(ds.departmentName, 'قسم غير معروف') : safeString(ds.departmentNameEn || ds.departmentName, 'Unknown Department'),
           totalRevenue: safeNumber(ds.totalRevenue),
           totalQuantity: safeNumber(ds.totalQuantity),
         })),
@@ -252,34 +297,36 @@ const SalesAnalytics: React.FC = () => {
         averageOrderValue: safeNumber(response.averageOrderValue),
         topProduct: response.topProduct
           ? {
-              ...response.topProduct,
-              displayName: isRtl
-                ? response.topProduct.productName || t.errors.deleted_product
-                : response.topProduct.productNameEn ||
-                  response.topProduct.productName ||
-                  t.errors.deleted_product,
+              productId: safeString(response.topProduct.productId),
+              productName: safeString(response.topProduct.productName),
+              productNameEn: safeString(response.topProduct.productNameEn),
+              displayName: isRtl ? safeString(response.topProduct.productName, 'منتج محذوف') : safeString(response.topProduct.productNameEn || response.topProduct.productName, 'Deleted Product'),
               totalQuantity: safeNumber(response.topProduct.totalQuantity),
               totalRevenue: safeNumber(response.topProduct.totalRevenue),
             }
           : { productId: null, productName: '', displayName: '', totalQuantity: 0, totalRevenue: 0 },
         salesTrends: (response.salesTrends || []).map((trend: any) => ({
-          ...trend,
           period: formatDate(new Date(trend.period), language),
           totalSales: safeNumber(trend.totalSales),
           saleCount: safeNumber(trend.saleCount),
         })),
         topCustomers: (response.topCustomers || []).map((customer: any) => ({
-          ...customer,
+          customerName: safeString(customer.customerName, t.noCustomers),
+          customerPhone: safeString(customer.customerPhone, ''),
           totalSpent: safeNumber(customer.totalSpent),
           purchaseCount: safeNumber(customer.purchaseCount),
         })),
       });
       setError('');
     } catch (err: any) {
-      console.error(`[${new Date().toISOString()}] Analytics fetch error:`, { message: err.message, stack: err.stack });
-      const errorMessage = err.status === 403 ? t.errors.unauthorized_access : err.status === 0 ? t.errors.network_error : t.errors.fetch_analytics;
+      console.error(`[${new Date().toISOString()}] Analytics fetch error:`, { message: err.message, status: err.status, stack: err.stack });
+      const errorMessage =
+        err.status === 403 ? t.errors.unauthorized_access :
+        err.status === 400 ? t.errors.invalid_dates :
+        err.status === 0 ? t.errors.network_error :
+        t.errors.fetch_analytics;
       setError(errorMessage);
-      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
       setAnalytics({
         branchSales: [],
         leastBranchSales: [],
@@ -303,244 +350,138 @@ const SalesAnalytics: React.FC = () => {
     fetchAnalytics();
   }, [fetchAnalytics]);
 
-  const processedTopCustomers = useMemo(() => {
-    const customers = analytics.topCustomers.map((customer) => {
-      if (!customer.customerName && !customer.customerPhone) {
-        return { ...customer, customerName: t.unknownCustomers, customerPhone: '' };
-      }
-      return customer;
-    });
-    return customers.sort((a, b) => {
-      if (a.customerName === t.unknownCustomers) return 1;
-      if (b.customerName === t.unknownCustomers) return -1;
-      return b.totalSpent - a.totalSpent;
-    });
-  }, [analytics.topCustomers, t]);
+  const filteredData = useMemo(() => ({
+    productSales: analytics.productSales.filter((ps) => ps.displayName.toLowerCase().includes(searchTerm)),
+    leastProductSales: analytics.leastProductSales.filter((ps) => ps.displayName.toLowerCase().includes(searchTerm)),
+    departmentSales: analytics.departmentSales.filter((ds) => ds.displayName.toLowerCase().includes(searchTerm)),
+    leastDepartmentSales: analytics.leastDepartmentSales.filter((ds) => ds.displayName.toLowerCase().includes(searchTerm)),
+    branchSales: analytics.branchSales.filter((bs) => bs.displayName.toLowerCase().includes(searchTerm)),
+    leastBranchSales: analytics.leastBranchSales.filter((bs) => bs.displayName.toLowerCase().includes(searchTerm)),
+  }), [analytics, searchTerm]);
 
-  const chartColors = useMemo(() => ['#FBBF24', '#3B82F6', '#FF6384', '#4BC0C0', '#9966FF'], []);
+  const chartOptions = useMemo(() => ({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'bottom' as const, labels: { font: { size: 10, family: 'Alexandria' } } },
+      tooltip: { bodyFont: { size: 10, family: 'Alexandria' }, padding: 8 },
+      title: { display: true, font: { size: 12, family: 'Alexandria' }, padding: 10 },
+    },
+    scales: {
+      x: { ticks: { font: { size: 9, family: 'Alexandria' }, maxRotation: isRtl ? -45 : 45, autoSkip: true } },
+      y: { ticks: { font: { size: 9, family: 'Alexandria' } }, beginAtZero: true },
+    },
+  }), [isRtl]);
 
-  const chartOptions = useMemo(
-    () => ({
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          position: 'bottom' as const,
-          labels: { font: { size: 10, family: 'Alexandria', weight: '500' }, color: '#1F2937' },
-        },
-        tooltip: {
-          backgroundColor: '#1F2937',
-          titleColor: '#FFFFFF',
-          bodyColor: '#FFFFFF',
-          borderColor: '#4B5563',
-          borderWidth: 1,
-          titleFont: { size: 10, family: 'Alexandria', weight: '500' },
-          bodyFont: { size: 10, family: 'Alexandria' },
-          padding: 8,
-        },
-        title: {
-          display: true,
-          font: { size: 12, family: 'Alexandria', weight: '600' },
-          color: '#1F2937',
-          position: 'top' as const,
-          padding: { top: 8, bottom: 20 },
-        },
-      },
-      scales: {
-        x: {
-          ticks: {
-            font: { size: 9, family: 'Alexandria', weight: '400' },
-            color: '#1F2937',
-            maxRotation: isRtl ? -45 : 45,
-            minRotation: isRtl ? -45 : 45,
-            autoSkip: true,
-            maxTicksLimit: 10,
-          },
-          grid: { display: false },
-          title: {
-            display: true,
-            text: t.totalSales,
-            font: { size: 10, family: 'Alexandria', weight: '500' },
-            color: '#1F2937',
-            padding: { top: 10, bottom: 8 },
-          },
-        },
-        y: {
-          ticks: { font: { size: 9, family: 'Alexandria', weight: '400' }, color: '#1F2937' },
-          grid: { color: '#E5E7EB' },
-        },
-      },
-      elements: {
-        bar: {
-          barThickness: 10, // عرض أصغر للأعمدة
-        },
-        line: {
-          borderWidth: 2, // خطوط أنحف
-        },
-      },
-    }),
-    [isRtl, t]
-  );
-
-  const productSalesData = {
-    labels: analytics.productSales.slice(0, 8).map((p) => p.displayName),
-    datasets: [
-      {
-        label: `${t.totalSales} (${t.currency})`,
-        data: analytics.productSales.slice(0, 8).map((p) => safeNumber(p.totalRevenue)),
-        backgroundColor: chartColors[0],
-        borderWidth: 0,
-      },
-    ],
-  };
-
-  const leastProductSalesData = {
-    labels: analytics.leastProductSales.slice(0, 8).map((p) => p.displayName),
-    datasets: [
-      {
-        label: `${t.totalSales} (${t.currency})`,
-        data: analytics.leastProductSales.slice(0, 8).map((p) => safeNumber(p.totalRevenue)),
-        backgroundColor: chartColors[1],
-        borderWidth: 0,
-      },
-    ],
-  };
-
-  const departmentSalesData = {
-    labels: analytics.departmentSales.slice(0, 8).map((d) => d.displayName),
-    datasets: [
-      {
-        label: `${t.totalSales} (${t.currency})`,
-        data: analytics.departmentSales.slice(0, 8).map((d) => safeNumber(d.totalRevenue)),
-        backgroundColor: chartColors[2],
-        borderWidth: 0,
-      },
-    ],
-  };
-
-  const leastDepartmentSalesData = {
-    labels: analytics.leastDepartmentSales.slice(0, 8).map((d) => d.displayName),
-    datasets: [
-      {
-        label: `${t.totalSales} (${t.currency})`,
-        data: analytics.leastDepartmentSales.slice(0, 8).map((d) => safeNumber(d.totalRevenue)),
-        backgroundColor: chartColors[3],
-        borderWidth: 0,
-      },
-    ],
-  };
-
-  const branchSalesData = {
-    labels: analytics.branchSales.slice(0, 8).map((b) => b.displayName),
-    datasets: [
-      {
-        label: `${t.totalSales} (${t.currency})`,
-        data: analytics.branchSales.slice(0, 8).map((b) => safeNumber(b.totalSales)),
-        backgroundColor: chartColors[4],
-        borderWidth: 0,
-      },
-    ],
-  };
-
-  const leastBranchSalesData = {
-    labels: analytics.leastBranchSales.slice(0, 8).map((b) => b.displayName),
-    datasets: [
-      {
-        label: `${t.totalSales} (${t.currency})`,
-        data: analytics.leastBranchSales.slice(0, 8).map((b) => safeNumber(b.totalSales)),
-        backgroundColor: chartColors[0],
-        borderWidth: 0,
-      },
-    ],
-  };
-
-  const salesTrendsData = {
-    labels: analytics.salesTrends.slice(0, 10).map((trend) => trend.period),
-    datasets: [
-      {
-        label: t.totalCount,
-        data: analytics.salesTrends.slice(0, 10).map((trend) => safeNumber(trend.saleCount)),
-        borderColor: chartColors[1],
-        backgroundColor: 'transparent',
-        fill: false,
-        tension: 0.4,
-      },
-    ],
-  };
+  const chartData = useMemo(() => ({
+    productSales: {
+      labels: filteredData.productSales.slice(0, 5).map((p) => p.displayName),
+      datasets: [{ label: `${t.totalSales} (${t.currency})`, data: filteredData.productSales.slice(0, 5).map((p) => safeNumber(p.totalRevenue)), backgroundColor: '#FBBF24' }],
+    },
+    leastProductSales: {
+      labels: filteredData.leastProductSales.slice(0, 5).map((p) => p.displayName),
+      datasets: [{ label: `${t.totalSales} (${t.currency})`, data: filteredData.leastProductSales.slice(0, 5).map((p) => safeNumber(p.totalRevenue)), backgroundColor: '#3B82F6' }],
+    },
+    departmentSales: {
+      labels: filteredData.departmentSales.slice(0, 5).map((d) => d.displayName),
+      datasets: [{ label: `${t.totalSales} (${t.currency})`, data: filteredData.departmentSales.slice(0, 5).map((d) => safeNumber(d.totalRevenue)), backgroundColor: '#FF6384' }],
+    },
+    leastDepartmentSales: {
+      labels: filteredData.leastDepartmentSales.slice(0, 5).map((d) => d.displayName),
+      datasets: [{ label: `${t.totalSales} (${t.currency})`, data: filteredData.leastDepartmentSales.slice(0, 5).map((d) => safeNumber(d.totalRevenue)), backgroundColor: '#4BC0C0' }],
+    },
+    branchSales: {
+      labels: filteredData.branchSales.slice(0, 5).map((b) => b.displayName),
+      datasets: [{ label: `${t.totalSales} (${t.currency})`, data: filteredData.branchSales.slice(0, 5).map((b) => safeNumber(b.totalSales)), backgroundColor: '#9966FF' }],
+    },
+    leastBranchSales: {
+      labels: filteredData.leastBranchSales.slice(0, 5).map((b) => b.displayName),
+      datasets: [{ label: `${t.totalSales} (${t.currency})`, data: filteredData.leastBranchSales.slice(0, 5).map((b) => safeNumber(b.totalSales)), backgroundColor: '#FBBF24' }],
+    },
+    salesTrends: {
+      labels: analytics.salesTrends.slice(0, 10).map((trend) => trend.period),
+      datasets: [
+        { label: t.totalCount, data: analytics.salesTrends.slice(0, 10).map((trend) => safeNumber(trend.saleCount)), borderColor: '#3B82F6', fill: false, tension: 0.4 },
+      ],
+    },
+  }), [filteredData, t, analytics]);
 
   if (user?.role !== 'admin') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4">
-        <div className="p-6 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
-          <AlertCircle className="w-6 h-6 text-red-600" />
-          <span className="text-red-600 text-base font-medium font-alexandria">{t.errors.unauthorized_access}</span>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <span className="text-red-600 text-sm font-alexandria">{t.errors.unauthorized_access}</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen px-4 py-8  ">
+    <div className="min-h-screen p-4 bg-gray-50 font-alexandria" dir={isRtl ? 'rtl' : 'ltr'}>
       <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;500;600&display=swap" rel="stylesheet" />
-      <header className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+      <header className="mb-4 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
         <div className="flex items-center gap-3">
-          <BarChart2 className="w-6 h-6 text-amber-600" />
+          <BarChart2 className="w-5 h-5 text-amber-600" />
           <div>
-            <h1 className="text-2xl font-semibold text-gray-800">{t.title}</h1>
-            <p className="text-gray-500 text-sm">{t.subtitle}</p>
+            <h1 className="text-xl font-semibold text-gray-800">{t.title}</h1>
+            <p className="text-sm text-gray-500">{t.subtitle}</p>
           </div>
         </div>
-        <div className="flex gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">{t.startDate}</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="mt-1 w-full py-2 px-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white shadow-sm hover:shadow-md text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">{t.endDate}</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              className="mt-1 w-full py-2 px-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all bg-white shadow-sm hover:shadow-md text-sm"
-            />
+        <div className="flex flex-col sm:flex-row gap-3">
+          <SearchInput value={searchTerm} onChange={debouncedSearch} />
+          <div className="flex gap-3">
+            <div>
+              <label className="block text-sm text-gray-700">{t.startDate}</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="mt-1 w-full py-2 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-700">{t.endDate}</label>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="mt-1 w-full py-2 px-3 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
+              />
+            </div>
           </div>
         </div>
       </header>
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
           <AlertCircle className="w-5 h-5 text-red-600" />
-          <span className="text-red-600 text-sm font-medium">{error}</span>
+          <span className="text-sm text-red-600">{error}</span>
         </div>
       )}
       {loading ? (
         <AnalyticsSkeleton />
       ) : !analytics ? (
-        <div className="p-6 text-center bg-white rounded-lg shadow-sm border border-gray-100">
-          <BarChart2 className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-          <p className="text-gray-600 text-sm font-medium">{t.noAnalytics}</p>
+        <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100 text-center">
+          <BarChart2 className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+          <NoDataMessage message={t.noAnalytics} />
         </div>
       ) : (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-800">{t.totalSales}</h3>
-              <p className="text-lg font-bold text-amber-600 mt-2">{safeNumber(analytics.totalSales).toFixed(2)} {t.currency}</p>
+              <h3 className="text-sm font-medium text-gray-700">{t.totalSales}</h3>
+              <p className="text-lg font-bold text-amber-600">{safeNumber(analytics.totalSales).toFixed(2)} {t.currency}</p>
               <p className="text-xs text-gray-500">{t.totalCount}: {safeNumber(analytics.totalCount)}</p>
             </div>
             <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-800">{t.averageOrderValue}</h3>
-              <p className="text-lg font-bold text-amber-600 mt-2">{safeNumber(analytics.averageOrderValue).toFixed(2)} {t.currency}</p>
+              <h3 className="text-sm font-medium text-gray-700">{t.averageOrderValue}</h3>
+              <p className="text-lg font-bold text-amber-600">{safeNumber(analytics.averageOrderValue).toFixed(2)} {t.currency}</p>
             </div>
             <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-800">{t.topProduct}</h3>
+              <h3 className="text-sm font-medium text-gray-700">{t.topProduct}</h3>
               {analytics.topProduct?.productId ? (
                 <div className="mt-2 space-y-1">
-                  <p className="text-sm font-medium">{analytics.topProduct.displayName}</p>
+                  <p className="text-sm">{analytics.topProduct.displayName}</p>
                   <p className="text-xs text-gray-500">{t.totalSales}: {safeNumber(analytics.topProduct.totalRevenue).toFixed(2)} {t.currency}</p>
                   <p className="text-xs text-gray-500">{t.totalCount}: {safeNumber(analytics.topProduct.totalQuantity)}</p>
                 </div>
@@ -550,25 +491,23 @@ const SalesAnalytics: React.FC = () => {
             </div>
           </div>
           <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-            <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.topCustomers}</h3>
-            {processedTopCustomers.length > 0 ? (
+            <h3 className="text-sm font-medium text-gray-700 mb-3">{t.topCustomers}</h3>
+            {analytics.topCustomers.length > 0 ? (
               <div className="overflow-x-auto">
-                <table className="w-full text-sm text-gray-700">
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className={`px-4 py-2 text-${isRtl ? 'right' : 'left'} font-semibold text-xs`}>{t.customerName}</th>
-                      <th className={`px-4 py-2 text-${isRtl ? 'right' : 'left'} font-semibold text-xs`}>{t.customerPhone}</th>
-                      <th className={`px-4 py-2 text-${isRtl ? 'right' : 'left'} font-semibold text-xs`}>{t.totalSales}</th>
-                      <th className={`px-4 py-2 text-${isRtl ? 'right' : 'left'} font-semibold text-xs`}>{t.totalCount}</th>
+                    <tr className="bg-gray-50">
+                      <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'}`}>{t.topCustomers}</th>
+                      <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'}`}>{t.totalSales}</th>
+                      <th className={`p-2 ${isRtl ? 'text-right' : 'text-left'}`}>{t.totalCount}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {processedTopCustomers.map((customer, index) => (
-                      <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
-                        <td className="px-4 py-2 text-xs">{customer.customerName || t.unknownCustomers}</td>
-                        <td className="px-4 py-2 text-xs">{customer.customerPhone || 'N/A'}</td>
-                        <td className="px-4 py-2 text-xs">{safeNumber(customer.totalSpent).toFixed(2)} {t.currency}</td>
-                        <td className="px-4 py-2 text-xs">{safeNumber(customer.purchaseCount)}</td>
+                    {analytics.topCustomers.map((customer, index) => (
+                      <tr key={index} className="border-t">
+                        <td className="p-2">{customer.customerName || t.noCustomers}</td>
+                        <td className="p-2">{safeNumber(customer.totalSpent).toFixed(2)} {t.currency}</td>
+                        <td className="p-2">{safeNumber(customer.purchaseCount)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -578,114 +517,72 @@ const SalesAnalytics: React.FC = () => {
               <NoDataMessage message={t.noCustomers} />
             )}
           </div>
-          <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-            <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.salesTrends}</h3>
-            {analytics.salesTrends.length > 0 ? (
-              <div className="h-64">
-                <Line
-                  data={salesTrendsData}
-                  options={{
-                    ...chartOptions,
-                    plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.salesTrends } },
-                  }}
-                />
-              </div>
-            ) : (
-              <NoDataMessage message={t.noData} />
-            )}
-          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.productSales}</h3>
-              {analytics.productSales.length > 0 ? (
+              <h3 className="text-sm font-medium text-gray-700 mb-3">{t.salesTrends}</h3>
+              {analytics.salesTrends.length > 0 ? (
                 <div className="h-48">
-                  <Bar
-                    data={productSalesData}
-                    options={{
-                      ...chartOptions,
-                      plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.productSales } },
-                    }}
-                  />
+                  <Line data={chartData.salesTrends} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.salesTrends } } }} />
                 </div>
               ) : (
                 <NoDataMessage message={t.noData} />
               )}
             </div>
             <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.leastProductSales}</h3>
-              {analytics.leastProductSales.length > 0 ? (
+              <h3 className="text-sm font-medium text-gray-700 mb-3">{t.productSales}</h3>
+              {filteredData.productSales.length > 0 ? (
                 <div className="h-48">
-                  <Bar
-                    data={leastProductSalesData}
-                    options={{
-                      ...chartOptions,
-                      plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.leastProductSales } },
-                    }}
-                  />
+                  <Bar data={chartData.productSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.productSales } } }} />
                 </div>
               ) : (
                 <NoDataMessage message={t.noData} />
               )}
             </div>
             <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.departmentSales}</h3>
-              {analytics.departmentSales.length > 0 ? (
+              <h3 className="text-sm font-medium text-gray-700 mb-3">{t.leastProductSales}</h3>
+              {filteredData.leastProductSales.length > 0 ? (
                 <div className="h-48">
-                  <Bar
-                    data={departmentSalesData}
-                    options={{
-                      ...chartOptions,
-                      plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.departmentSales } },
-                    }}
-                  />
+                  <Bar data={chartData.leastProductSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.leastProductSales } } }} />
                 </div>
               ) : (
                 <NoDataMessage message={t.noData} />
               )}
             </div>
             <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.leastDepartmentSales}</h3>
-              {analytics.leastDepartmentSales.length > 0 ? (
+              <h3 className="text-sm font-medium text-gray-700 mb-3">{t.departmentSales}</h3>
+              {filteredData.departmentSales.length > 0 ? (
                 <div className="h-48">
-                  <Bar
-                    data={leastDepartmentSalesData}
-                    options={{
-                      ...chartOptions,
-                      plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.leastDepartmentSales } },
-                    }}
-                  />
+                  <Bar data={chartData.departmentSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.departmentSales } } }} />
                 </div>
               ) : (
                 <NoDataMessage message={t.noData} />
               )}
             </div>
             <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.branchSales}</h3>
-              {analytics.branchSales.length > 0 ? (
+              <h3 className="text-sm font-medium text-gray-700 mb-3">{t.leastDepartmentSales}</h3>
+              {filteredData.leastDepartmentSales.length > 0 ? (
                 <div className="h-48">
-                  <Bar
-                    data={branchSalesData}
-                    options={{
-                      ...chartOptions,
-                      plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.branchSales } },
-                    }}
-                  />
+                  <Bar data={chartData.leastDepartmentSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.leastDepartmentSales } } }} />
                 </div>
               ) : (
                 <NoDataMessage message={t.noData} />
               )}
             </div>
             <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-800 mb-3">{t.leastBranchSales}</h3>
-              {analytics.leastBranchSales.length > 0 ? (
+              <h3 className="text-sm font-medium text-gray-700 mb-3">{t.branchSales}</h3>
+              {filteredData.branchSales.length > 0 ? (
                 <div className="h-48">
-                  <Bar
-                    data={leastBranchSalesData}
-                    options={{
-                      ...chartOptions,
-                      plugins: { ...chartOptions.plugins, title: { ...chartOptions.plugins.title, text: t.leastBranchSales } },
-                    }}
-                  />
+                  <Bar data={chartData.branchSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.branchSales } } }} />
+                </div>
+              ) : (
+                <NoDataMessage message={t.noData} />
+              )}
+            </div>
+            <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">{t.leastBranchSales}</h3>
+              {filteredData.leastBranchSales.length > 0 ? (
+                <div className="h-48">
+                  <Bar data={chartData.leastBranchSales} options={{ ...chartOptions, plugins: { ...chartOptions.plugins, title: { text: t.leastBranchSales } } }} />
                 </div>
               ) : (
                 <NoDataMessage message={t.noData} />
