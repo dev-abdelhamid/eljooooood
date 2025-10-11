@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { salesAPI, branchesAPI } from '../services/api';
+import { salesAPI, branchesAPI, departmentsAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, BarChart2, Search, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
@@ -327,17 +327,17 @@ const SalesAnalytics: React.FC = () => {
   );
   const [endDate, setEndDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [searchTerm, setSearchTerm] = useState('');
-  const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim().toLowerCase()), 300), []);
+  const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim().toLowerCase()), 500), []);
 
   const fetchBranches = useCallback(async () => {
     try {
-      const response = await branchesAPI.getAll();
-      if (!response?.branches || !Array.isArray(response.branches)) {
+      const response = await branchesAPI.getAll(); // Assumes endpoint /api/branches
+      if (!response?.success || !Array.isArray(response.branches)) {
         throw new Error(t.errors.invalid_data);
       }
       const branchList = response.branches.map((b: any) => ({
         _id: safeString(b._id),
-        name: safeString(b.name),
+        name: safeString(b.name, isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
         nameEn: safeString(b.nameEn),
         displayName: isRtl ? safeString(b.name, 'فرع غير معروف') : safeString(b.nameEn || b.name, 'Unknown Branch'),
       }));
@@ -355,13 +355,13 @@ const SalesAnalytics: React.FC = () => {
 
   const fetchDepartments = useCallback(async () => {
     try {
-      const response = await salesAPI.getDepartments(); // Assume API endpoint for departments
-      if (!response?.departments || !Array.isArray(response.departments)) {
+      const response = await departmentsAPI.getAll(); // Assumes endpoint /api/departments
+      if (!response?.success || !Array.isArray(response.departments)) {
         throw new Error(t.errors.invalid_data);
       }
       const departmentList = response.departments.map((d: any) => ({
         _id: safeString(d._id),
-        name: safeString(d.name),
+        name: safeString(d.name, isRtl ? 'قسم غير معروف' : 'Unknown Department'),
         nameEn: safeString(d.nameEn),
         displayName: isRtl ? safeString(d.name, 'قسم غير معروف') : safeString(d.nameEn || d.name, 'Unknown Department'),
       }));
@@ -375,9 +375,13 @@ const SalesAnalytics: React.FC = () => {
   }, [isRtl, t]);
 
   useEffect(() => {
-    fetchBranches();
-    fetchDepartments();
-  }, [fetchBranches, fetchDepartments]);
+    Promise.all([fetchBranches(), fetchDepartments()])
+      .catch((err) => {
+        console.error(`[${new Date().toISOString()}] Error fetching branches or departments:`, err);
+        setError(t.errors.network_error);
+        toast.error(t.errors.network_error, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
+      });
+  }, [fetchBranches, fetchDepartments, isRtl, t]);
 
   const fetchAnalytics = useCallback(async () => {
     if (user?.role !== 'admin') {
@@ -406,8 +410,8 @@ const SalesAnalytics: React.FC = () => {
       };
       console.log(`[${new Date().toISOString()}] Fetching analytics with params:`, params);
       const response = await salesAPI.getAnalytics(params);
-      console.log(`[${new Date().toISOString()}] Response:`, response);
-      if (!response || typeof response !== 'object') {
+      console.log(`[${new Date().toISOString()}] Analytics response:`, response);
+      if (!response || typeof response !== 'object' || !response.success) {
         throw new Error(t.errors.invalid_data);
       }
       setAnalytics({
@@ -528,12 +532,30 @@ const SalesAnalytics: React.FC = () => {
   }, []);
 
   const filteredData = useMemo(() => ({
-    productSales: analytics.productSales.filter((ps) => ps.displayName.toLowerCase().includes(searchTerm) && (!selectedDepartment || ps.departmentId === selectedDepartment)),
-    leastProductSales: analytics.leastProductSales.filter((ps) => ps.displayName.toLowerCase().includes(searchTerm) && (!selectedDepartment || ps.departmentId === selectedDepartment)),
-    departmentSales: analytics.departmentSales.filter((ds) => ds.displayName.toLowerCase().includes(searchTerm)),
-    leastDepartmentSales: analytics.leastDepartmentSales.filter((ds) => ds.displayName.toLowerCase().includes(searchTerm)),
-    branchSales: analytics.branchSales.filter((bs) => bs.displayName.toLowerCase().includes(searchTerm) && (!selectedBranch || bs.branchId === selectedBranch)),
-    leastBranchSales: analytics.leastBranchSales.filter((bs) => bs.displayName.toLowerCase().includes(searchTerm) && (!selectedBranch || bs.branchId === selectedBranch)),
+    productSales: analytics.productSales.filter((ps) =>
+      ps.displayName.toLowerCase().includes(searchTerm) &&
+      (!selectedDepartment || ps.departmentId === selectedDepartment)
+    ),
+    leastProductSales: analytics.leastProductSales.filter((ps) =>
+      ps.displayName.toLowerCase().includes(searchTerm) &&
+      (!selectedDepartment || ps.departmentId === selectedDepartment)
+    ),
+    departmentSales: analytics.departmentSales.filter((ds) =>
+      ds.displayName.toLowerCase().includes(searchTerm) &&
+      (!selectedDepartment || ds.departmentId === selectedDepartment)
+    ),
+    leastDepartmentSales: analytics.leastDepartmentSales.filter((ds) =>
+      ds.displayName.toLowerCase().includes(searchTerm) &&
+      (!selectedDepartment || ds.departmentId === selectedDepartment)
+    ),
+    branchSales: analytics.branchSales.filter((bs) =>
+      bs.displayName.toLowerCase().includes(searchTerm) &&
+      (!selectedBranch || bs.branchId === selectedBranch)
+    ),
+    leastBranchSales: analytics.leastBranchSales.filter((bs) =>
+      bs.displayName.toLowerCase().includes(searchTerm) &&
+      (!selectedBranch || bs.branchId === selectedBranch)
+    ),
   }), [analytics, searchTerm, selectedDepartment, selectedBranch]);
 
   const branchOptions = useMemo(
