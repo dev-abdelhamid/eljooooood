@@ -7,6 +7,10 @@ import { formatDate } from '../utils/formatDate';
 import { AlertCircle, Search, X, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend } from 'chart.js';
+import { Bar, Line } from 'react-chartjs-2';
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend);
 
 // Interfaces
 interface SalesTrend {
@@ -452,41 +456,39 @@ export const BranchSalesAnalytics: React.FC = () => {
   );
 
   // Chart for Sales Trends
-  const salesTrendsChart = analytics?.salesTrends?.length > 0 ? {
-    type: 'line',
-    data: {
-      labels: analytics.salesTrends.map((trend) => trend.period),
-      datasets: [
-        {
-          label: t.totalSales,
-          data: analytics.salesTrends.map((trend) => trend.totalSales),
-          borderColor: '#f59e0b',
-          backgroundColor: 'rgba(245, 158, 11, 0.2)',
-          fill: true,
-          tension: 0.4,
-        },
-        {
-          label: t.totalOrders,
-          data: analytics.salesTrends.map((trend) => trend.saleCount),
-          borderColor: '#10b981',
-          backgroundColor: 'rgba(16, 185, 129, 0.2)',
-          fill: true,
-          tension: 0.4,
-        },
-      ],
-    },
-    options: {
-      responsive: true,
-      plugins: {
-        legend: { position: 'top', labels: { font: { family: 'Alexandria', size: 12 } } },
-        title: { display: true, text: t.salesTrends, font: { family: 'Alexandria', size: 16 } },
+  const salesTrendsChartData = {
+    labels: analytics?.salesTrends.map((trend) => trend.period) || [],
+    datasets: [
+      {
+        label: t.totalSales,
+        data: analytics?.salesTrends.map((trend) => trend.totalSales) || [],
+        borderColor: '#f59e0b',
+        backgroundColor: 'rgba(245, 158, 11, 0.2)',
+        fill: true,
+        tension: 0.4,
       },
-      scales: {
-        x: { title: { display: true, text: t.filterBy, font: { family: 'Alexandria' } } },
-        y: { beginAtZero: true, title: { display: true, text: t.currency, font: { family: 'Alexandria' } } },
+      {
+        label: t.totalOrders,
+        data: analytics?.salesTrends.map((trend) => trend.saleCount) || [],
+        borderColor: '#10b981',
+        backgroundColor: 'rgba(16, 185, 129, 0.2)',
+        fill: true,
+        tension: 0.4,
       },
+    ],
+  };
+
+  const salesTrendsChartOptions = {
+    responsive: true,
+    plugins: {
+      legend: { position: 'top', labels: { font: { family: 'Alexandria', size: 12 } } },
+      title: { display: true, text: t.salesTrends, font: { family: 'Alexandria', size: 16 } },
     },
-  } : null;
+    scales: {
+      x: { title: { display: true, text: t.filterBy, font: { family: 'Alexandria' } } },
+      y: { beginAtZero: true, title: { display: true, text: t.currency, font: { family: 'Alexandria' } } },
+    },
+  };
 
   return (
     <div className="min-h-screen px-4 py-8 bg-gradient-to-br from-gray-50 to-gray-100 font-alexandria" dir={isRtl ? 'rtl' : 'ltr'}>
@@ -576,14 +578,16 @@ export const BranchSalesAnalytics: React.FC = () => {
               <p className="text-sm text-gray-600 font-alexandria">{t.quantity}: {safeNumber(analytics.topProduct.totalQuantity)}</p>
             </div>
           </div>
-          {salesTrendsChart && (
-            <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.salesTrends}</h3>
-              ```chartjs
-              {salesTrendsChart}
-              ```
-            </div>
-          )}
+          <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.salesTrends}</h3>
+            {analytics.salesTrends.length > 0 ? (
+              <div className="h-48">
+                <Line data={salesTrendsChartData} options={salesTrendsChartOptions} />
+              </div>
+            ) : (
+              <p className="text-center text-gray-500 py-4 text-sm font-alexandria">{t.noAnalytics}</p>
+            )}
+          </div>
           <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.productSales}</h3>
             <ul className="space-y-2">
