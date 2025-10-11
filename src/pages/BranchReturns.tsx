@@ -73,11 +73,6 @@ interface AvailableItem {
   price: number;
 }
 
-interface Branch {
-  _id: string;
-  displayName: string;
-}
-
 interface ReturnFormState {
   notes: string;
   items: ReturnItem[];
@@ -94,8 +89,6 @@ const translations = {
     totalQuantity: 'إجمالي الكمية',
     totalPrice: 'إجمالي السعر',
     branch: 'الفرع',
-    filterByBranch: 'تصفية حسب الفرع',
-    selectBranch: 'اختر الفرع',
     notesLabel: 'ملاحظات',
     reviewNotes: 'ملاحظات المراجعة',
     noNotes: 'لا توجد ملاحظات',
@@ -107,10 +100,9 @@ const translations = {
     searchPlaceholder: 'البحث برقم الإرجاع أو الملاحظات...',
     filterStatus: 'تصفية حسب الحالة',
     allStatuses: 'جميع الحالات',
-    filterByReason: 'تصفية حسب السبب',
-    selectReason: 'اختر السبب',
     selectProduct: 'اختر منتج',
     reason: 'سبب الإرجاع',
+    selectReason: 'اختر السبب',
     damaged: 'تالف',
     wrongItem: 'منتج خاطئ',
     excessQuantity: 'كمية زائدة',
@@ -150,7 +142,6 @@ const translations = {
     errors: {
       noBranch: 'لم يتم العثور على فرع',
       fetchReturns: 'خطأ في جلب طلبات الإرجاع',
-      fetchBranches: 'خطأ في جلب الفروع',
       createReturn: 'خطأ في إنشاء طلب الإرجاع',
       updateReturn: 'خطأ في تحديث حالة الإرجاع',
       invalidForm: 'البيانات المدخلة غير صالحة',
@@ -184,8 +175,6 @@ const translations = {
     totalQuantity: 'Total Quantity',
     totalPrice: 'Total Price',
     branch: 'Branch',
-    filterByBranch: 'Filter by Branch',
-    selectBranch: 'Select Branch',
     notesLabel: 'Notes',
     reviewNotes: 'Review Notes',
     noNotes: 'No notes available',
@@ -197,10 +186,9 @@ const translations = {
     searchPlaceholder: 'Search by return number or notes...',
     filterStatus: 'Filter by Status',
     allStatuses: 'All Statuses',
-    filterByReason: 'Filter by Reason',
-    selectReason: 'Select Reason',
     selectProduct: 'Select Product',
     reason: 'Return Reason',
+    selectReason: 'Select Reason',
     damaged: 'Damaged',
     wrongItem: 'Wrong Item',
     excessQuantity: 'Excess Quantity',
@@ -240,7 +228,6 @@ const translations = {
     errors: {
       noBranch: 'No branch found',
       fetchReturns: 'Error fetching return requests',
-      fetchBranches: 'Error fetching branches',
       createReturn: 'Error creating return request',
       updateReturn: 'Error updating return status',
       invalidForm: 'Invalid form data',
@@ -298,11 +285,11 @@ const QuantityInput = ({
     <div className="flex items-center gap-2">
       <button
         onClick={onDecrement}
-        className="w-8 h-8 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
+        className="w-7 h-7 bg-gray-200 hover:bg-gray-300 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
         aria-label={isRtl ? 'تقليل الكمية' : 'Decrease quantity'}
         disabled={value <= 1}
       >
-        <MinusCircle className="w-4 h-4 text-gray-600" />
+        <MinusCircle className="w-4 h-4" />
       </button>
       <input
         type="number"
@@ -310,12 +297,12 @@ const QuantityInput = ({
         onChange={(e) => handleChange(e.target.value)}
         max={max}
         min={1}
-        className="w-12 h-8 text-center border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
+        className="w-10 h-7 text-center border border-gray-200 rounded-md text-xs focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
         aria-label={isRtl ? 'الكمية' : 'Quantity'}
       />
       <button
         onClick={onIncrement}
-        className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
+        className="w-7 h-7 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
         aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
         disabled={max !== undefined && value >= max}
       >
@@ -363,8 +350,6 @@ export const BranchReturns: React.FC = () => {
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<ReturnStatus | ''>('');
-  const [filterReason, setFilterReason] = useState<string>('');
-  const [filterBranch, setFilterBranch] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
@@ -375,13 +360,13 @@ export const BranchReturns: React.FC = () => {
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
   const [retryCount, setRetryCount] = useState(0);
   const [reviewNotes, setReviewNotes] = useState('');
-  const maxRetries = 3;
+
   const RETURNS_PER_PAGE = 10;
 
   // Check if user is authorized
   if (user?.role === 'chef') {
     return (
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+      <div className="mx-auto max-w-7xl px-4 py-8">
         <div className="p-6 bg-red-50 rounded-xl shadow-sm border border-red-200">
           <p className="text-red-600 text-sm font-medium">{t.errors.accessDenied}</p>
         </div>
@@ -401,58 +386,20 @@ export const BranchReturns: React.FC = () => {
 
   const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
 
-  const { data: branchesData, isLoading: branchesLoading, error: branchesError, refetch: refetchBranches } = useQuery<
-    Branch[],
-    Error
-  >({
-    queryKey: ['branches', language],
-    queryFn: async () => {
-      try {
-        const response = await returnsAPI.getBranches();
-        return response.branches.map((branch: any) => ({
-          _id: branch._id,
-          displayName: isRtl ? branch.name : branch.nameEn || branch.name,
-        }));
-      } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Error fetching branches:`, err);
-        if (err.status === 404 && retryCount < maxRetries) {
-          setRetryCount((prev) => prev + 1);
-          toast.info(t.errors.retryFetchBranches, {
-            position: isRtl ? 'top-right' : 'top-left',
-            toastId: `retry-branches-${retryCount}`,
-          });
-          setTimeout(() => refetchBranches(), 1000 * Math.pow(2, retryCount));
-        } else {
-          toast.error(t.errors.fetchBranches, {
-            position: isRtl ? 'top-right' : 'top-left',
-            toastId: `fetch-branches-error`,
-          });
-        }
-        throw err;
-      }
-    },
-    enabled: user?.role === 'admin' || user?.role === 'production',
-    staleTime: 10 * 60 * 1000,
-    retry: false,
-  });
-
   const { data: returnsData, isLoading: returnsLoading, error: returnsError, refetch: refetchReturns } = useQuery<
     { returns: Return[]; total: number },
     Error
   >({
-    queryKey: ['returns', user?.branchId, filterStatus, filterReason, filterBranch, debouncedSearchQuery, currentPage, language],
+    queryKey: ['returns', user?.branchId, filterStatus, debouncedSearchQuery, currentPage, language],
     queryFn: async () => {
-      const query: any = {
+      const query = {
         status: filterStatus,
-        'items.reasonEn': filterReason,
         search: debouncedSearchQuery,
         page: currentPage,
         limit: RETURNS_PER_PAGE,
       };
       if (user?.role === 'branch' && user.branchId) {
         query.branch = user.branchId;
-      } else if (filterBranch) {
-        query.branch = filterBranch;
       }
       const response = await returnsAPI.getAll(query);
       return {
@@ -482,9 +429,7 @@ export const BranchReturns: React.FC = () => {
                     ? {
                         name: item.product.department.name,
                         nameEn: item.product.department.nameEn || item.product.department.name,
-                        displayName: isRtl
-                          ? item.product.department.name
-                          : item.product.department.nameEn || item.product.department.name,
+                        displayName: isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name,
                       }
                     : null,
                   price: item.product?.price || 0,
@@ -508,7 +453,7 @@ export const BranchReturns: React.FC = () => {
     onError: (err) => {
       toast.error(err.message || t.errors.fetchReturns, {
         position: isRtl ? 'top-right' : 'top-left',
-        toastId: `fetch-returns-error`,
+        toastId: `fetch-returns-${Date.now()}`,
       });
     },
   });
@@ -597,7 +542,7 @@ export const BranchReturns: React.FC = () => {
     socket.on('connect', () => {
       toast.info(t.socket.connected, {
         position: isRtl ? 'top-right' : 'top-left',
-        toastId: `socket-connect`,
+        toastId: `socket-connect-${Date.now()}`,
       });
     });
 
@@ -624,23 +569,12 @@ export const BranchReturns: React.FC = () => {
   const reasonOptions = useMemo(
     () => [
       { value: '', label: t.selectReason, enValue: '' },
-      { value: isRtl ? ReturnReason.DAMAGED_AR : ReturnReason.DAMAGED_EN, label: t.damaged, enValue: ReturnReason.DAMAGED_EN },
-      { value: isRtl ? ReturnReason.WRONG_ITEM_AR : ReturnReason.WRONG_ITEM_EN, label: t.wrongItem, enValue: ReturnReason.WRONG_ITEM_EN },
-      { value: isRtl ? ReturnReason.EXCESS_QUANTITY_AR : ReturnReason.EXCESS_QUANTITY_EN, label: t.excessQuantity, enValue: ReturnReason.EXCESS_QUANTITY_EN },
-      { value: isRtl ? ReturnReason.OTHER_AR : ReturnReason.OTHER_EN, label: t.other, enValue: ReturnReason.OTHER_EN },
+      { value: ReturnReason.DAMAGED_AR, label: t.damaged, enValue: ReturnReason.DAMAGED_EN },
+      { value: ReturnReason.WRONG_ITEM_AR, label: t.wrongItem, enValue: ReturnReason.WRONG_ITEM_EN },
+      { value: ReturnReason.EXCESS_QUANTITY_AR, label: t.excessQuantity, enValue: ReturnReason.EXCESS_QUANTITY_EN },
+      { value: ReturnReason.OTHER_AR, label: t.other, enValue: ReturnReason.OTHER_EN },
     ],
-    [t, isRtl]
-  );
-
-  const branchOptions = useMemo(
-    () => [
-      { _id: '', displayName: t.selectBranch },
-      ...(branchesData || []).map((branch) => ({
-        _id: branch._id,
-        displayName: branch.displayName,
-      })),
-    ],
-    [branchesData, t]
+    [t]
   );
 
   const productOptions = useMemo(
@@ -664,13 +598,11 @@ export const BranchReturns: React.FC = () => {
     () =>
       (returnsData?.returns || []).filter(
         (ret) =>
-          (ret.returnNumber.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-            ret.notes.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
-            (ret.branch?.displayName || '').toLowerCase().includes(debouncedSearchQuery.toLowerCase())) &&
-          (!filterBranch || ret.branch?._id === filterBranch) &&
-          (!filterReason || ret.items.some((item) => item.reasonEn === filterReason))
+          ret.returnNumber.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+          (ret.notes || '').toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+          (ret.branch?.displayName || '').toLowerCase().includes(debouncedSearchQuery.toLowerCase())
       ),
-    [returnsData, debouncedSearchQuery, filterBranch, filterReason]
+    [returnsData, debouncedSearchQuery]
   );
 
   const paginatedReturns = useMemo(
@@ -820,17 +752,17 @@ export const BranchReturns: React.FC = () => {
       }
     },
     onError: (err) => {
-      if (err.message.includes('Write conflict') && retryCount < maxRetries) {
-        setRetryCount((prev) => prev + 1);
+      if (err.message.includes('Write conflict') && retryCount < 3) {
+        setRetryCount(retryCount + 1);
         setTimeout(() => createReturnMutation.mutate(), 2000 * (retryCount + 1));
         toast.info(t.errors.writeConflict, {
           position: isRtl ? 'top-right' : 'top-left',
-          toastId: `write-conflict-${retryCount}`,
+          toastId: `write-conflict-${Date.now()}`,
         });
       } else {
         toast.error(err.message || t.errors.createReturn, {
           position: isRtl ? 'top-right' : 'top-left',
-          toastId: `create-error`,
+          toastId: `create-error-${Date.now()}`,
         });
         setReturnErrors({ form: err.message });
       }
@@ -871,7 +803,7 @@ export const BranchReturns: React.FC = () => {
     onError: (err) => {
       toast.error(err.message || t.errors.updateReturn, {
         position: isRtl ? 'top-right' : 'top-left',
-        toastId: `update-error`,
+        toastId: `update-error-${Date.now()}`,
       });
     },
   });
@@ -893,68 +825,68 @@ export const BranchReturns: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="bg-white rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-gray-200"
+          className="bg-gradient-to-br from-white to-gray-50 rounded-xl shadow-md hover:shadow-lg transition-all duration-300 border border-gray-100 overflow-hidden"
         >
-          <div className="p-6">
-            <div className="flex items-center justify-between mb-4">
+          <div className="p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
               <h3 className="text-lg font-semibold text-gray-900">{t.returnNumber}: {ret.returnNumber}</h3>
-              <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${statusInfo.color}`}>
-                <StatusIcon className="w-5 h-5" />
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
+                <StatusIcon className="w-4 h-4" />
                 {statusInfo.label}
               </span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
               <div>
-                <p className="text-sm text-gray-500">{t.date}</p>
-                <p className="text-sm font-medium text-gray-900">
+                <p className="text-xs text-gray-500">{t.date}</p>
+                <p className="text-xs font-medium text-gray-900">
                   {new Date(ret.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">{t.totalQuantity}</p>
-                <p className="text-sm font-medium text-gray-900">
+                <p className="text-xs text-gray-500">{t.totalQuantity}</p>
+                <p className="text-xs font-medium text-gray-900">
                   {totalQuantity} {t.items}
                 </p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">{t.totalPrice}</p>
-                <p className="text-sm font-medium text-gray-900">{totalPrice} {t.Currency}</p>
+                <p className="text-xs text-gray-500">{t.totalPrice}</p>
+                <p className="text-xs font-medium text-gray-900">{totalPrice} {t.Currency}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">{t.branch}</p>
-                <p className="text-sm font-medium text-gray-900">{ret.branch?.displayName || t.branch}</p>
+                <p className="text-xs text-gray-500">{t.branch}</p>
+                <p className="text-xs font-medium text-gray-900">{ret.branch?.displayName || t.branch}</p>
               </div>
             </div>
-            <div className="space-y-3">
+            <div className="flex flex-col gap-2 mb-3">
               {ret.items.map((item, index) => (
                 <div
                   key={index}
-                  className="p-4 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors duration-200"
+                  className="p-3 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors duration-200"
                 >
-                  <p className="text-sm font-semibold text-gray-900">{item.product.displayName}</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
-                    <p className="text-sm text-gray-600">
+                  <p className="text-xs font-semibold text-gray-900">{item.product.displayName}</p>
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">
+                    <p className="text-xs text-gray-600">
                       {t.quantity}: {item.quantity} {item.product.displayUnit}
                     </p>
-                    <p className="text-sm text-gray-600">
+                    <p className="text-xs text-gray-600">
                       {t.price}: {(item.quantity * item.product.price).toFixed(2)} {t.Currency}
                     </p>
-                    <p className="text-sm text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
+                    <p className="text-xs text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
                   </div>
                 </div>
               ))}
             </div>
             {ret.notes && (
-              <div className="mt-4 p-4 bg-amber-50 rounded-lg">
-                <p className="text-sm font-medium text-amber-800">{t.notesLabel}: {ret.notes}</p>
+              <div className="p-3 bg-amber-50 rounded-lg">
+                <p className="text-xs font-medium text-amber-800">{t.notesLabel}: {ret.notes}</p>
               </div>
             )}
             {ret.reviewNotes && (
-              <div className="mt-2 p-4 bg-blue-50 rounded-lg">
-                <p className="text-sm font-medium text-blue-800">{t.reviewNotes}: {ret.reviewNotes}</p>
+              <div className="p-3 bg-blue-50 rounded-lg mt-2">
+                <p className="text-xs font-medium text-blue-800">{t.reviewNotes}: {ret.reviewNotes}</p>
               </div>
             )}
-            <div className="flex justify-end gap-3 mt-4">
+            <div className="flex justify-end gap-2 mt-3">
               {['admin', 'production'].includes(user?.role || '') && ret.status === ReturnStatus.PENDING && (
                 <>
                   <button
@@ -962,10 +894,10 @@ export const BranchReturns: React.FC = () => {
                       setSelectedReturn(ret);
                       setIsApproveModalOpen(true);
                     }}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+                    className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-medium transition-colors duration-200 flex items-center gap-1.5"
                     aria-label={t.approve}
                   >
-                    <CheckCircle className="w-5 h-5" />
+                    <CheckCircle className="w-4 h-4" />
                     {t.approve}
                   </button>
                   <button
@@ -973,10 +905,10 @@ export const BranchReturns: React.FC = () => {
                       setSelectedReturn(ret);
                       setIsApproveModalOpen(true);
                     }}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-medium transition-colors duration-200 flex items-center gap-1.5"
                     aria-label={t.reject}
                   >
-                    <XCircle className="w-5 h-5" />
+                    <XCircle className="w-4 h-4" />
                     {t.reject}
                   </button>
                 </>
@@ -986,10 +918,10 @@ export const BranchReturns: React.FC = () => {
                   setSelectedReturn(ret);
                   setIsViewModalOpen(true);
                 }}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-medium transition-colors duration-200 flex items-center gap-1.5"
                 aria-label={t.view}
               >
-                <Eye className="w-5 h-5" />
+                <Eye className="w-4 h-4" />
                 {t.view}
               </button>
             </div>
@@ -1001,138 +933,80 @@ export const BranchReturns: React.FC = () => {
   );
 
   return (
-    <div className={`mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 ${isRtl ? 'rtl' : 'ltr'}`}>
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="mb-8"
-      >
-        <div className="flex items-center gap-4 mb-4">
-          <Package className="w-8 h-8 text-amber-600" />
+    <div className="mx-auto px-4 py-6">
+      <div className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+        <div className="flex items-center gap-3">
+          <Package className="w-7 h-7 text-amber-600" />
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
-            <p className="text-sm text-gray-600">{t.subtitle}</p>
+            <p className="text-gray-600 text-xs">{t.subtitle}</p>
           </div>
         </div>
         {user?.role === 'branch' && (
           <button
             onClick={() => setIsCreateModalOpen(true)}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-sm font-medium transition-colors duration-200 flex items-center gap-2"
+            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-medium transition-colors duration-200 flex items-center gap-1.5"
             aria-label={t.createReturn}
           >
-            <Plus className="w-5 h-5" />
+            <Plus className="w-4 h-4" />
             {t.createReturn}
           </button>
         )}
-      </motion.div>
+      </div>
 
-      {(returnsError || branchesError) && (
+      {returnsError && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          className="mb-8 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3"
+          className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3"
         >
-          <AlertCircle className="w-5 h-5 text-red-600" />
-          <span className="text-red-600 text-sm font-medium">
-            {returnsError?.message || branchesError?.message || t.errors.fetchReturns}
-          </span>
+          <AlertCircle className="w-4 h-4 text-red-600" />
+          <span className="text-red-600 text-xs font-medium">{returnsError.message}</span>
           <button
-            onClick={() => {
-              if (returnsError) refetchReturns();
-              if (branchesError) refetchBranches();
-            }}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-sm font-medium transition-colors duration-200"
+            onClick={() => refetchReturns()}
+            className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-medium transition-colors duration-200"
           >
             {t.common.retry}
           </button>
         </motion.div>
       )}
 
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.5 }}
-        className="mb-8 bg-white rounded-xl shadow-sm p-6 border border-gray-200"
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t.searchPlaceholder}</label>
-            <ProductSearchInput
-              value={searchInput}
-              onChange={handleSearchChange}
-              placeholder={t.searchPlaceholder}
-              className="w-full rounded-md border-gray-300 focus:ring-amber-500 text-sm"
-            />
-          </div>
-          {(user?.role === 'admin' || user?.role === 'production') && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t.filterByBranch}</label>
-              <select
-                value={filterBranch}
-                onChange={(e) => {
-                  setFilterBranch(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="w-full rounded-md border-gray-300 focus:ring-amber-500 text-sm"
-                disabled={branchesLoading}
-              >
-                {branchOptions.map((branch) => (
-                  <option key={branch._id} value={branch._id}>
-                    {branch.displayName}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t.filterStatus}</label>
-            <ProductDropdown
-              value={filterStatus}
-              onChange={(value) => {
-                setFilterStatus(value as ReturnStatus | '');
-                setCurrentPage(1);
-              }}
-              options={statusOptions}
-              className="w-full rounded-md border-gray-300 focus:ring-amber-500 text-sm"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t.filterByReason}</label>
-            <ProductDropdown
-              value={filterReason}
-              onChange={(value) => {
-                setFilterReason(value);
-                setCurrentPage(1);
-              }}
-              options={reasonOptions.map((opt) => ({ value: opt.enValue, label: opt.label }))}
-              className="w-full rounded-md border-gray-300 focus:ring-amber-500 text-sm"
-            />
-          </div>
+      <div className="p-5 bg-white rounded-xl shadow-sm mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <ProductSearchInput
+            value={searchInput}
+            onChange={handleSearchChange}
+            placeholder={t.searchPlaceholder}
+            className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs"
+          />
+          <ProductDropdown
+            value={filterStatus}
+            onChange={(value) => {
+              setFilterStatus(value as ReturnStatus | '');
+              setCurrentPage(1);
+            }}
+            options={statusOptions}
+            className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs"
+          />
         </div>
-      </motion.div>
+      </div>
 
       {returnsLoading ? (
-        <div className="grid grid-cols-1 gap-6">
+        <div className="grid grid-cols-1 gap-4">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="p-6 bg-white rounded-xl shadow-sm animate-pulse">
-              <div className="h-6 bg-gray-200 rounded w-3/4 mb-4"></div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-              </div>
+            <div key={i} className="p-5 bg-white rounded-xl shadow-sm animate-pulse">
+              <div className="h-4 bg-gray-200 rounded w-3/4 mb-3"></div>
+              <div className="h-3 bg-gray-200 rounded w-1/2 mb-2"></div>
+              <div className="h-3 bg-gray-200 rounded w-1/3"></div>
             </div>
           ))}
         </div>
       ) : paginatedReturns.length === 0 ? (
-        <div className="p-6 text-center bg-white rounded-xl shadow-sm border border-gray-200">
-          <p className="text-gray-500 text-sm">{t.noReturns}</p>
+        <div className="p-6 text-center bg-white rounded-xl shadow-sm">
+          <p className="text-gray-500 text-xs">{t.noReturns}</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6">
+        <div className="grid grid-cols-1 gap-4">
           {paginatedReturns.map((ret) => (
             <ReturnCard key={ret._id} ret={ret} />
           ))}
@@ -1140,32 +1014,27 @@ export const BranchReturns: React.FC = () => {
       )}
 
       {totalPages > 1 && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.5 }}
-          className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4"
-        >
-          <div className="text-sm text-gray-600">
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="text-xs text-gray-600">
             {t.pagination.page.replace('{current}', currentPage.toString()).replace('{total}', totalPages.toString())}
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <button
               onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
               disabled={currentPage === 1}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+              className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-md text-xs font-medium transition-colors duration-200 disabled:opacity-50"
             >
               {t.pagination.previous}
             </button>
             <button
               onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
               disabled={currentPage === totalPages}
-              className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+              className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-md text-xs font-medium transition-colors duration-200 disabled:opacity-50"
             >
               {t.pagination.next}
             </button>
           </div>
-        </motion.div>
+        </div>
       )}
 
       {/* Create Return Modal */}
@@ -1175,7 +1044,7 @@ export const BranchReturns: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
             onClick={() => {
               setIsCreateModalOpen(false);
               dispatchReturnForm({ type: 'RESET' });
@@ -1186,10 +1055,10 @@ export const BranchReturns: React.FC = () => {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-xl p-6 w-full max-w-md"
+              className="bg-white rounded-xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex justify-between items-center mb-3">
                 <h2 className="text-xl font-bold text-gray-900">{t.createReturn}</h2>
                 <button
                   onClick={() => {
@@ -1197,34 +1066,34 @@ export const BranchReturns: React.FC = () => {
                     dispatchReturnForm({ type: 'RESET' });
                     setReturnErrors({});
                   }}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors duration-200"
+                  className="p-1.5 hover:bg-gray-100 rounded-full"
                 >
-                  <X className="w-5 h-5 text-gray-600" />
+                  <X className="w-4 h-4 text-gray-600" />
                 </button>
               </div>
               {returnErrors.form && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 text-red-600" />
-                  <span className="text-red-600 text-sm">{returnErrors.form}</span>
+                <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-600" />
+                  <span className="text-red-600 text-xs">{returnErrors.form}</span>
                 </div>
               )}
-              <div className="space-y-4">
+              <div className="flex flex-col gap-3">
                 {returnForm.items.map((item, index) => (
-                  <div key={index} className="p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    <div className="space-y-3">
+                  <div key={index} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+                    <div className="grid grid-cols-1 gap-3">
                       <div>
                         <ProductDropdown
                           value={item.productId}
                           onChange={(value) => handleProductChange(index, value)}
                           options={productOptions}
                           placeholder={t.selectProduct}
-                          className="w-full rounded-md border-gray-300 focus:ring-amber-500 text-sm"
+                          className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs"
                         />
                         {returnErrors[`item_${index}_productId`] && (
-                          <p className="text-red-600 text-sm mt-1">{returnErrors[`item_${index}_productId`]}</p>
+                          <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_productId`]}</p>
                         )}
                       </div>
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-3">
                         <QuantityInput
                           value={item.quantity}
                           onChange={(val) => updateItemInForm(index, 'quantity', val)}
@@ -1233,7 +1102,7 @@ export const BranchReturns: React.FC = () => {
                           max={item.maxQuantity}
                         />
                         {returnErrors[`item_${index}_quantity`] && (
-                          <p className="text-red-600 text-sm">{returnErrors[`item_${index}_quantity`]}</p>
+                          <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_quantity`]}</p>
                         )}
                       </div>
                       <div>
@@ -1242,50 +1111,50 @@ export const BranchReturns: React.FC = () => {
                           onChange={(value) => updateItemInForm(index, 'reason', value)}
                           options={reasonOptions}
                           placeholder={t.selectReason}
-                          className="w-full rounded-md border-gray-300 focus:ring-amber-500 text-sm"
+                          className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-xs"
                         />
                         {returnErrors[`item_${index}_reason`] && (
-                          <p className="text-red-600 text-sm mt-1">{returnErrors[`item_${index}_reason`]}</p>
+                          <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_reason`]}</p>
                         )}
                       </div>
                     </div>
                     <button
                       onClick={() => removeItemFromForm(index)}
-                      className="mt-3 text-red-600 hover:text-red-800 text-sm flex items-center gap-2"
+                      className="mt-2 text-red-600 hover:text-red-800 text-xs flex items-center gap-1"
                       aria-label={t.removeItem}
                     >
-                      <XCircle className="w-5 h-5" />
+                      <XCircle className="w-4 h-4" />
                       {t.removeItem}
                     </button>
                   </div>
                 ))}
-                {returnErrors.items && <p className="text-red-600 text-sm">{returnErrors.items}</p>}
+                {returnErrors.items && <p className="text-red-600 text-xs">{returnErrors.items}</p>}
                 <button
                   onClick={addItemToForm}
-                  className="w-full px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-sm font-medium transition-colors duration-200 flex items-center justify-center gap-2"
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-medium transition-colors duration-200 flex items-center gap-1.5"
                   aria-label={t.addItem}
                 >
-                  <Plus className="w-5 h-5" />
+                  <Plus className="w-4 h-4" />
                   {t.addItem}
                 </button>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t.notesLabel}</label>
+                  <label className="block text-xs font-medium text-gray-700">{t.notesLabel}</label>
                   <textarea
                     value={returnForm.notes}
                     onChange={(e) => dispatchReturnForm({ type: 'SET_NOTES', payload: e.target.value })}
                     placeholder={t.notesPlaceholder}
-                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
-                    rows={4}
+                    className="w-full mt-1 p-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent text-xs"
+                    rows={3}
                   />
                 </div>
-                <div className="flex justify-end gap-3">
+                <div className="flex justify-end gap-2">
                   <button
                     onClick={() => {
                       setIsCreateModalOpen(false);
                       dispatchReturnForm({ type: 'RESET' });
                       setReturnErrors({});
                     }}
-                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-medium transition-colors duration-200"
+                    className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-md text-xs font-medium transition-colors duration-200"
                     aria-label={t.common.cancel}
                   >
                     {t.common.cancel}
@@ -1293,7 +1162,7 @@ export const BranchReturns: React.FC = () => {
                   <button
                     onClick={() => createReturnMutation.mutate()}
                     disabled={createReturnMutation.isLoading}
-                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-md text-xs font-medium transition-colors duration-200 disabled:opacity-50"
                     aria-label={t.submitReturn}
                   >
                     {createReturnMutation.isLoading ? t.common.submitting : t.submitReturn}
@@ -1312,93 +1181,88 @@ export const BranchReturns: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
             onClick={() => setIsViewModalOpen(false)}
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-xl p-6 w-full max-w-lg"
+              className="bg-white rounded-xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex justify-between items-center mb-3">
                 <h2 className="text-xl font-bold text-gray-900">{t.viewReturn}</h2>
-                <button
-                  onClick={() => setIsViewModalOpen(false)}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors duration-200"
-                >
-                  <X className="w-5 h-5 text-gray-600" />
+                <button onClick={() => setIsViewModalOpen(false)} className="p-1.5 hover:bg-gray-100 rounded-full">
+                  <X className="w-4 h-4 text-gray-600" />
                 </button>
               </div>
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <p className="text-sm text-gray-500">{t.returnNumber}</p>
-                    <p className="text-sm font-medium text-gray-900">{selectedReturn.returnNumber}</p>
+                    <p className="text-xs text-gray-500">{t.returnNumber}</p>
+                    <p className="text-xs font-medium text-gray-900">{selectedReturn.returnNumber}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">{t.statusLabel}</p>
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-xs text-gray-500">{t.statusLabel}</p>
+                    <p className="text-xs font-medium text-gray-900">
                       {t.status[selectedReturn.status as keyof typeof t.status]}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">{t.date}</p>
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-xs text-gray-500">{t.date}</p>
+                    <p className="text-xs font-medium text-gray-900">
                       {new Date(selectedReturn.createdAt).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">{t.branch}</p>
-                    <p className="text-sm font-medium text-gray-900">{selectedReturn.branch?.displayName || t.branch}</p>
+                    <p className="text-xs text-gray-500">{t.branch}</p>
+                    <p className="text-xs font-medium text-gray-900">{selectedReturn.branch?.displayName || t.branch}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">{t.totalQuantity}</p>
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-xs text-gray-500">{t.totalQuantity}</p>
+                    <p className="text-xs font-medium text-gray-900">
                       {selectedReturn.items.reduce((sum, item) => sum + item.quantity, 0)} {t.items}
                     </p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">{t.totalPrice}</p>
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-xs text-gray-500">{t.totalPrice}</p>
+                    <p className="text-xs font-medium text-gray-900">
                       {selectedReturn.items.reduce((sum, item) => sum + item.quantity * item.product.price, 0).toFixed(2)} {t.Currency}
                     </p>
                   </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-700 mb-2">{t.items}</p>
-                  <div className="space-y-3">
-                    {selectedReturn.items.map((item, index) => (
-                      <div key={index} className="p-4 bg-gray-50 rounded-lg border border-gray-100">
-                        <p className="text-sm font-semibold text-gray-900">{item.product.displayName}</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
-                          <p className="text-sm text-gray-600">
-                            {t.quantity}: {item.quantity} {item.product.displayUnit}
-                          </p>
-                          <p className="text-sm text-gray-600">
-                            {t.price}: {(item.quantity * item.product.price).toFixed(2)} {t.Currency}
-                          </p>
-                          <p className="text-sm text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
-                        </div>
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs font-medium text-gray-700">{t.items}</p>
+                  {selectedReturn.items.map((item, index) => (
+                    <div key={index} className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                      <p className="text-xs font-semibold text-gray-900">{item.product.displayName}</p>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:gap-3">
+                        <p className="text-xs text-gray-600">
+                          {t.quantity}: {item.quantity} {item.product.displayUnit}
+                        </p>
+                        <p className="text-xs text-gray-600">
+                          {t.price}: {(item.quantity * item.product.price).toFixed(2)} {t.Currency}
+                        </p>
+                        <p className="text-xs text-gray-600">{t.reason}: {isRtl ? item.reason : item.reasonEn}</p>
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ))}
                 </div>
                 {selectedReturn.notes && (
-                  <div className="p-4 bg-amber-50 rounded-lg">
-                    <p className="text-sm font-medium text-amber-800">{t.notesLabel}: {selectedReturn.notes}</p>
+                  <div className="p-3 bg-amber-50 rounded-lg">
+                    <p className="text-xs font-medium text-amber-800">{t.notesLabel}: {selectedReturn.notes}</p>
                   </div>
                 )}
                 {selectedReturn.reviewNotes && (
-                  <div className="p-4 bg-blue-50 rounded-lg">
-                    <p className="text-sm font-medium text-blue-800">{t.reviewNotes}: {selectedReturn.reviewNotes}</p>
+                  <div className="p-3 bg-blue-50 rounded-lg">
+                    <p className="text-xs font-medium text-blue-800">{t.reviewNotes}: {selectedReturn.reviewNotes}</p>
                   </div>
                 )}
                 <div className="flex justify-end">
                   <button
                     onClick={() => setIsViewModalOpen(false)}
-                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-medium transition-colors duration-200"
+                    className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-md text-xs font-medium transition-colors duration-200"
                     aria-label={t.common.close}
                   >
                     {t.common.close}
@@ -1417,7 +1281,7 @@ export const BranchReturns: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
             onClick={() => {
               setIsApproveModalOpen(false);
               setReviewNotes('');
@@ -1428,10 +1292,10 @@ export const BranchReturns: React.FC = () => {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-xl p-6 w-full max-w-md"
+              className="bg-white rounded-xl p-5 w-full max-w-md"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex justify-between items-center mb-3">
                 <h2 className="text-xl font-bold text-gray-900">{t.approveReturn}</h2>
                 <button
                   onClick={() => {
@@ -1439,34 +1303,34 @@ export const BranchReturns: React.FC = () => {
                     setReviewNotes('');
                     setSelectedReturn(null);
                   }}
-                  className="p-2 hover:bg-gray-100 rounded-full transition-colors duration-200"
+                  className="p-1.5 hover:bg-gray-100 rounded-full"
                 >
-                  <X className="w-5 h-5 text-gray-600" />
+                  <X className="w-4 h-4 text-gray-600" />
                 </button>
               </div>
-              <div className="space-y-4">
+              <div className="flex flex-col gap-3">
                 <div>
-                  <p className="text-sm text-gray-500">{t.returnNumber}</p>
-                  <p className="text-sm font-medium text-gray-900">{selectedReturn.returnNumber}</p>
+                  <p className="text-xs text-gray-500">{t.returnNumber}</p>
+                  <p className="text-xs font-medium text-gray-900">{selectedReturn.returnNumber}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t.reviewNotes}</label>
+                  <label className="block text-xs font-medium text-gray-700">{t.reviewNotes}</label>
                   <textarea
                     value={reviewNotes}
                     onChange={(e) => setReviewNotes(e.target.value)}
                     placeholder={t.reviewNotesPlaceholder}
-                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
-                    rows={4}
+                    className="w-full mt-1 p-2 border border-gray-200 rounded-md focus:ring-2 focus:ring-amber-500 focus:border-transparent text-xs"
+                    rows={3}
                   />
                 </div>
-                <div className="flex justify-end gap-3">
+                <div className="flex justify-end gap-2">
                   <button
                     onClick={() => {
                       setIsApproveModalOpen(false);
                       setReviewNotes('');
                       setSelectedReturn(null);
                     }}
-                    className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-medium transition-colors duration-200"
+                    className="px-3 py-1.5 bg-gray-200 hover:bg-gray-300 rounded-md text-xs font-medium transition-colors duration-200"
                     aria-label={t.common.cancel}
                   >
                     {t.common.cancel}
@@ -1480,7 +1344,7 @@ export const BranchReturns: React.FC = () => {
                       })
                     }
                     disabled={updateReturnStatusMutation.isLoading}
-                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                    className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-md text-xs font-medium transition-colors duration-200 disabled:opacity-50"
                     aria-label={t.approve}
                   >
                     {updateReturnStatusMutation.isLoading ? t.common.submitting : t.approve}
@@ -1494,7 +1358,7 @@ export const BranchReturns: React.FC = () => {
                       })
                     }
                     disabled={updateReturnStatusMutation.isLoading}
-                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-medium transition-colors duration-200 disabled:opacity-50"
                     aria-label={t.reject}
                   >
                     {updateReturnStatusMutation.isLoading ? t.common.submitting : t.reject}
