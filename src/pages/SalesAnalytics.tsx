@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { salesAPI, branchesAPI, departmentsAPI } from '../services/api';
+import { salesAPI, branchesAPI , departmentAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { AlertCircle, BarChart2, Search, ChevronDown } from 'lucide-react';
 import { toast } from 'react-toastify';
