@@ -449,6 +449,7 @@ const createErrorMessage = (errorType: string, isRtl: boolean): string => {
     invalidBranchId: { ar: 'معرف الفرع غير صالح', en: 'Invalid branch ID' },
     invalidOrderId: { ar: 'معرف الطلب غير صالح', en: 'Invalid order ID' },
     invalidDepartmentId: { ar: 'معرف القسم غير صالح', en: 'Invalid department ID' },
+    invalidProductId: { ar: 'معرف المنتج غير صالح', en: 'Invalid product ID' },
     invalidOrderOrTaskId: { ar: 'معرف الطلب أو المهمة غير صالح', en: 'Invalid order or task ID' },
     invalidOrderOrItemOrChefId: { ar: 'معرف الطلب، العنصر، أو الشيف غير صالح', en: 'Invalid order, item, or chef ID' },
     invalidStockQuantity: { ar: 'كمية المخزون يجب أن تكون غير سالبة', en: 'Stock quantity must be non-negative' },
@@ -828,8 +829,6 @@ export const inventoryAPI = {
     console.log(`[${new Date().toISOString()}] inventoryAPI.getByBranch - Response:`, response);
     return response.inventory;
   },
-
-  
   getAll: async (params: { branch?: string; product?: string; search?: string; page?: number; limit?: number } = {}) => {
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getAll - Invalid branch ID:`, params.branch);
@@ -973,7 +972,7 @@ export const inventoryAPI = {
     console.log(`[${new Date().toISOString()}] inventoryAPI.updateStock - Response:`, response);
     return response.inventory;
   },
- processReturnItems: async (returnId: string, data: {
+  processReturnItems: async (returnId: string, data: {
     branchId: string;
     items: Array<{ productId: string; quantity: number; status: 'approved' | 'rejected'; reviewNotes?: string }>;
   }) => {
@@ -1017,7 +1016,6 @@ export const inventoryAPI = {
       throw new Error(errorMessage);
     }
   },
-
   createReturn: async (data: {
     orderId: string;
     branchId: string;
@@ -1132,38 +1130,28 @@ export const inventoryAPI = {
     console.log(`[${new Date().toISOString()}] inventoryAPI.getHistory - Response:`, response);
     return response.history;
   },
-  createReturn: async (data: {
-    orderId: string;
-    branchId: string;
-    reason: string;
-    items: Array<{ itemId: string; productId: string; quantity: number; reason: string }>;
-    notes?: string;
-  }) => {
-    if (
-      !isValidObjectId(data.orderId) ||
-      !isValidObjectId(data.branchId) ||
-      !data.reason ||
-      !Array.isArray(data.items) ||
-      data.items.length === 0 ||
-      data.items.some(item => !isValidObjectId(item.itemId) || !isValidObjectId(item.productId) || item.quantity < 1 || !item.reason)
-    ) {
-      console.error(`[${new Date().toISOString()}] inventoryAPI.createReturn - Invalid data:`, data);
-      throw new Error(createErrorMessage('invalidBranchId', localStorage.getItem('language') === 'ar'));
+  checkOrderHistory: async (orderId: string) => {
+    if (!isValidObjectId(orderId)) {
+      console.error(`[${new Date().toISOString()}] inventoryAPI.checkOrderHistory - Invalid order ID:`, orderId);
+      throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.post('/inventory/returns', {
-      orderId: data.orderId,
-      branchId: data.branchId,
-      reason: data.reason.trim(),
-      items: data.items.map(item => ({
-        itemId: item.itemId,
-        productId: item.productId,
-        quantity: item.quantity,
-        reason: item.reason.trim(),
-      })),
-      notes: data.notes?.trim(),
-    });
-    console.log(`[${new Date().toISOString()}] inventoryAPI.createReturn - Response:`, response);
-    return response.returnRequest;
+    try {
+      const response = await api.get(`/inventory/check-order-history/${orderId}`);
+      console.log(`[${new Date().toISOString()}] inventoryAPI.checkOrderHistory - Response:`, response);
+      return response.exists;
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] inventoryAPI.checkOrderHistory - Error:`, {
+        message: error.message,
+        status: error.status,
+        details: error.details,
+        response: error.response,
+      });
+      let errorMessage = error.message || (localStorage.getItem('language') === 'ar' ? 'خطأ في التحقق من سجل الطلب' : 'Error checking order history');
+      if (error.status === 500) {
+        errorMessage = localStorage.getItem('language') === 'ar' ? 'خطأ في الخادم، حاول مرة أخرى لاحقًا' : 'Server error, please try again later';
+      }
+      throw new Error(errorMessage);
+    }
   },
 };
 
