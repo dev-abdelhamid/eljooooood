@@ -4,11 +4,11 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { ShoppingCart, Clock, BarChart3, CheckCircle, AlertCircle, Package, DollarSign, ChefHat, RotateCcw } from 'lucide-react';
+import { ShoppingCart, Clock, BarChart3, CheckCircle, AlertCircle, Package, DollarSign, ChefHat } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
-import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, returnsAPI } from '../services/api';
+import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 
 const cache = new Map<string, any>();
@@ -22,10 +22,7 @@ interface Stats {
   totalSales: number;
   completedTasks: number;
   inProgressTasks: number;
-  totalReturns: number;
-  pendingReturns: number;
-  approvedReturns: number;
-  rejectedReturns: number;
+  returns: number;
   averageOrderValue: number;
 }
 
@@ -41,28 +38,6 @@ interface Task {
   status: 'pending' | 'assigned' | 'in_progress' | 'completed';
   branchName: string;
   branchNameEn?: string;
-  createdAt: string;
-}
-
-interface Return {
-  id: string;
-  returnNumber: string;
-  branchName: string;
-  branchNameEn?: string;
-  branchId: string;
-  items: Array<{
-    _id: string;
-    productId: string;
-    productName: string;
-    productNameEn?: string;
-    quantity: number;
-    price: number;
-    reason: string;
-    reasonEn?: string;
-    department: { _id: string; name: string; nameEn?: string };
-  }>;
-  status: 'pending_approval' | 'approved' | 'rejected';
-  createdByName: string;
   createdAt: string;
 }
 
@@ -104,7 +79,7 @@ interface Order {
   }>;
   returns?: Array<{
     returnId: string;
-    status: 'pending_approval' | 'approved' | 'rejected';
+    status: 'pending_approval' | 'approved' | 'rejected' | 'processed';
     items: Array<{
       productId: string;
       quantity: number;
@@ -328,7 +303,6 @@ export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [returns, setReturns] = useState<Return[]>([]);
   const [chefs, setChefs] = useState<Chef[]>([]);
   const [branches, setBranches] = useState<{ _id: string; name: string; nameEn?: string }[]>([]);
   const [branchPerformance, setBranchPerformance] = useState<BranchPerformance[]>([]);
@@ -342,10 +316,7 @@ export const Dashboard: React.FC = () => {
     totalSales: 0,
     completedTasks: 0,
     inProgressTasks: 0,
-    totalReturns: 0,
-    pendingReturns: 0,
-    approvedReturns: 0,
-    rejectedReturns: 0,
+    returns: 0,
     averageOrderValue: 0,
   });
   const [timeFilter, setTimeFilter] = useState('week');
@@ -376,7 +347,6 @@ export const Dashboard: React.FC = () => {
         const cachedData = cache.get(cacheKey);
         setOrders(cachedData.orders);
         setTasks(cachedData.tasks);
-        setReturns(cachedData.returns);
         setChefs(cachedData.chefs);
         setBranches(cachedData.branches);
         setBranchPerformance(cachedData.branchPerformance);
@@ -411,25 +381,30 @@ export const Dashboard: React.FC = () => {
         }
 
         const query: Record<string, any> = { startDate: startDate.toISOString(), endDate: now.toISOString(), limit: 20 };
-        if (user.role === 'branch') query.branch = user.id || user._id;
-        if (user.role === 'production' && user.department) query.departmentId = user.department._id;
+        let ordersResponse: any[] = [];
+        let tasksResponse: any[] = [];
+        let chefsResponse: any[] = [];
+        let branchesResponse: any[] = [];
 
-        const [ordersResponse, tasksResponse, returnsResponse, chefsResponse, branchesResponse] = await Promise.all([
-          ordersAPI.getAll(query).catch(() => ({ returns: [], total: 0 })),
-          user.role === 'chef'
-            ? chefsAPI.getByUserId(user.id || user._id).then((chefProfile) => {
-                if (!chefProfile?._id || !/^[0-9a-fA-F]{24}$/.test(chefProfile._id)) {
-                  throw new Error(isRtl ? 'بيانات الشيف غير صالحة' : 'Invalid chef data');
-                }
-                return productionAssignmentsAPI.getChefTasks(chefProfile._id, { limit: 20 });
-              }).catch(() => [])
-            : productionAssignmentsAPI.getAllTasks(query).catch(() => []),
-          returnsAPI.getAll(query).catch(() => ({ returns: [], total: 0 })),
-          ['admin', 'production'].includes(user.role) ? chefsAPI.getAll().catch(() => []) : Promise.resolve([]),
-          ['admin', 'production'].includes(user.role) ? branchesAPI.getAll().catch(() => []) : Promise.resolve([]),
-        ]);
+        if (user.role === 'chef') {
+          const chefProfile = await chefsAPI.getByUserId(user.id || user._id);
+          const chefId = chefProfile?._id;
+          if (!chefId || !/^[0-9a-fA-F]{24}$/.test(chefId)) {
+            throw new Error(isRtl ? 'بيانات الشيف غير صالحة' : 'Invalid chef data');
+          }
+          tasksResponse = await productionAssignmentsAPI.getChefTasks(chefId, { limit: 20 });
+        } else {
+          if (user.role === 'branch') query.branch = user.id || user._id;
+          if (user.role === 'production' && user.department) query.departmentId = user.department._id;
+          [ordersResponse, tasksResponse, chefsResponse, branchesResponse] = await Promise.all([
+            ordersAPI.getAll(query).catch(() => []),
+            productionAssignmentsAPI.getAllTasks(query).catch(() => []),
+            ['admin', 'production'].includes(user.role) ? chefsAPI.getAll().catch(() => []) : Promise.resolve([]),
+            ['admin', 'production'].includes(user.role) ? branchesAPI.getAll().catch(() => []) : Promise.resolve([]),
+          ]);
+        }
 
-        const mappedOrders = ordersResponse.returns.map((order: any) => ({
+        const mappedOrders = ordersResponse.map((order: any) => ({
           id: order._id || crypto.randomUUID(),
           orderNumber: order.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
           branchName: order.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
@@ -487,28 +462,6 @@ export const Dashboard: React.FC = () => {
           createdAt: formatDate(task.createdAt || new Date(), language),
         }));
 
-        const mappedReturns = returnsResponse.returns.map((ret: any) => ({
-          id: ret._id || crypto.randomUUID(),
-          returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
-          branchName: ret.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
-          branchNameEn: ret.branch?.nameEn || ret.branch?.name || 'Unknown',
-          branchId: ret.branch?._id || 'unknown',
-          items: (ret.items || []).map((item: any) => ({
-            _id: item._id || crypto.randomUUID(),
-            productId: item.product?._id || 'unknown',
-            productName: item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
-            productNameEn: item.product?.nameEn || item.product?.name || 'Unknown',
-            quantity: Number(item.quantity) || 1,
-            price: Number(item.price) || 0,
-            reason: item.reason || '',
-            reasonEn: item.reasonEn || item.reason || '',
-            department: item.product?.department || { _id: 'unknown', name: isRtl ? 'قسم غير معروف' : 'Unknown Department', nameEn: 'Unknown' },
-          })),
-          status: ret.status || 'pending_approval',
-          createdByName: ret.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-          createdAt: formatDate(ret.createdAt || new Date(), language),
-        }));
-
         const mappedChefs = chefsResponse.map((chef: any) => ({
           _id: chef._id || crypto.randomUUID(),
           userId: chef.user?._id || chef._id,
@@ -555,16 +508,12 @@ export const Dashboard: React.FC = () => {
         const totalSales = mappedOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
         const completedTasks = mappedTasks.filter((task) => task.status === 'completed').length;
         const inProgressTasks = mappedTasks.filter((task) => task.status === 'in_progress').length;
-        const totalReturns = mappedReturns.length;
-        const pendingReturns = mappedReturns.filter((r) => r.status === 'pending_approval').length;
-        const approvedReturns = mappedReturns.filter((r) => r.status === 'approved').length;
-        const rejectedReturns = mappedReturns.filter((r) => r.status === 'rejected').length;
+        const returns = mappedOrders.reduce((sum, o) => sum + (o.returns ? o.returns.length : 0), 0);
         const averageOrderValue = totalOrders > 0 ? totalSales / totalOrders : 0;
 
         const newData = {
           orders: mappedOrders,
           tasks: mappedTasks,
-          returns: mappedReturns,
           chefs: mappedChefs,
           branches: mappedBranches,
           branchPerformance: branchPerf,
@@ -578,10 +527,7 @@ export const Dashboard: React.FC = () => {
             totalSales,
             completedTasks,
             inProgressTasks,
-            totalReturns,
-            pendingReturns,
-            approvedReturns,
-            rejectedReturns,
+            returns,
             averageOrderValue,
           },
         };
@@ -589,7 +535,6 @@ export const Dashboard: React.FC = () => {
         cache.set(cacheKey, newData);
         setOrders(newData.orders);
         setTasks(newData.tasks);
-        setReturns(newData.returns);
         setChefs(newData.chefs);
         setBranches(newData.branches);
         setBranchPerformance(newData.branchPerformance);
@@ -597,7 +542,7 @@ export const Dashboard: React.FC = () => {
         setStats(newData.stats);
         setError('');
       } catch (err: any) {
-        const errorMessage = err.status === 403 ? (isRtl ? 'الوصول غير مصرح به' : 'Unauthorized access') : (isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data');
+        const errorMessage = err.status === 403 ? (isRtl ? 'الوصول غير مصرح به' : 'Unauthorized access') : (isRtl ? 'خطأ في الخادم' : 'Server error');
         setError(errorMessage);
         toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
         addNotification({
@@ -736,90 +681,11 @@ export const Dashboard: React.FC = () => {
       fetchDashboardData(true);
     });
 
-    socket.on('returnCreated', (data: any) => {
-      if (!data.returnId || !data.returnNumber || !data.branchName || !data.eventId) {
-        console.warn(`[${new Date().toISOString()}] Invalid return created data:`, data);
-        return;
-      }
-      if (!['admin', 'branch', 'production'].includes(user.role)) return;
-      if (user.role === 'branch' && data.branchId !== user.branchId) return;
-
-      setReturns((prev) => [
-        {
-          id: data.returnId,
-          returnNumber: data.returnNumber,
-          branchName: data.branchName,
-          branchNameEn: data.branchNameEn || data.branchName,
-          branchId: data.branchId || 'unknown',
-          items: (data.items || []).map((item: any) => ({
-            _id: item._id || crypto.randomUUID(),
-            productId: item.product?._id || 'unknown',
-            productName: item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
-            productNameEn: item.product?.nameEn || item.product?.name || 'Unknown',
-            quantity: Number(item.quantity) || 1,
-            price: Number(item.price) || 0,
-            reason: item.reason || '',
-            reasonEn: item.reasonEn || item.reason || '',
-            department: item.product?.department || { _id: 'unknown', name: isRtl ? 'قسم غير معروف' : 'Unknown Department', nameEn: 'Unknown' },
-          })),
-          status: data.status || 'pending_approval',
-          createdByName: data.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-          createdAt: formatDate(data.createdAt || new Date(), language),
-        },
-        ...prev.filter((r) => r.id !== data.returnId),
-      ]);
-      addNotification({
-        _id: data.eventId,
-        type: 'info',
-        message: isRtl
-          ? `تم إنشاء مرتجع جديد ${data.returnNumber} - ${data.branchName}`
-          : `New return created: ${data.returnNumber} - ${data.branchName}`,
-        data: { returnId: data.returnId, eventId: data.eventId },
-        read: false,
-        createdAt: formatDate(new Date(), language),
-        path: '/returns',
-        sound: '/sounds/return-created.mp3',
-        vibrate: [300, 100, 300],
-      });
-      fetchDashboardData(true);
-    });
-
-    socket.on('returnStatusUpdated', (data: any) => {
-      if (!data.returnId || !data.status || !data.returnNumber || !data.branchName || !data.eventId) {
-        console.warn(`[${new Date().toISOString()}] Invalid return status update data:`, data);
-        return;
-      }
-      if (!['admin', 'branch', 'production'].includes(user.role)) return;
-      if (user.role === 'branch' && data.branchId !== user.branchId) return;
-
-      setReturns((prev) =>
-        prev.map((ret) =>
-          ret.id === data.returnId ? { ...ret, status: data.status } : ret
-        )
-      );
-      addNotification({
-        _id: data.eventId,
-        type: data.status === 'approved' ? 'success' : 'error',
-        message: isRtl
-          ? `تم تحديث حالة المرتجع ${data.returnNumber} إلى ${data.status === 'approved' ? 'موافق عليه' : 'مرفوض'}`
-          : `Return ${data.returnNumber} status updated to ${data.status}`,
-        data: { returnId: data.returnId, eventId: data.eventId },
-        read: false,
-        createdAt: formatDate(new Date(), language),
-        path: '/returns',
-        sound: data.status === 'approved' ? '/sounds/return-approved.mp3' : '/sounds/return-rejected.mp3',
-        vibrate: [300, 100, 300],
-      });
-      fetchDashboardData(true);
-    });
-
     return () => {
       socket.off('connect_error');
       socket.off('taskAssigned');
       socket.off('orderCompleted');
       socket.off('itemStatusUpdated');
-      socket.off('returnCreated');
-      socket.off('returnStatusUpdated');
     };
   }, [socket, user, isRtl, language, addNotification, fetchDashboardData, isConnected]);
 
@@ -950,13 +816,6 @@ export const Dashboard: React.FC = () => {
       .slice(0, 8);
   }, [orders]);
 
-  const sortedPendingReturns = useMemo(() => {
-    return [...returns]
-      .filter((ret) => ['pending_approval', 'approved'].includes(ret.status))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 8);
-  }, [returns]);
-
   const renderStats = () => (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -1016,32 +875,11 @@ export const Dashboard: React.FC = () => {
             ariaLabel={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
           />
           <StatsCard
-            title={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
-            value={stats.totalReturns.toString()}
-            icon={RotateCcw}
+            title={isRtl ? 'المرتجعات' : 'Returns'}
+            value={stats.returns.toString()}
+            icon={Package}
             color="orange"
-            ariaLabel={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
-          />
-          <StatsCard
-            title={isRtl ? 'المرتجعات المعلقة' : 'Pending Returns'}
-            value={stats.pendingReturns.toString()}
-            icon={AlertCircle}
-            color="yellow"
-            ariaLabel={isRtl ? 'المرتجعات المعلقة' : 'Pending Returns'}
-          />
-          <StatsCard
-            title={isRtl ? 'المرتجعات الموافق عليها' : 'Approved Returns'}
-            value={stats.approvedReturns.toString()}
-            icon={CheckCircle}
-            color="green"
-            ariaLabel={isRtl ? 'المرتجعات الموافق عليها' : 'Approved Returns'}
-          />
-          <StatsCard
-            title={isRtl ? 'المرتجعات المرفوضة' : 'Rejected Returns'}
-            value={stats.rejectedReturns.toString()}
-            icon={AlertCircle}
-            color="red"
-            ariaLabel={isRtl ? 'المرتجعات المرفوضة' : 'Rejected Returns'}
+            ariaLabel={isRtl ? 'المرتجعات' : 'Returns'}
           />
         </>
       )}
@@ -1136,59 +974,6 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 
-  const renderLatestReturns = () => (
-    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-      <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
-        <RotateCcw className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
-        {isRtl ? 'أحدث المرتجعات' : 'Latest Returns'}
-      </h3>
-      <div className="space-y-3 max-h-96 overflow-y-auto">
-        <AnimatePresence>
-          {sortedPendingReturns.length === 0 ? (
-            <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد مرتجعات' : 'No returns available'}</p>
-          ) : (
-            sortedPendingReturns.map((ret) => (
-              <motion.div
-                key={ret.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="border border-amber-100 rounded-lg p-3 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
-                onClick={() => navigate(`/returns/${ret.id}`)}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-semibold text-sm text-gray-800 truncate">
-                    {isRtl ? `مرتجع رقم ${ret.returnNumber}` : `Return #${ret.returnNumber}`}
-                  </h4>
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      ret.status === 'pending_approval'
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : ret.status === 'approved'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}
-                  >
-                    {isRtl
-                      ? ret.status === 'pending_approval'
-                        ? 'معلق'
-                        : ret.status === 'approved'
-                        ? 'موافق عليه'
-                        : 'مرفوض'
-                      : ret.status.charAt(0).toUpperCase() + ret.status.slice(1)}
-                  </span>
-                </div>
-                <p className="text-sm text-gray-600 mb-2 truncate">{isRtl ? ret.branchName : ret.branchNameEn || ret.branchName}</p>
-                <p className="text-xs text-gray-500">{isRtl ? `تم الإنشاء في: ${ret.createdAt}` : `Created At: ${ret.createdAt}`}</p>
-              </motion.div>
-            ))
-          )}
-        </AnimatePresence>
-      </div>
-    </div>
-  );
-
   if (loading) return <Loader />;
   if (error) return <div className="text-center text-red-600 p-4">{error}</div>;
 
@@ -1225,58 +1010,55 @@ export const Dashboard: React.FC = () => {
         <>
           {renderStats()}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div>
-              <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mb-4">
-                <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
-                  <ShoppingCart className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
-                  {isRtl ? 'أحدث الطلبات' : 'Latest Orders'}
-                </h3>
-                <div className="space-y-3 max-h-96 overflow-y-auto">
-                  <AnimatePresence>
-                    {sortedPendingOrders.length === 0 ? (
-                      <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد طلبات' : 'No orders available'}</p>
-                    ) : (
-                      sortedPendingOrders.map((order) => (
-                        <motion.div
-                          key={order.id}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          transition={{ duration: 0.2 }}
-                          className="border border-amber-100 rounded-lg p-3 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
-                          onClick={() => navigate(`/orders/${order.id}`)}
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <h4 className="font-semibold text-sm text-gray-800 truncate">
-                              {isRtl ? `طلب رقم ${order.orderNumber}` : `Order #${order.orderNumber}`}
-                            </h4>
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                order.status === 'pending'
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : order.status === 'in_production'
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-green-100 text-green-800'
-                              }`}
-                            >
-                              {isRtl
-                                ? order.status === 'pending'
-                                  ? 'معلق'
-                                  : order.status === 'in_production'
-                                  ? 'قيد الإنتاج'
-                                  : 'مكتمل'
-                                : order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-600 mb-2 truncate">{isRtl ? order.branchName : order.branchNameEn || order.branchName}</p>
-                          <p className="text-xs text-gray-500">{isRtl ? `تم الإنشاء في: ${order.date}` : `Created At: ${order.date}`}</p>
-                        </motion.div>
-                      ))
-                    )}
-                  </AnimatePresence>
-                </div>
+            <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                <ShoppingCart className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+                {isRtl ? 'أحدث الطلبات' : 'Latest Orders'}
+              </h3>
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                <AnimatePresence>
+                  {sortedPendingOrders.length === 0 ? (
+                    <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد طلبات' : 'No orders available'}</p>
+                  ) : (
+                    sortedPendingOrders.map((order) => (
+                      <motion.div
+                        key={order.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2 }}
+                        className="border border-amber-100 rounded-lg p-3 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
+                        onClick={() => navigate(`/orders/${order.id}`)}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-semibold text-sm text-gray-800 truncate">
+                            {isRtl ? `طلب رقم ${order.orderNumber}` : `Order #${order.orderNumber}`}
+                          </h4>
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              order.status === 'pending'
+                                ? 'bg-amber-100 text-amber-800'
+                                : order.status === 'in_production'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-green-100 text-green-800'
+                            }`}
+                          >
+                            {isRtl
+                              ? order.status === 'pending'
+                                ? 'معلق'
+                                : order.status === 'in_production'
+                                ? 'قيد الإنتاج'
+                                : 'مكتمل'
+                              : order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-2 truncate">{isRtl ? order.branchName : order.branchNameEn || order.branchName}</p>
+                        <p className="text-xs text-gray-500">{isRtl ? `تم الإنشاء في: ${order.date}` : `Created At: ${order.date}`}</p>
+                      </motion.div>
+                    ))
+                  )}
+                </AnimatePresence>
               </div>
-              {['admin', 'branch', 'production'].includes(user.role) && renderLatestReturns()}
             </div>
             {['admin', 'production'].includes(user.role) && (
               <>
