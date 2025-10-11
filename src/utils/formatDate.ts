@@ -34,3 +34,11 @@ export const formatDate = (dateString: string | Date | undefined, language: stri
     return 'غير معروف';
   }
 };
+
+export const formatCurrency = (value: number, currency: string): string => {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: currency === 'ريال' ? 'SAR' : currency,
+    minimumFractionDigits: 2,
+  }).format(value);
+};
