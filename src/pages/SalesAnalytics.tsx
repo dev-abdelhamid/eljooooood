@@ -731,7 +731,12 @@ const SalesAnalytics: React.FC = () => {
               currency={t.currency}
             />
           </div>
-          <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
+          
+        </div>
+        
+      )}
+
+      <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
             <h3 className="text-sm font-medium text-gray-700 mb-3">{t.topCustomers}</h3>
             {analytics.topCustomers.length > 0 ? (
               <div className="overflow-x-auto">
@@ -758,8 +763,6 @@ const SalesAnalytics: React.FC = () => {
               <NoDataMessage message={t.noCustomers} />
             )}
           </div>
-        </div>
-      )}
     </div>
   );
 };
