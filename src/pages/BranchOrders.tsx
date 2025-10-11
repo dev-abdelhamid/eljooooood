@@ -1,4 +1,3 @@
-```tsx
 import React, { useReducer, useEffect, useMemo, useCallback, Suspense, useRef } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -84,7 +83,7 @@ const reducer = (state: State, action: Action): State => {
     case 'SET_SELECTED_ORDER':
       return { ...state, selectedOrder: action.payload };
     case 'SET_MODAL':
-      return { ...state, [`is${action.modal!.charAt(0).toUpperCase() + action.modal!.slice(1)}ModalOpen`]: action.isOpen };
+      return { ...state, [action.modal!]: action.isOpen };
     case 'SET_SEARCH_QUERY':
       return { ...state, searchQuery: action.payload, currentPage: 1 };
     case 'SET_FILTER_STATUS':
@@ -1009,4 +1008,3 @@ export const BranchOrders: React.FC = () => {
 };
 
 export default BranchOrders;
-```
