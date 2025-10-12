@@ -6,9 +6,8 @@ import { Button } from '../components/UI/Button';
 import { Upload } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
-import Skeleton from 'react-loading-skeleton';
-import 'react-loading-skeleton/dist/skeleton.css';
+import autoTable from 'jspdf-autotable';
+import { toast } from 'react-toastify';
 import { inventoryAPI, ordersAPI, branchesAPI } from '../services/api';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 
@@ -36,6 +35,240 @@ interface Branch {
   displayName: string;
 }
 
+// Convert numbers to Arabic numerals
+const toArabicNumerals = (number: string | number): string => {
+  const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  return String(number).replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
+};
+
+// Convert Arabic numerals to Latin for parsing
+const fromArabicNumerals = (str: string): string => {
+  const arabicMap: { [key: string]: string } = {
+    '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
+    '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9'
+  };
+  return str.replace(/[٠-٩]/g, (digit) => arabicMap[digit] || digit);
+};
+
+// Format price consistently
+const formatPrice = (amount: number, isRtl: boolean, isStats: boolean = false): string => {
+  const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
+  let formatted: string;
+  if (isStats) {
+    formatted = validAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    formatted = isRtl ? `${toArabicNumerals(formatted)} ر.س` : `${formatted} SAR`;
+  } else {
+    formatted = validAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
+      style: 'currency',
+      currency: 'SAR',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+    if (isRtl) {
+      formatted = formatted.replace(/\d/g, (d) => String.fromCharCode(0x0660 + parseInt(d)));
+    }
+  }
+  return formatted;
+};
+
+// Convert array buffer to base64 for font embedding
+const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+};
+
+// Load Amiri font for Arabic rendering
+const loadFont = async (doc: jsPDF): Promise<boolean> => {
+  const fontName = 'Amiri';
+  const fontUrls = {
+    regular: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Regular.ttf',
+    bold: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Bold.ttf',
+  };
+  try {
+    const regularFontBytes = await fetch(fontUrls.regular).then((res) => {
+      if (!res.ok) throw new Error('فشل تحميل الخط Amiri العادي');
+      return res.arrayBuffer();
+    });
+    doc.addFileToVFS(`${fontName}-normal.ttf`, arrayBufferToBase64(regularFontBytes));
+    doc.addFont(`${fontName}-normal.ttf`, fontName, 'normal');
+    const boldFontBytes = await fetch(fontUrls.bold).then((res) => {
+      if (!res.ok) throw new Error('فشل تحميل الخط Amiri الغامق');
+      return res.arrayBuffer();
+    });
+    doc.addFileToVFS(`${fontName}-bold.ttf`, arrayBufferToBase64(boldFontBytes));
+    doc.addFont(`${fontName}-bold.ttf`, fontName, 'bold');
+    doc.setFont(fontName, 'normal');
+    return true;
+  } catch (error) {
+    console.error('خطأ تحميل الخط:', error);
+    doc.setFont('helvetica', 'normal');
+    toast.error('فشل تحميل خط Amiri، استخدام خط افتراضي', {
+      position: 'top-right',
+      autoClose: 3000,
+    });
+    return false;
+  }
+};
+
+// Generate dynamic file name
+const generateFileName = (title: string, monthName: string, isRtl: boolean): string => {
+  const date = new Date().toISOString().split('T')[0];
+  return isRtl ? `${title}_${monthName}_${date}.pdf` : `${title}_${monthName}_${date}.pdf`;
+};
+
+// Generate PDF header
+const generatePDFHeader = (
+  doc: jsPDF,
+  isRtl: boolean,
+  title: string,
+  monthName: string,
+  totalItems: number,
+  totalQuantity: number,
+  totalPrice: number,
+  fontName: string,
+  fontLoaded: boolean
+) => {
+  doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
+  doc.setFontSize(18);
+  doc.setTextColor(33, 33, 33);
+  const pageWidth = doc.internal.pageSize.width;
+  const pageHeight = doc.internal.pageSize.height;
+  doc.text(isRtl ? title : title, isRtl ? pageWidth - 20 : 20, 12, { align: isRtl ? 'right' : 'left' });
+  doc.setFontSize(10);
+  doc.setTextColor(100, 100, 100);
+  const stats = isRtl
+    ? `إجمالي المنتجات: ${toArabicNumerals(totalItems)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${formatPrice(totalPrice, isRtl, true)}`
+    : `Total Products: ${totalItems} | Total Quantity: ${totalQuantity} units | Total Amount: ${formatPrice(totalPrice, isRtl, true)}`;
+  doc.text(stats, isRtl ? pageWidth - 20 : 20, 20, { align: isRtl ? 'right' : 'left' });
+  doc.setLineWidth(0.5);
+  doc.setDrawColor(255, 193, 7);
+  doc.line(20, 25, pageWidth - 20, 25);
+  const pageCount = doc.getNumberOfPages();
+  const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(150, 150, 150);
+    doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
+    const footerText = isRtl
+      ? `تم إنشاؤه بواسطة نظام إدارة الجودياء - ${toArabicNumerals(currentDate)}`
+      : `Generated by elgoodia Management System - ${currentDate}`;
+    doc.text(footerText, pageWidth / 2, pageHeight - 10, { align: 'center' });
+  }
+};
+
+// Generate PDF table
+const generatePDFTable = (
+  doc: jsPDF,
+  headers: string[],
+  data: any[],
+  isRtl: boolean,
+  fontLoaded: boolean,
+  fontName: string
+) => {
+  const processedHeaders = isRtl ? headers.map(header => doc.processArabic(header)) : headers;
+  const processedData = data.map(row => isRtl ? row.map((cell: string) => doc.processArabic(String(cell))) : row);
+  autoTable(doc, {
+    head: [isRtl ? processedHeaders.slice().reverse() : processedHeaders],
+    body: isRtl ? processedData.map(row => row.slice().reverse()) : processedData,
+    theme: 'grid',
+    startY: 30,
+    margin: { left: 15, right: 15 },
+    headStyles: {
+      fillColor: [255, 193, 7],
+      textColor: [33, 33, 33],
+      fontSize: 10,
+      halign: isRtl ? 'center' : 'center',
+      font: fontLoaded ? fontName : 'helvetica',
+      fontStyle: 'bold',
+      cellPadding: 4,
+      minCellHeight: 8,
+    },
+    bodyStyles: {
+      fontSize: 9,
+      halign: isRtl ? 'center' : 'center',
+      font: fontLoaded ? fontName : 'helvetica',
+      fontStyle: 'normal',
+      cellPadding: 4,
+      textColor: [33, 33, 33],
+      lineColor: [200, 200, 200],
+      fillColor: [255, 255, 255],
+      minCellHeight: 6,
+    },
+    alternateRowStyles: {
+      fillColor: [245, 245, 245],
+    },
+    columnStyles: headers.reduce((acc, _, index) => {
+      acc[index] = { cellWidth: index === 0 ? 50 : 30, fontStyle: index === headers.length - 1 ? 'bold' : 'normal' };
+      return acc;
+    }, {} as { [key: number]: any }),
+    styles: {
+      overflow: 'linebreak',
+      cellWidth: 'wrap',
+      font: fontLoaded ? fontName : 'helvetica',
+      valign: 'middle',
+    },
+    didParseCell: (data) => {
+      data.cell.styles.halign = isRtl ? 'center' : 'center';
+      if (data.column.index === (isRtl ? 0 : headers.length - 1)) {
+        if (!data.cell.text[0] || data.cell.text[0].includes('NaN')) {
+          data.cell.text[0] = formatPrice(0, isRtl);
+        }
+        data.cell.styles.fontStyle = 'bold';
+      }
+      if (isRtl) {
+        data.cell.text = data.cell.text.map(text => doc.processArabic(text));
+      }
+    },
+    didDrawPage: () => {
+      doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
+    },
+  });
+};
+
+// Main export function for PDF
+const exportToPDF = async (
+  data: any[],
+  title: string,
+  monthName: string,
+  headers: string[],
+  isRtl: boolean,
+  totalItems: number,
+  totalQuantity: number,
+  totalPrice: number
+) => {
+  try {
+    const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
+    const fontName = 'Amiri';
+    const fontLoaded = await loadFont(doc);
+    generatePDFHeader(doc, isRtl, title, monthName, totalItems, totalQuantity, totalPrice, fontName, fontLoaded);
+    generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName);
+    const fileName = generateFileName(title, monthName, isRtl);
+    doc.save(fileName);
+    toast.success(isRtl ? 'تم تصدير ملف PDF بنجاح' : 'PDF exported successfully', {
+      position: isRtl ? 'top-left' : 'top-right',
+      autoClose: 3000,
+    });
+  } catch (error) {
+    console.error('Error exporting PDF:', error);
+    toast.error(isRtl ? 'فشل في تصدير ملف PDF' : 'Failed to export PDF', {
+      position: isRtl ? 'top-left' : 'top-right',
+      autoClose: 3000,
+    });
+  }
+};
+
 const ProductionReport: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
@@ -45,21 +278,20 @@ const ProductionReport: React.FC = () => {
   const [stockInData, setStockInData] = useState<{ [month: number]: StockRow[] }>({});
   const [stockOutData, setStockOutData] = useState<{ [month: number]: StockRow[] }>({});
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [selectedMonth, setSelectedMonth] = useState(8); // September 2025 (0-based index)
+  const [selectedMonth, setSelectedMonth] = useState(8); // September 2025
   const [activeTab, setActiveTab] = useState<'orders' | 'stockIn' | 'stockOut'>('orders');
-  const currentDate = new Date('2025-10-12T11:19:00+03:00');
+  const currentDate = new Date('2025-10-12T21:37:00+03:00');
   const currentYear = currentDate.getFullYear();
   const months = Array.from({ length: 12 }, (_, i) => ({
     value: i,
     label: new Date(currentYear, i).toLocaleString(language, { month: 'long' }),
   }));
 
-  // Calculate actual days for the selected month with improved formatting
   const getDaysInMonth = useCallback((month: number) => {
     const daysInMonthCount = new Date(currentYear, month + 1, 0).getDate();
     return Array.from({ length: daysInMonthCount }, (_, i) => {
       const date = new Date(currentYear, month, i + 1);
-      return date.toLocaleString(language, { day: 'numeric', month: 'short' }); // Shorter format for better table fit
+      return date.toLocaleString(language, { day: 'numeric', month: 'short' });
     });
   }, [currentYear, language]);
 
@@ -79,7 +311,6 @@ const ProductionReport: React.FC = () => {
         const monthlyStockInData: { [month: number]: StockRow[] } = {};
         const monthlyStockOutData: { [month: number]: StockRow[] } = {};
 
-        // Set branches
         const fetchedBranches = branchesResponse
           .filter((branch: any) => branch && branch._id)
           .map((branch: any) => ({
@@ -91,7 +322,6 @@ const ProductionReport: React.FC = () => {
           .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language));
         setBranches(fetchedBranches);
 
-        // Handle empty orders, fallback to inventory movements
         let orders = Array.isArray(ordersResponse) ? ordersResponse : [];
         if (orders.length === 0) {
           orders = inventory.flatMap((item: any) => {
@@ -114,7 +344,6 @@ const ProductionReport: React.FC = () => {
           const stockInMap = new Map<string, StockRow>();
           const stockOutMap = new Map<string, StockRow>();
 
-          // Process orders
           orders.forEach((order: any) => {
             const status = order.status || order.orderStatus;
             if (status !== 'completed') return;
@@ -146,7 +375,6 @@ const ProductionReport: React.FC = () => {
             }
           });
 
-          // Process inventory movements
           if (Array.isArray(inventory)) {
             inventory.forEach((item: any) => {
               const product = item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
@@ -196,6 +424,10 @@ const ProductionReport: React.FC = () => {
         setStockOutData(monthlyStockOutData);
       } catch (error) {
         console.error('Failed to fetch data:', error);
+        toast.error(isRtl ? 'فشل في جلب البيانات' : 'Failed to fetch data', {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 3000,
+        });
       } finally {
         setLoading(false);
       }
@@ -215,9 +447,9 @@ const ProductionReport: React.FC = () => {
       }, {} as { [branch: string]: number });
       const grandTotalQuantity = data.reduce((sum, row) => sum + row.totalQuantity, 0);
       const grandTotalPrice = data.reduce((sum, row) => sum + row.totalPrice, 0);
+      const monthName = months[month].label;
 
       const exportTable = (format: 'excel' | 'pdf') => {
-        const monthName = new Date(currentYear, month, 1).toLocaleString(language, { month: 'long' });
         const headers = [
           isRtl ? 'المنتج' : 'Product',
           ...allBranches,
@@ -229,15 +461,22 @@ const ProductionReport: React.FC = () => {
             product: row.product,
             ...Object.fromEntries(allBranches.map(branch => [branch, row.branchQuantities[branch] || 0])),
             totalQuantity: row.totalQuantity,
-            totalPrice: row.totalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' }),
+            totalPrice: formatPrice(row.totalPrice, isRtl),
           })),
           {
             product: isRtl ? 'الإجمالي' : 'Total',
             ...Object.fromEntries(allBranches.map(branch => [branch, totalQuantities[branch] || 0])),
             totalQuantity: grandTotalQuantity,
-            totalPrice: grandTotalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' }),
+            totalPrice: formatPrice(grandTotalPrice, isRtl),
           },
         ];
+        const dataRows = rows.map(row => [
+          row.product,
+          ...allBranches.map(branch => row[branch]),
+          row.totalQuantity,
+          row.totalPrice,
+        ]);
+
         if (format === 'excel') {
           const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
           if (isRtl) ws['!views'] = [{ RTL: true }];
@@ -245,22 +484,12 @@ const ProductionReport: React.FC = () => {
           const wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
-        } else if (format === 'pdf') {
-          const doc = new jsPDF();
-          doc.autoTable({
-            head: [headers],
-            body: rows.map(row => [
-              row.product,
-              ...allBranches.map(branch => row[branch]),
-              row.totalQuantity,
-              row.totalPrice,
-            ]),
-            styles: { font: isRtl ? 'Amiri' : 'Helvetica', halign: isRtl ? 'right' : 'left', fontSize: 10 },
-            headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontSize: 10 },
-            bodyStyles: { fontSize: 9 },
-            footStyles: { fillColor: [240, 240, 240], fontSize: 10, fontStyle: 'bold' },
+          toast.success(isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully', {
+            position: isRtl ? 'top-left' : 'top-right',
+            autoClose: 3000,
           });
-          doc.save(`${title}_${monthName}.pdf`);
+        } else if (format === 'pdf') {
+          exportToPDF(dataRows, title, monthName, headers, isRtl, data.length, grandTotalQuantity, grandTotalPrice);
         }
       };
 
@@ -282,7 +511,7 @@ const ProductionReport: React.FC = () => {
       return (
         <div className="mb-8">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${months[month].label}` : `${title} - ${months[month].label}`}</h2>
+            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
             <div className="flex gap-2">
               <Button
                 variant={data.length > 0 ? 'primary' : 'secondary'}
@@ -348,7 +577,7 @@ const ProductionReport: React.FC = () => {
                     ))}
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{row.totalQuantity}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">
-                      {row.totalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
+                      {formatPrice(row.totalPrice, isRtl)}
                     </td>
                   </tr>
                 ))}
@@ -361,7 +590,7 @@ const ProductionReport: React.FC = () => {
                   ))}
                   <td className="px-4 py-3 text-gray-800 text-center">{grandTotalQuantity}</td>
                   <td className="px-4 py-3 text-gray-800 text-center">
-                    {grandTotalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
+                    {formatPrice(grandTotalPrice, isRtl)}
                   </td>
                 </tr>
               </tbody>
@@ -370,16 +599,16 @@ const ProductionReport: React.FC = () => {
         </div>
       );
     },
-    [loading, isRtl, allBranches, months, currentYear, language]
+    [loading, isRtl, allBranches, months, formatPrice]
   );
 
   const renderStockTable = useCallback(
     (data: StockRow[], title: string, month: number, isIn: boolean) => {
       const grandTotalQuantity = data.reduce((sum, row) => sum + row.totalQuantity, 0);
       const grandTotalPrice = data.reduce((sum, row) => sum + row.totalPrice, 0);
+      const monthName = months[month].label;
 
       const exportTable = (format: 'excel' | 'pdf') => {
-        const monthName = new Date(currentYear, month, 1).toLocaleString(language, { month: 'long' });
         const headers = [
           isRtl ? 'رقم' : 'No.',
           isRtl ? 'المنتج' : 'Product',
@@ -393,16 +622,24 @@ const ProductionReport: React.FC = () => {
             product: row.product,
             ...Object.fromEntries(row.dailyQuantities.map((qty, i) => [daysInMonth[i], qty])),
             totalQuantity: row.totalQuantity,
-            totalPrice: row.totalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' }),
+            totalPrice: formatPrice(row.totalPrice, isRtl),
           })),
           {
             no: '',
             product: isRtl ? 'الإجمالي' : 'Total',
             ...Object.fromEntries(daysInMonth.map((_, i) => [daysInMonth[i], data.reduce((sum, row) => sum + row.dailyQuantities[i], 0)])),
             totalQuantity: grandTotalQuantity,
-            totalPrice: grandTotalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' }),
+            totalPrice: formatPrice(grandTotalPrice, isRtl),
           },
         ];
+        const dataRows = rows.map(row => [
+          row.no,
+          row.product,
+          ...daysInMonth.map(day => row[day]),
+          row.totalQuantity,
+          row.totalPrice,
+        ]);
+
         if (format === 'excel') {
           const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
           if (isRtl) ws['!views'] = [{ RTL: true }];
@@ -410,23 +647,12 @@ const ProductionReport: React.FC = () => {
           const wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
-        } else if (format === 'pdf') {
-          const doc = new jsPDF();
-          doc.autoTable({
-            head: [headers],
-            body: rows.map(row => [
-              row.no,
-              row.product,
-              ...daysInMonth.map(day => row[day]),
-              row.totalQuantity,
-              row.totalPrice,
-            ]),
-            styles: { font: isRtl ? 'Amiri' : 'Helvetica', halign: isRtl ? 'right' : 'left', fontSize: 10 },
-            headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontSize: 10 },
-            bodyStyles: { fontSize: 9 },
-            footStyles: { fillColor: [240, 240, 240], fontSize: 10, fontStyle: 'bold' },
+          toast.success(isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully', {
+            position: isRtl ? 'top-left' : 'top-right',
+            autoClose: 3000,
           });
-          doc.save(`${title}_${monthName}.pdf`);
+        } else if (format === 'pdf') {
+          exportToPDF(dataRows, title, monthName, headers, isRtl, data.length, grandTotalQuantity, grandTotalPrice);
         }
       };
 
@@ -448,7 +674,7 @@ const ProductionReport: React.FC = () => {
       return (
         <div className="mb-8">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${months[month].label}` : `${title} - ${months[month].label}`}</h2>
+            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
             <div className="flex gap-2">
               <Button
                 variant={data.length > 0 ? 'primary' : 'secondary'}
@@ -514,7 +740,7 @@ const ProductionReport: React.FC = () => {
                     ))}
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{row.totalQuantity}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">
-                      {row.totalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
+                      {formatPrice(row.totalPrice, isRtl)}
                     </td>
                   </tr>
                 ))}
@@ -527,7 +753,7 @@ const ProductionReport: React.FC = () => {
                   ))}
                   <td className="px-4 py-3 text-gray-800 text-center">{grandTotalQuantity}</td>
                   <td className="px-4 py-3 text-gray-800 text-center">
-                    {grandTotalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
+                    {formatPrice(grandTotalPrice, isRtl)}
                   </td>
                 </tr>
               </tbody>
@@ -536,7 +762,7 @@ const ProductionReport: React.FC = () => {
         </div>
       );
     },
-    [loading, isRtl, daysInMonth, months, currentYear, language]
+    [loading, isRtl, daysInMonth, months, formatPrice]
   );
 
   return (
