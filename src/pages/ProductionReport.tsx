@@ -9,7 +9,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
-import { ordersAPI, productionAssignmentsAPI, inventoryAPI } from '../services/api';
+import { inventoryAPI } from '../services/api'; // استيراد API المناسب
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 
 const ProductionReport = () => {
@@ -19,44 +19,72 @@ const ProductionReport = () => {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState([]);
   const [activeTab, setActiveTab] = useState('products');
-  const currentDate = new Date('2025-10-12T08:33:00+03:00'); // 08:33 AM EEST, October 12, 2025
+  const currentDate = new Date('2025-10-12T08:57:00+03:00'); // 08:57 AM EEST, October 12, 2025
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const orders = await ordersAPI.getAll({ status: 'completed', page: 1, limit: 100 });
-        const tasks = await productionAssignmentsAPI.getAllTasks();
-        const inventory = await inventoryAPI.getInventory();
+        const inventory = await inventoryAPI.getInventory(); // جلب بيانات المخزون
 
-        console.log('Orders:', orders);
-        console.log('Tasks:', tasks);
         console.log('Inventory:', inventory);
 
         const productionMap = new Map();
-        orders.forEach(order => {
-          order.items.forEach(item => {
-            const task = tasks.find(t => t.itemId === item._id && t.status === 'completed');
-            if (task) {
-              const date = new Date(order.date);
-              const day = date.getDate();
-              if (date.getMonth() === currentDate.getMonth() && date.getFullYear() === currentDate.getFullYear() && day <= currentDate.getDate()) {
-                if (!productionMap.has(item.product)) {
-                  productionMap.set(item.product, Array(31).fill(0));
-                }
-                productionMap.get(item.product)[day - 1] += item.quantity;
+        const branchOrdersMap = new Map(); // لتتبع الطلبات اليومية لكل فرع
+
+        inventory.forEach(item => {
+          item.movements.forEach(movement => {
+            const date = new Date(movement.createdAt);
+            const day = date.getDate();
+            if (date.getMonth() === currentDate.getMonth() && date.getFullYear() === currentDate.getFullYear() && day === currentDate.getDate()) {
+              const product = item.productName;
+              const branch = movement.branch?.displayName || 'الفرع الرئيسي'; // فرع افتراضي إذا لم يكن موجودًا
+
+              // إعداد الإنتاج اليومي
+              if (!productionMap.has(product)) {
+                productionMap.set(product, 0);
+              }
+              if (movement.type === 'out') { // المبيعات كمؤشر للإنتاج
+                productionMap.set(product, productionMap.get(product) + Math.abs(movement.quantity));
+              } else if (movement.type === 'in') { // التسليمات كإضافة
+                productionMap.set(product, productionMap.get(product) + Math.abs(movement.quantity));
+              }
+
+              // إعداد الطلبات اليومية للفروع
+              if (!branchOrdersMap.has(branch)) {
+                branchOrdersMap.set(branch, new Map());
+              }
+              if (!branchOrdersMap.get(branch).has(product)) {
+                branchOrdersMap.get(branch).set(product, 0);
+              }
+              if (movement.type === 'out') {
+                branchOrdersMap.get(branch).set(product, branchOrdersMap.get(branch).get(product) + Math.abs(movement.quantity));
               }
             }
           });
         });
 
-        const processedData = Array.from(productionMap.entries()).map(([product, quantities]) => ({
+        // تحويل الإنتاج اليومي إلى تنسيق البيانات
+        const productionData = Array.from(productionMap.entries()).map(([product, total]) => ({
           product,
-          quantities,
-          total: quantities.reduce((sum, qty) => sum + qty, 0),
+          total,
+          dailyQuantities: Array(31).fill(0).map((_, i) => i + 1 === day ? total : 0), // فقط اليوم الحالي
         }));
-        console.log('Processed Data:', processedData);
-        setData(processedData);
+
+        // تحويل طلبات الفروع إلى تنسيق البيانات
+        const branchData = Array.from(branchOrdersMap.entries()).flatMap(([branch, productMap]) =>
+          Array.from(productMap.entries()).map(([product, total]) => ({
+            branch,
+            product,
+            total,
+            dailyQuantities: Array(31).fill(0).map((_, i) => i + 1 === day ? total : 0),
+          }))
+        );
+
+        console.log('Production Data:', productionData);
+        console.log('Branch Data:', branchData);
+
+        setData(activeTab === 'products' ? productionData : branchData);
       } catch (error) {
         console.error('Failed to fetch production data:', error);
       } finally {
@@ -64,21 +92,21 @@ const ProductionReport = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [activeTab]);
 
   const rows = useMemo(() => {
     return data.map((item, index) => ({
-      id: `prod-${index + 1}`,
-      orderNumber: `PROD-${index + 1}`,
-      branch: { displayName: 'الإنتاج الرئيسي' },
+      id: `${activeTab}-${index + 1}`,
+      orderNumber: `${activeTab.toUpperCase()}-${index + 1}`,
+      branch: { displayName: item.branch || 'الإنتاج الرئيسي' },
       status: 'مكتمل',
       products: item.product,
       totalAmount: item.total.toString(),
       totalQuantity: item.total,
       date: currentDate.toISOString().split('T')[0],
-      dailyQuantities: item.quantities,
+      dailyQuantities: item.dailyQuantities,
     }));
-  }, [data]);
+  }, [data, activeTab]);
 
   const exportTable = useCallback((rows, fileName, format) => {
     if (format === 'excel') {
