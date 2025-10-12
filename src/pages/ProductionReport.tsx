@@ -6,12 +6,12 @@ import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
 import { Select } from '../components/UI/Select';
 import { Input } from '../components/UI/Input';
-import { ShoppingCart, AlertCircle, Search, Table2, Grid, Download, ChefHat } from 'lucide-react';
+import { ShoppingCart, AlertCircle, Search, Table2, Grid, Download, ChefHat, Calendar } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
 import { ordersAPI, chefsAPI, branchesAPI } from '../services/api';
-import { formatDate } from '../utils/formatDate';
+import { formatDate, getMonthName, getWeekRange } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { Order, Chef, Branch, AssignChefsForm, OrderStatus } from '../types/types';
 import { exportToPDF } from '../components/Shared/PDFExporter';
@@ -52,6 +52,10 @@ interface State {
   socketConnected: boolean;
   socketError: string | null;
   viewMode: 'card' | 'table';
+  filterMonth: string;
+  filterPeriod: 'week' | 'month' | 'custom';
+  customStartDate: string;
+  customEndDate: string;
 }
 
 interface Action {
@@ -85,6 +89,10 @@ const initialState: State = {
   socketConnected: false,
   socketError: null,
   viewMode: 'card',
+  filterMonth: '',
+  filterPeriod: 'month',
+  customStartDate: '',
+  customEndDate: '',
 };
 
 const reducer = (state: State, action: Action): State => {
@@ -218,6 +226,10 @@ const reducer = (state: State, action: Action): State => {
         : state.selectedOrder,
     };
     case 'SET_VIEW_MODE': return { ...state, viewMode: action.payload, currentPage: 1 };
+    case 'SET_FILTER_MONTH': return { ...state, filterMonth: action.payload, currentPage: 1 };
+    case 'SET_FILTER_PERIOD': return { ...state, filterPeriod: action.payload, currentPage: 1 };
+    case 'SET_CUSTOM_START_DATE': return { ...state, customStartDate: action.payload, currentPage: 1 };
+    case 'SET_CUSTOM_END_DATE': return { ...state, customEndDate: action.payload, currentPage: 1 };
     default: return state;
   }
 };
@@ -247,6 +259,18 @@ const sortOptions = [
   { value: 'totalAmount', label: 'sort_total_amount' },
   { value: 'priority', label: 'sort_priority' },
 ];
+const monthOptions = [
+  { value: '', label: 'all_months' },
+  ...Array.from({ length: 12 }, (_, i) => ({
+    value: (i + 1).toString().padStart(2, '0'),
+    label: getMonthName(i + 1, language),
+  })),
+];
+const periodOptions = [
+  { value: 'week', label: 'this_week' },
+  { value: 'month', label: 'this_month' },
+  { value: 'custom', label: 'custom_range' },
+];
 
 const translateUnit = (unit: string, isRtl: boolean) => {
   const translations: Record<string, { ar: string; en: string }> = {
@@ -268,7 +292,8 @@ const exportToExcel = (
   calculateAdjustedTotal: (order: Order) => string,
   calculateTotalQuantity: (order: Order) => number,
   translateUnit: (unit: string, isRtl: boolean) => string,
-  chefAssignments: Record<string, { chef: string; tasks: number }[]>
+  chefAssignments: Record<string, { chef: string; tasks: number }[]>,
+  branchDistribution: Record<string, number>
 ) => {
   const headers = [
     isRtl ? 'رقم الطلب' : 'Order Number',
@@ -279,6 +304,7 @@ const exportToExcel = (
     isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
     isRtl ? 'التاريخ' : 'Date',
     isRtl ? 'توزيع الشيفات' : 'Chef Assignments',
+    ...state.branches.map(b => isRtl ? b.name : b.nameEn || b.name),
   ];
   const data = orders.map(order => {
     const productsStr = order.items.map(i => `${i.displayProductName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ');
@@ -286,6 +312,7 @@ const exportToExcel = (
     const totalQuantity = `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`;
     const statusLabel = isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status;
     const assignments = chefAssignments[order.id]?.map(a => `${a.chef}: ${a.tasks} ${isRtl ? 'مهام' : 'tasks'}`).join(', ') || (isRtl ? 'لا يوجد' : 'None');
+    const branchCounts = state.branches.map(b => (branchDistribution[b._id] || 0).toString());
     return {
       [headers[0]]: order.orderNumber,
       [headers[1]]: order.branch.displayName,
@@ -295,11 +322,12 @@ const exportToExcel = (
       [headers[5]]: totalQuantity,
       [headers[6]]: order.date,
       [headers[7]]: assignments,
+      ...branchCounts.reduce((acc, count, i) => ({ ...acc, [headers[8 + i]]: count }), {}),
     };
   });
   const ws = XLSX.utils.json_to_sheet(isRtl ? data.map(row => Object.fromEntries(Object.entries(row).reverse())) : data, { header: headers });
   if (isRtl) ws['!views'] = [{ RTL: true }];
-  ws['!cols'] = [{ wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 50 }, { wch: 20 }, { wch: 15 }, { wch: 20 }, { wch: 30 }];
+  ws['!cols'] = [{ wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 50 }, { wch: 20 }, { wch: 15 }, { wch: 20 }, { wch: 30 }, ...Array(state.branches.length).fill({ wch: 10 })];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, isRtl ? 'الطلبات' : 'Orders');
   XLSX.writeFile(wb, 'ProductionReport.xlsx');
@@ -357,6 +385,29 @@ export const ProductionReport: React.FC = () => {
     });
     return assignments;
   }, [state.orders]);
+
+  const branchDistribution = useMemo(() => {
+    const distribution: Record<string, number> = {};
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    const currentYear = now.getFullYear();
+    const [weekStart, weekEnd] = getWeekRange(now);
+
+    state.orders.forEach(order => {
+      const orderDate = new Date(order.date);
+      const isInMonth = state.filterMonth ? parseInt(state.filterMonth) === orderDate.getMonth() + 1 && orderDate.getFullYear() === currentYear : true;
+      const isInWeek = state.filterPeriod === 'week' && orderDate >= weekStart && orderDate <= weekEnd;
+      const isInMonthPeriod = state.filterPeriod === 'month' && orderDate.getMonth() + 1 === currentMonth && orderDate.getFullYear() === currentYear;
+      const isInCustom = state.filterPeriod === 'custom' && state.customStartDate && state.customEndDate
+        ? orderDate >= new Date(state.customStartDate) && orderDate <= new Date(state.customEndDate)
+        : true;
+
+      if ((isInMonth || !state.filterMonth) && (isInWeek || isInMonthPeriod || isInCustom)) {
+        distribution[order.branchId] = (distribution[order.branchId] || 0) + 1;
+      }
+    });
+    return distribution;
+  }, [state.orders, state.filterMonth, state.filterPeriod, state.customStartDate, state.customEndDate]);
 
   const branchAnalysis = useMemo(() => {
     const analysis: Record<string, { totalOrders: number; totalQuantity: number; totalAmount: number; statusBreakdown: Record<string, number> }> = {};
@@ -544,6 +595,10 @@ export const ProductionReport: React.FC = () => {
   const filteredOrders = useMemo(
     () => {
       const normalizedQuery = normalizeText(state.searchQuery);
+      const now = new Date();
+      const currentMonth = now.getMonth() + 1;
+      const currentYear = now.getFullYear();
+      const [weekStart, weekEnd] = getWeekRange(now);
       return state.orders
         .filter(order => order)
         .filter(
@@ -557,15 +612,24 @@ export const ProductionReport: React.FC = () => {
             )
         )
         .filter(
-          order =>
-            (!state.filterStatus || order.status === state.filterStatus) &&
-            (!state.filterBranch || order.branchId === state.filterBranch) &&
-            (user?.role === 'production' && user?.department
-              ? order.items.some(item => item.department._id === user.department._id)
-              : true)
+          order => {
+            const orderDate = new Date(order.date);
+            const isInMonth = state.filterMonth ? parseInt(state.filterMonth) === orderDate.getMonth() + 1 && orderDate.getFullYear() === currentYear : true;
+            const isInWeek = state.filterPeriod === 'week' && orderDate >= weekStart && orderDate <= weekEnd;
+            const isInMonthPeriod = state.filterPeriod === 'month' && orderDate.getMonth() + 1 === currentMonth && orderDate.getFullYear() === currentYear;
+            const isInCustom = state.filterPeriod === 'custom' && state.customStartDate && state.customEndDate
+              ? orderDate >= new Date(state.customStartDate) && orderDate <= new Date(state.customEndDate)
+              : true;
+            return (isInMonth || !state.filterMonth) && (isInWeek || isInMonthPeriod || isInCustom) &&
+              (!state.filterStatus || order.status === state.filterStatus) &&
+              (!state.filterBranch || order.branchId === state.filterBranch) &&
+              (user?.role === 'production' && user?.department
+                ? order.items.some(item => item.department._id === user.department._id)
+                : true);
+          }
         );
     },
-    [state.orders, state.searchQuery, state.filterStatus, state.filterBranch, user]
+    [state.orders, state.searchQuery, state.filterStatus, state.filterBranch, state.filterMonth, state.filterPeriod, state.customStartDate, state.customEndDate, user]
   );
 
   const sortedOrders = useMemo(() => {
@@ -927,7 +991,7 @@ export const ProductionReport: React.FC = () => {
             <div className="flex gap-2 flex-wrap justify-center sm:justify-end w-full sm:w-auto">
               <Button
                 variant={state.orders.length > 0 ? 'primary' : 'secondary'}
-                onClick={state.orders.length > 0 ? () => exportToExcel(filteredOrders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, chefAssignments) : undefined}
+                onClick={state.orders.length > 0 ? () => exportToExcel(filteredOrders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, chefAssignments, branchDistribution) : undefined}
                 className={`flex items-center gap-1 ${state.orders.length > 0 ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'} rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300`}
                 disabled={state.orders.length === 0}
               >
@@ -946,7 +1010,7 @@ export const ProductionReport: React.FC = () => {
             </div>
           </div>
           <Card className="p-3 mt-6 bg-white shadow-md rounded-xl border border-gray-200">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
                 <div className="relative">
@@ -983,6 +1047,52 @@ export const ProductionReport: React.FC = () => {
                 />
               </div>
               <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'الشهر' : 'Month'}</label>
+                <Select
+                  options={monthOptions.map(opt => ({
+                    value: opt.value,
+                    label: isRtl ? opt.label : getMonthName(parseInt(opt.value) || 0, 'en'),
+                  }))}
+                  value={state.filterMonth}
+                  onChange={(value) => dispatch({ type: 'SET_FILTER_MONTH', payload: value })}
+                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'الفترة' : 'Period'}</label>
+                <Select
+                  options={periodOptions.map(opt => ({
+                    value: opt.value,
+                    label: isRtl ? { week: 'هذا الأسبوع', month: 'هذا الشهر', custom: 'نطاق مخصص' }[opt.value] : opt.label,
+                  }))}
+                  value={state.filterPeriod}
+                  onChange={(value) => dispatch({ type: 'SET_FILTER_PERIOD', payload: value })}
+                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
+                />
+              </div>
+              {state.filterPeriod === 'custom' && (
+                <>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تاريخ البداية' : 'Start Date'}</label>
+                    <Input
+                      type="date"
+                      value={state.customStartDate}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => dispatch({ type: 'SET_CUSTOM_START_DATE', payload: e.target.value })}
+                      className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تاريخ النهاية' : 'End Date'}</label>
+                    <Input
+                      type="date"
+                      value={state.customEndDate}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => dispatch({ type: 'SET_CUSTOM_END_DATE', payload: e.target.value })}
+                      className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
+                    />
+                  </div>
+                </>
+              )}
+              <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
                 <Select
                   options={sortOptions.map(opt => ({
@@ -1007,6 +1117,45 @@ export const ProductionReport: React.FC = () => {
                 {state.viewMode === 'card' ? <Table2 className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
                 {state.viewMode === 'card' ? (isRtl ? 'عرض كجدول' : 'View as Table') : (isRtl ? 'عرض كبطاقات' : 'View as Cards')}
               </Button>
+            </div>
+          </Card>
+          <Card className="p-3 mt-6 bg-white shadow-md rounded-xl border border-gray-200">
+            <h2 className="text-base font-semibold text-gray-800 mb-3">{isRtl ? 'توزيع الطلبات حسب الفرع' : 'Order Distribution by Branch'}</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border-collapse">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border border-gray-300 p-2 text-left font-medium">{isRtl ? 'الفرع' : 'Branch'}</th>
+                    {state.branches.map(branch => (
+                      <th key={branch._id} className="border border-gray-300 p-2 text-center font-medium" style={{ minWidth: '100px' }}>
+                        {branch.displayName}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-gray-300 p-2 font-medium">{isRtl ? 'عدد الطلبات' : 'Order Count'}</td>
+                    {state.branches.map((branch, index) => {
+                      const prevCount = index > 0 ? (branchDistribution[state.branches[index - 1]._id] || 0) : 0;
+                      const currentCount = branchDistribution[branch._id] || 0;
+                      const change = currentCount - prevCount;
+                      const color = change > 0 ? 'text-green-600' : change < 0 ? 'text-red-600' : '';
+                      const bgColor = change > 0 ? 'bg-green-100' : change < 0 ? 'bg-red-100' : 'bg-gray-100';
+                      return (
+                        <td key={branch._id} className={`border border-gray-300 p-2 text-center ${bgColor}`}>
+                          <span className={color}>{currentCount}</span>
+                          {change !== 0 && (
+                            <span className={`ml-1 text-xs ${change > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              ({change > 0 ? '+' : ''}{change})
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </Card>
           <Card className="p-3 mt-6 bg-white shadow-md rounded-xl border border-gray-200">
