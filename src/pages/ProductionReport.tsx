@@ -17,31 +17,37 @@ const ProductionReport: React.FC = () => {
   const { data: branches } = useQuery({
     queryKey: ['branches'],
     queryFn: branchesAPI.getAll,
+    enabled: !!user,
   });
 
   const { data: products } = useQuery({
     queryKey: ['products'],
     queryFn: productsAPI.getAll,
+    enabled: !!user,
   });
 
   const { data: orders } = useQuery({
     queryKey: ['orders', 'production-report'],
     queryFn: () => ordersAPI.getAll({}),
+    enabled: !!user,
   });
 
   const { data: sales } = useQuery({
     queryKey: ['sales', 'production-report'],
     queryFn: () => salesAPI.getAll({}),
+    enabled: ['admin', 'branch', 'production'].includes(user.role),
   });
 
   const { data: returns } = useQuery({
     queryKey: ['returns', 'production-report'],
     queryFn: () => returnsAPI.getAll({}),
+    enabled: ['admin', 'branch', 'production'].includes(user.role),
   });
 
   const { data: production } = useQuery({
     queryKey: ['production', 'production-report'],
     queryFn: productionAssignmentsAPI.getAllTasks,
+    enabled: !!user,
   });
 
   const sortedBranches = useMemo(() => {
@@ -64,27 +70,29 @@ const ProductionReport: React.FC = () => {
     return isRtl ? headers.reverse() : headers;
   }, [sortedBranches, isRtl]);
 
-  const aggregateData = (items, key) => {
+  const aggregateData = useCallback((items, key) => {
     const productMap = new Map();
-    items.forEach((entry) => {
-      entry[key].forEach((item) => {
-        if (!productMap.has(item.product._id || item.productId)) {
-          productMap.set(item.product._id || item.productId, new Map());
+    (items || []).forEach((entry) => {
+      (entry[key] || []).forEach((item) => {
+        const productId = item.product?._id || item.productId;
+        if (!productId) return;
+        if (!productMap.has(productId)) {
+          productMap.set(productId, new Map());
         }
-        const branchMap = productMap.get(item.product._id || item.productId);
-        const branchId = entry.branch._id || entry.branchId;
+        const branchMap = productMap.get(productId);
+        const branchId = entry.branch?._id || entry.branchId;
         const current = branchMap.get(branchId) || 0;
-        branchMap.set(branchId, current + item.quantity);
+        branchMap.set(branchId, current + (item.quantity || 0));
       });
     });
     return productMap;
-  };
+  }, []);
 
-  const generateRows = (aggregated, products) => {
-    return products?.map((product) => {
+  const generateRows = useCallback((aggregated, products) => {
+    return (products?.products || []).map((product) => {
       const branchQuantities = aggregated.get(product._id) || new Map();
       const total = Array.from(branchQuantities.values()).reduce((sum, q) => sum + q, 0);
-      const sale = total; // Assuming sale is the same as total for simplicity; adjust if needed
+      const sale = total; // Adjust logic for 'sale' if different from total
       return {
         unit: isRtl ? product.unit : product.unitEn || product.unit,
         total,
@@ -94,18 +102,18 @@ const ProductionReport: React.FC = () => {
         price: product.price,
         name: isRtl ? product.name : product.nameEn || product.name,
       };
-    }) || [];
-  };
+    });
+  }, [sortedBranches, isRtl]);
 
-  const ordersAggregated = useMemo(() => aggregateData(orders || [], 'items'), [orders]);
-  const salesAggregated = useMemo(() => aggregateData(sales?.sales || [], 'items'), [sales]);
-  const returnsAggregated = useMemo(() => aggregateData(returns?.returns || [], 'items'), [returns]);
-  const productionAggregated = useMemo(() => aggregateData(production || [], 'items'), [production]);
+  const ordersAggregated = useMemo(() => aggregateData(orders, 'items'), [orders, aggregateData]);
+  const salesAggregated = useMemo(() => aggregateData(sales?.sales, 'items'), [sales, aggregateData]);
+  const returnsAggregated = useMemo(() => aggregateData(returns?.returns, 'items'), [returns, aggregateData]);
+  const productionAggregated = useMemo(() => aggregateData(production, 'items'), [production, aggregateData]);
 
-  const ordersRows = useMemo(() => generateRows(ordersAggregated, products?.products), [ordersAggregated, products]);
-  const salesRows = useMemo(() => generateRows(salesAggregated, products?.products), [salesAggregated, products]);
-  const returnsRows = useMemo(() => generateRows(returnsAggregated, products?.products), [returnsAggregated, products]);
-  const productionRows = useMemo(() => generateRows(productionAggregated, products?.products), [productionAggregated, products]);
+  const ordersRows = useMemo(() => generateRows(ordersAggregated, products), [ordersAggregated, products, generateRows]);
+  const salesRows = useMemo(() => generateRows(salesAggregated, products), [salesAggregated, products, generateRows]);
+  const returnsRows = useMemo(() => generateRows(returnsAggregated, products), [returnsAggregated, products, generateRows]);
+  const productionRows = useMemo(() => generateRows(productionAggregated, products), [productionAggregated, products, generateRows]);
 
   const exportTable = (rows, headers, fileName, format) => {
     if (format === 'excel') {
@@ -176,21 +184,21 @@ const ProductionReport: React.FC = () => {
       <h1 className="text-xl md:text-2xl font-bold text-gray-800 mb-4">
         {isRtl ? 'تقرير الإنتاج' : 'Production Report'}
       </h1>
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap gap-2">
         <button
-          className={`px-4 py-2 mr-2 ${activeSection === 'orders' ? 'bg-blue-500 text-white' : 'bg-gray-200'} rounded`}
+          className={`px-4 py-2 ${activeSection === 'orders' ? 'bg-blue-500 text-white' : 'bg-gray-200'} rounded`}
           onClick={() => setActiveSection('orders')}
         >
           {isRtl ? 'الطلبات' : 'Orders'}
         </button>
         <button
-          className={`px-4 py-2 mr-2 ${activeSection === 'sales' ? 'bg-blue-500 text-white' : 'bg-gray-200'} rounded`}
+          className={`px-4 py-2 ${activeSection === 'sales' ? 'bg-blue-500 text-white' : 'bg-gray-200'} rounded`}
           onClick={() => setActiveSection('sales')}
         >
           {isRtl ? 'المبيعات' : 'Sales'}
         </button>
         <button
-          className={`px-4 py-2 mr-2 ${activeSection === 'returns' ? 'bg-blue-500 text-white' : 'bg-gray-200'} rounded`}
+          className={`px-4 py-2 ${activeSection === 'returns' ? 'bg-blue-500 text-white' : 'bg-gray-200'} rounded`}
           onClick={() => setActiveSection('returns')}
         >
           {isRtl ? 'المرتجعات' : 'Returns'}
@@ -203,16 +211,16 @@ const ProductionReport: React.FC = () => {
         </button>
       </div>
       {activeSection === 'orders' && (
-        <RenderTable rows={ordersRows} headers={tableHeaders} title={isRtl ? 'الطلبات' : 'Orders'} fileName="orders_report" />
+        <RenderTable rows={ordersRows} headers={tableHeaders} title={isRtl ? 'الطلبات' : 'Orders'} fileName="orders" />
       )}
       {activeSection === 'sales' && (
-        <RenderTable rows={salesRows} headers={tableHeaders} title={isRtl ? 'المبيعات' : 'Sales'} fileName="sales_report" />
+        <RenderTable rows={salesRows} headers={tableHeaders} title={isRtl ? 'المبيعات' : 'Sales'} fileName="sales" />
       )}
       {activeSection === 'returns' && (
-        <RenderTable rows={returnsRows} headers={tableHeaders} title={isRtl ? 'المرتجعات' : 'Returns'} fileName="returns_report" />
+        <RenderTable rows={returnsRows} headers={tableHeaders} title={isRtl ? 'المرتجعات' : 'Returns'} fileName="returns" />
       )}
       {activeSection === 'production' && (
-        <RenderTable rows={productionRows} headers={tableHeaders} title={isRtl ? 'الإنتاج اليومي' : 'Daily Production'} fileName="production_report" />
+        <RenderTable rows={productionRows} headers={tableHeaders} title={isRtl ? 'الإنتاج اليومي' : 'Daily Production'} fileName="production" />
       )}
     </div>
   );
