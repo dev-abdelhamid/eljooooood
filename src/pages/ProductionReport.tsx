@@ -39,14 +39,22 @@ const ProductionReport: React.FC = () => {
     queryKey: ['sales', 'production-report'],
     queryFn: () => salesAPI.getAll({}),
     enabled: !!user,
-    onError: (err) => toast.error(isRtl ? 'خطأ في جلب المبيعات' : 'Error fetching sales'),
+    onError: (err) => {
+      toast.error(isRtl ? 'خطأ في جلب المبيعات' : 'Error fetching sales');
+      console.error(err);
+    },
+    select: (data) => data?.sales || [], // Return empty array if undefined
   });
 
   const { data: returns, isLoading: returnsLoading, error: returnsError } = useQuery({
     queryKey: ['returns', 'production-report'],
     queryFn: () => returnsAPI.getAll({}),
     enabled: !!user,
-    onError: (err) => toast.error(isRtl ? 'خطأ في جلب المرتجعات' : 'Error fetching returns'),
+    onError: (err) => {
+      toast.error(isRtl ? 'خطأ في جلب المرتجعات' : 'Error fetching returns');
+      console.error(err);
+    },
+    select: (data) => data?.returns || [], // Return empty array if undefined
   });
 
   const { data: production, isLoading: productionLoading, error: productionError } = useQuery({
@@ -112,14 +120,14 @@ const ProductionReport: React.FC = () => {
   };
 
   const ordersAggregated = useMemo(() => aggregateData(orders || [], 'items'), [orders]);
-  const salesAggregated = useMemo(() => aggregateData(sales?.sales || [], 'items'), [sales]);
-  const returnsAggregated = useMemo(() => aggregateData(returns?.returns || [], 'items'), [returns]);
+  const salesAggregated = useMemo(() => aggregateData(sales || [], 'items'), [sales]);
+  const returnsAggregated = useMemo(() => aggregateData(returns || [], 'items'), [returns]);
   const productionAggregated = useMemo(() => aggregateData(production || [], 'items'), [production]);
 
-  const ordersRows = useMemo(() => generateRows(ordersAggregated, products?.products || []), [ordersAggregated, products]);
-  const salesRows = useMemo(() => generateRows(salesAggregated, products?.products || []), [salesAggregated, products]);
-  const returnsRows = useMemo(() => generateRows(returnsAggregated, products?.products || []), [returnsAggregated, products]);
-  const productionRows = useMemo(() => generateRows(productionAggregated, products?.products || []), [productionAggregated, products]);
+  const ordersRows = useMemo(() => generateRows(ordersAggregated, products?.products || []), [ordersAggregated, products, generateRows]);
+  const salesRows = useMemo(() => generateRows(salesAggregated, products?.products || []), [salesAggregated, products, generateRows]);
+  const returnsRows = useMemo(() => generateRows(returnsAggregated, products?.products || []), [returnsAggregated, products, generateRows]);
+  const productionRows = useMemo(() => generateRows(productionAggregated, products?.products || []), [productionAggregated, products, generateRows]);
 
   const exportTable = (rows, headers, fileName, format) => {
     if (format === 'excel') {
@@ -192,14 +200,6 @@ const ProductionReport: React.FC = () => {
       </table>
     </div>
   );
-
-  if (branchesError || productsError || ordersError || salesError || returnsError || productionError) {
-    return <div className="text-red-600 p-4">{isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'}</div>;
-  }
-
-  if (branchesLoading || productsLoading || ordersLoading || salesLoading || returnsLoading || productionLoading) {
-    return <div className="text-center p-4">{isRtl ? 'جاري التحميل...' : 'Loading...'}</div>;
-  }
 
   return (
     <div className={`py-6 px-4 mx-auto ${isRtl ? 'rtl' : 'ltr'}`}>
