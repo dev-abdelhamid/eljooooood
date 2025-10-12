@@ -17,10 +17,15 @@ const ProductionReport = () => {
   const isRtl = language === 'ar';
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [orderData, setOrderData] = useState([]);
-  const [productionData, setProductionData] = useState([]);
-  const currentDate = new Date('2025-10-12T09:12:00+03:00'); // 09:12 AM EEST, October 12, 2025
-  const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate(); // 31 يوم في أكتوبر
+  const [orderData, setOrderData] = useState({});
+  const [productionData, setProductionData] = useState({});
+  const [selectedMonth, setSelectedMonth] = useState(9); // October (0-based index)
+  const currentDate = new Date('2025-10-12T09:12:00+03:00');
+  const currentYear = currentDate.getFullYear();
+  const months = Array.from({ length: 12 }, (_, i) => ({
+    value: i,
+    label: new Date(currentYear, i).toLocaleString(language, { month: 'long' }),
+  }));
 
   useEffect(() => {
     const fetchData = async () => {
@@ -28,68 +33,88 @@ const ProductionReport = () => {
       try {
         const [inventory, orders] = await Promise.all([
           inventoryAPI.getInventory(),
-          ordersAPI.getAll({ status: 'completed', page: 1, limit: 100 }),
+          ordersAPI.getAll({ status: 'completed', page: 1, limit: 1000 }),
         ]);
 
-        console.log('Inventory:', inventory);
-        console.log('Orders:', orders);
+        // Organize data by month
+        const monthlyOrderData = {};
+        const monthlyProductionData = {};
+        for (let month = 0; month < 12; month++) {
+          const daysInMonth = new Date(currentYear, month + 1, 0).getDate();
+          const orderDistribution = new Map();
+          const productionMap = new Map();
 
-        // توزيع الطلبات
-        const orderDistribution = new Map();
-        orders.forEach(order => {
-          const date = new Date(order.createdAt || order.date);
-          const day = date.getDate();
-          const month = date.getMonth();
-          const year = date.getFullYear();
-          if (year === currentDate.getFullYear() && month === currentDate.getMonth() && day <= currentDate.getDate()) {
-            const branch = order.branch?.displayName || order.branchId || 'الفرع الرئيسي';
-            order.items.forEach(item => {
-              const product = item.product?.name || item.productName || 'Unknown Product';
-              const key = `${branch}-${product}`;
-              if (!orderDistribution.has(key)) {
-                orderDistribution.set(key, {
-                  branch,
-                  product,
-                  orderNumber: order.orderNumber || `ORDER-${Math.floor(Math.random() * 1000)}`,
-                  quantities: Array(daysInMonth).fill(0),
-                  total: 0,
-                });
-              }
-              orderDistribution.get(key).quantities[day - 1] += item.quantity;
-              orderDistribution.get(key).total += item.quantity;
-            });
-          }
-        });
-
-        // توزيع الإنتاج
-        const productionMap = new Map();
-        inventory.forEach(item => {
-          item.movements.forEach(movement => {
-            const date = new Date(movement.createdAt);
-            const day = date.getDate();
-            const month = date.getMonth();
+          // Process orders
+          orders.forEach(order => {
+            const date = new Date(order.createdAt || order.date);
+            const orderMonth = date.getMonth();
             const year = date.getFullYear();
-            if (year === currentDate.getFullYear() && month === currentDate.getMonth() && day <= currentDate.getDate()) {
-              const product = item.productName || item.product?.name || 'Unknown Product';
-              const branch = movement.branch?.displayName || movement.branchId || 'المصنع الرئيسي';
-              if (!productionMap.has(product)) {
-                productionMap.set(product, {
-                  product,
-                  branch,
-                  quantities: Array(daysInMonth).fill(0),
-                  total: 0,
-                });
-              }
-              if (movement.type === 'in') { // الإنتاج يعتمد على المدخلات
-                productionMap.get(product).quantities[day - 1] += Math.abs(movement.quantity);
-                productionMap.get(product).total += Math.abs(movement.quantity);
-              }
+            if (year === currentYear && orderMonth === month) {
+              const day = date.getDate();
+              const branch = order.branch?.displayName || order.branchId || 'الفرع الرئيسي';
+              order.items.forEach(item => {
+                const product = item.product?.name || item.productName || 'Unknown Product';
+                const key = `${branch}-${product}`;
+                if (!orderDistribution.has(key)) {
+                  orderDistribution.set(key, {
+                    branch,
+                    product,
+                    orderNumber: order.orderNumber || `ORDER-${Math.floor(Math.random() * 1000)}`,
+                    quantities: Array(daysInMonth).fill(0),
+                    total: 0,
+                    changes: Array(daysInMonth).fill(0),
+                  });
+                }
+                orderDistribution.get(key).quantities[day - 1] += item.quantity;
+                orderDistribution.get(key).total += item.quantity;
+                if (day > 1) {
+                  orderDistribution.get(key).changes[day - 1] = item.quantity - orderDistribution.get(key).quantities[day - 2];
+                } else {
+                  orderDistribution.get(key).changes[0] = item.quantity;
+                }
+              });
             }
           });
-        });
 
-        setOrderData(Array.from(orderDistribution.values()));
-        setProductionData(Array.from(productionMap.values()));
+          // Process production
+          inventory.forEach(item => {
+            item.movements.forEach(movement => {
+              const date = new Date(movement.createdAt);
+              const prodMonth = date.getMonth();
+              const year = date.getFullYear();
+              if (year === currentYear && prodMonth === month) {
+                const day = date.getDate();
+                const product = item.productName || item.product?.name || 'Unknown Product';
+                const branch = movement.branch?.displayName || movement.branchId || 'المصنع الرئيسي';
+                if (!productionMap.has(product)) {
+                  productionMap.set(product, {
+                    product,
+                    branch,
+                    quantities: Array(daysInMonth).fill(0),
+                    total: 0,
+                    changes: Array(daysInMonth).fill(0),
+                  });
+                }
+                if (movement.type === 'in') {
+                  const quantity = Math.abs(movement.quantity);
+                  productionMap.get(product).quantities[day - 1] += quantity;
+                  productionMap.get(product).total += quantity;
+                  if (day > 1) {
+                    productionMap.get(product).changes[day - 1] = quantity - productionMap.get(product).quantities[day - 2];
+                  } else {
+                    productionMap.get(product).changes[0] = quantity;
+                  }
+                }
+              }
+            });
+          });
+
+          monthlyOrderData[month] = Array.from(orderDistribution.values());
+          monthlyProductionData[month] = Array.from(productionMap.values());
+        }
+
+        setOrderData(monthlyOrderData);
+        setProductionData(monthlyProductionData);
       } catch (error) {
         console.error('Failed to fetch data:', error);
       } finally {
@@ -99,20 +124,23 @@ const ProductionReport = () => {
     fetchData();
   }, []);
 
-  const renderTable = (data, title) => {
+  const renderTable = (data, title, month) => {
+    const daysInMonth = new Date(currentYear, month + 1, 0).getDate();
     const rows = useMemo(() => {
       return data.map((item, index) => ({
-        id: `${title.toLowerCase().replace(' ', '-')}-${index + 1}`,
+        id: `${title.toLowerCase().replace(' ', '-')}-${month}-${index + 1}`,
         orderNumber: item.orderNumber || '-',
         branch: { displayName: item.branch },
         product: item.product,
         totalQuantity: item.total,
-        date: currentDate.toISOString().split('T')[0],
+        date: new Date(currentYear, month, 1).toISOString().split('T')[0],
         dailyQuantities: item.quantities,
+        changes: item.changes,
       }));
-    }, [data]);
+    }, [data, month]);
 
     const exportTable = useCallback((rows, fileName, format) => {
+      const monthName = new Date(currentYear, month, 1).toLocaleString(language, { month: 'long' });
       if (format === 'excel') {
         const ws = XLSX.utils.json_to_sheet(rows.map(row => ({
           'رقم الطلب': row.orderNumber,
@@ -120,11 +148,11 @@ const ProductionReport = () => {
           'المنتج': row.product,
           'الكمية الإجمالية': row.totalQuantity,
           'التاريخ': row.date,
-          ...Object.fromEntries(Array(daysInMonth).fill(0).map((_, i) => [`اليوم ${i + 1}`, row.dailyQuantities[i]])),
+          ...Object.fromEntries(row.dailyQuantities.map((qty, i) => [`اليوم ${i + 1}`, qty])),
         })));
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, fileName);
-        XLSX.writeFile(wb, `${fileName}.xlsx`);
+        XLSX.utils.book_append_sheet(wb, ws, `${fileName}_${monthName}`);
+        XLSX.writeFile(wb, `${fileName}_${monthName}.xlsx`);
       } else if (format === 'pdf') {
         const doc = new jsPDF();
         doc.autoTable({
@@ -138,10 +166,12 @@ const ProductionReport = () => {
             row.date,
             ...row.dailyQuantities,
           ]),
+          styles: { font: 'Amiri', halign: isRtl ? 'right' : 'left' },
+          headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255] },
         });
-        doc.save(`${fileName}.pdf`);
+        doc.save(`${fileName}_${monthName}.pdf`);
       }
-    }, []);
+    }, [month]);
 
     if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
     if (rows.length === 0) {
@@ -156,16 +186,17 @@ const ProductionReport = () => {
         </motion.div>
       );
     }
+
     return (
       <div className="mb-8">
         <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-800 flex items-center gap-3">
-            {isRtl ? title : title}
+            {isRtl ? `${title} - ${months[month].label}` : `${title} - ${months[month].label}`}
           </h1>
           <div className="flex gap-2 flex-wrap">
             <Button
               variant={rows.length > 0 ? 'primary' : 'secondary'}
-              onClick={rows.length > 0 ? () => exportTable(rows, `${title.toLowerCase().replace(' ', '_')}_report`, 'excel') : undefined}
+              onClick={rows.length > 0 ? () => exportTable(rows, `${title.toLowerCase().replace(' ', '_')}_${month}`, 'excel') : undefined}
               className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm shadow-sm ${
                 rows.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
               }`}
@@ -176,7 +207,7 @@ const ProductionReport = () => {
             </Button>
             <Button
               variant={rows.length > 0 ? 'primary' : 'secondary'}
-              onClick={rows.length > 0 ? () => exportTable(rows, `${title.toLowerCase().replace(' ', '_')}_report`, 'pdf') : undefined}
+              onClick={rows.length > 0 ? () => exportTable(rows, `${title.toLowerCase().replace(' ', '_')}_${month}`, 'pdf') : undefined}
               className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm shadow-sm ${
                 rows.length > 0 ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
               }`}
@@ -231,7 +262,14 @@ const ProductionReport = () => {
                   <td className="px-2 py-2 text-gray-600 text-center">{row.totalQuantity}</td>
                   <td className="px-2 py-2 text-gray-600 text-center truncate">{row.date}</td>
                   {row.dailyQuantities.map((qty, i) => (
-                    <td key={i} className="px-2 py-2 text-gray-600 text-center">{qty}</td>
+                    <td
+                      key={i}
+                      className={`px-2 py-2 text-center ${
+                        row.changes[i] > 0 ? 'text-green-600 font-semibold' : row.changes[i] < 0 ? 'text-red-600 font-semibold' : 'text-gray-600'
+                      }`}
+                    >
+                      {qty} {row.changes[i] !== 0 && `(${row.changes[i] > 0 ? '+' : ''}${row.changes[i]})`}
+                    </td>
                   ))}
                 </tr>
               ))}
@@ -243,9 +281,26 @@ const ProductionReport = () => {
   };
 
   return (
-    <div className={`px-4 py-6 min-h-screen ${isRtl ? 'rtl' : 'ltr'}`}>
-      {renderTable(orderData, isRtl ? 'تقرير توزيع الطلبات' : 'Order Distribution Report')}
-      {renderTable(productionData, isRtl ? 'تقرير الإنتاج' : 'Production Report')}
+    <div className={`px-4 py-6 min-h-screen ${isRtl ? 'rtl' : 'ltr'} bg-gray-50`}>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-800 mb-4">{isRtl ? 'تقارير الإنتاج' : 'Production Reports'}</h1>
+        <div className="flex flex-wrap gap-2">
+          {months.map(month => (
+            <Button
+              key={month.value}
+              variant={selectedMonth === month.value ? 'primary' : 'secondary'}
+              onClick={() => setSelectedMonth(month.value)}
+              className={`px-4 py-2 rounded-lg text-sm ${
+                selectedMonth === month.value ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              {month.label}
+            </Button>
+          ))}
+        </div>
+      </div>
+      {renderTable(orderData[selectedMonth] || [], isRtl ? 'تقرير توزيع الطلبات' : 'Order Distribution Report', selectedMonth)}
+      {renderTable(productionData[selectedMonth] || [], isRtl ? 'تقرير الإنتاج' : 'Production Report', selectedMonth)}
     </div>
   );
 };
