@@ -39,7 +39,7 @@ const ProductionReport: React.FC = () => {
   const [stockOutData, setStockOutData] = useState<{ [month: number]: StockRow[] }>({});
   const [selectedMonth, setSelectedMonth] = useState(8); // September 2025 (0-based index)
   const [activeTab, setActiveTab] = useState<'orders' | 'stockIn' | 'stockOut'>('orders');
-  const currentDate = new Date('2025-10-12T10:41:00+03:00');
+  const currentDate = new Date('2025-10-12T11:02:00+03:00');
   const currentYear = currentDate.getFullYear();
   const months = Array.from({ length: 12 }, (_, i) => ({
     value: i,
@@ -66,6 +66,9 @@ const ProductionReport: React.FC = () => {
           ordersAPI.getAll({ status: 'completed', page: 1, limit: 1000 }, isRtl),
         ]);
 
+        console.log('Orders API Response:', orders); // Debug: Log orders response
+        console.log('Inventory API Response:', inventory); // Debug: Log inventory response
+
         const monthlyOrderData: { [month: number]: OrderRow[] } = {};
         const monthlyStockInData: { [month: number]: StockRow[] } = {};
         const monthlyStockOutData: { [month: number]: StockRow[] } = {};
@@ -77,71 +80,84 @@ const ProductionReport: React.FC = () => {
           const stockOutMap = new Map<string, StockRow>();
 
           // Process orders (only completed, pivot table: branches as columns, products as rows)
-          orders.forEach((order: any) => {
-            if (order.status !== 'completed') return; // Strict filter for completed orders
-            const date = new Date(order.createdAt || order.date);
-            const orderMonth = date.getMonth();
-            const year = date.getFullYear();
-            if (year === currentYear && orderMonth === month) {
-              const branch = order.branch?.displayName || order.branch?.name || order.branchId || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
-              order.items.forEach((item: any) => {
-                const product = item.displayProductName || item.product?.name || item.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
-                const key = `${product}-${month}`;
-                if (!orderMap.has(product)) {
-                  orderMap.set(product, {
-                    id: key,
-                    product,
-                    branchQuantities: {},
-                    totalQuantity: 0,
-                    totalPrice: 0,
-                  });
-                }
-                const row = orderMap.get(product)!;
-                const quantity = Number(item.quantity) || 0;
-                const price = Number(item.price) || 0;
-                row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + quantity;
-                row.totalQuantity += quantity;
-                row.totalPrice += quantity * price;
-              });
-            }
-          });
-
-          // Process inventory movements (strictly separate in and out)
-          inventory.forEach((item: any) => {
-            const product = item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
-            const assumedPrice = Number(item.product?.price) || 0; // Assume price from product data
-            item.movements.forEach((movement: any) => {
-              if (!['in', 'out'].includes(movement.type)) return; // Skip invalid movement types
-              const date = new Date(movement.createdAt);
-              const prodMonth = date.getMonth();
+          if (Array.isArray(orders)) {
+            orders.forEach((order: any) => {
+              if (order.status !== 'completed') return; // Strict filter for completed orders
+              const date = new Date(order.createdAt || order.date);
+              if (isNaN(date.getTime())) return; // Skip invalid dates
+              const orderMonth = date.getMonth();
               const year = date.getFullYear();
-              if (year === currentYear && prodMonth === month) {
-                const day = date.getDate();
-                const key = `${product}-${month}`;
-                const map = movement.type === 'in' ? stockInMap : stockOutMap;
-                if (!map.has(key)) {
-                  map.set(key, {
-                    id: key,
-                    product,
-                    totalQuantity: 0,
-                    dailyQuantities: Array(daysInMonth).fill(0),
-                    changes: Array(daysInMonth).fill(0),
-                    totalPrice: 0,
-                  });
-                }
-                const row = map.get(key)!;
-                const quantity = Math.abs(Number(movement.quantity) || 0);
-                row.dailyQuantities[day - 1] += quantity;
-                row.totalQuantity += quantity;
-                row.totalPrice += quantity * assumedPrice;
-                if (day > 1) {
-                  row.changes[day - 1] = quantity - row.dailyQuantities[day - 2];
-                } else {
-                  row.changes[0] = quantity;
-                }
+              if (year === currentYear && orderMonth === month) {
+                const branch = order.branch?.displayName || order.branch?.name || order.branchId || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
+                (order.items || []).forEach((item: any) => {
+                  const product = item.displayProductName || item.product?.name || item.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
+                  const key = `${product}-${month}`;
+                  if (!orderMap.has(key)) {
+                    orderMap.set(key, {
+                      id: key,
+                      product,
+                      branchQuantities: {},
+                      totalQuantity: 0,
+                      totalPrice: 0,
+                    });
+                  }
+                  const row = orderMap.get(key)!;
+                  const quantity = Number(item.quantity) || 0;
+                  const price = Number(item.price) || 0;
+                  row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + quantity;
+                  row.totalQuantity += quantity;
+                  row.totalPrice += quantity * price;
+                });
               }
             });
-          });
+          }
+
+          // Process inventory movements (strictly separate in and out)
+          if (Array.isArray(inventory)) {
+            inventory.forEach((item: any) => {
+              const product = item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
+              const assumedPrice = Number(item.product?.price) || 0; // Assume price from product data
+              (item.movements || []).forEach((movement: any) => {
+                if (!movement.type || !['in', 'out'].includes(movement.type)) {
+                  console.warn(`Invalid movement type for product ${product}:`, movement.type); // Debug: Log invalid types
+                  return;
+                }
+                const date = new Date(movement.createdAt);
+                if (isNaN(date.getTime())) return; // Skip invalid dates
+                const prodMonth = date.getMonth();
+                const year = date.getFullYear();
+                if (year === currentYear && prodMonth === month) {
+                  const day = date.getDate();
+                  const key = `${product}-${month}`;
+                  const map = movement.type === 'in' ? stockInMap : stockOutMap;
+                  if (!map.has(key)) {
+                    map.set(key, {
+                      id: key,
+                      product,
+                      totalQuantity: 0,
+                      dailyQuantities: Array(daysInMonth).fill(0),
+                      changes: Array(daysInMonth).fill(0),
+                      totalPrice: 0,
+                    });
+                  }
+                  const row = map.get(key)!;
+                  const quantity = Math.abs(Number(movement.quantity) || 0);
+                  row.dailyQuantities[day - 1] += quantity;
+                  row.totalQuantity += quantity;
+                  row.totalPrice += quantity * assumedPrice;
+                  if (day > 1) {
+                    row.changes[day - 1] = quantity - row.dailyQuantities[day - 2];
+                  } else {
+                    row.changes[0] = quantity;
+                  }
+                }
+              });
+            });
+          }
+
+          console.log(`Month ${month} - Orders:`, Array.from(orderMap.values())); // Debug: Log order data
+          console.log(`Month ${month} - Stock In:`, Array.from(stockInMap.values())); // Debug: Log stock in data
+          console.log(`Month ${month} - Stock Out:`, Array.from(stockOutMap.values())); // Debug: Log stock out data
 
           monthlyOrderData[month] = Array.from(orderMap.values());
           monthlyStockInData[month] = Array.from(stockInMap.values());
