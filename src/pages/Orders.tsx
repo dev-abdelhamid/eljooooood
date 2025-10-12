@@ -18,9 +18,10 @@ import { useNavigate } from 'react-router-dom';
 import { exportToPDF } from '../components/Shared/PDFExporter';
 import { OrderCardSkeleton, OrderTableSkeleton } from '../components/Shared/OrderSkeletons';
 import Pagination from '../components/Shared/Pagination';
-const AssignChefsModal = lazy(() => import('../components/Shared/AssignChefsModal'));
-const OrderTable = lazy(() => import('../components/Shared/OrderTable'));
-const OrderCard = lazy(() => import('../components/Shared/OrderCard'));
+import AssignChefsModal from '../components/Shared/AssignChefsModal';
+import  OrderTable  from '../components/Shared/OrderTable';
+import OrderCard from '../components/Shared/OrderCard';
+
 
 
 // Normalize text for search
