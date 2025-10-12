@@ -25,12 +25,13 @@ const ProductionReport = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // جلب الطلبات المكتملة
         const orders = await ordersAPI.getAll({ status: 'completed', page: 1, limit: 100 });
-        // جلب مهام الإنتاج
         const tasks = await productionAssignmentsAPI.getAllTasks();
-        // جلب المخزون
         const inventory = await inventoryAPI.getInventory();
+
+        console.log('Orders:', orders);
+        console.log('Tasks:', tasks);
+        console.log('Inventory:', inventory);
 
         const productionMap = new Map();
         orders.forEach(order => {
@@ -39,7 +40,7 @@ const ProductionReport = () => {
             if (task) {
               const date = new Date(order.date);
               const day = date.getDate();
-              if (date.getMonth() === currentDate.getMonth() && date.getFullYear() === currentDate.getFullYear()) {
+              if (date.getMonth() === currentDate.getMonth() && date.getFullYear() === currentDate.getFullYear() && day <= currentDate.getDate()) {
                 if (!productionMap.has(item.product)) {
                   productionMap.set(item.product, Array(31).fill(0));
                 }
@@ -54,6 +55,7 @@ const ProductionReport = () => {
           quantities,
           total: quantities.reduce((sum, qty) => sum + qty, 0),
         }));
+        console.log('Processed Data:', processedData);
         setData(processedData);
       } catch (error) {
         console.error('Failed to fetch production data:', error);
@@ -68,7 +70,7 @@ const ProductionReport = () => {
     return data.map((item, index) => ({
       id: `prod-${index + 1}`,
       orderNumber: `PROD-${index + 1}`,
-      branch: { displayName: 'الإنتاج الرئيسي' }, // يمكن تحديثه من orders.branchId
+      branch: { displayName: 'الإنتاج الرئيسي' },
       status: 'مكتمل',
       products: item.product,
       totalAmount: item.total.toString(),
