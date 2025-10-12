@@ -18,36 +18,42 @@ const ProductionReport: React.FC = () => {
     queryKey: ['branches'],
     queryFn: branchesAPI.getAll,
     enabled: !!user,
+    onError: (err) => toast.error(isRtl ? 'خطأ في جلب الفروع' : 'Error fetching branches'),
   });
 
   const { data: products, isLoading: productsLoading, error: productsError } = useQuery({
     queryKey: ['products'],
     queryFn: productsAPI.getAll,
     enabled: !!user,
+    onError: (err) => toast.error(isRtl ? 'خطأ في جلب المنتجات' : 'Error fetching products'),
   });
 
   const { data: orders, isLoading: ordersLoading, error: ordersError } = useQuery({
     queryKey: ['orders', 'production-report'],
     queryFn: () => ordersAPI.getAll({}),
     enabled: !!user,
+    onError: (err) => toast.error(isRtl ? 'خطأ في جلب الطلبات' : 'Error fetching orders'),
   });
 
   const { data: sales, isLoading: salesLoading, error: salesError } = useQuery({
     queryKey: ['sales', 'production-report'],
     queryFn: () => salesAPI.getAll({}),
     enabled: !!user,
+    onError: (err) => toast.error(isRtl ? 'خطأ في جلب المبيعات' : 'Error fetching sales'),
   });
 
   const { data: returns, isLoading: returnsLoading, error: returnsError } = useQuery({
     queryKey: ['returns', 'production-report'],
     queryFn: () => returnsAPI.getAll({}),
     enabled: !!user,
+    onError: (err) => toast.error(isRtl ? 'خطأ في جلب المرتجعات' : 'Error fetching returns'),
   });
 
   const { data: production, isLoading: productionLoading, error: productionError } = useQuery({
     queryKey: ['production', 'production-report'],
     queryFn: productionAssignmentsAPI.getAllTasks,
     enabled: !!user,
+    onError: (err) => toast.error(isRtl ? 'خطأ في جلب الإنتاج' : 'Error fetching production'),
   });
 
   const sortedBranches = useMemo(() => {
@@ -80,7 +86,7 @@ const ProductionReport: React.FC = () => {
           productMap.set(productId, new Map());
         }
         const branchMap = productMap.get(productId);
-        const branchId = entry.branch?._id || entry.branchId;
+        const branchId = entry.branch?._id || entry.branchId || 'unknown';
         const current = branchMap.get(branchId) || 0;
         branchMap.set(branchId, current + (item.quantity || 0));
       });
@@ -92,7 +98,7 @@ const ProductionReport: React.FC = () => {
     return (productsList || []).map((product) => {
       const branchQuantities = aggregated.get(product._id) || new Map();
       const total = Array.from(branchQuantities.values()).reduce((sum, q) => sum + q, 0);
-      const sale = total; // Adjust if 'sale' logic is different; based on image, it's a column for sale quantities
+      const sale = total; // Adjust logic if 'sale' is different; based on image, it's a separate column, perhaps for sales quantity
       return {
         unit: isRtl ? product.unit : product.unitEn || product.unit,
         total,
@@ -110,10 +116,10 @@ const ProductionReport: React.FC = () => {
   const returnsAggregated = useMemo(() => aggregateData(returns?.returns || [], 'items'), [returns]);
   const productionAggregated = useMemo(() => aggregateData(production || [], 'items'), [production]);
 
-  const ordersRows = useMemo(() => generateRows(ordersAggregated, products?.products), [ordersAggregated, products]);
-  const salesRows = useMemo(() => generateRows(salesAggregated, products?.products), [salesAggregated, products]);
-  const returnsRows = useMemo(() => generateRows(returnsAggregated, products?.products), [returnsAggregated, products]);
-  const productionRows = useMemo(() => generateRows(productionAggregated, products?.products), [productionAggregated, products]);
+  const ordersRows = useMemo(() => generateRows(ordersAggregated, products?.products || []), [ordersAggregated, products]);
+  const salesRows = useMemo(() => generateRows(salesAggregated, products?.products || []), [salesAggregated, products]);
+  const returnsRows = useMemo(() => generateRows(returnsAggregated, products?.products || []), [returnsAggregated, products]);
+  const productionRows = useMemo(() => generateRows(productionAggregated, products?.products || []), [productionAggregated, products]);
 
   const exportTable = (rows, headers, fileName, format) => {
     if (format === 'excel') {
@@ -165,22 +171,30 @@ const ProductionReport: React.FC = () => {
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {rows.map((row, index) => (
-            <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-              {headers.map((header) => (
-                <td key={header.key} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {row[header.key]}
-                </td>
-              ))}
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={headers.length} className="px-6 py-4 text-center text-sm text-gray-500">
+                {isRtl ? 'لا توجد بيانات' : 'No data available'}
+              </td>
             </tr>
-          ))}
+          ) : (
+            rows.map((row, index) => (
+              <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                {headers.map((header) => (
+                  <td key={header.key} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {row[header.key]}
+                  </td>
+                ))}
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>
   );
 
   if (branchesError || productsError || ordersError || salesError || returnsError || productionError) {
-    return <div className="text-red-600 p-4">{t.errors.fetchReturns}</div>;
+    return <div className="text-red-600 p-4">{isRtl ? 'خطأ في جلب البيانات' : 'Error fetching data'}</div>;
   }
 
   if (branchesLoading || productsLoading || ordersLoading || salesLoading || returnsLoading || productionLoading) {
