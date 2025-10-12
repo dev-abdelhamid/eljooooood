@@ -1524,6 +1524,63 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 
+  const renderLatestOrders = () => (
+    <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center font-alexandria">
+        <ShoppingCart className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+        {t.latestOrders}
+      </h3>
+      <div className="space-y-2 max-h-80 overflow-y-auto">
+        <AnimatePresence>
+          {sortedPendingOrders.length === 0 ? (
+            <p className="text-gray-500 text-xs font-alexandria">{t.noData}</p>
+          ) : (
+            sortedPendingOrders.map((order) => (
+              <motion.div
+                key={order.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="border border-amber-100 rounded-lg p-2 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
+                onClick={() => navigate(`/orders/${order.id}`)}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-semibold text-xs text-gray-800 truncate font-alexandria">
+                    {isRtl ? `طلب رقم ${order.orderNumber}` : `Order #${order.orderNumber}`}
+                  </h4>
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-xs font-medium font-alexandria ${
+                      order.status === 'pending' || order.status === 'approved'
+                        ? 'bg-amber-100 text-amber-800'
+                        : order.status === 'in_production'
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-green-100 text-green-800'
+                    }`}
+                  >
+                    {isRtl
+                      ? order.status === 'pending'
+                        ? 'معلق'
+                        : order.status === 'approved'
+                        ? 'موافق عليه'
+                        : order.status === 'in_production'
+                        ? 'قيد الإنتاج'
+                        : order.status === 'in_transit'
+                        ? 'في الطريق'
+                        : 'مكتمل'
+                      : order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 mb-2 truncate font-alexandria">{isRtl ? order.branchName : order.branchNameEn || order.branchName}</p>
+                <p className="text-xs text-gray-500 font-alexandria">{isRtl ? `تم الإنشاء في: ${order.createdAt}` : `Created At: ${order.createdAt}`}</p>
+              </motion.div>
+            ))
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+
   const toggleViewMode = useCallback(() => setViewMode((prev) => (prev === 'chart' ? 'table' : 'chart')), []);
 
   if (loading && isInitialLoad) return <Loader />;
@@ -1541,7 +1598,7 @@ export const Dashboard: React.FC = () => {
         <TimeFilterDropdown value={timeFilter} onChange={setTimeFilter} isRtl={isRtl} />
       </div>
       {user.role === 'chef' ? (
-        <ChefDashboard
+           <ChefDashboard
           stats={stats}
           tasks={tasks}
           isRtl={isRtl}
