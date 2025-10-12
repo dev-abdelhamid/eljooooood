@@ -306,258 +306,229 @@ const ProductionReport: React.FC = () => {
     return branches.map(b => b.displayName).sort();
   }, [branches]);
 
-useEffect(() => {
-  const fetchData = async () => {
-    setLoading(true);
-    try {
-      const [inventory, ordersResponse, branchesResponse, salesResponse] = await Promise.all([
-        inventoryAPI.getInventory({}, isRtl),
-        ordersAPI.getAll({ status: 'completed', page: 1, limit: 1000 }, isRtl),
-        branchesAPI.getAll(),
-        salesAPI.getAnalytics({
-          startDate: new Date(currentYear, selectedMonth, 1).toISOString(),
-          endDate: new Date(currentYear, selectedMonth + 1, 0).toISOString(),
-          lang: language,
-        }),
-      ]);
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const [inventory, ordersResponse, branchesResponse, salesResponse] = await Promise.all([
+          inventoryAPI.getInventory({}, isRtl),
+          ordersAPI.getAll({ status: 'completed', page: 1, limit: 1000 }, isRtl),
+          branchesAPI.getAll(),
+          salesAPI.getAnalytics({ startDate: new Date(currentYear, selectedMonth, 1).toISOString(), endDate: new Date(currentYear, selectedMonth + 1, 0).toISOString(), lang: language }),
+        ]);
 
-      const monthlyOrderData: { [month: number]: OrderRow[] } = {};
-      const monthlyStockInData: { [month: number]: StockRow[] } = {};
-      const monthlyStockOutData: { [month: number]: StockRow[] } = {};
-      const monthlyReturnData: { [month: number]: ReturnRow[] } = {};
-      const monthlySalesData: { [month: number]: OrderRow[] } = {};
+        const monthlyOrderData: { [month: number]: OrderRow[] } = {};
+        const monthlyStockInData: { [month: number]: StockRow[] } = {};
+        const monthlyStockOutData: { [month: number]: StockRow[] } = {};
+        const monthlyReturnData: { [month: number]: ReturnRow[] } = {};
+        const monthlySalesData: { [month: number]: OrderRow[] } = {};
 
-      // Process branches
-      const fetchedBranches = branchesResponse
-        .filter((branch: any) => branch && branch._id)
-        .map((branch: any) => ({
-          _id: branch._id,
-          name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
-          nameEn: branch.nameEn,
-          displayName: isRtl ? branch.name : branch.nameEn || branch.name,
-        }))
-        .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language));
-      setBranches(fetchedBranches);
+        const fetchedBranches = branchesResponse
+          .filter((branch: any) => branch && branch._id)
+          .map((branch: any) => ({
+            _id: branch._id,
+            name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
+            nameEn: branch.nameEn,
+            displayName: isRtl ? branch.name : branch.nameEn || branch.name,
+          }))
+          .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language));
+        setBranches(fetchedBranches);
 
-      // Process product details with null checks
-      const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
-      inventory.forEach((item: any) => {
-        if (item?.product?._id) {
-          productDetails.set(item.product._id, {
-            code: item.product.code || `code-${Math.random().toString(36).substring(2)}`,
-            product: item.product.displayName || item.product.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
-            unit: item.product.displayUnit || item.product.unit || (isRtl ? 'غير محدد' : 'N/A'),
-            price: Number(item.product.price) || 0,
-          });
-        }
-      });
+        const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
+        inventory.forEach((item: any) => {
+          if (item.product?._id) {
+            productDetails.set(item.product._id, {
+              code: item.product.code, // Use product.code instead of _id
+              product: item.product.displayName || item.product.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+              unit: item.product.unit ||item.product.unitEn,
+              price: Number(item.product.price) || 0,
+            });
+          }
+        });
 
-      // Process orders with fallback data
-      let orders = Array.isArray(ordersResponse) ? ordersResponse : [];
-      if (orders.length === 0) {
-        orders = inventory
-          .filter((item: any) => item?.product?._id) // Filter out invalid items
-          .flatMap((item: any) => {
+        let orders = Array.isArray(ordersResponse) ? ordersResponse : [];
+        if (orders.length === 0) {
+          orders = inventory.flatMap((item: any) => {
             return (item.movements || []).map((movement: any) => ({
               status: 'completed',
-              createdAt: movement.createdAt || new Date().toISOString(),
-              branch: {
-                displayName:
-                  fetchedBranches[Math.floor(Math.random() * fetchedBranches.length)]?.displayName ||
-                  (isRtl ? 'الفرع الرئيسي' : 'Main Branch'),
-              },
-              items: [
-                {
-                  displayProductName:
-                    item.product?.displayName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
-                  quantity: Math.abs(Number(movement.quantity) || 0),
-                  price: Number(item.product?.price) || 0,
-                  productId: item.product?._id,
-                  unit: item.product?.displayUnit || item.product?.unit || (isRtl ? 'غير محدد' : 'N/A'),
-                  sales:
-                    Number(item.product?.sales) ||
-                    (Math.abs(Number(movement.quantity)) * Number(item.product?.price) * 0.1) || 0,
-                },
-              ],
+              createdAt: movement.createdAt,
+              branch: { displayName: fetchedBranches[Math.floor(Math.random() * fetchedBranches.length)]?.displayName || (isRtl ? 'الفرع الرئيسي' : 'Main Branch') },
+              items: [{
+                displayProductName: item.product.displayName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+                quantity: Math.abs(movement.quantity),
+                price: item.product?.price || 0,
+                productId: item.product?._id,
+                unit: item.product?.displayUnit || (isRtl ? 'غير محدد' : 'N/A'),
+                sales: item.product?.sales || (Math.abs(movement.quantity) * item.product?.price * 0.10) || 0,
+              }],
             }));
           });
-      }
-
-      // Process data for each month
-      for (let month = 0; month < 12; month++) {
-        const daysInMonthCount = new Date(currentYear, month + 1, 0).getDate();
-        const orderMap = new Map<string, OrderRow>();
-        const stockInMap = new Map<string, StockRow>();
-        const stockOutMap = new Map<string, StockRow>();
-        const returnMap = new Map<string, ReturnRow>();
-        const salesMap = new Map<string, OrderRow>();
-
-        // Process orders
-        orders.forEach((order: any) => {
-          const status = order.status || order.orderStatus;
-          if (status !== 'completed') return;
-          const date = new Date(order.createdAt || order.date);
-          if (isNaN(date.getTime())) return;
-          const orderMonth = date.getMonth();
-          const year = date.getFullYear();
-          if (year === currentYear && orderMonth === month) {
-            const branch =
-              order.branch?.displayName ||
-              order.branch?.name ||
-              order.branchId ||
-              (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
-            (order.items || []).forEach((item: any) => {
-              const productId = item.product?._id || item.productId;
-              if (!productId) return; // Skip if no productId
-              const details = productDetails.get(productId) || {
-                code: item.product?.code || `code-${Math.random().toString(36).substring(2)}`,
-                product: item.displayProductName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
-                unit: item.unit || item.product?.unit || (isRtl ? 'غير محدد' : 'N/A'),
-                price: Number(item.price) || 0,
-              };
-              const key = `${productId}-${month}`;
-              if (!orderMap.has(key)) {
-                orderMap.set(key, {
-                  id: key,
-                  code: details.code,
-                  product: details.product,
-                  unit: details.unit,
-                  branchQuantities: {},
-                  totalQuantity: 0,
-                  totalPrice: 0,
-                  sales: 0,
-                  actualSales: 0,
-                });
-              }
-              const row = orderMap.get(key)!;
-              const quantity = Number(item.quantity) || 0;
-              row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + quantity;
-              row.totalQuantity += quantity;
-              row.totalPrice += quantity * details.price;
-              row.sales = row.totalPrice * 0.1;
-            });
-          }
-        });
-
-        // Set actualSales after building rows
-        for (const row of orderMap.values()) {
-          const salesItem = salesResponse.productSales?.find((s: any) => s.productId === row.id.split('-')[0]);
-          if (salesItem) {
-            row.actualSales = Number(salesItem.totalQuantity) || 0;
-          }
         }
 
-        // Process inventory movements
-        inventory.forEach((item: any) => {
-          const productId = item?.product?._id;
-          if (!productId) return; // Skip if no productId
-          const details = productDetails.get(productId) || {
-            code: item.product?.code || `code-${Math.random().toString(36).substring(2)}`,
-            product: item.product?.displayName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
-            unit: item.product?.displayUnit || item.product?.unit || (isRtl ? 'غير محدد' : 'N/A'),
-            price: Number(item.product?.price) || 0,
-          };
-          (item.movements || []).forEach((movement: any) => {
-            if (!movement.type || !['in', 'out', 'return'].includes(movement.type)) return;
-            const date = new Date(movement.createdAt);
+        for (let month = 0; month < 12; month++) {
+          const daysInMonthCount = new Date(currentYear, month + 1, 0).getDate();
+          const orderMap = new Map<string, OrderRow>();
+          const stockInMap = new Map<string, StockRow>();
+          const stockOutMap = new Map<string, StockRow>();
+          const returnMap = new Map<string, ReturnRow>();
+          const salesMap = new Map<string, OrderRow>();
+
+          orders.forEach((order: any) => {
+            const status = order.status || order.orderStatus;
+            if (status !== 'completed') return;
+            const date = new Date(order.createdAt || order.date);
             if (isNaN(date.getTime())) return;
-            const prodMonth = date.getMonth();
+            const orderMonth = date.getMonth();
             const year = date.getFullYear();
-            if (year === currentYear && prodMonth === month) {
-              const day = date.getDate();
-              const key = `${productId}-${month}`;
-              if (movement.type === 'return') {
-                if (!returnMap.has(key)) {
-                  returnMap.set(key, {
-                    id: key,
-                    product: details.product,
-                    code: details.code,
-                    unit: details.unit,
-                    totalReturns: 0,
-                    dailyReturns: Array(daysInMonthCount).fill(0),
-                    totalValue: 0,
-                  });
-                }
-                const row = returnMap.get(key)!;
-                const quantity = Math.abs(Number(movement.quantity) || 0);
-                row.dailyReturns[day - 1] += quantity;
-                row.totalReturns += quantity;
-                row.totalValue += quantity * details.price;
-              } else {
-                const map = movement.type === 'in' ? stockInMap : stockOutMap;
-                if (!map.has(key)) {
-                  map.set(key, {
+            if (year === currentYear && orderMonth === month) {
+              const branch = order.branch?.displayName || order.branch?.name || order.branchId || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
+              (order.items || []).forEach((item: any) => {
+                const productId = item.product?._id || item.productId;
+                const details = productDetails.get(productId) || {
+                  code: item.product?.code || `code-${Math.random().toString(36).substring(2)}`,
+                  product: item.displayProductName || item.product?.displayName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+                  unit: item.unit || item.product?.displayUnit || item.product.unitEn,
+                  price: Number(item.price) || 0,
+                };
+                const key = `${productId}-${month}`;
+                if (!orderMap.has(key)) {
+                  orderMap.set(key, {
                     id: key,
                     code: details.code,
                     product: details.product,
                     unit: details.unit,
+                    branchQuantities: {},
                     totalQuantity: 0,
-                    dailyQuantities: Array(daysInMonthCount).fill(0),
-                    changes: Array(daysInMonthCount).fill({ value: 0, type: movement.type }),
                     totalPrice: 0,
+                    sales: 0,
+                    actualSales: 0,
                   });
                 }
-                const row = map.get(key)! as StockRow;
-                const quantity = Number(movement.quantity) || 0;
-                row.dailyQuantities[day - 1] += Math.abs(quantity);
-                row.totalQuantity += Math.abs(quantity);
-                row.totalPrice += Math.abs(quantity) * details.price;
-                row.changes[day - 1] = { value: quantity, type: movement.type };
-              }
+                const row = orderMap.get(key)!;
+                const quantity = Number(item.quantity) || 0;
+                row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + quantity;
+                row.totalQuantity += quantity;
+                row.totalPrice += quantity * details.price;
+                row.sales = row.totalPrice * 0.10;
+              });
             }
           });
-        });
 
-        // Process sales
-        salesResponse.productSales?.forEach((s: any) => {
-          const productId = s.productId;
-          if (!productId) return; // Skip if no productId
-          const details = productDetails.get(productId) || {
-            code: s.product?.code || `code-${Math.random().toString(36).substring(2)}`,
-            product: s.productName || s.product?.displayName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
-            unit: s.product?.displayUnit || s.product?.unit || (isRtl ? 'غير محدد' : 'N/A'),
-            price: s.totalRevenue / s.totalQuantity || 0,
-          };
-          const key = `${productId}-${month}`;
-          if (!salesMap.has(key)) {
-            salesMap.set(key, {
-              id: key,
-              code: details.code,
-              product: details.product,
-              unit: details.unit,
-              branchQuantities: {},
-              totalQuantity: s.totalQuantity || 0,
-              totalPrice: s.totalRevenue || s.totalQuantity * details.price || 0,
-              sales: s.totalRevenue * 0.1 || 0,
-              actualSales: s.totalQuantity || 0,
-            });
+          // Set actualSales after building rows to avoid duplication
+          for (const row of orderMap.values()) {
+            const salesItem = salesResponse.productSales.find((s: any) => s.productId === row.id.split('-')[0]);
+            if (salesItem) {
+              row.actualSales = salesItem.totalQuantity;
+            }
           }
+
+          inventory.forEach((item: any) => {
+            const productId = item.product?._id;
+            const details = productDetails.get(productId) || {
+              code: item.product?.code || `code-${Math.random().toString(36).substring(2)}`,
+              product: item.product?.displayName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+              unit: item.product?.displayUnit || (isRtl ? 'غير محدد' : 'N/A'),
+              price: Number(item.product?.price) || 0,
+            };
+            (item.movements || []).forEach((movement: any) => {
+              if (!movement.type || !['in', 'out', 'return'].includes(movement.type)) return;
+              const date = new Date(movement.createdAt);
+              if (isNaN(date.getTime())) return;
+              const prodMonth = date.getMonth();
+              const year = date.getFullYear();
+              if (year === currentYear && prodMonth === month) {
+                const day = date.getDate();
+                const key = `${productId}-${month}`;
+                if (movement.type === 'return') {
+                  if (!returnMap.has(key)) {
+                    returnMap.set(key, {
+                      id: key,
+                      product: details.product,
+                      code: details.code,
+                      unit: details.unit,
+                      totalReturns: 0,
+                      dailyReturns: Array(daysInMonthCount).fill(0),
+                      totalValue: 0,
+                    });
+                  }
+                  const row = returnMap.get(key)!;
+                  const quantity = Math.abs(Number(movement.quantity) || 0);
+                  row.dailyReturns[day - 1] += quantity;
+                  row.totalReturns += quantity;
+                  row.totalValue += quantity * details.price;
+                } else {
+                  const map = movement.type === 'in' ? stockInMap : stockOutMap;
+                  if (!map.has(key)) {
+                    map.set(key, {
+                      id: key,
+                      code: details.code,
+                      product: details.product,
+                      unit: details.unit,
+                      totalQuantity: 0,
+                      dailyQuantities: Array(daysInMonthCount).fill(0),
+                      changes: Array(daysInMonthCount).fill({ value: 0, type: movement.type }),
+                      totalPrice: 0,
+                    });
+                  }
+                  const row = map.get(key)! as StockRow;
+                  const quantity = Number(movement.quantity) || 0;
+                  row.dailyQuantities[day - 1] += Math.abs(quantity);
+                  row.totalQuantity += Math.abs(quantity);
+                  row.totalPrice += Math.abs(quantity) * details.price;
+                  row.changes[day - 1] = { value: quantity, type: movement.type };
+                }
+              }
+            });
+          });
+
+          salesResponse.productSales.forEach((s: any) => {
+            const productId = s.productId;
+            const details = productDetails.get(productId) || {
+              code: s.product?.code || `code-${Math.random().toString(36).substring(2)}`,
+              product: s.productName || s.product?.displayName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+              unit: s.product?.displayUnit || (isRtl ? 'غير محدد' : 'N/A'),
+              price: s.totalRevenue / s.totalQuantity || 0,
+            };
+            const key = `${productId}-${month}`;
+            if (!salesMap.has(key)) {
+              salesMap.set(key, {
+                id: key,
+                code: details.code,
+                product: details.product,
+                unit: details.unit,
+                branchQuantities: {},
+                totalQuantity: s.totalQuantity,
+                totalPrice: s.totalRevenue || s.totalQuantity * details.price,
+                sales: s.totalRevenue * 0.10,
+                actualSales: s.totalQuantity,
+              });
+            }
+          });
+
+          monthlyOrderData[month] = Array.from(orderMap.values());
+          monthlyStockInData[month] = Array.from(stockInMap.values());
+          monthlyStockOutData[month] = Array.from(stockOutMap.values());
+          monthlyReturnData[month] = Array.from(returnMap.values());
+          monthlySalesData[month] = Array.from(salesMap.values());
+        }
+
+        setOrderData(monthlyOrderData);
+        setStockInData(monthlyStockInData);
+        setStockOutData(monthlyStockOutData);
+        setReturnData(monthlyReturnData);
+        setSalesData(monthlySalesData);
+      } catch (error) {
+        console.error('Failed to fetch data:', error);
+        toast.error(isRtl ? 'فشل في جلب البيانات' : 'Failed to fetch data', {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 3000,
         });
-
-        monthlyOrderData[month] = Array.from(orderMap.values());
-        monthlyStockInData[month] = Array.from(stockInMap.values());
-        monthlyStockOutData[month] = Array.from(stockOutMap.values());
-        monthlyReturnData[month] = Array.from(returnMap.values());
-        monthlySalesData[month] = Array.from(salesMap.values());
+      } finally {
+        setLoading(false);
       }
-
-      setOrderData(monthlyOrderData);
-      setStockInData(monthlyStockInData);
-      setStockOutData(monthlyStockOutData);
-      setReturnData(monthlyReturnData);
-      setSalesData(monthlySalesData);
-    } catch (error) {
-      console.error('Failed to fetch data:', error);
-      toast.error(isRtl ? 'فشل في جلب البيانات' : 'Failed to fetch data', {
-        position: isRtl ? 'top-left' : 'top-right',
-        autoClose: 3000,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-  fetchData();
-}, [isRtl, currentYear, selectedMonth, language]);
+    };
+    fetchData();
+  }, [isRtl, currentYear, selectedMonth, language]);
 
   const renderOrderTable = useCallback(
     (data: OrderRow[], title: string, month: number) => {
