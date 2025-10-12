@@ -9,7 +9,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
-import { inventoryAPI } from '../services/api';
+import { inventoryAPI, ordersAPI } from '../services/api';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 
 const ProductionReport = () => {
@@ -18,73 +18,75 @@ const ProductionReport = () => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState([]);
-  const [activeTab, setActiveTab] = useState('products');
-  const currentDate = new Date('2025-10-12T09:02:00+03:00'); // 09:02 AM EEST, October 12, 2025
+  const currentDate = new Date('2025-10-12T09:08:00+03:00'); // 09:08 AM EEST, October 12, 2025
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const inventory = await inventoryAPI.getInventory();
+        const [inventory, orders] = await Promise.all([
+          inventoryAPI.getInventory(),
+          ordersAPI.getAll({ status: 'completed', page: 1, limit: 100 }),
+        ]);
 
         console.log('Inventory:', inventory);
+        console.log('Orders:', orders);
 
-        const productionMap = new Map(); // للإنتاج اليومي لكل منتج
-        const branchOrdersMap = new Map(); // للطلبات اليومية لكل فرع
+        const orderDistribution = new Map(); // لتوزيع الطلبات لكل فرع ومنتج
 
+        // معالجة حركات المخزون
         inventory.forEach(item => {
           item.movements.forEach(movement => {
             const date = new Date(movement.createdAt);
-            const day = date.getDate(); // تعريف day هنا لكل حركة
+            const day = date.getDate();
             if (date.getMonth() === currentDate.getMonth() && date.getFullYear() === currentDate.getFullYear() && day <= currentDate.getDate()) {
-              const product = item.productName;
-              const branch = movement.branch?.displayName || 'الفرع الرئيسي'; // فرع افتراضي إذا لم يكن موجودًا
+              const branch = movement.branch?.displayName || movement.branchId || 'الفرع الرئيسي';
+              const product = item.productName || item.product?.name || 'Unknown Product';
+              const key = `${branch}-${product}`;
 
-              // إعداد الإنتاج اليومي
-              if (!productionMap.has(product)) {
-                productionMap.set(product, Array(31).fill(0));
-              }
-              if (movement.type === 'out') { // المبيعات كمؤشر للإنتاج
-                productionMap.get(product)[day - 1] += Math.abs(movement.quantity);
-              } else if (movement.type === 'in') { // التسليمات كإضافة
-                productionMap.get(product)[day - 1] += Math.abs(movement.quantity);
-              }
-
-              // إعداد الطلبات اليومية للفروع
-              if (!branchOrdersMap.has(branch)) {
-                branchOrdersMap.set(branch, new Map());
-              }
-              if (!branchOrdersMap.get(branch).has(product)) {
-                branchOrdersMap.get(branch).set(product, Array(31).fill(0));
+              if (!orderDistribution.has(key)) {
+                orderDistribution.set(key, {
+                  branch,
+                  product,
+                  orderNumber: `ORDER-${Math.floor(Math.random() * 1000)}`, // رقم طلب عشوائي كمثال
+                  quantities: Array(31).fill(0),
+                  total: 0,
+                });
               }
               if (movement.type === 'out') {
-                branchOrdersMap.get(branch).get(product)[day - 1] += Math.abs(movement.quantity);
+                orderDistribution.get(key).quantities[day - 1] += Math.abs(movement.quantity);
+                orderDistribution.get(key).total += Math.abs(movement.quantity);
               }
             }
           });
         });
 
-        // تحويل الإنتاج اليومي إلى تنسيق البيانات
-        const productionData = Array.from(productionMap.entries()).map(([product, quantities]) => ({
-          product,
-          quantities,
-          total: quantities.reduce((sum, qty) => sum + qty, 0),
-        }));
+        // معالجة الطلبات المكتملة
+        orders.forEach(order => {
+          const date = new Date(order.createdAt || order.date);
+          const day = date.getDate();
+          if (date.getMonth() === currentDate.getMonth() && date.getFullYear() === currentDate.getFullYear() && day <= currentDate.getDate()) {
+            const branch = order.branch?.displayName || order.branchId || 'الفرع الرئيسي';
+            order.items.forEach(item => {
+              const product = item.product?.name || item.productName || 'Unknown Product';
+              const key = `${branch}-${product}`;
 
-        // تحويل طلبات الفروع إلى تنسيق البيانات
-        const branchData = Array.from(branchOrdersMap.entries()).flatMap(([branch, productMap]) =>
-          Array.from(productMap.entries()).map(([product, quantities]) => ({
-            branch,
-            product,
-            quantities,
-            total: quantities.reduce((sum, qty) => sum + qty, 0),
-          }))
-        );
+              if (!orderDistribution.has(key)) {
+                orderDistribution.set(key, {
+                  branch,
+                  product,
+                  orderNumber: order.orderNumber || `ORDER-${Math.floor(Math.random() * 1000)}`,
+                  quantities: Array(31).fill(0),
+                  total: 0,
+                });
+              }
+              orderDistribution.get(key).quantities[day - 1] += item.quantity;
+              orderDistribution.get(key).total += item.quantity;
+            });
+          }
+        });
 
-        console.log('Production Data:', productionData);
-        console.log('Branch Data:', branchData);
-
-        setData(activeTab === 'products' ? productionData : branchData);
+        setData(Array.from(orderDistribution.values()));
       } catch (error) {
         console.error('Failed to fetch production data:', error);
       } finally {
@@ -92,29 +94,26 @@ const ProductionReport = () => {
       }
     };
     fetchData();
-  }, [activeTab]);
+  }, []);
 
   const rows = useMemo(() => {
     return data.map((item, index) => ({
-      id: `${activeTab}-${index + 1}`,
-      orderNumber: `${activeTab.toUpperCase()}-${index + 1}`,
-      branch: { displayName: item.branch || 'الإنتاج الرئيسي' },
-      status: 'مكتمل',
-      products: item.product,
-      totalAmount: item.total.toString(),
+      id: `order-${index + 1}`,
+      orderNumber: item.orderNumber,
+      branch: { displayName: item.branch },
+      product: item.product,
       totalQuantity: item.total,
       date: currentDate.toISOString().split('T')[0],
-      dailyQuantities: item.quantities || Array(31).fill(0), // تأكد من وجود dailyQuantities
+      dailyQuantities: item.quantities,
     }));
-  }, [data, activeTab]);
+  }, [data]);
 
   const exportTable = useCallback((rows, fileName, format) => {
     if (format === 'excel') {
       const ws = XLSX.utils.json_to_sheet(rows.map(row => ({
         'رقم الطلب': row.orderNumber,
         'الفرع': row.branch.displayName,
-        'المنتجات': row.products,
-        'إجمالي المبلغ': row.totalAmount,
+        'المنتج': row.product,
         'الكمية الإجمالية': row.totalQuantity,
         'التاريخ': row.date,
         ...Object.fromEntries(Array(31).fill(0).map((_, i) => [`اليوم ${i + 1}`, row.dailyQuantities[i]])),
@@ -125,13 +124,12 @@ const ProductionReport = () => {
     } else if (format === 'pdf') {
       const doc = new jsPDF();
       doc.autoTable({
-        head: [['رقم', 'رقم الطلب', 'الفرع', 'المنتجات', 'إجمالي المبلغ', 'الكمية الإجمالية', 'التاريخ', ...Array(31).fill(0).map((_, i) => `اليوم ${i + 1}`)]],
+        head: [['رقم', 'رقم الطلب', 'الفرع', 'المنتج', 'الكمية الإجمالية', 'التاريخ', ...Array(31).fill(0).map((_, i) => `اليوم ${i + 1}`)]],
         body: rows.map(row => [
           rows.indexOf(row) + 1,
           row.orderNumber,
           row.branch.displayName,
-          row.products,
-          row.totalAmount,
+          row.product,
           row.totalQuantity,
           row.date,
           ...row.dailyQuantities,
@@ -174,11 +172,8 @@ const ProductionReport = () => {
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">
                 {isRtl ? 'الفرع' : 'Branch'}
               </th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center">
-                {isRtl ? 'المنتجات' : 'Products'}
-              </th>
-              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">
-                {isRtl ? 'إجمالي المبلغ' : 'Total Amount'}
+              <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[120px]">
+                {isRtl ? 'المنتج' : 'Product'}
               </th>
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">
                 {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
@@ -186,7 +181,7 @@ const ProductionReport = () => {
               <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">
                 {isRtl ? 'التاريخ' : 'Date'}
               </th>
-              {Array(31).fill(0).map((_, i) => (
+              {Array(12).fill(0).map((_, i) => (
                 <th key={i} className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[50px]">
                   {isRtl ? `اليوم ${i + 1}` : `Day ${i + 1}`}
                 </th>
@@ -199,11 +194,10 @@ const ProductionReport = () => {
                 <td className="px-2 py-2 text-gray-600 text-center whitespace-nowrap">{index + 1}</td>
                 <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[100px]">{row.orderNumber}</td>
                 <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[100px]">{row.branch.displayName}</td>
-                <td className="px-2 py-2 text-gray-600 text-center truncate max-w-xs">{row.products}</td>
-                <td className="px-2 py-2 text-gray-600 text-center truncate">{row.totalAmount}</td>
+                <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[120px]">{row.product}</td>
                 <td className="px-2 py-2 text-gray-600 text-center">{row.totalQuantity}</td>
                 <td className="px-2 py-2 text-gray-600 text-center truncate">{row.date}</td>
-                {row.dailyQuantities.map((qty, i) => (
+                {row.dailyQuantities.slice(0, 12).map((qty, i) => (
                   <td key={i} className="px-2 py-2 text-gray-600 text-center">{qty}</td>
                 ))}
               </tr>
@@ -224,12 +218,12 @@ const ProductionReport = () => {
       >
         <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-800 flex items-center gap-3">
-            {isRtl ? 'تقرير الإنتاج' : 'Production Report'}
+            {isRtl ? 'تقرير توزيع الطلبات' : 'Order Distribution Report'}
           </h1>
           <div className="flex gap-2 flex-wrap">
             <Button
               variant={rows.length > 0 ? 'primary' : 'secondary'}
-              onClick={rows.length > 0 ? () => exportTable(rows, 'production_report', 'excel') : undefined}
+              onClick={rows.length > 0 ? () => exportTable(rows, 'order_distribution_report', 'excel') : undefined}
               className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm shadow-sm ${
                 rows.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
               }`}
@@ -240,7 +234,7 @@ const ProductionReport = () => {
             </Button>
             <Button
               variant={rows.length > 0 ? 'primary' : 'secondary'}
-              onClick={rows.length > 0 ? () => exportTable(rows, 'production_report', 'pdf') : undefined}
+              onClick={rows.length > 0 ? () => exportTable(rows, 'order_distribution_report', 'pdf') : undefined}
               className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm shadow-sm ${
                 rows.length > 0 ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
               }`}
@@ -249,22 +243,6 @@ const ProductionReport = () => {
               <Upload className="w-5 h-5" />
               {isRtl ? 'تصدير PDF' : 'Export PDF'}
             </Button>
-          </div>
-        </div>
-        <div className="mb-4">
-          <div className={`flex gap-2 border-b ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <button
-              className={`px-4 py-2 font-medium ${activeTab === 'products' ? 'border-b-2 border-blue-500 text-blue-500' : 'text-gray-500'}`}
-              onClick={() => setActiveTab('products')}
-            >
-              {isRtl ? 'المنتجات' : 'Products'}
-            </button>
-            <button
-              className={`px-4 py-2 font-medium ${activeTab === 'branches' ? 'border-b-2 border-blue-500 text-blue-500' : 'text-gray-500'}`}
-              onClick={() => setActiveTab('branches')}
-            >
-              {isRtl ? 'الفروع' : 'Branches'}
-            </button>
           </div>
         </div>
         {renderTable()}
