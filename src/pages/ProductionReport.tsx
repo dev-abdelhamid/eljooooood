@@ -20,12 +20,14 @@ interface OrderRow {
   totalQuantity: number;
   totalPrice: number;
   sales: number;
-  actualSales: number; // New field for actual sales based on orders
+  actualSales: number;
 }
 
 interface StockRow {
   id: string;
+  code: string;
   product: string;
+  unit: string;
   totalQuantity: number;
   dailyQuantities: number[];
   changes: number[];
@@ -83,6 +85,10 @@ const formatPrice = (amount: number, isRtl: boolean, isStats: boolean = false): 
     }
   }
   return formatted;
+};
+
+const formatNumber = (num: number, isRtl: boolean): string => {
+  return isRtl ? toArabicNumerals(num) : num.toString();
 };
 
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
@@ -280,8 +286,8 @@ const ProductionReport: React.FC = () => {
   const [orderData, setOrderData] = useState<{ [month: number]: OrderRow[] }>({});
   const [stockInData, setStockInData] = useState<{ [month: number]: StockRow[] }>({});
   const [stockOutData, setStockOutData] = useState<{ [month: number]: StockRow[] }>({});
-  const [returnData, setReturnData] = useState<{ [month: number]: ReturnRow[] }>({}); // New state for returns
-  const [salesData, setSalesData] = useState<{ [month: number]: OrderRow[] }>({}); // New state for sales
+  const [returnData, setReturnData] = useState<{ [month: number]: ReturnRow[] }>({});
+  const [salesData, setSalesData] = useState<{ [month: number]: OrderRow[] }>({});
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(8); // September 2025
   const [activeTab, setActiveTab] = useState<'orders' | 'stockIn' | 'stockOut' | 'returns' | 'sales'>('orders');
@@ -334,6 +340,18 @@ const ProductionReport: React.FC = () => {
           .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language));
         setBranches(fetchedBranches);
 
+        const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
+        inventory.forEach((item: any) => {
+          if (item.product?._id) {
+            productDetails.set(item.product._id, {
+              code: item.product._id, // استخدم _id كـ code بشكل صحيح
+              product: item.productName || item.product.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+              unit: item.product.displayUnit || item.product.unit || 'unit',
+              price: Number(item.product.price) || 0,
+            });
+          }
+        });
+
         let orders = Array.isArray(ordersResponse) ? ordersResponse : [];
         if (orders.length === 0) {
           orders = inventory.flatMap((item: any) => {
@@ -372,95 +390,113 @@ const ProductionReport: React.FC = () => {
             if (year === currentYear && orderMonth === month) {
               const branch = order.branch?.displayName || order.branch?.name || order.branchId || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
               (order.items || []).forEach((item: any) => {
-                const product = item.displayProductName || item.product?.name || item.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
-                const key = `${product}-${month}`;
+                const productId = item.product?._id || item.productId;
+                const details = productDetails.get(productId) || {
+                  code: productId || `code-${Math.random().toString(36).substring(2)}`,
+                  product: item.displayProductName || item.product?.name || item.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+                  unit: item.displayUnit || item.unit || 'unit',
+                  price: Number(item.price) || 0,
+                };
+                const key = `${productId}-${month}`;
                 if (!orderMap.has(key)) {
                   orderMap.set(key, {
                     id: key,
-                    code: item.productId || `code-${Math.random().toString(36).substring(2)}`,
-                    product,
-                    unit: item.displayUnit || item.unit || 'unit',
+                    code: details.code,
+                    product: details.product,
+                    unit: details.unit,
                     branchQuantities: {},
                     totalQuantity: 0,
                     totalPrice: 0,
-                    sales: item.sales || 0,
-                    actualSales: 0, // Initialize actual sales
+                    sales: 0,
+                    actualSales: 0,
                   });
                 }
                 const row = orderMap.get(key)!;
                 const quantity = Number(item.quantity) || 0;
-                const price = Number(item.price) || 0;
                 row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + quantity;
                 row.totalQuantity += quantity;
-                row.totalPrice += quantity * price;
-                row.sales = item.sales || (row.totalPrice * 0.10);
-                // Update actual sales from sales analytics
-                const salesItem = salesResponse.productSales.find((s: any) => s.productId === item.productId);
-                if (salesItem) {
-                  row.actualSales += salesItem.totalQuantity;
-                }
+                row.totalPrice += quantity * details.price;
+                row.sales = row.totalPrice * 0.10;
               });
             }
           });
 
-          if (Array.isArray(inventory)) {
-            inventory.forEach((item: any) => {
-              const product = item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
-              const assumedPrice = Number(item.product?.price) || 0;
-              (item.movements || []).forEach((movement: any) => {
-                if (!movement.type || !['in', 'out'].includes(movement.type)) return;
-                const date = new Date(movement.createdAt);
-                if (isNaN(date.getTime())) return;
-                const prodMonth = date.getMonth();
-                const year = date.getFullYear();
-                if (year === currentYear && prodMonth === month) {
-                  const day = date.getDate();
-                  const key = `${product}-${month}`;
-                  const map = movement.type === 'in' ? stockInMap : stockOutMap;
-                  if (!map.has(key)) {
-                    map.set(key, {
-                      id: key,
-                      product,
-                      totalQuantity: 0,
-                      dailyQuantities: Array(daysInMonthCount).fill(0),
-                      changes: Array(daysInMonthCount).fill(0),
-                      totalPrice: 0,
-                    });
-                  }
-                  const row = map.get(key)!;
-                  const quantity = Math.abs(Number(movement.quantity) || 0);
-                  row.dailyQuantities[day - 1] += quantity;
-                  row.totalQuantity += quantity;
-                  row.totalPrice += quantity * assumedPrice;
-                  if (day > 1) {
-                    row.changes[day - 1] = row.dailyQuantities[day - 1] - row.dailyQuantities[day - 2];
-                  } else {
-                    row.changes[0] = row.dailyQuantities[0];
-                  }
-                }
-              });
-            });
+          // Set actualSales after building rows to avoid duplication
+          for (const row of orderMap.values()) {
+            const salesItem = salesResponse.productSales.find((s: any) => s.productId === row.code); // Use code (_id)
+            if (salesItem) {
+              row.actualSales = salesItem.totalQuantity;
+            }
           }
 
-          // Process returns (assuming returns are a subset of movements with negative quantities)
           inventory.forEach((item: any) => {
-            const product = item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
-            const assumedPrice = Number(item.product?.price) || 0;
+            const productId = item.product?._id;
+            const details = productDetails.get(productId) || {
+              code: productId || `code-${Math.random().toString(36).substring(2)}`,
+              product: item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+              unit: item.product?.displayUnit || item.product?.unit || 'unit',
+              price: Number(item.product?.price) || 0,
+            };
             (item.movements || []).forEach((movement: any) => {
-              if (movement.type === 'return') {
+              if (!movement.type || !['in', 'out'].includes(movement.type)) return;
+              const date = new Date(movement.createdAt);
+              if (isNaN(date.getTime())) return;
+              const prodMonth = date.getMonth();
+              const year = date.getFullYear();
+              if (year === currentYear && prodMonth === month) {
+                const day = date.getDate();
+                const key = `${productId}-${month}`;
+                const map = movement.type === 'in' ? stockInMap : stockOutMap;
+                if (!map.has(key)) {
+                  map.set(key, {
+                    id: key,
+                    code: details.code,
+                    product: details.product,
+                    unit: details.unit,
+                    totalQuantity: 0,
+                    dailyQuantities: Array(daysInMonthCount).fill(0),
+                    changes: Array(daysInMonthCount).fill(0),
+                    totalPrice: 0,
+                  });
+                }
+                const row = map.get(key)!;
+                const quantity = Math.abs(Number(movement.quantity) || 0);
+                row.dailyQuantities[day - 1] += quantity;
+                row.totalQuantity += quantity;
+                row.totalPrice += quantity * details.price;
+                if (day > 1) {
+                  row.changes[day - 1] = row.dailyQuantities[day - 1] - row.dailyQuantities[day - 2];
+                } else {
+                  row.changes[0] = row.dailyQuantities[0];
+                }
+              }
+            });
+          });
+
+          // Returns: Use quantity < 0 for returns to show data
+          inventory.forEach((item: any) => {
+            const productId = item.product?._id;
+            const details = productDetails.get(productId) || {
+              code: productId || `code-${Math.random().toString(36).substring(2)}`,
+              product: item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+              unit: item.product?.displayUnit || item.product?.unit || 'unit',
+              price: Number(item.product?.price) || 0,
+            };
+            (item.movements || []).forEach((movement: any) => {
+              if (movement.quantity < 0) { // Changed to quantity < 0 to capture returns
                 const date = new Date(movement.createdAt);
                 if (isNaN(date.getTime())) return;
                 const returnMonth = date.getMonth();
                 const year = date.getFullYear();
                 if (year === currentYear && returnMonth === month) {
                   const day = date.getDate();
-                  const key = `${product}-${month}`;
+                  const key = `${productId}-${month}`;
                   if (!returnMap.has(key)) {
                     returnMap.set(key, {
                       id: key,
-                      product,
-                      code: item.product?._id || `code-${Math.random().toString(36).substring(2)}`,
-                      unit: item.product?.unit || 'unit',
+                      product: details.product,
+                      code: details.code,
+                      unit: details.unit,
                       totalReturns: 0,
                       dailyReturns: Array(daysInMonthCount).fill(0),
                       totalValue: 0,
@@ -470,51 +506,34 @@ const ProductionReport: React.FC = () => {
                   const quantity = Math.abs(Number(movement.quantity) || 0);
                   row.dailyReturns[day - 1] += quantity;
                   row.totalReturns += quantity;
-                  row.totalValue += quantity * assumedPrice;
+                  row.totalValue += quantity * details.price;
                 }
               }
             });
           });
 
-          // Process sales based on order data and sales analytics
-          orders.forEach((order: any) => {
-            const status = order.status || order.orderStatus;
-            if (status === 'completed') {
-              const date = new Date(order.createdAt || order.date);
-              if (isNaN(date.getTime())) return;
-              const orderMonth = date.getMonth();
-              const year = date.getFullYear();
-              if (year === currentYear && orderMonth === month) {
-                const branch = order.branch?.displayName || order.branch?.name || order.branchId || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
-                (order.items || []).forEach((item: any) => {
-                  const product = item.displayProductName || item.product?.name || item.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
-                  const key = `${product}-${month}`;
-                  if (!salesMap.has(key)) {
-                    salesMap.set(key, {
-                      id: key,
-                      code: item.productId || `code-${Math.random().toString(36).substring(2)}`,
-                      product,
-                      unit: item.displayUnit || item.unit || 'unit',
-                      branchQuantities: {},
-                      totalQuantity: 0,
-                      totalPrice: 0,
-                      sales: item.sales || 0,
-                      actualSales: 0,
-                    });
-                  }
-                  const row = salesMap.get(key)!;
-                  const quantity = Number(item.quantity) || 0;
-                  const price = Number(item.price) || 0;
-                  row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + quantity;
-                  row.totalQuantity += quantity;
-                  row.totalPrice += quantity * price;
-                  row.sales = item.sales || (row.totalPrice * 0.10);
-                  const salesItem = salesResponse.productSales.find((s: any) => s.productId === item.productId);
-                  if (salesItem) {
-                    row.actualSales += salesItem.totalQuantity;
-                  }
-                });
-              }
+          // Sales: Focus on sold quantities, use salesResponse directly
+          salesResponse.productSales.forEach((s: any) => {
+            const productId = s.productId;
+            const details = productDetails.get(productId) || {
+              code: productId,
+              product: s.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+              unit: 'unit',
+              price: s.totalRevenue / s.totalQuantity || 0,
+            };
+            const key = `${productId}-${month}`;
+            if (!salesMap.has(key)) {
+              salesMap.set(key, {
+                id: key,
+                code: details.code,
+                product: details.product,
+                unit: details.unit,
+                branchQuantities: {}, // If no branch breakdown, leave empty; assume total
+                totalQuantity: s.totalQuantity,
+                totalPrice: s.totalRevenue || s.totalQuantity * details.price,
+                sales: s.totalRevenue * 0.10,
+                actualSales: s.totalQuantity, // Actual sold quantity
+              });
             }
           });
 
@@ -551,7 +570,6 @@ const ProductionReport: React.FC = () => {
       }, {} as { [branch: string]: number });
       const grandTotalQuantity = data.reduce((sum, row) => sum + row.totalQuantity, 0);
       const grandTotalPrice = data.reduce((sum, row) => sum + row.totalPrice, 0);
-      const grandTotalSales = data.reduce((sum, row) => sum + row.sales, 0);
       const grandActualSales = data.reduce((sum, row) => sum + row.actualSales, 0);
       const monthName = months[month].label;
 
@@ -713,16 +731,16 @@ const ProductionReport: React.FC = () => {
                         }`}
                         title={`${isRtl ? 'الكمية في ' : 'Quantity in '} ${branch}: ${row.branchQuantities[branch] || 0}`}
                       >
-                        {row.branchQuantities[branch] || 0}
+                        {formatNumber(row.branchQuantities[branch] || 0, isRtl)}
                       </td>
                     ))}
-                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{row.totalQuantity}</td>
-                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{row.actualSales}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.actualSales, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">
                       {formatPrice(row.totalPrice, isRtl)}
                     </td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">
-                      {row.totalQuantity > 0 ? ((row.actualSales / row.totalQuantity) * 100).toFixed(2) : '0.00'}%
+                      {formatNumber(row.totalQuantity > 0 ? ((row.actualSales / row.totalQuantity) * 100).toFixed(2) : '0.00', isRtl)}%
                     </td>
                   </tr>
                 ))}
@@ -732,16 +750,16 @@ const ProductionReport: React.FC = () => {
                   <td className="px-4 py-3 text-gray-800 text-center"></td>
                   {allBranches.map(branch => (
                     <td key={branch} className="px-4 py-3 text-gray-800 text-center">
-                      {totalQuantities[branch] || 0}
+                      {formatNumber(totalQuantities[branch] || 0, isRtl)}
                     </td>
                   ))}
-                  <td className="px-4 py-3 text-gray-800 text-center">{grandTotalQuantity}</td>
-                  <td className="px-4 py-3 text-gray-800 text-center">{grandActualSales}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandActualSales, isRtl)}</td>
                   <td className="px-4 py-3 text-gray-800 text-center">
                     {formatPrice(grandTotalPrice, isRtl)}
                   </td>
                   <td className="px-4 py-3 text-gray-800 text-center">
-                    {grandTotalQuantity > 0 ? ((grandActualSales / grandTotalQuantity) * 100).toFixed(2) : '0.00'}%
+                    {formatNumber(grandTotalQuantity > 0 ? ((grandActualSales / grandTotalQuantity) * 100).toFixed(2) : '0.00', isRtl)}%
                   </td>
                 </tr>
               </tbody>
@@ -762,7 +780,9 @@ const ProductionReport: React.FC = () => {
       const exportTable = (format: 'excel' | 'pdf') => {
         const headers = [
           isRtl ? 'رقم' : 'No.',
+          isRtl ? 'الكود' : 'Code',
           isRtl ? 'المنتج' : 'Product',
+          isRtl ? 'وحدة المنتج' : 'Product Unit',
           ...daysInMonth,
           isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
           isRtl ? 'السعر الإجمالي' : 'Total Price',
@@ -770,14 +790,18 @@ const ProductionReport: React.FC = () => {
         const rows = [
           ...data.map((row, index) => ({
             no: index + 1,
+            code: row.code,
             product: row.product,
+            unit: row.unit,
             ...Object.fromEntries(row.dailyQuantities.map((qty, i) => [daysInMonth[i], qty])),
             totalQuantity: row.totalQuantity,
             totalPrice: formatPrice(row.totalPrice, isRtl),
           })),
           {
             no: '',
+            code: '',
             product: isRtl ? 'الإجمالي' : 'Total',
+            unit: '',
             ...Object.fromEntries(daysInMonth.map((_, i) => [daysInMonth[i], data.reduce((sum, row) => sum + row.dailyQuantities[i], 0)])),
             totalQuantity: grandTotalQuantity,
             totalPrice: formatPrice(grandTotalPrice, isRtl),
@@ -785,7 +809,9 @@ const ProductionReport: React.FC = () => {
         ];
         const dataRows = rows.map(row => [
           row.no,
+          row.code,
           row.product,
+          row.unit,
           ...daysInMonth.map(day => row[day]),
           row.totalQuantity,
           row.totalPrice,
@@ -794,7 +820,7 @@ const ProductionReport: React.FC = () => {
         if (format === 'excel') {
           const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
           if (isRtl) ws['!views'] = [{ RTL: true }];
-          ws['!cols'] = [{ wch: 10 }, { wch: 20 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }];
+          ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }];
           const wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
@@ -861,7 +887,9 @@ const ProductionReport: React.FC = () => {
               <thead className="bg-blue-100 sticky top-0">
                 <tr className={isRtl ? 'flex-row-reverse' : ''}>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
                   {daysInMonth.map((day, i) => (
                     <th key={i} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
                       {day}
@@ -878,31 +906,33 @@ const ProductionReport: React.FC = () => {
               <tbody className="divide-y divide-gray-200">
                 {data.map((row, index) => (
                   <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                    <td className="px-4 py-3 text-gray-700 text-center">{index + 1}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
                     {row.dailyQuantities.map((qty, i) => (
                       <td
                         key={i}
                         className={`px-4 py-3 text-center font-medium ${isIn ? 'text-green-700' : 'text-red-700'}`}
                         title={`${isRtl ? 'التغيير' : 'Change'}: ${row.changes[i] > 0 ? '+' : ''}${row.changes[i]} (${isRtl ? 'الكمية' : 'Quantity'}: ${qty})`}
                       >
-                        {qty} {row.changes[i] !== 0 && `(${row.changes[i] > 0 ? '+' : ''}${row.changes[i]})`}
+                        {formatNumber(qty, isRtl)} {row.changes[i] !== 0 && `(${row.changes[i] > 0 ? '+' : ''}${formatNumber(row.changes[i], isRtl)})`}
                       </td>
                     ))}
-                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{row.totalQuantity}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">
                       {formatPrice(row.totalPrice, isRtl)}
                     </td>
                   </tr>
                 ))}
                 <tr className={`font-semibold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  <td className="px-4 py-3 text-gray-800 text-center" colSpan={2}>{isRtl ? 'الإجمالي' : 'Total'}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
                   {daysInMonth.map((_, i) => (
                     <td key={i} className="px-4 py-3 text-gray-800 text-center">
-                      {data.reduce((sum, row) => sum + row.dailyQuantities[i], 0)}
+                      {formatNumber(data.reduce((sum, row) => sum + row.dailyQuantities[i], 0), isRtl)}
                     </td>
                   ))}
-                  <td className="px-4 py-3 text-gray-800 text-center">{grandTotalQuantity}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
                   <td className="px-4 py-3 text-gray-800 text-center">
                     {formatPrice(grandTotalPrice, isRtl)}
                   </td>
@@ -1051,7 +1081,7 @@ const ProductionReport: React.FC = () => {
               <tbody className="divide-y divide-gray-200">
                 {data.map((row, index) => (
                   <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                    <td className="px-4 py-3 text-gray-700 text-center">{index + 1}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
@@ -1061,10 +1091,10 @@ const ProductionReport: React.FC = () => {
                         className="px-4 py-3 text-center font-medium text-red-700"
                         title={`${isRtl ? 'المرتجعات' : 'Returns'}: ${qty}`}
                       >
-                        {qty}
+                        {formatNumber(qty, isRtl)}
                       </td>
                     ))}
-                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{row.totalReturns}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalReturns, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">
                       {formatPrice(row.totalValue, isRtl)}
                     </td>
@@ -1074,10 +1104,10 @@ const ProductionReport: React.FC = () => {
                   <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
                   {daysInMonth.map((_, i) => (
                     <td key={i} className="px-4 py-3 text-gray-800 text-center">
-                      {data.reduce((sum, row) => sum + row.dailyReturns[i], 0)}
+                      {formatNumber(data.reduce((sum, row) => sum + row.dailyReturns[i], 0), isRtl)}
                     </td>
                   ))}
-                  <td className="px-4 py-3 text-gray-800 text-center">{grandTotalReturns}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalReturns, isRtl)}</td>
                   <td className="px-4 py-3 text-gray-800 text-center">
                     {formatPrice(grandTotalValue, isRtl)}
                   </td>
@@ -1097,7 +1127,7 @@ const ProductionReport: React.FC = () => {
         acc[branch] = data.reduce((sum, row) => sum + (row.branchQuantities[branch] || 0), 0);
         return acc;
       }, {} as { [branch: string]: number });
-      const grandTotalQuantity = data.reduce((sum, row) => sum + row.totalQuantity, 0);
+      const grandTotalQuantity = data.reduce((sum, row) => sum + row.actualSales, 0); // Focus on sold
       const grandTotalPrice = data.reduce((sum, row) => sum + row.totalPrice, 0);
       const grandActualSales = data.reduce((sum, row) => sum + row.actualSales, 0);
       const monthName = months[month].label;
@@ -1118,7 +1148,7 @@ const ProductionReport: React.FC = () => {
             product: row.product,
             unit: row.unit,
             ...Object.fromEntries(allBranches.map(branch => [branch, row.branchQuantities[branch] || 0])),
-            totalQuantity: row.totalQuantity,
+            totalQuantity: row.actualSales, // Sold quantity
             actualSales: row.actualSales,
             totalPrice: formatPrice(row.totalPrice, isRtl),
           })),
@@ -1252,11 +1282,11 @@ const ProductionReport: React.FC = () => {
                         }`}
                         title={`${isRtl ? 'الكمية في ' : 'Quantity in '} ${branch}: ${row.branchQuantities[branch] || 0}`}
                       >
-                        {row.branchQuantities[branch] || 0}
+                        {formatNumber(row.branchQuantities[branch] || 0, isRtl)}
                       </td>
                     ))}
-                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{row.totalQuantity}</td>
-                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{row.actualSales}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.actualSales, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">
                       {formatPrice(row.totalPrice, isRtl)}
                     </td>
@@ -1268,11 +1298,11 @@ const ProductionReport: React.FC = () => {
                   <td className="px-4 py-3 text-gray-800 text-center"></td>
                   {allBranches.map(branch => (
                     <td key={branch} className="px-4 py-3 text-gray-800 text-center">
-                      {totalQuantities[branch] || 0}
+                      {formatNumber(totalQuantities[branch] || 0, isRtl)}
                     </td>
                   ))}
-                  <td className="px-4 py-3 text-gray-800 text-center">{grandTotalQuantity}</td>
-                  <td className="px-4 py-3 text-gray-800 text-center">{grandActualSales}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandActualSales, isRtl)}</td>
                   <td className="px-4 py-3 text-gray-800 text-center">
                     {formatPrice(grandTotalPrice, isRtl)}
                   </td>
