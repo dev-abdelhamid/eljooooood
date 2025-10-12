@@ -26,7 +26,7 @@ interface StockRow {
   totalQuantity: number;
   dailyQuantities: number[];
   changes: number[];
-  totalPrice: number; // Assumed price for stock movements
+  totalPrice: number;
 }
 
 const ProductionReport: React.FC = () => {
@@ -39,7 +39,7 @@ const ProductionReport: React.FC = () => {
   const [stockOutData, setStockOutData] = useState<{ [month: number]: StockRow[] }>({});
   const [selectedMonth, setSelectedMonth] = useState(8); // September 2025 (0-based index)
   const [activeTab, setActiveTab] = useState<'orders' | 'stockIn' | 'stockOut'>('orders');
-  const currentDate = new Date('2025-10-12T10:24:00+03:00');
+  const currentDate = new Date('2025-10-12T10:41:00+03:00');
   const currentYear = currentDate.getFullYear();
   const months = Array.from({ length: 12 }, (_, i) => ({
     value: i,
@@ -76,12 +76,13 @@ const ProductionReport: React.FC = () => {
           const stockInMap = new Map<string, StockRow>();
           const stockOutMap = new Map<string, StockRow>();
 
-          // Process orders (pivot table: branches as columns, products as rows)
+          // Process orders (only completed, pivot table: branches as columns, products as rows)
           orders.forEach((order: any) => {
+            if (order.status !== 'completed') return; // Strict filter for completed orders
             const date = new Date(order.createdAt || order.date);
             const orderMonth = date.getMonth();
             const year = date.getFullYear();
-            if (year === currentYear && orderMonth === month && order.status === 'completed') {
+            if (year === currentYear && orderMonth === month) {
               const branch = order.branch?.displayName || order.branch?.name || order.branchId || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
               order.items.forEach((item: any) => {
                 const product = item.displayProductName || item.product?.name || item.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
@@ -96,18 +97,21 @@ const ProductionReport: React.FC = () => {
                   });
                 }
                 const row = orderMap.get(product)!;
-                row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + (Number(item.quantity) || 0);
-                row.totalQuantity += Number(item.quantity) || 0;
-                row.totalPrice += (Number(item.quantity) || 0) * (Number(item.price) || 0);
+                const quantity = Number(item.quantity) || 0;
+                const price = Number(item.price) || 0;
+                row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + quantity;
+                row.totalQuantity += quantity;
+                row.totalPrice += quantity * price;
               });
             }
           });
 
-          // Process inventory movements (increases and decreases)
+          // Process inventory movements (strictly separate in and out)
           inventory.forEach((item: any) => {
             const product = item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
-            const assumedPrice = item.product?.price || 0; // Assume price from product data
+            const assumedPrice = Number(item.product?.price) || 0; // Assume price from product data
             item.movements.forEach((movement: any) => {
+              if (!['in', 'out'].includes(movement.type)) return; // Skip invalid movement types
               const date = new Date(movement.createdAt);
               const prodMonth = date.getMonth();
               const year = date.getFullYear();
