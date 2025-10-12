@@ -975,11 +975,11 @@ export const Dashboard: React.FC = () => {
       {['admin', 'production', 'branch'].includes(user.role) && (
         <>
           <StatsCard
-            title={isRtl ? 'إجمالي قيمة الطلبات' : 'Total Order Value'} // تغيير من Total Sales إلى Total Order Value
+            title={isRtl ? 'إجمالي قيمة المخزون' : 'Total  Inventory Value'} 
             value={stats.totalOrderValue.toFixed(2)}
             icon={DollarSign}
             color="purple"
-            ariaLabel={isRtl ? 'إجمالي قيمة الطلبات' : 'Total Order Value'}
+            ariaLabel={isRtl ? 'إجمالي قيمة المخزون ' : 'Total inventory Value'}
           />
           <StatsCard
             title={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
