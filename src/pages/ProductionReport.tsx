@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,13 +13,13 @@ import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 
 interface OrderRow {
   id: string;
-  code: string; // الكود
+  code: string;
   product: string;
-  unit: string; // وحدة المنتج
+  unit: string;
   branchQuantities: { [branch: string]: number };
   totalQuantity: number;
   totalPrice: number;
-  sales: number; // المبيعات
+  sales: number;
 }
 
 interface StockRow {
@@ -172,7 +171,7 @@ const generatePDFHeader = (
   }
 };
 
-// Generate PDF table
+// Generate PDF table with improved layout
 const generatePDFTable = (
   doc: jsPDF,
   headers: string[],
@@ -181,64 +180,62 @@ const generatePDFTable = (
   fontLoaded: boolean,
   fontName: string
 ) => {
-  const processedHeaders = isRtl ? headers.map(header => doc.processArabic(header)) : headers;
-  const processedData = data.map(row => isRtl ? row.map((cell: string) => doc.processArabic(String(cell))) : row);
+  const tableColumnWidths = headers.map((_, index) => {
+    if (index === 0) return 30; // Code
+    if (index === 1) return 50; // Product
+    if (index === 2) return 30; // Unit
+    if (index >= 3 && index < headers.length - 3) return 25; // Branch Quantities
+    if (index === headers.length - 3) return 30; // Total Quantity
+    if (index === headers.length - 2) return 35; // Total Price
+    return 35; // Sales
+  });
+
   autoTable(doc, {
-    head: [isRtl ? processedHeaders.slice().reverse() : processedHeaders],
-    body: isRtl ? processedData.map(row => row.slice().reverse()) : processedData,
+    head: [isRtl ? headers.slice().reverse() : headers],
+    body: isRtl ? data.map(row => row.slice().reverse()) : data,
     theme: 'grid',
     startY: 30,
-    margin: { left: 15, right: 15 },
+    margin: { left: 10, right: 10 },
+    tableWidth: 'auto',
+    columnStyles: {
+      0: { cellWidth: tableColumnWidths[0], halign: 'center' },
+      1: { cellWidth: tableColumnWidths[1], halign: 'center' },
+      2: { cellWidth: tableColumnWidths[2], halign: 'center' },
+      ...Object.fromEntries(
+        allBranches.map((_, i) => [i + 3, { cellWidth: tableColumnWidths[i + 3], halign: 'center' }])
+      ),
+      [headers.length - 3]: { cellWidth: tableColumnWidths[headers.length - 3], halign: 'center', fontStyle: 'bold' },
+      [headers.length - 2]: { cellWidth: tableColumnWidths[headers.length - 2], halign: 'center', fontStyle: 'bold' },
+      [headers.length - 1]: { cellWidth: tableColumnWidths[headers.length - 1], halign: 'center', fontStyle: 'bold' },
+    },
     headStyles: {
       fillColor: [255, 193, 7],
       textColor: [33, 33, 33],
       fontSize: 10,
-      halign: isRtl ? 'center' : 'center',
+      halign: 'center',
       font: fontLoaded ? fontName : 'helvetica',
       fontStyle: 'bold',
       cellPadding: 4,
-      minCellHeight: 8,
     },
     bodyStyles: {
       fontSize: 9,
-      halign: isRtl ? 'center' : 'center',
+      halign: 'center',
       font: fontLoaded ? fontName : 'helvetica',
-      fontStyle: 'normal',
-      cellPadding: 4,
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
       fillColor: [255, 255, 255],
-      minCellHeight: 6,
+      cellPadding: 4,
     },
-    alternateRowStyles: {
-      fillColor: [245, 245, 245],
-    },
-    columnStyles: headers.reduce((acc, _, index) => {
-      acc[index] = { 
-        cellWidth: index === 0 ? 40 : index === 1 ? 60 : index === headers.length - 2 ? 40 : 30,
-        fontStyle: index === headers.length - 2 || index === headers.length - 1 ? 'bold' : 'normal'
-      };
-      return acc;
-    }, {} as { [key: number]: any }),
-    styles: {
-      overflow: 'linebreak',
-      cellWidth: 'wrap',
-      font: fontLoaded ? fontName : 'helvetica',
-      valign: 'middle',
-    },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
     didParseCell: (data) => {
-      data.cell.styles.halign = isRtl ? 'center' : 'center';
-      if (data.column.index === (isRtl ? 1 : headers.length - 2) || data.column.index === (isRtl ? 0 : headers.length - 1)) {
-        if (!data.cell.text[0] || data.cell.text[0].includes('NaN')) {
-          data.cell.text[0] = formatPrice(0, isRtl);
-        }
+      if (data.section === 'body' && (data.column.index === (isRtl ? 0 : headers.length - 2) || data.column.index === (isRtl ? 1 : headers.length - 1))) {
         data.cell.styles.fontStyle = 'bold';
       }
       if (isRtl) {
-        data.cell.text = data.cell.text.map(text => doc.processArabic(text));
+        data.cell.text = data.cell.text.map(text => doc.processArabic(String(text)));
       }
     },
-    didDrawPage: () => {
+    didDrawPage: (data) => {
       doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
     },
   });
@@ -256,7 +253,7 @@ const exportToPDF = async (
   totalPrice: number
 ) => {
   try {
-    const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const fontName = 'Amiri';
     const fontLoaded = await loadFont(doc);
     generatePDFHeader(doc, isRtl, title, monthName, totalItems, totalQuantity, totalPrice, fontName, fontLoaded);
@@ -287,7 +284,7 @@ const ProductionReport: React.FC = () => {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(8); // September 2025
   const [activeTab, setActiveTab] = useState<'orders' | 'stockIn' | 'stockOut'>('orders');
-  const currentDate = new Date('2025-10-12T21:37:00+03:00');
+  const currentDate = new Date('2025-10-12T21:50:00+03:00'); // Updated to current time
   const currentYear = currentDate.getFullYear();
   const months = Array.from({ length: 12 }, (_, i) => ({
     value: i,
@@ -303,6 +300,10 @@ const ProductionReport: React.FC = () => {
   }, [currentYear, language]);
 
   const daysInMonth = useMemo(() => getDaysInMonth(selectedMonth), [selectedMonth, getDaysInMonth]);
+
+  const allBranches = useMemo(() => {
+    return branches.map(b => b.displayName).sort();
+  }, [branches]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -342,7 +343,8 @@ const ProductionReport: React.FC = () => {
                 price: item.product?.price || 0,
                 productId: item.product?._id || `code-${Math.random().toString(36).substring(2)}`,
                 unit: item.product?.unit || 'unit',
-                displayUnit: item.product?.unit || 'unit',
+                displayUnit: item.product?.displayUnit || item.product?.unit || 'unit',
+                sales: item.product?.sales || (Math.abs(movement.quantity) * item.product?.price * 0.10) || 0, // Sales from API or calculated
               }],
             }));
           });
@@ -371,11 +373,11 @@ const ProductionReport: React.FC = () => {
                     id: key,
                     code: item.productId || `code-${Math.random().toString(36).substring(2)}`,
                     product,
-                    unit: item.displayUnit || 'unit',
+                    unit: item.displayUnit || item.unit || 'unit',
                     branchQuantities: {},
                     totalQuantity: 0,
                     totalPrice: 0,
-                    sales: 0,
+                    sales: item.sales || 0,
                   });
                 }
                 const row = orderMap.get(key)!;
@@ -384,7 +386,7 @@ const ProductionReport: React.FC = () => {
                 row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + quantity;
                 row.totalQuantity += quantity;
                 row.totalPrice += quantity * price;
-                row.sales = row.totalPrice * 0.10; // 10% من السعر الإجمالي كمثال
+                row.sales = item.sales || (row.totalPrice * 0.10); // Use API sales or calculate 10%
               });
             }
           });
@@ -448,10 +450,6 @@ const ProductionReport: React.FC = () => {
     };
     fetchData();
   }, [isRtl, currentYear]);
-
-  const allBranches = useMemo(() => {
-    return branches.map(b => b.displayName).sort();
-  }, [branches]);
 
   const renderOrderTable = useCallback(
     (data: OrderRow[], title: string, month: number) => {
@@ -816,7 +814,7 @@ const ProductionReport: React.FC = () => {
   );
 
   return (
-    <div className={`px-6 py-8 min-h-screen ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-100`}>
+    <div className={`min-h-screen px-6 py-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-100`}>
       <h1 className="text-3xl font-bold text-gray-900 mb-8">{isRtl ? 'تقارير الإنتاج' : 'Production Reports'}</h1>
       <div className="mb-8 bg-white shadow-md rounded-xl p-4">
         <div className="flex flex-wrap gap-2 mb-4 justify-center">
