@@ -17,16 +17,16 @@ interface OrderRow {
   product: string;
   branchQuantities: { [branch: string]: number };
   totalQuantity: number;
+  totalPrice: number;
 }
 
 interface StockRow {
   id: string;
   product: string;
-  branch: string;
   totalQuantity: number;
-  date: string;
   dailyQuantities: number[];
   changes: number[];
+  totalPrice: number; // Assumed price for stock movements
 }
 
 const ProductionReport: React.FC = () => {
@@ -37,14 +37,25 @@ const ProductionReport: React.FC = () => {
   const [orderData, setOrderData] = useState<{ [month: number]: OrderRow[] }>({});
   const [stockInData, setStockInData] = useState<{ [month: number]: StockRow[] }>({});
   const [stockOutData, setStockOutData] = useState<{ [month: number]: StockRow[] }>({});
-  const [selectedMonth, setSelectedMonth] = useState(9); // October (0-based index)
+  const [selectedMonth, setSelectedMonth] = useState(8); // September 2025 (0-based index)
   const [activeTab, setActiveTab] = useState<'orders' | 'stockIn' | 'stockOut'>('orders');
-  const currentDate = new Date('2025-10-12T10:18:00+03:00');
+  const currentDate = new Date('2025-10-12T10:24:00+03:00');
   const currentYear = currentDate.getFullYear();
   const months = Array.from({ length: 12 }, (_, i) => ({
     value: i,
     label: new Date(currentYear, i).toLocaleString(language, { month: 'long' }),
   }));
+
+  // Calculate actual days for the selected month
+  const getDaysInMonth = useCallback((month: number) => {
+    const daysInMonth = new Date(currentYear, month + 1, 0).getDate();
+    return Array.from({ length: daysInMonth }, (_, i) => {
+      const date = new Date(currentYear, month, i + 1);
+      return date.toLocaleString(language, { weekday: 'long', day: 'numeric', month: 'long' });
+    });
+  }, [currentYear, language]);
+
+  const daysInMonth = useMemo(() => getDaysInMonth(selectedMonth), [selectedMonth, getDaysInMonth]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -70,53 +81,55 @@ const ProductionReport: React.FC = () => {
             const date = new Date(order.createdAt || order.date);
             const orderMonth = date.getMonth();
             const year = date.getFullYear();
-            if (year === currentYear && orderMonth === month) {
-              const branch = order.branch?.displayName || order.branchId || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
+            if (year === currentYear && orderMonth === month && order.status === 'completed') {
+              const branch = order.branch?.displayName || order.branch?.name || order.branchId || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
               order.items.forEach((item: any) => {
-                const product = item.product?.name || item.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
-                const key = `${product}-${branch}`;
+                const product = item.displayProductName || item.product?.name || item.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
+                const key = `${product}-${month}`;
                 if (!orderMap.has(product)) {
                   orderMap.set(product, {
-                    id: `${product}-${month}`,
+                    id: key,
                     product,
                     branchQuantities: {},
                     totalQuantity: 0,
+                    totalPrice: 0,
                   });
                 }
                 const row = orderMap.get(product)!;
-                row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + item.quantity;
-                row.totalQuantity += item.quantity;
+                row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + (Number(item.quantity) || 0);
+                row.totalQuantity += Number(item.quantity) || 0;
+                row.totalPrice += (Number(item.quantity) || 0) * (Number(item.price) || 0);
               });
             }
           });
 
           // Process inventory movements (increases and decreases)
           inventory.forEach((item: any) => {
+            const product = item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
+            const assumedPrice = item.product?.price || 0; // Assume price from product data
             item.movements.forEach((movement: any) => {
               const date = new Date(movement.createdAt);
               const prodMonth = date.getMonth();
               const year = date.getFullYear();
               if (year === currentYear && prodMonth === month) {
                 const day = date.getDate();
-                const product = item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
-                const branch = movement.branch?.displayName || movement.branchId || (isRtl ? 'المصنع الرئيسي' : 'Main Factory');
-                const key = `${product}-${branch}`;
+                const key = `${product}-${month}`;
                 const map = movement.type === 'in' ? stockInMap : stockOutMap;
                 if (!map.has(key)) {
                   map.set(key, {
-                    id: `${key}-${month}`,
+                    id: key,
                     product,
-                    branch,
                     totalQuantity: 0,
-                    date: new Date(currentYear, month, 1).toISOString().split('T')[0],
                     dailyQuantities: Array(daysInMonth).fill(0),
                     changes: Array(daysInMonth).fill(0),
+                    totalPrice: 0,
                   });
                 }
                 const row = map.get(key)!;
-                const quantity = Math.abs(movement.quantity);
+                const quantity = Math.abs(Number(movement.quantity) || 0);
                 row.dailyQuantities[day - 1] += quantity;
                 row.totalQuantity += quantity;
+                row.totalPrice += quantity * assumedPrice;
                 if (day > 1) {
                   row.changes[day - 1] = quantity - row.dailyQuantities[day - 2];
                 } else {
@@ -141,7 +154,7 @@ const ProductionReport: React.FC = () => {
       }
     };
     fetchData();
-  }, [isRtl]);
+  }, [isRtl, currentYear]);
 
   const allBranches = useMemo(() => {
     const branches = new Set<string>();
@@ -155,22 +168,40 @@ const ProductionReport: React.FC = () => {
 
   const renderOrderTable = useCallback(
     (data: OrderRow[], title: string, month: number) => {
-      const daysInMonth = new Date(currentYear, month + 1, 0).getDate();
+      const totalQuantities = allBranches.reduce((acc, branch) => {
+        acc[branch] = data.reduce((sum, row) => sum + (row.branchQuantities[branch] || 0), 0);
+        return acc;
+      }, {} as { [branch: string]: number });
+      const grandTotalQuantity = data.reduce((sum, row) => sum + row.totalQuantity, 0);
+      const grandTotalPrice = data.reduce((sum, row) => sum + row.totalPrice, 0);
+
       const exportTable = (format: 'excel' | 'pdf') => {
         const monthName = new Date(currentYear, month, 1).toLocaleString(language, { month: 'long' });
-        const headers = [isRtl ? 'المنتج' : 'Product', isRtl ? 'الكمية الإجمالية' : 'Total Quantity', ...allBranches];
-        const rows = data.map(row => ({
-          product: row.product,
-          totalQuantity: row.totalQuantity,
-          ...Object.fromEntries(allBranches.map(branch => [branch, row.branchQuantities[branch] || 0])),
-        }));
+        const headers = [
+          isRtl ? 'المنتج' : 'Product',
+          isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
+          isRtl ? 'السعر الإجمالي' : 'Total Price',
+          ...allBranches,
+        ];
+        const rows = [
+          ...data.map(row => ({
+            product: row.product,
+            totalQuantity: row.totalQuantity,
+            totalPrice: row.totalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' }),
+            ...Object.fromEntries(allBranches.map(branch => [branch, row.branchQuantities[branch] || 0])),
+          })),
+          {
+            product: isRtl ? 'الإجمالي' : 'Total',
+            totalQuantity: grandTotalQuantity,
+            totalPrice: grandTotalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' }),
+            ...Object.fromEntries(allBranches.map(branch => [branch, totalQuantities[branch] || 0])),
+          },
+        ];
 
         if (format === 'excel') {
-          const ws = XLSX.utils.json_to_sheet(rows.map(row => ({
-            [isRtl ? 'المنتج' : 'Product']: row.product,
-            [isRtl ? 'الكمية الإجمالية' : 'Total Quantity']: row.totalQuantity,
-            ...Object.fromEntries(allBranches.map(branch => [branch, row[branch]])),
-          })));
+          const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
+          if (isRtl) ws['!views'] = [{ RTL: true }];
+          ws['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 15 }, ...allBranches.map(() => ({ wch: 15 }))];
           const wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
@@ -178,10 +209,16 @@ const ProductionReport: React.FC = () => {
           const doc = new jsPDF();
           doc.autoTable({
             head: [headers],
-            body: rows.map(row => [row.product, row.totalQuantity, ...allBranches.map(branch => row[branch])]),
+            body: rows.map(row => [
+              row.product,
+              row.totalQuantity,
+              row.totalPrice,
+              ...allBranches.map(branch => row[branch]),
+            ]),
             styles: { font: isRtl ? 'Amiri' : 'Helvetica', halign: isRtl ? 'right' : 'left', fontSize: 10 },
             headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontSize: 10 },
             bodyStyles: { fontSize: 9 },
+            footStyles: { fillColor: [240, 240, 240], fontSize: 10, fontStyle: 'bold' },
           });
           doc.save(`${title}_${monthName}.pdf`);
         }
@@ -243,6 +280,9 @@ const ProductionReport: React.FC = () => {
                   <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">
                     {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
                   </th>
+                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">
+                    {isRtl ? 'السعر الإجمالي' : 'Total Price'}
+                  </th>
                   {allBranches.map(branch => (
                     <th key={branch} className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">
                       {branch}
@@ -255,6 +295,9 @@ const ProductionReport: React.FC = () => {
                   <tr key={row.id} className={`hover:bg-blue-50/50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
                     <td className="px-3 py-2 text-gray-700 text-center truncate">{row.product}</td>
                     <td className="px-3 py-2 text-gray-700 text-center font-medium">{row.totalQuantity}</td>
+                    <td className="px-3 py-2 text-gray-700 text-center font-medium">
+                      {row.totalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
+                    </td>
                     {allBranches.map(branch => (
                       <td key={branch} className="px-3 py-2 text-gray-700 text-center">
                         {row.branchQuantities[branch] || 0}
@@ -262,6 +305,18 @@ const ProductionReport: React.FC = () => {
                     ))}
                   </tr>
                 ))}
+                <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <td className="px-3 py-2 text-gray-800 text-center">{isRtl ? 'الإجمالي' : 'Total'}</td>
+                  <td className="px-3 py-2 text-gray-800 text-center">{grandTotalQuantity}</td>
+                  <td className="px-3 py-2 text-gray-800 text-center">
+                    {grandTotalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
+                  </td>
+                  {allBranches.map(branch => (
+                    <td key={branch} className="px-3 py-2 text-gray-800 text-center">
+                      {totalQuantities[branch] || 0}
+                    </td>
+                  ))}
+                </tr>
               </tbody>
             </table>
           </motion.div>
@@ -273,35 +328,39 @@ const ProductionReport: React.FC = () => {
 
   const renderStockTable = useCallback(
     (data: StockRow[], title: string, month: number) => {
-      const daysInMonth = new Date(currentYear, month + 1, 0).getDate();
+      const grandTotalQuantity = data.reduce((sum, row) => sum + row.totalQuantity, 0);
+      const grandTotalPrice = data.reduce((sum, row) => sum + row.totalPrice, 0);
+
       const exportTable = (format: 'excel' | 'pdf') => {
         const monthName = new Date(currentYear, month, 1).toLocaleString(language, { month: 'long' });
         const headers = [
           isRtl ? 'رقم' : 'No.',
           isRtl ? 'المنتج' : 'Product',
-          isRtl ? 'الفرع' : 'Branch',
           isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
-          isRtl ? 'التاريخ' : 'Date',
-          ...Array(daysInMonth).fill(0).map((_, i) => isRtl ? `اليوم ${i + 1}` : `Day ${i + 1}`),
+          isRtl ? 'السعر الإجمالي' : 'Total Price',
+          ...daysInMonth,
         ];
-        const rows = data.map((row, index) => ({
-          no: index + 1,
-          product: row.product,
-          branch: row.branch,
-          totalQuantity: row.totalQuantity,
-          date: row.date,
-          ...Object.fromEntries(row.dailyQuantities.map((qty, i) => [`day${i + 1}`, qty])),
-        }));
+        const rows = [
+          ...data.map((row, index) => ({
+            no: index + 1,
+            product: row.product,
+            totalQuantity: row.totalQuantity,
+            totalPrice: row.totalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' }),
+            ...Object.fromEntries(row.dailyQuantities.map((qty, i) => [daysInMonth[i], qty])),
+          })),
+          {
+            no: '',
+            product: isRtl ? 'الإجمالي' : 'Total',
+            totalQuantity: grandTotalQuantity,
+            totalPrice: grandTotalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' }),
+            ...Object.fromEntries(daysInMonth.map((_, i) => [daysInMonth[i], data.reduce((sum, row) => sum + row.dailyQuantities[i], 0)])),
+          },
+        ];
 
         if (format === 'excel') {
-          const ws = XLSX.utils.json_to_sheet(rows.map(row => ({
-            [isRtl ? 'رقم' : 'No.']: row.no,
-            [isRtl ? 'المنتج' : 'Product']: row.product,
-            [isRtl ? 'الفرع' : 'Branch']: row.branch,
-            [isRtl ? 'الكمية الإجمالية' : 'Total Quantity']: row.totalQuantity,
-            [isRtl ? 'التاريخ' : 'Date']: row.date,
-            ...Object.fromEntries(Object.entries(row).filter(([key]) => key.startsWith('day')).map(([key, value]) => [headers[parseInt(key.replace('day', '')) + 4], value])),
-          })));
+          const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
+          if (isRtl) ws['!views'] = [{ RTL: true }];
+          ws['!cols'] = [{ wch: 10 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 15 }))];
           const wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
@@ -309,10 +368,17 @@ const ProductionReport: React.FC = () => {
           const doc = new jsPDF();
           doc.autoTable({
             head: [headers],
-            body: rows.map(row => [row.no, row.product, row.branch, row.totalQuantity, row.date, ...row.dailyQuantities]),
+            body: rows.map(row => [
+              row.no,
+              row.product,
+              row.totalQuantity,
+              row.totalPrice,
+              ...daysInMonth.map(day => row[day]),
+            ]),
             styles: { font: isRtl ? 'Amiri' : 'Helvetica', halign: isRtl ? 'right' : 'left', fontSize: 10 },
             headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontSize: 10 },
             bodyStyles: { fontSize: 9 },
+            footStyles: { fillColor: [240, 240, 240], fontSize: 10, fontStyle: 'bold' },
           });
           doc.save(`${title}_${monthName}.pdf`);
         }
@@ -372,14 +438,15 @@ const ProductionReport: React.FC = () => {
                 <tr className={isRtl ? 'flex-row-reverse' : ''}>
                   <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
                   <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
-                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'الفرع' : 'Branch'}</th>
                   <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">
                     {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
                   </th>
-                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'التاريخ' : 'Date'}</th>
-                  {Array(daysInMonth).fill(0).map((_, i) => (
-                    <th key={i} className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[60px]">
-                      {isRtl ? `اليوم ${i + 1}` : `Day ${i + 1}`}
+                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">
+                    {isRtl ? 'السعر الإجمالي' : 'Total Price'}
+                  </th>
+                  {daysInMonth.map((day, i) => (
+                    <th key={i} className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[120px]">
+                      {day}
                     </th>
                   ))}
                 </tr>
@@ -389,9 +456,10 @@ const ProductionReport: React.FC = () => {
                   <tr key={row.id} className={`hover:bg-blue-50/50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
                     <td className="px-3 py-2 text-gray-700 text-center">{index + 1}</td>
                     <td className="px-3 py-2 text-gray-700 text-center truncate">{row.product}</td>
-                    <td className="px-3 py-2 text-gray-700 text-center truncate">{row.branch}</td>
                     <td className="px-3 py-2 text-gray-700 text-center font-medium">{row.totalQuantity}</td>
-                    <td className="px-3 py-2 text-gray-700 text-center truncate">{row.date}</td>
+                    <td className="px-3 py-2 text-gray-700 text-center font-medium">
+                      {row.totalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
+                    </td>
                     {row.dailyQuantities.map((qty, i) => (
                       <td
                         key={i}
@@ -404,13 +472,25 @@ const ProductionReport: React.FC = () => {
                     ))}
                   </tr>
                 ))}
+                <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <td className="px-3 py-2 text-gray-800 text-center" colSpan={2}>{isRtl ? 'الإجمالي' : 'Total'}</td>
+                  <td className="px-3 py-2 text-gray-800 text-center">{grandTotalQuantity}</td>
+                  <td className="px-3 py-2 text-gray-800 text-center">
+                    {grandTotalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
+                  </td>
+                  {daysInMonth.map((_, i) => (
+                    <td key={i} className="px-3 py-2 text-gray-800 text-center">
+                      {data.reduce((sum, row) => sum + row.dailyQuantities[i], 0)}
+                    </td>
+                  ))}
+                </tr>
               </tbody>
             </table>
           </motion.div>
         </div>
       );
     },
-    [loading, isRtl, months, currentYear, language]
+    [loading, isRtl, daysInMonth, months, currentYear, language]
   );
 
   return (
