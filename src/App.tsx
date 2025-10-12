@@ -15,7 +15,7 @@ import { Orders } from './pages/Orders';
 import { OrderDetailsPage } from './pages/OrderDetailsPage';
 import { NewOrder } from './pages/NewOrder';
 import { ChefTasks } from './pages/ChefTasks';
-import AdminReturns from './pages/ReturnStats';
+import ProductionReport from './pages/ProductionReport';
 import { Chefs } from './pages/Chefs';
 import { Departments } from './pages/Departments';
 import { Branches } from './pages/Branches';
@@ -84,6 +84,8 @@ function AppContent() {
                   <Route path="/orders/new" element={<NewOrder />} />
                   <Route path="/orders/review" element={<Orders />} />
                   <Route path="/returns" element={<BranchReturns />} />
+              
+                  <Route path="/production-report" element={<ProductionReport />} />
            
                   <Route path="/production-tasks" element={<ChefTasks />} />
                   <Route path="/branches" element={<Branches />} />
