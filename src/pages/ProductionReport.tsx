@@ -6,10 +6,10 @@ import { Button } from '../components/UI/Button';
 import { Upload } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
-import { inventoryAPI, ordersAPI, branchesAPI } from '../services/api';
+import { inventoryAPI, ordersAPI } from '../services/api';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 
 interface OrderRow {
@@ -29,13 +29,6 @@ interface StockRow {
   totalPrice: number;
 }
 
-interface Branch {
-  _id: string;
-  name: string;
-  nameEn: string;
-  displayName: string;
-}
-
 const ProductionReport: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
@@ -44,7 +37,6 @@ const ProductionReport: React.FC = () => {
   const [orderData, setOrderData] = useState<{ [month: number]: OrderRow[] }>({});
   const [stockInData, setStockInData] = useState<{ [month: number]: StockRow[] }>({});
   const [stockOutData, setStockOutData] = useState<{ [month: number]: StockRow[] }>({});
-  const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(8); // September 2025 (0-based index)
   const [activeTab, setActiveTab] = useState<'orders' | 'stockIn' | 'stockOut'>('orders');
   const currentDate = new Date('2025-10-12T11:19:00+03:00');
@@ -54,12 +46,11 @@ const ProductionReport: React.FC = () => {
     label: new Date(currentYear, i).toLocaleString(language, { month: 'long' }),
   }));
 
-  // Calculate actual days for the selected month
   const getDaysInMonth = useCallback((month: number) => {
     const daysInMonth = new Date(currentYear, month + 1, 0).getDate();
     return Array.from({ length: daysInMonth }, (_, i) => {
       const date = new Date(currentYear, month, i + 1);
-      return date.toLocaleString(language, { weekday: 'long', day: 'numeric', month: 'long' });
+      return date.toLocaleString(language, { day: 'numeric', month: 'long' });
     });
   }, [currentYear, language]);
 
@@ -69,32 +60,18 @@ const ProductionReport: React.FC = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [inventory, ordersResponse, branchesResponse] = await Promise.all([
+        const [inventory, ordersResponse] = await Promise.all([
           inventoryAPI.getInventory({}, isRtl),
           ordersAPI.getAll({ status: 'completed', page: 1, limit: 1000 }, isRtl),
-          branchesAPI.getAll(),
         ]);
 
-        console.log('Orders API Response:', ordersResponse); // Debug: Log orders response
-        console.log('Inventory API Response:', inventory); // Debug: Log inventory response
+        console.log('Orders API Response:', ordersResponse);
+        console.log('Inventory API Response:', inventory);
 
         const monthlyOrderData: { [month: number]: OrderRow[] } = {};
         const monthlyStockInData: { [month: number]: StockRow[] } = {};
         const monthlyStockOutData: { [month: number]: StockRow[] } = {};
 
-        // Set branches
-        const fetchedBranches = branchesResponse
-          .filter((branch: any) => branch && branch._id)
-          .map((branch: any) => ({
-            _id: branch._id,
-            name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
-            nameEn: branch.nameEn,
-            displayName: isRtl ? branch.name : branch.nameEn || branch.name,
-          }))
-          .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language));
-        setBranches(fetchedBranches);
-
-        // Handle empty orders, fallback to inventory movements
         let orders = Array.isArray(ordersResponse) ? ordersResponse : [];
         if (orders.length === 0) {
           console.warn('No orders found, falling back to inventory movements for order data');
@@ -102,7 +79,7 @@ const ProductionReport: React.FC = () => {
             return (item.movements || []).map((movement: any) => ({
               status: 'completed',
               createdAt: movement.createdAt,
-              branch: { displayName: fetchedBranches[Math.floor(Math.random() * fetchedBranches.length)]?.displayName || (isRtl ? 'الفرع الرئيسي' : 'Main Branch') },
+              branch: { displayName: isRtl ? 'الفرع الرئيسي' : 'Main Branch' },
               items: [{
                 displayProductName: item.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
                 quantity: Math.abs(movement.quantity),
@@ -118,10 +95,9 @@ const ProductionReport: React.FC = () => {
           const stockInMap = new Map<string, StockRow>();
           const stockOutMap = new Map<string, StockRow>();
 
-          // Process orders (only completed, pivot table: branches as columns, products as rows)
           orders.forEach((order: any) => {
-            const status = order.status || order.orderStatus; // Handle potential status field variation
-            if (status !== 'completed') return; // Strict filter for completed orders
+            const status = order.status || order.orderStatus;
+            if (status !== 'completed') return;
             const date = new Date(order.createdAt || order.date);
             if (isNaN(date.getTime())) {
               console.warn('Invalid order date:', order.createdAt || order.date);
@@ -130,7 +106,7 @@ const ProductionReport: React.FC = () => {
             const orderMonth = date.getMonth();
             const year = date.getFullYear();
             if (year === currentYear && orderMonth === month) {
-              const branch = order.branch?.displayName || order.branch?.name || order.branchId || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
+              const branch = order.branch?.displayName || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
               (order.items || []).forEach((item: any) => {
                 const product = item.displayProductName || item.product?.name || item.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
                 const key = `${product}-${month}`;
@@ -153,7 +129,6 @@ const ProductionReport: React.FC = () => {
             }
           });
 
-          // Process inventory movements (strictly separate in and out)
           if (Array.isArray(inventory)) {
             inventory.forEach((item: any) => {
               const product = item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
@@ -222,13 +197,9 @@ const ProductionReport: React.FC = () => {
     fetchData();
   }, [isRtl, currentYear]);
 
-  const allBranches = useMemo(() => {
-    return branches.map(b => b.displayName).sort();
-  }, [branches]);
-
   const renderOrderTable = useCallback(
     (data: OrderRow[], title: string, month: number) => {
-      const totalQuantities = allBranches.reduce((acc, branch) => {
+      const totalQuantities = Object.keys(data[0]?.branchQuantities || {}).reduce((acc, branch) => {
         acc[branch] = data.reduce((sum, row) => sum + (row.branchQuantities[branch] || 0), 0);
         return acc;
       }, {} as { [branch: string]: number });
@@ -241,39 +212,39 @@ const ProductionReport: React.FC = () => {
           isRtl ? 'المنتج' : 'Product',
           isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
           isRtl ? 'السعر الإجمالي' : 'Total Price',
-          ...allBranches,
+          ...Object.keys(data[0]?.branchQuantities || {}),
         ];
         const rows = [
           ...data.map(row => ({
             product: row.product,
             totalQuantity: row.totalQuantity,
             totalPrice: row.totalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' }),
-            ...Object.fromEntries(allBranches.map(branch => [branch, row.branchQuantities[branch] || 0])),
+            ...Object.fromEntries(Object.keys(row.branchQuantities).map(branch => [branch, row.branchQuantities[branch] || 0])),
           })),
           {
             product: isRtl ? 'الإجمالي' : 'Total',
             totalQuantity: grandTotalQuantity,
             totalPrice: grandTotalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' }),
-            ...Object.fromEntries(allBranches.map(branch => [branch, totalQuantities[branch] || 0])),
+            ...Object.fromEntries(Object.keys(totalQuantities).map(branch => [branch, totalQuantities[branch] || 0])),
           },
         ];
 
         if (format === 'excel') {
           const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
           if (isRtl) ws['!views'] = [{ RTL: true }];
-          ws['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 15 }, ...allBranches.map(() => ({ wch: 15 }))];
+          ws['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 15 }, ...headers.slice(3).map(() => ({ wch: 15 }))];
           const wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
         } else if (format === 'pdf') {
           const doc = new jsPDF();
-          doc.autoTable({
+          autoTable(doc, {
             head: [headers],
             body: rows.map(row => [
               row.product,
               row.totalQuantity,
               row.totalPrice,
-              ...allBranches.map(branch => row[branch]),
+              ...headers.slice(3).map(branch => row[branch]),
             ]),
             styles: { font: isRtl ? 'Amiri' : 'Helvetica', halign: isRtl ? 'right' : 'left', fontSize: 10 },
             headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontSize: 10 },
@@ -343,7 +314,7 @@ const ProductionReport: React.FC = () => {
                   <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">
                     {isRtl ? 'السعر الإجمالي' : 'Total Price'}
                   </th>
-                  {allBranches.map(branch => (
+                  {Object.keys(data[0]?.branchQuantities || {}).map(branch => (
                     <th key={branch} className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">
                       {branch}
                     </th>
@@ -358,10 +329,10 @@ const ProductionReport: React.FC = () => {
                     <td className="px-3 py-2 text-gray-700 text-center font-medium">
                       {row.totalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
                     </td>
-                    {allBranches.map(branch => (
+                    {Object.keys(row.branchQuantities).map(branch => (
                       <td
                         key={branch}
-                        className={`px-3 py-2 text-center ${row.branchQuantities[branch] > 0 ? 'bg-green-50 text-green-600' : row.branchQuantities[branch] < 0 ? 'bg-red-50 text-red-600' : 'text-gray-700'}`}
+                        className={`px-3 py-2 text-center ${row.branchQuantities[branch] > 0 ? 'text-green-600' : row.branchQuantities[branch] < 0 ? 'text-red-600' : 'text-gray-700'}`}
                       >
                         {row.branchQuantities[branch] || 0}
                       </td>
@@ -374,7 +345,7 @@ const ProductionReport: React.FC = () => {
                   <td className="px-3 py-2 text-gray-800 text-center">
                     {grandTotalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
                   </td>
-                  {allBranches.map(branch => (
+                  {Object.keys(totalQuantities).map(branch => (
                     <td key={branch} className="px-3 py-2 text-gray-800 text-center">
                       {totalQuantities[branch] || 0}
                     </td>
@@ -386,7 +357,7 @@ const ProductionReport: React.FC = () => {
         </div>
       );
     },
-    [loading, isRtl, allBranches, months, currentYear, language]
+    [loading, isRtl, months, currentYear, language]
   );
 
   const renderStockInTable = useCallback(
@@ -429,7 +400,7 @@ const ProductionReport: React.FC = () => {
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
         } else if (format === 'pdf') {
           const doc = new jsPDF();
-          doc.autoTable({
+          autoTable(doc, {
             head: [headers],
             body: rows.map(row => [
               row.no,
@@ -526,9 +497,9 @@ const ProductionReport: React.FC = () => {
                     {row.dailyQuantities.map((qty, i) => (
                       <td
                         key={i}
-                        className={`px-3 py-2 text-center text-green-600 font-medium`}
+                        className={`px-3 py-2 text-center ${row.changes[i] > 0 ? 'text-green-600' : row.changes[i] < 0 ? 'text-red-600' : 'text-gray-700'}`}
                       >
-                        {qty} {row.changes[i] !== 0 && `(+${row.changes[i]})`}
+                        {qty} {row.changes[i] !== 0 && `(${row.changes[i] > 0 ? '+' : ''}${row.changes[i]})`}
                       </td>
                     ))}
                   </tr>
@@ -594,7 +565,7 @@ const ProductionReport: React.FC = () => {
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
         } else if (format === 'pdf') {
           const doc = new jsPDF();
-          doc.autoTable({
+          autoTable(doc, {
             head: [headers],
             body: rows.map(row => [
               row.no,
@@ -691,9 +662,9 @@ const ProductionReport: React.FC = () => {
                     {row.dailyQuantities.map((qty, i) => (
                       <td
                         key={i}
-                        className={`px-3 py-2 text-center text-red-600 font-medium`}
+                        className={`px-3 py-2 text-center ${row.changes[i] > 0 ? 'text-green-600' : row.changes[i] < 0 ? 'text-red-600' : 'text-gray-700'}`}
                       >
-                        {qty} {row.changes[i] !== 0 && `(${row.changes[i]})`}
+                        {qty} {row.changes[i] !== 0 && `(${row.changes[i] > 0 ? '+' : ''}${row.changes[i]})`}
                       </td>
                     ))}
                   </tr>
