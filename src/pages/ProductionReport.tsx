@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { ordersAPI, salesAPI, returnsAPI, productionAssignmentsAPI, branchesAPI, productsAPI } from '../services/api';
@@ -14,44 +14,44 @@ const ProductionReport: React.FC = () => {
   const { user } = useAuth();
   const [activeSection, setActiveSection] = useState('orders');
 
-  const { data: branches } = useQuery({
+  const { data: branches, isLoading: branchesLoading, error: branchesError } = useQuery({
     queryKey: ['branches'],
     queryFn: branchesAPI.getAll,
     enabled: !!user,
   });
 
-  const { data: products } = useQuery({
+  const { data: products, isLoading: productsLoading, error: productsError } = useQuery({
     queryKey: ['products'],
     queryFn: productsAPI.getAll,
     enabled: !!user,
   });
 
-  const { data: orders } = useQuery({
+  const { data: orders, isLoading: ordersLoading, error: ordersError } = useQuery({
     queryKey: ['orders', 'production-report'],
     queryFn: () => ordersAPI.getAll({}),
     enabled: !!user,
   });
 
-  const { data: sales } = useQuery({
+  const { data: sales, isLoading: salesLoading, error: salesError } = useQuery({
     queryKey: ['sales', 'production-report'],
     queryFn: () => salesAPI.getAll({}),
-    enabled: ['admin', 'branch', 'production'].includes(user.role),
+    enabled: !!user,
   });
 
-  const { data: returns } = useQuery({
+  const { data: returns, isLoading: returnsLoading, error: returnsError } = useQuery({
     queryKey: ['returns', 'production-report'],
     queryFn: () => returnsAPI.getAll({}),
-    enabled: ['admin', 'branch', 'production'].includes(user.role),
+    enabled: !!user,
   });
 
-  const { data: production } = useQuery({
+  const { data: production, isLoading: productionLoading, error: productionError } = useQuery({
     queryKey: ['production', 'production-report'],
     queryFn: productionAssignmentsAPI.getAllTasks,
     enabled: !!user,
   });
 
   const sortedBranches = useMemo(() => {
-    return branches?.sort((a, b) => a.name.localeCompare(b.name)) || [];
+    return (branches || []).sort((a, b) => a.name.localeCompare(b.name));
   }, [branches]);
 
   const tableHeaders = useMemo(() => {
@@ -70,7 +70,7 @@ const ProductionReport: React.FC = () => {
     return isRtl ? headers.reverse() : headers;
   }, [sortedBranches, isRtl]);
 
-  const aggregateData = useCallback((items, key) => {
+  const aggregateData = (items, key) => {
     const productMap = new Map();
     (items || []).forEach((entry) => {
       (entry[key] || []).forEach((item) => {
@@ -86,13 +86,13 @@ const ProductionReport: React.FC = () => {
       });
     });
     return productMap;
-  }, []);
+  };
 
-  const generateRows = useCallback((aggregated, products) => {
-    return (products?.products || []).map((product) => {
+  const generateRows = (aggregated, productsList) => {
+    return (productsList || []).map((product) => {
       const branchQuantities = aggregated.get(product._id) || new Map();
       const total = Array.from(branchQuantities.values()).reduce((sum, q) => sum + q, 0);
-      const sale = total; // Adjust logic for 'sale' if different from total
+      const sale = total; // Adjust if 'sale' logic is different; based on image, it's a column for sale quantities
       return {
         unit: isRtl ? product.unit : product.unitEn || product.unit,
         total,
@@ -103,17 +103,17 @@ const ProductionReport: React.FC = () => {
         name: isRtl ? product.name : product.nameEn || product.name,
       };
     });
-  }, [sortedBranches, isRtl]);
+  };
 
-  const ordersAggregated = useMemo(() => aggregateData(orders, 'items'), [orders, aggregateData]);
-  const salesAggregated = useMemo(() => aggregateData(sales?.sales, 'items'), [sales, aggregateData]);
-  const returnsAggregated = useMemo(() => aggregateData(returns?.returns, 'items'), [returns, aggregateData]);
-  const productionAggregated = useMemo(() => aggregateData(production, 'items'), [production, aggregateData]);
+  const ordersAggregated = useMemo(() => aggregateData(orders || [], 'items'), [orders]);
+  const salesAggregated = useMemo(() => aggregateData(sales?.sales || [], 'items'), [sales]);
+  const returnsAggregated = useMemo(() => aggregateData(returns?.returns || [], 'items'), [returns]);
+  const productionAggregated = useMemo(() => aggregateData(production || [], 'items'), [production]);
 
-  const ordersRows = useMemo(() => generateRows(ordersAggregated, products), [ordersAggregated, products, generateRows]);
-  const salesRows = useMemo(() => generateRows(salesAggregated, products), [salesAggregated, products, generateRows]);
-  const returnsRows = useMemo(() => generateRows(returnsAggregated, products), [returnsAggregated, products, generateRows]);
-  const productionRows = useMemo(() => generateRows(productionAggregated, products), [productionAggregated, products, generateRows]);
+  const ordersRows = useMemo(() => generateRows(ordersAggregated, products?.products), [ordersAggregated, products]);
+  const salesRows = useMemo(() => generateRows(salesAggregated, products?.products), [salesAggregated, products]);
+  const returnsRows = useMemo(() => generateRows(returnsAggregated, products?.products), [returnsAggregated, products]);
+  const productionRows = useMemo(() => generateRows(productionAggregated, products?.products), [productionAggregated, products]);
 
   const exportTable = (rows, headers, fileName, format) => {
     if (format === 'excel') {
@@ -179,6 +179,14 @@ const ProductionReport: React.FC = () => {
     </div>
   );
 
+  if (branchesError || productsError || ordersError || salesError || returnsError || productionError) {
+    return <div className="text-red-600 p-4">{t.errors.fetchReturns}</div>;
+  }
+
+  if (branchesLoading || productsLoading || ordersLoading || salesLoading || returnsLoading || productionLoading) {
+    return <div className="text-center p-4">{isRtl ? 'جاري التحميل...' : 'Loading...'}</div>;
+  }
+
   return (
     <div className={`py-6 px-4 mx-auto ${isRtl ? 'rtl' : 'ltr'}`}>
       <h1 className="text-xl md:text-2xl font-bold text-gray-800 mb-4">
@@ -211,16 +219,16 @@ const ProductionReport: React.FC = () => {
         </button>
       </div>
       {activeSection === 'orders' && (
-        <RenderTable rows={ordersRows} headers={tableHeaders} title={isRtl ? 'الطلبات' : 'Orders'} fileName="orders" />
+        <RenderTable rows={ordersRows} headers={tableHeaders} title={isRtl ? 'الطلبات' : 'Orders'} fileName="orders_report" />
       )}
       {activeSection === 'sales' && (
-        <RenderTable rows={salesRows} headers={tableHeaders} title={isRtl ? 'المبيعات' : 'Sales'} fileName="sales" />
+        <RenderTable rows={salesRows} headers={tableHeaders} title={isRtl ? 'المبيعات' : 'Sales'} fileName="sales_report" />
       )}
       {activeSection === 'returns' && (
-        <RenderTable rows={returnsRows} headers={tableHeaders} title={isRtl ? 'المرتجعات' : 'Returns'} fileName="returns" />
+        <RenderTable rows={returnsRows} headers={tableHeaders} title={isRtl ? 'المرتجعات' : 'Returns'} fileName="returns_report" />
       )}
       {activeSection === 'production' && (
-        <RenderTable rows={productionRows} headers={tableHeaders} title={isRtl ? 'الإنتاج اليومي' : 'Daily Production'} fileName="production" />
+        <RenderTable rows={productionRows} headers={tableHeaders} title={isRtl ? 'الإنتاج اليومي' : 'Daily Production'} fileName="production_report" />
       )}
     </div>
   );
