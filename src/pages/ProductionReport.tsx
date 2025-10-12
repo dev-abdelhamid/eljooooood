@@ -9,8 +9,8 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
-import { ordersAPI, productionAssignmentsAPI, inventoryAPI } from '../api';
-import { OrderTableSkeleton } from '../components/branch/OrderTableSkeleton';
+import { ordersAPI, productionAssignmentsAPI, inventoryAPI } from '../services/api';
+import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 
 const ProductionReport = () => {
   const { language } = useLanguage();
