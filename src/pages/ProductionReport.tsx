@@ -1409,52 +1409,161 @@ const ProductionReport: React.FC = () => {
   };
 
   return (
-  
-    <div className={`px-4 py-6 min-h-screen ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-50`}>
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">{isRtl ? 'تقارير الإنتاج' : 'Production Reports'}</h1>
-      <div className="mb-6">
-        <div className="flex flex-wrap gap-2 mb-4">
-          {months.map(month => (
-            <Button
-              key={month.value}
-              variant={selectedMonth === month.value ? 'primary' : 'secondary'}
-              onClick={() => setSelectedMonth(month.value)}
-              className={`px-4 py-2 rounded-full text-xs font-medium ${
-                selectedMonth === month.value ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
+    <div className={`container mx-auto p-4 ${isRtl ? 'text-right' : 'text-left'}`}>
+      <h1 className="text-2xl font-bold text-gray-800 mb-6">
+        {isRtl ? 'تقرير الإنتاج' : 'Production Report'}
+      </h1>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <div className="flex gap-2">
+          <Button variant={activeTab === 'orders' ? 'primary' : 'secondary'}
+            onClick={() => handleTabChange('orders')}
+            className={`px-4 py-2 rounded-full text-xs font-medium transition-all duration-200 ${
+              activeTab === 'orders'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            {isRtl ? 'الطلبات' : 'Orders'}
+          </Button>
+          <Button
+            variant={activeTab === 'stockIn' ? 'primary' : 'secondary'}
+            onClick={() => handleTabChange('stockIn')}
+            className={`px-4 py-2 rounded-full text-xs font-medium transition-all duration-200 ${
+              activeTab === 'stockIn'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            {isRtl ? 'إضافة المخزون' : 'Stock In'}
+          </Button>
+          <Button
+            variant={activeTab === 'stockOut' ? 'primary' : 'secondary'}
+            onClick={() => handleTabChange('stockOut')}
+            className={`px-4 py-2 rounded-full text-xs font-medium transition-all duration-200 ${
+              activeTab === 'stockOut'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            {isRtl ? 'نقصان المخزون' : 'Stock Out'}
+          </Button>
+          <Button
+            variant={activeTab === 'returns' ? 'primary' : 'secondary'}
+            onClick={() => handleTabChange('returns')}
+            className={`px-4 py-2 rounded-full text-xs font-medium transition-all duration-200 ${
+              activeTab === 'returns'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            {isRtl ? 'المرتجعات' : 'Returns'}
+          </Button>
+          <Button
+            variant={activeTab === 'sales' ? 'primary' : 'secondary'}
+            onClick={() => handleTabChange('sales')}
+            className={`px-4 py-2 rounded-full text-xs font-medium transition-all duration-200 ${
+              activeTab === 'sales'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            {isRtl ? 'المبيعات' : 'Sales'}
+          </Button>
+        </div>
+        <select
+          value={selectedMonth}
+          onChange={handleMonthChange}
+          className={`px-4 py-2 rounded-full text-xs font-medium border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+            isRtl ? 'text-right' : 'text-left'
+          }`}
+        >
+          {months.map((month) => (
+            <option key={month.value} value={month.value}>
               {month.label}
-            </Button>
+            </option>
           ))}
-        </div>
-        <div className="flex gap-2 border-b border-gray-200">
-          <button
-            onClick={() => setActiveTab('orders')}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-              activeTab === 'orders' ? 'bg-blue-100 text-blue-700 border-b-2 border-blue-500' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-            }`}
-          >
-            {isRtl ? 'توزيع الطلبات' : 'Order Distribution'}
-          </button>
-          <button
-            onClick={() => setActiveTab('stockIn')}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-              activeTab === 'stockIn' ? 'bg-blue-100 text-blue-700 border-b-2 border-blue-500' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-            }`}
-          >
-            {isRtl ? 'زيادة المخزون' : 'Stock Increases'}
-          </button>
-          <button
-            onClick={() => setActiveTab('stockOut')}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-              activeTab === 'stockOut' ? 'bg-blue-100 text-blue-700 border-b-2 border-blue-500' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-            }`}
-          >
-            {isRtl ? 'نقصان المخزون' : 'Stock Decreases'}
-          </button>
-        </div>
+        </select>
       </div>
 
+      <AnimatePresence mode="wait">
+        {activeTab === 'orders' && (
+          <motion.div
+            key="orders"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {renderOrderTable(
+              orderData[selectedMonth] || [],
+              isRtl ? 'تقرير الطلبات' : 'Orders Report',
+              selectedMonth
+            )}
+          </motion.div>
+        )}
+        {activeTab === 'stockIn' && (
+          <motion.div
+            key="stockIn"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {renderStockTable(
+              stockInData[selectedMonth] || [],
+              isRtl ? 'تقرير إضافة المخزون' : 'Stock In Report',
+              selectedMonth,
+              true
+            )}
+          </motion.div>
+        )}
+        {activeTab === 'stockOut' && (
+          <motion.div
+            key="stockOut"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {renderStockTable(
+              stockOutData[selectedMonth] || [],
+              isRtl ? 'تقرير نقصان المخزون' : 'Stock Out Report',
+              selectedMonth,
+              false
+            )}
+          </motion.div>
+        )}
+        {activeTab === 'returns' && (
+          <motion.div
+            key="returns"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {renderReturnTable(
+              returnData[selectedMonth] || [],
+              isRtl ? 'تقرير المرتجعات' : 'Returns Report',
+              selectedMonth
+            )}
+          </motion.div>
+        )}
+        {activeTab === 'sales' && (
+          <motion.div
+            key="sales"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {renderSalesTable(
+              salesData[selectedMonth] || [],
+              isRtl ? 'تقرير المبيعات' : 'Sales Report',
+              selectedMonth
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
