@@ -19,7 +19,7 @@ const ProductionReport = () => {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState([]);
   const [activeTab, setActiveTab] = useState('products');
-  const currentDate = new Date('2025-10-12T09:01:00+03:00'); // 09:01 AM EEST, October 12, 2025
+  const currentDate = new Date('2025-10-12T09:02:00+03:00'); // 09:02 AM EEST, October 12, 2025
 
   useEffect(() => {
     const fetchData = async () => {
@@ -35,7 +35,7 @@ const ProductionReport = () => {
         inventory.forEach(item => {
           item.movements.forEach(movement => {
             const date = new Date(movement.createdAt);
-            const day = date.getDate();
+            const day = date.getDate(); // تعريف day هنا لكل حركة
             if (date.getMonth() === currentDate.getMonth() && date.getFullYear() === currentDate.getFullYear() && day <= currentDate.getDate()) {
               const product = item.productName;
               const branch = movement.branch?.displayName || 'الفرع الرئيسي'; // فرع افتراضي إذا لم يكن موجودًا
