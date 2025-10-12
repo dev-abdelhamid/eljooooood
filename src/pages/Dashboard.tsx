@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -10,9 +11,6 @@ import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, returnsAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable';
 
 // تعريف الواجهات
 interface Stats {
@@ -21,7 +19,7 @@ interface Stats {
   inProductionOrders: number;
   inTransitOrders: number;
   deliveredOrders: number;
-  totalOrderValue: number;
+  totalOrderValue: number; // تم تغيير الاسم من totalSales إلى totalOrderValue
   completedTasks: number;
   inProgressTasks: number;
   totalReturns: number;
@@ -45,7 +43,6 @@ interface Task {
   branchName: string;
   branchNameEn?: string;
   createdAt: string;
-  chefId?: string;
 }
 
 interface BranchPerformance {
@@ -337,7 +334,7 @@ export const Dashboard: React.FC = () => {
     inProductionOrders: 0,
     inTransitOrders: 0,
     deliveredOrders: 0,
-    totalOrderValue: 0,
+    totalOrderValue: 0, // تغيير من totalSales إلى totalOrderValue
     completedTasks: 0,
     inProgressTasks: 0,
     totalReturns: 0,
@@ -431,7 +428,7 @@ export const Dashboard: React.FC = () => {
           if (user.role === 'production' && user.department) query.departmentId = user.department._id;
           const promises = [
             ordersAPI.getAll(query).catch(() => []),
-            productionAssignmentsAPI.getAllTasks(query).catch(() => []),
+            user.role !== 'branch' ? productionAssignmentsAPI.getAllTasks(query).catch(() => []) : Promise.resolve([]),
             ['admin', 'production'].includes(user.role) ? chefsAPI.getAll().catch(() => []) : Promise.resolve([]),
             ['admin', 'production'].includes(user.role) ? branchesAPI.getAll().catch(() => []) : Promise.resolve([]),
             ['admin', 'production', 'branch'].includes(user.role)
@@ -488,7 +485,6 @@ export const Dashboard: React.FC = () => {
           branchName: task.order?.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
           branchNameEn: task.order?.branch?.nameEn || task.order?.branch?.name || 'Unknown',
           createdAt: formatDate(task.createdAt || new Date(), language),
-          chefId: task.chef?._id || 'unknown',
         }));
 
         const mappedChefs = chefsResponse.map((chef: any) => ({
@@ -539,7 +535,11 @@ export const Dashboard: React.FC = () => {
         }).filter((b: any) => b.totalOrders > 0);
 
         const chefPerf = mappedChefs.map((chef: any) => {
-          const chefTasks = mappedTasks.filter((task) => task.chefId === chef._id);
+          const chefTasks = mappedTasks.filter((task) => {
+            const order = mappedOrders.find((o) => o.id === task.orderId);
+            const item = order?.items.find((i) => i.productId === task.productId);
+            return item?.assignedTo?._id === chef.userId;
+          });
           const total = chefTasks.length;
           const completed = chefTasks.filter((t) => t.status === 'completed').length;
           const perf = total > 0 ? (completed / total) * 100 : 0;
@@ -692,7 +692,6 @@ export const Dashboard: React.FC = () => {
             branchName: data.branchName,
             branchNameEn: data.branchNameEn || data.branchName,
             createdAt: formatDate(new Date(), language),
-            chefId: data.chefId,
           },
           ...prev.filter((t) => t.id !== data.taskId),
         ]);
@@ -943,66 +942,6 @@ export const Dashboard: React.FC = () => {
       .slice(0, 8);
   }, [returns]);
 
-  const exportToExcel = (data, fileName) => {
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
-    XLSX.writeFile(wb, `${fileName}.xlsx`);
-  };
-
-  const exportToPDF = (data, fileName) => {
-    const doc = new jsPDF();
-    doc.autoTable({
-      head: [Object.keys(data[0])],
-      body: data.map(row => Object.values(row)),
-    });
-    doc.save(`${fileName}.pdf`);
-  };
-
-  const exportChefPerformance = (format) => {
-    const data = chefPerformance.map(c => ({
-      'Chef Name': isRtl ? c.chefName : c.chefNameEn,
-      'Total Tasks': c.totalTasks,
-      'Completed Tasks': c.completedTasks,
-      'Performance': `${c.performance.toFixed(1)}%`,
-    }));
-    if (format === 'excel') {
-      exportToExcel(data, 'chef_performance');
-    } else if (format === 'pdf') {
-      exportToPDF(data, 'chef_performance');
-    }
-  };
-
-  const exportBranchPerformance = (format) => {
-    const data = branchPerformance.map(b => ({
-      'Branch Name': isRtl ? b.branchName : b.branchNameEn,
-      'Total Orders': b.totalOrders,
-      'Completed Orders': b.completedOrders,
-      'Performance': `${b.performance.toFixed(1)}%`,
-    }));
-    if (format === 'excel') {
-      exportToExcel(data, 'branch_performance');
-    } else if (format === 'pdf') {
-      exportToPDF(data, 'branch_performance');
-    }
-  };
-
-  const exportReturns = (format) => {
-    const data = returns.map(r => ({
-      'Return Number': r.returnNumber,
-      'Branch Name': isRtl ? r.branchName : r.branchNameEn,
-      'Status': r.status,
-      'Created At': r.createdAt,
-    }));
-    if (format === 'excel') {
-      exportToExcel(data, 'returns_report');
-    } else if (format === 'pdf') {
-      exportToPDF(data, 'returns_report');
-    }
-  };
-
-  // Add similar functions for other reports like inventory, sales, etc.
-
   const renderStats = () => (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -1100,20 +1039,10 @@ export const Dashboard: React.FC = () => {
 
   const renderBranchPerformance = () => (
     <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 mt-4">
-      <div className="flex justify-between items-center mb-3">
-        <h3 className="text-base font-semibold text-gray-800 flex items-center">
-          <BarChart3 className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
-          {isRtl ? 'أداء الفروع' : 'Branch Performance'}
-        </h3>
-        <div className="flex gap-2">
-          <button onClick={() => exportBranchPerformance('excel')} className="bg-blue-500 text-white px-2 py-1 rounded text-xs">
-            Excel
-          </button>
-          <button onClick={() => exportBranchPerformance('pdf')} className="bg-green-500 text-white px-2 py-1 rounded text-xs">
-            PDF
-          </button>
-        </div>
-      </div>
+      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
+        <BarChart3 className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+        {isRtl ? 'أداء الفروع' : 'Branch Performance'}
+      </h3>
       <div className="space-y-2 max-h-64 overflow-y-auto">
         <AnimatePresence>
           {branchPerformance.length === 0 ? (
@@ -1154,20 +1083,10 @@ export const Dashboard: React.FC = () => {
 
   const renderChefPerformance = () => (
     <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 mt-4">
-      <div className="flex justify-between items-center mb-3">
-        <h3 className="text-base font-semibold text-gray-800 flex items-center">
-          <ChefHat className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
-          {isRtl ? 'أداء الطهاة' : 'Chef Performance'}
-        </h3>
-        <div className="flex gap-2">
-          <button onClick={() => exportChefPerformance('excel')} className="bg-blue-500 text-white px-2 py-1 rounded text-xs">
-            Excel
-          </button>
-          <button onClick={() => exportChefPerformance('pdf')} className="bg-green-500 text-white px-2 py-1 rounded text-xs">
-            PDF
-          </button>
-        </div>
-      </div>
+      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
+        <ChefHat className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+        {isRtl ? 'أداء الطهاة' : 'Chef Performance'}
+      </h3>
       <div className="space-y-2 max-h-64 overflow-y-auto">
         <AnimatePresence>
           {chefPerformance.length === 0 ? (
@@ -1208,20 +1127,10 @@ export const Dashboard: React.FC = () => {
 
   const renderLatestReturns = () => (
     <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
-      <div className="flex justify-between items-center mb-3">
-        <h3 className="text-base font-semibold text-gray-800 flex items-center">
-          <RotateCcw className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
-          {isRtl ? 'أحدث المرتجعات' : 'Latest Returns'}
-        </h3>
-        <div className="flex gap-2">
-          <button onClick={() => exportReturns('excel')} className="bg-blue-500 text-white px-2 py-1 rounded text-xs">
-            Excel
-          </button>
-          <button onClick={() => exportReturns('pdf')} className="bg-green-500 text-white px-2 py-1 rounded text-xs">
-            PDF
-          </button>
-        </div>
-      </div>
+      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
+        <RotateCcw className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+        {isRtl ? 'أحدث المرتجعات' : 'Latest Returns'}
+      </h3>
       <div className="space-y-2 max-h-80 overflow-y-auto">
         <AnimatePresence>
           {sortedLatestReturns.length === 0 ? (
