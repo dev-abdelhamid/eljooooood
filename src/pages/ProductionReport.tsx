@@ -20,7 +20,7 @@ interface OrderRow {
   totalQuantity: number;
   totalPrice: number;
   sales: number;
-  actualSales: number; // New field for actual sales based on orders
+  actualSales: number;
 }
 
 interface StockRow {
@@ -41,7 +41,6 @@ interface ReturnRow {
   unit: string;
   totalReturns: number;
   dailyReturns: number[];
-  changes: number[];
   totalValue: number;
 }
 
@@ -86,6 +85,10 @@ const formatPrice = (amount: number, isRtl: boolean, isStats: boolean = false): 
     }
   }
   return formatted;
+};
+
+const formatNumber = (num: number, isRtl: boolean): string => {
+  return isRtl ? toArabicNumerals(num) : num.toString();
 };
 
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
@@ -284,7 +287,7 @@ const ProductionReport: React.FC = () => {
   const [stockInData, setStockInData] = useState<{ [month: number]: StockRow[] }>({});
   const [stockOutData, setStockOutData] = useState<{ [month: number]: StockRow[] }>({});
   const [returnData, setReturnData] = useState<{ [month: number]: ReturnRow[] }>({});
-  const [salesData, setSalesData] = useState<{ [month: number]: StockRow[] }>({});
+  const [salesData, setSalesData] = useState<{ [month: number]: OrderRow[] }>({});
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(8); // September 2025
   const [activeTab, setActiveTab] = useState<'orders' | 'stockIn' | 'stockOut' | 'returns' | 'sales'>('orders');
@@ -324,7 +327,7 @@ const ProductionReport: React.FC = () => {
         const monthlyStockInData: { [month: number]: StockRow[] } = {};
         const monthlyStockOutData: { [month: number]: StockRow[] } = {};
         const monthlyReturnData: { [month: number]: ReturnRow[] } = {};
-        const monthlySalesData: { [month: number]: StockRow[] } = {};
+        const monthlySalesData: { [month: number]: OrderRow[] } = {};
 
         const fetchedBranches = branchesResponse
           .filter((branch: any) => branch && branch._id)
@@ -341,8 +344,8 @@ const ProductionReport: React.FC = () => {
         inventory.forEach((item: any) => {
           if (item.product?._id) {
             productDetails.set(item.product._id, {
-              code: item.product.code || item.product._id,
-              product: item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+              code: item.product._id, // استخدم _id كـ code بشكل صحيح
+              product: item.productName || item.product.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
               unit: item.product.displayUnit || item.product.unit || 'unit',
               price: Number(item.product.price) || 0,
             });
@@ -375,7 +378,7 @@ const ProductionReport: React.FC = () => {
           const stockInMap = new Map<string, StockRow>();
           const stockOutMap = new Map<string, StockRow>();
           const returnMap = new Map<string, ReturnRow>();
-          const salesMap = new Map<string, StockRow>();
+          const salesMap = new Map<string, OrderRow>();
 
           orders.forEach((order: any) => {
             const status = order.status || order.orderStatus;
@@ -413,77 +416,89 @@ const ProductionReport: React.FC = () => {
                 row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + quantity;
                 row.totalQuantity += quantity;
                 row.totalPrice += quantity * details.price;
-                row.sales = item.sales || (row.totalPrice * 0.10);
-                // Update actual sales from sales analytics
-                const salesItem = salesResponse.productSales.find((s: any) => s.productId === item.productId);
-                if (salesItem) {
-                  row.actualSales += salesItem.totalQuantity;
-                }
+                row.sales = row.totalPrice * 0.10;
               });
             }
           });
 
-          if (Array.isArray(inventory)) {
-            inventory.forEach((item: any) => {
-              const product = item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
-              const assumedPrice = Number(item.product?.price) || 0;
-              (item.movements || []).forEach((movement: any) => {
-                if (!movement.type || !['in', 'out'].includes(movement.type)) return;
-                const date = new Date(movement.createdAt);
-                if (isNaN(date.getTime())) return;
-                const prodMonth = date.getMonth();
-                const year = date.getFullYear();
-                if (year === currentYear && prodMonth === month) {
-                  const day = date.getDate();
-                  const key = `${product}-${month}`;
-                  const map = movement.type === 'in' ? stockInMap : stockOutMap;
-                  if (!map.has(key)) {
-                    map.set(key, {
-                      id: key,
-                      product,
-                      totalQuantity: 0,
-                      dailyQuantities: Array(daysInMonthCount).fill(0),
-                      changes: Array(daysInMonthCount).fill(0),
-                      totalPrice: 0,
-                    });
-                  }
-                  const row = map.get(key)!;
-                  const quantity = Math.abs(Number(movement.quantity) || 0);
-                  row.dailyQuantities[day - 1] += quantity;
-                  row.totalQuantity += quantity;
-                  row.totalPrice += quantity * assumedPrice;
-                  if (day > 1) {
-                    row.changes[day - 1] = row.dailyQuantities[day - 1] - row.dailyQuantities[day - 2];
-                  } else {
-                    row.changes[0] = row.dailyQuantities[0];
-                  }
-                }
-              });
-            });
+          // Set actualSales after building rows to avoid duplication
+          for (const row of orderMap.values()) {
+            const salesItem = salesResponse.productSales.find((s: any) => s.productId === row.code); // Use code (_id)
+            if (salesItem) {
+              row.actualSales = salesItem.totalQuantity;
+            }
           }
 
-          // Process returns (assuming returns are a subset of movements with negative quantities)
           inventory.forEach((item: any) => {
-            const product = item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
-            const assumedPrice = Number(item.product?.price) || 0;
+            const productId = item.product?._id;
+            const details = productDetails.get(productId) || {
+              code: productId || `code-${Math.random().toString(36).substring(2)}`,
+              product: item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+              unit: item.product?.displayUnit || item.product?.unit || 'unit',
+              price: Number(item.product?.price) || 0,
+            };
             (item.movements || []).forEach((movement: any) => {
-              if (movement.type === 'return') {
+              if (!movement.type || !['in', 'out'].includes(movement.type)) return;
+              const date = new Date(movement.createdAt);
+              if (isNaN(date.getTime())) return;
+              const prodMonth = date.getMonth();
+              const year = date.getFullYear();
+              if (year === currentYear && prodMonth === month) {
+                const day = date.getDate();
+                const key = `${productId}-${month}`;
+                const map = movement.type === 'in' ? stockInMap : stockOutMap;
+                if (!map.has(key)) {
+                  map.set(key, {
+                    id: key,
+                    code: details.code,
+                    product: details.product,
+                    unit: details.unit,
+                    totalQuantity: 0,
+                    dailyQuantities: Array(daysInMonthCount).fill(0),
+                    changes: Array(daysInMonthCount).fill(0),
+                    totalPrice: 0,
+                  });
+                }
+                const row = map.get(key)!;
+                const quantity = Math.abs(Number(movement.quantity) || 0);
+                row.dailyQuantities[day - 1] += quantity;
+                row.totalQuantity += quantity;
+                row.totalPrice += quantity * details.price;
+                if (day > 1) {
+                  row.changes[day - 1] = row.dailyQuantities[day - 1] - row.dailyQuantities[day - 2];
+                } else {
+                  row.changes[0] = row.dailyQuantities[0];
+                }
+              }
+            });
+          });
+
+          // Returns: Use quantity < 0 for returns to show data
+          inventory.forEach((item: any) => {
+            const productId = item.product?._id;
+            const details = productDetails.get(productId) || {
+              code: productId || `code-${Math.random().toString(36).substring(2)}`,
+              product: item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+              unit: item.product?.displayUnit || item.product?.unit || 'unit',
+              price: Number(item.product?.price) || 0,
+            };
+            (item.movements || []).forEach((movement: any) => {
+              if (movement.quantity < 0) { // Changed to quantity < 0 to capture returns
                 const date = new Date(movement.createdAt);
                 if (isNaN(date.getTime())) return;
                 const returnMonth = date.getMonth();
                 const year = date.getFullYear();
                 if (year === currentYear && returnMonth === month) {
                   const day = date.getDate();
-                  const key = `${product}-${month}`;
+                  const key = `${productId}-${month}`;
                   if (!returnMap.has(key)) {
                     returnMap.set(key, {
                       id: key,
-                      product,
-                      code: item.product?._id || `code-${Math.random().toString(36).substring(2)}`,
-                      unit: item.product?.unit || 'unit',
+                      product: details.product,
+                      code: details.code,
+                      unit: details.unit,
                       totalReturns: 0,
                       dailyReturns: Array(daysInMonthCount).fill(0),
-                      changes: Array(daysInMonthCount).fill(0),
                       totalValue: 0,
                     });
                   }
@@ -491,55 +506,34 @@ const ProductionReport: React.FC = () => {
                   const quantity = Math.abs(Number(movement.quantity) || 0);
                   row.dailyReturns[day - 1] += quantity;
                   row.totalReturns += quantity;
-                  row.totalValue += quantity * assumedPrice;
-                  if (day > 1) {
-                    row.changes[day - 1] = row.dailyReturns[day - 1] - row.dailyReturns[day - 2];
-                  } else {
-                    row.changes[0] = row.dailyReturns[0];
-                  }
+                  row.totalValue += quantity * details.price;
                 }
               }
             });
           });
 
-          // Process sales based on order data and sales analytics
-          orders.forEach((order: any) => {
-            const status = order.status || order.orderStatus;
-            if (status === 'completed') {
-              const date = new Date(order.createdAt || order.date);
-              if (isNaN(date.getTime())) return;
-              const orderMonth = date.getMonth();
-              const year = date.getFullYear();
-              if (year === currentYear && orderMonth === month) {
-                const branch = order.branch?.displayName || order.branch?.name || order.branchId || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
-                (order.items || []).forEach((item: any) => {
-                  const product = item.displayProductName || item.product?.name || item.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
-                  const key = `${product}-${month}`;
-                  if (!salesMap.has(key)) {
-                    salesMap.set(key, {
-                      id: key,
-                      code: item.productId || `code-${Math.random().toString(36).substring(2)}`,
-                      product,
-                      unit: item.displayUnit || item.unit || 'unit',
-                      branchQuantities: {},
-                      totalQuantity: 0,
-                      totalPrice: 0,
-                      sales: item.sales || 0,
-                      actualSales: 0,
-                    });
-                  }
-                  const row = salesMap.get(key)!;
-                  const quantity = Number(item.quantity) || 0;
-                  row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + quantity;
-                  row.totalQuantity += quantity;
-                  row.totalPrice += quantity * price;
-                  row.sales = item.sales || (row.totalPrice * 0.10);
-                  const salesItem = salesResponse.productSales.find((s: any) => s.productId === item.productId);
-                  if (salesItem) {
-                    row.actualSales += salesItem.totalQuantity;
-                  }
-                });
-              }
+          // Sales: Focus on sold quantities, use salesResponse directly
+          salesResponse.productSales.forEach((s: any) => {
+            const productId = s.productId;
+            const details = productDetails.get(productId) || {
+              code: productId,
+              product: s.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+              unit: 'unit',
+              price: s.totalRevenue / s.totalQuantity || 0,
+            };
+            const key = `${productId}-${month}`;
+            if (!salesMap.has(key)) {
+              salesMap.set(key, {
+                id: key,
+                code: details.code,
+                product: details.product,
+                unit: details.unit,
+                branchQuantities: {}, // If no branch breakdown, leave empty; assume total
+                totalQuantity: s.totalQuantity,
+                totalPrice: s.totalRevenue || s.totalQuantity * details.price,
+                sales: s.totalRevenue * 0.10,
+                actualSales: s.totalQuantity, // Actual sold quantity
+              });
             }
           });
 
@@ -701,6 +695,372 @@ const ProductionReport: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200 text-xs">
               <thead className="bg-blue-100 sticky top-0">
                 <tr className={isRtl ? 'flex-row-reverse' : ''}>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
+                  {allBranches.map(branch => (
+                    <th key={branch} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                      {branch}
+                    </th>
+                  ))}
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                    {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
+                  </th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                    {isRtl ? 'المبيعات الفعلية' : 'Actual Sales'}
+                  </th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                    {isRtl ? 'السعر الإجمالي' : 'Total Price'}
+                  </th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                    {isRtl ? 'نسبة المبيعات %' : 'Sales Percentage %'}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {data.map(row => (
+                  <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
+                    {allBranches.map(branch => (
+                      <td
+                        key={branch}
+                        className={`px-4 py-3 text-center ${
+                          row.branchQuantities[branch] > 0 ? 'bg-green-50 text-green-700' : row.branchQuantities[branch] < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
+                        }`}
+                        title={`${isRtl ? 'الكمية في ' : 'Quantity in '} ${branch}: ${row.branchQuantities[branch] || 0}`}
+                      >
+                        {formatNumber(row.branchQuantities[branch] || 0, isRtl)}
+                      </td>
+                    ))}
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.actualSales, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">
+                      {formatPrice(row.totalPrice, isRtl)}
+                    </td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">
+                      {formatNumber(row.totalQuantity > 0 ? ((row.actualSales / row.totalQuantity) * 100).toFixed(2) : '0.00', isRtl)}%
+                    </td>
+                  </tr>
+                ))}
+                <tr className={`font-semibold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <td className="px-4 py-3 text-gray-800 text-center"></td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{isRtl ? 'الإجمالي' : 'Total'}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center"></td>
+                  {allBranches.map(branch => (
+                    <td key={branch} className="px-4 py-3 text-gray-800 text-center">
+                      {formatNumber(totalQuantities[branch] || 0, isRtl)}
+                    </td>
+                  ))}
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandActualSales, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">
+                    {formatPrice(grandTotalPrice, isRtl)}
+                  </td>
+                  <td className="px-4 py-3 text-gray-800 text-center">
+                    {formatNumber(grandTotalQuantity > 0 ? ((grandActualSales / grandTotalQuantity) * 100).toFixed(2) : '0.00', isRtl)}%
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </motion.div>
+        </div>
+      );
+    },
+    [loading, isRtl, allBranches, months, formatPrice]
+  );
+
+  const renderStockTable = useCallback(
+    (data: StockRow[], title: string, month: number, isIn: boolean) => {
+      const grandTotalQuantity = data.reduce((sum, row) => sum + row.totalQuantity, 0);
+      const grandTotalPrice = data.reduce((sum, row) => sum + row.totalPrice, 0);
+      const monthName = months[month].label;
+
+      const exportTable = (format: 'excel' | 'pdf') => {
+        const headers = [
+          isRtl ? 'رقم' : 'No.',
+          isRtl ? 'الكود' : 'Code',
+          isRtl ? 'المنتج' : 'Product',
+          isRtl ? 'وحدة المنتج' : 'Product Unit',
+          ...daysInMonth,
+          isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
+          isRtl ? 'السعر الإجمالي' : 'Total Price',
+        ];
+        const rows = [
+          ...data.map((row, index) => ({
+            no: index + 1,
+            code: row.code,
+            product: row.product,
+            unit: row.unit,
+            ...Object.fromEntries(row.dailyQuantities.map((qty, i) => [daysInMonth[i], qty])),
+            totalQuantity: row.totalQuantity,
+            totalPrice: formatPrice(row.totalPrice, isRtl),
+          })),
+          {
+            no: '',
+            code: '',
+            product: isRtl ? 'الإجمالي' : 'Total',
+            unit: '',
+            ...Object.fromEntries(daysInMonth.map((_, i) => [daysInMonth[i], data.reduce((sum, row) => sum + row.dailyQuantities[i], 0)])),
+            totalQuantity: grandTotalQuantity,
+            totalPrice: formatPrice(grandTotalPrice, isRtl),
+          },
+        ];
+        const dataRows = rows.map(row => [
+          row.no,
+          row.code,
+          row.product,
+          row.unit,
+          ...daysInMonth.map(day => row[day]),
+          row.totalQuantity,
+          row.totalPrice,
+        ]);
+
+        if (format === 'excel') {
+          const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
+          if (isRtl) ws['!views'] = [{ RTL: true }];
+          ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }];
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
+          XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
+          toast.success(isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully', {
+            position: isRtl ? 'top-left' : 'top-right',
+            autoClose: 3000,
+          });
+        } else if (format === 'pdf') {
+          exportToPDF(dataRows, title, monthName, headers, isRtl, data.length, grandTotalQuantity, grandTotalPrice, []);
+        }
+      };
+
+      if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
+
+      if (data.length === 0) {
+        return (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className="text-center py-12 bg-white shadow-md rounded-xl border border-gray-200"
+          >
+            <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>
+          </motion.div>
+        );
+      }
+
+      return (
+        <div className="mb-8">
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
+            <div className="flex gap-2">
+              <Button
+                variant={data.length > 0 ? 'primary' : 'secondary'}
+                onClick={data.length > 0 ? () => exportTable('excel') : undefined}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+                  data.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                }`}
+                disabled={data.length === 0}
+              >
+                <Upload className="w-4 h-4" />
+                {isRtl ? 'تصدير إكسل' : 'Export Excel'}
+              </Button>
+              <Button
+                variant={data.length > 0 ? 'primary' : 'secondary'}
+                onClick={data.length > 0 ? () => exportTable('pdf') : undefined}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+                  data.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                }`}
+                disabled={data.length === 0}
+              >
+                <Upload className="w-4 h-4" />
+                {isRtl ? 'تصدير PDF' : 'Export PDF'}
+              </Button>
+            </div>
+          </div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
+          >
+            <table className="min-w-full divide-y divide-gray-200 text-xs">
+              <thead className="bg-blue-100 sticky top-0">
+                <tr className={isRtl ? 'flex-row-reverse' : ''}>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
+                  {daysInMonth.map((day, i) => (
+                    <th key={i} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
+                      {day}
+                    </th>
+                  ))}
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                    {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
+                  </th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                    {isRtl ? 'السعر الإجمالي' : 'Total Price'}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {data.map((row, index) => (
+                  <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <td className="px-4 py-3 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
+                    {row.dailyQuantities.map((qty, i) => (
+                      <td
+                        key={i}
+                        className={`px-4 py-3 text-center font-medium ${isIn ? 'text-green-700' : 'text-red-700'}`}
+                        title={`${isRtl ? 'التغيير' : 'Change'}: ${row.changes[i] > 0 ? '+' : ''}${row.changes[i]} (${isRtl ? 'الكمية' : 'Quantity'}: ${qty})`}
+                      >
+                        {formatNumber(qty, isRtl)} {row.changes[i] !== 0 && `(${row.changes[i] > 0 ? '+' : ''}${formatNumber(row.changes[i], isRtl)})`}
+                      </td>
+                    ))}
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">
+                      {formatPrice(row.totalPrice, isRtl)}
+                    </td>
+                  </tr>
+                ))}
+                <tr className={`font-semibold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
+                  {daysInMonth.map((_, i) => (
+                    <td key={i} className="px-4 py-3 text-gray-800 text-center">
+                      {formatNumber(data.reduce((sum, row) => sum + row.dailyQuantities[i], 0), isRtl)}
+                    </td>
+                  ))}
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">
+                    {formatPrice(grandTotalPrice, isRtl)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </motion.div>
+        </div>
+      );
+    },
+    [loading, isRtl, daysInMonth, months, formatPrice]
+  );
+
+  const renderReturnTable = useCallback(
+    (data: ReturnRow[], title: string, month: number) => {
+      const grandTotalReturns = data.reduce((sum, row) => sum + row.totalReturns, 0);
+      const grandTotalValue = data.reduce((sum, row) => sum + row.totalValue, 0);
+      const monthName = months[month].label;
+
+      const exportTable = (format: 'excel' | 'pdf') => {
+        const headers = [
+          isRtl ? 'رقم' : 'No.',
+          isRtl ? 'الكود' : 'Code',
+          isRtl ? 'المنتج' : 'Product',
+          isRtl ? 'وحدة المنتج' : 'Product Unit',
+          ...daysInMonth,
+          isRtl ? 'إجمالي المرتجعات' : 'Total Returns',
+          isRtl ? 'القيمة الإجمالية' : 'Total Value',
+        ];
+        const rows = [
+          ...data.map((row, index) => ({
+            no: index + 1,
+            code: row.code,
+            product: row.product,
+            unit: row.unit,
+            ...Object.fromEntries(row.dailyReturns.map((qty, i) => [daysInMonth[i], qty])),
+            totalReturns: row.totalReturns,
+            totalValue: formatPrice(row.totalValue, isRtl),
+          })),
+          {
+            no: '',
+            code: '',
+            product: isRtl ? 'الإجمالي' : 'Total',
+            unit: '',
+            ...Object.fromEntries(daysInMonth.map((_, i) => [daysInMonth[i], data.reduce((sum, row) => sum + row.dailyReturns[i], 0)])),
+            totalReturns: grandTotalReturns,
+            totalValue: formatPrice(grandTotalValue, isRtl),
+          },
+        ];
+        const dataRows = rows.map(row => [
+          row.no,
+          row.code,
+          row.product,
+          row.unit,
+          ...daysInMonth.map(day => row[day]),
+          row.totalReturns,
+          row.totalValue,
+        ]);
+
+        if (format === 'excel') {
+          const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
+          if (isRtl) ws['!views'] = [{ RTL: true }];
+          ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }];
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
+          XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
+          toast.success(isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully', {
+            position: isRtl ? 'top-left' : 'top-right',
+            autoClose: 3000,
+          });
+        } else if (format === 'pdf') {
+          exportToPDF(dataRows, title, monthName, headers, isRtl, data.length, grandTotalReturns, grandTotalValue, []);
+        }
+      };
+
+      if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
+
+      if (data.length === 0) {
+        return (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className="text-center py-12 bg-white shadow-md rounded-xl border border-gray-200"
+          >
+            <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات مرتجعات' : 'No return data available'}</p>
+          </motion.div>
+        );
+      }
+
+      return (
+        <div className="mb-8">
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
+            <div className="flex gap-2">
+              <Button
+                variant={data.length > 0 ? 'primary' : 'secondary'}
+                onClick={data.length > 0 ? () => exportTable('excel') : undefined}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+                  data.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                }`}
+                disabled={data.length === 0}
+              >
+                <Upload className="w-4 h-4" />
+                {isRtl ? 'تصدير إكسل' : 'Export Excel'}
+              </Button>
+              <Button
+                variant={data.length > 0 ? 'primary' : 'secondary'}
+                onClick={data.length > 0 ? () => exportTable('pdf') : undefined}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+                  data.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                }`}
+                disabled={data.length === 0}
+              >
+                <Upload className="w-4 h-4" />
+                {isRtl ? 'تصدير PDF' : 'Export PDF'}
+              </Button>
+            </div>
+          </div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
+          >
+            <table className="min-w-full divide-y divide-gray-200 text-xs">
+              <thead className="bg-blue-100 sticky top-0">
+                <tr className={isRtl ? 'flex-row-reverse' : ''}>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
@@ -725,20 +1085,15 @@ const ProductionReport: React.FC = () => {
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
-                    {row.changes.map((chg, i) => {
-                      const change = -chg; // invert for returns as out
-                      const sign = change > 0 ? '+' : '';
-                      const color = change > 0 ? 'text-green-700' : 'text-red-700';
-                      return (
-                        <td
-                          key={i}
-                          className={`px-4 py-3 text-center font-medium ${color}`}
-                          title={`${isRtl ? 'التغيير' : 'Change'}: ${sign}${change}`}
-                        >
-                          {sign}{formatNumber(change, isRtl)}
-                        </td>
-                      );
-                    })}
+                    {row.dailyReturns.map((qty, i) => (
+                      <td
+                        key={i}
+                        className="px-4 py-3 text-center font-medium text-red-700"
+                        title={`${isRtl ? 'المرتجعات' : 'Returns'}: ${qty}`}
+                      >
+                        {formatNumber(qty, isRtl)}
+                      </td>
+                    ))}
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalReturns, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">
                       {formatPrice(row.totalValue, isRtl)}
@@ -749,7 +1104,7 @@ const ProductionReport: React.FC = () => {
                   <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
                   {daysInMonth.map((_, i) => (
                     <td key={i} className="px-4 py-3 text-gray-800 text-center">
-                      {formatNumber(data.reduce((sum, row) => sum + row.changes[i], 0), isRtl)}
+                      {formatNumber(data.reduce((sum, row) => sum + row.dailyReturns[i], 0), isRtl)}
                     </td>
                   ))}
                   <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalReturns, isRtl)}</td>
@@ -767,10 +1122,198 @@ const ProductionReport: React.FC = () => {
   );
 
   const renderSalesTable = useCallback(
-    (data: StockRow[], title: string, month: number) => {
-      return renderStockTable(data, title, month, false);
+    (data: OrderRow[], title: string, month: number) => {
+      const totalQuantities = allBranches.reduce((acc, branch) => {
+        acc[branch] = data.reduce((sum, row) => sum + (row.branchQuantities[branch] || 0), 0);
+        return acc;
+      }, {} as { [branch: string]: number });
+      const grandTotalQuantity = data.reduce((sum, row) => sum + row.actualSales, 0); // Focus on sold
+      const grandTotalPrice = data.reduce((sum, row) => sum + row.totalPrice, 0);
+      const grandActualSales = data.reduce((sum, row) => sum + row.actualSales, 0);
+      const monthName = months[month].label;
+
+      const exportTable = (format: 'excel' | 'pdf') => {
+        const headers = [
+          isRtl ? 'الكود' : 'Code',
+          isRtl ? 'المنتج' : 'Product',
+          isRtl ? 'وحدة المنتج' : 'Product Unit',
+          ...allBranches,
+          isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
+          isRtl ? 'المبيعات الفعلية' : 'Actual Sales',
+          isRtl ? 'السعر الإجمالي' : 'Total Price',
+        ];
+        const rows = [
+          ...data.map(row => ({
+            code: row.code,
+            product: row.product,
+            unit: row.unit,
+            ...Object.fromEntries(allBranches.map(branch => [branch, row.branchQuantities[branch] || 0])),
+            totalQuantity: row.actualSales, // Sold quantity
+            actualSales: row.actualSales,
+            totalPrice: formatPrice(row.totalPrice, isRtl),
+          })),
+          {
+            code: '',
+            product: isRtl ? 'الإجمالي' : 'Total',
+            unit: '',
+            ...Object.fromEntries(allBranches.map(branch => [branch, totalQuantities[branch] || 0])),
+            totalQuantity: grandTotalQuantity,
+            actualSales: grandActualSales,
+            totalPrice: formatPrice(grandTotalPrice, isRtl),
+          },
+        ];
+        const dataRows = rows.map(row => [
+          row.code,
+          row.product,
+          row.unit,
+          ...allBranches.map(branch => row[branch]),
+          row.totalQuantity,
+          row.actualSales,
+          row.totalPrice,
+        ]);
+
+        if (format === 'excel') {
+          const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
+          if (isRtl) ws['!views'] = [{ RTL: true }];
+          ws['!cols'] = [
+            { wch: 15 },
+            { wch: 25 },
+            { wch: 15 },
+            ...allBranches.map(() => ({ wch: 15 })),
+            { wch: 15 },
+            { wch: 15 },
+            { wch: 15 },
+          ];
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
+          XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
+          toast.success(isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully', {
+            position: isRtl ? 'top-left' : 'top-right',
+            autoClose: 3000,
+          });
+        } else if (format === 'pdf') {
+          exportToPDF(dataRows, title, monthName, headers, isRtl, data.length, grandTotalQuantity, grandTotalPrice, allBranches);
+        }
+      };
+
+      if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
+
+      if (data.length === 0) {
+        return (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className="text-center py-12 bg-white shadow-md rounded-xl border border-gray-200"
+          >
+            <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات مبيعات' : 'No sales data available'}</p>
+          </motion.div>
+        );
+      }
+
+      return (
+        <div className="mb-8">
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
+            <div className="flex gap-2">
+              <Button
+                variant={data.length > 0 ? 'primary' : 'secondary'}
+                onClick={data.length > 0 ? () => exportTable('excel') : undefined}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+                  data.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                }`}
+                disabled={data.length === 0}
+              >
+                <Upload className="w-4 h-4" />
+                {isRtl ? 'تصدير إكسل' : 'Export Excel'}
+              </Button>
+              <Button
+                variant={data.length > 0 ? 'primary' : 'secondary'}
+                onClick={data.length > 0 ? () => exportTable('pdf') : undefined}
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+                  data.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                }`}
+                disabled={data.length === 0}
+              >
+                <Upload className="w-4 h-4" />
+                {isRtl ? 'تصدير PDF' : 'Export PDF'}
+              </Button>
+            </div>
+          </div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
+          >
+            <table className="min-w-full divide-y divide-gray-200 text-xs">
+              <thead className="bg-blue-100 sticky top-0">
+                <tr className={isRtl ? 'flex-row-reverse' : ''}>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
+                  {allBranches.map(branch => (
+                    <th key={branch} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                      {branch}
+                    </th>
+                  ))}
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                    {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
+                  </th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                    {isRtl ? 'المبيعات الفعلية' : 'Actual Sales'}
+                  </th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                    {isRtl ? 'السعر الإجمالي' : 'Total Price'}
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {data.map(row => (
+                  <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
+                    {allBranches.map(branch => (
+                      <td
+                        key={branch}
+                        className={`px-4 py-3 text-center ${
+                          row.branchQuantities[branch] > 0 ? 'bg-green-50 text-green-700' : row.branchQuantities[branch] < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
+                        }`}
+                        title={`${isRtl ? 'الكمية في ' : 'Quantity in '} ${branch}: ${row.branchQuantities[branch] || 0}`}
+                      >
+                        {formatNumber(row.branchQuantities[branch] || 0, isRtl)}
+                      </td>
+                    ))}
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.actualSales, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">
+                      {formatPrice(row.totalPrice, isRtl)}
+                    </td>
+                  </tr>
+                ))}
+                <tr className={`font-semibold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <td className="px-4 py-3 text-gray-800 text-center"></td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{isRtl ? 'الإجمالي' : 'Total'}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center"></td>
+                  {allBranches.map(branch => (
+                    <td key={branch} className="px-4 py-3 text-gray-800 text-center">
+                      {formatNumber(totalQuantities[branch] || 0, isRtl)}
+                    </td>
+                  ))}
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandActualSales, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">
+                    {formatPrice(grandTotalPrice, isRtl)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </motion.div>
+        </div>
+      );
     },
-    [renderStockTable]
+    [loading, isRtl, allBranches, months, formatPrice]
   );
 
   return (
@@ -794,7 +1337,7 @@ const ProductionReport: React.FC = () => {
         <div className="flex gap-2 border-b border-gray-200 justify-center">
           <button
             onClick={() => setActiveTab('orders')}
-            className={`px-4 py-2 text-sm font-medium rounded-t-xl transition-all duration-200 ${
+            className={`px-6 py-3 text-sm font-medium rounded-t-xl transition-all duration-200 ${
               activeTab === 'orders' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
@@ -802,7 +1345,7 @@ const ProductionReport: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('stockIn')}
-            className={`px-4 py-2 text-sm font-medium rounded-t-xl transition-all duration-200 ${
+            className={`px-6 py-3 text-sm font-medium rounded-t-xl transition-all duration-200 ${
               activeTab === 'stockIn' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
@@ -810,7 +1353,7 @@ const ProductionReport: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('stockOut')}
-            className={`px-4 py-2 text-sm font-medium rounded-t-xl transition-all duration-200 ${
+            className={`px-6 py-3 text-sm font-medium rounded-t-xl transition-all duration-200 ${
               activeTab === 'stockOut' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
@@ -818,7 +1361,7 @@ const ProductionReport: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('returns')}
-            className={`px-4 py-2 text-sm font-medium rounded-t-xl transition-all duration-200 ${
+            className={`px-6 py-3 text-sm font-medium rounded-t-xl transition-all duration-200 ${
               activeTab === 'returns' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
@@ -826,7 +1369,7 @@ const ProductionReport: React.FC = () => {
           </button>
           <button
             onClick={() => setActiveTab('sales')}
-            className={`px-4 py-2 text-sm font-medium rounded-t-xl transition-all duration-200 ${
+            className={`px-6 py-3 text-sm font-medium rounded-t-xl transition-all duration-200 ${
               activeTab === 'sales' ? 'bg-white text-blue-600 border-b-2 border-blue-600' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
             }`}
           >
