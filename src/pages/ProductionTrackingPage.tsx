@@ -9,7 +9,7 @@ import { Input } from '../components/UI/Input';
 import { Search, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as XLSX from 'xlsx';
-import { ordersAPI, branchesAPI, salesAPI } from '../services/api';
+import { ordersAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { toast } from 'react-toastify';
 
@@ -38,11 +38,10 @@ const ProductionTrackingPage = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [branchesResp, ordersResp, salesResp] = await Promise.all([
-          branchesAPI.getAll(),
-          ordersAPI.getProductionStats(),
-          salesAPI.getDailyStats(),
-        ]);
+        // استدعاء بيانات الطلبات بدلاً من getProductionStats
+        const ordersResp = await ordersAPI.getOrders({ status: 'in_production' });
+        const branchesResp = await ordersAPI.getBranches(); // افتراض وجود دالة لجلب الفروع
+
         const mappedBranches = branchesResp.map(b => ({
           _id: b._id,
           name: b.name,
@@ -52,16 +51,18 @@ const ProductionTrackingPage = () => {
         setBranches(mappedBranches);
 
         const combinedData = ordersResp.map(order => {
-          const salesData = salesResp.find(s => s.orderId === order.id) || {};
+          const totalSales = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+          const dailyProduction = order.items.reduce((sum, item) => sum + (item.status === 'completed' ? item.quantity : 0), 0);
+
           return {
             orderNumber: order.orderNumber,
-            branch: mappedBranches.find(b => b._id === order.branchId)?.displayName || '',
-            product: order.items.map(i => i.displayProductName).join(', '),
+            branch: mappedBranches.find(b => b._id === order.branch)?.displayName || '',
+            product: order.items.map(i => isRtl ? i.product.name : (i.product.nameEn || i.product.name)).join(', '),
             quantity: order.items.reduce((sum, i) => sum + i.quantity, 0),
             status: order.status,
-            date: formatDate(new Date(order.date), language),
-            salesAmount: salesData.totalAmount || 0,
-            dailyProduction: order.items.reduce((sum, i) => sum + (i.status === 'completed' ? i.quantity : 0), 0),
+            date: formatDate(new Date(order.createdAt), language),
+            salesAmount: totalSales,
+            dailyProduction: dailyProduction,
           };
         });
         setData(combinedData);
