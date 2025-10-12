@@ -6,7 +6,7 @@ import { Button } from '../components/UI/Button';
 import { Upload } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import 'jspdf-autotable';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
 import { inventoryAPI, ordersAPI, branchesAPI } from '../services/api';
@@ -83,17 +83,16 @@ const ProductionReport: React.FC = () => {
         const monthlyStockOutData: { [month: number]: StockRow[] } = {};
 
         // Set branches
-        setBranches(
-          branchesResponse
-            .filter((branch: any) => branch && branch._id)
-            .map((branch: any) => ({
-              _id: branch._id,
-              name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              nameEn: branch.nameEn,
-              displayName: isRtl ? branch.name : branch.nameEn || branch.name,
-            }))
-            .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language))
-        );
+        const fetchedBranches = branchesResponse
+          .filter((branch: any) => branch && branch._id)
+          .map((branch: any) => ({
+            _id: branch._id,
+            name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
+            nameEn: branch.nameEn,
+            displayName: isRtl ? branch.name : branch.nameEn || branch.name,
+          }))
+          .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language));
+        setBranches(fetchedBranches);
 
         // Handle empty orders, fallback to inventory movements
         let orders = Array.isArray(ordersResponse) ? ordersResponse : [];
@@ -103,7 +102,7 @@ const ProductionReport: React.FC = () => {
             return (item.movements || []).map((movement: any) => ({
               status: 'completed',
               createdAt: movement.createdAt,
-              branch: { displayName: branches[Math.floor(Math.random() * branches.length)]?.displayName || (isRtl ? 'الفرع الرئيسي' : 'Main Branch') },
+              branch: { displayName: fetchedBranches[Math.floor(Math.random() * fetchedBranches.length)]?.displayName || (isRtl ? 'الفرع الرئيسي' : 'Main Branch') },
               items: [{
                 displayProductName: item.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
                 quantity: Math.abs(movement.quantity),
@@ -224,14 +223,8 @@ const ProductionReport: React.FC = () => {
   }, [isRtl, currentYear]);
 
   const allBranches = useMemo(() => {
-    const branches = new Set<string>();
-    Object.values(orderData).forEach(monthData => {
-      monthData.forEach(row => {
-        Object.keys(row.branchQuantities).forEach(branch => branches.add(branch));
-      });
-    });
-    return Array.from(branches).sort();
-  }, [orderData]);
+    return branches.map(b => b.displayName).sort();
+  }, [branches]);
 
   const renderOrderTable = useCallback(
     (data: OrderRow[], title: string, month: number) => {
@@ -274,7 +267,7 @@ const ProductionReport: React.FC = () => {
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
         } else if (format === 'pdf') {
           const doc = new jsPDF();
-          autoTable(doc, {
+          doc.autoTable({
             head: [headers],
             body: rows.map(row => [
               row.product,
@@ -436,7 +429,7 @@ const ProductionReport: React.FC = () => {
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
         } else if (format === 'pdf') {
           const doc = new jsPDF();
-          autoTable(doc, {
+          doc.autoTable({
             head: [headers],
             body: rows.map(row => [
               row.no,
@@ -533,12 +526,9 @@ const ProductionReport: React.FC = () => {
                     {row.dailyQuantities.map((qty, i) => (
                       <td
                         key={i}
-                        className={`px-3 py-2 text-center bg-green-50/50`}
+                        className={`px-3 py-2 text-center text-green-600 font-medium`}
                       >
-                        {qty}
-                        {row.changes[i] !== 0 && (
-                          <span className="ml-1 text-green-400">({row.changes[i] > 0 ? '+' : ''}{row.changes[i]})</span>
-                        )}
+                        {qty} {row.changes[i] !== 0 && `(+${row.changes[i]})`}
                       </td>
                     ))}
                   </tr>
@@ -604,7 +594,7 @@ const ProductionReport: React.FC = () => {
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
         } else if (format === 'pdf') {
           const doc = new jsPDF();
-          autoTable(doc, {
+          doc.autoTable({
             head: [headers],
             body: rows.map(row => [
               row.no,
@@ -701,12 +691,9 @@ const ProductionReport: React.FC = () => {
                     {row.dailyQuantities.map((qty, i) => (
                       <td
                         key={i}
-                        className={`px-3 py-2 text-center bg-red-50/50`}
+                        className={`px-3 py-2 text-center text-red-600 font-medium`}
                       >
-                        {qty}
-                        {row.changes[i] !== 0 && (
-                          <span className="ml-1 text-red-400">({row.changes[i]})</span>
-                        )}
+                        {qty} {row.changes[i] !== 0 && `(${row.changes[i]})`}
                       </td>
                     ))}
                   </tr>
@@ -733,72 +720,67 @@ const ProductionReport: React.FC = () => {
   );
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 px-4 py-6 sm:px-6 lg:px-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'}`}>
-      <div className="max-w-7xl mx-auto bg-white rounded-2xl shadow-xl p-6 border border-blue-100">
-        <h1 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-          <Upload className="w-6 h-6 text-blue-600" />
-          {isRtl ? 'تقارير الإنتاج' : 'Production Reports'}
-        </h1>
-        <div className="mb-6">
-          <div className="flex flex-wrap gap-2 mb-4 justify-center sm:justify-start">
-            {months.map(month => (
-              <Button
-                key={month.value}
-                variant={selectedMonth === month.value ? 'primary' : 'secondary'}
-                onClick={() => setSelectedMonth(month.value)}
-                className={`px-4 py-2 rounded-full text-xs font-medium transition-all duration-300 shadow-sm hover:shadow-md ${
-                  selectedMonth === month.value ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {month.label}
-              </Button>
-            ))}
-          </div>
-          <div className="flex gap-2 border-b border-gray-200 justify-center sm:justify-start">
-            <button
-              onClick={() => setActiveTab('orders')}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all duration-300 shadow-sm hover:shadow-md ${
-                activeTab === 'orders' ? 'bg-blue-100 text-blue-700 border-b-2 border-blue-500' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+    <div className={`px-4 py-6 min-h-screen ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-50`}>
+      <h1 className="text-2xl font-bold text-gray-800 mb-6">{isRtl ? 'تقارير الإنتاج' : 'Production Reports'}</h1>
+      <div className="mb-6">
+        <div className="flex flex-wrap gap-2 mb-4">
+          {months.map(month => (
+            <Button
+              key={month.value}
+              variant={selectedMonth === month.value ? 'primary' : 'secondary'}
+              onClick={() => setSelectedMonth(month.value)}
+              className={`px-4 py-2 rounded-full text-xs font-medium ${
+                selectedMonth === month.value ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
-              {isRtl ? 'توزيع الطلبات' : 'Order Distribution'}
-            </button>
-            <button
-              onClick={() => setActiveTab('stockIn')}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all duration-300 shadow-sm hover:shadow-md ${
-                activeTab === 'stockIn' ? 'bg-blue-100 text-blue-700 border-b-2 border-blue-500' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {isRtl ? 'زيادة المخزون' : 'Stock Increases'}
-            </button>
-            <button
-              onClick={() => setActiveTab('stockOut')}
-              className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-all duration-300 shadow-sm hover:shadow-md ${
-                activeTab === 'stockOut' ? 'bg-blue-100 text-blue-700 border-b-2 border-blue-500' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {isRtl ? 'نقصان المخزون' : 'Stock Decreases'}
-            </button>
-          </div>
+              {month.label}
+            </Button>
+          ))}
         </div>
-        <AnimatePresence mode="wait">
-          {activeTab === 'orders' && (
-            <motion.div key="orders" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.5 }}>
-              {renderOrderTable(orderData[selectedMonth] || [], isRtl ? 'تقرير توزيع الطلبات' : 'Order Distribution Report', selectedMonth)}
-            </motion.div>
-          )}
-          {activeTab === 'stockIn' && (
-            <motion.div key="stockIn" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.5 }}>
-              {renderStockInTable(stockInData[selectedMonth] || [], isRtl ? 'تقرير زيادة المخزون' : 'Stock Increases Report', selectedMonth)}
-            </motion.div>
-          )}
-          {activeTab === 'stockOut' && (
-            <motion.div key="stockOut" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.5 }}>
-              {renderStockOutTable(stockOutData[selectedMonth] || [], isRtl ? 'تقرير نقصان المخزون' : 'Stock Decreases Report', selectedMonth)}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div className="flex gap-2 border-b border-gray-200">
+          <button
+            onClick={() => setActiveTab('orders')}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+              activeTab === 'orders' ? 'bg-blue-100 text-blue-700 border-b-2 border-blue-500' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+            }`}
+          >
+            {isRtl ? 'توزيع الطلبات' : 'Order Distribution'}
+          </button>
+          <button
+            onClick={() => setActiveTab('stockIn')}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+              activeTab === 'stockIn' ? 'bg-blue-100 text-blue-700 border-b-2 border-blue-500' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+            }`}
+          >
+            {isRtl ? 'زيادة المخزون' : 'Stock Increases'}
+          </button>
+          <button
+            onClick={() => setActiveTab('stockOut')}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+              activeTab === 'stockOut' ? 'bg-blue-100 text-blue-700 border-b-2 border-blue-500' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+            }`}
+          >
+            {isRtl ? 'نقصان المخزون' : 'Stock Decreases'}
+          </button>
+        </div>
       </div>
+      <AnimatePresence mode="wait">
+        {activeTab === 'orders' && (
+          <motion.div key="orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+            {renderOrderTable(orderData[selectedMonth] || [], isRtl ? 'تقرير توزيع الطلبات' : 'Order Distribution Report', selectedMonth)}
+          </motion.div>
+        )}
+        {activeTab === 'stockIn' && (
+          <motion.div key="stockIn" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+            {renderStockInTable(stockInData[selectedMonth] || [], isRtl ? 'تقرير زيادة المخزون' : 'Stock Increases Report', selectedMonth)}
+          </motion.div>
+        )}
+        {activeTab === 'stockOut' && (
+          <motion.div key="stockOut" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+            {renderStockOutTable(stockOutData[selectedMonth] || [], isRtl ? 'تقرير نقصان المخزون' : 'Stock Decreases Report', selectedMonth)}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
