@@ -38,6 +38,7 @@ import { ChefDetails } from './pages/ChefDetails';
 import BranchSalesAnalytics from './pages/BranchSalesAnalytics';
 import SalesAnalytics from './pages/SalesAnalytics';
 import ReturnStats from './pages/ReturnStats';
+import ProductionTrackingPage from './pages/ProductionTrackingPage';
 
 
 // إعداد QueryClient لإدارة الاستعلامات
@@ -86,6 +87,9 @@ function AppContent() {
                   <Route path="/returns" element={<BranchReturns />} />
               
                   <Route path="/production-report" element={<ProductionReport />} />
+                                    <Route path="/production" element={<ProductionTrackingPage />} />
+
+
            
                   <Route path="/production-tasks" element={<ChefTasks />} />
                   <Route path="/branches" element={<Branches />} />
