@@ -39,7 +39,7 @@ const ProductionReport: React.FC = () => {
   const [stockOutData, setStockOutData] = useState<{ [month: number]: StockRow[] }>({});
   const [selectedMonth, setSelectedMonth] = useState(9); // October (0-based index)
   const [activeTab, setActiveTab] = useState<'orders' | 'stockIn' | 'stockOut'>('orders');
-  const currentDate = new Date('2025-10-12T10:16:00+03:00');
+  const currentDate = new Date('2025-10-12T10:18:00+03:00');
   const currentYear = currentDate.getFullYear();
   const months = Array.from({ length: 12 }, (_, i) => ({
     value: i,
@@ -51,8 +51,8 @@ const ProductionReport: React.FC = () => {
       setLoading(true);
       try {
         const [inventory, orders] = await Promise.all([
-          inventoryAPI.getInventory(),
-          ordersAPI.getAll({ status: 'completed', page: 1, limit: 1000 }),
+          inventoryAPI.getInventory({}, isRtl),
+          ordersAPI.getAll({ status: 'completed', page: 1, limit: 1000 }, isRtl),
         ]);
 
         const monthlyOrderData: { [month: number]: OrderRow[] } = {};
@@ -66,13 +66,13 @@ const ProductionReport: React.FC = () => {
           const stockOutMap = new Map<string, StockRow>();
 
           // Process orders (pivot table: branches as columns, products as rows)
-          orders.forEach(order => {
+          orders.forEach((order: any) => {
             const date = new Date(order.createdAt || order.date);
             const orderMonth = date.getMonth();
             const year = date.getFullYear();
             if (year === currentYear && orderMonth === month) {
               const branch = order.branch?.displayName || order.branchId || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
-              order.items.forEach(item => {
+              order.items.forEach((item: any) => {
                 const product = item.product?.name || item.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
                 const key = `${product}-${branch}`;
                 if (!orderMap.has(product)) {
@@ -91,8 +91,8 @@ const ProductionReport: React.FC = () => {
           });
 
           // Process inventory movements (increases and decreases)
-          inventory.forEach(item => {
-            item.movements.forEach(movement => {
+          inventory.forEach((item: any) => {
+            item.movements.forEach((movement: any) => {
               const date = new Date(movement.createdAt);
               const prodMonth = date.getMonth();
               const year = date.getFullYear();
