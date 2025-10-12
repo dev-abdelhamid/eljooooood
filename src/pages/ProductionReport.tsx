@@ -10,8 +10,8 @@ import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
 import { inventoryAPI, ordersAPI, branchesAPI, salesAPI } from '../services/api';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
-import ReactTooltip from 'react-tooltip';
-import 'react-tooltip/dist/react-tooltip.css';
+import { Tooltip } from 'react-tooltip';
+
 
 interface OrderRow {
   id: string;
@@ -938,7 +938,7 @@ const ProductionReport: React.FC = () => {
                 </tr>
               </tbody>
             </table>
-            <ReactTooltip id="stock-change" place="top" effect="solid" className="custom-tooltip" />
+            <Tooltip id="stock-change" place="top" effect="solid" className="custom-tooltip" />
           </motion.div>
         </div>
       );
