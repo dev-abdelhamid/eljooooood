@@ -246,8 +246,7 @@ const ProductionReport: React.FC = () => {
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
         } else if (format === 'pdf') {
           const doc = new jsPDF({ orientation: 'landscape' });
-          doc.addFileToVFS('Amiri-Regular.ttf', /* ضع رمز الخط هنا */);
-          doc.addFont('Amiri-Regular.ttf', 'Amiri', 'normal');
+          // Note: You need to add the Arabic font properly in your project, e.g., via addFileToVFS
           doc.autoTable({
             head: [headers],
             body: rows.map(row => isOrderTable
