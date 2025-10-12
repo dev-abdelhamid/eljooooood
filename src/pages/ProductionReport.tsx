@@ -8,7 +8,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
-import { inventoryAPI, ordersAPI } from '../services/api';
+import { inventoryAPI, ordersAPI, branchesAPI } from '../services/api';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 
 interface OrderRow {
@@ -28,6 +28,13 @@ interface StockRow {
   totalPrice: number;
 }
 
+interface Branch {
+  _id: string;
+  name: string;
+  nameEn: string;
+  displayName: string;
+}
+
 const ProductionReport: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
@@ -36,9 +43,10 @@ const ProductionReport: React.FC = () => {
   const [orderData, setOrderData] = useState<{ [month: number]: OrderRow[] }>({});
   const [stockInData, setStockInData] = useState<{ [month: number]: StockRow[] }>({});
   const [stockOutData, setStockOutData] = useState<{ [month: number]: StockRow[] }>({});
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(8); // September 2025
   const [activeTab, setActiveTab] = useState<'orders' | 'stockIn' | 'stockOut'>('orders');
-  const currentDate = new Date('2025-10-12T11:19:00+03:00');
+  const currentDate = new Date('2025-10-12T12:02:00+03:00');
   const currentYear = currentDate.getFullYear();
   const months = Array.from({ length: 12 }, (_, i) => ({
     value: i,
@@ -59,14 +67,34 @@ const ProductionReport: React.FC = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [inventory, orders] = await Promise.all([
+        const [inventoryResponse, ordersResponse, branchesResponse] = await Promise.all([
           inventoryAPI.getInventory({}, isRtl),
           ordersAPI.getAll({ status: 'completed', page: 1, limit: 1000 }, isRtl),
+          branchesAPI.getAll(),
         ]);
 
         const monthlyOrderData: { [month: number]: OrderRow[] } = {};
         const monthlyStockInData: { [month: number]: StockRow[] } = {};
         const monthlyStockOutData: { [month: number]: StockRow[] } = {};
+
+        // Set branches
+        setBranches(
+          branchesResponse
+            .filter((branch: any) => branch && branch._id)
+            .map((branch: any) => ({
+              _id: branch._id,
+              name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
+              nameEn: branch.nameEn,
+              displayName: isRtl ? branch.name : branch.nameEn || branch.name,
+            }))
+            .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language))
+        );
+
+        // Handle empty orders response
+        const orders = Array.isArray(ordersResponse) && ordersResponse.length > 0 ? ordersResponse : [];
+        if (orders.length === 0) {
+          console.warn('No order data received from ordersAPI');
+        }
 
         for (let month = 0; month < 12; month++) {
           const daysInMonth = new Date(currentYear, month + 1, 0).getDate();
@@ -106,8 +134,8 @@ const ProductionReport: React.FC = () => {
             });
           }
 
-          if (Array.isArray(inventory)) {
-            inventory.forEach((item: any) => {
+          if (Array.isArray(inventoryResponse)) {
+            inventoryResponse.forEach((item: any) => {
               const product = item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
               const assumedPrice = Number(item.product?.price) || 0;
               (item.movements || []).forEach((movement: any) => {
@@ -160,17 +188,11 @@ const ProductionReport: React.FC = () => {
       }
     };
     fetchData();
-  }, [isRtl, currentYear]);
+  }, [isRtl, currentYear, language]);
 
   const allBranches = useMemo(() => {
-    const branches = new Set<string>();
-    Object.values(orderData).forEach(monthData => {
-      monthData.forEach(row => {
-        Object.keys(row.branchQuantities).forEach(branch => branches.add(branch));
-      });
-    });
-    return Array.from(branches).sort();
-  }, [orderData]);
+    return branches.map(branch => branch.displayName);
+  }, [branches]);
 
   const renderTable = useCallback(
     (data: OrderRow[] | StockRow[], title: string, month: number, type: 'orders' | 'stockIn' | 'stockOut') => {
@@ -246,7 +268,6 @@ const ProductionReport: React.FC = () => {
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
         } else if (format === 'pdf') {
           const doc = new jsPDF({ orientation: 'landscape' });
-          // Note: You need to add the Arabic font properly in your project, e.g., via addFileToVFS
           doc.autoTable({
             head: [headers],
             body: rows.map(row => isOrderTable
@@ -352,27 +373,33 @@ const ProductionReport: React.FC = () => {
                             {(row as OrderRow).branchQuantities[branch] || 0}
                           </td>
                         ))
-                      : (row as StockRow).dailyQuantities.map((qty, i) => (
-                          <td
-                            key={i}
-                            className={`px-2 py-1.5 text-center text-xs font-medium ${
-                              type === 'stockIn'
-                                ? 'text-green-500 bg-green-50/50'
-                                : 'text-red-500 bg-red-50/50'
-                            }`}
-                          >
-                            {qty}
-                            {(row as StockRow).changes[i] !== 0 && (
-                              <span
-                                className={`ml-1 text-xs ${
-                                  type === 'stockIn' ? 'text-green-400' : 'text-red-400'
-                                }`}
-                              >
-                                ({(row as StockRow).changes[i] > 0 ? '+' : ''}{(row as StockRow).changes[i]})
-                              </span>
-                            )}
-                          </td>
-                        ))}
+                      : (row as StockRow).dailyQuantities.map((qty, i) => {
+                          const change = (row as StockRow).changes[i];
+                          const isChange = change !== 0;
+                          return (
+                            <td
+                              key={i}
+                              className={`px-2 py-1.5 text-center text-xs font-medium ${
+                                isChange
+                                  ? change > 0
+                                    ? 'bg-green-50/50 text-green-500'
+                                    : 'bg-red-50/50 text-red-500'
+                                  : ''
+                              }`}
+                            >
+                              {qty}
+                              {isChange && (
+                                <span
+                                  className={`ml-1 text-xs ${
+                                    change > 0 ? 'text-green-400' : 'text-red-400'
+                                  }`}
+                                >
+                                  ({change > 0 ? '+' : ''}{change})
+                                </span>
+                              )}
+                            </td>
+                          );
+                        })}
                   </tr>
                 ))}
                 <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
