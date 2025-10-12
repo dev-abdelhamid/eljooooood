@@ -46,7 +46,7 @@ const ProductionReport: React.FC = () => {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(8); // September 2025
   const [activeTab, setActiveTab] = useState<'orders' | 'stockIn' | 'stockOut'>('orders');
-  const currentDate = new Date('2025-10-12T12:02:00+03:00');
+  const currentDate = new Date('2025-10-12T12:08:00+03:00');
   const currentYear = currentDate.getFullYear();
   const months = Array.from({ length: 12 }, (_, i) => ({
     value: i,
@@ -93,7 +93,18 @@ const ProductionReport: React.FC = () => {
         // Handle empty orders response
         const orders = Array.isArray(ordersResponse) && ordersResponse.length > 0 ? ordersResponse : [];
         if (orders.length === 0) {
-          console.warn('No order data received from ordersAPI');
+          console.warn('No order data received from ordersAPI, using inventory data as fallback');
+          // Fallback to inventory movements if orders are empty
+          orders.push(...(inventoryResponse || []).map((item: any) => ({
+            status: 'completed',
+            createdAt: item.movements?.[0]?.createdAt || new Date().toISOString(),
+            branch: { displayName: branches[0]?.displayName || (isRtl ? 'الفرع الرئيسي' : 'Main Branch') },
+            items: item.movements?.map((m: any) => ({
+              displayProductName: item.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+              quantity: m.quantity || 0,
+              price: item.product?.price || 0,
+            })) || [],
+          })));
         }
 
         for (let month = 0; month < 12; month++) {
@@ -102,52 +113,49 @@ const ProductionReport: React.FC = () => {
           const stockInMap = new Map<string, StockRow>();
           const stockOutMap = new Map<string, StockRow>();
 
-          if (Array.isArray(orders)) {
-            orders.forEach((order: any) => {
-              if (order.status !== 'completed') return;
-              const date = new Date(order.createdAt);
-              if (isNaN(date.getTime())) return;
-              const orderMonth = date.getMonth();
-              const year = date.getFullYear();
-              if (year === currentYear && orderMonth === month) {
-                const branch = order.branch?.displayName || order.branch?.name || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
-                (order.items || []).forEach((item: any) => {
-                  const product = item.displayProductName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
-                  const key = `${product}-${month}`;
-                  if (!orderMap.has(key)) {
-                    orderMap.set(key, {
-                      id: key,
-                      product,
-                      branchQuantities: {},
-                      totalQuantity: 0,
-                      totalPrice: 0,
-                    });
-                  }
-                  const row = orderMap.get(key)!;
-                  const quantity = Number(item.quantity) || 0;
-                  const price = Number(item.price) || 0;
-                  row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + quantity;
-                  row.totalQuantity += quantity;
-                  row.totalPrice += quantity * price;
-                });
-              }
-            });
-          }
+          orders.forEach((order: any) => {
+            if (order.status !== 'completed') return;
+            const date = new Date(order.createdAt);
+            if (isNaN(date.getTime())) return;
+            const orderMonth = date.getMonth();
+            const year = date.getFullYear();
+            if (year === currentYear && orderMonth === month) {
+              const branch = order.branch?.displayName || order.branch?.name || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
+              (order.items || []).forEach((item: any) => {
+                const product = item.displayProductName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
+                const key = `${product}-${month}`;
+                if (!orderMap.has(key)) {
+                  orderMap.set(key, {
+                    id: key,
+                    product,
+                    branchQuantities: {},
+                    totalQuantity: 0,
+                    totalPrice: 0,
+                  });
+                }
+                const row = orderMap.get(key)!;
+                const quantity = Number(item.quantity) || 0;
+                const price = Number(item.price) || 0;
+                row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + quantity;
+                row.totalQuantity += quantity;
+                row.totalPrice += quantity * price;
+              });
+            }
+          });
 
           if (Array.isArray(inventoryResponse)) {
             inventoryResponse.forEach((item: any) => {
               const product = item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
               const assumedPrice = Number(item.product?.price) || 0;
               (item.movements || []).forEach((movement: any) => {
-                if (!['in', 'out'].includes(movement.type)) return;
                 const date = new Date(movement.createdAt);
                 if (isNaN(date.getTime())) return;
                 const prodMonth = date.getMonth();
                 const year = date.getFullYear();
                 if (year === currentYear && prodMonth === month) {
-                  const day = date.getDate();
+                  const day = date.getDate() - 1;
                   const key = `${product}-${month}`;
-                  const map = movement.type === 'in' ? stockInMap : stockOutMap;
+                  const map = movement.quantity > 0 ? stockInMap : stockOutMap;
                   if (!map.has(key)) {
                     map.set(key, {
                       id: key,
@@ -160,11 +168,11 @@ const ProductionReport: React.FC = () => {
                   }
                   const row = map.get(key)!;
                   const quantity = Math.abs(Number(movement.quantity) || 0);
-                  row.dailyQuantities[day - 1] += quantity;
+                  row.dailyQuantities[day] += quantity;
                   row.totalQuantity += quantity;
                   row.totalPrice += quantity * assumedPrice;
-                  if (day > 1) {
-                    row.changes[day - 1] = quantity - (row.dailyQuantities[day - 2] || 0);
+                  if (day > 0) {
+                    row.changes[day] = quantity - (row.dailyQuantities[day - 1] || 0);
                   } else {
                     row.changes[0] = quantity;
                   }
@@ -245,7 +253,7 @@ const ProductionReport: React.FC = () => {
               product: row.product,
               totalQuantity: row.totalQuantity,
               totalPrice: row.totalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' }),
-              ...Object.fromEntries(row.dailyQuantities.map((qty, i) => [daysInMonth[i], qty])),
+              ...Object.fromEntries(daysInMonth.map((day, i) => [day, row.dailyQuantities[i]])),
             })),
             {
               no: '',
@@ -375,12 +383,11 @@ const ProductionReport: React.FC = () => {
                         ))
                       : (row as StockRow).dailyQuantities.map((qty, i) => {
                           const change = (row as StockRow).changes[i];
-                          const isChange = change !== 0;
                           return (
                             <td
                               key={i}
                               className={`px-2 py-1.5 text-center text-xs font-medium ${
-                                isChange
+                                change !== 0
                                   ? change > 0
                                     ? 'bg-green-50/50 text-green-500'
                                     : 'bg-red-50/50 text-red-500'
@@ -388,7 +395,7 @@ const ProductionReport: React.FC = () => {
                               }`}
                             >
                               {qty}
-                              {isChange && (
+                              {change !== 0 && (
                                 <span
                                   className={`ml-1 text-xs ${
                                     change > 0 ? 'text-green-400' : 'text-red-400'
