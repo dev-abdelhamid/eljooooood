@@ -9,17 +9,8 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
-import axios from 'axios';
 import { inventoryAPI, ordersAPI } from '../services/api';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
-
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 30000,
-  headers: { 'Content-Type': 'application/json' },
-});
 
 const ProductionReport = () => {
   const { language } = useLanguage();
@@ -28,79 +19,74 @@ const ProductionReport = () => {
   const [loading, setLoading] = useState(true);
   const [orderData, setOrderData] = useState([]);
   const [productionData, setProductionData] = useState([]);
-  const currentDate = new Date('2025-10-12T09:19:00+03:00'); // 09:19 AM EEST, October 12, 2025
-  const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate(); // 31 يوم في أكتوبر 2025
+  const currentDate = new Date('2025-10-12T09:12:00+03:00'); // 09:12 AM EEST, October 12, 2025
+  const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate(); // 31 يوم في أكتوبر
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const token = localStorage.getItem('token');
-        api.interceptors.request.use((config) => {
-          if (token) config.headers.Authorization = `Bearer ${token}`;
-          config.params = { ...config.params, lang: language };
-          return config;
-        });
-
-        const [inventoryResponse, ordersResponse] = await Promise.all([
-          inventoryAPI.getInventory({ branch: user?.branchId, page: 1, limit: 500 }), // زيادة الحد للحصول على بيانات أكثر
-          ordersAPI.getAll({ status: 'completed', page: 1, limit: 500 }),
+        const [inventory, orders] = await Promise.all([
+          inventoryAPI.getInventory(),
+          ordersAPI.getAll({ status: 'completed', page: 1, limit: 100 }),
         ]);
+
+        console.log('Inventory:', inventory);
+        console.log('Orders:', orders);
 
         // توزيع الطلبات
         const orderDistribution = new Map();
-        if (ordersResponse && Array.isArray(ordersResponse)) {
-          ordersResponse.forEach(order => {
-            const date = new Date(order.createdAt || order.date);
-            const day = date.getDate() - 1;
-            if (date.getMonth() === currentDate.getMonth() && date.getFullYear() === currentDate.getFullYear() && day < daysInMonth) {
-              const branch = order.branchId || 'الفرع الرئيسي';
-              order.items?.forEach(item => {
-                const product = item.product?.name || item.productName || 'Unknown Product';
-                const key = `${branch}-${product}`;
-                if (!orderDistribution.has(key)) {
-                  orderDistribution.set(key, {
-                    branch,
-                    product,
-                    orderNumber: order.orderNumber || `ORDER-${Math.floor(Math.random() * 1000)}`,
-                    quantities: Array(daysInMonth).fill(0),
-                    total: 0,
-                  });
-                }
-                if (day >= 0 && day < daysInMonth) {
-                  orderDistribution.get(key).quantities[day] += item.quantity || 0;
-                  orderDistribution.get(key).total += item.quantity || 0;
-                }
-              });
-            }
-          });
-        }
+        orders.forEach(order => {
+          const date = new Date(order.createdAt || order.date);
+          const day = date.getDate();
+          const month = date.getMonth();
+          const year = date.getFullYear();
+          if (year === currentDate.getFullYear() && month === currentDate.getMonth() && day <= currentDate.getDate()) {
+            const branch = order.branch?.displayName || order.branchId || 'الفرع الرئيسي';
+            order.items.forEach(item => {
+              const product = item.product?.name || item.productName || 'Unknown Product';
+              const key = `${branch}-${product}`;
+              if (!orderDistribution.has(key)) {
+                orderDistribution.set(key, {
+                  branch,
+                  product,
+                  orderNumber: order.orderNumber || `ORDER-${Math.floor(Math.random() * 1000)}`,
+                  quantities: Array(daysInMonth).fill(0),
+                  total: 0,
+                });
+              }
+              orderDistribution.get(key).quantities[day - 1] += item.quantity;
+              orderDistribution.get(key).total += item.quantity;
+            });
+          }
+        });
 
         // توزيع الإنتاج
         const productionMap = new Map();
-        if (inventoryResponse && inventoryResponse.inventory && Array.isArray(inventoryResponse.inventory)) {
-          inventoryResponse.inventory.forEach(item => {
-            item.movements?.forEach(movement => {
-              const date = new Date(movement.createdAt);
-              const day = date.getDate() - 1;
-              if (date.getMonth() === currentDate.getMonth() && date.getFullYear() === currentDate.getFullYear() && day < daysInMonth) {
-                const product = item.productName || item.product?.name || 'Unknown Product';
-                if (!productionMap.has(product)) {
-                  productionMap.set(product, {
-                    product,
-                    branch: 'المصنع الرئيسي',
-                    quantities: Array(daysInMonth).fill(0),
-                    total: 0,
-                  });
-                }
-                if (day >= 0 && day < daysInMonth && movement.type === 'in') {
-                  productionMap.get(product).quantities[day] += Math.abs(movement.quantity) || 0;
-                  productionMap.get(product).total += Math.abs(movement.quantity) || 0;
-                }
+        inventory.forEach(item => {
+          item.movements.forEach(movement => {
+            const date = new Date(movement.createdAt);
+            const day = date.getDate();
+            const month = date.getMonth();
+            const year = date.getFullYear();
+            if (year === currentDate.getFullYear() && month === currentDate.getMonth() && day <= currentDate.getDate()) {
+              const product = item.productName || item.product?.name || 'Unknown Product';
+              const branch = movement.branch?.displayName || movement.branchId || 'المصنع الرئيسي';
+              if (!productionMap.has(product)) {
+                productionMap.set(product, {
+                  product,
+                  branch,
+                  quantities: Array(daysInMonth).fill(0),
+                  total: 0,
+                });
               }
-            });
+              if (movement.type === 'in') { // الإنتاج يعتمد على المدخلات
+                productionMap.get(product).quantities[day - 1] += Math.abs(movement.quantity);
+                productionMap.get(product).total += Math.abs(movement.quantity);
+              }
+            }
           });
-        }
+        });
 
         setOrderData(Array.from(orderDistribution.values()));
         setProductionData(Array.from(productionMap.values()));
@@ -111,27 +97,19 @@ const ProductionReport = () => {
       }
     };
     fetchData();
-  }, [language, user?.branchId]);
+  }, []);
 
   const renderTable = (data, title) => {
     const rows = useMemo(() => {
-      const rowsData = data.map((item, index) => ({
+      return data.map((item, index) => ({
         id: `${title.toLowerCase().replace(' ', '-')}-${index + 1}`,
         orderNumber: item.orderNumber || '-',
         branch: { displayName: item.branch },
         product: item.product,
         totalQuantity: item.total,
+        date: currentDate.toISOString().split('T')[0],
         dailyQuantities: item.quantities,
       }));
-      const totalRow = {
-        id: `${title.toLowerCase().replace(' ', '-')}-total`,
-        orderNumber: isRtl ? 'الإجمالي' : 'Total',
-        branch: { displayName: '' },
-        product: '',
-        totalQuantity: data.reduce((sum, item) => sum + item.total, 0),
-        dailyQuantities: Array(daysInMonth).fill(0).map((_, i) => data.reduce((sum, item) => sum + (item.quantities[i] || 0), 0)),
-      };
-      return [...rowsData, totalRow];
     }, [data]);
 
     const exportTable = useCallback((rows, fileName, format) => {
@@ -141,6 +119,7 @@ const ProductionReport = () => {
           'الفرع': row.branch.displayName,
           'المنتج': row.product,
           'الكمية الإجمالية': row.totalQuantity,
+          'التاريخ': row.date,
           ...Object.fromEntries(Array(daysInMonth).fill(0).map((_, i) => [`اليوم ${i + 1}`, row.dailyQuantities[i]])),
         })));
         const wb = XLSX.utils.book_new();
@@ -149,13 +128,14 @@ const ProductionReport = () => {
       } else if (format === 'pdf') {
         const doc = new jsPDF();
         doc.autoTable({
-          head: [['رقم', 'رقم الطلب', 'الفرع', 'المنتج', 'الكمية الإجمالية', ...Array(daysInMonth).fill(0).map((_, i) => `اليوم ${i + 1}`)]],
+          head: [['رقم', 'رقم الطلب', 'الفرع', 'المنتج', 'الكمية الإجمالية', 'التاريخ', ...Array(daysInMonth).fill(0).map((_, i) => `اليوم ${i + 1}`)]],
           body: rows.map(row => [
             rows.indexOf(row) + 1,
             row.orderNumber,
             row.branch.displayName,
             row.product,
             row.totalQuantity,
+            row.date,
             ...row.dailyQuantities,
           ]),
         });
@@ -231,6 +211,9 @@ const ProductionReport = () => {
                 <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">
                   {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
                 </th>
+                <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">
+                  {isRtl ? 'التاريخ' : 'Date'}
+                </th>
                 {Array(daysInMonth).fill(0).map((_, i) => (
                   <th key={i} className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[50px]">
                     {isRtl ? `اليوم ${i + 1}` : `Day ${i + 1}`}
@@ -240,14 +223,15 @@ const ProductionReport = () => {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {rows.map((row, index) => (
-                <tr key={row.id} className={`hover:bg-gray-50 transition-colors ${isRtl ? 'flex-row-reverse' : ''} ${index === rows.length - 1 ? 'font-bold bg-gray-100' : ''}`}>
+                <tr key={row.id} className={`hover:bg-gray-50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <td className="px-2 py-2 text-gray-600 text-center whitespace-nowrap">{index + 1}</td>
                   <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[100px]">{row.orderNumber}</td>
                   <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[100px]">{row.branch.displayName}</td>
                   <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[120px]">{row.product}</td>
                   <td className="px-2 py-2 text-gray-600 text-center">{row.totalQuantity}</td>
+                  <td className="px-2 py-2 text-gray-600 text-center truncate">{row.date}</td>
                   {row.dailyQuantities.map((qty, i) => (
-                    <td key={i} className="px-2 py-2 text-gray-600 text-center">{qty || 0}</td>
+                    <td key={i} className="px-2 py-2 text-gray-600 text-center">{qty}</td>
                   ))}
                 </tr>
               ))}
