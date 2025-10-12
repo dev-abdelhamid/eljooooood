@@ -9,8 +9,16 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
-import { inventoryAPI, ordersAPI } from '../services/api';
+import axios from 'axios';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
+
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app/api';
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  timeout: 30000,
+  headers: { 'Content-Type': 'application/json' },
+});
 
 const ProductionReport = () => {
   const { language } = useLanguage();
@@ -19,76 +27,78 @@ const ProductionReport = () => {
   const [loading, setLoading] = useState(true);
   const [orderData, setOrderData] = useState([]);
   const [productionData, setProductionData] = useState([]);
-  const currentDate = new Date('2025-10-12T09:12:00+03:00'); // 09:12 AM EEST, October 12, 2025
-  const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate(); // 31 يوم في أكتوبر
+  const currentDate = new Date('2025-10-12T09:35:00+03:00'); // Updated to current time
+  const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate(); // 31 يوم
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [inventory, orders] = await Promise.all([
-          inventoryAPI.getInventory(),
-          ordersAPI.getAll({ status: 'completed', page: 1, limit: 100 }),
+        const token = localStorage.getItem('token');
+        api.interceptors.request.use((config) => {
+          if (token) config.headers.Authorization = `Bearer ${token}`;
+          config.params = { ...config.params, lang: language };
+          return config;
+        });
+
+        const [inventoryResponse, ordersResponse] = await Promise.all([
+          api.get('/inventory', { params: { branch: user?.branchId } }),
+          api.get('/orders', { params: { month: currentDate.getMonth() + 1, year: currentDate.getFullYear(), branch: user?.branchId } })
         ]);
 
-        console.log('Inventory:', inventory);
-        console.log('Orders:', orders);
+        const inventoryData = inventoryResponse.data.inventory;
+        const ordersData = ordersResponse.data.orders || [];
 
-        // توزيع الطلبات
+        // توزيع الطلبات حسب الفروع يوميًا لكل منتج
         const orderDistribution = new Map();
-        orders.forEach(order => {
-          const date = new Date(order.createdAt || order.date);
-          const day = date.getDate();
-          const month = date.getMonth();
-          const year = date.getFullYear();
-          if (year === currentDate.getFullYear() && month === currentDate.getMonth() && day <= currentDate.getDate()) {
-            const branch = order.branch?.displayName || order.branchId || 'الفرع الرئيسي';
+        ordersData.forEach(order => {
+          const orderDate = new Date(order.createdAt);
+          if (orderDate.getMonth() === currentDate.getMonth() && orderDate.getFullYear() === currentDate.getFullYear()) {
+            const day = orderDate.getDate() - 1;
             order.items.forEach(item => {
-              const product = item.product?.name || item.productName || 'Unknown Product';
-              const key = `${branch}-${product}`;
+              const key = `${item.productName}-${order.branchId}`;
               if (!orderDistribution.has(key)) {
                 orderDistribution.set(key, {
-                  branch,
-                  product,
-                  orderNumber: order.orderNumber || `ORDER-${Math.floor(Math.random() * 1000)}`,
+                  product: item.productName,
+                  branch: order.branchName || 'المصنع الرئيسي',
                   quantities: Array(daysInMonth).fill(0),
-                  total: 0,
                 });
               }
-              orderDistribution.get(key).quantities[day - 1] += item.quantity;
-              orderDistribution.get(key).total += item.quantity;
+              const entry = orderDistribution.get(key);
+              if (day >= 0 && day < daysInMonth) {
+                entry.quantities[day] += item.quantity;
+              }
             });
           }
         });
+        setOrderData(Array.from(orderDistribution.values()).map(item => ({
+          ...item,
+          total: item.quantities.reduce((sum, qty) => sum + qty, 0),
+        })));
 
         // توزيع الإنتاج
         const productionMap = new Map();
-        inventory.forEach(item => {
-          item.movements.forEach(movement => {
+        inventoryData.forEach(item => {
+          const dailyQuantities = Array(daysInMonth).fill(0);
+          item.movements?.forEach(movement => {
             const date = new Date(movement.createdAt);
-            const day = date.getDate();
-            const month = date.getMonth();
-            const year = date.getFullYear();
-            if (year === currentDate.getFullYear() && month === currentDate.getMonth() && day <= currentDate.getDate()) {
-              const product = item.productName || item.product?.name || 'Unknown Product';
-              const branch = movement.branch?.displayName || movement.branchId || 'المصنع الرئيسي';
-              if (!productionMap.has(product)) {
-                productionMap.set(product, {
-                  product,
-                  branch,
-                  quantities: Array(daysInMonth).fill(0),
-                  total: 0,
-                });
-              }
-              if (movement.type === 'in') { // الإنتاج يعتمد على المدخلات
-                productionMap.get(product).quantities[day - 1] += Math.abs(movement.quantity);
-                productionMap.get(product).total += Math.abs(movement.quantity);
+            if (date.getMonth() === currentDate.getMonth() && date.getFullYear() === currentDate.getFullYear()) {
+              const day = date.getDate() - 1;
+              if (day >= 0 && day < daysInMonth) {
+                dailyQuantities[day] += movement.type === 'in' ? Math.abs(movement.quantity) : -Math.abs(movement.quantity);
               }
             }
           });
+          const key = item.productName;
+          if (!productionMap.has(key)) {
+            productionMap.set(key, {
+              product: item.productName,
+              branch: item.branchName || 'المصنع الرئيسي',
+              quantities: dailyQuantities,
+              total: dailyQuantities.reduce((sum, qty) => sum + qty, 0),
+            });
+          }
         });
-
-        setOrderData(Array.from(orderDistribution.values()));
         setProductionData(Array.from(productionMap.values()));
       } catch (error) {
         console.error('Failed to fetch data:', error);
@@ -97,19 +107,27 @@ const ProductionReport = () => {
       }
     };
     fetchData();
-  }, []);
+  }, [language, user?.branchId]);
 
   const renderTable = (data, title) => {
     const rows = useMemo(() => {
-      return data.map((item, index) => ({
+      const rowsData = data.map((item, index) => ({
         id: `${title.toLowerCase().replace(' ', '-')}-${index + 1}`,
         orderNumber: item.orderNumber || '-',
         branch: { displayName: item.branch },
         product: item.product,
         totalQuantity: item.total,
-        date: currentDate.toISOString().split('T')[0],
         dailyQuantities: item.quantities,
       }));
+      const totalRow = {
+        id: `${title.toLowerCase().replace(' ', '-')}-total`,
+        orderNumber: isRtl ? 'الإجمالي' : 'Total',
+        branch: { displayName: '' },
+        product: '',
+        totalQuantity: data.reduce((sum, item) => sum + item.total, 0),
+        dailyQuantities: Array(daysInMonth).fill(0).map((_, i) => data.reduce((sum, item) => sum + (item.quantities[i] || 0), 0)),
+      };
+      return [...rowsData, totalRow];
     }, [data]);
 
     const exportTable = useCallback((rows, fileName, format) => {
@@ -119,7 +137,6 @@ const ProductionReport = () => {
           'الفرع': row.branch.displayName,
           'المنتج': row.product,
           'الكمية الإجمالية': row.totalQuantity,
-          'التاريخ': row.date,
           ...Object.fromEntries(Array(daysInMonth).fill(0).map((_, i) => [`اليوم ${i + 1}`, row.dailyQuantities[i]])),
         })));
         const wb = XLSX.utils.book_new();
@@ -128,14 +145,13 @@ const ProductionReport = () => {
       } else if (format === 'pdf') {
         const doc = new jsPDF();
         doc.autoTable({
-          head: [['رقم', 'رقم الطلب', 'الفرع', 'المنتج', 'الكمية الإجمالية', 'التاريخ', ...Array(daysInMonth).fill(0).map((_, i) => `اليوم ${i + 1}`)]],
+          head: [['رقم', 'رقم الطلب', 'الفرع', 'المنتج', 'الكمية الإجمالية', ...Array(daysInMonth).fill(0).map((_, i) => `اليوم ${i + 1}`)]],
           body: rows.map(row => [
             rows.indexOf(row) + 1,
             row.orderNumber,
             row.branch.displayName,
             row.product,
             row.totalQuantity,
-            row.date,
             ...row.dailyQuantities,
           ]),
         });
@@ -211,9 +227,6 @@ const ProductionReport = () => {
                 <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[80px]">
                   {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
                 </th>
-                <th className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[100px]">
-                  {isRtl ? 'التاريخ' : 'Date'}
-                </th>
                 {Array(daysInMonth).fill(0).map((_, i) => (
                   <th key={i} className="px-2 py-2 font-medium text-gray-600 uppercase tracking-wider text-center min-w-[50px]">
                     {isRtl ? `اليوم ${i + 1}` : `Day ${i + 1}`}
@@ -223,15 +236,14 @@ const ProductionReport = () => {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {rows.map((row, index) => (
-                <tr key={row.id} className={`hover:bg-gray-50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <tr key={row.id} className={`hover:bg-gray-50 transition-colors ${isRtl ? 'flex-row-reverse' : ''} ${index === rows.length - 1 ? 'font-bold bg-gray-100' : ''}`}>
                   <td className="px-2 py-2 text-gray-600 text-center whitespace-nowrap">{index + 1}</td>
                   <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[100px]">{row.orderNumber}</td>
                   <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[100px]">{row.branch.displayName}</td>
                   <td className="px-2 py-2 text-gray-600 text-center truncate max-w-[120px]">{row.product}</td>
                   <td className="px-2 py-2 text-gray-600 text-center">{row.totalQuantity}</td>
-                  <td className="px-2 py-2 text-gray-600 text-center truncate">{row.date}</td>
                   {row.dailyQuantities.map((qty, i) => (
-                    <td key={i} className="px-2 py-2 text-gray-600 text-center">{qty}</td>
+                    <td key={i} className="px-2 py-2 text-gray-600 text-center">{qty || 0}</td>
                   ))}
                 </tr>
               ))}
