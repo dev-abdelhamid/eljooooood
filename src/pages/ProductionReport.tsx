@@ -759,7 +759,7 @@ const ProductionReport: React.FC = () => {
                 </tr>
               </tbody>
             </table>
-            <ReactTooltip id="branch-quantity" place="top" effect="solid" className="custom-tooltip" />
+            <Tooltip id="branch-quantity" place="top" effect="solid" className="custom-tooltip" />
           </motion.div>
         </div>
       );
@@ -1111,7 +1111,7 @@ const ProductionReport: React.FC = () => {
                 </tr>
               </tbody>
             </table>
-            <ReactTooltip id="return-tooltip" place="top" effect="solid" className="custom-tooltip" />
+            <Tooltip id="return-tooltip" place="top" effect="solid" className="custom-tooltip" />
           </motion.div>
         </div>
       );
@@ -1304,7 +1304,7 @@ const ProductionReport: React.FC = () => {
                 </tr>
               </tbody>
             </table>
-            <ReactTooltip id="branch-quantity" place="top" effect="solid" className="custom-tooltip" />
+            <Tooltip id="branch-quantity" place="top" effect="solid" className="custom-tooltip" />
           </motion.div>
         </div>
       );
