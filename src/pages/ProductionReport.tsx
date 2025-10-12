@@ -6,7 +6,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import {autoTable} from 'jspdf-autotable';
+import 'jspdf-autotable';
 
 const ProductionReport: React.FC = () => {
   const { language } = useLanguage();
@@ -52,6 +52,7 @@ const ProductionReport: React.FC = () => {
     const headers = [
       { key: 'unit', label: isRtl ? 'الوحدة' : 'Unit' },
       { key: 'total', label: isRtl ? 'الإجمالي' : 'Total' },
+      { key: 'sale', label: isRtl ? 'البيع' : 'Sale' },
       ...sortedBranches.map((branch) => ({
         key: branch._id,
         label: isRtl ? branch.name : branch.nameEn || branch.name,
@@ -83,9 +84,11 @@ const ProductionReport: React.FC = () => {
     return products?.map((product) => {
       const branchQuantities = aggregated.get(product._id) || new Map();
       const total = Array.from(branchQuantities.values()).reduce((sum, q) => sum + q, 0);
+      const sale = total; // Assuming sale is the same as total for simplicity; adjust if needed
       return {
         unit: isRtl ? product.unit : product.unitEn || product.unit,
         total,
+        sale,
         ...Object.fromEntries(sortedBranches.map((branch) => [branch._id, branchQuantities.get(branch._id) || 0])),
         code: product.code,
         price: product.price,
@@ -200,16 +203,16 @@ const ProductionReport: React.FC = () => {
         </button>
       </div>
       {activeSection === 'orders' && (
-        <RenderTable rows={ordersRows} headers={tableHeaders} title={isRtl ? 'الطلبات' : 'Orders'} fileName="orders" />
+        <RenderTable rows={ordersRows} headers={tableHeaders} title={isRtl ? 'الطلبات' : 'Orders'} fileName="orders_report" />
       )}
       {activeSection === 'sales' && (
-        <RenderTable rows={salesRows} headers={tableHeaders} title={isRtl ? 'المبيعات' : 'Sales'} fileName="sales" />
+        <RenderTable rows={salesRows} headers={tableHeaders} title={isRtl ? 'المبيعات' : 'Sales'} fileName="sales_report" />
       )}
       {activeSection === 'returns' && (
-        <RenderTable rows={returnsRows} headers={tableHeaders} title={isRtl ? 'المرتجعات' : 'Returns'} fileName="returns" />
+        <RenderTable rows={returnsRows} headers={tableHeaders} title={isRtl ? 'المرتجعات' : 'Returns'} fileName="returns_report" />
       )}
       {activeSection === 'production' && (
-        <RenderTable rows={productionRows} headers={tableHeaders} title={isRtl ? 'الإنتاج اليومي' : 'Daily Production'} fileName="production" />
+        <RenderTable rows={productionRows} headers={tableHeaders} title={isRtl ? 'الإنتاج اليومي' : 'Daily Production'} fileName="production_report" />
       )}
     </div>
   );
