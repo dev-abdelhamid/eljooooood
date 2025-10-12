@@ -9,7 +9,7 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 import Skeleton from 'react-loading-skeleton';
 import 'react-loading-skeleton/dist/skeleton.css';
-import { factoryInventoryAPI } from '../api';
+import { ordersAPI, productionAssignmentsAPI, inventoryAPI } from '../api';
 import { OrderTableSkeleton } from '../components/branch/OrderTableSkeleton';
 
 const ProductionReport = () => {
@@ -19,17 +19,42 @@ const ProductionReport = () => {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState([]);
   const [activeTab, setActiveTab] = useState('products');
+  const currentDate = new Date('2025-10-12T08:33:00+03:00'); // 08:33 AM EEST, October 12, 2025
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const response = await factoryInventoryAPI.getAll({ lowStock: false });
-        setData(response.map(item => ({
-          product: item.productId,
-          quantities: Array(31).fill(0).map((_, i) => item.quantity || 0), // Replace with actual daily data from API
-          total: item.quantity || 0,
-        })));
+        // جلب الطلبات المكتملة
+        const orders = await ordersAPI.getAll({ status: 'completed', page: 1, limit: 100 });
+        // جلب مهام الإنتاج
+        const tasks = await productionAssignmentsAPI.getAllTasks();
+        // جلب المخزون
+        const inventory = await inventoryAPI.getInventory();
+
+        const productionMap = new Map();
+        orders.forEach(order => {
+          order.items.forEach(item => {
+            const task = tasks.find(t => t.itemId === item._id && t.status === 'completed');
+            if (task) {
+              const date = new Date(order.date);
+              const day = date.getDate();
+              if (date.getMonth() === currentDate.getMonth() && date.getFullYear() === currentDate.getFullYear()) {
+                if (!productionMap.has(item.product)) {
+                  productionMap.set(item.product, Array(31).fill(0));
+                }
+                productionMap.get(item.product)[day - 1] += item.quantity;
+              }
+            }
+          });
+        });
+
+        const processedData = Array.from(productionMap.entries()).map(([product, quantities]) => ({
+          product,
+          quantities,
+          total: quantities.reduce((sum, qty) => sum + qty, 0),
+        }));
+        setData(processedData);
       } catch (error) {
         console.error('Failed to fetch production data:', error);
       } finally {
@@ -43,12 +68,12 @@ const ProductionReport = () => {
     return data.map((item, index) => ({
       id: `prod-${index + 1}`,
       orderNumber: `PROD-${index + 1}`,
-      branch: { displayName: 'الإنتاج الرئيسي' },
+      branch: { displayName: 'الإنتاج الرئيسي' }, // يمكن تحديثه من orders.branchId
       status: 'مكتمل',
       products: item.product,
       totalAmount: item.total.toString(),
       totalQuantity: item.total,
-      date: '2025-07-01',
+      date: currentDate.toISOString().split('T')[0],
       dailyQuantities: item.quantities,
     }));
   }, [data]);
