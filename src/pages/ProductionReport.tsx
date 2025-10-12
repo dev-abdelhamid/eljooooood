@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { ordersAPI, salesAPI, returnsAPI, productionAssignmentsAPI, branchesAPI, productsAPI } from '../services/api';
