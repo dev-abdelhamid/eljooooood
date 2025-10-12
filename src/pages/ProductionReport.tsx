@@ -1,1342 +1,754 @@
-import React, { useReducer, useEffect, useMemo, useCallback, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useSocket } from '../contexts/SocketContext';
-import { Card } from '../components/UI/Card';
-import { Button } from '../components/UI/Button';
-import { Select } from '../components/UI/Select';
-import { Input } from '../components/UI/Input';
-import { ShoppingCart, AlertCircle, Search, Table2, Grid, Download, ChefHat, Calendar } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { toast } from 'react-toastify';
+import { Button } from '../components/UI/Button';
+import { Upload } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { ordersAPI, chefsAPI, branchesAPI } from '../services/api';
-import { formatDate, getMonthName, getWeekRange } from '../utils/formatDate';
-import { useOrderNotifications } from '../hooks/useOrderNotifications';
-import { Order, Chef, Branch, AssignChefsForm, OrderStatus } from '../types/types';
-import { exportToPDF } from '../components/Shared/PDFExporter';
-import { OrderCardSkeleton, OrderTableSkeleton } from '../components/Shared/OrderSkeletons';
-import Pagination from '../components/Shared/Pagination';
-import AssignChefsModal from '../components/Shared/AssignChefsModal';
-import OrderTable from '../components/Shared/OrderTable';
-import OrderCard from '../components/Shared/OrderCard';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import Skeleton from 'react-loading-skeleton';
+import 'react-loading-skeleton/dist/skeleton.css';
+import { inventoryAPI, ordersAPI } from '../services/api';
+import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 
-// Normalize text for search
-const normalizeText = (text: string) => {
-  return text
-    .normalize('NFD')
-    .replace(/[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E8\u06EA-\u06ED]/g, '')
-    .replace(/أ|إ|آ|ٱ/g, 'ا')
-    .replace(/ى/g, 'ي')
-    .replace(/ة/g, 'ه')
-    .toLowerCase()
-    .trim();
-};
-
-interface State {
-  orders: Order[];
-  selectedOrder: Order | null;
-  chefs: Chef[];
-  branches: Branch[];
-  isAssignModalOpen: boolean;
-  assignFormData: AssignChefsForm;
-  filterStatus: string;
-  filterBranch: string;
-  searchQuery: string;
-  sortBy: 'date' | 'totalAmount' | 'priority';
-  sortOrder: 'asc' | 'desc';
-  currentPage: number;
-  loading: boolean;
-  error: string;
-  submitting: string | null;
-  socketConnected: boolean;
-  socketError: string | null;
-  viewMode: 'card' | 'table';
-  filterMonth: string;
-  filterPeriod: 'week' | 'month' | 'custom';
-  customStartDate: string;
-  customEndDate: string;
+interface OrderRow {
+  id: string;
+  product: string;
+  branchQuantities: { [branch: string]: number };
+  totalQuantity: number;
+  totalPrice: number;
 }
 
-interface Action {
-  type: string;
-  payload?: any;
-  orderId?: string;
-  status?: Order['status'];
-  returnId?: string;
-  items?: any[];
-  by?: 'date' | 'totalAmount' | 'priority';
-  order?: 'asc' | 'desc';
-  isOpen?: boolean;
+interface StockRow {
+  id: string;
+  product: string;
+  totalQuantity: number;
+  dailyQuantities: number[];
+  changes: number[];
+  totalPrice: number;
 }
 
-const initialState: State = {
-  orders: [],
-  selectedOrder: null,
-  chefs: [],
-  branches: [],
-  isAssignModalOpen: false,
-  assignFormData: { items: [] },
-  filterStatus: '',
-  filterBranch: '',
-  searchQuery: '',
-  sortBy: 'date',
-  sortOrder: 'desc',
-  currentPage: 1,
-  loading: true,
-  error: '',
-  submitting: null,
-  socketConnected: false,
-  socketError: null,
-  viewMode: 'card',
-  filterMonth: '',
-  filterPeriod: 'month',
-  customStartDate: '',
-  customEndDate: '',
-};
-
-const reducer = (state: State, action: Action): State => {
-  switch (action.type) {
-    case 'SET_ORDERS': return { ...state, orders: action.payload, error: '', currentPage: 1 };
-    case 'ADD_ORDER': return { ...state, orders: [action.payload, ...state.orders.filter(o => o.id !== action.payload.id)] };
-    case 'SET_SELECTED_ORDER': return { ...state, selectedOrder: action.payload };
-    case 'SET_CHEFS': return { ...state, chefs: action.payload };
-    case 'SET_BRANCHES': return { ...state, branches: action.payload };
-    case 'SET_MODAL': return { ...state, isAssignModalOpen: action.isOpen ?? false };
-    case 'SET_ASSIGN_FORM': return { ...state, assignFormData: action.payload };
-    case 'SET_FILTER_STATUS': return { ...state, filterStatus: action.payload, currentPage: 1 };
-    case 'SET_FILTER_BRANCH': return { ...state, filterBranch: action.payload, currentPage: 1 };
-    case 'SET_SEARCH_QUERY': return { ...state, searchQuery: action.payload, currentPage: 1 };
-    case 'SET_SORT': return { ...state, sortBy: action.by ?? 'date', sortOrder: action.order ?? 'desc', currentPage: 1 };
-    case 'SET_PAGE': return { ...state, currentPage: action.payload };
-    case 'SET_LOADING': return { ...state, loading: action.payload };
-    case 'SET_ERROR': return { ...state, error: action.payload };
-    case 'SET_SUBMITTING': return { ...state, submitting: action.payload };
-    case 'SET_SOCKET_CONNECTED': return { ...state, socketConnected: action.payload };
-    case 'SET_SOCKET_ERROR': return { ...state, socketError: action.payload };
-    case 'UPDATE_ORDER_STATUS': return {
-      ...state,
-      orders: state.orders.map(o => o.id === action.orderId ? { ...o, status: action.status! } : o),
-      selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
-        ? { ...state.selectedOrder, status: action.status! } : state.selectedOrder,
-    };
-    case 'UPDATE_ITEM_STATUS': return {
-      ...state,
-      orders: state.orders.map(order =>
-        order.id === action.orderId
-          ? {
-              ...order,
-              items: order.items.map(item =>
-                item._id === action.payload.itemId ? { ...item, status: action.payload.status } : item
-              ),
-              status: order.items.every(i => i.status === 'completed') && order.status !== 'completed'
-                ? 'completed' : order.status,
-            }
-          : order
-      ),
-      selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
-        ? {
-            ...state.selectedOrder,
-            items: state.selectedOrder.items.map(item =>
-              item._id === action.payload.itemId ? { ...item, status: action.payload.status } : item
-            ),
-            status: state.selectedOrder.items.every(i => i.status === 'completed') && state.selectedOrder.status !== 'completed'
-              ? 'completed' : state.selectedOrder.status,
-          }
-        : state.selectedOrder,
-    };
-    case 'TASK_ASSIGNED': return {
-      ...state,
-      orders: state.orders.map(order =>
-        order.id === action.orderId
-          ? {
-              ...order,
-              items: order.items.map(i => {
-                const assignment = action.items?.find(a => a._id === i._id);
-                return assignment
-                  ? {
-                      ...i,
-                      assignedTo: assignment.assignedTo
-                        ? { 
-                            ...assignment.assignedTo, 
-                            displayName: state.isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name 
-                          }
-                        : undefined,
-                      status: assignment.status || i.status,
-                    }
-                  : i;
-              }),
-              status: order.items.every(i => i.status === 'assigned') ? 'in_production' : order.status,
-            }
-          : order
-      ),
-      selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
-        ? {
-            ...state.selectedOrder,
-            items: state.selectedOrder.items.map(i => {
-              const assignment = action.items?.find(a => a._id === i._id);
-              return assignment
-                ? {
-                    ...i,
-                    assignedTo: assignment.assignedTo
-                      ? { 
-                          ...assignment.assignedTo, 
-                          displayName: state.isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name 
-                        }
-                      : undefined,
-                    status: assignment.status || i.status,
-                  }
-                : i;
-            }),
-            status: state.selectedOrder.items.every(i => i.status === 'assigned') ? 'in_production' : state.selectedOrder.status,
-          }
-        : state.selectedOrder,
-    };
-    case 'RETURN_STATUS_UPDATED': return {
-      ...state,
-      orders: state.orders.map(order =>
-        order.id === action.orderId
-          ? {
-              ...order,
-              returns: order.returns.map(ret =>
-                ret.returnId === action.returnId ? { ...ret, status: action.status! } : ret
-              ),
-              adjustedTotal: action.status === 'approved'
-                ? order.adjustedTotal - (order.returns.find(r => r.returnId === action.returnId)?.items.reduce((sum, item) => {
-                    const orderItem = order.items.find(i => i.productId === item.productId);
-                    return sum + (orderItem ? orderItem.price * item.quantity : 0);
-                  }, 0) || 0)
-                : order.adjustedTotal,
-            }
-          : order
-      ),
-      selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
-        ? {
-            ...state.selectedOrder,
-            returns: state.selectedOrder.returns.map(ret =>
-              ret.returnId === action.returnId ? { ...ret, status: action.status! } : ret
-            ),
-            adjustedTotal: action.status === 'approved'
-              ? state.selectedOrder.adjustedTotal - (state.selectedOrder.returns.find(r => r.returnId === action.returnId)?.items.reduce((sum, item) => {
-                  const orderItem = state.selectedOrder.items.find(i => i.productId === item.productId);
-                  return sum + (orderItem ? orderItem.price * item.quantity : 0);
-                }, 0) || 0)
-              : state.selectedOrder.adjustedTotal,
-          }
-        : state.selectedOrder,
-    };
-    case 'SET_VIEW_MODE': return { ...state, viewMode: action.payload, currentPage: 1 };
-    case 'SET_FILTER_MONTH': return { ...state, filterMonth: action.payload, currentPage: 1 };
-    case 'SET_FILTER_PERIOD': return { ...state, filterPeriod: action.payload, currentPage: 1 };
-    case 'SET_CUSTOM_START_DATE': return { ...state, customStartDate: action.payload, currentPage: 1 };
-    case 'SET_CUSTOM_END_DATE': return { ...state, customEndDate: action.payload, currentPage: 1 };
-    default: return state;
-  }
-};
-
-const ORDERS_PER_PAGE = { card: 12, table: 50 };
-const validTransitions: Record<OrderStatus, OrderStatus[]> = {
-  pending: ['approved', 'cancelled'],
-  approved: ['in_production', 'cancelled'],
-  in_production: ['completed', 'cancelled'],
-  completed: ['in_transit'],
-  in_transit: ['delivered'],
-  delivered: [],
-  cancelled: [],
-};
-const statusOptions = [
-  { value: '', label: 'all_statuses' },
-  { value: 'pending', label: 'pending' },
-  { value: 'approved', label: 'approved' },
-  { value: 'in_production', label: 'in_production' },
-  { value: 'completed', label: 'completed' },
-  { value: 'in_transit', label: 'in_transit' },
-  { value: 'delivered', label: 'delivered' },
-  { value: 'cancelled', label: 'cancelled' },
-];
-const sortOptions = [
-  { value: 'date', label: 'sort_date' },
-  { value: 'totalAmount', label: 'sort_total_amount' },
-  { value: 'priority', label: 'sort_priority' },
-];
-const monthOptions = [
-  { value: '', label: 'all_months' },
-  ...Array.from({ length: 12 }, (_, i) => ({
-    value: (i + 1).toString().padStart(2, '0'),
-    label: getMonthName(i + 1, language),
-  })),
-];
-const periodOptions = [
-  { value: 'week', label: 'this_week' },
-  { value: 'month', label: 'this_month' },
-  { value: 'custom', label: 'custom_range' },
-];
-
-const translateUnit = (unit: string, isRtl: boolean) => {
-  const translations: Record<string, { ar: string; en: string }> = {
-    'كيلو': { ar: 'كيلو', en: 'kg' },
-    'قطعة': { ar: 'قطعة', en: 'piece' },
-    'علبة': { ar: 'علبة', en: 'pack' },
-    'صينية': { ar: 'صينية', en: 'tray' },
-    'kg': { ar: 'كجم', en: 'kg' },
-    'piece': { ar: 'قطعة', en: 'piece' },
-    'pack': { ar: 'علبة', en: 'pack' },
-    'tray': { ar: 'صينية', en: 'tray' },
-  };
-  return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
-};
-
-const exportToExcel = (
-  orders: Order[],
-  isRtl: boolean,
-  calculateAdjustedTotal: (order: Order) => string,
-  calculateTotalQuantity: (order: Order) => number,
-  translateUnit: (unit: string, isRtl: boolean) => string,
-  chefAssignments: Record<string, { chef: string; tasks: number }[]>,
-  branchDistribution: Record<string, number>
-) => {
-  const headers = [
-    isRtl ? 'رقم الطلب' : 'Order Number',
-    isRtl ? 'الفرع' : 'Branch',
-    isRtl ? 'الحالة' : 'Status',
-    isRtl ? 'المنتجات' : 'Products',
-    isRtl ? 'إجمالي المبلغ' : 'Total Amount',
-    isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
-    isRtl ? 'التاريخ' : 'Date',
-    isRtl ? 'توزيع الشيفات' : 'Chef Assignments',
-    ...state.branches.map(b => isRtl ? b.name : b.nameEn || b.name),
-  ];
-  const data = orders.map(order => {
-    const productsStr = order.items.map(i => `${i.displayProductName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ');
-    const totalAmount = calculateAdjustedTotal(order);
-    const totalQuantity = `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`;
-    const statusLabel = isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status;
-    const assignments = chefAssignments[order.id]?.map(a => `${a.chef}: ${a.tasks} ${isRtl ? 'مهام' : 'tasks'}`).join(', ') || (isRtl ? 'لا يوجد' : 'None');
-    const branchCounts = state.branches.map(b => (branchDistribution[b._id] || 0).toString());
-    return {
-      [headers[0]]: order.orderNumber,
-      [headers[1]]: order.branch.displayName,
-      [headers[2]]: statusLabel,
-      [headers[3]]: productsStr,
-      [headers[4]]: totalAmount,
-      [headers[5]]: totalQuantity,
-      [headers[6]]: order.date,
-      [headers[7]]: assignments,
-      ...branchCounts.reduce((acc, count, i) => ({ ...acc, [headers[8 + i]]: count }), {}),
-    };
-  });
-  const ws = XLSX.utils.json_to_sheet(isRtl ? data.map(row => Object.fromEntries(Object.entries(row).reverse())) : data, { header: headers });
-  if (isRtl) ws['!views'] = [{ RTL: true }];
-  ws['!cols'] = [{ wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 50 }, { wch: 20 }, { wch: 15 }, { wch: 20 }, { wch: 30 }, ...Array(state.branches.length).fill({ wch: 10 })];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, isRtl ? 'الطلبات' : 'Orders');
-  XLSX.writeFile(wb, 'ProductionReport.xlsx');
-  toast.success(isRtl ? 'تم تصدير الملف بنجاح' : 'Export successful', { position: isRtl ? 'top-left' : 'top-right' });
-};
-
-export const ProductionReport: React.FC = () => {
-  const { t, language } = useLanguage();
+const ProductionReport: React.FC = () => {
+  const { language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
-  const { socket, isConnected, emit } = useSocket();
-  const [state, dispatch] = useReducer(reducer, initialState);
-  const stateRef = useRef(state);
-  const listRef = useRef<HTMLDivElement>(null);
-  const playNotificationSound = useOrderNotifications(dispatch, stateRef, user);
+  const [loading, setLoading] = useState(true);
+  const [orderData, setOrderData] = useState<{ [month: number]: OrderRow[] }>({});
+  const [stockInData, setStockInData] = useState<{ [month: number]: StockRow[] }>({});
+  const [stockOutData, setStockOutData] = useState<{ [month: number]: StockRow[] }>({});
+  const [selectedMonth, setSelectedMonth] = useState(8); // September 2025 (0-based index)
+  const [activeTab, setActiveTab] = useState<'orders' | 'stockIn' | 'stockOut'>('orders');
+  const currentDate = new Date('2025-10-12T11:19:00+03:00');
+  const currentYear = currentDate.getFullYear();
+  const months = Array.from({ length: 12 }, (_, i) => ({
+    value: i,
+    label: new Date(currentYear, i).toLocaleString(language, { month: 'long' }),
+  }));
+
+  // Calculate actual days for the selected month
+  const getDaysInMonth = useCallback((month: number) => {
+    const daysInMonth = new Date(currentYear, month + 1, 0).getDate();
+    return Array.from({ length: daysInMonth }, (_, i) => {
+      const date = new Date(currentYear, month, i + 1);
+      return date.toLocaleString(language, { weekday: 'long', day: 'numeric', month: 'long' });
+    });
+  }, [currentYear, language]);
+
+  const daysInMonth = useMemo(() => getDaysInMonth(selectedMonth), [selectedMonth, getDaysInMonth]);
 
   useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
-
-  const calculateTotalQuantity = useCallback((order: Order) => {
-    return order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
-  }, []);
-
-  const calculateAdjustedTotal = useCallback((order: Order) => {
-    const approvedReturnsTotal = order.returns
-      .filter(ret => ret.status === 'approved')
-      .reduce((sum, ret) => {
-        const returnTotal = ret.items.reduce((retSum, item) => {
-          const orderItem = order.items.find(i => i.productId === item.productId);
-          return retSum + (orderItem ? orderItem.price * item.quantity : 0);
-        }, 0);
-        return sum + returnTotal;
-      }, 0);
-    const adjusted = (order.adjustedTotal || order.totalAmount || 0) - approvedReturnsTotal;
-    return adjusted.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
-      style: 'currency',
-      currency: 'SAR',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-  }, [isRtl]);
-
-  const chefAssignments = useMemo(() => {
-    const assignments: Record<string, { chef: string; tasks: number }[]> = {};
-    state.orders.forEach(order => {
-      const chefTasks: Record<string, number> = {};
-      order.items.forEach(item => {
-        if (item.assignedTo) {
-          const chefName = item.assignedTo.displayName;
-          chefTasks[chefName] = (chefTasks[chefName] || 0) + 1;
-        }
-      });
-      assignments[order.id] = Object.entries(chefTasks).map(([chef, tasks]) => ({ chef, tasks }));
-    });
-    return assignments;
-  }, [state.orders]);
-
-  const branchDistribution = useMemo(() => {
-    const distribution: Record<string, number> = {};
-    const now = new Date();
-    const currentMonth = now.getMonth() + 1;
-    const currentYear = now.getFullYear();
-    const [weekStart, weekEnd] = getWeekRange(now);
-
-    state.orders.forEach(order => {
-      const orderDate = new Date(order.date);
-      const isInMonth = state.filterMonth ? parseInt(state.filterMonth) === orderDate.getMonth() + 1 && orderDate.getFullYear() === currentYear : true;
-      const isInWeek = state.filterPeriod === 'week' && orderDate >= weekStart && orderDate <= weekEnd;
-      const isInMonthPeriod = state.filterPeriod === 'month' && orderDate.getMonth() + 1 === currentMonth && orderDate.getFullYear() === currentYear;
-      const isInCustom = state.filterPeriod === 'custom' && state.customStartDate && state.customEndDate
-        ? orderDate >= new Date(state.customStartDate) && orderDate <= new Date(state.customEndDate)
-        : true;
-
-      if ((isInMonth || !state.filterMonth) && (isInWeek || isInMonthPeriod || isInCustom)) {
-        distribution[order.branchId] = (distribution[order.branchId] || 0) + 1;
-      }
-    });
-    return distribution;
-  }, [state.orders, state.filterMonth, state.filterPeriod, state.customStartDate, state.customEndDate]);
-
-  const branchAnalysis = useMemo(() => {
-    const analysis: Record<string, { totalOrders: number; totalQuantity: number; totalAmount: number; statusBreakdown: Record<string, number> }> = {};
-    state.branches.forEach(branch => {
-      const branchOrders = state.orders.filter(order => order.branchId === branch._id);
-      analysis[branch._id] = {
-        totalOrders: branchOrders.length,
-        totalQuantity: branchOrders.reduce((sum, order) => sum + calculateTotalQuantity(order), 0),
-        totalAmount: branchOrders.reduce((sum, order) => sum + (order.adjustedTotal || order.totalAmount || 0), 0),
-        statusBreakdown: branchOrders.reduce((acc, order) => {
-          acc[order.status] = (acc[order.status] || 0) + 1;
-          return acc;
-        }, {} as Record<string, number>),
-      };
-    });
-    return analysis;
-  }, [state.orders, state.branches, calculateTotalQuantity]);
-
-  const fetchData = useCallback(
-    async (retryCount = 0) => {
-      if (!user || !['admin', 'production'].includes(user.role)) {
-        dispatch({ type: 'SET_ERROR', payload: isRtl ? 'غير مصرح للوصول' : 'Unauthorized access' });
-        dispatch({ type: 'SET_LOADING', payload: false });
-        return;
-      }
-      dispatch({ type: 'SET_LOADING', payload: true });
+    const fetchData = async () => {
+      setLoading(true);
       try {
-        const query: Record<string, any> = {
-          sortBy: state.sortBy,
-          sortOrder: state.sortOrder,
-        };
-        if (user.role === 'production' && user.department) query.department = user.department._id;
-        const [ordersResponse, chefsResponse, branchesResponse] = await Promise.all([
-          ordersAPI.getAll(query),
-          chefsAPI.getAll(),
-          branchesAPI.getAll(),
+        const [inventory, orders] = await Promise.all([
+          inventoryAPI.getInventory({}, isRtl),
+          ordersAPI.getAll({ status: 'completed', page: 1, limit: 1000 }, isRtl),
         ]);
-        const mappedOrders: Order[] = ordersResponse
-          .filter((order: any) => order && order._id && order.orderNumber)
-          .map((order: any) => ({
-            id: order._id,
-            orderNumber: order.orderNumber,
-            branchId: order.branch?._id || 'unknown',
-            branch: {
-              _id: order.branch?._id || 'unknown',
-              name: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              nameEn: order.branch?.nameEn,
-              displayName: isRtl ? order.branch?.name : order.branch?.nameEn || order.branch?.name,
-            },
-            items: Array.isArray(order.items)
-              ? order.items.map((item: any) => ({
-                  _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
-                  productId: item.product?._id || 'unknown',
-                  productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                  productNameEn: item.product?.nameEn,
-                  displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
-                  quantity: Number(item.quantity) || 1,
-                  price: Number(item.price) || 0,
-                  unit: item.product?.unit || 'unit',
-                  unitEn: item.product?.unitEn,
-                  displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
-                  department: {
-                    _id: item.product?.department?._id || 'unknown',
-                    name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    nameEn: item.product?.department?.nameEn,
-                    displayName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name,
-                  },
-                  assignedTo: item.assignedTo ? {
-                    _id: item.assignedTo._id,
-                    username: item.assignedTo.username,
-                    name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    nameEn: item.assignedTo.nameEn,
-                    displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
-                    department: item.assignedTo.department
-                  } : undefined,
-                  status: item.status || 'pending',
-                  returnedQuantity: Number(item.returnedQuantity) || 0,
-                  returnReason: item.returnReason || '',
-                }))
-              : [],
-            returns: Array.isArray(order.returns)
-              ? order.returns.map((ret: any) => ({
-                  returnId: ret._id || `temp-${Math.random().toString(36).substring(2)}`,
-                  returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
-                  items: Array.isArray(ret.items)
-                    ? ret.items.map((item: any) => ({
-                        productId: item.product?._id || 'unknown',
-                        productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                        productNameEn: item.product?.nameEn,
-                        quantity: Number(item.quantity) || 0,
-                        reason: item.reason || (isRtl ? 'غير محدد' : 'Unspecified'),
-                        unit: item.product?.unit || 'unit',
-                        unitEn: item.product?.unitEn,
-                        displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
-                      }))
-                    : [],
-                  status: ret.status || 'pending',
-                  reviewNotes: ret.notes || '',
-                  createdAt: formatDate(ret.createdAt ? new Date(ret.createdAt) : new Date(), language),
-                  createdBy: {
-                    _id: ret.createdBy?._id,
-                    username: ret.createdBy?.username,
-                    name: ret.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    nameEn: ret.createdBy?.nameEn,
-                    displayName: isRtl ? ret.createdBy?.name : ret.createdBy?.nameEn || ret.createdBy?.name,
-                  },
-                }))
-              : [],
-            status: order.status || 'pending',
-            totalAmount: Number(order.totalAmount) || 0,
-            adjustedTotal: Number(order.adjustedTotal) || 0,
-            date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
-            requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : null,
-            notes: order.notes || '',
-            priority: order.priority || 'medium',
-            createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-            approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
-            approvedAt: order.approvedAt ? new Date(order.approvedAt) : null,
-            deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : null,
-            transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : null,
-            statusHistory: Array.isArray(order.statusHistory)
-              ? order.statusHistory.map((history: any) => ({
-                  status: history.status || 'pending',
-                  changedBy: history.changedBy?.name || 'unknown',
-                  changedAt: formatDate(history.changedAt ? new Date(history.changedAt) : new Date(), language),
-                  notes: history.notes || '',
-                }))
-              : [],
-          }));
-        dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
-        dispatch({
-          type: 'SET_CHEFS',
-          payload: chefsResponse
-            .filter((chef: any) => chef && chef.user?._id)
-            .map((chef: any) => ({
-              _id: chef._id,
-              userId: chef.user._id,
-              name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              nameEn: chef.user?.nameEn || chef.nameEn,
-              displayName: isRtl ? (chef.user?.name || chef.name) : (chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name),
-              department: chef.department ? {
-                _id: chef.department._id,
-                name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: chef.department.nameEn,
-                displayName: isRtl ? chef.department.name : chef.department.nameEn || chef.department.name
-              } : null,
-              status: chef.status || 'active',
-            })),
-        });
-        dispatch({
-          type: 'SET_BRANCHES',
-          payload: branchesResponse
-            .filter((branch: any) => branch && branch._id)
-            .map((branch: any) => ({
-              _id: branch._id,
-              name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              nameEn: branch.nameEn,
-              displayName: isRtl ? branch.name : branch.nameEn || branch.name,
-            }))
-            .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language)),
-        });
-        dispatch({ type: 'SET_ERROR', payload: '' });
-      } catch (err: any) {
-        console.error('Fetch data error:', err.message);
-        if (retryCount < 3) {
-          setTimeout(() => fetchData(retryCount + 1), 2000);
-          return;
-        }
-        const errorMessage = err.response?.status === 404
-          ? isRtl ? 'لم يتم العثور على طلبات' : 'No orders found'
-          : isRtl ? `خطأ في جلب الطلبات: ${err.message}` : `Error fetching orders: ${err.message}`;
-        dispatch({ type: 'SET_ERROR', payload: errorMessage });
-        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
-      } finally {
-        dispatch({ type: 'SET_LOADING', payload: false });
-      }
-    },
-    [user, state.sortBy, state.sortOrder, isRtl, language]
-  );
 
-  const handleSearchChange = useCallback((value: string) => {
-    dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
-  }, []);
+        console.log('Orders API Response:', orders); // Debug: Log orders response
+        console.log('Inventory API Response:', inventory); // Debug: Log inventory response
 
-  const filteredOrders = useMemo(
-    () => {
-      const normalizedQuery = normalizeText(state.searchQuery);
-      const now = new Date();
-      const currentMonth = now.getMonth() + 1;
-      const currentYear = now.getFullYear();
-      const [weekStart, weekEnd] = getWeekRange(now);
-      return state.orders
-        .filter(order => order)
-        .filter(
-          order =>
-            normalizeText(order.orderNumber || '').includes(normalizedQuery) ||
-            normalizeText(order.branch.displayName || '').includes(normalizedQuery) ||
-            normalizeText(order.notes || '').includes(normalizedQuery) ||
-            normalizeText(order.createdBy || '').includes(normalizedQuery) ||
-            order.items.some(item =>
-              normalizeText(item.displayProductName || '').includes(normalizedQuery)
-            )
-        )
-        .filter(
-          order => {
-            const orderDate = new Date(order.date);
-            const isInMonth = state.filterMonth ? parseInt(state.filterMonth) === orderDate.getMonth() + 1 && orderDate.getFullYear() === currentYear : true;
-            const isInWeek = state.filterPeriod === 'week' && orderDate >= weekStart && orderDate <= weekEnd;
-            const isInMonthPeriod = state.filterPeriod === 'month' && orderDate.getMonth() + 1 === currentMonth && orderDate.getFullYear() === currentYear;
-            const isInCustom = state.filterPeriod === 'custom' && state.customStartDate && state.customEndDate
-              ? orderDate >= new Date(state.customStartDate) && orderDate <= new Date(state.customEndDate)
-              : true;
-            return (isInMonth || !state.filterMonth) && (isInWeek || isInMonthPeriod || isInCustom) &&
-              (!state.filterStatus || order.status === state.filterStatus) &&
-              (!state.filterBranch || order.branchId === state.filterBranch) &&
-              (user?.role === 'production' && user?.department
-                ? order.items.some(item => item.department._id === user.department._id)
-                : true);
+        const monthlyOrderData: { [month: number]: OrderRow[] } = {};
+        const monthlyStockInData: { [month: number]: StockRow[] } = {};
+        const monthlyStockOutData: { [month: number]: StockRow[] } = {};
+
+        for (let month = 0; month < 12; month++) {
+          const daysInMonth = new Date(currentYear, month + 1, 0).getDate();
+          const orderMap = new Map<string, OrderRow>();
+          const stockInMap = new Map<string, StockRow>();
+          const stockOutMap = new Map<string, StockRow>();
+
+          // Process orders (only completed, pivot table: branches as columns, products as rows)
+          if (Array.isArray(orders)) {
+            orders.forEach((order: any) => {
+              const status = order.status || order.orderStatus; // Handle potential status field variation
+              if (status !== 'completed') return; // Strict filter for completed orders
+              const date = new Date(order.createdAt || order.date);
+              if (isNaN(date.getTime())) {
+                console.warn('Invalid order date:', order.createdAt || order.date);
+                return;
+              }
+              const orderMonth = date.getMonth();
+              const year = date.getFullYear();
+              if (year === currentYear && orderMonth === month) {
+                const branch = order.branch?.displayName || order.branch?.name || order.branchId || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
+                (order.items || []).forEach((item: any) => {
+                  const product = item.displayProductName || item.product?.name || item.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
+                  const key = `${product}-${month}`;
+                  if (!orderMap.has(key)) {
+                    orderMap.set(key, {
+                      id: key,
+                      product,
+                      branchQuantities: {},
+                      totalQuantity: 0,
+                      totalPrice: 0,
+                    });
+                  }
+                  const row = orderMap.get(key)!;
+                  const quantity = Number(item.quantity) || 0;
+                  const price = Number(item.price) || 0;
+                  row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + quantity;
+                  row.totalQuantity += quantity;
+                  row.totalPrice += quantity * price;
+                });
+              }
+            });
+          } else {
+            console.warn('Orders is not an array:', orders);
           }
-        );
-    },
-    [state.orders, state.searchQuery, state.filterStatus, state.filterBranch, state.filterMonth, state.filterPeriod, state.customStartDate, state.customEndDate, user]
-  );
 
-  const sortedOrders = useMemo(() => {
-    const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 };
-    return [...filteredOrders].sort((a, b) => {
-      if (state.sortBy === 'date') {
-        return state.sortOrder === 'asc'
-          ? new Date(a.date).getTime() - new Date(b.date).getTime()
-          : new Date(b.date).getTime() - new Date(a.date).getTime();
-      } else if (state.sortBy === 'totalAmount') {
-        return state.sortOrder === 'asc' ? a.adjustedTotal - b.adjustedTotal : b.adjustedTotal - a.adjustedTotal;
-      } else {
-        return state.sortOrder === 'asc'
-          ? priorityOrder[a.priority] - priorityOrder[b.priority]
-          : priorityOrder[b.priority] - priorityOrder[a.priority];
-      }
-    });
-  }, [filteredOrders, state.sortBy, state.sortOrder]);
+          // Process inventory movements (strictly separate in and out)
+          if (Array.isArray(inventory)) {
+            inventory.forEach((item: any) => {
+              const product = item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
+              const assumedPrice = Number(item.product?.price) || 0;
+              (item.movements || []).forEach((movement: any) => {
+                if (!movement.type || !['in', 'out'].includes(movement.type)) {
+                  console.warn(`Invalid movement type for product ${product}:`, movement.type);
+                  return;
+                }
+                const date = new Date(movement.createdAt);
+                if (isNaN(date.getTime())) {
+                  console.warn('Invalid movement date:', movement.createdAt);
+                  return;
+                }
+                const prodMonth = date.getMonth();
+                const year = date.getFullYear();
+                if (year === currentYear && prodMonth === month) {
+                  const day = date.getDate();
+                  const key = `${product}-${month}`;
+                  const map = movement.type === 'in' ? stockInMap : stockOutMap;
+                  if (!map.has(key)) {
+                    map.set(key, {
+                      id: key,
+                      product,
+                      totalQuantity: 0,
+                      dailyQuantities: Array(daysInMonth).fill(0),
+                      changes: Array(daysInMonth).fill(0),
+                      totalPrice: 0,
+                    });
+                  }
+                  const row = map.get(key)!;
+                  const quantity = Math.abs(Number(movement.quantity) || 0);
+                  row.dailyQuantities[day - 1] += quantity;
+                  row.totalQuantity += quantity;
+                  row.totalPrice += quantity * assumedPrice;
+                  if (day > 1) {
+                    row.changes[day - 1] = quantity - (row.dailyQuantities[day - 2] || 0);
+                  } else {
+                    row.changes[0] = quantity;
+                  }
+                }
+              });
+            });
+          } else {
+            console.warn('Inventory is not an array:', inventory);
+          }
 
-  const paginatedOrders = useMemo(
-    () => sortedOrders.slice((state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode], state.currentPage * ORDERS_PER_PAGE[state.viewMode]),
-    [sortedOrders, state.currentPage, state.viewMode]
-  );
+          console.log(`Month ${month} - Orders:`, Array.from(orderMap.values()));
+          console.log(`Month ${month} - Stock In:`, Array.from(stockInMap.values()));
+          console.log(`Month ${month} - Stock Out:`, Array.from(stockOutMap.values()));
 
-  const totalPages = useMemo(
-    () => Math.ceil(sortedOrders.length / ORDERS_PER_PAGE[state.viewMode]),
-    [sortedOrders, state.viewMode]
-  );
-
-  const updateOrderStatus = useCallback(
-    async (orderId: string, newStatus: OrderStatus) => {
-      const order = state.orders.find(o => o.id === orderId);
-      if (!order || !validTransitions[order.status].includes(newStatus)) {
-        toast.error(isRtl ? 'انتقال غير صالح' : 'Invalid transition', { position: isRtl ? 'top-left' : 'top-right' });
-        return;
-      }
-      dispatch({ type: 'SET_SUBMITTING', payload: orderId });
-      try {
-        await ordersAPI.updateStatus(orderId, { status: newStatus });
-        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: newStatus });
-        if (socket && isConnected) {
-          emit('orderStatusUpdated', { orderId, status: newStatus });
+          monthlyOrderData[month] = Array.from(orderMap.values());
+          monthlyStockInData[month] = Array.from(stockInMap.values());
+          monthlyStockOutData[month] = Array.from(stockOutMap.values());
         }
-        toast.success(isRtl ? `تم تحديث الحالة إلى: ${newStatus}` : `Order status updated to: ${newStatus}`, {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
-      } catch (err: any) {
-        console.error('Update order status error:', err.message);
-        toast.error(isRtl ? `فشل في تحديث الحالة: ${err.message}` : `Failed to update status: ${err.message}`, {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
+
+        setOrderData(monthlyOrderData);
+        setStockInData(monthlyStockInData);
+        setStockOutData(monthlyStockOutData);
+      } catch (error) {
+        console.error('Failed to fetch data:', error);
       } finally {
-        dispatch({ type: 'SET_SUBMITTING', payload: null });
+        setLoading(false);
       }
-    },
-    [state.orders, isRtl, socket, isConnected, emit]
-  );
-
-  const updateItemStatus = useCallback(
-    async (orderId: string, itemId: string, status: Order['items'][0]['status']) => {
-      if (!user?.id) {
-        toast.error(isRtl ? 'لا يوجد مستخدم مرتبط' : 'No user associated', { position: isRtl ? 'top-left' : 'top-right' });
-        return;
-      }
-      dispatch({ type: 'SET_SUBMITTING', payload: orderId });
-      try {
-        await ordersAPI.updateItemStatus(orderId, itemId, { status });
-        dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
-        if (socket && isConnected) {
-          emit('itemStatusUpdated', { orderId, itemId, status });
-        }
-        toast.success(isRtl ? `تم تحديث حالة العنصر إلى: ${status}` : `Item status updated to: ${status}`, {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
-      } catch (err: any) {
-        console.error('Update item status error:', err.message);
-        toast.error(isRtl ? `فشل في تحديث حالة العنصر: ${err.message}` : `Failed to update item status: ${err.message}`, {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
-      } finally {
-        dispatch({ type: 'SET_SUBMITTING', payload: null });
-      }
-    },
-    [isRtl, user, socket, isConnected, emit]
-  );
-
-  const assignChefs = useCallback(
-    async (orderId: string) => {
-      if (!user?.id || state.assignFormData.items.some(item => !item.assignedTo)) {
-        toast.error(isRtl ? 'يرجى تعيين شيف واحد على الأقل' : 'Please assign at least one chef', {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
-        return;
-      }
-      dispatch({ type: 'SET_SUBMITTING', payload: orderId });
-      try {
-        await ordersAPI.assignChef(orderId, { items: state.assignFormData.items });
-        const items = state.assignFormData.items.map(item => ({
-          _id: item.itemId,
-          assignedTo: state.chefs.find(chef => chef.userId === item.assignedTo) || {
-            _id: item.assignedTo,
-            name: isRtl ? 'غير معروف' : 'Unknown',
-            department: { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' }
-          },
-          status: 'assigned',
-        }));
-        dispatch({ type: 'TASK_ASSIGNED', orderId, items });
-        dispatch({ type: 'SET_MODAL', isOpen: false });
-        dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
-        if (socket && isConnected) {
-          emit('taskAssigned', { orderId, items });
-        }
-        toast.success(isRtl ? 'تم تعيين الشيفات بنجاح' : 'Chefs assigned successfully', {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
-      } catch (err: any) {
-        console.error('Assign chefs error:', err.message);
-        toast.error(isRtl ? `فشل في تعيين الشيفات: ${err.message}` : `Failed to assign chefs: ${err.message}`, {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
-      } finally {
-        dispatch({ type: 'SET_SUBMITTING', payload: null });
-      }
-    },
-    [user, state.assignFormData, state.chefs, socket, isConnected, emit, isRtl]
-  );
-
-  const openAssignModal = useCallback(
-    (order: Order) => {
-      if (order.status !== 'approved') {
-        toast.error(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved', {
-          position: isRtl ? 'top-left' : 'top-right',
-        });
-        return;
-      }
-      dispatch({ type: 'SET_SELECTED_ORDER', payload: order });
-      dispatch({
-        type: 'SET_ASSIGN_FORM',
-        payload: {
-          items: order.items
-            .filter(item => !item.assignedTo)
-            .map(item => ({
-              itemId: item._id,
-              assignedTo: '',
-              product: item.displayProductName,
-              quantity: item.quantity,
-              unit: translateUnit(item.unit, isRtl),
-            })),
-        },
-      });
-      dispatch({ type: 'SET_MODAL', isOpen: true });
-    },
-    [isRtl]
-  );
-
-  const handlePageChange = useCallback((page: number) => {
-    dispatch({ type: 'SET_PAGE', payload: page });
-    listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  // WebSocket handling
-  useEffect(() => {
-    if (!user || !['admin', 'production'].includes(user.role) || !socket) {
-      dispatch({ type: 'SET_ERROR', payload: isRtl ? 'غير مصرح للوصول' : 'Unauthorized access' });
-      dispatch({ type: 'SET_LOADING', payload: false });
-      return;
-    }
-
-    const reconnectInterval = setInterval(() => {
-      if (!isConnected && socket) {
-        console.log('Attempting to reconnect WebSocket...');
-        socket.connect();
-      }
-    }, 5000);
-
-    socket.on('connect', () => {
-      dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
-      dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
-    });
-
-    socket.on('connect_error', (err) => {
-      console.error('Socket connect error:', err.message);
-      dispatch({ type: 'SET_SOCKET_ERROR', payload: isRtl ? 'خطأ في الاتصال' : 'Connection error' });
-      dispatch({ type: 'SET_SOCKET_CONNECTED', payload: false });
-    });
-
-    socket.on('newOrder', (order: any) => {
-      if (!order || !order._id || !order.orderNumber) {
-        console.warn('Invalid new order data:', order);
-        return;
-      }
-      const mappedOrder: Order = {
-        id: order._id,
-        orderNumber: order.orderNumber,
-        branchId: order.branch?._id || 'unknown',
-        branch: {
-          _id: order.branch?._id || 'unknown',
-          name: order.branch?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-          nameEn: order.branch?.nameEn,
-          displayName: isRtl ? order.branch?.name : order.branch?.nameEn || order.branch?.name,
-        },
-        items: Array.isArray(order.items)
-          ? order.items.map((item: any) => ({
-              _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
-              productId: item.product?._id || 'unknown',
-              productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              productNameEn: item.product?.nameEn,
-              displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
-              quantity: Number(item.quantity) || 1,
-              price: Number(item.price) || 0,
-              unit: item.product?.unit || 'unit',
-              unitEn: item.product?.unitEn,
-              displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
-              department: {
-                _id: item.product?.department?._id || 'unknown',
-                name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: item.product?.department?.nameEn,
-                displayName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name,
-              },
-              assignedTo: item.assignedTo ? {
-                _id: item.assignedTo._id,
-                username: item.assignedTo.username,
-                name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: item.assignedTo.nameEn,
-                displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
-                department: item.assignedTo.department
-              } : undefined,
-              status: item.status || 'pending',
-              returnedQuantity: Number(item.returnedQuantity) || 0,
-              returnReason: item.returnReason || '',
-            }))
-          : [],
-        returns: Array.isArray(order.returns)
-          ? order.returns.map((ret: any) => ({
-              returnId: ret._id || `temp-${Math.random().toString(36).substring(2)}`,
-              returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
-              items: Array.isArray(ret.items)
-                ? ret.items.map((item: any) => ({
-                    productId: item.product?._id || 'unknown',
-                    productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    productNameEn: item.product?.nameEn,
-                    quantity: Number(item.quantity) || 0,
-                    reason: item.reason || (isRtl ? 'غير محدد' : 'Unspecified'),
-                    unit: item.product?.unit || 'unit',
-                    unitEn: item.product?.unitEn,
-                    displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
-                  }))
-                : [],
-              status: ret.status || 'pending',
-              reviewNotes: ret.notes || '',
-              createdAt: formatDate(ret.createdAt ? new Date(ret.createdAt) : new Date(), language),
-              createdBy: {
-                _id: ret.createdBy?._id,
-                username: ret.createdBy?.username,
-                name: ret.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: ret.createdBy?.nameEn,
-                displayName: isRtl ? ret.createdBy?.name : ret.createdBy?.nameEn || ret.createdBy?.name,
-              },
-            }))
-          : [],
-        status: order.status || 'pending',
-        totalAmount: Number(order.totalAmount) || 0,
-        adjustedTotal: Number(order.adjustedTotal) || 0,
-        date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
-        requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : undefined,
-        notes: order.notes || '',
-        priority: order.priority || 'medium',
-        createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-        approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
-        approvedAt: order.approvedAt ? new Date(order.approvedAt) : undefined,
-        deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : undefined,
-        transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : undefined,
-        statusHistory: Array.isArray(order.statusHistory)
-          ? order.statusHistory.map((history: any) => ({
-              status: history.status || 'pending',
-              changedBy: history.changedBy?.name || 'unknown',
-              changedAt: formatDate(history.changedAt ? new Date(history.changedAt) : new Date(), language),
-              notes: history.notes || '',
-            }))
-          : [],
-      };
-      dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
-      playNotificationSound('/sounds/notification.mp3', [200, 100, 200]);
-      toast.success(isRtl ? `طلب جديد: ${order.orderNumber}` : `New order: ${order.orderNumber}`, {
-        position: isRtl ? 'top-left' : 'top-right',
-      });
-    });
-
-    socket.on('orderStatusUpdated', ({ orderId, status }: { orderId: string; status: OrderStatus }) => {
-      if (!orderId || !status) {
-        console.warn('Invalid order status update data:', { orderId, status });
-        return;
-      }
-      dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
-      toast.info(isRtl ? `تم تحديث حالة الطلب ${orderId} إلى ${status}` : `Order ${orderId} status updated to ${status}`, {
-        position: isRtl ? 'top-left' : 'top-right',
-      });
-    });
-
-    socket.on('itemStatusUpdated', ({ orderId, itemId, status }: { orderId: string; itemId: string; status: string }) => {
-      if (!orderId || !itemId || !status) {
-        console.warn('Invalid item status update data:', { orderId, itemId, status });
-        return;
-      }
-      dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
-      toast.info(isRtl ? `تم تحديث حالة العنصر في الطلب ${orderId}` : `Item status updated in order ${orderId}`, {
-        position: isRtl ? 'top-left' : 'top-right',
-      });
-    });
-
-    socket.on('returnStatusUpdated', ({ orderId, returnId, status }: { orderId: string; returnId: string; status: string }) => {
-      if (!orderId || !returnId || !status) {
-        console.warn('Invalid return status update data:', { orderId, returnId, status });
-        return;
-      }
-      dispatch({ type: 'RETURN_STATUS_UPDATED', orderId, returnId, status });
-      toast.info(isRtl ? `تم تحديث حالة الإرجاع إلى: ${status}` : `Return status updated to: ${status}`, {
-        position: isRtl ? 'top-left' : 'top-right',
-      });
-    });
-
-    socket.on('taskAssigned', ({ orderId, items }: { orderId: string; items: any[] }) => {
-      if (!orderId || !items) {
-        console.warn('Invalid task assigned data:', { orderId, items });
-        return;
-      }
-      dispatch({ type: 'TASK_ASSIGNED', orderId, items });
-      toast.info(isRtl ? 'تم تعيين الشيفات' : 'Chefs assigned', { position: isRtl ? 'top-left' : 'top-right' });
-    });
-
-    return () => {
-      clearInterval(reconnectInterval);
-      socket.off('connect');
-      socket.off('connect_error');
-      socket.off('newOrder');
-      socket.off('orderStatusUpdated');
-      socket.off('itemStatusUpdated');
-      socket.off('returnStatusUpdated');
-      socket.off('taskAssigned');
     };
-  }, [user, socket, isConnected, isRtl, language, playNotificationSound]);
+    fetchData();
+  }, [isRtl, currentYear]);
+
+  const allBranches = useMemo(() => {
+    const branches = new Set<string>();
+    Object.values(orderData).forEach(monthData => {
+      monthData.forEach(row => {
+        Object.keys(row.branchQuantities).forEach(branch => branches.add(branch));
+      });
+    });
+    return Array.from(branches).sort();
+  }, [orderData]);
+
+  const renderOrderTable = useCallback(
+    (data: OrderRow[], title: string, month: number) => {
+      const totalQuantities = allBranches.reduce((acc, branch) => {
+        acc[branch] = data.reduce((sum, row) => sum + (row.branchQuantities[branch] || 0), 0);
+        return acc;
+      }, {} as { [branch: string]: number });
+      const grandTotalQuantity = data.reduce((sum, row) => sum + row.totalQuantity, 0);
+      const grandTotalPrice = data.reduce((sum, row) => sum + row.totalPrice, 0);
+
+      const exportTable = (format: 'excel' | 'pdf') => {
+        const monthName = new Date(currentYear, month, 1).toLocaleString(language, { month: 'long' });
+        const headers = [
+          isRtl ? 'المنتج' : 'Product',
+          isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
+          isRtl ? 'السعر الإجمالي' : 'Total Price',
+          ...allBranches,
+        ];
+        const rows = [
+          ...data.map(row => ({
+            product: row.product,
+            totalQuantity: row.totalQuantity,
+            totalPrice: row.totalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' }),
+            ...Object.fromEntries(allBranches.map(branch => [branch, row.branchQuantities[branch] || 0])),
+          })),
+          {
+            product: isRtl ? 'الإجمالي' : 'Total',
+            totalQuantity: grandTotalQuantity,
+            totalPrice: grandTotalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' }),
+            ...Object.fromEntries(allBranches.map(branch => [branch, totalQuantities[branch] || 0])),
+          },
+        ];
+
+        if (format === 'excel') {
+          const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
+          if (isRtl) ws['!views'] = [{ RTL: true }];
+          ws['!cols'] = [{ wch: 20 }, { wch: 15 }, { wch: 15 }, ...allBranches.map(() => ({ wch: 15 }))];
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
+          XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
+        } else if (format === 'pdf') {
+          const doc = new jsPDF();
+          doc.autoTable({
+            head: [headers],
+            body: rows.map(row => [
+              row.product,
+              row.totalQuantity,
+              row.totalPrice,
+              ...allBranches.map(branch => row[branch]),
+            ]),
+            styles: { font: isRtl ? 'Amiri' : 'Helvetica', halign: isRtl ? 'right' : 'left', fontSize: 10 },
+            headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontSize: 10 },
+            bodyStyles: { fontSize: 9 },
+            footStyles: { fillColor: [240, 240, 240], fontSize: 10, fontStyle: 'bold' },
+          });
+          doc.save(`${title}_${monthName}.pdf`);
+        }
+      };
+
+      if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
+      if (data.length === 0) {
+        return (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className="text-center py-12 bg-white shadow-sm rounded-lg border border-gray-100"
+          >
+            <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>
+          </motion.div>
+        );
+      }
+
+      return (
+        <div className="mb-8">
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${months[month].label}` : `${title} - ${months[month].label}`}</h2>
+            <div className="flex gap-2">
+              <Button
+                variant={data.length > 0 ? 'primary' : 'secondary'}
+                onClick={data.length > 0 ? () => exportTable('excel') : undefined}
+                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium ${
+                  data.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                }`}
+                disabled={data.length === 0}
+              >
+                <Upload className="w-4 h-4" />
+                {isRtl ? 'تصدير إكسل' : 'Export Excel'}
+              </Button>
+              <Button
+                variant={data.length > 0 ? 'primary' : 'secondary'}
+                onClick={data.length > 0 ? () => exportTable('pdf') : undefined}
+                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium ${
+                  data.length > 0 ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                }`}
+                disabled={data.length === 0}
+              >
+                <Upload className="w-4 h-4" />
+                {isRtl ? 'تصدير PDF' : 'Export PDF'}
+              </Button>
+            </div>
+          </div>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className="overflow-x-auto rounded-lg shadow-sm border border-gray-100 bg-white"
+          >
+            <table className="min-w-full divide-y divide-gray-100 text-xs">
+              <thead className="bg-blue-50 sticky top-0">
+                <tr className={isRtl ? 'flex-row-reverse' : ''}>
+                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
+                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">
+                    {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
+                  </th>
+                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">
+                    {isRtl ? 'السعر الإجمالي' : 'Total Price'}
+                  </th>
+                  {allBranches.map(branch => (
+                    <th key={branch} className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">
+                      {branch}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {data.map(row => (
+                  <tr key={row.id} className={`hover:bg-blue-50/50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <td className="px-3 py-2 text-gray-700 text-center truncate">{row.product}</td>
+                    <td className="px-3 py-2 text-gray-700 text-center font-medium">{row.totalQuantity}</td>
+                    <td className="px-3 py-2 text-gray-700 text-center font-medium">
+                      {row.totalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
+                    </td>
+                    {allBranches.map(branch => (
+                      <td key={branch} className="px-3 py-2 text-gray-700 text-center">
+                        {row.branchQuantities[branch] || 0}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+                <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <td className="px-3 py-2 text-gray-800 text-center">{isRtl ? 'الإجمالي' : 'Total'}</td>
+                  <td className="px-3 py-2 text-gray-800 text-center">{grandTotalQuantity}</td>
+                  <td className="px-3 py-2 text-gray-800 text-center">
+                    {grandTotalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
+                  </td>
+                  {allBranches.map(branch => (
+                    <td key={branch} className="px-3 py-2 text-gray-800 text-center">
+                      {totalQuantities[branch] || 0}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </motion.div>
+        </div>
+      );
+    },
+    [loading, isRtl, allBranches, months, currentYear, language]
+  );
+
+  const renderStockInTable = useCallback(
+    (data: StockRow[], title: string, month: number) => {
+      const grandTotalQuantity = data.reduce((sum, row) => sum + row.totalQuantity, 0);
+      const grandTotalPrice = data.reduce((sum, row) => sum + row.totalPrice, 0);
+
+      const exportTable = (format: 'excel' | 'pdf') => {
+        const monthName = new Date(currentYear, month, 1).toLocaleString(language, { month: 'long' });
+        const headers = [
+          isRtl ? 'رقم' : 'No.',
+          isRtl ? 'المنتج' : 'Product',
+          isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
+          isRtl ? 'السعر الإجمالي' : 'Total Price',
+          ...daysInMonth,
+        ];
+        const rows = [
+          ...data.map((row, index) => ({
+            no: index + 1,
+            product: row.product,
+            totalQuantity: row.totalQuantity,
+            totalPrice: row.totalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' }),
+            ...Object.fromEntries(row.dailyQuantities.map((qty, i) => [daysInMonth[i], qty])),
+          })),
+          {
+            no: '',
+            product: isRtl ? 'الإجمالي' : 'Total',
+            totalQuantity: grandTotalQuantity,
+            totalPrice: grandTotalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' }),
+            ...Object.fromEntries(daysInMonth.map((_, i) => [daysInMonth[i], data.reduce((sum, row) => sum + row.dailyQuantities[i], 0)])),
+          },
+        ];
+
+        if (format === 'excel') {
+          const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
+          if (isRtl) ws['!views'] = [{ RTL: true }];
+          ws['!cols'] = [{ wch: 10 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 15 }))];
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
+          XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
+        } else if (format === 'pdf') {
+          const doc = new jsPDF();
+          doc.autoTable({
+            head: [headers],
+            body: rows.map(row => [
+              row.no,
+              row.product,
+              row.totalQuantity,
+              row.totalPrice,
+              ...daysInMonth.map(day => row[day]),
+            ]),
+            styles: { font: isRtl ? 'Amiri' : 'Helvetica', halign: isRtl ? 'right' : 'left', fontSize: 10 },
+            headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontSize: 10 },
+            bodyStyles: { fontSize: 9 },
+            footStyles: { fillColor: [240, 240, 240], fontSize: 10, fontStyle: 'bold' },
+          });
+          doc.save(`${title}_${monthName}.pdf`);
+        }
+      };
+
+      if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
+      if (data.length === 0) {
+        return (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className="text-center py-12 bg-white shadow-sm rounded-lg border border-gray-100"
+          >
+            <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>
+          </motion.div>
+        );
+      }
+
+      return (
+        <div className="mb-8">
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${months[month].label}` : `${title} - ${months[month].label}`}</h2>
+            <div className="flex gap-2">
+              <Button
+                variant={data.length > 0 ? 'primary' : 'secondary'}
+                onClick={data.length > 0 ? () => exportTable('excel') : undefined}
+                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium ${
+                  data.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                }`}
+                disabled={data.length === 0}
+              >
+                <Upload className="w-4 h-4" />
+                {isRtl ? 'تصدير إكسل' : 'Export Excel'}
+              </Button>
+              <Button
+                variant={data.length > 0 ? 'primary' : 'secondary'}
+                onClick={data.length > 0 ? () => exportTable('pdf') : undefined}
+                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium ${
+                  data.length > 0 ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                }`}
+                disabled={data.length === 0}
+              >
+                <Upload className="w-4 h-4" />
+                {isRtl ? 'تصدير PDF' : 'Export PDF'}
+              </Button>
+            </div>
+          </div>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className="overflow-x-auto rounded-lg shadow-sm border border-gray-100 bg-white"
+          >
+            <table className="min-w-full divide-y divide-gray-100 text-xs">
+              <thead className="bg-blue-50 sticky top-0">
+                <tr className={isRtl ? 'flex-row-reverse' : ''}>
+                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
+                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
+                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">
+                    {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
+                  </th>
+                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">
+                    {isRtl ? 'السعر الإجمالي' : 'Total Price'}
+                  </th>
+                  {daysInMonth.map((day, i) => (
+                    <th key={i} className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[120px]">
+                      {day}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {data.map((row, index) => (
+                  <tr key={row.id} className={`hover:bg-blue-50/50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <td className="px-3 py-2 text-gray-700 text-center">{index + 1}</td>
+                    <td className="px-3 py-2 text-gray-700 text-center truncate">{row.product}</td>
+                    <td className="px-3 py-2 text-gray-700 text-center font-medium">{row.totalQuantity}</td>
+                    <td className="px-3 py-2 text-gray-700 text-center font-medium">
+                      {row.totalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
+                    </td>
+                    {row.dailyQuantities.map((qty, i) => (
+                      <td
+                        key={i}
+                        className={`px-3 py-2 text-center text-green-600 font-medium`}
+                      >
+                        {qty} {row.changes[i] !== 0 && `(+${row.changes[i]})`}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+                <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <td className="px-3 py-2 text-gray-800 text-center" colSpan={2}>{isRtl ? 'الإجمالي' : 'Total'}</td>
+                  <td className="px-3 py-2 text-gray-800 text-center">{grandTotalQuantity}</td>
+                  <td className="px-3 py-2 text-gray-800 text-center">
+                    {grandTotalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
+                  </td>
+                  {daysInMonth.map((_, i) => (
+                    <td key={i} className="px-3 py-2 text-gray-800 text-center">
+                      {data.reduce((sum, row) => sum + row.dailyQuantities[i], 0)}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </motion.div>
+        </div>
+      );
+    },
+    [loading, isRtl, daysInMonth, months, currentYear, language]
+  );
+
+  const renderStockOutTable = useCallback(
+    (data: StockRow[], title: string, month: number) => {
+      const grandTotalQuantity = data.reduce((sum, row) => sum + row.totalQuantity, 0);
+      const grandTotalPrice = data.reduce((sum, row) => sum + row.totalPrice, 0);
+
+      const exportTable = (format: 'excel' | 'pdf') => {
+        const monthName = new Date(currentYear, month, 1).toLocaleString(language, { month: 'long' });
+        const headers = [
+          isRtl ? 'رقم' : 'No.',
+          isRtl ? 'المنتج' : 'Product',
+          isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
+          isRtl ? 'السعر الإجمالي' : 'Total Price',
+          ...daysInMonth,
+        ];
+        const rows = [
+          ...data.map((row, index) => ({
+            no: index + 1,
+            product: row.product,
+            totalQuantity: row.totalQuantity,
+            totalPrice: row.totalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' }),
+            ...Object.fromEntries(row.dailyQuantities.map((qty, i) => [daysInMonth[i], qty])),
+          })),
+          {
+            no: '',
+            product: isRtl ? 'الإجمالي' : 'Total',
+            totalQuantity: grandTotalQuantity,
+            totalPrice: grandTotalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' }),
+            ...Object.fromEntries(daysInMonth.map((_, i) => [daysInMonth[i], data.reduce((sum, row) => sum + row.dailyQuantities[i], 0)])),
+          },
+        ];
+
+        if (format === 'excel') {
+          const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
+          if (isRtl) ws['!views'] = [{ RTL: true }];
+          ws['!cols'] = [{ wch: 10 }, { wch: 20 }, { wch: 15 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 15 }))];
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
+          XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
+        } else if (format === 'pdf') {
+          const doc = new jsPDF();
+          doc.autoTable({
+            head: [headers],
+            body: rows.map(row => [
+              row.no,
+              row.product,
+              row.totalQuantity,
+              row.totalPrice,
+              ...daysInMonth.map(day => row[day]),
+            ]),
+            styles: { font: isRtl ? 'Amiri' : 'Helvetica', halign: isRtl ? 'right' : 'left', fontSize: 10 },
+            headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontSize: 10 },
+            bodyStyles: { fontSize: 9 },
+            footStyles: { fillColor: [240, 240, 240], fontSize: 10, fontStyle: 'bold' },
+          });
+          doc.save(`${title}_${monthName}.pdf`);
+        }
+      };
+
+      if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
+      if (data.length === 0) {
+        return (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className="text-center py-12 bg-white shadow-sm rounded-lg border border-gray-100"
+          >
+            <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>
+          </motion.div>
+        );
+      }
+
+      return (
+        <div className="mb-8">
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${months[month].label}` : `${title} - ${months[month].label}`}</h2>
+            <div className="flex gap-2">
+              <Button
+                variant={data.length > 0 ? 'primary' : 'secondary'}
+                onClick={data.length > 0 ? () => exportTable('excel') : undefined}
+                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium ${
+                  data.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                }`}
+                disabled={data.length === 0}
+              >
+                <Upload className="w-4 h-4" />
+                {isRtl ? 'تصدير إكسل' : 'Export Excel'}
+              </Button>
+              <Button
+                variant={data.length > 0 ? 'primary' : 'secondary'}
+                onClick={data.length > 0 ? () => exportTable('pdf') : undefined}
+                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-medium ${
+                  data.length > 0 ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                }`}
+                disabled={data.length === 0}
+              >
+                <Upload className="w-4 h-4" />
+                {isRtl ? 'تصدير PDF' : 'Export PDF'}
+              </Button>
+            </div>
+          </div>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            className="overflow-x-auto rounded-lg shadow-sm border border-gray-100 bg-white"
+          >
+            <table className="min-w-full divide-y divide-gray-100 text-xs">
+              <thead className="bg-blue-50 sticky top-0">
+                <tr className={isRtl ? 'flex-row-reverse' : ''}>
+                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
+                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
+                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">
+                    {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
+                  </th>
+                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">
+                    {isRtl ? 'السعر الإجمالي' : 'Total Price'}
+                  </th>
+                  {daysInMonth.map((day, i) => (
+                    <th key={i} className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[120px]">
+                      {day}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {data.map((row, index) => (
+                  <tr key={row.id} className={`hover:bg-blue-50/50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    <td className="px-3 py-2 text-gray-700 text-center">{index + 1}</td>
+                    <td className="px-3 py-2 text-gray-700 text-center truncate">{row.product}</td>
+                    <td className="px-3 py-2 text-gray-700 text-center font-medium">{row.totalQuantity}</td>
+                    <td className="px-3 py-2 text-gray-700 text-center font-medium">
+                      {row.totalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
+                    </td>
+                    {row.dailyQuantities.map((qty, i) => (
+                      <td
+                        key={i}
+                        className={`px-3 py-2 text-center text-red-600 font-medium`}
+                      >
+                        {qty} {row.changes[i] !== 0 && `(${row.changes[i]})`}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+                <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <td className="px-3 py-2 text-gray-800 text-center" colSpan={2}>{isRtl ? 'الإجمالي' : 'Total'}</td>
+                  <td className="px-3 py-2 text-gray-800 text-center">{grandTotalQuantity}</td>
+                  <td className="px-3 py-2 text-gray-800 text-center">
+                    {grandTotalPrice.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}
+                  </td>
+                  {daysInMonth.map((_, i) => (
+                    <td key={i} className="px-3 py-2 text-gray-800 text-center">
+                      {data.reduce((sum, row) => sum + row.dailyQuantities[i], 0)}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+          </motion.div>
+        </div>
+      );
+    },
+    [loading, isRtl, daysInMonth, months, currentYear, language]
+  );
 
   return (
-    <div className="px-2 py-4">
-      <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: 'easeOut' }} className="mb-6">
-          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <div className="w-full sm:w-auto text-center sm:text-start">
-              <h1 className="text-xl font-bold text-gray-900 flex items-center justify-center sm:justify-start gap-2">
-                <ShoppingCart className="w-5 h-5 text-amber-700" />
-                {isRtl ? 'تقرير الإنتاج' : 'Production Report'}
-              </h1>
-              <p className="text-xs text-gray-600 mt-1">{isRtl ? 'إدارة وتحليل طلبات الإنتاج' : 'Manage and analyze production orders'}</p>
-            </div>
-            <div className="flex gap-2 flex-wrap justify-center sm:justify-end w-full sm:w-auto">
-              <Button
-                variant={state.orders.length > 0 ? 'primary' : 'secondary'}
-                onClick={state.orders.length > 0 ? () => exportToExcel(filteredOrders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, chefAssignments, branchDistribution) : undefined}
-                className={`flex items-center gap-1 ${state.orders.length > 0 ? 'bg-amber-600 hover:bg-amber-700 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'} rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300`}
-                disabled={state.orders.length === 0}
-              >
-                <Download className="w-4 h-4" />
-                {isRtl ? 'تصدير إلى Excel' : 'Export to Excel'}
-              </Button>
-              <Button
-                variant={state.orders.length > 0 ? 'primary' : 'secondary'}
-                onClick={state.orders.length > 0 ? () => exportToPDF(filteredOrders, isRtl, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, state.filterStatus, state.branches.find(b => b._id === state.filterBranch)?.displayName || '') : undefined}
-                className={`flex items-center gap-1 ${state.orders.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'} rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300`}
-                disabled={state.orders.length === 0}
-              >
-                <Download className="w-4 h-4" />
-                {isRtl ? 'تصدير إلى PDF' : 'Export to PDF'}
-              </Button>
-            </div>
-          </div>
-          <Card className="p-3 mt-6 bg-white shadow-md rounded-xl border border-gray-200">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
-                <div className="relative">
-                  <Search className={`w-4 h-4 text-gray-500 absolute top-2 ${isRtl ? 'left-2' : 'right-2'}`} />
-                  <Input
-                    value={state.searchQuery}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleSearchChange(e.target.value)}
-                    placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
-                    className={`w-full ${isRtl ? 'pl-8' : 'pr-8'} rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200`}
-                    dir={isRtl ? 'rtl' : 'ltr'}
-                    lang={isRtl ? 'ar' : 'en'}
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
-                <Select
-                  options={statusOptions.map(opt => ({
-                    value: opt.value,
-                    label: isRtl ? { '': 'كل الحالات', pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[opt.value] : opt.label,
-                  }))}
-                  value={state.filterStatus}
-                  onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
-                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الفرع' : 'Filter by Branch'}</label>
-                <Select
-                  options={[{ value: '', label: isRtl ? 'جميع الفروع' : 'All Branches' }, ...state.branches.map(b => ({ value: b._id, label: b.displayName }))]}
-                  value={state.filterBranch}
-                  onChange={(value) => dispatch({ type: 'SET_FILTER_BRANCH', payload: value })}
-                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'الشهر' : 'Month'}</label>
-                <Select
-                  options={monthOptions.map(opt => ({
-                    value: opt.value,
-                    label: isRtl ? opt.label : getMonthName(parseInt(opt.value) || 0, 'en'),
-                  }))}
-                  value={state.filterMonth}
-                  onChange={(value) => dispatch({ type: 'SET_FILTER_MONTH', payload: value })}
-                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'الفترة' : 'Period'}</label>
-                <Select
-                  options={periodOptions.map(opt => ({
-                    value: opt.value,
-                    label: isRtl ? { week: 'هذا الأسبوع', month: 'هذا الشهر', custom: 'نطاق مخصص' }[opt.value] : opt.label,
-                  }))}
-                  value={state.filterPeriod}
-                  onChange={(value) => dispatch({ type: 'SET_FILTER_PERIOD', payload: value })}
-                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
-                />
-              </div>
-              {state.filterPeriod === 'custom' && (
-                <>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تاريخ البداية' : 'Start Date'}</label>
-                    <Input
-                      type="date"
-                      value={state.customStartDate}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => dispatch({ type: 'SET_CUSTOM_START_DATE', payload: e.target.value })}
-                      className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تاريخ النهاية' : 'End Date'}</label>
-                    <Input
-                      type="date"
-                      value={state.customEndDate}
-                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => dispatch({ type: 'SET_CUSTOM_END_DATE', payload: e.target.value })}
-                      className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
-                    />
-                  </div>
-                </>
-              )}
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
-                <Select
-                  options={sortOptions.map(opt => ({
-                    value: opt.value,
-                    label: isRtl ? { date: 'التاريخ', totalAmount: 'إجمالي المبلغ', priority: 'الأولوية' }[opt.value] : opt.label,
-                  }))}
-                  value={state.sortBy}
-                  onChange={(value) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
-                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
-                />
-              </div>
-            </div>
-            <div className={`flex flex-col sm:flex-row justify-between items-center gap-3 mt-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-              <div className="text-xs text-center text-gray-600">
-                {isRtl ? `عدد الطلبات: ${filteredOrders.length}` : `Orders count: ${filteredOrders.length}`}
-              </div>
-              <Button
-                variant="secondary"
-                onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' })}
-                className="flex items-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300"
-              >
-                {state.viewMode === 'card' ? <Table2 className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
-                {state.viewMode === 'card' ? (isRtl ? 'عرض كجدول' : 'View as Table') : (isRtl ? 'عرض كبطاقات' : 'View as Cards')}
-              </Button>
-            </div>
-          </Card>
-          <Card className="p-3 mt-6 bg-white shadow-md rounded-xl border border-gray-200">
-            <h2 className="text-base font-semibold text-gray-800 mb-3">{isRtl ? 'توزيع الطلبات حسب الفرع' : 'Order Distribution by Branch'}</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border border-gray-300 p-2 text-left font-medium">{isRtl ? 'الفرع' : 'Branch'}</th>
-                    {state.branches.map(branch => (
-                      <th key={branch._id} className="border border-gray-300 p-2 text-center font-medium" style={{ minWidth: '100px' }}>
-                        {branch.displayName}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td className="border border-gray-300 p-2 font-medium">{isRtl ? 'عدد الطلبات' : 'Order Count'}</td>
-                    {state.branches.map((branch, index) => {
-                      const prevCount = index > 0 ? (branchDistribution[state.branches[index - 1]._id] || 0) : 0;
-                      const currentCount = branchDistribution[branch._id] || 0;
-                      const change = currentCount - prevCount;
-                      const color = change > 0 ? 'text-green-600' : change < 0 ? 'text-red-600' : '';
-                      const bgColor = change > 0 ? 'bg-green-100' : change < 0 ? 'bg-red-100' : 'bg-gray-100';
-                      return (
-                        <td key={branch._id} className={`border border-gray-300 p-2 text-center ${bgColor}`}>
-                          <span className={color}>{currentCount}</span>
-                          {change !== 0 && (
-                            <span className={`ml-1 text-xs ${change > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                              ({change > 0 ? '+' : ''}{change})
-                            </span>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </Card>
-          <Card className="p-3 mt-6 bg-white shadow-md rounded-xl border border-gray-200">
-            <h2 className="text-base font-semibold text-gray-800 mb-3">{isRtl ? 'تحليل الفروع' : 'Branch Analysis'}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {state.branches.map(branch => (
-                <div key={branch._id} className="p-3 bg-gray-50 rounded-md border border-gray-100">
-                  <h3 className="text-xs font-medium text-gray-800">{branch.displayName}</h3>
-                  <p className="text-xs text-gray-600">{isRtl ? `إجمالي الطلبات: ${branchAnalysis[branch._id]?.totalOrders || 0}` : `Total Orders: ${branchAnalysis[branch._id]?.totalOrders || 0}`}</p>
-                  <p className="text-xs text-gray-600">{isRtl ? `الكمية الإجمالية: ${branchAnalysis[branch._id]?.totalQuantity || 0} وحدة` : `Total Quantity: ${branchAnalysis[branch._id]?.totalQuantity || 0} units`}</p>
-                  <p className="text-xs text-gray-600">{isRtl ? `إجمالي المبلغ: ${branchAnalysis[branch._id]?.totalAmount.toLocaleString('ar-SA', { style: 'currency', currency: 'SAR' })}` : `Total Amount: ${branchAnalysis[branch._id]?.totalAmount.toLocaleString('en-US', { style: 'currency', currency: 'SAR' })}`}</p>
-                  <p className="text-xs text-gray-600 mt-1">{isRtl ? 'توزيع الحالة:' : 'Status Breakdown:'}</p>
-                  <ul className="text-xs text-gray-600">
-                    {Object.entries(branchAnalysis[branch._id]?.statusBreakdown || {}).map(([status, count]) => (
-                      <li key={status}>{isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[status] : status}: {count}</li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </Card>
-          <Card className="p-3 mt-6 bg-white shadow-md rounded-xl border border-gray-200">
-            <h2 className="text-base font-semibold text-gray-800 mb-3">{isRtl ? 'توزيع الشيفات' : 'Chef Distribution'}</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {state.chefs.map(chef => {
-                const tasks = state.orders.reduce((sum, order) => sum + order.items.filter(item => item.assignedTo?.userId === chef.userId).length, 0);
-                return (
-                  <div key={chef._id} className="p-3 bg-gray-50 rounded-md border border-gray-100">
-                    <div className="flex items-center gap-2">
-                      <ChefHat className="w-4 h-4 text-gray-600" />
-                      <h3 className="text-xs font-medium text-gray-800">{chef.displayName}</h3>
-                    </div>
-                    <p className="text-xs text-gray-600">{isRtl ? `القسم: ${chef.department?.displayName || 'غير معروف'}` : `Department: ${chef.department?.displayName || 'Unknown'}`}</p>
-                    <p className="text-xs text-gray-600">{isRtl ? `عدد المهام: ${tasks}` : `Tasks Assigned: ${tasks}`}</p>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-          <div ref={listRef} className="mt-6 min-h-[300px]">
-            <AnimatePresence>
-              {state.loading ? (
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -20 }}
-                  transition={{ duration: 0.3 }}
-                  className="space-y-1"
-                >
-                  {state.viewMode === 'card' ? (
-                    <div className="grid grid-cols-1 gap-1">
-                      {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => (
-                        <motion.div
-                          key={i}
-                          initial={{ opacity: 0, scale: 0.95 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ duration: 0.3, delay: i * 0.05 }}
-                        >
-                          <OrderCardSkeleton isRtl={isRtl} />
-                        </motion.div>
-                      ))}
-                    </div>
-                  ) : (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.3 }}
-                    >
-                      <OrderTableSkeleton isRtl={isRtl} rows={ORDERS_PER_PAGE.table} />
-                    </motion.div>
-                  )}
-                </motion.div>
-              ) : state.error ? (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.4 }}
-                  className="mt-6"
-                >
-                  <Card className="p-5 max-w-md mx-auto text-center bg-red-50 shadow-md rounded-xl border border-red-100">
-                    <div className={`flex items-center justify-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                      <AlertCircle className="w-5 h-5 text-red-600" />
-                      <p className="text-xs font-medium text-red-600">{state.error}</p>
-                    </div>
-                    <Button
-                      variant="primary"
-                      onClick={() => fetchData()}
-                      className="mt-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300"
-                    >
-                      {isRtl ? 'إعادة المحاولة' : 'Retry'}
-                    </Button>
-                  </Card>
-                </motion.div>
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ duration: 0.4 }}
-                  className="space-y-3"
-                >
-                  {paginatedOrders.length === 0 ? (
-                    <Card className="p-6 text-center bg-white shadow-md rounded-xl border border-gray-100">
-                      <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-                      <h3 className="text-base font-medium text-gray-800 mb-1">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
-                      <p className="text-xs text-gray-500">
-                        {state.filterStatus || state.filterBranch || state.searchQuery
-                          ? isRtl ? 'لا توجد طلبات مطابقة' : 'No matching orders'
-                          : isRtl ? 'لا توجد طلبات بعد' : 'No orders yet'}
-                      </p>
-                    </Card>
-                  ) : (
-                    <>
-                      {state.viewMode === 'table' ? (
-                        <OrderTable
-                          orders={paginatedOrders}
-                          calculateAdjustedTotal={calculateAdjustedTotal}
-                          calculateTotalQuantity={calculateTotalQuantity}
-                          translateUnit={translateUnit}
-                          updateOrderStatus={updateOrderStatus}
-                          openAssignModal={openAssignModal}
-                          submitting={state.submitting}
-                          isRtl={isRtl}
-                          startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
-                        />
-                      ) : (
-                        <div className="grid grid-cols-1 gap-4">
-                          {paginatedOrders.map(order => (
-                            <motion.div
-                              key={order.id}
-                              initial={{ opacity: 0, scale: 0.95 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              transition={{ duration: 0.3 }}
-                            >
-                              <OrderCard
-                                order={order}
-                                calculateAdjustedTotal={calculateAdjustedTotal}
-                                calculateTotalQuantity={calculateTotalQuantity}
-                                translateUnit={translateUnit}
-                                updateOrderStatus={updateOrderStatus}
-                                openAssignModal={openAssignModal}
-                                submitting={state.submitting}
-                                isRtl={isRtl}
-                              />
-                            </motion.div>
-                          ))}
-                        </div>
-                      )}
-                      {totalPages > 1 && (
-                        <Pagination
-                          currentPage={state.currentPage}
-                          totalPages={totalPages}
-                          isRtl={isRtl}
-                          handlePageChange={handlePageChange}
-                        />
-                      )}
-                    </>
-                  )}
-                  <AssignChefsModal
-                    isOpen={state.isAssignModalOpen}
-                    onClose={() => {
-                      dispatch({ type: 'SET_MODAL', isOpen: false });
-                      dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
-                      dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
-                    }}
-                    selectedOrder={state.selectedOrder}
-                    chefs={state.chefs}
-                    assignFormData={state.assignFormData}
-                    setAssignForm={(data) => dispatch({ type: 'SET_ASSIGN_FORM', payload: data })}
-                    assignChefs={assignChefs}
-                    error={state.error}
-                    submitting={state.submitting}
-                    isRtl={isRtl}
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </motion.div>
-      </Suspense>
+    <div className={`px-4 py-6 min-h-screen ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-50`}>
+      <h1 className="text-2xl font-bold text-gray-800 mb-6">{isRtl ? 'تقارير الإنتاج' : 'Production Reports'}</h1>
+      <div className="mb-6">
+        <div className="flex flex-wrap gap-2 mb-4">
+          {months.map(month => (
+            <Button
+              key={month.value}
+              variant={selectedMonth === month.value ? 'primary' : 'secondary'}
+              onClick={() => setSelectedMonth(month.value)}
+              className={`px-4 py-2 rounded-full text-xs font-medium ${
+                selectedMonth === month.value ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              {month.label}
+            </Button>
+          ))}
+        </div>
+        <div className="flex gap-2 border-b border-gray-200">
+          <button
+            onClick={() => setActiveTab('orders')}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+              activeTab === 'orders' ? 'bg-blue-100 text-blue-700 border-b-2 border-blue-500' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+            }`}
+          >
+            {isRtl ? 'توزيع الطلبات' : 'Order Distribution'}
+          </button>
+          <button
+            onClick={() => setActiveTab('stockIn')}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+              activeTab === 'stockIn' ? 'bg-blue-100 text-blue-700 border-b-2 border-blue-500' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+            }`}
+          >
+            {isRtl ? 'زيادة المخزون' : 'Stock Increases'}
+          </button>
+          <button
+            onClick={() => setActiveTab('stockOut')}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+              activeTab === 'stockOut' ? 'bg-blue-100 text-blue-700 border-b-2 border-blue-500' : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+            }`}
+          >
+            {isRtl ? 'نقصان المخزون' : 'Stock Decreases'}
+          </button>
+        </div>
+      </div>
+      <AnimatePresence mode="wait">
+        {activeTab === 'orders' && (
+          <motion.div key="orders" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+            {renderOrderTable(orderData[selectedMonth] || [], isRtl ? 'تقرير توزيع الطلبات' : 'Order Distribution Report', selectedMonth)}
+          </motion.div>
+        )}
+        {activeTab === 'stockIn' && (
+          <motion.div key="stockIn" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+            {renderStockInTable(stockInData[selectedMonth] || [], isRtl ? 'تقرير زيادة المخزون' : 'Stock Increases Report', selectedMonth)}
+          </motion.div>
+        )}
+        {activeTab === 'stockOut' && (
+          <motion.div key="stockOut" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+            {renderStockOutTable(stockOutData[selectedMonth] || [], isRtl ? 'تقرير نقصان المخزون' : 'Stock Decreases Report', selectedMonth)}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
