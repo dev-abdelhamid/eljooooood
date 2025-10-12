@@ -32,6 +32,7 @@ interface Task {
   id: string;
   orderId: string;
   orderNumber: string;
+  productId: string;
   productName: string;
   productNameEn?: string;
   quantity: number;
@@ -453,10 +454,10 @@ export const Dashboard: React.FC = () => {
             quantity: Number(item.quantity) || 1,
             price: Number(item.price) || 0,
             department: item.product?.department || { _id: 'unknown', name: isRtl ? 'قسم غير معروف' : 'Unknown Department', nameEn: 'Unknown' },
-            status: item.status || 'pending',
             assignedTo: item.assignedTo
               ? { _id: item.assignedTo._id, username: item.assignedTo.username, name: item.assignedTo.name || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'), nameEn: item.assignedTo.nameEn || item.assignedTo.name || 'Unknown' }
               : undefined,
+            status: item.status || 'pending',
             returnedQuantity: Number(item.returnedQuantity) || 0,
             returnReason: item.returnReason || '',
             returnReasonEn: item.returnReasonEn || item.returnReason || '',
@@ -473,6 +474,7 @@ export const Dashboard: React.FC = () => {
           id: task._id || crypto.randomUUID(),
           orderId: task.order?._id || 'unknown',
           orderNumber: task.order?.orderNumber || (isRtl ? 'غير معروف' : 'Unknown'),
+          productId: task.product?._id || 'unknown',
           productName: task.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
           productNameEn: task.product?.nameEn || task.product?.name || 'Unknown',
           quantity: Number(task.quantity) || 0,
@@ -534,7 +536,8 @@ export const Dashboard: React.FC = () => {
         const chefPerf = mappedChefs.map((chef: any) => {
           const chefTasks = mappedTasks.filter((task) => {
             const order = mappedOrders.find((o) => o.id === task.orderId);
-            return order?.items.some((i) => i.assignedTo?._id === chef.userId);
+            const item = order?.items.find((i) => i.productId === task.productId);
+            return item?.assignedTo?._id === chef.userId;
           });
           const total = chefTasks.length;
           const completed = chefTasks.filter((t) => t.status === 'completed').length;
@@ -678,6 +681,7 @@ export const Dashboard: React.FC = () => {
             id: data.taskId,
             orderId: data.orderId,
             orderNumber: data.orderNumber,
+            productId: data.productId || 'unknown',
             productName: data.productName,
             productNameEn: data.productNameEn || data.productName,
             quantity: Number(data.quantity) || 0,
@@ -982,20 +986,6 @@ export const Dashboard: React.FC = () => {
             ariaLabel={isRtl ? 'إجمالي قيمة المخزون ' : 'Total inventory Value'}
           />
           <StatsCard
-            title={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
-            value={stats.completedTasks.toString()}
-            icon={CheckCircle}
-            color="green"
-            ariaLabel={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
-          />
-          <StatsCard
-            title={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
-            value={stats.inProgressTasks.toString()}
-            icon={Clock}
-            color="blue"
-            ariaLabel={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
-          />
-          <StatsCard
             title={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
             value={stats.totalReturns.toString()}
             icon={RotateCcw}
@@ -1022,6 +1012,24 @@ export const Dashboard: React.FC = () => {
             icon={AlertCircle}
             color="red"
             ariaLabel={isRtl ? 'المرتجعات المرفوضة' : 'Rejected Returns'}
+          />
+        </>
+      )}
+      {['admin', 'production'].includes(user.role) && (
+        <>
+          <StatsCard
+            title={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
+            value={stats.completedTasks.toString()}
+            icon={CheckCircle}
+            color="green"
+            ariaLabel={isRtl ? 'المهام المكتملة' : 'Completed Tasks'}
+          />
+          <StatsCard
+            title={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
+            value={stats.inProgressTasks.toString()}
+            icon={Clock}
+            color="blue"
+            ariaLabel={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
           />
         </>
       )}
