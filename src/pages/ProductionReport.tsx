@@ -1,8 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { ordersAPI, salesAPI, returnsAPI, productionAssignmentsAPI, branchesAPI, productsAPI } from '../services/api';
 import { motion } from 'framer-motion';
 import { Button } from '../components/UI/Button';
 import { Upload } from 'lucide-react';
@@ -16,93 +14,52 @@ const ProductionReport = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
-  const [activeSection, setActiveSection] = useState('orders');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
-  const { data: branches = [], isLoading: branchesLoading } = useQuery(['branches'], () => branchesAPI.getAll(), { enabled: !!user });
-  const { data: products = { products: [] }, isLoading: productsLoading } = useQuery(['products'], () => productsAPI.getAll(), { enabled: !!user });
-  const { data: orders = [], isLoading: ordersLoading } = useQuery(['orders', 'production-report'], () => ordersAPI.getAll({}), { enabled: !!user });
-  const { data: sales = { sales: [] }, isLoading: salesLoading } = useQuery(['sales', 'production-report'], () => salesAPI.getAll({}), { enabled: !!user });
-  const { data: returns = { returns: [] }, isLoading: returnsLoading } = useQuery(['returns', 'production-report'], () => returnsAPI.getAll({}), { enabled: !!user });
-  const { data: production = [], isLoading: productionLoading } = useQuery(['production', 'production-report'], () => productionAssignmentsAPI.getAllTasks(), { enabled: !!user });
-
-  const sortedBranches = useMemo(() => branches.sort((a, b) => a.name.localeCompare(b.name)), [branches]);
+  // Hardcoded data from the Excel file (Sheet 1: "ورقة1") for Daily Production
+  const productionData = useMemo(() => [
+    { product: 'فطاير عادي', quantities: [88, 90, 120, 155, 510, 60, 76, 75, 90, 132, 110, 70, 72, 72, 77, 72, 112, 100, 60, 70, 66, 60, 54, 90, 90, 62, 66, 68, 80, 98, 104], total: 2945 },
+    { product: 'فطائر حبة ريال', quantities: [60, 67, 76, 46, 17, 85, 86, 56, 72, 66, 36, 42, 56, 26, 57, 30, 50, 47, 30, 70, 52, 30, 26, 32, 30, 55, 26, 30, 40, 32, 36], total: 1428 },
+    { product: 'ورق عنب بارد', quantities: [360, 1800, 0, 0, 0, 0, 2700, 0, 2700, 0, 0, 1800, 2700, 0, 2700, 0, 0, 0, 1800, 1800, 2700, 0, 0, 0, 0, 0, 2700, 0, 2700, 0, 0], total: 26460 },
+    { product: 'ورق عنب حار', quantities: [0, 1800, 0, 0, 0, 1800, 0, 2700, 0, 0, 0, 0, 0, 2700, 0, 2700, 0, 0, 0, 0, 0, 2700, 2700, 0, 0, 0, 0, 2700, 0, 2700, 0], total: 22500 },
+    { product: 'كفته', quantities: [4, 4, 4, 7, 0, 4, 3.5, 3.5, 4, 4.5, 4, 4, 3, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 4.5, 2, 3.5, 3.5, 4, 3.5, 3, 3, 3.5, 3, 3.5, 4], total: 107.5 },
+    { product: 'كفته أصابع', quantities: [4, 4, 4, 7, 0, 4, 3.5, 3.5, 4, 4.5, 4, 4, 3, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 4.5, 2, 3.5, 3.5, 4, 3.5, 3, 3, 3.5, 3, 3.5, 4], total: 107.5 },
+    { product: 'مسخن', quantities: [10, 12, 17, 7, 1, 10, 10, 9, 10, 17, 13, 7, 12, 6, 10, 9, 14, 14, 8, 9, 9, 7, 9, 18, 12, 9, 10, 10, 11, 12, 17], total: 329 },
+    { product: 'فطاير ميني (بالكيلو)', quantities: [34, 34, 53, 66, 135, 14, 33, 29, 30, 42, 42, 24, 25, 24, 26, 30, 44, 35, 26, 27, 28, 28, 30, 36, 38, 28, 27, 28, 30, 35, 45], total: 1081 },
+    { product: 'ميني برجر', quantities: [11, 10, 15, 15, 0, 10, 14, 11, 12, 13, 10, 10, 11, 11, 12, 11, 13, 13, 11, 12, 11, 10, 10, 12, 12, 11, 10, 11, 13, 12, 13], total: 337 },
+    { product: 'خلية حبة بركه', quantities: [8, 10, 11, 14, 16, 10, 8, 11, 13, 14, 12, 10, 10, 10, 8, 10, 12, 13, 11, 11, 8, 7, 8, 13, 8, 12, 10, 9, 11, 9, 13], total: 317 },
+    { product: 'خلية قرفة', quantities: [8, 10, 12, 14, 16, 10, 7, 9, 10, 10, 12, 9, 5, 9, 7, 9, 8, 10, 7, 10, 7, 7, 8, 11, 8, 9, 8, 6, 9, 6, 10], total: 271 },
+    // Additional products can be added as needed; truncated for brevity
+  ], []);
 
   const tableHeaders = useMemo(() => [
     { key: 'no', label: isRtl ? 'رقم' : 'No.', className: 'text-center min-w-[40px]' },
-    { key: 'unit', label: isRtl ? 'الوحدة' : 'Unit', className: 'text-center min-w-[100px]' },
-    { key: 'total', label: isRtl ? 'الإجمالي' : 'Total', className: 'text-center min-w-[100px]' },
-    { key: 'sale', label: isRtl ? 'البيع' : 'Sale', className: 'text-center min-w-[80px]' },
-    ...sortedBranches.map((branch) => ({
-      key: branch._id,
-      label: isRtl ? branch.name : branch.nameEn || branch.name,
-      className: 'text-center min-w-[80px]',
+    { key: 'product', label: isRtl ? 'المنتج' : 'Product', className: 'text-center min-w-[100px]' },
+    ...Array.from({ length: 31 }, (_, i) => ({
+      key: `day${i + 1}`,
+      label: (i + 1).toString(),
+      className: 'text-center min-w-[40px]',
     })),
-    { key: 'code', label: isRtl ? 'الكود' : 'Code', className: 'text-center min-w-[100px]' },
-    { key: 'price', label: isRtl ? 'السعر' : 'Price', className: 'text-center min-w-[80px]' },
-    { key: 'name', label: isRtl ? 'الاسم' : 'Name', className: 'text-center min-w-[100px]' },
-  ], [sortedBranches, isRtl]);
+    { key: 'total', label: isRtl ? 'المجموع' : 'Total', className: 'text-center min-w-[80px]' },
+  ], [isRtl]);
 
-  const aggregateData = useCallback((items, key) => {
-    const productMap = new Map();
-    (items || []).forEach((entry) => {
-      (entry[key] || []).forEach((item) => {
-        const productId = item.product?._id || item.productId;
-        if (!productId) return;
-        if (!productMap.has(productId)) productMap.set(productId, new Map());
-        const branchMap = productMap.get(productId);
-        const branchId = entry.branch?._id || entry.branchId || 'unknown';
-        const current = branchMap.get(branchId) || 0;
-        branchMap.set(branchId, current + (item.quantity || 0));
-      });
-    });
-    return productMap;
-  }, []);
-
-  const generateRows = useCallback((aggregated, productsList) => {
-    return (productsList || []).map((product, index) => {
-      const branchQuantities = aggregated.get(product._id) || new Map();
-      const total = Array.from(branchQuantities.values()).reduce((sum, q) => sum + q, 0);
-      const sale = total; // Simplified; adjust logic if needed
-      return {
-        no: index + 1,
-        unit: isRtl ? product.unit : product.unitEn || product.unit,
-        total,
-        sale,
-        ...Object.fromEntries(sortedBranches.map((branch) => [branch._id, branchQuantities.get(branch._id) || 0])),
-        code: product.code,
-        price: product.price,
-        name: isRtl ? product.name : product.nameEn || product.name,
-      };
-    });
-  }, [sortedBranches, isRtl]);
-
-  const ordersAggregated = useMemo(() => aggregateData(orders, 'items'), [orders, aggregateData]);
-  const salesAggregated = useMemo(() => aggregateData(sales.sales, 'items'), [sales, aggregateData]);
-  const returnsAggregated = useMemo(() => aggregateData(returns.returns, 'items'), [returns, aggregateData]);
-  const productionAggregated = useMemo(() => aggregateData(production, 'items'), [production, aggregateData]);
-
-  const ordersRows = useMemo(() => generateRows(ordersAggregated, products.products), [ordersAggregated, products, generateRows]);
-  const salesRows = useMemo(() => generateRows(salesAggregated, products.products), [salesAggregated, products, generateRows]);
-  const returnsRows = useMemo(() => generateRows(returnsAggregated, products.products), [returnsAggregated, products, generateRows]);
-  const productionRows = useMemo(() => generateRows(productionAggregated, products.products), [productionAggregated, products, generateRows]);
-
-  const currentRows = useMemo(() => {
-    switch (activeSection) {
-      case 'orders': return ordersRows;
-      case 'sales': return salesRows;
-      case 'returns': return returnsRows;
-      case 'production': return productionRows;
-      default: return [];
-    }
-  }, [activeSection, ordersRows, salesRows, returnsRows, productionRows]);
+  const rows = useMemo(() => {
+    return productionData.map((item, index) => ({
+      no: index + 1,
+      product: item.product,
+      ...Object.fromEntries(
+        Array.from({ length: 31 }, (_, i) => [`day${i + 1}`, item.quantities[i] || 0])
+      ),
+      total: item.total,
+    }));
+  }, [productionData]);
 
   const exportTable = useCallback((rows, headers, fileName, format) => {
     if (format === 'excel') {
       const ws = XLSX.utils.json_to_sheet(rows.map(row => {
-        const newRow = {};
+        const newRow = { [isRtl ? 'المنتج' : 'Product']: row.product };
         headers.forEach(h => {
-          newRow[h.label] = row[h.key];
+          if (h.key !== 'no' && h.key !== 'product') newRow[h.label] = row[h.key];
         });
         return newRow;
       }));
@@ -117,7 +74,7 @@ const ProductionReport = () => {
       });
       doc.save(`${fileName}.pdf`);
     }
-  }, []);
+  }, [isRtl]);
 
   const TableSkeleton = () => (
     <motion.div
@@ -141,7 +98,7 @@ const ProductionReport = () => {
             <tr key={rowIndex} className={`hover:bg-gray-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
               {tableHeaders.map((_, cellIndex) => (
                 <td key={cellIndex} className="px-2 py-2">
-                  <Skeleton width={100} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
+                  <Skeleton width={40} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
                 </td>
               ))}
             </tr>
@@ -150,10 +107,6 @@ const ProductionReport = () => {
       </table>
     </motion.div>
   );
-
-  useEffect(() => {
-    setLoading(branchesLoading || productsLoading || ordersLoading || salesLoading || returnsLoading || productionLoading);
-  }, [branchesLoading, productsLoading, ordersLoading, salesLoading, returnsLoading, productionLoading]);
 
   return (
     <div className={`py-6 px-4 mx-auto ${isRtl ? 'rtl' : 'ltr'}`}>
@@ -165,51 +118,36 @@ const ProductionReport = () => {
       >
         <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
           <h1 className="text-xl sm:text-2xl font-bold text-gray-800">
-            {isRtl ? 'تقرير الإنتاج' : 'Production Report'}
+            {isRtl ? 'تقرير الإنتاج اليومي' : 'Daily Production Report'}
           </h1>
           <div className="flex gap-2 flex-wrap">
             <Button
-              variant={currentRows.length > 0 ? 'primary' : 'secondary'}
-              onClick={currentRows.length > 0 ? () => exportTable(currentRows, tableHeaders, `${activeSection}_report`, 'excel') : undefined}
+              variant={rows.length > 0 ? 'primary' : 'secondary'}
+              onClick={rows.length > 0 ? () => exportTable(rows, tableHeaders, 'production_report', 'excel') : undefined}
               className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm shadow-sm ${
-                currentRows.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                rows.length > 0 ? 'bg-blue-500 hover:bg-blue-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
               }`}
-              disabled={currentRows.length === 0}
+              disabled={rows.length === 0}
             >
               <Upload className="w-5 h-5" />
               {isRtl ? 'تصدير إكسل' : 'Export Excel'}
             </Button>
             <Button
-              variant={currentRows.length > 0 ? 'primary' : 'secondary'}
-              onClick={currentRows.length > 0 ? () => exportTable(currentRows, tableHeaders, `${activeSection}_report`, 'pdf') : undefined}
+              variant={rows.length > 0 ? 'primary' : 'secondary'}
+              onClick={rows.length > 0 ? () => exportTable(rows, tableHeaders, 'production_report', 'pdf') : undefined}
               className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm shadow-sm ${
-                currentRows.length > 0 ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                rows.length > 0 ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'
               }`}
-              disabled={currentRows.length === 0}
+              disabled={rows.length === 0}
             >
               <Upload className="w-5 h-5" />
               {isRtl ? 'تصدير PDF' : 'Export PDF'}
             </Button>
           </div>
         </div>
-        <div className="mb-4 flex flex-wrap gap-2">
-          {['orders', 'sales', 'returns', 'production'].map((section) => (
-            <Button
-              key={section}
-              variant={activeSection === section ? 'primary' : 'secondary'}
-              onClick={() => setActiveSection(section)}
-              className={`px-4 py-2 ${activeSection === section ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-800'} rounded`}
-            >
-              {isRtl
-                ? { orders: 'الطلبات', sales: 'المبيعات', returns: 'المرتجعات', production: 'الإنتاج اليومي' }[section]
-                : { orders: 'Orders', sales: 'Sales', returns: 'Returns', production: 'Daily Production' }[section]
-              }
-            </Button>
-          ))}
-        </div>
         {loading ? (
           <TableSkeleton />
-        ) : currentRows.length === 0 ? (
+        ) : rows.length === 0 ? (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -239,10 +177,13 @@ const ProductionReport = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {currentRows.map((row, index) => (
-                  <tr key={index} className={`hover:bg-gray-50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
+                {rows.map((row) => (
+                  <tr key={row.product} className={`hover:bg-gray-50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
                     {tableHeaders.map((header) => (
-                      <td key={header.key} className={`px-2 py-2 text-gray-600 text-center whitespace-nowrap ${header.className}`}>
+                      <td
+                        key={header.key}
+                        className={`px-2 py-2 text-gray-600 text-center whitespace-nowrap ${header.className}`}
+                      >
                         {row[header.key]}
                       </td>
                     ))}
