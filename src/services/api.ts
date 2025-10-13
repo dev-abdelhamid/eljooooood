@@ -11,7 +11,7 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
+const isValidObjectId = (id) => /^[0-9a-fA-F]{24}$/.test(id);
 
 api.interceptors.request.use(
   (config) => {
@@ -69,7 +69,7 @@ api.interceptors.response.use(
           window.location.href = '/login';
           return Promise.reject({ message: isRtl ? 'التوكن منتهي الصلاحية ولا يوجد توكن منعش' : 'Token expired and no refresh token available', status: 401 });
         }
-        const response = await axios.post<{ accessToken: string; refreshToken?: string }>(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
+        const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
         const { accessToken, refreshToken: newRefreshToken } = response.data;
         localStorage.setItem('token', accessToken);
         if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
@@ -90,7 +90,7 @@ api.interceptors.response.use(
 );
 
 export const authAPI = {
-  login: async (credentials: { username: string; password: string }) => {
+  login: async (credentials) => {
     const response = await api.post('/auth/login', {
       username: credentials.username.trim(),
       password: credentials.password,
@@ -98,7 +98,7 @@ export const authAPI = {
     console.log(`[${new Date().toISOString()}] Login response:`, response);
     return response;
   },
-  refreshToken: async (refreshToken: string) => {
+  refreshToken: async (refreshToken) => {
     const response = await axios.post(`${API_BASE_URL}/auth/refresh-token`, { refreshToken });
     console.log(`[${new Date().toISOString()}] Refresh token response:`, response.data);
     return response.data;
@@ -114,7 +114,7 @@ export const authAPI = {
       },
     };
   },
-  updateProfile: async (data: { name?: string; nameEn?: string; email?: string; phone?: string; password?: string }) => {
+  updateProfile: async (data) => {
     const response = await api.put('/auth/update-profile', {
       name: data.name?.trim(),
       nameEn: data.nameEn?.trim(),
@@ -125,7 +125,7 @@ export const authAPI = {
     console.log(`[${new Date().toISOString()}] Update profile response:`, response);
     return response;
   },
-  checkEmail: async (email: string) => {
+  checkEmail: async (email) => {
     const response = await api.post('/auth/check-email', { email: email.trim() });
     console.log(`[${new Date().toISOString()}] Check email response:`, response);
     return response;
@@ -133,7 +133,7 @@ export const authAPI = {
 };
 
 export const productsAPI = {
-  getAll: async (params: { department?: string; search?: string; page?: number; limit?: number } = {}) => {
+  getAll: async (params = {}) => {
     if (params.department && !isValidObjectId(params.department)) {
       console.error(`[${new Date().toISOString()}] productsAPI.getAll - Invalid department ID:`, params.department);
       throw new Error('Invalid department ID');
@@ -142,7 +142,7 @@ export const productsAPI = {
     console.log(`[${new Date().toISOString()}] productsAPI.getAll - Response:`, response);
     return response;
   },
-  getById: async (id: string) => {
+  getById: async (id) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] productsAPI.getById - Invalid product ID:`, id);
       throw new Error('Invalid product ID');
@@ -151,16 +151,7 @@ export const productsAPI = {
     console.log(`[${new Date().toISOString()}] productsAPI.getById - Response:`, response);
     return response;
   },
-  create: async (productData: {
-    name: string;
-    nameEn?: string;
-    code: string;
-    department: string;
-    price: number;
-    unit: string;
-    unitEn?: string;
-    description?: string;
-  }) => {
+  create: async (productData) => {
     if (!isValidObjectId(productData.department)) {
       console.error(`[${new Date().toISOString()}] productsAPI.create - Invalid department ID:`, productData.department);
       throw new Error('Invalid department ID');
@@ -178,16 +169,7 @@ export const productsAPI = {
     console.log(`[${new Date().toISOString()}] productsAPI.create - Response:`, response);
     return response;
   },
-  update: async (id: string, productData: Partial<{
-    name: string;
-    nameEn?: string;
-    code: string;
-    department: string;
-    price: number;
-    unit: string;
-    unitEn?: string;
-    description: string;
-  }>) => {
+  update: async (id, productData) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] productsAPI.update - Invalid product ID:`, id);
       throw new Error('Invalid product ID');
@@ -209,7 +191,7 @@ export const productsAPI = {
     console.log(`[${new Date().toISOString()}] productsAPI.update - Response:`, response);
     return response;
   },
-  delete: async (id: string) => {
+  delete: async (id) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] productsAPI.delete - Invalid product ID:`, id);
       throw new Error('Invalid product ID');
@@ -226,7 +208,7 @@ export const branchesAPI = {
     console.log(`[${new Date().toISOString()}] Branches getAll response:`, response);
     return response;
   },
-  getById: async (id: string) => {
+  getById: async (id) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] Branches getById - Invalid branch ID:`, id);
       throw new Error('Invalid branch ID');
@@ -235,25 +217,7 @@ export const branchesAPI = {
     console.log(`[${new Date().toISOString()}] Branches getById response:`, response);
     return response;
   },
-  create: async (branchData: {
-    name: string;
-    nameEn?: string;
-    code: string;
-    address: string;
-    addressEn?: string;
-    city: string;
-    cityEn?: string;
-    phone?: string;
-    user: {
-      name: string;
-      nameEn?: string;
-      username: string;
-      password: string;
-      email?: string;
-      phone?: string;
-      isActive?: boolean;
-    };
-  }) => {
+  create: async (branchData) => {
     const response = await api.post('/branches', {
       name: branchData.name.trim(),
       nameEn: branchData.nameEn?.trim(),
@@ -276,24 +240,7 @@ export const branchesAPI = {
     console.log(`[${new Date().toISOString()}] Branches create response:`, response);
     return response;
   },
-  update: async (id: string, branchData: {
-    name: string;
-    nameEn?: string;
-    code: string;
-    address: string;
-    addressEn?: string;
-    city: string;
-    cityEn?: string;
-    phone?: string;
-    user: {
-      name: string;
-      nameEn?: string;
-      username: string;
-      email?: string;
-      phone?: string;
-      isActive?: boolean;
-    };
-  }) => {
+  update: async (id, branchData) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] Branches update - Invalid branch ID:`, id);
       throw new Error('Invalid branch ID');
@@ -319,7 +266,7 @@ export const branchesAPI = {
     console.log(`[${new Date().toISOString()}] Branches update response:`, response);
     return response;
   },
-  delete: async (id: string) => {
+  delete: async (id) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] Branches delete - Invalid branch ID:`, id);
       throw new Error('Invalid branch ID');
@@ -328,12 +275,12 @@ export const branchesAPI = {
     console.log(`[${new Date().toISOString()}] Branches delete response:`, response);
     return response;
   },
-  checkEmail: async (email: string) => {
+  checkEmail: async (email) => {
     const response = await api.post('/branches/check-email', { email: email.trim() });
     console.log(`[${new Date().toISOString()}] Branches checkEmail response:`, response);
     return response;
   },
-  resetPassword: async (id: string, password: string) => {
+  resetPassword: async (id, password) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] Branches resetPassword - Invalid branch ID:`, id);
       throw new Error('Invalid branch ID');
@@ -350,7 +297,7 @@ export const usersAPI = {
     console.log(`[${new Date().toISOString()}] usersAPI.getAll - Response:`, response);
     return response;
   },
-  getById: async (id: string) => {
+  getById: async (id) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] usersAPI.getById - Invalid user ID:`, id);
       throw new Error('Invalid user ID');
@@ -359,17 +306,7 @@ export const usersAPI = {
     console.log(`[${new Date().toISOString()}] usersAPI.getById - Response:`, response);
     return response;
   },
-  create: async (userData: {
-    name: string;
-    nameEn?: string;
-    username: string;
-    password: string;
-    email?: string;
-    phone?: string;
-    role: 'admin' | 'branch' | 'production';
-    branch?: string;
-    isActive?: boolean;
-  }) => {
+  create: async (userData) => {
     if (userData.role === 'branch' && userData.branch && !isValidObjectId(userData.branch)) {
       console.error(`[${new Date().toISOString()}] usersAPI.create - Invalid branch ID:`, userData.branch);
       throw new Error('Invalid branch ID');
@@ -388,16 +325,7 @@ export const usersAPI = {
     console.log(`[${new Date().toISOString()}] usersAPI.create - Response:`, response);
     return response;
   },
-  update: async (id: string, userData: Partial<{
-    name: string;
-    nameEn?: string;
-    username: string;
-    email?: string;
-    phone?: string;
-    role: 'admin' | 'branch' | 'production';
-    branch?: string;
-    isActive?: boolean;
-  }>) => {
+  update: async (id, userData) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] usersAPI.update - Invalid user ID:`, id);
       throw new Error('Invalid user ID');
@@ -419,7 +347,7 @@ export const usersAPI = {
     console.log(`[${new Date().toISOString()}] usersAPI.update - Response:`, response);
     return response;
   },
-  delete: async (id: string) => {
+  delete: async (id) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] usersAPI.delete - Invalid user ID:`, id);
       throw new Error('Invalid user ID');
@@ -428,12 +356,12 @@ export const usersAPI = {
     console.log(`[${new Date().toISOString()}] usersAPI.delete - Response:`, response);
     return response;
   },
-  checkEmail: async (email: string) => {
+  checkEmail: async (email) => {
     const response = await api.post('/users/check-email', { email: email.trim() });
     console.log(`[${new Date().toISOString()}] usersAPI.checkEmail - Response:`, response);
     return response;
   },
-  resetPassword: async (id: string, password: string) => {
+  resetPassword: async (id, password) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] usersAPI.resetPassword - Invalid user ID:`, id);
       throw new Error('Invalid user ID');
@@ -444,8 +372,8 @@ export const usersAPI = {
   },
 };
 
-const createErrorMessage = (errorType: string, isRtl: boolean): string => {
-  const messages: { [key: string]: { ar: string; en: string } } = {
+const createErrorMessage = (errorType, isRtl) => {
+  const messages = {
     invalidBranchId: { ar: 'معرف الفرع غير صالح', en: 'Invalid branch ID' },
     invalidOrderId: { ar: 'معرف الطلب غير صالح', en: 'Invalid order ID' },
     invalidDepartmentId: { ar: 'معرف القسم غير صالح', en: 'Invalid department ID' },
@@ -461,15 +389,7 @@ const createErrorMessage = (errorType: string, isRtl: boolean): string => {
 };
 
 export const ordersAPI = {
-  create: async (
-    orderData: {
-      orderNumber: string;
-      branchId: string;
-      items: Array<{ product: string; quantity: number; price: number }>;
-      status: string;
-    },
-    isRtl: boolean = false
-  ) => {
+  create: async (orderData, isRtl = false) => {
     if (!isValidObjectId(orderData.branchId)) {
       console.error(`[${new Date().toISOString()}] ordersAPI.create - Invalid branchId:`, orderData.branchId);
       throw new Error(createErrorMessage('invalidBranchId', isRtl));
@@ -487,14 +407,12 @@ export const ordersAPI = {
       });
       console.log(`[${new Date().toISOString()}] ordersAPI.create - Response:`, response);
       return response;
-    } catch (error: any) {
+    } catch (error) {
       console.error(`[${new Date().toISOString()}] ordersAPI.create - Error:`, error.message);
       throw new Error(isRtl ? `فشل في إنشاء الطلب: ${error.message}` : `Failed to create order: ${error.message}`);
     }
   },
-  getAll: async (
-    params: { status?: string; branch?: string; page?: number; limit?: number; department?: string; search?: string; sortBy?: string; sortOrder?: 'asc' | 'desc' } = {}
-  ) => {
+  getAll: async (params = {}) => {
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] ordersAPI.getAll - Invalid branch ID:`, params.branch);
       throw new Error(createErrorMessage('invalidBranchId', params.lang === 'ar'));
@@ -507,12 +425,12 @@ export const ordersAPI = {
       const response = await api.get('/orders', { params });
       console.log(`[${new Date().toISOString()}] ordersAPI.getAll - Response:`, response);
       return response;
-    } catch (error: any) {
+    } catch (error) {
       console.error(`[${new Date().toISOString()}] ordersAPI.getAll - Error:`, error.message);
       throw new Error(params.lang === 'ar' ? `فشل في جلب الطلبات: ${error.message}` : `Failed to fetch orders: ${error.message}`);
     }
   },
-  getById: async (orderId: string) => {
+  getById: async (orderId) => {
     if (!isValidObjectId(orderId)) {
       console.error(`[${new Date().toISOString()}] ordersAPI.getById - Invalid order ID:`, orderId);
       throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
@@ -521,12 +439,12 @@ export const ordersAPI = {
       const response = await api.get(`/orders/${orderId}`);
       console.log(`[${new Date().toISOString()}] ordersAPI.getById - Response:`, response);
       return response;
-    } catch (error: any) {
+    } catch (error) {
       console.error(`[${new Date().toISOString()}] ordersAPI.getById - Error:`, error.message);
       throw new Error(`Failed to fetch order: ${error.message}`);
     }
   },
-  updateStatus: async (orderId: string, data: { status: string }) => {
+  updateStatus: async (orderId, data) => {
     if (!isValidObjectId(orderId)) {
       console.error(`[${new Date().toISOString()}] ordersAPI.updateStatus - Invalid order ID:`, orderId);
       throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
@@ -537,12 +455,12 @@ export const ordersAPI = {
       });
       console.log(`[${new Date().toISOString()}] ordersAPI.updateStatus - Response:`, response);
       return response;
-    } catch (error: any) {
+    } catch (error) {
       console.error(`[${new Date().toISOString()}] ordersAPI.updateStatus - Error:`, error.message);
       throw new Error(`Failed to update order status: ${error.message}`);
     }
   },
-  updateChefItem: async (orderId: string, data: { taskId: string; status: string }) => {
+  updateChefItem: async (orderId, data) => {
     if (!isValidObjectId(orderId) || !isValidObjectId(data.taskId)) {
       console.error(`[${new Date().toISOString()}] ordersAPI.updateChefItem - Invalid order ID or task ID:`, { orderId, taskId: data.taskId });
       throw new Error(createErrorMessage('invalidOrderOrTaskId', localStorage.getItem('language') === 'ar'));
@@ -553,15 +471,12 @@ export const ordersAPI = {
       });
       console.log(`[${new Date().toISOString()}] ordersAPI.updateChefItem - Response:`, response);
       return response;
-    } catch (error: any) {
+    } catch (error) {
       console.error(`[${new Date().toISOString()}] ordersAPI.updateChefItem - Error:`, error.message);
       throw new Error(`Failed to update item status: ${error.message}`);
     }
   },
-  assignChef: async (
-    orderId: string,
-    data: { items: Array<{ itemId: string; assignedTo: string }> }
-  ) => {
+  assignChef: async (orderId, data) => {
     if (!isValidObjectId(orderId) || data.items.some(item => !isValidObjectId(item.itemId) || !isValidObjectId(item.assignedTo))) {
       console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - Invalid data:`, { orderId, data });
       throw new Error(createErrorMessage('invalidOrderOrItemOrChefId', localStorage.getItem('language') === 'ar'));
@@ -573,12 +488,12 @@ export const ordersAPI = {
       });
       console.log(`[${new Date().toISOString()}] ordersAPI.assignChef - Response:`, response);
       return response;
-    } catch (error: any) {
+    } catch (error) {
       console.error(`[${new Date().toISOString()}] ordersAPI.assignChef - Error:`, error.message);
       throw new Error(`Failed to assign chefs: ${error.message}`);
     }
   },
-  confirmDelivery: async (orderId: string) => {
+  confirmDelivery: async (orderId) => {
     if (!isValidObjectId(orderId)) {
       console.error(`[${new Date().toISOString()}] ordersAPI.confirmDelivery - Invalid order ID:`, orderId);
       throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
@@ -587,7 +502,7 @@ export const ordersAPI = {
       const response = await api.patch(`/orders/${orderId}/confirm-delivery`, {});
       console.log(`[${new Date().toISOString()}] ordersAPI.confirmDelivery - Response:`, response);
       return response;
-    } catch (error: any) {
+    } catch (error) {
       console.error(`[${new Date().toISOString()}] ordersAPI.confirmDelivery - Error:`, error.message);
       throw new Error(`Failed to confirm delivery: ${error.message}`);
     }
@@ -595,12 +510,12 @@ export const ordersAPI = {
 };
 
 export const departmentAPI = {
-  getAll: async (params: { page?: number; limit?: number; search?: string } = {}) => {
+  getAll: async (params = {}) => {
     const response = await api.get('/departments', { params });
     console.log(`[${new Date().toISOString()}] departmentAPI.getAll - Response:`, response);
     return response;
   },
-  getById: async (id: string) => {
+  getById: async (id) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] departmentAPI.getById - Invalid department ID:`, id);
       throw new Error('Invalid department ID');
@@ -609,12 +524,7 @@ export const departmentAPI = {
     console.log(`[${new Date().toISOString()}] departmentAPI.getById - Response:`, response);
     return response;
   },
-  create: async (departmentData: {
-    name: string;
-    nameEn?: string;
-    code: string;
-    description?: string;
-  }) => {
+  create: async (departmentData) => {
     const response = await api.post('/departments', {
       name: departmentData.name.trim(),
       nameEn: departmentData.nameEn?.trim(),
@@ -624,12 +534,7 @@ export const departmentAPI = {
     console.log(`[${new Date().toISOString()}] departmentAPI.create - Response:`, response);
     return response;
   },
-  update: async (id: string, departmentData: Partial<{
-    name: string;
-    nameEn?: string;
-    code: string;
-    description: string;
-  }>) => {
+  update: async (id, departmentData) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] departmentAPI.update - Invalid department ID:`, id);
       throw new Error('Invalid department ID');
@@ -643,7 +548,7 @@ export const departmentAPI = {
     console.log(`[${new Date().toISOString()}] departmentAPI.update - Response:`, response);
     return response;
   },
-  delete: async (id: string) => {
+  delete: async (id) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] departmentAPI.delete - Invalid department ID:`, id);
       throw new Error('Invalid department ID');
@@ -660,7 +565,7 @@ export const chefsAPI = {
     console.log(`[${new Date().toISOString()}] chefsAPI.getAll - Response:`, response);
     return response;
   },
-  getById: async (id: string) => {
+  getById: async (id) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.getById - Invalid chef ID:`, id);
       throw new Error('Invalid chef ID');
@@ -669,7 +574,7 @@ export const chefsAPI = {
     console.log(`[${new Date().toISOString()}] chefsAPI.getById - Response:`, response);
     return response;
   },
-  getByUserId: async (userId: string) => {
+  getByUserId: async (userId) => {
     if (!isValidObjectId(userId)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.getByUserId - Invalid user ID:`, userId);
       throw new Error('Invalid user ID');
@@ -678,19 +583,7 @@ export const chefsAPI = {
     console.log(`[${new Date().toISOString()}] chefsAPI.getByUserId - Response:`, response);
     return response;
   },
-  create: async (chefData: {
-    user: {
-      name: string;
-      nameEn?: string;
-      username: string;
-      email?: string;
-      phone?: string;
-      password: string;
-      role: string;
-      isActive?: boolean;
-    };
-    department: string;
-  }) => {
+  create: async (chefData) => {
     if (!isValidObjectId(chefData.department)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.create - Invalid department ID:`, chefData.department);
       throw new Error('Invalid department ID');
@@ -711,17 +604,7 @@ export const chefsAPI = {
     console.log(`[${new Date().toISOString()}] chefsAPI.create - Response:`, response);
     return response;
   },
-  update: async (id: string, chefData: {
-    user: {
-      name: string;
-      nameEn?: string;
-      username: string;
-      email?: string;
-      phone?: string;
-      isActive?: boolean;
-    };
-    department: string;
-  }) => {
+  update: async (id, chefData) => {
     if (!isValidObjectId(id) || !isValidObjectId(chefData.department)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.update - Invalid chef ID or department ID:`, { id, department: chefData.department });
       throw new Error('Invalid chef ID or department ID');
@@ -740,7 +623,7 @@ export const chefsAPI = {
     console.log(`[${new Date().toISOString()}] chefsAPI.update - Response:`, response);
     return response;
   },
-  delete: async (id: string) => {
+  delete: async (id) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.delete - Invalid chef ID:`, id);
       throw new Error('Invalid chef ID');
@@ -749,7 +632,7 @@ export const chefsAPI = {
     console.log(`[${new Date().toISOString()}] chefsAPI.delete - Response:`, response);
     return response;
   },
-  resetPassword: async (id: string, password: string) => {
+  resetPassword: async (id, password) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] chefsAPI.resetPassword - Invalid chef ID:`, id);
       throw new Error('Invalid chef ID');
@@ -761,13 +644,7 @@ export const chefsAPI = {
 };
 
 export const productionAssignmentsAPI = {
-  create: async (assignmentData: {
-    order: string;
-    product: string;
-    chef: string;
-    quantity: number;
-    itemId: string;
-  }) => {
+  create: async (assignmentData) => {
     if (
       !isValidObjectId(assignmentData.order) ||
       !isValidObjectId(assignmentData.product) ||
@@ -781,7 +658,7 @@ export const productionAssignmentsAPI = {
     console.log(`[${new Date().toISOString()}] productionAssignmentsAPI.create - Response:`, response);
     return response;
   },
-  getChefTasks: async (chefId: string, query: { page?: number; limit?: number; status?: string; search?: string } = {}) => {
+  getChefTasks: async (chefId, query = {}) => {
     if (!isValidObjectId(chefId)) {
       console.error(`[${new Date().toISOString()}] productionAssignmentsAPI.getChefTasks - Invalid chefId:`, chefId);
       throw new Error('Invalid chef ID');
@@ -790,7 +667,7 @@ export const productionAssignmentsAPI = {
     console.log(`[${new Date().toISOString()}] productionAssignmentsAPI.getChefTasks - Response:`, response);
     return response;
   },
-  updateTaskStatus: async (orderId: string, taskId: string, data: { status: string }) => {
+  updateTaskStatus: async (orderId, taskId, data) => {
     if (!isValidObjectId(orderId) || !isValidObjectId(taskId)) {
       console.error(`[${new Date().toISOString()}] productionAssignmentsAPI.updateTaskStatus - Invalid orderId or taskId:`, { orderId, taskId });
       throw new Error(createErrorMessage('invalidOrderOrTaskId', localStorage.getItem('language') === 'ar'));
@@ -807,7 +684,7 @@ export const productionAssignmentsAPI = {
 };
 
 export const inventoryAPI = {
-  getInventory: async (params: { branch?: string; product?: string; search?: string; page?: number; limit?: number } = {}) => {
+  getInventory: async (params = {}) => {
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getInventory - Invalid branch ID:`, params.branch);
       throw new Error(createErrorMessage('invalidBranchId', params.lang === 'ar'));
@@ -820,7 +697,7 @@ export const inventoryAPI = {
     console.log(`[${new Date().toISOString()}] inventoryAPI.getInventory - Response:`, response);
     return response.inventory;
   },
-  getByBranch: async (branchId: string) => {
+  getByBranch: async (branchId) => {
     if (!isValidObjectId(branchId)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getByBranch - Invalid branch ID:`, branchId);
       throw new Error(createErrorMessage('invalidBranchId', localStorage.getItem('language') === 'ar'));
@@ -829,7 +706,7 @@ export const inventoryAPI = {
     console.log(`[${new Date().toISOString()}] inventoryAPI.getByBranch - Response:`, response);
     return response.inventory;
   },
-  getAll: async (params: { branch?: string; product?: string; search?: string; page?: number; limit?: number } = {}) => {
+  getAll: async (params = {}) => {
     if (params.branch && !isValidObjectId(params.branch)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getAll - Invalid branch ID:`, params.branch);
       throw new Error(createErrorMessage('invalidBranchId', params.lang === 'ar'));
@@ -842,15 +719,7 @@ export const inventoryAPI = {
     console.log(`[${new Date().toISOString()}] inventoryAPI.getAll - Response:`, response);
     return response.inventory;
   },
-  create: async (data: {
-    branchId: string;
-    productId: string;
-    currentStock: number;
-    minStockLevel?: number;
-    maxStockLevel?: number;
-    userId: string;
-    orderId?: string;
-  }) => {
+  create: async (data) => {
     if (
       !isValidObjectId(data.branchId) ||
       !isValidObjectId(data.productId) ||
@@ -888,12 +757,7 @@ export const inventoryAPI = {
     console.log(`[${new Date().toISOString()}] inventoryAPI.create - Response:`, response);
     return response.inventory;
   },
-  bulkCreate: async (data: {
-    branchId: string;
-    userId: string;
-    orderId?: string;
-    items: Array<{ productId: string; currentStock: number; minStockLevel?: number; maxStockLevel?: number }>;
-  }) => {
+  bulkCreate: async (data) => {
     if (
       !isValidObjectId(data.branchId) ||
       !isValidObjectId(data.userId) ||
@@ -931,13 +795,7 @@ export const inventoryAPI = {
     console.log(`[${new Date().toISOString()}] inventoryAPI.bulkCreate - Response:`, response);
     return response.inventories;
   },
-  updateStock: async (id: string, data: Partial<{
-    currentStock?: number;
-    minStockLevel?: number;
-    maxStockLevel?: number;
-    productId?: string;
-    branchId?: string;
-  }>) => {
+  updateStock: async (id, data) => {
     if (
       !isValidObjectId(id) ||
       (data.productId && !isValidObjectId(data.productId)) ||
@@ -972,10 +830,7 @@ export const inventoryAPI = {
     console.log(`[${new Date().toISOString()}] inventoryAPI.updateStock - Response:`, response);
     return response.inventory;
   },
-  processReturnItems: async (returnId: string, data: {
-    branchId: string;
-    items: Array<{ productId: string; quantity: number; status: 'approved' | 'rejected'; reviewNotes?: string }>;
-  }) => {
+  processReturnItems: async (returnId, data) => {
     const language = localStorage.getItem('language') || 'en';
     const isRtl = language === 'ar';
 
@@ -1002,7 +857,7 @@ export const inventoryAPI = {
       });
       console.log(`[${new Date().toISOString()}] inventoryAPI.processReturnItems - Response:`, response);
       return response.returnRequest;
-    } catch (error: any) {
+    } catch (error) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.processReturnItems - Error:`, {
         message: error.message,
         status: error.status,
@@ -1016,13 +871,7 @@ export const inventoryAPI = {
       throw new Error(errorMessage);
     }
   },
-  createReturn: async (data: {
-    orderId: string;
-    branchId: string;
-    reason: string;
-    items: Array<{ itemId?: string; productId: string; quantity: number; reason: string; reasonEn?: string }>;
-    notes?: string;
-  }) => {
+  createReturn: async (data) => {
     const language = localStorage.getItem('language') || 'en';
     const isRtl = language === 'ar';
 
@@ -1059,7 +908,7 @@ export const inventoryAPI = {
       });
       console.log(`[${new Date().toISOString()}] inventoryAPI.createReturn - Response:`, response);
       return response.returnRequest;
-    } catch (error: any) {
+    } catch (error) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.createReturn - Error:`, {
         message: error.message,
         status: error.status,
@@ -1073,12 +922,7 @@ export const inventoryAPI = {
       throw new Error(errorMessage);
     }
   },
-  createRestockRequest: async (data: {
-    productId: string;
-    branchId: string;
-    requestedQuantity: number;
-    notes?: string;
-  }) => {
+  createRestockRequest: async (data) => {
     if (
       !isValidObjectId(data.productId) ||
       !isValidObjectId(data.branchId) ||
@@ -1096,7 +940,7 @@ export const inventoryAPI = {
     console.log(`[${new Date().toISOString()}] inventoryAPI.createRestockRequest - Response:`, response);
     return response.restockRequest;
   },
-  getRestockRequests: async (params: { branchId?: string } = {}) => {
+  getRestockRequests: async (params = {}) => {
     if (params.branchId && !isValidObjectId(params.branchId)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getRestockRequests - Invalid branch ID:`, params.branchId);
       throw new Error(createErrorMessage('invalidBranchId', params.lang === 'ar'));
@@ -1105,7 +949,7 @@ export const inventoryAPI = {
     console.log(`[${new Date().toISOString()}] inventoryAPI.getRestockRequests - Response:`, response);
     return response.restockRequests;
   },
-  approveRestockRequest: async (requestId: string, data: { approvedQuantity: number; userId: string }) => {
+  approveRestockRequest: async (requestId, data) => {
     if (!isValidObjectId(requestId) || !isValidObjectId(data.userId) || data.approvedQuantity < 1) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.approveRestockRequest - Invalid data:`, { requestId, data });
       throw new Error(createErrorMessage('invalidBranchId', localStorage.getItem('language') === 'ar'));
@@ -1117,7 +961,7 @@ export const inventoryAPI = {
     console.log(`[${new Date().toISOString()}] inventoryAPI.approveRestockRequest - Response:`, response);
     return response.restockRequest;
   },
-  getHistory: async (params: { branchId?: string; productId?: string } = {}) => {
+  getHistory: async (params = {}) => {
     if (params.branchId && !isValidObjectId(params.branchId)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.getHistory - Invalid branch ID:`, params.branchId);
       throw new Error(createErrorMessage('invalidBranchId', params.lang === 'ar'));
@@ -1130,7 +974,7 @@ export const inventoryAPI = {
     console.log(`[${new Date().toISOString()}] inventoryAPI.getHistory - Response:`, response);
     return response.history;
   },
-  checkOrderHistory: async (orderId: string) => {
+  checkOrderHistory: async (orderId) => {
     if (!isValidObjectId(orderId)) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.checkOrderHistory - Invalid order ID:`, orderId);
       throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
@@ -1139,7 +983,7 @@ export const inventoryAPI = {
       const response = await api.get(`/inventory/check-order-history/${orderId}`);
       console.log(`[${new Date().toISOString()}] inventoryAPI.checkOrderHistory - Response:`, response);
       return response.exists;
-    } catch (error: any) {
+    } catch (error) {
       console.error(`[${new Date().toISOString()}] inventoryAPI.checkOrderHistory - Error:`, {
         message: error.message,
         status: error.status,
@@ -1155,7 +999,123 @@ export const inventoryAPI = {
   },
 };
 
+export const factoryInventoryAPI = {
+  getFactoryInventory: async (params = {}) => {
+    if (params.product && !isValidObjectId(params.product)) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getFactoryInventory - Invalid product ID:`, params.product);
+      throw new Error('Invalid product ID');
+    }
+    if (params.department && !isValidObjectId(params.department)) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getFactoryInventory - Invalid department ID:`, params.department);
+      throw new Error('Invalid department ID');
+    }
+    const response = await api.get('/factory', { params });
+    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getFactoryInventory - Response:`, response);
+    return response.inventory || [];
+  },
+  createFactoryInventory: async (data) => {
+    if (!isValidObjectId(data.productId) || !isValidObjectId(data.department)) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.createFactoryInventory - Invalid data:`, data);
+      throw new Error('Invalid product ID or department ID');
+    }
+    if (data.currentStock < 0) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.createFactoryInventory - Invalid stock quantity:`, data.currentStock);
+      throw new Error('Stock quantity must be non-negative');
+    }
+    const response = await api.post('/factory', {
+      productId: data.productId,
+      department: data.department,
+      currentStock: data.currentStock,
+      minStockLevel: data.minStockLevel ?? 0,
+      maxStockLevel: data.maxStockLevel ?? 1000,
+      userId: data.userId,
+    });
+    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.createFactoryInventory - Response:`, response);
+    return response.inventory;
+  },
+  updateFactoryInventory: async (id, data) => {
+    if (!isValidObjectId(id)) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateFactoryInventory - Invalid inventory ID:`, id);
+      throw new Error('Invalid inventory ID');
+    }
+    if (data.currentStock !== undefined && (data.currentStock < 0 || !Number.isInteger(data.currentStock))) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateFactoryInventory - Invalid stock quantity:`, data.currentStock);
+      throw new Error('Stock quantity must be non-negative');
+    }
+    if (data.minStockLevel !== undefined && (data.minStockLevel < 0 || !Number.isInteger(data.minStockLevel))) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateFactoryInventory - Invalid minStockLevel:`, data.minStockLevel);
+      throw new Error('Minimum stock level must be a non-negative integer');
+    }
+    if (data.maxStockLevel !== undefined && (data.maxStockLevel < 0 || !Number.isInteger(data.maxStockLevel))) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateFactoryInventory - Invalid maxStockLevel:`, data.maxStockLevel);
+      throw new Error('Maximum stock level must be a non-negative integer');
+    }
+    if (data.minStockLevel !== undefined && data.maxStockLevel !== undefined && data.maxStockLevel <= data.minStockLevel) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateFactoryInventory - Max stock level less than min:`, { minStockLevel: data.minStockLevel, maxStockLevel: data.maxStockLevel });
+      throw new Error('Maximum stock level must be greater than minimum');
+    }
+    const response = await api.put(`/factory/${id}`, {
+      currentStock: data.currentStock,
+      minStockLevel: data.minStockLevel,
+      maxStockLevel: data.maxStockLevel,
+    });
+    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.updateFactoryInventory - Response:`, response);
+    return response.inventory;
+  },
+};
 
+export const productionRequestsAPI = {
+  createProductionRequest: async (data) => {
+    if (!['branch', 'production'].includes(data.type)) {
+      console.error(`[${new Date().toISOString()}] productionRequestsAPI.createProductionRequest - Invalid request type:`, data.type);
+      throw new Error('Invalid request type');
+    }
+    if (data.type === 'branch' && !isValidObjectId(data.branchId)) {
+      console.error(`[${new Date().toISOString()}] productionRequestsAPI.createProductionRequest - Invalid branch ID:`, data.branchId);
+      throw new Error('Invalid branch ID');
+    }
+    if (!Array.isArray(data.items) || data.items.length === 0 || data.items.some(item => !isValidObjectId(item.productId) || item.quantity < 1)) {
+      console.error(`[${new Date().toISOString()}] productionRequestsAPI.createProductionRequest - Invalid items:`, data.items);
+      throw new Error('Invalid items');
+    }
+    const response = await api.post('/factory/production-requests', {
+      type: data.type,
+      branchId: data.type === 'branch' ? data.branchId : null,
+      items: data.items,
+      notes: data.notes?.trim(),
+    });
+    console.log(`[${new Date().toISOString()}] productionRequestsAPI.createProductionRequest - Response:`, response);
+    return response.request;
+  },
+  getProductionRequests: async (params = {}) => {
+    if (params.type && !['branch', 'production'].includes(params.type)) {
+      console.error(`[${new Date().toISOString()}] productionRequestsAPI.getProductionRequests - Invalid request type:`, params.type);
+      throw new Error('Invalid request type');
+    }
+    if (params.status && !['pending', 'assigned', 'in_progress', 'completed', 'delivered', 'rejected'].includes(params.status)) {
+      console.error(`[${new Date().toISOString()}] productionRequestsAPI.getProductionRequests - Invalid request status:`, params.status);
+      throw new Error('Invalid request status');
+    }
+    const response = await api.get('/factory/production-requests', { params });
+    console.log(`[${new Date().toISOString()}] productionRequestsAPI.getProductionRequests - Response:`, response);
+    return response.requests || [];
+  },
+  updateProductionRequestStatus: async (requestId, data) => {
+    if (!isValidObjectId(requestId)) {
+      console.error(`[${new Date().toISOString()}] productionRequestsAPI.updateProductionRequestStatus - Invalid request ID:`, requestId);
+      throw new Error('Invalid request ID');
+    }
+    if (!['pending', 'assigned', 'in_progress', 'completed', 'delivered', 'rejected'].includes(data.status)) {
+      console.error(`[${new Date().toISOString()}] productionRequestsAPI.updateProductionRequestStatus - Invalid status:`, data.status);
+      throw new Error('Invalid status');
+    }
+    const response = await api.patch(`/factory/production-requests/${requestId}/status`, {
+      status: data.status,
+    });
+    console.log(`[${new Date().toISOString()}] productionRequestsAPI.updateProductionRequestStatus - Response:`, response);
+    return response.request;
+  },
+};
 
 export { notificationsAPI, returnsAPI, salesAPI };
 export default api;
