@@ -39,6 +39,7 @@ import BranchSalesAnalytics from './pages/BranchSalesAnalytics';
 import SalesAnalytics from './pages/SalesAnalytics';
 import ReturnStats from './pages/ReturnStats';
 import ProductionInventory from './pages/ProductionInventory';
+import { FactoryInventory } from './pages/FactoryInventory';
 
 
 // إعداد QueryClient لإدارة الاستعلامات
@@ -87,6 +88,9 @@ function AppContent() {
                   <Route path="/returns" element={<BranchReturns />} />
                   <Route path="/production-report" element={<ProductionReport />} />
                                     <Route path="/production" element={<ProductionInventory />} />
+                                                                        <Route path="/production-inventory" element={<FactoryInventory />} />
+
+
 
                                     
 
