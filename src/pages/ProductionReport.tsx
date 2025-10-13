@@ -814,7 +814,7 @@ const ProductionReport: React.FC = () => {
   );
 
   const renderStockTable = useCallback(
-    (data: StockRow[], title: string, month: number, type: 'in' | 'out') => {
+    (data: StockRow[], title: string, month: number, isIn: boolean) => {
       const grandTotalQuantity = data.reduce((sum, row) => sum + row.totalQuantity, 0);
       const grandTotalPrice = data.reduce((sum, row) => sum + row.totalPrice, 0);
       const monthName = months[month].label;
@@ -952,16 +952,20 @@ const ProductionReport: React.FC = () => {
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
-                    {row.dailyQuantities.map((qty, i) => (
+                    {row.changes.map((change, i) => (
                       <td
                         key={i}
                         className={`px-4 py-3 text-center font-medium ${
-                          qty > 0 ? 'bg-green-50 text-green-700' : qty < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
+                          change.value > 0 ? 'bg-green-50 text-green-700' : change.value < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
                         }`}
                         data-tooltip-id="stock-change"
-                        data-tooltip-content={getTooltipContent(qty, row.dailyBranchDetails[i], isRtl, type)}
+                        data-tooltip-content={
+                          isRtl
+                            ? `${change.type === 'in' ? 'زيادة مخزون' : 'نقص مخزون'}: ${change.value > 0 ? '+' : ''}${formatNumber(change.value, isRtl)}`
+                            : `${change.type === 'in' ? 'Stock In' : 'Stock Out'}: ${change.value > 0 ? '+' : ''}${formatNumber(change.value, isRtl)}`
+                        }
                       >
-                        {qty !== 0 ? `${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}` : '0'}
+                        {change.value !== 0 ? `${change.value > 0 ? '+' : ''}${formatNumber(change.value, isRtl)}` : '0'}
                       </td>
                     ))}
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
