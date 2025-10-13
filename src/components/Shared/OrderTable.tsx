@@ -47,40 +47,58 @@ export const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
     <table className="min-w-full">
       <thead>
         <tr className={isRtl ? 'flex-row-reverse' : ''}>
-          {Array(9).fill(0).map((_, index) => (
-            <th key={index} className="px-3 py-2">
-              <Skeleton width={80} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
-            </th>
-          ))}
+          {Array(9)
+            .fill(0)
+            .map((_, index) => (
+              <th key={index} className="px-3 py-2">
+                <Skeleton width={80} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
+              </th>
+            ))}
         </tr>
       </thead>
       <tbody>
-        {Array(5).fill(0).map((_, rowIndex) => (
-          <tr
-            key={rowIndex}
-            className={`hover:bg-gray-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}
-          >
-            {Array(9).fill(0).map((_, cellIndex) => (
-              <td key={cellIndex} className="px-3 py-2">
-                <Skeleton width={100} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
-              </td>
-            ))}
-          </tr>
-        ))}
+        {Array(5)
+          .fill(0)
+          .map((_, rowIndex) => (
+            <tr
+              key={rowIndex}
+              className={`hover:bg-gray-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}
+            >
+              {Array(9)
+                .fill(0)
+                .map((_, cellIndex) => (
+                  <td key={cellIndex} className="px-3 py-2">
+                    <Skeleton width={100} height={14} baseColor="#f3f4f6" highlightColor="#e5e7eb" />
+                  </td>
+                ))}
+            </tr>
+          ))}
       </tbody>
     </table>
   </motion.div>
 );
 
 const OrderTable: React.FC<OrderTableProps> = memo(
-  ({ orders, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, updateOrderStatus, openAssignModal, submitting, isRtl, startIndex }) => {
+  ({
+    orders,
+    calculateAdjustedTotal,
+    calculateTotalQuantity,
+    translateUnit,
+    updateOrderStatus,
+    openAssignModal,
+    submitting,
+    isRtl,
+    startIndex,
+  }) => {
     const { user } = useAuth();
 
-    const formatProducts = useMemo(() => (order: Order) => {
-      return order.items
-        .map(item => `(${item.quantity} ${item.displayUnit} ${item.displayProductName})`)
-        .join(' + ');
-    }, [isRtl, translateUnit]);
+    const formatProducts = useMemo(
+      () => (order: Order) =>
+        order.items
+          .map((item) => `(${item.quantity} ${translateUnit(item.unit, isRtl)} ${item.displayProductName})`)
+          .join(' + '),
+      [isRtl, translateUnit]
+    );
 
     const statusTranslations = {
       pending: isRtl ? 'قيد الانتظار' : 'Pending',
@@ -167,9 +185,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
                         {statusTranslations[order.status]}
                       </span>
                     </td>
-                    <td className="px-2 py-2 text-gray-600 text-center truncate max-w-xs">
-                      {formatProducts(order)}
-                    </td>
+                    <td className="px-2 py-2 text-gray-600 text-center truncate max-w-xs">{formatProducts(order)}</td>
                     <td className="px-2 py-2 text-gray-600 text-center truncate">{calculateAdjustedTotal(order)}</td>
                     <td className="px-2 py-2 text-gray-600 text-center">{calculateTotalQuantity(order)}</td>
                     <td className="px-2 py-2 text-gray-600 text-center truncate">{order.date}</td>
