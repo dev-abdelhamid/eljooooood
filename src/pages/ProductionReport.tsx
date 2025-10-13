@@ -22,7 +22,6 @@ interface OrderRow {
   totalPrice: number;
   sales: number;
   actualSales: number;
-  dailyQuantities?: number[]; // Added for potential daily if needed
 }
 
 interface StockRow {
@@ -49,6 +48,7 @@ interface ReturnRow {
   dailyReturns: number[];
   dailyBranchDetails: { [branch: string]: number }[];
   totalValue: number;
+  totalOrders?: number;
 }
 
 interface SalesRow {
@@ -417,7 +417,7 @@ const ProductionReport: React.FC = () => {
           const returnMap = new Map<string, ReturnRow>();
           const salesMap = new Map<string, SalesRow>();
 
-          // Process orders with daily breakdown
+          // Process orders
           orders.forEach((order: any) => {
             const status = order.status || order.orderStatus;
             if (status !== 'completed') return;
@@ -584,6 +584,7 @@ const ProductionReport: React.FC = () => {
                     returnRow.dailyBranchDetails[day][branchName] = (returnRow.dailyBranchDetails[day][branchName] || 0) + qty;
                     returnRow.totalReturns += qty;
                     returnRow.totalValue += quantity * details.price;
+                    returnRow.totalOrders = ordersDailyMap.get(key)?.totalOrders || 0;
                   } else if (isSale) {
                     row.dailySales![day] += qty;
                     row.dailySalesDetails![day][branchName] = (row.dailySalesDetails![day][branchName] || 0) + qty;
@@ -643,12 +644,12 @@ const ProductionReport: React.FC = () => {
             });
           });
 
-          monthlyOrderData[month] = Array.from(orderMap.values());
-          monthlyStockInData[month] = Array.from(stockInMap.values());
-          monthlyStockOutData[month] = Array.from(stockOutMap.values());
-          monthlyReturnData[month] = Array.from(returnMap.values());
-          monthlySalesData[month] = Array.from(salesMap.values());
-          monthlyOrdersVsReturnsData[month] = Array.from(ordersVsReturnsMap.values());
+          monthlyOrderData[month] = Array.from(orderMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity);
+          monthlyStockInData[month] = Array.from(stockInMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity);
+          monthlyStockOutData[month] = Array.from(stockOutMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity);
+          monthlyReturnData[month] = Array.from(returnMap.values()).sort((a, b) => b.totalReturns - a.totalReturns);
+          monthlySalesData[month] = Array.from(salesMap.values()).sort((a, b) => b.totalSales - a.totalSales);
+          monthlyOrdersVsReturnsData[month] = Array.from(ordersVsReturnsMap.values()).sort((a, b) => b.totalRatio - a.totalRatio);
         }
 
         setOrderData(monthlyOrderData);
@@ -901,19 +902,15 @@ const ProductionReport: React.FC = () => {
       const monthName = months[month].label;
 
       const exportTable = (format: 'excel' | 'pdf') => {
-        const baseHeaders = [
+        const headers = [
           isRtl ? 'رقم' : 'No.',
           isRtl ? 'الكود' : 'Code',
           isRtl ? 'المنتج' : 'Product',
           isRtl ? 'وحدة المنتج' : 'Product Unit',
-        ];
-        let dayHeaders: string[] = daysInMonth;
-        const totalHeaders = [
+          ...daysInMonth,
           isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
           isRtl ? 'السعر الإجمالي' : 'Total Price',
         ];
-        const headers = [...baseHeaders, ...dayHeaders, ...totalHeaders];
-
         const rows = [
           ...data.map((row, index) => ({
             no: index + 1,
@@ -961,7 +958,7 @@ const ProductionReport: React.FC = () => {
       };
 
       const getOutTooltip = (qty: number, sales: number, returns: number, salesDetails: { [branch: string]: number }, returnsDetails: { [branch: string]: number }, isRtl: boolean) => {
-        let content = getTooltipContent(qty, {}, isRtl, 'out');
+        let content = `${isRtl ? 'إجمالي النقصان' : 'Total Out'}: ${formatNumber(qty, isRtl)}`;
         content += `\n${isRtl ? 'مبيعات' : 'Sales'}: ${formatNumber(sales, isRtl)}\n${Object.entries(salesDetails).map(([branch, s]) => `${branch}: ${formatNumber(s, isRtl)}`).join('\n')}`;
         content += `\n${isRtl ? 'مرتجعات' : 'Returns'}: ${formatNumber(returns, isRtl)}\n${Object.entries(returnsDetails).map(([branch, r]) => `${branch}: ${formatNumber(r, isRtl)}`).join('\n')}`;
         return content;
@@ -1084,6 +1081,7 @@ const ProductionReport: React.FC = () => {
     (data: ReturnRow[], title: string, month: number) => {
       const grandTotalReturns = data.reduce((sum, row) => sum + row.totalReturns, 0);
       const grandTotalValue = data.reduce((sum, row) => sum + row.totalValue, 0);
+      const grandTotalOrders = data.reduce((sum, row) => sum + (row.totalOrders || 0), 0);
       const monthName = months[month].label;
 
       const exportTable = (format: 'excel' | 'pdf') => {
@@ -1095,6 +1093,7 @@ const ProductionReport: React.FC = () => {
           ...daysInMonth,
           isRtl ? 'إجمالي المرتجعات' : 'Total Returns',
           isRtl ? 'القيمة الإجمالية' : 'Total Value',
+          isRtl ? 'نسبة %' : 'Ratio %',
         ];
         const rows = [
           ...data.map((row, index) => ({
@@ -1105,6 +1104,7 @@ const ProductionReport: React.FC = () => {
             ...Object.fromEntries(row.dailyReturns.map((qty, i) => [daysInMonth[i], qty])),
             totalReturns: row.totalReturns,
             totalValue: formatPrice(row.totalValue, isRtl),
+            ratio: row.totalOrders > 0 ? ((row.totalReturns / row.totalOrders) * 100).toFixed(2) : '0.00',
           })),
           {
             no: '',
@@ -1114,6 +1114,7 @@ const ProductionReport: React.FC = () => {
             ...Object.fromEntries(daysInMonth.map((_, i) => [daysInMonth[i], data.reduce((sum, row) => sum + row.dailyReturns[i], 0)])),
             totalReturns: grandTotalReturns,
             totalValue: formatPrice(grandTotalValue, isRtl),
+            ratio: grandTotalOrders > 0 ? ((grandTotalReturns / grandTotalOrders) * 100).toFixed(2) : '0.00',
           },
         ];
         const dataRows = rows.map(row => [
@@ -1124,12 +1125,13 @@ const ProductionReport: React.FC = () => {
           ...daysInMonth.map(day => row[day]),
           row.totalReturns,
           row.totalValue,
+          `${row.ratio}%`,
         ]);
 
         if (format === 'excel') {
           const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
           if (isRtl) ws['!views'] = [{ RTL: true }];
-          ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }];
+          ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }, { wch: 15 }];
           const wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
@@ -1210,6 +1212,9 @@ const ProductionReport: React.FC = () => {
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
                     {isRtl ? 'القيمة الإجمالية' : 'Total Value'}
                   </th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                    {isRtl ? 'نسبة %' : 'Ratio %'}
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -1231,6 +1236,9 @@ const ProductionReport: React.FC = () => {
                     ))}
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalReturns, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.totalValue, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">
+                      {row.totalOrders > 0 ? formatNumber(((row.totalReturns / row.totalOrders) * 100).toFixed(2), isRtl) + '%' : '0.00%'}
+                    </td>
                   </tr>
                 ))}
                 <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
@@ -1242,6 +1250,9 @@ const ProductionReport: React.FC = () => {
                   ))}
                   <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalReturns, isRtl)}</td>
                   <td className="px-4 py-3 text-gray-800 text-center">{formatPrice(grandTotalValue, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">
+                    {grandTotalOrders > 0 ? formatNumber(((grandTotalReturns / grandTotalOrders) * 100).toFixed(2), isRtl) + '%' : '0.00%'}
+                  </td>
                 </tr>
               </tbody>
             </table>
@@ -1464,7 +1475,7 @@ const ProductionReport: React.FC = () => {
               daysInMonth.flatMap((day, i) => [
                 [`${day} - ${isRtl ? 'طلبات' : 'Orders'}`, row.dailyOrders[i]],
                 [`${day} - ${isRtl ? 'مرتجعات' : 'Returns'}`, row.dailyReturns[i]],
-                [`${day} - ${isRtl ? 'نسبة %' : 'Ratio %'}`, row.dailyOrders[i] > 0 ? (row.dailyReturns[i] / row.dailyOrders[i] * 100).toFixed(2) : '0.00'],
+                [`${day} - ${isRtl ? 'نسبة %' : 'Ratio %'}`, row.dailyOrders[i] > 0 ? ((row.dailyReturns[i] / row.dailyOrders[i]) * 100).toFixed(2) : '0.00'],
               ])
             ),
             totalOrders: row.totalOrders,
@@ -1480,7 +1491,7 @@ const ProductionReport: React.FC = () => {
               daysInMonth.flatMap((day, i) => [
                 [`${day} - ${isRtl ? 'طلبات' : 'Orders'}`, data.reduce((sum, row) => sum + row.dailyOrders[i], 0)],
                 [`${day} - ${isRtl ? 'مرتجعات' : 'Returns'}`, data.reduce((sum, row) => sum + row.dailyReturns[i], 0)],
-                [`${day} - ${isRtl ? 'نسبة %' : 'Ratio %'}`, (data.reduce((sum, row) => sum + row.dailyOrders[i], 0) > 0) ? (data.reduce((sum, row) => sum + row.dailyReturns[i], 0) / data.reduce((sum, row) => sum + row.dailyOrders[i], 0) * 100).toFixed(2) : '0.00'],
+                [`${day} - ${isRtl ? 'نسبة %' : 'Ratio %'}`, (data.reduce((sum, row) => sum + row.dailyOrders[i], 0) > 0) ? ((data.reduce((sum, row) => sum + row.dailyReturns[i], 0) / data.reduce((sum, row) => sum + row.dailyOrders[i], 0)) * 100).toFixed(2) : '0.00'],
               ])
             ),
             totalOrders: grandTotalOrders,
@@ -1644,13 +1655,11 @@ const ProductionReport: React.FC = () => {
                         {formatNumber(data.reduce((sum, row) => sum + row.dailyReturns[i], 0), isRtl)}
                       </td>
                       <td className="px-4 py-3 text-gray-800 text-center">
-                        {formatNumber(
-                          data.reduce((sum, row) => sum + (row.dailyReturns[i] / row.dailyOrders[i] * 100), 0).toFixed(2),  isRtl
-                        ) + '%'}
-                      </td> 
+                        {formatNumber((data.reduce((sum, row) => sum + row.dailyOrders[i], 0) > 0 ? (data.reduce((sum, row) => sum + row.dailyReturns[i], 0) / data.reduce((sum, row) => sum + row.dailyOrders[i], 0) * 100).toFixed(2) : '0.00', isRtl) + '%')}
+                        
+                      </td>
                     </Fragment>
                   ))}
-                     غ
                   <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalOrders, isRtl)}</td>
                   <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalReturns, isRtl)}</td>
                   <td className="px-4 py-3 text-gray-800 text-center">{grandTotalRatio}%</td>
