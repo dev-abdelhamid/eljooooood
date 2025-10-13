@@ -1321,7 +1321,7 @@ const ProductionReport: React.FC = () => {
                   </th>
                 </tr>
               </thead>
-              <              <tbody className="divide-y divide-gray-200">
+                 <tbody className="divide-y divide-gray-200">
                 {data.map((row, index) => (
                   <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
                     <td className="px-4 py-3 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
