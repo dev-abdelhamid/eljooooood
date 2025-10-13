@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Package, Plus, X, Eye, Edit, AlertCircle, Minus } from 'lucide-react';
-import { returnsAPI, inventoryAPI } from '../services/api';
+import { factoryInventoryAPI, productionRequestsAPI, branchesAPI, productsAPI } from '../services/api';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,15 +17,9 @@ enum InventoryStatus {
   FULL = 'full',
 }
 
-enum ReturnReason {
-  DAMAGED_AR = 'تالف',
-  WRONG_ITEM_AR = 'منتج خاطئ',
-  EXCESS_QUANTITY_AR = 'كمية زائدة',
-  OTHER_AR = 'أخرى',
-  DAMAGED_EN = 'Damaged',
-  WRONG_ITEM_EN = 'Wrong Item',
-  EXCESS_QUANTITY_EN = 'Excess Quantity',
-  OTHER_EN = 'Other',
+enum ProductionType {
+  BRANCH = 'branch',
+  PRODUCTION = 'production',
 }
 
 // Interfaces aligned with backend
@@ -42,37 +36,36 @@ interface InventoryItem {
     displayName: string;
     displayUnit: string;
   } | null;
-  branch: { _id: string; name: string; nameEn: string; displayName: string } | null;
   currentStock: number;
-  pendingReturnStock: number;
+  pendingProductionStock: number;
   damagedStock: number;
   minStockLevel: number;
   maxStockLevel: number;
   status: InventoryStatus;
 }
 
-interface ReturnItem {
-  product: string;
+interface ProductionItem {
+  productId: string;
   quantity: number;
-  reason: string;
-  reasonEn: string;
-  maxQuantity: number;
 }
 
-interface ReturnFormState {
+interface ProductionFormState {
   notes: string;
-  items: ReturnItem[];
+  items: ProductionItem[];
+  type: ProductionType;
+  branchId: string;
 }
 
 interface ProductHistoryEntry {
   _id: string;
   date: string;
-  type: 'delivery' | 'return_pending' | 'return_rejected' | 'return_approved' | 'sale' | 'adjustment';
+  type: 'in' | 'out' | 'production';
   quantity: number;
-  description: string;
+  reference: string;
 }
 
 interface EditForm {
+  currentStock: number;
   minStockLevel: number;
   maxStockLevel: number;
 }
@@ -89,12 +82,12 @@ interface AvailableItem {
 // Translations
 const translations = {
   ar: {
-    title: 'إدارة المخزون',
-    description: 'إدارة مخزون الفرع وطلبات الإرجاع',
+    title: 'إدارة مخزون المصنع',
+    description: 'إدارة مخزون المصنع وطلبات الإنتاج',
     noItems: 'لا توجد عناصر في المخزون',
     noHistory: 'لا يوجد سجل لهذا المنتج',
     stock: 'المخزون الحالي',
-    pendingStock: 'المخزون المعلق للإرجاع',
+    pendingStock: 'المخزون المعلق للإنتاج',
     damagedStock: 'المخزون التالف',
     minStock: 'الحد الأدنى للمخزون',
     maxStock: 'الحد الأقصى للمخزون',
@@ -102,7 +95,7 @@ const translations = {
     lowStock: 'مخزون منخفض',
     normal: 'عادي',
     full: 'مخزون ممتلئ',
-    create: 'إنشاء طلب إرجاع',
+    create: 'إنشاء طلب إنتاج',
     viewDetails: 'عرض التفاصيل',
     editStockLimits: 'تعديل حدود المخزون',
     search: 'البحث عن المنتجات...',
@@ -111,12 +104,6 @@ const translations = {
     filterByDepartment: 'تصفية حسب القسم',
     allStatuses: 'جميع الحالات',
     allDepartments: 'جميع الأقسام',
-    reason: 'سبب الإرجاع',
-    selectReason: 'اختر السبب',
-    damaged: 'تالف',
-    wrongItem: 'منتج خاطئ',
-    excessQuantity: 'كمية زائدة',
-    other: 'أخرى',
     notes: 'ملاحظات',
     notesPlaceholder: 'أدخل ملاحظات إضافية (اختياري)',
     items: 'العناصر',
@@ -131,17 +118,18 @@ const translations = {
     date: 'التاريخ',
     type: 'النوع',
     quantity: 'الكمية',
-    delivery: 'تسليم',
-    return_pending: 'إرجاع قيد الانتظار',
-    return_rejected: 'إرجاع مرفوض',
-    return_approved: 'إرجاع موافق عليه',
-    sale: 'بيع',
-    adjustment: 'تعديل',
+    in: 'دخول',
+    out: 'خروج',
+    production: 'إنتاج',
     available: 'متوفر',
+    branch: 'فرع',
+    productionType: 'إنتاج داخلي',
+    selectType: 'اختر نوع الطلب',
+    selectBranch: 'اختر فرع',
     errors: {
-      noBranch: 'لم يتم العثور على فرع',
+      noFactory: 'لم يتم العثور على مصنع',
       fetchInventory: 'خطأ في جلب بيانات المخزون',
-      createReturn: 'خطأ في إنشاء طلب الإرجاع',
+      createRequest: 'خطأ في إنشاء طلب الإنتاج',
       updateInventory: 'خطأ في تحديث المخزون',
       invalidForm: 'البيانات المدخلة غير صالحة',
       required: 'حقل {field} مطلوب',
@@ -151,24 +139,21 @@ const translations = {
       noItemSelected: 'لم يتم اختيار عنصر',
       invalidProductId: 'معرف المنتج غير صالح',
       insufficientQuantity: 'الكمية غير كافية للمنتج في المخزون',
-      branchNotFound: 'الفرع غير موجود',
       productNotFound: 'المنتج غير موجود',
       tooManyRequests: 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا',
       duplicateProduct: 'لا يمكن إضافة نفس المنتج أكثر من مرة',
     },
     notifications: {
-      returnApproved: 'تمت الموافقة على طلب الإرجاع',
-      returnRejected: 'تم رفض طلب الإرجاع',
-      returnCreated: 'تم إنشاء طلب الإرجاع بنجاح',
+      requestCreated: 'تم إنشاء طلب الإنتاج بنجاح',
     },
   },
   en: {
-    title: 'Inventory Management',
-    description: 'Manage branch inventory and return requests',
+    title: 'Factory Inventory Management',
+    description: 'Manage factory inventory and production requests',
     noItems: 'No items found in inventory',
     noHistory: 'No history available for this product',
     stock: 'Current Stock',
-    pendingStock: 'Pending Return Stock',
+    pendingStock: 'Pending Production Stock',
     damagedStock: 'Damaged Stock',
     minStock: 'Minimum Stock',
     maxStock: 'Maximum Stock',
@@ -176,7 +161,7 @@ const translations = {
     lowStock: 'Low Stock',
     normal: 'Normal',
     full: 'Full Stock',
-    create: 'Create Return Request',
+    create: 'Create Production Request',
     viewDetails: 'View Details',
     editStockLimits: 'Edit Stock Limits',
     search: 'Search products...',
@@ -185,12 +170,6 @@ const translations = {
     filterByDepartment: 'Filter by Department',
     allStatuses: 'All Statuses',
     allDepartments: 'All Departments',
-    reason: 'Return Reason',
-    selectReason: 'Select Reason',
-    damaged: 'Damaged',
-    wrongItem: 'Wrong Item',
-    excessQuantity: 'Excess Quantity',
-    other: 'Other',
     notes: 'Notes',
     notesPlaceholder: 'Enter additional notes (optional)',
     items: 'Items',
@@ -205,17 +184,18 @@ const translations = {
     date: 'Date',
     type: 'Type',
     quantity: 'Quantity',
-    delivery: 'Delivery',
-    return_pending: 'Return Pending',
-    return_rejected: 'Return Rejected',
-    return_approved: 'Return Approved',
-    sale: 'Sale',
-    adjustment: 'Adjustment',
+    in: 'In',
+    out: 'Out',
+    production: 'Production',
     available: 'Available',
+    branch: 'Branch',
+    productionType: 'Internal Production',
+    selectType: 'Select Request Type',
+    selectBranch: 'Select Branch',
     errors: {
-      noBranch: 'No branch found',
+      noFactory: 'No factory found',
       fetchInventory: 'Error fetching inventory data',
-      createReturn: 'Error creating return request',
+      createRequest: 'Error creating production request',
       updateInventory: 'Error updating inventory',
       invalidForm: 'Invalid form data',
       required: '{field} is required',
@@ -225,15 +205,12 @@ const translations = {
       noItemSelected: 'No item selected',
       invalidProductId: 'Invalid product ID',
       insufficientQuantity: 'Insufficient quantity for the product in inventory',
-      branchNotFound: 'Branch not found',
       productNotFound: 'Product not found',
       tooManyRequests: 'Too many requests, please try again later',
       duplicateProduct: 'Cannot add the same product multiple times',
     },
     notifications: {
-      returnApproved: 'Return request approved',
-      returnRejected: 'Return request rejected',
-      returnCreated: 'Return request created successfully',
+      requestCreated: 'Production request created successfully',
     },
   },
 };
@@ -299,15 +276,17 @@ const QuantityInput = ({
   );
 };
 
-// Reducer for return form
-type ReturnFormAction =
+// Reducer for production form (similar to return form)
+type ProductionFormAction =
   | { type: 'SET_NOTES'; payload: string }
-  | { type: 'ADD_ITEM'; payload: ReturnItem }
-  | { type: 'UPDATE_ITEM'; payload: { index: number; field: keyof ReturnItem; value: string | number } }
+  | { type: 'ADD_ITEM'; payload: ProductionItem }
+  | { type: 'UPDATE_ITEM'; payload: { index: number; field: keyof ProductionItem; value: string | number } }
   | { type: 'REMOVE_ITEM'; payload: number }
+  | { type: 'SET_TYPE'; payload: ProductionType }
+  | { type: 'SET_BRANCH'; payload: string }
   | { type: 'RESET' };
 
-const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): ReturnFormState => {
+const productionFormReducer = (state: ProductionFormState, action: ProductionFormAction): ProductionFormState => {
   switch (action.type) {
     case 'SET_NOTES':
       return { ...state, notes: action.payload };
@@ -319,8 +298,12 @@ const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): Re
       return { ...state, items: newItems };
     case 'REMOVE_ITEM':
       return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
+    case 'SET_TYPE':
+      return { ...state, type: action.payload };
+    case 'SET_BRANCH':
+      return { ...state, branchId: action.payload };
     case 'RESET':
-      return { notes: '', items: [] };
+      return { notes: '', items: [], type: ProductionType.BRANCH, branchId: '' };
     default:
       return state;
   }
@@ -329,25 +312,7 @@ const returnFormReducer = (state: ReturnFormState, action: ReturnFormAction): Re
 // Validate ObjectId
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 
-// Aggregate items by product
-const aggregateItemsByProduct = (items: ReturnItem[]): ReturnItem[] => {
-  const aggregated: Record<string, ReturnItem> = {};
-  items.forEach((item) => {
-    if (!aggregated[item.product]) {
-      aggregated[item.product] = {
-        product: item.product,
-        quantity: 0,
-        reason: item.reason,
-        reasonEn: item.reasonEn,
-        maxQuantity: item.maxQuantity,
-      };
-    }
-    aggregated[item.product].quantity += item.quantity;
-  });
-  return Object.values(aggregated);
-};
-
-export const FactoryInventory: React.FC = () => {
+export const FactoryInventory = () => {
   const { t: languageT, language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
@@ -358,17 +323,22 @@ export const FactoryInventory: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<InventoryStatus | ''>('');
   const [filterDepartment, setFilterDepartment] = useState<string>('');
-  const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<ProductionRequest | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [returnForm, dispatchReturnForm] = useReducer(returnFormReducer, { notes: '', items: [] });
-  const [editForm, setEditForm] = useState<EditForm>({ minStockLevel: 0, maxStockLevel: 0 });
-  const [returnErrors, setReturnErrors] = useState<Record<string, string>>({});
+  const [productionForm, dispatchProductionForm] = useReducer(productionFormReducer, { notes: '', items: [], type: ProductionType.BRANCH, branchId: '' });
+  const [editForm, setEditForm] = useState<EditForm>({ currentStock: 0, minStockLevel: 0, maxStockLevel: 0 });
+  const [productionErrors, setProductionErrors] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
+  const [branches, setBranches] = useState([]);
+  const [chefs, setChefs] = useState([]);
+  const [productionRequests, setProductionRequests] = useState([]);
 
   const ITEMS_PER_PAGE = 10;
 
@@ -386,26 +356,11 @@ export const FactoryInventory: React.FC = () => {
   const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
 
   // Inventory Query
-  const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError } = useQuery<
-    InventoryItem[],
-    Error
-  >({
-    queryKey: ['inventory', user?.branchId, debouncedSearchQuery, filterStatus, filterDepartment, currentPage, language],
+  const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError } = useQuery({
+    queryKey: ['factoryInventory', debouncedSearchQuery, filterStatus, filterDepartment, currentPage, language],
     queryFn: async () => {
-      if (!user?.branchId) throw new Error(t.errors.noBranch);
-      const response = await inventoryAPI.getByBranch(user.branchId);
-      return response;
-    },
-    enabled: !!user?.branchId,
-    staleTime: 5 * 60 * 1000,
-    cacheTime: 10 * 60 * 1000,
-    select: (response) => {
-      const inventoryData = Array.isArray(response)
-        ? response
-        : Array.isArray(response?.data)
-        ? response.data
-        : response?.data?.inventory || [];
-      return inventoryData.map((item: InventoryItem) => ({
+      const response = await factoryInventoryAPI.getFactoryInventory();
+      return response.map(item => ({
         ...item,
         product: item.product
           ? {
@@ -420,12 +375,6 @@ export const FactoryInventory: React.FC = () => {
                 : null,
             }
           : null,
-        branch: item.branch
-          ? {
-              ...item.branch,
-              displayName: isRtl ? item.branch.name : item.branch.nameEn || item.branch.name,
-            }
-          : null,
         status:
           item.currentStock <= item.minStockLevel
             ? InventoryStatus.LOW
@@ -434,27 +383,59 @@ export const FactoryInventory: React.FC = () => {
             : InventoryStatus.NORMAL,
       }));
     },
+    staleTime: 5 * 60 * 1000,
+    cacheTime: 10 * 60 * 1000,
     onError: (err) => {
-      toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-left' : 'top-right' });
     },
+  });
+
+  // Branches Query
+  const { data: branchesData } = useQuery({
+    queryKey: ['branches', language],
+    queryFn: async () => {
+      const response = await branchesAPI.getAll();
+      return response;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Chefs Query
+  const { data: chefsData } = useQuery({
+    queryKey: ['chefs', language],
+    queryFn: async () => {
+      const response = await chefsAPI.getAll();
+      return response;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Production Requests Query
+  const { data: productionRequestsData } = useQuery({
+    queryKey: ['productionRequests', language],
+    queryFn: async () => {
+      const response = await productionRequestsAPI.getFactoryProductionRequests();
+      return response;
+    },
+    staleTime: 5 * 60 * 1000,
   });
 
   // Product History Query
   const { data: productHistory, isLoading: historyLoading } = useQuery<ProductHistoryEntry[], Error>({
-    queryKey: ['productHistory', selectedProductId, user?.branchId],
+    queryKey: ['productHistory', selectedProductId],
     queryFn: async () => {
-      if (!selectedProductId || !user?.branchId) throw new Error(t.errors.noBranch);
-      const response = await inventoryAPI.getHistory({ productId: selectedProductId, branchId: user.branchId });
+      if (!selectedProductId) throw new Error(t.errors.noItemSelected);
+      const response = await factoryInventoryAPI.getFactoryInventoryHistory({ productId: selectedProductId });
       return response;
     },
-    enabled: isDetailsModalOpen && !!selectedProductId && !!user?.branchId,
+    enabled: isDetailsModalOpen && !!selectedProductId,
     staleTime: 5 * 60 * 1000,
   });
 
   // Update available items
   useEffect(() => {
     if (inventoryData) {
-      const items: AvailableItem[] = inventoryData
+      const items = inventoryData
         .filter((item) => item.currentStock > 0 && item.product)
         .map((item) => ({
           productId: item.product!._id,
@@ -472,44 +453,32 @@ export const FactoryInventory: React.FC = () => {
 
   // Socket Events
   useEffect(() => {
-    if (!socket || !user?.branchId) return;
+    if (!socket) return;
 
-    const handleInventoryUpdated = ({ branchId }: { branchId: string }) => {
-      if (branchId === user.branchId) {
-        queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      }
+    const handleInventoryUpdated = () => {
+      queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
     };
 
-    const handleReturnStatusUpdated = ({ branchId, returnId, status }: { branchId: string; returnId: string; status: string }) => {
-      if (branchId === user.branchId) {
-        queryClient.invalidateQueries({ queryKey: ['inventory'] });
-        const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
-        audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
-        addNotification({
-          _id: crypto.randomUUID(),
-          type: status === 'approved' ? 'success' : 'error',
-          message: status === 'approved' ? t.notifications.returnApproved : t.notifications.returnRejected,
-          data: { returnId, eventId: crypto.randomUUID() },
-          read: false,
-          createdAt: new Date().toISOString(),
-          sound: 'https://eljoodia-client.vercel.app/sounds/notification.mp3',
-          vibrate: [200, 100, 200],
-        });
-        toast[status === 'approved' ? 'success' : 'error'](
-          status === 'approved' ? t.notifications.returnApproved : t.notifications.returnRejected,
-          { position: isRtl ? 'top-right' : 'top-left' }
-        );
-      }
+    const handleRequestUpdated = ({ requestId, status }) => {
+      queryClient.invalidateQueries({ queryKey: ['productionRequests'] });
+      addNotification({
+        _id: crypto.randomUUID(),
+        type: 'success',
+        message: `Production request ${requestId} updated to ${status}`,
+        read: false,
+        createdAt: new Date().toISOString(),
+      });
+      toast.success(`Production request updated to ${status}`, { position: isRtl ? 'top-left' : 'top-right' });
     };
 
     socket.on('inventoryUpdated', handleInventoryUpdated);
-    socket.on('returnStatusUpdated', handleReturnStatusUpdated);
+    socket.on('requestUpdated', handleRequestUpdated);
 
     return () => {
       socket.off('inventoryUpdated', handleInventoryUpdated);
-      socket.off('returnStatusUpdated', handleReturnStatusUpdated);
+      socket.off('requestUpdated', handleRequestUpdated);
     };
-  }, [socket, user, queryClient, addNotification, t, isRtl]);
+  }, [socket, queryClient, addNotification, isRtl]);
 
   // Department options
   const departmentOptions = useMemo(() => {
@@ -544,18 +513,6 @@ export const FactoryInventory: React.FC = () => {
       { value: InventoryStatus.LOW, label: t.lowStock },
       { value: InventoryStatus.NORMAL, label: t.normal },
       { value: InventoryStatus.FULL, label: t.full },
-    ],
-    [t]
-  );
-
-  // Reason options
-  const reasonOptions = useMemo(
-    () => [
-      { value: '', label: t.selectReason, enValue: '' },
-      { value: ReturnReason.DAMAGED_AR, label: t.damaged, enValue: ReturnReason.DAMAGED_EN },
-      { value: ReturnReason.WRONG_ITEM_AR, label: t.wrongItem, enValue: ReturnReason.WRONG_ITEM_EN },
-      { value: ReturnReason.EXCESS_QUANTITY_AR, label: t.excessQuantity, enValue: ReturnReason.EXCESS_QUANTITY_EN },
-      { value: ReturnReason.OTHER_AR, label: t.other, enValue: ReturnReason.OTHER_EN },
     ],
     [t]
   );
@@ -600,33 +557,30 @@ export const FactoryInventory: React.FC = () => {
     setCurrentPage(1);
   }, []);
 
-  const handleOpenReturnModal = useCallback((item?: InventoryItem) => {
+  const handleOpenRequestModal = useCallback((item?: InventoryItem) => {
     setSelectedItem(item || null);
-    dispatchReturnForm({ type: 'RESET' });
+    dispatchProductionForm({ type: 'RESET' });
     if (item?.product) {
-      dispatchReturnForm({
+      dispatchProductionForm({
         type: 'ADD_ITEM',
         payload: {
-          product: item.product._id,
+          productId: item.product._id,
           quantity: 1,
-          reason: '',
-          reasonEn: '',
-          maxQuantity: item.currentStock,
         },
       });
     } else {
-      dispatchReturnForm({
+      dispatchProductionForm({
         type: 'ADD_ITEM',
-        payload: { product: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0 },
+        payload: { productId: '', quantity: 1 },
       });
     }
-    setReturnErrors({});
-    setIsReturnModalOpen(true);
+    setProductionErrors({});
+    setIsRequestModalOpen(true);
   }, []);
 
   const handleOpenEditModal = useCallback((item: InventoryItem) => {
     setSelectedItem(item);
-    setEditForm({ minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
+    setEditForm({ currentStock: item.currentStock, minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
     setEditErrors({});
     setIsEditModalOpen(true);
   }, []);
@@ -639,126 +593,81 @@ export const FactoryInventory: React.FC = () => {
   }, []);
 
   const addItemToForm = useCallback(() => {
-    dispatchReturnForm({
+    dispatchProductionForm({
       type: 'ADD_ITEM',
-      payload: { product: '', quantity: 1, reason: '', reasonEn: '', maxQuantity: 0 },
+      payload: { productId: '', quantity: 1 },
     });
   }, []);
 
   const updateItemInForm = useCallback(
-    (index: number, field: keyof ReturnItem, value: string | number) => {
+    (index: number, field: keyof ProductionItem, value: string | number) => {
       if (field === 'quantity' && typeof value === 'string') {
         const numValue = parseInt(value);
         if (isNaN(numValue) || numValue < 1) return;
         value = numValue;
       }
-      if (field === 'reason') {
-        const selectedReason = reasonOptions.find((opt) => opt.value === value);
-        dispatchReturnForm({
-          type: 'UPDATE_ITEM',
-          payload: { index, field: 'reason', value },
-        });
-        dispatchReturnForm({
-          type: 'UPDATE_ITEM',
-          payload: { index, field: 'reasonEn', value: selectedReason?.enValue || '' },
-        });
-      } else {
-        dispatchReturnForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
-      }
+      dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
     },
-    [reasonOptions]
+    []
   );
 
   const handleProductChange = useCallback(
     (index: number, productId: string) => {
       if (!isValidObjectId(productId)) {
-        setReturnErrors((prev) => ({
+        setProductionErrors((prev) => ({
           ...prev,
           [`item_${index}_product`]: t.errors.invalidProductId,
         }));
         return;
       }
-      // Check for duplicate products
-      if (returnForm.items.some((item, i) => i !== index && item.product === productId)) {
-        setReturnErrors((prev) => ({
+      if (productionForm.items.some((item, i) => i !== index && item.productId === productId)) {
+        setProductionErrors((prev) => ({
           ...prev,
           [`item_${index}_product`]: t.errors.duplicateProduct,
         }));
         return;
       }
-      const inventoryItem = inventoryData?.find((inv) => inv.product?._id === productId);
-      if (!inventoryItem) {
-        setReturnErrors((prev) => ({
-          ...prev,
-          [`item_${index}_product`]: t.errors.productNotFound,
-        }));
-        return;
-      }
-      dispatchReturnForm({
+      dispatchProductionForm({
         type: 'UPDATE_ITEM',
-        payload: { index, field: 'product', value: productId },
+        payload: { index, field: 'productId', value: productId },
       });
-      dispatchReturnForm({
-        type: 'UPDATE_ITEM',
-        payload: { index, field: 'maxQuantity', value: inventoryItem.currentStock },
-      });
-      dispatchReturnForm({
+      dispatchProductionForm({
         type: 'UPDATE_ITEM',
         payload: { index, field: 'quantity', value: 1 },
       });
     },
-    [inventoryData, t, returnForm.items]
+    [productionForm.items, t]
   );
 
   const removeItemFromForm = useCallback((index: number) => {
-    dispatchReturnForm({ type: 'REMOVE_ITEM', payload: index });
+    dispatchProductionForm({ type: 'REMOVE_ITEM', payload: index });
   }, []);
 
-  const validateReturnForm = useCallback(() => {
+  const validateProductionForm = useCallback(() => {
     const errors: Record<string, string> = {};
-    if (!user?.branchId || !isValidObjectId(user.branchId)) {
-      errors.form = t.errors.noBranch;
+    if (productionForm.type === ProductionType.BRANCH && !productionForm.branchId) {
+      errors.branchId = t.errors.required.replace('{field}', t.selectBranch);
     }
-    if (returnForm.items.length === 0) {
+    if (productionForm.items.length === 0) {
       errors.items = t.errors.required.replace('{field}', t.items);
     }
-    returnForm.items.forEach((item, index) => {
-      if (!item.product) {
-        errors[`item_${index}_product`] = t.errors.required.replace('{field}', t.items);
-      } else if (!isValidObjectId(item.product)) {
-        errors[`item_${index}_product`] = t.errors.invalidProductId;
+    productionForm.items.forEach((item, index) => {
+      if (!item.productId) {
+        errors[`item_${index}_productId`] = t.errors.required.replace('{field}', t.selectProduct);
+      } else if (!isValidObjectId(item.productId)) {
+        errors[`item_${index}_productId`] = t.errors.invalidProductId;
       }
-      if (!item.reason) {
-        errors[`item_${index}_reason`] = t.errors.required.replace('{field}', t.reason);
-      }
-      if (!item.reasonEn) {
-        errors[`item_${index}_reasonEn`] = t.errors.required.replace('{field}', t.reason);
-      }
-      const reasonMap = {
-        [ReturnReason.DAMAGED_AR]: ReturnReason.DAMAGED_EN,
-        [ReturnReason.WRONG_ITEM_AR]: ReturnReason.WRONG_ITEM_EN,
-        [ReturnReason.EXCESS_QUANTITY_AR]: ReturnReason.EXCESS_QUANTITY_EN,
-        [ReturnReason.OTHER_AR]: ReturnReason.OTHER_EN,
-      };
-      if (item.reason && reasonMap[item.reason] !== item.reasonEn) {
-        errors[`item_${index}_reasonEn`] = isRtl ? 'سبب الإرجاع بالإنجليزية غير متطابق' : 'English reason does not match Arabic reason';
-      }
-      if (item.quantity < 1 || item.quantity > item.maxQuantity || isNaN(item.quantity)) {
-        errors[`item_${index}_quantity`] = t.errors.invalidQuantityMax.replace('{max}', item.maxQuantity.toString());
-      }
-      const inventoryItem = inventoryData?.find((inv) => inv.product?._id === item.product);
-      if (!inventoryItem) {
-        errors[`item_${index}_product`] = t.errors.productNotFound;
-      } else if (item.quantity > inventoryItem.currentStock) {
-        errors[`item_${index}_quantity`] = t.errors.insufficientQuantity;
+      if (item.quantity < 1 || isNaN(item.quantity)) {
+        errors[`item_${index}_quantity`] = t.errors.nonNegative.replace('{field}', t.quantity);
       }
     });
-    setReturnErrors(errors);
+    setProductionErrors(errors);
     return Object.keys(errors).length === 0;
-  }, [returnForm, t, inventoryData, user, isRtl]);
+  }, [productionForm, t]);
 
   const validateEditForm = useCallback(() => {
     const errors: Record<string, string> = {};
+    if (editForm.currentStock < 0) errors.currentStock = t.errors.nonNegative.replace('{field}', t.stock);
     if (editForm.minStockLevel < 0) errors.minStockLevel = t.errors.nonNegative.replace('{field}', t.minStock);
     if (editForm.maxStockLevel < 0) errors.maxStockLevel = t.errors.nonNegative.replace('{field}', t.maxStock);
     if (editForm.maxStockLevel <= editForm.minStockLevel) errors.maxStockLevel = t.errors.maxGreaterMin;
@@ -766,121 +675,85 @@ export const FactoryInventory: React.FC = () => {
     return Object.keys(errors).length === 0;
   }, [editForm, t]);
 
-  const createReturnMutation = useMutation<{ returnId: string; returnNumber: string }, Error, void>({
+  const createRequestMutation = useMutation({
     mutationFn: async () => {
-      if (!validateReturnForm()) throw new Error(t.errors.invalidForm);
-      if (!user?.branchId) throw new Error(t.errors.noBranch);
-      // Aggregate items by product before sending
-      const aggregatedItems = aggregateItemsByProduct(returnForm.items);
-      // Validate aggregated quantities
-      for (const item of aggregatedItems) {
-        const inventoryItem = inventoryData?.find((inv) => inv.product?._id === item.product);
-        if (!inventoryItem) {
-          throw new Error(`${t.errors.productNotFound}: ${item.product}`);
-        }
-        if (item.quantity > inventoryItem.currentStock) {
-          throw new Error(`${t.errors.insufficientQuantity}: ${item.product}`);
-        }
-      }
+      if (!validateProductionForm()) throw new Error(t.errors.invalidForm);
       const data = {
-        branchId: user.branchId,
-        items: aggregatedItems.map((item) => ({
-          product: item.product,
-          quantity: item.quantity,
-          reason: item.reason,
-          reasonEn: item.reasonEn,
-          price: 0,
-        })),
-        notes: returnForm.notes || undefined,
+        type: productionForm.type,
+        branchId: productionForm.type === ProductionType.BRANCH ? productionForm.branchId : null,
+        items: productionForm.items,
+        notes: productionForm.notes,
       };
-      console.log(`[${new Date().toISOString()}] Aggregated return items:`, data);
-      const response = await returnsAPI.createReturn(data);
-      return {
-        returnId: response?.returnRequest?._id || crypto.randomUUID(),
-        returnNumber: response?.returnRequest?.returnNumber || `RET-${response?._id.slice(-6)}`,
-      };
+      return await factoryInventoryAPI.createFactoryProductionRequest(data);
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      setIsReturnModalOpen(false);
-      dispatchReturnForm({ type: 'RESET' });
-      setReturnErrors({});
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
+      queryClient.invalidateQueries({ queryKey: ['productionRequests'] });
+      setIsRequestModalOpen(false);
+      dispatchProductionForm({ type: 'RESET' });
+      setProductionErrors({});
       setSelectedItem(null);
-      toast.success(t.notifications.returnCreated, { position: isRtl ? 'top-right' : 'top-left' });
-      socket?.emit('returnCreated', {
-        branchId: user?.branchId,
-        returnId: data.returnId,
-        returnNumber: data.returnNumber,
-        status: 'pending_approval',
-        eventId: crypto.randomUUID(),
-      });
+      toast.success(t.notifications.requestCreated, { position: isRtl ? 'top-left' : 'top-right' });
     },
-    onError: (err: any) => {
-      let errorMessage = err.message || t.errors.createReturn;
-      if (err.status === 429) {
-        errorMessage = t.errors.tooManyRequests;
-      } else if (err.errors?.length > 0) {
-        errorMessage = err.errors.map((e: any) => e.msg).join(', ');
-        err.errors.forEach((e: any, index: number) => {
-          setReturnErrors((prev) => ({
-            ...prev,
-            [`item_${index}_${e.path}`]: e.msg,
-          }));
-        });
-      } else if (err.message.includes('الفرع غير موجود') || err.message.includes('Branch not found')) {
-        errorMessage = t.errors.noBranch;
-      } else if (err.message.includes('الكمية غير كافية') || err.message.includes('Insufficient quantity')) {
-        errorMessage = t.errors.insufficientQuantity;
-      } else if (err.message.includes('بيانات العنصر غير صالحة') || err.message.includes('Invalid item data')) {
-        errorMessage = t.errors.invalidForm;
-      } else if (err.message.includes('معرف المنتج غير صالح') || err.message.includes('Invalid product ID')) {
-        errorMessage = t.errors.invalidProductId;
-      } else if (err.message.includes('المنتج غير موجود') || err.message.includes('Product not found')) {
-        errorMessage = t.errors.productNotFound;
-      } else if (err.message.includes('تضارب في تحديث المخزون') || err.message.includes('Conflict in updating inventory stock')) {
-        errorMessage = t.errors.createReturn;
-        console.error(`[${new Date().toISOString()}] Inventory update conflict:`, {
-          branchId: user?.branchId,
-          items: returnForm.items,
-          error: err.message,
-        });
-      }
-      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
-      setReturnErrors((prev) => ({ ...prev, form: errorMessage }));
+    onError: (err) => {
+      toast.error(err.message || t.errors.createRequest, { position: isRtl ? 'top-left' : 'top-right' });
     },
   });
 
-  const updateInventoryMutation = useMutation<void, Error, void>({
+  const updateInventoryMutation = useMutation({
     mutationFn: async () => {
       if (!validateEditForm()) throw new Error(t.errors.invalidForm);
       if (!selectedItem) throw new Error(t.errors.noItemSelected);
-      if (!user?.branchId && !selectedItem.branch?._id) throw new Error(t.errors.noBranch);
-      await inventoryAPI.updateStock(selectedItem._id, {
-        minStockLevel: editForm.minStockLevel,
-        maxStockLevel: editForm.maxStockLevel,
-        branchId: selectedItem.branch?._id || user?.branchId,
-      });
+      await factoryInventoryAPI.updateFactoryInventory(selectedItem._id, editForm);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
       setIsEditModalOpen(false);
-      setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
+      setEditForm({ currentStock: 0, minStockLevel: 0, maxStockLevel: 0 });
       setEditErrors({});
       setSelectedItem(null);
-      toast.success(t.save, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.success(t.save, { position: isRtl ? 'top-left' : 'top-right' });
       socket?.emit('inventoryUpdated', {
-        branchId: selectedItem?.branch?._id || user?.branchId,
         productId: selectedItem?.product?._id,
-        minStockLevel: editForm.minStockLevel,
-        maxStockLevel: editForm.maxStockLevel,
         eventId: crypto.randomUUID(),
       });
     },
     onError: (err) => {
-      const errorMessage = err.status === 429 ? t.errors.tooManyRequests : err.message || t.errors.updateInventory;
-      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
-      setEditErrors({ form: errorMessage });
+      toast.error(err.message || t.errors.updateInventory, { position: isRtl ? 'top-left' : 'top-right' });
+      setEditErrors({ form: err.message });
     },
+  });
+
+  const assignChefMutation = useMutation({
+    mutationFn: async (chefId) => {
+      if (!selectedRequest) throw new Error('No request selected');
+      await factoryInventoryAPI.assignChefToRequest({
+        requestId: selectedRequest._id,
+        chefId,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['productionRequests'] });
+      setIsAssignModalOpen(false);
+      setSelectedRequest(null);
+      toast.success('Chef assigned successfully');
+      socket?.emit('requestUpdated', { requestId: selectedRequest?._id, status: 'assigned' });
+    },
+    onError: (err) => toast.error(err.message || 'Failed to assign chef'),
+  });
+
+  const completeRequestMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedRequest) throw new Error('No request selected');
+      await factoryInventoryAPI.completeProductionRequest(selectedRequest._id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['productionRequests'] });
+      queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
+      toast.success('Request completed successfully');
+      socket?.emit('requestUpdated', { requestId: selectedRequest?._id, status: 'completed' });
+    },
+    onError: (err) => toast.error(err.message || 'Failed to complete request'),
   });
 
   const errorMessage = inventoryError?.message || '';
@@ -896,7 +769,7 @@ export const FactoryInventory: React.FC = () => {
           </div>
         </div>
         <button
-          onClick={() => handleOpenReturnModal()}
+          onClick={() => handleOpenRequestModal()}
           className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
           aria-label={t.create}
         >
@@ -981,7 +854,7 @@ export const FactoryInventory: React.FC = () => {
           <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600 text-sm font-medium">{t.noItems}</p>
           <button
-            onClick={() => handleOpenReturnModal()}
+            onClick={() => handleOpenRequestModal()}
             className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
             aria-label={t.create}
           >
@@ -1047,7 +920,7 @@ export const FactoryInventory: React.FC = () => {
                       <Edit className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => handleOpenReturnModal(item)}
+                      onClick={() => handleOpenRequestModal(item)}
                       disabled={item.currentStock <= 0}
                       className="p-2 text-red-600 hover:text-red-800 rounded-lg text-sm transition-colors duration-200 disabled:opacity-50"
                       aria-label={t.create}
@@ -1088,9 +961,9 @@ export const FactoryInventory: React.FC = () => {
 
       <motion.div
         initial={{ opacity: 0 }}
-        animate={{ opacity: isReturnModalOpen ? 1 : 0 }}
+        animate={{ opacity: isRequestModalOpen ? 1 : 0 }}
         className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
-          isReturnModalOpen ? '' : 'pointer-events-none'
+          isRequestModalOpen ? '' : 'pointer-events-none'
         }`}
         role="dialog"
         aria-modal="true"
@@ -1098,16 +971,16 @@ export const FactoryInventory: React.FC = () => {
       >
         <motion.div
           initial={{ scale: 0.95, y: 20 }}
-          animate={{ scale: isReturnModalOpen ? 1 : 0.95, y: isReturnModalOpen ? 0 : 20 }}
+          animate={{ scale: isRequestModalOpen ? 1 : 0.95, y: isRequestModalOpen ? 0 : 20 }}
           className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-lg max-h-[90vh] overflow-y-auto"
         >
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-gray-900">{t.create}</h2>
             <button
               onClick={() => {
-                setIsReturnModalOpen(false);
-                dispatchReturnForm({ type: 'RESET' });
-                setReturnErrors({});
+                setIsRequestModalOpen(false);
+                dispatchProductionForm({ type: 'RESET' });
+                setProductionErrors({});
                 setSelectedItem(null);
               }}
               className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
@@ -1117,39 +990,61 @@ export const FactoryInventory: React.FC = () => {
             </button>
           </div>
           <div className="space-y-4">
-            {selectedItem?.product && (
-              <p className="text-sm text-gray-600">
-                {t.items}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
-              </p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t.selectType}</label>
+              <ProductDropdown
+                value={productionForm.type}
+                onChange={(value) => dispatchProductionForm({ type: 'SET_TYPE', payload: value })}
+                options={[
+                  { value: ProductionType.BRANCH, label: t.branch },
+                  { value: ProductionType.PRODUCTION, label: t.productionType },
+                ]}
+                ariaLabel={t.selectType}
+                className="w-full"
+              />
+            </div>
+            {productionForm.type === ProductionType.BRANCH && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t.selectBranch}</label>
+                <ProductDropdown
+                  value={productionForm.branchId}
+                  onChange={(value) => dispatchProductionForm({ type: 'SET_BRANCH', payload: value })}
+                  options={[
+                    { value: '', label: t.selectBranch },
+                    ...branches.map(b => ({ value: b._id, label: b.displayName })),
+                  ]}
+                  ariaLabel={t.selectBranch}
+                  className="w-full"
+                />
+                {productionErrors.branchId && <p className="text-red-600 text-xs mt-1">{productionErrors.branchId}</p>}
+              </div>
             )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">{t.notes}</label>
               <textarea
-                value={returnForm.notes}
-                onChange={(e) => dispatchReturnForm({ type: 'SET_NOTES', payload: e.target.value })}
+                value={productionForm.notes}
+                onChange={(e) => dispatchProductionForm({ type: 'SET_NOTES', payload: e.target.value })}
                 placeholder={t.notesPlaceholder}
                 className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm resize-none"
                 rows={3}
                 aria-label={t.notes}
               />
-              {returnErrors.form && <p className="text-red-600 text-xs mt-1">{returnErrors.form}</p>}
+              {productionErrors.form && <p className="text-red-600 text-xs mt-1">{productionErrors.form}</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
-              {returnForm.items.map((item, index) => (
+              {productionForm.items.map((item, index) => (
                 <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                  {!selectedItem && (
-                    <ProductDropdown
-                      value={item.product}
-                      onChange={(value) => handleProductChange(index, value)}
-                      options={productOptions}
-                      ariaLabel={`${t.items} ${index + 1}`}
-                      placeholder={t.selectProduct}
-                      className="w-full"
-                    />
-                  )}
-                  {returnErrors[`item_${index}_product`] && (
-                    <p className="text-red-600 text-xs">{returnErrors[`item_${index}_product`]}</p>
+                  <ProductDropdown
+                    value={item.productId}
+                    onChange={(value) => handleProductChange(index, value)}
+                    options={productOptions}
+                    ariaLabel={`${t.items} ${index + 1}`}
+                    placeholder={t.selectProduct}
+                    className="w-full"
+                  />
+                  {productionErrors[`item_${index}_productId`] && (
+                    <p className="text-red-600 text-xs">{productionErrors[`item_${index}_productId`]}</p>
                   )}
                   <div className="flex flex-col sm:flex-row gap-4">
                     <div className="flex-1">
@@ -1161,27 +1056,11 @@ export const FactoryInventory: React.FC = () => {
                         onDecrement={() => updateItemInForm(index, 'quantity', item.quantity - 1)}
                         max={item.maxQuantity}
                       />
-                      {returnErrors[`item_${index}_quantity`] && (
-                        <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_quantity`]}</p>
+                      {productionErrors[`item_${index}_quantity`] && (
+                        <p className="text-red-600 text-xs mt-1">{productionErrors[`item_${index}_quantity`]}</p>
                       )}
                     </div>
-                    <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.reason}</label>
-                      <ProductDropdown
-                        value={item.reason}
-                        onChange={(value) => updateItemInForm(index, 'reason', value)}
-                        options={reasonOptions}
-                        ariaLabel={`${t.reason} ${index + 1}`}
-                        className="w-full"
-                      />
-                      {returnErrors[`item_${index}_reason`] && (
-                        <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_reason`]}</p>
-                      )}
-                      {returnErrors[`item_${index}_reasonEn`] && (
-                        <p className="text-red-600 text-xs mt-1">{returnErrors[`item_${index}_reasonEn`]}</p>
-                      )}
-                    </div>
-                    {!selectedItem && returnForm.items.length > 1 && (
+                    {productionForm.items.length > 1 && (
                       <button
                         onClick={() => removeItemFromForm(index)}
                         className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 self-start sm:self-end"
@@ -1193,24 +1072,22 @@ export const FactoryInventory: React.FC = () => {
                   </div>
                 </div>
               ))}
-              {!selectedItem && (
-                <button
-                  onClick={addItemToForm}
-                  className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
-                  aria-label={t.addItem}
-                >
-                  <Plus className="w-4 h-4" />
-                  {t.addItem}
-                </button>
-              )}
-              {returnErrors.items && <p className="text-red-600 text-xs">{returnErrors.items}</p>}
+              <button
+                onClick={addItemToForm}
+                className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
+                aria-label={t.addItem}
+              >
+                <Plus className="w-4 h-4" />
+                {t.addItem}
+              </button>
+              {productionErrors.items && <p className="text-red-600 text-xs">{productionErrors.items}</p>}
             </div>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => {
-                  setIsReturnModalOpen(false);
-                  dispatchReturnForm({ type: 'RESET' });
-                  setReturnErrors({});
+                  setIsRequestModalOpen(false);
+                  dispatchProductionForm({ type: 'RESET' });
+                  setProductionErrors({});
                   setSelectedItem(null);
                 }}
                 className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
@@ -1219,12 +1096,12 @@ export const FactoryInventory: React.FC = () => {
                 {t.cancel}
               </button>
               <button
-                onClick={() => createReturnMutation.mutate()}
-                disabled={createReturnMutation.isLoading}
+                onClick={() => createRequestMutation.mutate()}
+                disabled={createRequestMutation.isLoading}
                 className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                aria-label={createReturnMutation.isLoading ? t.submitting : t.submit}
+                aria-label={createRequestMutation.isLoading ? t.submitting : t.submit}
               >
-                {createReturnMutation.isLoading ? t.submitting : t.submit}
+                {createRequestMutation.isLoading ? t.submitting : t.submit}
               </button>
             </div>
           </div>
@@ -1233,26 +1110,25 @@ export const FactoryInventory: React.FC = () => {
 
       <motion.div
         initial={{ opacity: 0 }}
-        animate={{ opacity: isEditModalOpen ? 1 : 0 }}
+        animate={{ opacity: isAssignModalOpen ? 1 : 0 }}
         className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
-          isEditModalOpen ? '' : 'pointer-events-none'
+          isAssignModalOpen ? '' : 'pointer-events-none'
         }`}
         role="dialog"
         aria-modal="true"
-        aria-label={t.editStockLimits}
+        aria-label="Assign Chef"
       >
         <motion.div
           initial={{ scale: 0.95, y: 20 }}
-          animate={{ scale: isEditModalOpen ? 1 : 0.95, y: isEditModalOpen ? 0 : 20 }}
+          animate={{ scale: isAssignModalOpen ? 1 : 0.95, y: isAssignModalOpen ? 0 : 20 }}
           className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
         >
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-900">{t.editStockLimits}</h2>
+            <h2 className="text-xl font-bold text-gray-900">Assign Chef</h2>
             <button
               onClick={() => {
-                setIsEditModalOpen(false);
-                setEditErrors({});
-                setSelectedItem(null);
+                setIsAssignModalOpen(false);
+                setSelectedRequest(null);
               }}
               className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
               aria-label={t.cancel}
@@ -1261,137 +1137,98 @@ export const FactoryInventory: React.FC = () => {
             </button>
           </div>
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.minStock}</label>
-              <input
-                type="number"
-                value={editForm.minStockLevel}
-                onChange={(e) => setEditForm({ ...editForm, minStockLevel: Math.max(0, parseInt(e.target.value) || 0) })}
-                min={0}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
-                aria-label={t.minStock}
-              />
-              {editErrors.minStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.minStockLevel}</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.maxStock}</label>
-              <input
-                type="number"
-                value={editForm.maxStockLevel}
-                onChange={(e) => setEditForm({ ...editForm, maxStockLevel: Math.max(editForm.minStockLevel + 1, parseInt(e.target.value) || 1000) })}
-                min={0}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
-                aria-label={t.maxStock}
-              />
-              {editErrors.maxStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.maxStockLevel}</p>}
-            </div>
-            {editErrors.form && <p className="text-red-600 text-xs">{editErrors.form}</p>}
+            <ProductDropdown
+              value={selectedRequest?.assignedChef || ''}
+              onChange={(value) => assignChefMutation.mutate(value)}
+              options={[
+                { value: '', label: 'Select Chef' },
+                ...chefs.map(chef => ({ value: chef._id, label: chef.displayName })),
+              ]}
+              ariaLabel="Assign Chef"
+              className="w-full"
+            />
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => {
-                  setIsEditModalOpen(false);
-                  setEditErrors({});
-                  setSelectedItem(null);
+                  setIsAssignModalOpen(false);
+                  setSelectedRequest(null);
                 }}
                 className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
                 aria-label={t.cancel}
               >
                 {t.cancel}
-              </button>
-              <button
-                onClick={() => updateInventoryMutation.mutate()}
-                disabled={updateInventoryMutation.isLoading}
-                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                aria-label={updateInventoryMutation.isLoading ? t.saving : t.save}
-              >
-                {updateInventoryMutation.isLoading ? t.saving : t.save}
               </button>
             </div>
           </div>
         </motion.div>
       </motion.div>
 
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: isDetailsModalOpen ? 1 : 0 }}
-        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
-          isDetailsModalOpen ? '' : 'pointer-events-none'
-        }`}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t.productDetails}
-      >
-        <motion.div
-          initial={{ scale: 0.95, y: 20 }}
-          animate={{ scale: isDetailsModalOpen ? 1 : 0.95, y: isDetailsModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-2xl max-h-[90vh] overflow-y-auto"
-        >
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
-            <button
-              onClick={() => {
-                setIsDetailsModalOpen(false);
-                setSelectedProductId('');
-              }}
-              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
-              aria-label={t.cancel}
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="space-y-4">
-            {historyLoading ? (
-              <div className="space-y-3 animate-pulse">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-24 bg-gray-200 rounded-lg"></div>
-                ))}
-              </div>
-            ) : productHistory && productHistory.length > 0 ? (
-              <div className="space-y-4">
-                {productHistory.map((entry) => (
-                  <div
-                    key={entry._id}
-                    className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex flex-col gap-2"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
-                      <span className="text-sm font-medium text-gray-700">{t.date}</span>
-                      <span className="text-sm text-gray-600">
-                        {new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
-                      </span>
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
-                      <span className="text-sm font-medium text-gray-700">{t.type}</span>
-                      <span className="text-sm text-gray-600">{t[entry.type]}</span>
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
-                      <span className="text-sm font-medium text-gray-700">{t.quantity}</span>
-                      <span className="text-sm text-gray-600">{entry.quantity}</span>
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
-                      <span className="text-sm font-medium text-gray-700">{t.description}</span>
-                      <span className="text-sm text-gray-600">{entry.description}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-600 text-sm font-medium">{t.noHistory}</p>
-            )}
-            <div className="flex justify-end mt-4">
-              <button
-                onClick={() => {
-                  setIsDetailsModalOpen(false);
-                  setSelectedProductId('');
-                }}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
-                aria-label={t.cancel}
-              >
-                {t.cancel}
-              </button>
-            </div>
-          </div>
-        </motion.div>
-      </motion.div>
+      {/* Section for Production Requests */}
+      <div className="mt-12">
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">Production Requests</h2>
+        <div className="overflow-x-auto rounded-xl shadow-sm border border-gray-100 bg-white">
+          <table className="min-w-full divide-y divide-gray-100 text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Type</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Branch</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Status</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Items</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Created By</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Assigned Chef</th>
+                <th className="px-4 py-3 text-left font-semibold text-gray-700">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {productionRequests.map((request) => (
+                <tr key={request._id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">{request.type}</td>
+                  <td className="px-4 py-3">{request.branchName || 'N/A'}</td>
+                  <td className="px-4 py-3">{request.status}</td>
+                  <td className="px-4 py-3">
+                    {request.items.map((item, i) => (
+                      <div key={i}>{item.productName}: {item.quantity}</div>
+                    ))}
+                  </td>
+                  <td className="px-4 py-3">{request.createdBy}</td>
+                  <td className="px-4 py-3">{request.assignedChef || 'Not Assigned'}</td>
+                  <td className="px-4 py-3">
+                    {request.status === 'pending' && (
+                      <button
+                        onClick={() => {
+                          setSelectedRequest(request);
+                          setIsAssignModalOpen(true);
+                        }}
+                        className="px-3 py-1 bg-blue-600 text-white rounded-md text-xs"
+                      >
+                        Assign Chef
+                      </button>
+                    )}
+                    {request.status === 'assigned' && (
+                      <button
+                        onClick={() => productionRequestsAPI.updateProductionRequestStatus(request._id, { status: 'in_progress' })}
+                        className="px-3 py-1 bg-yellow-600 text-white rounded-md text-xs"
+                      >
+                        Start Production
+                      </button>
+                    )}
+                    {request.status === 'in_progress' && (
+                      <button
+                        onClick={() => completeRequestMutation.mutate()}
+                        className="px-3 py-1 bg-green-600 text-white rounded-md text-xs"
+                      >
+                        Complete
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   );
 };
+
+export default FactoryInventory;
