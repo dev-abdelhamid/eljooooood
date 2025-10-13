@@ -1654,12 +1654,17 @@ const ProductionReport: React.FC = () => {
                       <td className="px-4 py-3 text-gray-800 text-center">
                         {formatNumber(data.reduce((sum, row) => sum + row.dailyReturns[i], 0), isRtl)}
                       </td>
-                      <td className="px-4 py-3 text-gray-800 text-center">
-                        {formatNumber((data.reduce((sum, row) => sum + row.dailyOrders[i], 0) > 0 ? (data.reduce((sum, row) => sum + row.dailyReturns[i], 0) / data.reduce((sum, row) => sum + row.dailyOrders[i], 0) * 100).toFixed(2) : '0.00', isRtl) + '%')}
-                        
-                      </td>
+                     <td className="px-4 py-3 text-gray-800 text-center">
+  {(() => {
+    const dailyReturnsTotal = data.reduce((sum, row) => sum + (row.dailyReturns[i] || 0), 0);
+    const dailyOrdersTotal = data.reduce((sum, row) => sum + (row.dailyOrders[i] || 0), 0);
+    const ratio = dailyOrdersTotal > 0 ? (dailyReturnsTotal / dailyOrdersTotal * 100).toFixed(2) : '0.00';
+    return `${formatNumber(ratio, isRtl)}%`;
+  })()}
+</td>
                     </Fragment>
                   ))}
+                  
                   <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalOrders, isRtl)}</td>
                   <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalReturns, isRtl)}</td>
                   <td className="px-4 py-3 text-gray-800 text-center">{grandTotalRatio}%</td>
