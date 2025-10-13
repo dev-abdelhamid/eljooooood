@@ -31,6 +31,7 @@ interface StockRow {
   unit: string;
   totalQuantity: number;
   dailyQuantities: number[];
+  dailyBranchDetails: { [branch: string]: number }[];
   totalPrice: number;
 }
 
@@ -41,6 +42,7 @@ interface ReturnRow {
   unit: string;
   totalReturns: number;
   dailyReturns: number[];
+  dailyBranchDetails: { [branch: string]: number }[];
   totalValue: number;
 }
 
@@ -90,8 +92,7 @@ const formatPrice = (amount: number, isRtl: boolean, isStats: boolean = false): 
 };
 
 const formatNumber = (num: number, isRtl: boolean): string => {
-  const str = num.toString();
-  return isRtl ? toArabicNumerals(str) : str;
+  return isRtl ? toArabicNumerals(num) : num.toString();
 };
 
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
@@ -337,6 +338,8 @@ const ProductionReport: React.FC = () => {
           .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language));
         setBranches(fetchedBranches);
 
+        const branchMap = new Map<string, string>(fetchedBranches.map(b => [b._id, b.displayName]));
+
         // Process product details with language support
         const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
         inventory.forEach((item: any) => {
@@ -445,7 +448,7 @@ const ProductionReport: React.FC = () => {
           });
 
           if (month === selectedMonth) {
-            // Set actualSales only for selected month
+            // Set actualSales
             for (const row of orderMap.values()) {
               const salesItem = salesResponse.productSales?.find((s: any) => s.productId === row.id.split('-')[0]);
               if (salesItem) {
@@ -468,8 +471,10 @@ const ProductionReport: React.FC = () => {
                 : (item.product?.unitEn || item.product?.unit || 'N/A'),
               price: Number(item.product?.price) || 0,
             };
+            const branchId = item.branch?._id || item.branch;
+            const branchName = branchMap.get(branchId) || (isRtl ? 'غير معروف' : 'Unknown');
             (item.movements || []).forEach((movement: any) => {
-              if (!movement.type || !['in', 'out', 'return'].includes(movement.type)) return;
+              if (!movement.type || !['in', 'out'].includes(movement.type)) return;
               const date = new Date(movement.createdAt);
               if (isNaN(date.getTime())) return;
               const prodMonth = date.getMonth();
@@ -478,39 +483,7 @@ const ProductionReport: React.FC = () => {
                 const day = date.getDate();
                 const key = `${productId}-${month}`;
                 const quantity = Number(movement.quantity) || 0;
-                if (movement.type === 'return') {
-                  if (!returnMap.has(key)) {
-                    returnMap.set(key, {
-                      id: key,
-                      product: details.product,
-                      code: details.code,
-                      unit: details.unit,
-                      totalReturns: 0,
-                      dailyReturns: Array(daysInMonthCount).fill(0),
-                      totalValue: 0,
-                    });
-                  }
-                  const row = returnMap.get(key)!;
-                  row.dailyReturns[day - 1] -= Math.abs(quantity); // Negative for returns
-                  row.totalReturns -= Math.abs(quantity);
-                  row.totalValue += Math.abs(quantity) * details.price;
-                } else if (movement.type === 'out') {
-                  if (!stockOutMap.has(key)) {
-                    stockOutMap.set(key, {
-                      id: key,
-                      code: details.code,
-                      product: details.product,
-                      unit: details.unit,
-                      totalQuantity: 0,
-                      dailyQuantities: Array(daysInMonthCount).fill(0),
-                      totalPrice: 0,
-                    });
-                  }
-                  const row = stockOutMap.get(key)!;
-                  row.dailyQuantities[day - 1] -= Math.abs(quantity); // Negative for stock out
-                  row.totalQuantity -= Math.abs(quantity);
-                  row.totalPrice += Math.abs(quantity) * details.price;
-                } else {
+                if (movement.type === 'in') {
                   if (!stockInMap.has(key)) {
                     stockInMap.set(key, {
                       id: key,
@@ -519,17 +492,97 @@ const ProductionReport: React.FC = () => {
                       unit: details.unit,
                       totalQuantity: 0,
                       dailyQuantities: Array(daysInMonthCount).fill(0),
+                      dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
                       totalPrice: 0,
                     });
                   }
                   const row = stockInMap.get(key)!;
-                  row.dailyQuantities[day - 1] += Math.abs(quantity);
-                  row.totalQuantity += Math.abs(quantity);
-                  row.totalPrice += Math.abs(quantity) * details.price;
+                  const absQty = Math.abs(quantity);
+                  row.dailyQuantities[day - 1] += absQty;
+                  row.dailyBranchDetails[day - 1][branchName] = (row.dailyBranchDetails[day - 1][branchName] || 0) + absQty;
+                  row.totalQuantity += absQty;
+                  row.totalPrice += absQty * details.price;
+                } else if (movement.type === 'out') {
+                  const isReturn = movement.reference?.includes('مرتجع') || movement.reference?.includes('RET-');
+                  if (isReturn) {
+                    if (!returnMap.has(key)) {
+                      returnMap.set(key, {
+                        id: key,
+                        product: details.product,
+                        code: details.code,
+                        unit: details.unit,
+                        totalReturns: 0,
+                        dailyReturns: Array(daysInMonthCount).fill(0),
+                        dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+                        totalValue: 0,
+                      });
+                    }
+                    const row = returnMap.get(key)!;
+                    const qty = -Math.abs(quantity);
+                    row.dailyReturns[day - 1] += qty;
+                    row.dailyBranchDetails[day - 1][branchName] = (row.dailyBranchDetails[day - 1][branchName] || 0) + qty;
+                    row.totalReturns += qty;
+                    row.totalValue += Math.abs(quantity) * details.price;
+                  } else {
+                    if (!stockOutMap.has(key)) {
+                      stockOutMap.set(key, {
+                        id: key,
+                        code: details.code,
+                        product: details.product,
+                        unit: details.unit,
+                        totalQuantity: 0,
+                        dailyQuantities: Array(daysInMonthCount).fill(0),
+                        dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+                        totalPrice: 0,
+                      });
+                    }
+                    const row = stockOutMap.get(key)!;
+                    const qty = -Math.abs(quantity);
+                    row.dailyQuantities[day - 1] += qty;
+                    row.dailyBranchDetails[day - 1][branchName] = (row.dailyBranchDetails[day - 1][branchName] || 0) + qty;
+                    row.totalQuantity += qty;
+                    row.totalPrice += Math.abs(quantity) * details.price;
+                  }
                 }
               }
             });
           });
+
+          if (month === selectedMonth) {
+            // Process sales
+            salesResponse.productSales?.forEach((s: any) => {
+              const productId = s.productId;
+              if (!productId) return;
+              const details = productDetails.get(productId) || {
+                code: s.product?.code || `code-${Math.random().toString(36).substring(2)}`,
+                product: isRtl
+                  ? (s.product?.name || 'منتج غير معروف')
+                  : (s.product?.nameEn || s.product?.name || 'Unknown Product'),
+                unit: isRtl
+                  ? (s.product?.unit || 'غير محدد')
+                  : (s.product?.unitEn || s.product?.unit || 'N/A'),
+                price: s.totalRevenue / s.totalQuantity || 0,
+              };
+              const key = `${productId}-${month}`;
+              if (!salesMap.has(key)) {
+                salesMap.set(key, {
+                  id: key,
+                  code: details.code,
+                  product: details.product,
+                  unit: details.unit,
+                  totalSales: 0,
+                  dailySales: Array(daysInMonthCount).fill(0),
+                  totalValue: 0,
+                });
+              }
+              const row = salesMap.get(key)!;
+              s.dailySales?.forEach((sale: any, index: number) => {
+                row.dailySales[index] += sale.quantity || 0;
+                row.totalSales += sale.quantity || 0;
+                row.totalValue += (sale.quantity || 0) * details.price;
+              });
+            });
+          }
 
           monthlyOrderData[month] = Array.from(orderMap.values());
           monthlyStockInData[month] = Array.from(stockInMap.values());
@@ -537,44 +590,6 @@ const ProductionReport: React.FC = () => {
           monthlyReturnData[month] = Array.from(returnMap.values());
           monthlySalesData[month] = Array.from(salesMap.values());
         }
-
-        // Process sales only for selected month
-        const salesMap = new Map<string, SalesRow>();
-        const daysInSelectedMonth = new Date(currentYear, selectedMonth + 1, 0).getDate();
-        salesResponse.productSales?.forEach((s: any) => {
-          const productId = s.productId;
-          if (!productId) return;
-          const details = productDetails.get(productId) || {
-            code: s.product?.code || `code-${Math.random().toString(36).substring(2)}`,
-            product: isRtl
-              ? (s.product?.name || 'منتج غير معروف')
-              : (s.product?.nameEn || s.product?.name || 'Unknown Product'),
-            unit: isRtl
-              ? (s.product?.unit || 'غير محدد')
-              : (s.product?.unitEn || s.product?.unit || 'N/A'),
-            price: s.totalRevenue / s.totalQuantity || 0,
-          };
-          const key = `${productId}-${selectedMonth}`;
-          if (!salesMap.has(key)) {
-            salesMap.set(key, {
-              id: key,
-              code: details.code,
-              product: details.product,
-              unit: details.unit,
-              totalSales: 0,
-              dailySales: Array(daysInSelectedMonth).fill(0),
-              totalValue: 0,
-            });
-          }
-          const row = salesMap.get(key)!;
-          s.dailySales?.forEach((sale: any, index: number) => {
-            const qty = sale.quantity || 0;
-            row.dailySales[index] += qty;
-            row.totalSales += qty;
-            row.totalValue += qty * details.price;
-          });
-        });
-        monthlySalesData[selectedMonth] = Array.from(salesMap.values());
 
         setOrderData(monthlyOrderData);
         setStockInData(monthlyStockInData);
@@ -593,6 +608,19 @@ const ProductionReport: React.FC = () => {
     };
     fetchData();
   }, [isRtl, currentYear, selectedMonth, language]);
+
+  const getTooltipContent = (dailyQuantity: number, branchDetails: { [branch: string]: number }, isRtl: boolean, type: 'in' | 'out' | 'return' | 'sales') => {
+    let header = '';
+    if (type === 'in') header = isRtl ? 'زيادة مخزون' : 'Stock In';
+    if (type === 'out') header = isRtl ? 'نقص مخزون' : 'Stock Out';
+    if (type === 'return') header = isRtl ? 'مرتجع' : 'Return';
+    if (type === 'sales') header = isRtl ? 'مبيعات' : 'Sales';
+    let content = `${header}: ${dailyQuantity > 0 ? '+' : ''}${formatNumber(dailyQuantity, isRtl)}`;
+    if (Object.keys(branchDetails).length > 0) {
+      content += '\n' + Object.entries(branchDetails).map(([branch, qty]) => `${branch}: ${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}`).join('\n');
+    }
+    return content;
+  };
 
   const renderOrderTable = useCallback(
     (data: OrderRow[], title: string, month: number) => {
@@ -767,7 +795,9 @@ const ProductionReport: React.FC = () => {
                         {formatNumber(row.branchQuantities[branch] || 0, isRtl)}
                       </td>
                     ))}
-                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium" data-tooltip-id="total-quantity" data-tooltip-content={`${isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}: ${formatNumber(row.totalQuantity, isRtl)}\n${Object.entries(row.branchQuantities).map(([branch, qty]) => `${branch}: ${formatNumber(qty, isRtl)}`).join('\n')}`}>
+                      {formatNumber(row.totalQuantity, isRtl)}
+                    </td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.actualSales, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.totalPrice, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">
@@ -794,6 +824,7 @@ const ProductionReport: React.FC = () => {
               </tbody>
             </table>
             <Tooltip id="branch-quantity" place="top" effect="solid" className="custom-tooltip" />
+            <Tooltip id="total-quantity" place="top" effect="solid" className="custom-tooltip" />
           </motion.div>
         </div>
       );
@@ -802,7 +833,7 @@ const ProductionReport: React.FC = () => {
   );
 
   const renderStockTable = useCallback(
-    (data: StockRow[], title: string, month: number, isIn: boolean) => {
+    (data: StockRow[], title: string, month: number, type: 'in' | 'out') => {
       const grandTotalQuantity = data.reduce((sum, row) => sum + row.totalQuantity, 0);
       const grandTotalPrice = data.reduce((sum, row) => sum + row.totalPrice, 0);
       const monthName = months[month].label;
@@ -940,23 +971,18 @@ const ProductionReport: React.FC = () => {
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
-                    {row.dailyQuantities.map((qty, i) => {
-                      const display = qty !== 0
-                        ? (isIn && qty > 0 ? `+${formatNumber(qty, isRtl)}` : formatNumber(qty, isRtl))
-                        : '0';
-                      return (
-                        <td
-                          key={i}
-                          className={`px-4 py-3 text-center font-medium ${
-                            qty > 0 ? 'bg-green-50 text-green-700' : qty < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
-                          }`}
-                          data-tooltip-id="stock-change"
-                          data-tooltip-content={`${isRtl ? (isIn ? 'زيادة مخزون' : 'نقص مخزون') : (isIn ? 'Stock In' : 'Stock Out')}: ${display}`}
-                        >
-                          {display}
-                        </td>
-                      );
-                    })}
+                    {row.dailyQuantities.map((qty, i) => (
+                      <td
+                        key={i}
+                        className={`px-4 py-3 text-center font-medium ${
+                          qty > 0 ? 'bg-green-50 text-green-700' : qty < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
+                        }`}
+                        data-tooltip-id="stock-change"
+                        data-tooltip-content={getTooltipContent(qty, row.dailyBranchDetails[i], isRtl, type)}
+                      >
+                        {qty !== 0 ? `${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}` : '0'}
+                      </td>
+                    ))}
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.totalPrice, isRtl)}</td>
                   </tr>
@@ -1125,7 +1151,7 @@ const ProductionReport: React.FC = () => {
                         key={i}
                         className="px-4 py-3 text-center font-medium text-red-700"
                         data-tooltip-id="return-tooltip"
-                        data-tooltip-content={`${isRtl ? 'مرتجع' : 'Return'}: ${formatNumber(qty, isRtl)}`}
+                        data-tooltip-content={getTooltipContent(qty, row.dailyBranchDetails[i], isRtl, 'return')}
                       >
                         {qty !== 0 ? formatNumber(qty, isRtl) : '0'}
                       </td>
@@ -1298,7 +1324,7 @@ const ProductionReport: React.FC = () => {
                         key={i}
                         className="px-4 py-3 text-center font-medium text-green-700 bg-green-50"
                         data-tooltip-id="sales-tooltip"
-                        data-tooltip-content={`${isRtl ? 'مبيعات' : 'Sales'}: ${formatNumber(qty, isRtl)}`}
+                        data-tooltip-content={getTooltipContent(qty, {}, isRtl, 'sales')}
                       >
                         {qty !== 0 ? `+${formatNumber(qty, isRtl)}` : '0'}
                       </td>
@@ -1397,8 +1423,8 @@ const ProductionReport: React.FC = () => {
       </div>
       <AnimatePresence>
         {activeTab === 'orders' && renderOrderTable(orderData[selectedMonth] || [], isRtl ? 'تقرير الطلبات' : 'Orders Report', selectedMonth)}
-        {activeTab === 'stockIn' && renderStockTable(stockInData[selectedMonth] || [], isRtl ? 'تقرير إدخال المخزون' : 'Stock In Report', selectedMonth, true)}
-        {activeTab === 'stockOut' && renderStockTable(stockOutData[selectedMonth] || [], isRtl ? 'تقرير إخراج المخزون' : 'Stock Out Report', selectedMonth, false)}
+        {activeTab === 'stockIn' && renderStockTable(stockInData[selectedMonth] || [], isRtl ? 'تقرير إدخال المخزون' : 'Stock In Report', selectedMonth, 'in')}
+        {activeTab === 'stockOut' && renderStockTable(stockOutData[selectedMonth] || [], isRtl ? 'تقرير إخراج المخزون' : 'Stock Out Report', selectedMonth, 'out')}
         {activeTab === 'returns' && renderReturnTable(returnData[selectedMonth] || [], isRtl ? 'تقرير المرتجعات' : 'Returns Report', selectedMonth)}
         {activeTab === 'sales' && renderSalesTable(salesData[selectedMonth] || [], isRtl ? 'تقرير المبيعات' : 'Sales Report', selectedMonth)}
       </AnimatePresence>
