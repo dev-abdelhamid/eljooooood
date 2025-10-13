@@ -53,7 +53,6 @@ interface SalesRow {
   unit: string;
   totalSales: number;
   dailySales: number[];
-  dailyBranchDetails: { [branch: string]: number }[];
   totalValue: number;
 }
 
@@ -592,28 +591,14 @@ const ProductionReport: React.FC = () => {
   }, [isRtl, currentYear, selectedMonth, language]);
 
   const getTooltipContent = (dailyQuantity: number, branchDetails: { [branch: string]: number }, isRtl: boolean, type: 'in' | 'out' | 'return' | 'sales') => {
-    if (dailyQuantity === 0) return '';
     let header = '';
-    let movementType = '';
-    if (type === 'in') {
-      header = isRtl ? 'زيادة مخزون' : 'Stock In';
-      movementType = isRtl ? 'إدخال' : 'In';
-    }
-    if (type === 'out') {
-      header = isRtl ? 'نقص مخزون' : 'Stock Out';
-      movementType = isRtl ? 'إخراج' : 'Out';
-    }
-    if (type === 'return') {
-      header = isRtl ? 'مرتجع' : 'Return';
-      movementType = isRtl ? 'إرجاع' : 'Return';
-    }
-    if (type === 'sales') {
-      header = isRtl ? 'مبيعات' : 'Sales';
-      movementType = isRtl ? 'بيع' : 'Sale';
-    }
-    let content = `${header}: ${dailyQuantity > 0 ? '+' : ''}${formatNumber(dailyQuantity, isRtl)}\n${isRtl ? 'نوع الحركة: ' : 'Movement Type: '}${movementType}`;
+    if (type === 'in') header = isRtl ? 'زيادة مخزون' : 'Stock In';
+    if (type === 'out') header = isRtl ? 'نقص مخزون' : 'Stock Out';
+    if (type === 'return') header = isRtl ? 'مرتجع' : 'Return';
+    if (type === 'sales') header = isRtl ? 'مبيعات' : 'Sales';
+    let content = `${header}: ${dailyQuantity > 0 ? '+' : ''}${formatNumber(dailyQuantity, isRtl)}`;
     if (Object.keys(branchDetails).length > 0) {
-      content += `\n${isRtl ? 'تفاصيل الفروع:' : 'Branch Details:'}\n` + Object.entries(branchDetails).map(([branch, qty]) => `${branch}: ${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}`).join('\n');
+      content += '\n' + Object.entries(branchDetails).map(([branch, qty]) => `${branch}: ${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}`).join('\n');
     }
     return content;
   };
@@ -783,15 +768,17 @@ const ProductionReport: React.FC = () => {
                       <td
                         key={branch}
                         className={`px-4 py-3 text-center ${
-                          row.branchQuantities[branch] > 0 ? 'bg-green-100 text-green-800' : row.branchQuantities[branch] < 0 ? 'bg-red-100 text-red-800' : 'text-gray-700'
-                        } font-medium`}
+                          row.branchQuantities[branch] > 0 ? 'bg-green-50 text-green-700' : row.branchQuantities[branch] < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
+                        }`}
                         data-tooltip-id="branch-quantity"
                         data-tooltip-content={`${isRtl ? 'الكمية في ' : 'Quantity in '} ${branch}: ${formatNumber(row.branchQuantities[branch] || 0, isRtl)}`}
                       >
-                        {row.branchQuantities[branch] !== 0 ? formatNumber(row.branchQuantities[branch], isRtl) : ''}
+                        {formatNumber(row.branchQuantities[branch] || 0, isRtl)}
                       </td>
                     ))}
-                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium" data-tooltip-id="total-quantity" data-tooltip-content={`${isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}: ${formatNumber(row.totalQuantity, isRtl)}\n${Object.entries(row.branchQuantities).map(([branch, qty]) => `${branch}: ${formatNumber(qty, isRtl)}`).join('\n')}`}>
+                      {formatNumber(row.totalQuantity, isRtl)}
+                    </td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.actualSales, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.totalPrice, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">
@@ -818,6 +805,7 @@ const ProductionReport: React.FC = () => {
               </tbody>
             </table>
             <Tooltip id="branch-quantity" place="top" effect="solid" className="custom-tooltip" />
+            <Tooltip id="total-quantity" place="top" effect="solid" className="custom-tooltip" />
           </motion.div>
         </div>
       );
@@ -968,12 +956,12 @@ const ProductionReport: React.FC = () => {
                       <td
                         key={i}
                         className={`px-4 py-3 text-center font-medium ${
-                          qty !== 0 ? (qty > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800') : 'text-gray-700'
+                          qty > 0 ? 'bg-green-50 text-green-700' : qty < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
                         }`}
-                        data-tooltip-id={qty !== 0 ? 'stock-change' : undefined}
+                        data-tooltip-id="stock-change"
                         data-tooltip-content={getTooltipContent(qty, row.dailyBranchDetails[i], isRtl, type)}
                       >
-                        {qty !== 0 ? `${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}` : ''}
+                        {qty !== 0 ? `${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}` : '0'}
                       </td>
                     ))}
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
@@ -1142,13 +1130,11 @@ const ProductionReport: React.FC = () => {
                     {row.dailyReturns.map((qty, i) => (
                       <td
                         key={i}
-                        className={`px-4 py-3 text-center font-medium ${
-                          qty !== 0 ? 'bg-red-100 text-red-800' : 'text-gray-700'
-                        }`}
-                        data-tooltip-id={qty !== 0 ? 'return-tooltip' : undefined}
+                        className="px-4 py-3 text-center font-medium text-red-700"
+                        data-tooltip-id="return-tooltip"
                         data-tooltip-content={getTooltipContent(qty, row.dailyBranchDetails[i], isRtl, 'return')}
                       >
-                        {qty !== 0 ? formatNumber(qty, isRtl) : ''}
+                        {qty !== 0 ? formatNumber(qty, isRtl) : '0'}
                       </td>
                     ))}
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalReturns, isRtl)}</td>
@@ -1175,7 +1161,7 @@ const ProductionReport: React.FC = () => {
     [loading, isRtl, daysInMonth, months, formatPrice]
   );
 
-  const renderSalesTable = useCallback(
+    const renderSalesTable = useCallback(
     (data: SalesRow[], title: string, month: number) => {
       const grandTotalSales = data.reduce((sum, row) => sum + row.totalSales, 0);
       const grandTotalValue = data.reduce((sum, row) => sum + row.totalValue, 0);
@@ -1349,6 +1335,7 @@ const ProductionReport: React.FC = () => {
     },
     [loading, isRtl, daysInMonth, months, formatPrice]
   );
+
 
   return (
     <div className={`min-h-screen px-6 py-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-100`}>
