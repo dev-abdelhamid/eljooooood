@@ -53,7 +53,6 @@ interface SalesRow {
   unit: string;
   totalSales: number;
   dailySales: number[];
-  dailyBranchDetails: { [branch: string]: number }[];
   totalValue: number;
 }
 
@@ -448,11 +447,13 @@ const ProductionReport: React.FC = () => {
             }
           });
 
-          // Set actualSales
-          for (const row of orderMap.values()) {
-            const salesItem = salesResponse.productSales?.find((s: any) => s.productId === row.id.split('-')[0]);
-            if (salesItem) {
-              row.actualSales = Number(salesItem.totalQuantity) || 0;
+          if (month === selectedMonth) {
+            // Set actualSales
+            for (const row of orderMap.values()) {
+              const salesItem = salesResponse.productSales?.find((s: any) => s.productId === row.id.split('-')[0]);
+              if (salesItem) {
+                row.actualSales = Number(salesItem.totalQuantity) || 0;
+              }
             }
           }
 
@@ -501,29 +502,87 @@ const ProductionReport: React.FC = () => {
                   row.dailyBranchDetails[day - 1][branchName] = (row.dailyBranchDetails[day - 1][branchName] || 0) + absQty;
                   row.totalQuantity += absQty;
                   row.totalPrice += absQty * details.price;
-                } else {
-                  if (!stockOutMap.has(key)) {
-                    stockOutMap.set(key, {
-                      id: key,
-                      code: details.code,
-                      product: details.product,
-                      unit: details.unit,
-                      totalQuantity: 0,
-                      dailyQuantities: Array(daysInMonthCount).fill(0),
-                      dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
-                      totalPrice: 0,
-                    });
+                } else if (movement.type === 'out') {
+                  const isReturn = movement.reference?.includes('مرتجع') || movement.reference?.includes('RET-');
+                  if (isReturn) {
+                    if (!returnMap.has(key)) {
+                      returnMap.set(key, {
+                        id: key,
+                        product: details.product,
+                        code: details.code,
+                        unit: details.unit,
+                        totalReturns: 0,
+                        dailyReturns: Array(daysInMonthCount).fill(0),
+                        dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+                        totalValue: 0,
+                      });
+                    }
+                    const row = returnMap.get(key)!;
+                    const qty = -Math.abs(quantity);
+                    row.dailyReturns[day - 1] += qty;
+                    row.dailyBranchDetails[day - 1][branchName] = (row.dailyBranchDetails[day - 1][branchName] || 0) + qty;
+                    row.totalReturns += qty;
+                    row.totalValue += Math.abs(quantity) * details.price;
+                  } else {
+                    if (!stockOutMap.has(key)) {
+                      stockOutMap.set(key, {
+                        id: key,
+                        code: details.code,
+                        product: details.product,
+                        unit: details.unit,
+                        totalQuantity: 0,
+                        dailyQuantities: Array(daysInMonthCount).fill(0),
+                        dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+                        totalPrice: 0,
+                      });
+                    }
+                    const row = stockOutMap.get(key)!;
+                    const qty = -Math.abs(quantity);
+                    row.dailyQuantities[day - 1] += qty;
+                    row.dailyBranchDetails[day - 1][branchName] = (row.dailyBranchDetails[day - 1][branchName] || 0) + qty;
+                    row.totalQuantity += qty;
+                    row.totalPrice += Math.abs(quantity) * details.price;
                   }
-                  const row = stockOutMap.get(key)!;
-                  const absQty = Math.abs(quantity);
-                  row.dailyQuantities[day - 1] -= absQty;
-                  row.dailyBranchDetails[day - 1][branchName] = (row.dailyBranchDetails[day - 1][branchName] || 0) - absQty;
-                  row.totalQuantity -= absQty;
-                  row.totalPrice += absQty * details.price;
                 }
               }
             });
           });
+
+          if (month === selectedMonth) {
+            // Process sales
+            salesResponse.productSales?.forEach((s: any) => {
+              const productId = s.productId;
+              if (!productId) return;
+              const details = productDetails.get(productId) || {
+                code: s.product?.code || `code-${Math.random().toString(36).substring(2)}`,
+                product: isRtl
+                  ? (s.product?.name || 'منتج غير معروف')
+                  : (s.product?.nameEn || s.product?.name || 'Unknown Product'),
+                unit: isRtl
+                  ? (s.product?.unit || 'غير محدد')
+                  : (s.product?.unitEn || s.product?.unit || 'N/A'),
+                price: s.totalRevenue / s.totalQuantity || 0,
+              };
+              const key = `${productId}-${month}`;
+              if (!salesMap.has(key)) {
+                salesMap.set(key, {
+                  id: key,
+                  code: details.code,
+                  product: details.product,
+                  unit: details.unit,
+                  totalSales: 0,
+                  dailySales: Array(daysInMonthCount).fill(0),
+                  totalValue: 0,
+                });
+              }
+              const row = salesMap.get(key)!;
+              s.dailySales?.forEach((sale: any, index: number) => {
+                row.dailySales[index] += sale.quantity || 0;
+                row.totalSales += sale.quantity || 0;
+                row.totalValue += (sale.quantity || 0) * details.price;
+              });
+            });
+          }
 
           monthlyOrderData[month] = Array.from(orderMap.values());
           monthlyStockInData[month] = Array.from(stockInMap.values());
@@ -736,7 +795,9 @@ const ProductionReport: React.FC = () => {
                         {formatNumber(row.branchQuantities[branch] || 0, isRtl)}
                       </td>
                     ))}
-                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium" data-tooltip-id="total-quantity" data-tooltip-content={`${isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}: ${formatNumber(row.totalQuantity, isRtl)}\n${Object.entries(row.branchQuantities).map(([branch, qty]) => `${branch}: ${formatNumber(qty, isRtl)}`).join('\n')}`}>
+                      {formatNumber(row.totalQuantity, isRtl)}
+                    </td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.actualSales, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.totalPrice, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">
@@ -763,6 +824,7 @@ const ProductionReport: React.FC = () => {
               </tbody>
             </table>
             <Tooltip id="branch-quantity" place="top" effect="solid" className="custom-tooltip" />
+            <Tooltip id="total-quantity" place="top" effect="solid" className="custom-tooltip" />
           </motion.div>
         </div>
       );
@@ -913,12 +975,12 @@ const ProductionReport: React.FC = () => {
                       <td
                         key={i}
                         className={`px-4 py-3 text-center font-medium ${
-                          qty !== 0 ? (qty > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800') : 'text-gray-700'
+                          qty > 0 ? 'bg-green-50 text-green-700' : qty < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
                         }`}
-                        data-tooltip-id={qty !== 0 ? 'stock-change' : undefined}
+                        data-tooltip-id="stock-change"
                         data-tooltip-content={getTooltipContent(qty, row.dailyBranchDetails[i], isRtl, type)}
                       >
-                        {qty !== 0 ? `${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}` : ''}
+                        {qty !== 0 ? `${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}` : '0'}
                       </td>
                     ))}
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
@@ -1087,13 +1149,11 @@ const ProductionReport: React.FC = () => {
                     {row.dailyReturns.map((qty, i) => (
                       <td
                         key={i}
-                        className={`px-4 py-3 text-center font-medium ${
-                          qty !== 0 ? 'bg-red-100 text-red-800' : 'text-gray-700'
-                        }`}
-                        data-tooltip-id={qty !== 0 ? 'return-tooltip' : undefined}
+                        className="px-4 py-3 text-center font-medium text-red-700"
+                        data-tooltip-id="return-tooltip"
                         data-tooltip-content={getTooltipContent(qty, row.dailyBranchDetails[i], isRtl, 'return')}
                       >
-                        {qty !== 0 ? formatNumber(qty, isRtl) : ''}
+                        {qty !== 0 ? formatNumber(qty, isRtl) : '0'}
                       </td>
                     ))}
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalReturns, isRtl)}</td>
@@ -1262,13 +1322,11 @@ const ProductionReport: React.FC = () => {
                     {row.dailySales.map((qty, i) => (
                       <td
                         key={i}
-                        className={`px-4 py-3 text-center font-medium ${
-                          qty !== 0 ? 'bg-green-100 text-green-800' : 'text-gray-700'
-                        }`}
-                        data-tooltip-id={qty !== 0 ? 'sales-tooltip' : undefined}
-                        data-tooltip-content={getTooltipContent(qty, row.dailyBranchDetails[i], isRtl, 'sales')}
+                        className="px-4 py-3 text-center font-medium text-green-700 bg-green-50"
+                        data-tooltip-id="sales-tooltip"
+                        data-tooltip-content={getTooltipContent(qty, {}, isRtl, 'sales')}
                       >
-                        {qty !== 0 ? `${formatNumber(qty, isRtl)}` : ''}
+                        {qty !== 0 ? `+${formatNumber(qty, isRtl)}` : '0'}
                       </td>
                     ))}
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalSales, isRtl)}</td>
