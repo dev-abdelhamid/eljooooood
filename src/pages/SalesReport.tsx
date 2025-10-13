@@ -1,541 +1,663 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Button } from '../components/UI/Button';
-import { Upload } from 'lucide-react';
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import { useSocket } from '../contexts/SocketContext';
+import { salesAPI, branchesAPI } from '../services/api';
+import { formatDate } from '../utils/formatDate';
+import { AlertCircle, DollarSign, Search, X, ChevronDown, Trash } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { salesAPI } from '../services/api';
-import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
-import { Tooltip } from 'react-tooltip';
+import { debounce } from 'lodash';
 
-interface SalesRow {
-  id: string;
-  code: string;
-  product: string;
-  unit: string;
-  totalSales: number;
-  dailySales: number[];
-  totalValue: number;
+// واجهات البيانات
+export interface Sale {
+  _id: string;
+  orderNumber: string;
+  branch: { _id: string; name: string; nameEn?: string; displayName: string };
+  items: Array<{
+    product: string;
+    productName: string;
+    productNameEn?: string;
+    unit?: string;
+    unitEn?: string;
+    quantity: number;
+    unitPrice: number;
+    displayName: string;
+    displayUnit: string;
+    department?: { _id: string; name: string; nameEn?: string; displayName: string };
+    category?: { _id: string; name: string; nameEn?: string; displayName: string };
+  }>;
+  totalAmount: number;
+  createdAt: string;
+  notes?: string;
+  paymentMethod?: string;
+  customerName?: string;
+  customerPhone?: string;
+}
+export interface Branch {
+  _id: string;
+  name: string;
+  nameEn?: string;
+  displayName: string;
 }
 
-const toArabicNumerals = (number: string | number): string => {
-  const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
-  return String(number).replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
-};
-
-const formatPrice = (amount: number, isRtl: boolean, isStats: boolean = false): string => {
-  const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
-  let formatted: string;
-  if (isStats) {
-    formatted = validAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-    formatted = isRtl ? `${toArabicNumerals(formatted)} ر.س` : `${formatted} SAR`;
-  } else {
-    formatted = validAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
-      style: 'currency',
-      currency: 'SAR',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-    if (isRtl) {
-      formatted = formatted.replace(/\d/g, (d) => String.fromCharCode(0x0660 + parseInt(d)));
-    }
-  }
-  return formatted;
-};
-
-const formatNumber = (num: number, isRtl: boolean): string => {
-  return isRtl ? toArabicNumerals(num) : num.toString();
-};
-
-const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return window.btoa(binary);
-};
-
-const loadFont = async (doc: jsPDF): Promise<boolean> => {
-  const fontName = 'Amiri';
-  const fontUrls = {
-    regular: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Regular.ttf',
-    bold: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Bold.ttf',
-  };
-  try {
-    const regularFontBytes = await fetch(fontUrls.regular).then((res) => res.arrayBuffer());
-    doc.addFileToVFS(`${fontName}-normal.ttf`, arrayBufferToBase64(regularFontBytes));
-    doc.addFont(`${fontName}-normal.ttf`, fontName, 'normal');
-    const boldFontBytes = await fetch(fontUrls.bold).then((res) => res.arrayBuffer());
-    doc.addFileToVFS(`${fontName}-bold.ttf`, arrayBufferToBase64(boldFontBytes));
-    doc.addFont(`${fontName}-bold.ttf`, fontName, 'bold');
-    doc.setFont(fontName, 'normal');
-    return true;
-  } catch (error) {
-    console.error('Font loading error:', error);
-    doc.setFont('helvetica', 'normal');
-    toast.error('Failed to load Amiri font, using default', {
-      position: isRtl ? 'top-left' : 'top-right',
-      autoClose: 3000,
-    });
-    return false;
-  }
-};
-
-const generateFileName = (title: string, monthName: string, isRtl: boolean): string => {
-  const date = new Date().toISOString().split('T')[0];
-  return isRtl ? `${title}_${monthName}_${date}.pdf` : `${title}_${monthName}_${date}.pdf`;
-};
-
-const generatePDFHeader = (
-  doc: jsPDF,
-  isRtl: boolean,
-  title: string,
-  monthName: string,
-  totalItems: number,
-  totalQuantity: number,
-  totalPrice: number,
-  fontName: string,
-  fontLoaded: boolean
-) => {
-  doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
-  doc.setFontSize(18);
-  doc.setTextColor(33, 33, 33);
-  const pageWidth = doc.internal.pageSize.width;
-  doc.text(isRtl ? title : title, isRtl ? pageWidth - 20 : 20, 12, { align: isRtl ? 'right' : 'left' });
-  doc.setFontSize(10);
-  doc.setTextColor(100, 100, 100);
-  const stats = isRtl
-    ? `إجمالي المنتجات: ${toArabicNumerals(totalItems)} | إجمالي الكمية: ${toArabicNumerals(totalQuantity)} وحدة | إجمالي المبلغ: ${formatPrice(totalPrice, isRtl, true)}`
-    : `Total Products: ${totalItems} | Total Quantity: ${totalQuantity} units | Total Amount: ${formatPrice(totalPrice, isRtl, true)}`;
-  doc.text(stats, isRtl ? pageWidth - 20 : 20, 20, { align: isRtl ? 'right' : 'left' });
-  doc.setLineWidth(0.5);
-  doc.setDrawColor(255, 193, 7);
-  doc.line(20, 25, pageWidth - 20, 25);
-  const pageCount = doc.getNumberOfPages();
-  const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
-    doc.setFontSize(8);
-    doc.setTextColor(150, 150, 150);
-    doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
-    const footerText = isRtl
-      ? `تم إنشاؤه بواسطة نظام إدارة الجودياء - ${toArabicNumerals(currentDate)}`
-      : `Generated by elgoodia Management System - ${currentDate}`;
-    doc.text(footerText, pageWidth / 2, doc.internal.pageSize.height - 10, { align: 'center' });
-  }
-};
-
-const generatePDFTable = (
-  doc: jsPDF,
-  headers: string[],
-  data: any[],
-  isRtl: boolean,
-  fontLoaded: boolean,
-  fontName: string
-) => {
-  const tableColumnWidths = headers.map((_, index) => {
-    if (index === 0) return 15; // No.
-    if (index === 1) return 25; // Code
-    if (index === 2) return 45; // Product
-    if (index === 3) return 25; // Unit
-    if (index >= 4 && index < headers.length - 2) return 20; // Daily Sales
-    return 30; // Total Sales, Total Value
-  });
-
-  autoTable(doc, {
-    head: [isRtl ? headers.slice().reverse() : headers],
-    body: isRtl ? data.map(row => row.slice().reverse()) : data,
-    theme: 'grid',
-    startY: 30,
-    margin: { top: 10, bottom: 10, left: 10, right: 10 },
-    tableWidth: 'wrap',
-    columnStyles: Object.fromEntries(
-      headers.map((_, i) => [i, { cellWidth: tableColumnWidths[i], halign: 'center' }])
-    ),
-    headStyles: {
-      fillColor: [255, 193, 7],
-      textColor: [33, 33, 33],
-      fontSize: 10,
-      halign: 'center',
-      font: fontLoaded ? fontName : 'helvetica',
-      fontStyle: 'bold',
-      cellPadding: 4,
+// ترجمات الواجهة
+export const translations = {
+  ar: {
+    title: 'تقرير المبيعات',
+    subtitle: 'متابعة وتحليل المبيعات السابقة',
+    previousSales: 'المبيعات السابقة',
+    noSales: 'لا توجد مبيعات',
+    date: 'التاريخ',
+    branch: 'الفرع',
+    quantity: 'الكمية',
+    branchFilter: 'اختر فرعًا',
+    allBranches: 'جميع الفروع',
+    searchPlaceholder: 'ابحث عن المبيعات، العملاء، أو المنتجات...',
+    loadMore: 'تحميل المزيد',
+    deleteSale: 'حذف المبيعة',
+    confirmDelete: 'هل أنت متأكد من حذف هذه المبيعة؟',
+    search: 'ابحث',
+    totalSales: 'اجمالي المبلغ',
+    filterBy: 'تصفية حسب',
+    notes: 'ملاحظات',
+    all: 'الكل',
+    day: 'اليوم',
+    week: 'الأسبوع',
+    month: 'الشهر',
+    custom: 'مخصص',
+    customerNameLabel: 'اسم العميل',
+    customerPhoneLabel: 'رقم الهاتف',
+    paymentMethodLabel: 'طريقة الدفع',
+    errors: {
+      unauthorized_access: 'غير مصرح لك بالوصول',
+      fetch_sales: 'خطأ أثناء جلب المبيعات',
+      fetch_branches: 'خطأ أثناء جلب الفروع',
+      delete_sale_failed: 'فشل حذف المبيعة',
+      departments: { unknown: 'غير معروف' },
+      deleted_product: 'منتج محذوف',
+      no_search_results: 'لا توجد نتائج مطابقة',
     },
-    bodyStyles: {
-      fontSize: 9,
-      halign: 'center',
-      font: fontLoaded ? fontName : 'helvetica',
-      textColor: [33, 33, 33],
-      lineColor: [200, 200, 200],
-      fillColor: [255, 255, 255],
-      cellPadding: 3,
+    currency: 'ريال',
+    units: { default: 'غير محدد' },
+    paymentMethods: {
+      cash: 'نقدي',
+      card: 'بطاقة ائتمان',
+      credit: 'ائتمان',
     },
-    alternateRowStyles: { fillColor: [245, 245, 245] },
-    didParseCell: (data) => {
-      if (data.section === 'body' && data.column.index >= (isRtl ? 0 : headers.length - 2)) {
-        data.cell.styles.fontStyle = 'bold';
-      }
-      if (isRtl) {
-        data.cell.text = data.cell.text.map(text => String(text).replace(/[0-9]/g, d => toArabicNumerals(d)));
-      }
+  },
+  en: {
+    title: 'Sales Report',
+    subtitle: 'Track and analyze previous sales',
+    previousSales: 'Previous Sales',
+    noSales: 'No sales found',
+    date: 'Date',
+    branch: 'Branch',
+    quantity: 'Quantity',
+    branchFilter: 'Select Branch',
+    allBranches: 'All Branches',
+    searchPlaceholder: 'Search sales, customers, or products...',
+    loadMore: 'Load More',
+    deleteSale: 'Delete Sale',
+    confirmDelete: 'Are you sure you want to delete this sale?',
+    filterBy: 'Filter By',
+    all: 'All',
+    day: 'Day',
+    week: 'Week',
+    month: 'Month',
+    custom: 'Custom',
+    notes: 'Notes',
+    totalSales: 'Total Amount',
+    customerNameLabel: 'Customer Name',
+    customerPhoneLabel: 'Phone Number',
+    paymentMethodLabel: 'Payment Method',
+    errors: {
+      unauthorized_access: 'You are not authorized to access',
+      fetch_sales: 'Error fetching sales',
+      fetch_branches: 'Error fetching branches',
+      delete_sale_failed: 'Failed to delete sale',
+      departments: { unknown: 'Unknown' },
+      deleted_product: 'Deleted Product',
+      no_search_results: 'No matching results found',
     },
-    didDrawPage: (data) => {
-      doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
+    currency: 'SAR',
+    units: { default: 'N/A' },
+    paymentMethods: {
+      cash: 'Cash',
+      card: 'Credit Card',
+      credit: 'Credit',
     },
-  });
+  },
 };
 
-const exportToPDF = async (
-  data: any[],
-  title: string,
-  monthName: string,
-  headers: string[],
-  isRtl: boolean,
-  totalItems: number,
-  totalQuantity: number,
-  totalPrice: number
-) => {
-  try {
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    const fontName = 'Amiri';
-    const fontLoaded = await loadFont(doc);
-    generatePDFHeader(doc, isRtl, title, monthName, totalItems, totalQuantity, totalPrice, fontName, fontLoaded);
-    generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName);
-    const fileName = generateFileName(title, monthName, isRtl);
-    doc.save(fileName);
-    toast.success(isRtl ? 'تم تصدير ملف PDF بنجاح' : 'PDF exported successfully', {
-      position: isRtl ? 'top-left' : 'top-right',
-      autoClose: 3000,
-    });
-  } catch (error) {
-    console.error('Error exporting PDF:', error);
-    toast.error(isRtl ? 'فشل في تصدير ملف PDF' : 'Failed to export PDF', {
-      position: isRtl ? 'top-left' : 'top-right',
-      autoClose: 3000,
-    });
-  }
+// دالة للتحقق من القيم العددية
+export const safeNumber = (value: any, defaultValue: number = 0): number => {
+  return typeof value === 'number' && !isNaN(value) ? value : defaultValue;
 };
 
-const SalesReport: React.FC = () => {
+// مكون البحث
+const SearchInput = React.memo<{
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  ariaLabel: string;
+}>(({ value, onChange, placeholder, ariaLabel }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
-  const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [salesData, setSalesData] = useState<{ [month: number]: SalesRow[] }>({});
-  const [selectedMonth, setSelectedMonth] = useState(8); // September 2025
-  const currentDate = new Date('2025-10-13T02:39:00+03:00');
-  const currentYear = currentDate.getFullYear();
-  const months = Array.from({ length: 12 }, (_, i) => ({
-    value: i,
-    label: new Date(currentYear, i).toLocaleString(language, { month: 'long' }),
-  }));
-
-  const getDaysInMonth = useCallback((month: number) => {
-    const daysInMonthCount = new Date(currentYear, month + 1, 0).getDate();
-    return Array.from({ length: daysInMonthCount }, (_, i) => {
-      const date = new Date(currentYear, month, i + 1);
-      return date.toLocaleString(language, { day: 'numeric', month: 'short' });
-    });
-  }, [currentYear, language]);
-
-  const daysInMonth = useMemo(() => getDaysInMonth(selectedMonth), [selectedMonth, getDaysInMonth]);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const salesResponse = await salesAPI.getAnalytics({
-          startDate: new Date(currentYear, selectedMonth, 1).toISOString(),
-          endDate: new Date(currentYear, selectedMonth + 1, 0).toISOString(),
-          lang: language,
-        });
-
-        const monthlySalesData: { [month: number]: SalesRow[] } = {};
-
-        // Process product details with language support
-        const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
-        salesResponse.productSales?.forEach((item: any) => {
-          if (item?.product?._id) {
-            productDetails.set(item.product._id, {
-              code: item.product.code || `code-${Math.random().toString(36).substring(2)}`,
-              product: isRtl ? (item.product.name || 'منتج غير معروف') : (item.product.nameEn || item.product.name || 'Unknown Product'),
-              unit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
-              price: Number(item.totalRevenue / item.totalQuantity) || 0,
-            });
-          }
-        });
-
-        // Process sales data for each month
-        for (let month = 0; month < 12; month++) {
-          const daysInMonthCount = new Date(currentYear, month + 1, 0).getDate();
-          const salesMap = new Map<string, SalesRow>();
-
-          if (month === selectedMonth) {
-            salesResponse.productSales?.forEach((s: any) => {
-              const productId = s.productId;
-              if (!productId) return;
-              const details = productDetails.get(productId) || {
-                code: s.product?.code || `code-${Math.random().toString(36).substring(2)}`,
-                product: isRtl
-                  ? (s.product?.name || 'منتج غير معروف')
-                  : (s.product?.nameEn || s.product?.name || 'Unknown Product'),
-                unit: isRtl
-                  ? (s.product?.unit || 'غير محدد')
-                  : (s.product?.unitEn || s.product?.unit || 'N/A'),
-                price: s.totalRevenue / s.totalQuantity || 0,
-              };
-              const key = `${productId}-${month}`;
-              if (!salesMap.has(key)) {
-                salesMap.set(key, {
-                  id: key,
-                  code: details.code,
-                  product: details.product,
-                  unit: details.unit,
-                  totalSales: 0,
-                  dailySales: Array(daysInMonthCount).fill(0),
-                  totalValue: 0,
-                });
-              }
-              const row = salesMap.get(key)!;
-              s.dailySales?.forEach((sale: any, index: number) => {
-                row.dailySales[index] += sale.quantity || 0;
-                row.totalSales += sale.quantity || 0;
-                row.totalValue += (sale.quantity || 0) * details.price;
-              });
-            });
-          }
-
-          monthlySalesData[month] = Array.from(salesMap.values());
-        }
-
-        setSalesData(monthlySalesData);
-      } catch (error) {
-        console.error('Failed to fetch sales data:', error);
-        toast.error(isRtl ? 'فشل في جلب بيانات المبيعات' : 'Failed to fetch sales data', {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, [isRtl, currentYear, selectedMonth, language]);
-
-  const getTooltipContent = (dailyQuantity: number, isRtl: boolean) => {
-    const header = isRtl ? 'مبيعات' : 'Sales';
-    return `${header}: +${formatNumber(dailyQuantity, isRtl)}`;
-  };
-
-  const renderSalesTable = useCallback(
-    (data: SalesRow[], title: string, month: number) => {
-      const grandTotalSales = data.reduce((sum, row) => sum + row.totalSales, 0);
-      const grandTotalValue = data.reduce((sum, row) => sum + row.totalValue, 0);
-      const monthName = months[month].label;
-
-      const exportTable = (format: 'excel' | 'pdf') => {
-        const headers = [
-          isRtl ? 'رقم' : 'No.',
-          isRtl ? 'الكود' : 'Code',
-          isRtl ? 'المنتج' : 'Product',
-          isRtl ? 'وحدة المنتج' : 'Product Unit',
-          ...daysInMonth,
-          isRtl ? 'إجمالي المبيعات' : 'Total Sales',
-          isRtl ? 'القيمة الإجمالية' : 'Total Value',
-        ];
-        const rows = [
-          ...data.map((row, index) => ({
-            no: index + 1,
-            code: row.code,
-            product: row.product,
-            unit: row.unit,
-            ...Object.fromEntries(row.dailySales.map((qty, i) => [daysInMonth[i], qty])),
-            totalSales: row.totalSales,
-            totalValue: formatPrice(row.totalValue, isRtl),
-          })),
-          {
-            no: '',
-            code: '',
-            product: isRtl ? 'الإجمالي' : 'Total',
-            unit: '',
-            ...Object.fromEntries(daysInMonth.map((_, i) => [daysInMonth[i], data.reduce((sum, row) => sum + row.dailySales[i], 0)])),
-            totalSales: grandTotalSales,
-            totalValue: formatPrice(grandTotalValue, isRtl),
-          },
-        ];
-        const dataRows = rows.map(row => [
-          row.no,
-          row.code,
-          row.product,
-          row.unit,
-          ...daysInMonth.map(day => row[day]),
-          row.totalSales,
-          row.totalValue,
-        ]);
-
-        if (format === 'excel') {
-          const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
-          if (isRtl) ws['!views'] = [{ RTL: true }];
-          ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }];
-          const wb = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
-          XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
-          toast.success(isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully', {
-            position: isRtl ? 'top-left' : 'top-right',
-            autoClose: 3000,
-          });
-        } else if (format === 'pdf') {
-          exportToPDF(dataRows, title, monthName, headers, isRtl, data.length, grandTotalSales, grandTotalValue);
-        }
-      };
-
-      if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
-
-      if (data.length === 0) {
-        return (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="text-center py-12 bg-white shadow-md rounded-xl border border-gray-200"
-          >
-            <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات مبيعات' : 'No sales data available'}</p>
-          </motion.div>
-        );
-      }
-
-      return (
-        <div className="mb-8">
-          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
-            <div className="flex gap-2">
-              <Button
-                variant={data.length > 0 ? 'primary' : 'secondary'}
-                onClick={data.length > 0 ? () => exportTable('excel') : undefined}
-                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
-                  data.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                }`}
-                disabled={data.length === 0}
-              >
-                <Upload className="w-4 h-4" />
-                {isRtl ? 'تصدير إكسل' : 'Export Excel'}
-              </Button>
-              <Button
-                variant={data.length > 0 ? 'primary' : 'secondary'}
-                onClick={data.length > 0 ? () => exportTable('pdf') : undefined}
-                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
-                  data.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                }`}
-                disabled={data.length === 0}
-              >
-                <Upload className="w-4 h-4" />
-                {isRtl ? 'تصدير PDF' : 'Export PDF'}
-              </Button>
-            </div>
-          </div>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3 }}
-            className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
-          >
-            <table className="min-w-full divide-y divide-gray-200 text-xs">
-              <thead className="bg-blue-100 sticky top-0">
-                <tr className={isRtl ? 'flex-row-reverse' : ''}>
-                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
-                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
-                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
-                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
-                  {daysInMonth.map((day, i) => (
-                    <th key={i} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
-                      {day}
-                    </th>
-                  ))}
-                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
-                    {isRtl ? 'إجمالي المبيعات' : 'Total Sales'}
-                  </th>
-                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
-                    {isRtl ? 'القيمة الإجمالية' : 'Total Value'}
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {data.map((row, index) => (
-                  <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                    <td className="px-4 py-3 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
-                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
-                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
-                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
-                    {row.dailySales.map((qty, i) => (
-                      <td
-                        key={i}
-                        className="px-4 py-3 text-center font-medium text-green-700 bg-green-50"
-                        data-tooltip-id="sales-tooltip"
-                        data-tooltip-content={getTooltipContent(qty, isRtl)}
-                      >
-                        {qty !== 0 ? `+${formatNumber(qty, isRtl)}` : '0'}
-                      </td>
-                    ))}
-                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalSales, isRtl)}</td>
-                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.totalValue, isRtl)}</td>
-                  </tr>
-                ))}
-                <tr className={`font-semibold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
-                  {daysInMonth.map((_, i) => (
-                    <td key={i} className="px-4 py-3 text-gray-800 text-center">
-                      {formatNumber(data.reduce((sum, row) => sum + row.dailySales[i], 0), isRtl)}
-                    </td>
-                  ))}
-                  <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalSales, isRtl)}</td>
-                  <td className="px-4 py-3 text-gray-800 text-center">{formatPrice(grandTotalValue, isRtl)}</td>
-                </tr>
-              </tbody>
-            </table>
-            <Tooltip id="sales-tooltip" place="top" effect="solid" className="custom-tooltip" />
-          </motion.div>
-        </div>
-      );
-    },
-    [loading, isRtl, daysInMonth, months, formatPrice]
-  );
-
   return (
-    <div className={`min-h-screen px-6 py-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-100`}>
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">{isRtl ? 'تقرير المبيعات' : 'Sales Report'}</h1>
-      <div className="mb-8 bg-white shadow-md rounded-xl p-4">
-        <div className="flex flex-wrap gap-2 mb-4 justify-center">
-          {months.map(month => (
-            <Button
-              key={month.value}
-              variant={selectedMonth === month.value ? 'primary' : 'secondary'}
-              onClick={() => setSelectedMonth(month.value)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-                selectedMonth === month.value
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              {month.label}
-            </Button>
-          ))}
+    <div className="relative group w-full">
+      <Search
+        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
+      />
+      <input
+        type="text"
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className={`w-full ${isRtl ? 'pl-12 pr-4' : 'pr-12 pl-4'} py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm placeholder-gray-400 font-alexandria`}
+        aria-label={ariaLabel}
+      />
+      {value && (
+        <button
+          onClick={() => onChange({ target: { value: '' } } as React.ChangeEvent<HTMLInputElement>)}
+          className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors`}
+          aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
+        >
+          <X className="w-5 h-5" />
+        </button>
+      )}
+    </div>
+  );
+});
+
+// مكون القائمة المنسدلة
+export const ProductDropdown = React.memo<{
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  ariaLabel: string;
+  disabled?: boolean;
+}>(({ value, onChange, options, ariaLabel, disabled = false }) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedOption = options.find((opt) => opt.value === value) || options[0] || { value: '', label: isRtl ? 'اختر' : 'Select' };
+  return (
+    <div className="relative group w-full">
+      <button
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        className={`w-full px-4 py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-200 bg-gradient-to-r from-white to-gray-50 shadow-sm hover:shadow-md text-sm text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        aria-label={ariaLabel}
+      >
+        <span className="truncate">{selectedOption.label}</span>
+        <ChevronDown className={`${isOpen ? 'rotate-180' : 'rotate-0'} transition-transform duration-200 w-5 h-5 text-gray-400 group-focus-within:text-amber-500`} />
+      </button>
+      {isOpen && !disabled && (
+        <div className="absolute w-full mt-2 bg-white rounded-lg shadow-2xl border border-gray-100 z-20 max-h-60 overflow-y-auto scrollbar-none">
+          {options.length > 0 ? (
+            options.map((option) => (
+              <div
+                key={option.value}
+                onClick={() => {
+                  onChange(option.value);
+                  setIsOpen(false);
+                }}
+                className="px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 hover:text-amber-600 cursor-pointer transition-colors duration-200"
+              >
+                {option.label}
+              </div>
+            ))
+          ) : (
+            <div className="px-4 py-2.5 text-sm text-gray-500">{isRtl ? 'لا توجد خيارات متاحة' : 'No options available'}</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+});
+
+// مكون بطاقة المبيعة
+export const SaleCard = React.memo<{ sale: Sale; onDelete: (id: string) => void }>(
+  ({ sale, onDelete }) => {
+    const { language } = useLanguage();
+    const isRtl = language === 'ar';
+    const t = translations[isRtl ? 'ar' : 'en'];
+    return (
+      <div className="p-6 bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 hover:border-amber-200">
+        <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
+          <div className="space-y-3 w-full">
+            <h3 className="font-bold text-gray-900 text-xl font-alexandria">{sale.orderNumber}</h3>
+            <p className="text-sm text-gray-600 font-alexandria">{t.date}: {sale.createdAt}</p>
+            <p className="text-sm text-gray-600 font-alexandria">{t.branch}: {sale.branch?.displayName || t.errors.departments.unknown}</p>
+            <p className="text-sm text-gray-600 font-alexandria">{t.totalSales}: {safeNumber(sale.totalAmount).toFixed(2)} {t.currency}</p>
+            {sale.paymentMethod && (
+              <p className="text-sm text-gray-600 font-alexandria">
+                <span className="font-medium">{t.paymentMethodLabel}: </span>
+                {t.paymentMethods[sale.paymentMethod as keyof typeof t.paymentMethods] || 'N/A'}
+              </p>
+            )}
+            {sale.customerName && (
+              <p className="text-sm text-gray-600 font-alexandria">
+                <span className="font-medium">{t.customerNameLabel}: </span>{sale.customerName}
+              </p>
+            )}
+            {sale.customerPhone && (
+              <p className="text-sm text-gray-600 font-alexandria">
+                <span className="font-medium">{t.customerPhoneLabel}: </span>{sale.customerPhone}
+              </p>
+            )}
+            {sale.notes && <p className="text-sm text-gray-500 italic font-alexandria">{t.notes}: {sale.notes}</p>}
+            <ul className="space-y-2 text-sm text-gray-700">
+              {sale.items.map((item, index) => (
+                <li key={index} className="border-t border-gray-100 pt-2 font-alexandria">
+                  {item.displayName || t.errors.deleted_product} ({item.department?.displayName || t.errors.departments.unknown}) - {t.quantity}: {safeNumber(item.quantity)} {item.displayUnit || t.units.default}, {t.totalSales}: {safeNumber(item.unitPrice).toFixed(2)} {t.currency}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => onDelete(sale._id)} aria-label={t.deleteSale} className="p-2.5 rounded-full hover:bg-gray-100 transition-colors duration-200">
+              <Trash className="w-5 h-5 text-red-600 hover:text-red-800" />
+            </button>
+          </div>
         </div>
       </div>
-      <AnimatePresence>
-        {renderSalesTable(salesData[selectedMonth] || [], isRtl ? 'تقرير المبيعات' : 'Sales Report', selectedMonth)}
-      </AnimatePresence>
+    );
+  }
+);
+
+// مكون بطاقة التحميل
+export const SaleSkeletonCard = React.memo(() => (
+  <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 animate-pulse">
+    <div className="space-y-3">
+      <div className="h-5 bg-gray-200 rounded w-3/4"></div>
+      <div className="h-4 bg-gray-200 rounded w-1/2"></div>
+      <div className="h-4 bg-gray-200 rounded w-1/3"></div>
+      <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+    </div>
+  </div>
+));
+
+// المكون الرئيسي لتقرير المبيعات
+export const SalesReport: React.FC = () => {
+  const { language } = useLanguage();
+  const { user } = useAuth();
+  const { socket, emit, isConnected } = useSocket();
+  const isRtl = language === 'ar';
+  const t = translations[isRtl ? 'ar' : 'en'];
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [filterPeriod, setFilterPeriod] = useState('all');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
+  const [filterBranch, setFilterBranch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [salesLoading, setSalesLoading] = useState(false);
+  const [branchesLoading, setBranchesLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+
+  // دالة البحث المؤخر
+  const debouncedSearch = useCallback(debounce((value: string) => setSearchTerm(value.trim().toLowerCase()), 300), []);
+
+  // معالجة تغيير البحث
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchInput(value);
+    debouncedSearch(value);
+  };
+
+  // حساب التواريخ بناءً على الفترة
+  useEffect(() => {
+    const today = new Date();
+    let newStartDate = '';
+    let newEndDate = today.toISOString().split('T')[0];
+    if (filterPeriod === 'day') {
+      newStartDate = newEndDate;
+    } else if (filterPeriod === 'week') {
+      const firstDayOfWeek = new Date(today);
+      firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1);
+      newStartDate = firstDayOfWeek.toISOString().split('T')[0];
+    } else if (filterPeriod === 'month') {
+      const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+      newStartDate = firstDayOfMonth.toISOString().split('T')[0];
+    } else if (filterPeriod === 'custom') {
+      return;
+    } else {
+      newStartDate = '';
+      newEndDate = '';
+    }
+    setFilterStartDate(newStartDate);
+    setFilterEndDate(newEndDate);
+  }, [filterPeriod]);
+
+  // جلب الفروع
+  const fetchBranches = useCallback(async () => {
+    if (user?.role !== 'admin') return;
+    setBranchesLoading(true);
+    try {
+      const response = await branchesAPI.getAll();
+      console.log(`[${new Date().toISOString()}] جلب الفروع:`, response);
+      setBranches(
+        response.map((branch: any) => ({
+          _id: branch._id,
+          name: branch.name || t.errors.departments.unknown,
+          nameEn: branch.nameEn,
+          displayName: isRtl ? (branch.name || t.errors.departments.unknown) : (branch.nameEn || branch.name || t.errors.departments.unknown),
+        }))
+      );
+      setError('');
+    } catch (err: any) {
+      console.error(`[${new Date().toISOString()}] خطأ في جلب الفروع:`, { message: err.message, stack: err.stack });
+      setError(t.errors.fetch_branches);
+      toast.error(t.errors.fetch_branches, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
+    } finally {
+      setBranchesLoading(false);
+    }
+  }, [user, isRtl, t]);
+
+  // جلب المبيعات
+  const fetchSales = useCallback(
+    async (pageNum: number = 1, append: boolean = false) => {
+      if (user?.role !== 'admin') {
+        setError(t.errors.unauthorized_access);
+        toast.error(t.errors.unauthorized_access, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
+        setLoading(false);
+        return;
+      }
+      setLoading(pageNum === 1);
+      setSalesLoading(pageNum > 1);
+      try {
+        const salesParams: any = { page: pageNum, limit: 20, sort: '-createdAt', branch: filterBranch };
+        if (filterPeriod !== 'all' && filterStartDate && filterEndDate) {
+          salesParams.startDate = filterStartDate;
+          salesParams.endDate = filterEndDate;
+        }
+        const salesResponse = await salesAPI.getAll(salesParams);
+        console.log(`[${new Date().toISOString()}] جلب المبيعات:`, salesResponse);
+        const newSales = (salesResponse.sales || []).map((sale: any) => ({
+          _id: sale._id,
+          orderNumber: sale.saleNumber || sale.orderNumber || 'N/A',
+          branch: sale.branch
+            ? {
+                _id: sale.branch._id,
+                name: sale.branch.name || t.errors.departments.unknown,
+                nameEn: sale.branch.nameEn,
+                displayName: isRtl ? (sale.branch.name || t.errors.departments.unknown) : (sale.branch.nameEn || sale.branch.name || t.errors.departments.unknown),
+              }
+            : { _id: '', name: '', displayName: t.errors.departments.unknown },
+          items: (sale.items || []).map((item: any) => ({
+            product: item.product?._id || item.productId || '',
+            productName: item.product?.name || t.errors.deleted_product,
+            productNameEn: item.product?.nameEn,
+            unit: item.product?.unit,
+            unitEn: item.product?.unitEn,
+            displayName: isRtl
+              ? (item.product?.name || t.errors.deleted_product)
+              : (item.product?.nameEn || item.product?.name || t.errors.deleted_product),
+            displayUnit: isRtl
+              ? (item.product?.unit || t.units.default)
+              : (item.product?.unitEn || item.product?.unit || t.units.default),
+            quantity: safeNumber(item.quantity),
+            unitPrice: safeNumber(item.unitPrice),
+            department: item.product?.department
+              ? {
+                  _id: item.product.department._id,
+                  name: item.product.department.name || t.errors.departments.unknown,
+                  nameEn: item.product.department.nameEn,
+                  displayName: isRtl
+                    ? (item.product.department.name || t.errors.departments.unknown)
+                    : (item.product.department.nameEn || item.product.department.name || t.errors.departments.unknown),
+                }
+              : undefined,
+            category: item.product?.category
+              ? {
+                  _id: item.product.category._id,
+                  name: item.product.category.name || t.errors.departments.unknown,
+                  nameEn: item.product.category.nameEn,
+                  displayName: isRtl
+                    ? (item.product.category.name || t.errors.departments.unknown)
+                    : (item.product.category.nameEn || item.product.category.name || t.errors.departments.unknown),
+                }
+              : undefined,
+          })),
+          totalAmount: safeNumber(sale.totalAmount),
+          createdAt: formatDate(new Date(sale.createdAt), language),
+          notes: sale.notes,
+          paymentMethod: sale.paymentMethod,
+          customerName: sale.customerName || t.errors.departments.unknown,
+          customerPhone: sale.customerPhone,
+        }));
+        setSales((prev) => (append ? [...prev, ...newSales] : newSales));
+        setHasMore(salesResponse.total > pageNum * 20);
+        setError('');
+      } catch (err: any) {
+        console.error(`[${new Date().toISOString()}] خطأ في جلب المبيعات:`, { message: err.message, stack: err.stack });
+        setError(t.errors.fetch_sales);
+        toast.error(t.errors.fetch_sales, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
+        setSales([]);
+      } finally {
+        setLoading(false);
+        setSalesLoading(false);
+      }
+    },
+    [user, t, isRtl, language, filterBranch, filterPeriod, filterStartDate, filterEndDate]
+  );
+
+  // جلب البيانات عند التحميل الأولي
+  useEffect(() => {
+    fetchBranches();
+    fetchSales();
+  }, [fetchBranches, fetchSales]);
+
+  // التعامل مع تحديثات السوكت
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+    socket.on('saleCreated', (data: any) => {
+      toast.info(isRtl ? `تم إنشاء مبيعة جديدة: ${data.saleNumber}` : `New sale created: ${data.saleNumber}`, {
+        position: isRtl ? 'top-right' : 'top-left',
+        autoClose: 3000,
+      });
+      if (!filterBranch || data.branchId === filterBranch) {
+        fetchSales();
+      }
+    });
+    socket.on('saleDeleted', (data: any) => {
+      toast.info(isRtl ? `تم حذف مبيعة: ${data.saleId}` : `Sale deleted: ${data.saleId}`, {
+        position: isRtl ? 'top-right' : 'top-left',
+        autoClose: 3000,
+      });
+      if (!filterBranch || data.branchId === filterBranch) {
+        fetchSales();
+      }
+    });
+    return () => {
+      socket.off('saleCreated');
+      socket.off('saleDeleted');
+    };
+  }, [socket, isConnected, fetchSales, filterBranch, isRtl]);
+
+  // تحميل المزيد من المبيعات
+  const loadMoreSales = useCallback(() => {
+    setPage((prev) => prev + 1);
+    fetchSales(page + 1, true);
+  }, [fetchSales, page]);
+
+  // حذف المبيعة
+  const handleDeleteSale = useCallback(
+    async (id: string) => {
+      if (window.confirm(t.confirmDelete)) {
+        try {
+          await salesAPI.delete(id);
+          toast.success(t.deleteSale, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
+          emit('saleDeleted', { saleId: id, branchId: filterBranch });
+          fetchSales();
+        } catch (err: any) {
+          console.error(`[${new Date().toISOString()}] خطأ في حذف المبيعة:`, { message: err.message, stack: err.stack });
+          setError(t.errors.delete_sale_failed);
+          toast.error(t.errors.delete_sale_failed, { position: isRtl ? 'top-right' : 'top-left', autoClose: 3000 });
+        }
+      }
+    },
+    [t, emit, fetchSales, isRtl, filterBranch]
+  );
+
+  // تصفية المبيعات بناءً على البحث
+  const filteredSales = useMemo(
+    () =>
+      sales.filter((sale) => {
+        if (!searchTerm) return true;
+        const term = searchTerm.toLowerCase();
+        return (
+          sale.orderNumber.toLowerCase().includes(term) ||
+          (sale.customerName?.toLowerCase().includes(term) ?? false) ||
+          (sale.customerPhone?.toLowerCase().includes(term) ?? false) ||
+          sale.items.some((item) => item.displayName.toLowerCase().includes(term))
+        );
+      }),
+    [sales, searchTerm]
+  );
+
+  // خيارات الفترة
+  const periodOptions = useMemo(
+    () => [
+      { value: 'all', label: t.all },
+      { value: 'day', label: t.day },
+      { value: 'week', label: t.week },
+      { value: 'month', label: t.month },
+      { value: 'custom', label: t.custom },
+    ],
+    [t]
+  );
+
+  // خيارات الفروع
+  const branchOptions = useMemo(
+    () => [
+      { value: '', label: t.allBranches },
+      ...branches.map((branch) => ({
+        value: branch._id,
+        label: branch.displayName,
+      })),
+    ],
+    [branches, t]
+  );
+
+  // التحقق من صلاحيات المستخدم
+  if (user?.role !== 'admin') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4 font-alexandria" dir={isRtl ? 'rtl' : 'ltr'}>
+        <div className="p-6 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+          <AlertCircle className="w-6 h-6 text-red-600" />
+          <span className="text-red-600 text-base font-medium font-alexandria">{t.errors.unauthorized_access}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen px-4 sm:px-6 py-8 bg-gradient-to-br from-gray-50 to-gray-100 font-alexandria" dir={isRtl ? 'rtl' : 'ltr'}>
+      <link href="https://fonts.googleapis.com/css2?family=Alexandria:wght@400;500;600&display=swap" rel="stylesheet" />
+      <header className="mb-8 flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:items-center">
+        <div className="flex items-center gap-3">
+          <DollarSign className="w-7 h-7 text-amber-600" />
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900 font-alexandria">{t.title}</h1>
+            <p className="text-gray-600 text-sm font-alexandria">{t.subtitle}</p>
+          </div>
+        </div>
+      </header>
+      {error && (
+        <div className="mb-8 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-3">
+          <AlertCircle className="w-5 h-5 text-red-600" />
+          <span className="text-red-600 text-sm font-medium font-alexandria">{error}</span>
+        </div>
+      )}
+      <div className="space-y-8">
+        <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.filterBy}</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <SearchInput
+              value={searchInput}
+              onChange={handleSearchChange}
+              placeholder={t.searchPlaceholder}
+              ariaLabel={t.searchPlaceholder}
+            />
+            <ProductDropdown
+              value={filterPeriod}
+              onChange={setFilterPeriod}
+              options={periodOptions}
+              ariaLabel={t.filterBy}
+            />
+            <ProductDropdown
+              value={filterBranch}
+              onChange={setFilterBranch}
+              options={branchOptions}
+              ariaLabel={t.branchFilter}
+            />
+            {filterPeriod === 'custom' && (
+              <>
+                <input
+                  type="date"
+                  value={filterStartDate}
+                  onChange={(e) => setFilterStartDate(e.target.value)}
+                  className="w-full py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria"
+                  aria-label={t.date}
+                />
+                <input
+                  type="date"
+                  value={filterEndDate}
+                  onChange={(e) => setFilterEndDate(e.target.value)}
+                  className="w-full py-2.5 border border-gray-200 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent transition-all duration-300 bg-white shadow-sm hover:shadow-md text-sm font-alexandria"
+                  aria-label={t.date}
+                />
+              </>
+            )}
+          </div>
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 font-alexandria">{t.previousSales}</h2>
+          {loading || branchesLoading ? (
+            <div className="grid grid-cols-1 gap-6">
+              {[...Array(6)].map((_, index) => (
+                <SaleSkeletonCard key={index} />
+              ))}
+            </div>
+          ) : filteredSales.length === 0 ? (
+            <div className="p-8 text-center bg-white rounded-xl shadow-sm border border-gray-100">
+              <DollarSign className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600 text-sm font-medium font-alexandria">{searchTerm ? t.errors.no_search_results : t.noSales}</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-6">
+                {filteredSales.map((sale) => (
+                  <SaleCard key={sale._id} sale={sale} onDelete={handleDeleteSale} />
+                ))}
+              </div>
+              {hasMore && (
+                <div className="flex justify-center mt-6">
+                  <button
+                    onClick={loadMoreSales}
+                    className="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50 font-alexandria"
+                    disabled={salesLoading}
+                  >
+                    {salesLoading ? (
+                      <svg className="animate-spin h-5 w-5 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      t.loadMore
+                    )}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
