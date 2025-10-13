@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,6 +12,8 @@ import { toast } from 'react-toastify';
 import { inventoryAPI, ordersAPI, branchesAPI, salesAPI } from '../services/api';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 import { Tooltip } from 'react-tooltip';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
 
 interface OrderRow {
   id: string;
@@ -68,7 +71,7 @@ const toArabicNumerals = (number: string | number): string => {
 };
 
 const formatPrice = (amount: number, isRtl: boolean, isStats: boolean = false): string => {
-  const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
+  const validAmount = Number.isFinite(amount) ? amount : 0;
   let formatted: string;
   if (isStats) {
     formatted = validAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
@@ -121,7 +124,7 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
   } catch (error) {
     console.error('Font loading error:', error);
     doc.setFont('helvetica', 'normal');
-    toast.error('Failed to load Amiri font, using default', {
+    toast.error(isRtl ? 'فشل في تحميل خط Amiri، يتم استخدام الخط الافتراضي' : 'Failed to load Amiri font, using default', {
       position: isRtl ? 'top-left' : 'top-right',
       autoClose: 3000,
     });
@@ -129,16 +132,16 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
   }
 };
 
-const generateFileName = (title: string, monthName: string, isRtl: boolean): string => {
+const generateFileName = (title: string, periodLabel: string, isRtl: boolean): string => {
   const date = new Date().toISOString().split('T')[0];
-  return isRtl ? `${title}_${monthName}_${date}.pdf` : `${title}_${monthName}_${date}.pdf`;
+  return isRtl ? `${title}_${periodLabel}_${date}.pdf` : `${title}_${periodLabel}_${date}.pdf`;
 };
 
 const generatePDFHeader = (
   doc: jsPDF,
   isRtl: boolean,
   title: string,
-  monthName: string,
+  periodLabel: string,
   totalItems: number,
   totalQuantity: number,
   totalPrice: number,
@@ -241,7 +244,7 @@ const generatePDFTable = (
 const exportToPDF = async (
   data: any[],
   title: string,
-  monthName: string,
+  periodLabel: string,
   headers: string[],
   isRtl: boolean,
   totalItems: number,
@@ -253,9 +256,9 @@ const exportToPDF = async (
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const fontName = 'Amiri';
     const fontLoaded = await loadFont(doc);
-    generatePDFHeader(doc, isRtl, title, monthName, totalItems, totalQuantity, totalPrice, fontName, fontLoaded);
+    generatePDFHeader(doc, isRtl, title, periodLabel, totalItems, totalQuantity, totalPrice, fontName, fontLoaded);
     generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName, allBranches);
-    const fileName = generateFileName(title, monthName, isRtl);
+    const fileName = generateFileName(title, periodLabel, isRtl);
     doc.save(fileName);
     toast.success(isRtl ? 'تم تصدير ملف PDF بنجاح' : 'PDF exported successfully', {
       position: isRtl ? 'top-left' : 'top-right',
@@ -274,326 +277,326 @@ const ProductionReport: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [orderData, setOrderData] = useState<{ [month: number]: OrderRow[] }>({});
-  const [stockInData, setStockInData] = useState<{ [month: number]: StockRow[] }>({});
-  const [stockOutData, setStockOutData] = useState<{ [month: number]: StockRow[] }>({});
-  const [returnData, setReturnData] = useState<{ [month: number]: ReturnRow[] }>({});
-  const [salesData, setSalesData] = useState<{ [month: number]: SalesRow[] }>({});
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [selectedMonth, setSelectedMonth] = useState(8); // September 2025
-  const [activeTab, setActiveTab] = useState<'orders' | 'stockIn' | 'stockOut' | 'returns' | 'sales'>('orders');
-  const currentDate = new Date('2025-10-13T02:39:00+03:00');
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [activeTab, setActiveTab] = useState<'orders' | 'stockIn' | 'stockOut' | 'returns' | 'sales'>('sales');
+  const currentDate = new Date('2025-10-13T03:31:00+03:00');
   const currentYear = currentDate.getFullYear();
+
   const months = Array.from({ length: 12 }, (_, i) => ({
     value: i,
     label: new Date(currentYear, i).toLocaleString(language, { month: 'long' }),
   }));
 
-  const getDaysInMonth = useCallback((month: number) => {
-    const daysInMonthCount = new Date(currentYear, month + 1, 0).getDate();
-    return Array.from({ length: daysInMonthCount }, (_, i) => {
-      const date = new Date(currentYear, month, i + 1);
-      return date.toLocaleString(language, { day: 'numeric', month: 'short' });
-    });
-  }, [currentYear, language]);
+  const getDaysInPeriod = useCallback(() => {
+    if (!startDate || !endDate) return [];
+    const days: string[] = [];
+    let current = new Date(startDate);
+    while (current <= endDate) {
+      days.push(current.toLocaleString(language, { day: 'numeric', month: 'short' }));
+      current.setDate(current.getDate() + 1);
+    }
+    return days;
+  }, [startDate, endDate, language]);
 
-  const daysInMonth = useMemo(() => getDaysInMonth(selectedMonth), [selectedMonth, getDaysInMonth]);
+  const daysInPeriod = useMemo(() => getDaysInPeriod(), [getDaysInPeriod]);
 
-  const allBranches = useMemo(() => {
-    return branches.map(b => b.displayName).sort();
-  }, [branches]);
+  // Fetch branches
+  const { data: branches = [], isLoading: branchesLoading } = useQuery<Branch[], Error>({
+    queryKey: ['branches'],
+    queryFn: async () => {
+      const response = await branchesAPI.getAll();
+      return response
+        .filter((branch: any) => branch && branch._id)
+        .map((branch: any) => ({
+          _id: branch._id,
+          name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
+          nameEn: branch.nameEn || branch.name,
+          displayName: isRtl ? branch.name : branch.nameEn || branch.name,
+        }))
+        .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language));
+    },
+    staleTime: 60 * 60 * 1000, // Cache for 1 hour
+  });
 
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [inventory, ordersResponse, branchesResponse, salesResponse] = await Promise.all([
-          inventoryAPI.getInventory({}, isRtl),
-          ordersAPI.getAll({ status: 'completed', page: 1, limit: 1000 }, isRtl),
-          branchesAPI.getAll(),
-          salesAPI.getAnalytics({
-            startDate: new Date(currentYear, selectedMonth, 1).toISOString(),
-            endDate: new Date(currentYear, selectedMonth + 1, 0).toISOString(),
-            lang: language,
-          }),
-        ]);
+  const allBranches = useMemo(() => branches.map(b => b.displayName).sort(), [branches]);
 
-        const monthlyOrderData: { [month: number]: OrderRow[] } = {};
-        const monthlyStockInData: { [month: number]: StockRow[] } = {};
-        const monthlyStockOutData: { [month: number]: StockRow[] } = {};
-        const monthlyReturnData: { [month: number]: ReturnRow[] } = {};
-        const monthlySalesData: { [month: number]: SalesRow[] } = {};
+  // Fetch data with React Query
+  const { data: reportData, isLoading } = useQuery<{
+    orders: { [month: number]: OrderRow[] };
+    stockIn: { [month: number]: StockRow[] };
+    stockOut: { [month: number]: StockRow[] };
+    returns: { [month: number]: ReturnRow[] };
+    sales: { [month: number]: SalesRow[] };
+  }, Error>({
+    queryKey: ['reportData', selectedMonth, startDate, endDate, user?.branchId],
+    queryFn: async () => {
+      const start = startDate || new Date(currentYear, selectedMonth, 1);
+      const end = endDate || new Date(currentYear, selectedMonth + 1, 0);
+      const [inventory, ordersResponse, salesResponse] = await Promise.all([
+        inventoryAPI.getInventory({ startDate: start.toISOString(), endDate: end.toISOString() }, isRtl),
+        ordersAPI.getAll({ status: 'completed', page: 1, limit: 1000, startDate: start.toISOString(), endDate: end.toISOString() }, isRtl),
+        salesAPI.getAnalytics({
+          startDate: start.toISOString(),
+          endDate: end.toISOString(),
+          lang: language,
+        }),
+      ]);
 
-        // Process branches
-        const fetchedBranches = branchesResponse
-          .filter((branch: any) => branch && branch._id)
-          .map((branch: any) => ({
-            _id: branch._id,
-            name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
-            nameEn: branch.nameEn || branch.name,
-            displayName: isRtl ? branch.name : branch.nameEn || branch.name,
-          }))
-          .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language));
-        setBranches(fetchedBranches);
+      const monthlyOrderData: { [month: number]: OrderRow[] } = {};
+      const monthlyStockInData: { [month: number]: StockRow[] } = {};
+      const monthlyStockOutData: { [month: number]: StockRow[] } = {};
+      const monthlyReturnData: { [month: number]: ReturnRow[] } = {};
+      const monthlySalesData: { [month: number]: SalesRow[] } = {};
 
-        // Process product details with language support
-        const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
-        inventory.forEach((item: any) => {
-          if (item?.product?._id) {
-            productDetails.set(item.product._id, {
-              code: item.product.code || `code-${Math.random().toString(36).substring(2)}`,
-              product: isRtl ? (item.product.name || 'منتج غير معروف') : (item.product.nameEn || item.product.name || 'Unknown Product'),
-              unit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
-              price: Number(item.product.price) || 0,
+      const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
+      inventory.forEach((item: any) => {
+        if (item?.product?._id) {
+          productDetails.set(item.product._id, {
+            code: item.product.code || `code-${Math.random().toString(36).substring(2)}`,
+            product: isRtl ? (item.product.name || 'منتج غير معروف') : (item.product.nameEn || item.product.name || 'Unknown Product'),
+            unit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
+            price: Number(item.product.price) || 0,
+          });
+        }
+      });
+
+      let orders = Array.isArray(ordersResponse) ? ordersResponse : [];
+      if (orders.length === 0) {
+        orders = inventory
+          .filter((item: any) => item?.product?._id)
+          .flatMap((item: any) => {
+            return (item.movements || []).map((movement: any) => ({
+              status: 'completed',
+              createdAt: movement.createdAt || new Date().toISOString(),
+              branch: {
+                displayName:
+                  branches[Math.floor(Math.random() * branches.length)]?.displayName ||
+                  (isRtl ? 'الفرع الرئيسي' : 'Main Branch'),
+              },
+              items: [
+                {
+                  displayProductName: isRtl
+                    ? (item.product?.name || 'منتج غير معروف')
+                    : (item.product?.nameEn || item.product?.name || 'Unknown Product'),
+                  quantity: Math.abs(Number(movement.quantity) || 0),
+                  price: Number(item.product?.price) || 0,
+                  productId: item.product._id,
+                  unit: isRtl
+                    ? (item.product?.unit || 'غير محدد')
+                    : (item.product?.unitEn || item.product?.unit || 'N/A'),
+                  sales:
+                    Number(item.product?.sales) ||
+                    (Math.abs(Number(movement.quantity)) * Number(item.product?.price) * 0.1) || 0,
+                },
+              ],
+            }));
+          });
+      }
+
+      const daysInPeriodCount = daysInPeriod.length || new Date(currentYear, selectedMonth + 1, 0).getDate();
+      for (let month = 0; month < 12; month++) {
+        const orderMap = new Map<string, OrderRow>();
+        const stockInMap = new Map<string, StockRow>();
+        const stockOutMap = new Map<string, StockRow>();
+        const returnMap = new Map<string, ReturnRow>();
+        const salesMap = new Map<string, SalesRow>();
+
+        orders.forEach((order: any) => {
+          const status = order.status || order.orderStatus;
+          if (status !== 'completed') return;
+          const date = new Date(order.createdAt || order.date);
+          if (isNaN(date.getTime()) || date < start || date > end) return;
+          const orderMonth = date.getMonth();
+          const year = date.getFullYear();
+          if (year === currentYear && (!startDate || orderMonth === selectedMonth)) {
+            const branch =
+              order.branch?.displayName ||
+              order.branch?.name ||
+              order.branchId ||
+              (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
+            (order.items || []).forEach((item: any) => {
+              const productId = item.product?._id || item.productId;
+              if (!productId) return;
+              const details = productDetails.get(productId) || {
+                code: item.product?.code || `code-${Math.random().toString(36).substring(2)}`,
+                product: isRtl
+                  ? (item.product?.name || 'منتج غير معروف')
+                  : (item.product?.nameEn || item.product?.name || 'Unknown Product'),
+                unit: isRtl
+                  ? (item.product?.unit || 'غير محدد')
+                  : (item.product?.unitEn || item.product?.unit || 'N/A'),
+                price: Number(item.price) || 0,
+              };
+              const key = `${productId}-${month}`;
+              if (!orderMap.has(key)) {
+                orderMap.set(key, {
+                  id: key,
+                  code: details.code,
+                  product: details.product,
+                  unit: details.unit,
+                  branchQuantities: {},
+                  totalQuantity: 0,
+                  totalPrice: 0,
+                  sales: 0,
+                  actualSales: 0,
+                });
+              }
+              const row = orderMap.get(key)!;
+              const quantity = Number(item.quantity) || 0;
+              row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + quantity;
+              row.totalQuantity += quantity;
+              row.totalPrice += quantity * details.price;
+              row.sales = row.totalPrice * 0.1;
             });
           }
         });
 
-        // Process orders with fallback data
-        let orders = Array.isArray(ordersResponse) ? ordersResponse : [];
-        if (orders.length === 0) {
-          orders = inventory
-            .filter((item: any) => item?.product?._id)
-            .flatMap((item: any) => {
-              return (item.movements || []).map((movement: any) => ({
-                status: 'completed',
-                createdAt: movement.createdAt || new Date().toISOString(),
-                branch: {
-                  displayName:
-                    fetchedBranches[Math.floor(Math.random() * fetchedBranches.length)]?.displayName ||
-                    (isRtl ? 'الفرع الرئيسي' : 'Main Branch'),
-                },
-                items: [
-                  {
-                    displayProductName: isRtl
-                      ? (item.product?.name || 'منتج غير معروف')
-                      : (item.product?.nameEn || item.product?.name || 'Unknown Product'),
-                    quantity: Math.abs(Number(movement.quantity) || 0),
-                    price: Number(item.product?.price) || 0,
-                    productId: item.product._id,
-                    unit: isRtl
-                      ? (item.product?.unit || 'غير محدد')
-                      : (item.product?.unitEn || item.product?.unit || 'N/A'),
-                    sales:
-                      Number(item.product?.sales) ||
-                      (Math.abs(Number(movement.quantity)) * Number(item.product?.price) * 0.1) || 0,
-                  },
-                ],
-              }));
-            });
+        for (const row of orderMap.values()) {
+          const salesItem = salesResponse.productSales?.find((s: any) => s.productId === row.id.split('-')[0]);
+          if (salesItem) {
+            row.actualSales = Number(salesItem.totalQuantity) || 0;
+          }
         }
 
-        // Process data for each month
-        for (let month = 0; month < 12; month++) {
-          const daysInMonthCount = new Date(currentYear, month + 1, 0).getDate();
-          const orderMap = new Map<string, OrderRow>();
-          const stockInMap = new Map<string, StockRow>();
-          const stockOutMap = new Map<string, StockRow>();
-          const returnMap = new Map<string, ReturnRow>();
-          const salesMap = new Map<string, SalesRow>();
-
-          // Process orders
-          orders.forEach((order: any) => {
-            const status = order.status || order.orderStatus;
-            if (status !== 'completed') return;
-            const date = new Date(order.createdAt || order.date);
-            if (isNaN(date.getTime())) return;
-            const orderMonth = date.getMonth();
+        inventory.forEach((item: any) => {
+          const productId = item?.product?._id;
+          if (!productId) return;
+          const details = productDetails.get(productId) || {
+            code: item.product?.code || `code-${Math.random().toString(36).substring(2)}`,
+            product: isRtl
+              ? (item.product?.name || 'منتج غير معروف')
+              : (item.product?.nameEn || item.product?.name || 'Unknown Product'),
+            unit: isRtl
+              ? (item.product?.unit || 'غير محدد')
+              : (item.product?.unitEn || item.product?.unit || 'N/A'),
+            price: Number(item.product?.price) || 0,
+          };
+          (item.movements || []).forEach((movement: any) => {
+            if (!movement.type || !['in', 'out', 'return'].includes(movement.type)) return;
+            const date = new Date(movement.createdAt);
+            if (isNaN(date.getTime()) || date < start || date > end) return;
+            const prodMonth = date.getMonth();
             const year = date.getFullYear();
-            if (year === currentYear && orderMonth === month) {
-              const branch =
-                order.branch?.displayName ||
-                order.branch?.name ||
-                order.branchId ||
-                (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
-              (order.items || []).forEach((item: any) => {
-                const productId = item.product?._id || item.productId;
-                if (!productId) return;
-                const details = productDetails.get(productId) || {
-                  code: item.product?.code || `code-${Math.random().toString(36).substring(2)}`,
-                  product: isRtl
-                    ? (item.product?.name || 'منتج غير معروف')
-                    : (item.product?.nameEn || item.product?.name || 'Unknown Product'),
-                  unit: isRtl
-                    ? (item.product?.unit || 'غير محدد')
-                    : (item.product?.unitEn || item.product?.unit || 'N/A'),
-                  price: Number(item.price) || 0,
-                };
-                const key = `${productId}-${month}`;
-                if (!orderMap.has(key)) {
-                  orderMap.set(key, {
+            if (year === currentYear && (!startDate || prodMonth === selectedMonth)) {
+              const dayIndex = startDate ? Math.floor((date.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) : date.getDate() - 1;
+              if (dayIndex < 0 || dayIndex >= daysInPeriodCount) return;
+              const key = `${productId}-${month}`;
+              const quantity = Number(movement.quantity) || 0;
+              if (movement.type === 'return') {
+                if (!returnMap.has(key)) {
+                  returnMap.set(key, {
+                    id: key,
+                    product: details.product,
+                    code: details.code,
+                    unit: details.unit,
+                    totalReturns: 0,
+                    dailyReturns: Array(daysInPeriodCount).fill(0),
+                    totalValue: 0,
+                  });
+                }
+                const row = returnMap.get(key)!;
+                row.dailyReturns[dayIndex] -= Math.abs(quantity);
+                row.totalReturns -= Math.abs(quantity);
+                row.totalValue += Math.abs(quantity) * details.price;
+              } else if (movement.type === 'out') {
+                if (!stockOutMap.has(key)) {
+                  stockOutMap.set(key, {
                     id: key,
                     code: details.code,
                     product: details.product,
                     unit: details.unit,
-                    branchQuantities: {},
                     totalQuantity: 0,
+                    dailyQuantities: Array(daysInPeriodCount).fill(0),
+                    changes: Array(daysInPeriodCount).fill({ value: 0, type: movement.type }),
                     totalPrice: 0,
-                    sales: 0,
-                    actualSales: 0,
                   });
                 }
-                const row = orderMap.get(key)!;
-                const quantity = Number(item.quantity) || 0;
-                row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + quantity;
-                row.totalQuantity += quantity;
-                row.totalPrice += quantity * details.price;
-                row.sales = row.totalPrice * 0.1;
-              });
-            }
-          });
-
-          // Set actualSales
-          for (const row of orderMap.values()) {
-            const salesItem = salesResponse.productSales?.find((s: any) => s.productId === row.id.split('-')[0]);
-            if (salesItem) {
-              row.actualSales = Number(salesItem.totalQuantity) || 0;
-            }
-          }
-
-          // Process inventory movements
-          inventory.forEach((item: any) => {
-            const productId = item?.product?._id;
-            if (!productId) return;
-            const details = productDetails.get(productId) || {
-              code: item.product?.code || `code-${Math.random().toString(36).substring(2)}`,
-              product: isRtl
-                ? (item.product?.name || 'منتج غير معروف')
-                : (item.product?.nameEn || item.product?.name || 'Unknown Product'),
-              unit: isRtl
-                ? (item.product?.unit || 'غير محدد')
-                : (item.product?.unitEn || item.product?.unit || 'N/A'),
-              price: Number(item.product?.price) || 0,
-            };
-            (item.movements || []).forEach((movement: any) => {
-              if (!movement.type || !['in', 'out', 'return'].includes(movement.type)) return;
-              const date = new Date(movement.createdAt);
-              if (isNaN(date.getTime())) return;
-              const prodMonth = date.getMonth();
-              const year = date.getFullYear();
-              if (year === currentYear && prodMonth === month) {
-                const day = date.getDate();
-                const key = `${productId}-${month}`;
-                const quantity = Number(movement.quantity) || 0;
-                if (movement.type === 'return') {
-                  if (!returnMap.has(key)) {
-                    returnMap.set(key, {
-                      id: key,
-                      product: details.product,
-                      code: details.code,
-                      unit: details.unit,
-                      totalReturns: 0,
-                      dailyReturns: Array(daysInMonthCount).fill(0),
-                      totalValue: 0,
-                    });
-                  }
-                  const row = returnMap.get(key)!;
-                  row.dailyReturns[day - 1] -= Math.abs(quantity); // Negative for returns
-                  row.totalReturns -= Math.abs(quantity);
-                  row.totalValue += Math.abs(quantity) * details.price;
-                } else if (movement.type === 'out') {
-                  if (!stockOutMap.has(key)) {
-                    stockOutMap.set(key, {
-                      id: key,
-                      code: details.code,
-                      product: details.product,
-                      unit: details.unit,
-                      totalQuantity: 0,
-                      dailyQuantities: Array(daysInMonthCount).fill(0),
-                      changes: Array(daysInMonthCount).fill({ value: 0, type: movement.type }),
-                      totalPrice: 0,
-                    });
-                  }
-                  const row = stockOutMap.get(key)!;
-                  row.dailyQuantities[day - 1] -= Math.abs(quantity); // Negative for stock out
-                  row.totalQuantity -= Math.abs(quantity);
-                  row.totalPrice += Math.abs(quantity) * details.price;
-                  row.changes[day - 1] = { value: -Math.abs(quantity), type: movement.type };
-                } else {
-                  if (!stockInMap.has(key)) {
-                    stockInMap.set(key, {
-                      id: key,
-                      code: details.code,
-                      product: details.product,
-                      unit: details.unit,
-                      totalQuantity: 0,
-                      dailyQuantities: Array(daysInMonthCount).fill(0),
-                      changes: Array(daysInMonthCount).fill({ value: 0, type: movement.type }),
-                      totalPrice: 0,
-                    });
-                  }
-                  const row = stockInMap.get(key)!;
-                  row.dailyQuantities[day - 1] += Math.abs(quantity);
-                  row.totalQuantity += Math.abs(quantity);
-                  row.totalPrice += Math.abs(quantity) * details.price;
-                  row.changes[day - 1] = { value: quantity, type: movement.type };
+                const row = stockOutMap.get(key)!;
+                row.dailyQuantities[dayIndex] -= Math.abs(quantity);
+                row.totalQuantity -= Math.abs(quantity);
+                row.totalPrice += Math.abs(quantity) * details.price;
+                row.changes[dayIndex] = { value: -Math.abs(quantity), type: movement.type };
+              } else {
+                if (!stockInMap.has(key)) {
+                  stockInMap.set(key, {
+                    id: key,
+                    code: details.code,
+                    product: details.product,
+                    unit: details.unit,
+                    totalQuantity: 0,
+                    dailyQuantities: Array(daysInPeriodCount).fill(0),
+                    changes: Array(daysInPeriodCount).fill({ value: 0, type: movement.type }),
+                    totalPrice: 0,
+                  });
                 }
+                const row = stockInMap.get(key)!;
+                row.dailyQuantities[dayIndex] += Math.abs(quantity);
+                row.totalQuantity += Math.abs(quantity);
+                row.totalPrice += Math.abs(quantity) * details.price;
+                row.changes[dayIndex] = { value: quantity, type: movement.type };
               }
-            });
-          });
-
-          // Process sales
-          salesResponse.productSales?.forEach((s: any) => {
-            const productId = s.productId;
-            if (!productId) return;
-            const details = productDetails.get(productId) || {
-              code: s.product?.code || `code-${Math.random().toString(36).substring(2)}`,
-              product: isRtl
-                ? (s.product?.name || 'منتج غير معروف')
-                : (s.product?.nameEn || s.product?.name || 'Unknown Product'),
-              unit: isRtl
-                ? (s.product?.unit || 'غير محدد')
-                : (s.product?.unitEn || s.product?.unit || 'N/A'),
-              price: s.totalRevenue / s.totalQuantity || 0,
-            };
-            const key = `${productId}-${month}`;
-            if (!salesMap.has(key)) {
-              salesMap.set(key, {
-                id: key,
-                code: details.code,
-                product: details.product,
-                unit: details.unit,
-                totalSales: 0,
-                dailySales: Array(daysInMonthCount).fill(0),
-                totalValue: 0,
-              });
             }
-            const row = salesMap.get(key)!;
-            s.dailySales?.forEach((sale: any, index: number) => {
+          });
+        });
+
+        salesResponse.productSales?.forEach((s: any) => {
+          const productId = s.productId;
+          if (!productId) return;
+          const details = productDetails.get(productId) || {
+            code: s.product?.code || `code-${Math.random().toString(36).substring(2)}`,
+            product: isRtl
+              ? (s.product?.name || 'منتج غير معروف')
+              : (s.product?.nameEn || s.product?.name || 'Unknown Product'),
+            unit: isRtl
+              ? (s.product?.unit || 'غير محدد')
+              : (s.product?.unitEn || s.product?.unit || 'N/A'),
+            price: s.totalRevenue / (s.totalQuantity || 1) || 0,
+          };
+          const key = `${productId}-${month}`;
+          if (!salesMap.has(key)) {
+            salesMap.set(key, {
+              id: key,
+              code: details.code,
+              product: details.product,
+              unit: details.unit,
+              totalSales: 0,
+              dailySales: Array(daysInPeriodCount).fill(0),
+              totalValue: 0,
+            });
+          }
+          const row = salesMap.get(key)!;
+          s.dailySales?.forEach((sale: any, index: number) => {
+            if (index < daysInPeriodCount) {
               row.dailySales[index] = sale.quantity || 0;
               row.totalSales += sale.quantity || 0;
               row.totalValue += (sale.quantity || 0) * details.price;
-            });
+            }
           });
-
-          monthlyOrderData[month] = Array.from(orderMap.values());
-          monthlyStockInData[month] = Array.from(stockInMap.values());
-          monthlyStockOutData[month] = Array.from(stockOutMap.values());
-          monthlyReturnData[month] = Array.from(returnMap.values());
-          monthlySalesData[month] = Array.from(salesMap.values());
-        }
-
-        setOrderData(monthlyOrderData);
-        setStockInData(monthlyStockInData);
-        setStockOutData(monthlyStockOutData);
-        setReturnData(monthlyReturnData);
-        setSalesData(monthlySalesData);
-      } catch (error) {
-        console.error('Failed to fetch data:', error);
-        toast.error(isRtl ? 'فشل في جلب البيانات' : 'Failed to fetch data', {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
         });
-      } finally {
-        setLoading(false);
+
+        monthlyOrderData[month] = Array.from(orderMap.values());
+        monthlyStockInData[month] = Array.from(stockInMap.values());
+        monthlyStockOutData[month] = Array.from(stockOutMap.values());
+        monthlyReturnData[month] = Array.from(returnMap.values());
+        monthlySalesData[month] = Array.from(salesMap.values());
       }
-    };
-    fetchData();
-  }, [isRtl, currentYear, selectedMonth, language]);
+
+      return {
+        orders: monthlyOrderData,
+        stockIn: monthlyStockInData,
+        stockOut: monthlyStockOutData,
+        returns: monthlyReturnData,
+        sales: monthlySalesData,
+      };
+    },
+    enabled: !!user?.branchId && branches.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const renderOrderTable = useCallback(
-    (data: OrderRow[], title: string, month: number) => {
+    (data: OrderRow[], title: string, periodLabel: string) => {
       const totalQuantities = allBranches.reduce((acc, branch) => {
         acc[branch] = data.reduce((sum, row) => sum + (row.branchQuantities[branch] || 0), 0);
         return acc;
@@ -601,7 +604,6 @@ const ProductionReport: React.FC = () => {
       const grandTotalQuantity = data.reduce((sum, row) => sum + row.totalQuantity, 0);
       const grandTotalPrice = data.reduce((sum, row) => sum + row.totalPrice, 0);
       const grandActualSales = data.reduce((sum, row) => sum + row.actualSales, 0);
-      const monthName = months[month].label;
 
       const exportTable = (format: 'excel' | 'pdf') => {
         const headers = [
@@ -661,18 +663,18 @@ const ProductionReport: React.FC = () => {
             { wch: 15 },
           ];
           const wb = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
-          XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
+          XLSX.utils.book_append_sheet(wb, ws, `${title}_${periodLabel}`);
+          XLSX.writeFile(wb, `${title}_${periodLabel}.xlsx`);
           toast.success(isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully', {
             position: isRtl ? 'top-left' : 'top-right',
             autoClose: 3000,
           });
         } else if (format === 'pdf') {
-          exportToPDF(dataRows, title, monthName, headers, isRtl, data.length, grandTotalQuantity, grandTotalPrice, allBranches);
+          exportToPDF(dataRows, title, periodLabel, headers, isRtl, data.length, grandTotalQuantity, grandTotalPrice, allBranches);
         }
       };
 
-      if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
+      if (isLoading || branchesLoading) return <OrderTableSkeleton isRtl={isRtl} />;
 
       if (data.length === 0) {
         return (
@@ -690,7 +692,7 @@ const ProductionReport: React.FC = () => {
       return (
         <div className="mb-8">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
+            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${periodLabel}` : `${title} - ${periodLabel}`}</h2>
             <div className="flex gap-2">
               <Button
                 variant={data.length > 0 ? 'primary' : 'secondary'}
@@ -796,14 +798,13 @@ const ProductionReport: React.FC = () => {
         </div>
       );
     },
-    [loading, isRtl, allBranches, months, formatPrice]
+    [isRtl, allBranches, isLoading, branchesLoading, formatPrice]
   );
 
   const renderStockTable = useCallback(
-    (data: StockRow[], title: string, month: number, isIn: boolean) => {
+    (data: StockRow[], title: string, periodLabel: string, isIn: boolean) => {
       const grandTotalQuantity = data.reduce((sum, row) => sum + row.totalQuantity, 0);
       const grandTotalPrice = data.reduce((sum, row) => sum + row.totalPrice, 0);
-      const monthName = months[month].label;
 
       const exportTable = (format: 'excel' | 'pdf') => {
         const headers = [
@@ -811,7 +812,7 @@ const ProductionReport: React.FC = () => {
           isRtl ? 'الكود' : 'Code',
           isRtl ? 'المنتج' : 'Product',
           isRtl ? 'وحدة المنتج' : 'Product Unit',
-          ...daysInMonth,
+          ...(daysInPeriod.length > 0 ? daysInPeriod : months[selectedMonth].label.split(' ')),
           isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
           isRtl ? 'السعر الإجمالي' : 'Total Price',
         ];
@@ -821,7 +822,7 @@ const ProductionReport: React.FC = () => {
             code: row.code,
             product: row.product,
             unit: row.unit,
-            ...Object.fromEntries(row.dailyQuantities.map((qty, i) => [daysInMonth[i], qty])),
+            ...Object.fromEntries(row.dailyQuantities.map((qty, i) => [daysInPeriod[i] || i + 1, qty])),
             totalQuantity: row.totalQuantity,
             totalPrice: formatPrice(row.totalPrice, isRtl),
           })),
@@ -830,7 +831,12 @@ const ProductionReport: React.FC = () => {
             code: '',
             product: isRtl ? 'الإجمالي' : 'Total',
             unit: '',
-            ...Object.fromEntries(daysInMonth.map((_, i) => [daysInMonth[i], data.reduce((sum, row) => sum + row.dailyQuantities[i], 0)])),
+            ...Object.fromEntries(
+              (daysInPeriod.length > 0 ? daysInPeriod : months[selectedMonth].label.split(' ')).map((_, i) => [
+                daysInPeriod[i] || i + 1,
+                data.reduce((sum, row) => sum + row.dailyQuantities[i], 0),
+              ])
+            ),
             totalQuantity: grandTotalQuantity,
             totalPrice: formatPrice(grandTotalPrice, isRtl),
           },
@@ -840,7 +846,7 @@ const ProductionReport: React.FC = () => {
           row.code,
           row.product,
           row.unit,
-          ...daysInMonth.map(day => row[day]),
+          ...(daysInPeriod.length > 0 ? daysInPeriod : months[selectedMonth].label.split(' ')).map(day => row[day]),
           row.totalQuantity,
           row.totalPrice,
         ]);
@@ -848,20 +854,28 @@ const ProductionReport: React.FC = () => {
         if (format === 'excel') {
           const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
           if (isRtl) ws['!views'] = [{ RTL: true }];
-          ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }];
+          ws['!cols'] = [
+            { wch: 10 },
+            { wch: 15 },
+            { wch: 20 },
+            { wch: 15 },
+            ...(daysInPeriod.length > 0 ? daysInPeriod : months[selectedMonth].label.split(' ')).map(() => ({ wch: 12 })),
+            { wch: 15 },
+            { wch: 15 },
+          ];
           const wb = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
-          XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
+          XLSX.utils.book_append_sheet(wb, ws, `${title}_${periodLabel}`);
+          XLSX.writeFile(wb, `${title}_${periodLabel}.xlsx`);
           toast.success(isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully', {
             position: isRtl ? 'top-left' : 'top-right',
             autoClose: 3000,
           });
         } else if (format === 'pdf') {
-          exportToPDF(dataRows, title, monthName, headers, isRtl, data.length, grandTotalQuantity, grandTotalPrice, []);
+          exportToPDF(dataRows, title, periodLabel, headers, isRtl, data.length, grandTotalQuantity, grandTotalPrice, []);
         }
       };
 
-      if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
+      if (isLoading || branchesLoading) return <OrderTableSkeleton isRtl={isRtl} />;
 
       if (data.length === 0) {
         return (
@@ -879,7 +893,7 @@ const ProductionReport: React.FC = () => {
       return (
         <div className="mb-8">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
+            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${periodLabel}` : `${title} - ${periodLabel}`}</h2>
             <div className="flex gap-2">
               <Button
                 variant={data.length > 0 ? 'primary' : 'secondary'}
@@ -918,7 +932,7 @@ const ProductionReport: React.FC = () => {
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
-                  {daysInMonth.map((day, i) => (
+                  {(daysInPeriod.length > 0 ? daysInPeriod : months[selectedMonth].label.split(' ')).map((day, i) => (
                     <th key={i} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
                       {day}
                     </th>
@@ -960,7 +974,7 @@ const ProductionReport: React.FC = () => {
                 ))}
                 <tr className={`font-semibold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
-                  {daysInMonth.map((_, i) => (
+                  {(daysInPeriod.length > 0 ? daysInPeriod : months[selectedMonth].label.split(' ')).map((_, i) => (
                     <td key={i} className="px-4 py-3 text-gray-800 text-center">
                       {formatNumber(data.reduce((sum, row) => sum + row.dailyQuantities[i], 0), isRtl)}
                     </td>
@@ -975,14 +989,13 @@ const ProductionReport: React.FC = () => {
         </div>
       );
     },
-    [loading, isRtl, daysInMonth, months, formatPrice]
+    [isRtl, daysInPeriod, selectedMonth, months, isLoading, branchesLoading, formatPrice]
   );
 
   const renderReturnTable = useCallback(
-    (data: ReturnRow[], title: string, month: number) => {
+    (data: ReturnRow[], title: string, periodLabel: string) => {
       const grandTotalReturns = data.reduce((sum, row) => sum + row.totalReturns, 0);
       const grandTotalValue = data.reduce((sum, row) => sum + row.totalValue, 0);
-      const monthName = months[month].label;
 
       const exportTable = (format: 'excel' | 'pdf') => {
         const headers = [
@@ -990,7 +1003,7 @@ const ProductionReport: React.FC = () => {
           isRtl ? 'الكود' : 'Code',
           isRtl ? 'المنتج' : 'Product',
           isRtl ? 'وحدة المنتج' : 'Product Unit',
-          ...daysInMonth,
+          ...(daysInPeriod.length > 0 ? daysInPeriod : months[selectedMonth].label.split(' ')),
           isRtl ? 'إجمالي المرتجعات' : 'Total Returns',
           isRtl ? 'القيمة الإجمالية' : 'Total Value',
         ];
@@ -1000,7 +1013,7 @@ const ProductionReport: React.FC = () => {
             code: row.code,
             product: row.product,
             unit: row.unit,
-            ...Object.fromEntries(row.dailyReturns.map((qty, i) => [daysInMonth[i], qty])),
+            ...Object.fromEntries(row.dailyReturns.map((qty, i) => [daysInPeriod[i] || i + 1, qty])),
             totalReturns: row.totalReturns,
             totalValue: formatPrice(row.totalValue, isRtl),
           })),
@@ -1009,7 +1022,12 @@ const ProductionReport: React.FC = () => {
             code: '',
             product: isRtl ? 'الإجمالي' : 'Total',
             unit: '',
-            ...Object.fromEntries(daysInMonth.map((_, i) => [daysInMonth[i], data.reduce((sum, row) => sum + row.dailyReturns[i], 0)])),
+            ...Object.fromEntries(
+              (daysInPeriod.length > 0 ? daysInPeriod : months[selectedMonth].label.split(' ')).map((_, i) => [
+                daysInPeriod[i] || i + 1,
+                data.reduce((sum, row) => sum + row.dailyReturns[i], 0),
+              ])
+            ),
             totalReturns: grandTotalReturns,
             totalValue: formatPrice(grandTotalValue, isRtl),
           },
@@ -1019,7 +1037,7 @@ const ProductionReport: React.FC = () => {
           row.code,
           row.product,
           row.unit,
-          ...daysInMonth.map(day => row[day]),
+          ...(daysInPeriod.length > 0 ? daysInPeriod : months[selectedMonth].label.split(' ')).map(day => row[day]),
           row.totalReturns,
           row.totalValue,
         ]);
@@ -1027,20 +1045,28 @@ const ProductionReport: React.FC = () => {
         if (format === 'excel') {
           const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
           if (isRtl) ws['!views'] = [{ RTL: true }];
-          ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }];
+          ws['!cols'] = [
+            { wch: 10 },
+            { wch: 15 },
+            { wch: 20 },
+            { wch: 15 },
+            ...(daysInPeriod.length > 0 ? daysInPeriod : months[selectedMonth].label.split(' ')).map(() => ({ wch: 12 })),
+            { wch: 15 },
+            { wch: 15 },
+          ];
           const wb = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
-          XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
+          XLSX.utils.book_append_sheet(wb, ws, `${title}_${periodLabel}`);
+          XLSX.writeFile(wb, `${title}_${periodLabel}.xlsx`);
           toast.success(isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully', {
             position: isRtl ? 'top-left' : 'top-right',
             autoClose: 3000,
           });
         } else if (format === 'pdf') {
-          exportToPDF(dataRows, title, monthName, headers, isRtl, data.length, grandTotalReturns, grandTotalValue, []);
+          exportToPDF(dataRows, title, periodLabel, headers, isRtl, data.length, grandTotalReturns, grandTotalValue, []);
         }
       };
 
-      if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
+      if (isLoading || branchesLoading) return <OrderTableSkeleton isRtl={isRtl} />;
 
       if (data.length === 0) {
         return (
@@ -1058,7 +1084,7 @@ const ProductionReport: React.FC = () => {
       return (
         <div className="mb-8">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
+            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${periodLabel}` : `${title} - ${periodLabel}`}</h2>
             <div className="flex gap-2">
               <Button
                 variant={data.length > 0 ? 'primary' : 'secondary'}
@@ -1097,7 +1123,7 @@ const ProductionReport: React.FC = () => {
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
-                  {daysInMonth.map((day, i) => (
+                  {(daysInPeriod.length > 0 ? daysInPeriod : months[selectedMonth].label.split(' ')).map((day, i) => (
                     <th key={i} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
                       {day}
                     </th>
@@ -1133,7 +1159,7 @@ const ProductionReport: React.FC = () => {
                 ))}
                 <tr className={`font-semibold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
-                  {daysInMonth.map((_, i) => (
+                  {(daysInPeriod.length > 0 ? daysInPeriod : months[selectedMonth].label.split(' ')).map((_, i) => (
                     <td key={i} className="px-4 py-3 text-gray-800 text-center">
                       {formatNumber(data.reduce((sum, row) => sum + row.dailyReturns[i], 0), isRtl)}
                     </td>
@@ -1148,14 +1174,13 @@ const ProductionReport: React.FC = () => {
         </div>
       );
     },
-    [loading, isRtl, daysInMonth, months, formatPrice]
+    [isRtl, daysInPeriod, selectedMonth, months, isLoading, branchesLoading, formatPrice]
   );
 
   const renderSalesTable = useCallback(
-    (data: SalesRow[], title: string, month: number) => {
+    (data: SalesRow[], title: string, periodLabel: string) => {
       const grandTotalSales = data.reduce((sum, row) => sum + row.totalSales, 0);
       const grandTotalValue = data.reduce((sum, row) => sum + row.totalValue, 0);
-      const monthName = months[month].label;
 
       const exportTable = (format: 'excel' | 'pdf') => {
         const headers = [
@@ -1163,7 +1188,7 @@ const ProductionReport: React.FC = () => {
           isRtl ? 'الكود' : 'Code',
           isRtl ? 'المنتج' : 'Product',
           isRtl ? 'وحدة المنتج' : 'Product Unit',
-          ...daysInMonth,
+          ...(daysInPeriod.length > 0 ? daysInPeriod : months[selectedMonth].label.split(' ')),
           isRtl ? 'إجمالي المبيعات' : 'Total Sales',
           isRtl ? 'القيمة الإجمالية' : 'Total Value',
         ];
@@ -1173,7 +1198,7 @@ const ProductionReport: React.FC = () => {
             code: row.code,
             product: row.product,
             unit: row.unit,
-            ...Object.fromEntries(row.dailySales.map((qty, i) => [daysInMonth[i], qty])),
+            ...Object.fromEntries(row.dailySales.map((qty, i) => [daysInPeriod[i] || i + 1, qty])),
             totalSales: row.totalSales,
             totalValue: formatPrice(row.totalValue, isRtl),
           })),
@@ -1182,7 +1207,12 @@ const ProductionReport: React.FC = () => {
             code: '',
             product: isRtl ? 'الإجمالي' : 'Total',
             unit: '',
-            ...Object.fromEntries(daysInMonth.map((_, i) => [daysInMonth[i], data.reduce((sum, row) => sum + row.dailySales[i], 0)])),
+            ...Object.fromEntries(
+              (daysInPeriod.length > 0 ? daysInPeriod : months[selectedMonth].label.split(' ')).map((_, i) => [
+                daysInPeriod[i] || i + 1,
+                data.reduce((sum, row) => sum + row.dailySales[i], 0),
+              ])
+            ),
             totalSales: grandTotalSales,
             totalValue: formatPrice(grandTotalValue, isRtl),
           },
@@ -1192,7 +1222,7 @@ const ProductionReport: React.FC = () => {
           row.code,
           row.product,
           row.unit,
-          ...daysInMonth.map(day => row[day]),
+          ...(daysInPeriod.length > 0 ? daysInPeriod : months[selectedMonth].label.split(' ')).map(day => row[day]),
           row.totalSales,
           row.totalValue,
         ]);
@@ -1200,20 +1230,28 @@ const ProductionReport: React.FC = () => {
         if (format === 'excel') {
           const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
           if (isRtl) ws['!views'] = [{ RTL: true }];
-          ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }];
+          ws['!cols'] = [
+            { wch: 10 },
+            { wch: 15 },
+            { wch: 20 },
+            { wch: 15 },
+            ...(daysInPeriod.length > 0 ? daysInPeriod : months[selectedMonth].label.split(' ')).map(() => ({ wch: 12 })),
+            { wch: 15 },
+            { wch: 15 },
+          ];
           const wb = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
-          XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
+          XLSX.utils.book_append_sheet(wb, ws, `${title}_${periodLabel}`);
+          XLSX.writeFile(wb, `${title}_${periodLabel}.xlsx`);
           toast.success(isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully', {
             position: isRtl ? 'top-left' : 'top-right',
             autoClose: 3000,
           });
         } else if (format === 'pdf') {
-          exportToPDF(dataRows, title, monthName, headers, isRtl, data.length, grandTotalSales, grandTotalValue, []);
+          exportToPDF(dataRows, title, periodLabel, headers, isRtl, data.length, grandTotalSales, grandTotalValue, []);
         }
       };
 
-      if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
+      if (isLoading || branchesLoading) return <OrderTableSkeleton isRtl={isRtl} />;
 
       if (data.length === 0) {
         return (
@@ -1231,7 +1269,7 @@ const ProductionReport: React.FC = () => {
       return (
         <div className="mb-8">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
+            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${periodLabel}` : `${title} - ${periodLabel}`}</h2>
             <div className="flex gap-2">
               <Button
                 variant={data.length > 0 ? 'primary' : 'secondary'}
@@ -1270,7 +1308,7 @@ const ProductionReport: React.FC = () => {
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
-                  {daysInMonth.map((day, i) => (
+                  {(daysInPeriod.length > 0 ? daysInPeriod : months[selectedMonth].label.split(' ')).map((day, i) => (
                     <th key={i} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
                       {day}
                     </th>
@@ -1283,7 +1321,7 @@ const ProductionReport: React.FC = () => {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <              <tbody className="divide-y divide-gray-200">
                 {data.map((row, index) => (
                   <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
                     <td className="px-4 py-3 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
@@ -1293,11 +1331,11 @@ const ProductionReport: React.FC = () => {
                     {row.dailySales.map((qty, i) => (
                       <td
                         key={i}
-                        className="px-4 py-3 text-center font-medium text-green-700 bg-green-50"
+                        className="px-4 py-3 text-center font-medium text-blue-700"
                         data-tooltip-id="sales-tooltip"
-                        data-tooltip-content={`${isRtl ? 'مبيعات' : 'Sales'}: ${formatNumber(qty, isRtl)}`}
+                        data-tooltip-content={`${isRtl ? 'المبيعات' : 'Sales'}: ${formatNumber(qty, isRtl)}`}
                       >
-                        {qty !== 0 ? `+${formatNumber(qty, isRtl)}` : '0'}
+                        {qty !== 0 ? formatNumber(qty, isRtl) : '0'}
                       </td>
                     ))}
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalSales, isRtl)}</td>
@@ -1306,7 +1344,7 @@ const ProductionReport: React.FC = () => {
                 ))}
                 <tr className={`font-semibold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
-                  {daysInMonth.map((_, i) => (
+                  {(daysInPeriod.length > 0 ? daysInPeriod : months[selectedMonth].label.split(' ')).map((_, i) => (
                     <td key={i} className="px-4 py-3 text-gray-800 text-center">
                       {formatNumber(data.reduce((sum, row) => sum + row.dailySales[i], 0), isRtl)}
                     </td>
@@ -1321,87 +1359,178 @@ const ProductionReport: React.FC = () => {
         </div>
       );
     },
-    [loading, isRtl, daysInMonth, months, formatPrice]
+    [isRtl, daysInPeriod, selectedMonth, months, isLoading, branchesLoading, formatPrice]
   );
 
+  const periodLabel = startDate && endDate
+    ? `${startDate.toLocaleDateString(isRtl ? 'ar-SA' : 'en-US')} - ${endDate.toLocaleDateString(isRtl ? 'ar-SA' : 'en-US')}`
+    : months[selectedMonth].label;
+
+  const handleTabChange = (tab: 'orders' | 'stockIn' | 'stockOut' | 'returns' | 'sales') => {
+    setActiveTab(tab);
+  };
+
+  const handleResetFilter = () => {
+    setStartDate(null);
+    setEndDate(null);
+    setSelectedMonth(new Date().getMonth());
+  };
+
   return (
-    <div className={`min-h-screen px-6 py-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-100`}>
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">{isRtl ? 'تقارير الإنتاج' : 'Production Reports'}</h1>
-      <div className="mb-8 bg-white shadow-md rounded-xl p-4">
-        <div className="flex flex-wrap gap-2 mb-4 justify-center">
-          {months.map(month => (
-            <Button
-              key={month.value}
-              variant={selectedMonth === month.value ? 'primary' : 'secondary'}
-              onClick={() => setSelectedMonth(month.value)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-                selectedMonth === month.value
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
+    <div className={`container mx-auto px-4 py-8 ${isRtl ? 'text-right' : 'text-left'}`}>
+      <h1 className="text-2xl font-bold text-gray-800 mb-6">
+        {isRtl ? 'تقرير الإنتاج' : 'Production Report'}
+      </h1>
+
+      {/* Tabs */}
+      <div className={`flex flex-wrap gap-2 mb-6 border-b border-gray-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <button
+          className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors duration-200 ${
+            activeTab === 'sales'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+          onClick={() => handleTabChange('sales')}
+        >
+          {isRtl ? 'المبيعات' : 'Sales'}
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors duration-200 ${
+            activeTab === 'orders'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+          onClick={() => handleTabChange('orders')}
+        >
+          {isRtl ? 'الطلبات' : 'Orders'}
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors duration-200 ${
+            activeTab === 'stockIn'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+          onClick={() => handleTabChange('stockIn')}
+        >
+          {isRtl ? 'إدخال المخزون' : 'Stock In'}
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors duration-200 ${
+            activeTab === 'stockOut'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+          onClick={() => handleTabChange('stockOut')}
+        >
+          {isRtl ? 'إخراج المخزون' : 'Stock Out'}
+        </button>
+        <button
+          className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors duration-200 ${
+            activeTab === 'returns'
+              ? 'bg-blue-600 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+          onClick={() => handleTabChange('returns')}
+        >
+          {isRtl ? 'المرتجعات' : 'Returns'}
+        </button>
+      </div>
+
+      {/* Period Filter */}
+      <div className="mb-6 bg-white p-4 rounded-xl shadow-md border border-gray-200">
+        <div className={`flex flex-col sm:flex-row gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {isRtl ? 'اختر الشهر' : 'Select Month'}
+            </label>
+            <select
+              value={selectedMonth}
+              onChange={(e) => {
+                setSelectedMonth(Number(e.target.value));
+                setStartDate(null);
+                setEndDate(null);
+              }}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={startDate !== null || endDate !== null}
             >
-              {month.label}
+              {months.map((month) => (
+                <option key={month.value} value={month.value}>
+                  {month.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {isRtl ? 'من تاريخ' : 'From Date'}
+            </label>
+            <DatePicker
+              selected={startDate}
+              onChange={(date: Date) => setStartDate(date)}
+              maxDate={endDate || new Date()}
+              dateFormat="yyyy-MM-dd"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholderText={isRtl ? 'اختر التاريخ' : 'Select Date'}
+            />
+          </div>
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {isRtl ? 'إلى تاريخ' : 'To Date'}
+            </label>
+            <DatePicker
+              selected={endDate}
+              onChange={(date: Date) => setEndDate(date)}
+              minDate={startDate}
+              maxDate={new Date()}
+              dateFormat="yyyy-MM-dd"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholderText={isRtl ? 'اختر التاريخ' : 'Select Date'}
+            />
+          </div>
+          <div className="flex items-end">
+            <Button
+              variant="secondary"
+              onClick={handleResetFilter}
+              className="rounded-full px-4 py-2 text-sm font-medium bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all duration-200"
+            >
+              {isRtl ? 'إعادة تعيين' : 'Reset'}
             </Button>
-          ))}
-        </div>
-        <div className={`flex flex-wrap gap-2 justify-center ${isRtl ? 'flex-row-reverse' : ''}`}>
-          <Button
-            variant={activeTab === 'orders' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('orders')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-              activeTab === 'orders' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            {isRtl ? 'الطلبات' : 'Orders'}
-          </Button>
-          <Button
-            variant={activeTab === 'stockIn' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('stockIn')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-              activeTab === 'stockIn' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            {isRtl ? 'إدخال المخزون' : 'Stock In'}
-          </Button>
-          <Button
-            variant={activeTab === 'stockOut' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('stockOut')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-              activeTab === 'stockOut' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            {isRtl ? 'إخراج المخزون' : 'Stock Out'}
-          </Button>
-          <Button
-            variant={activeTab === 'returns' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('returns')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-              activeTab === 'returns' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            {isRtl ? 'المرتجعات' : 'Returns'}
-          </Button>
-          <Button
-            variant={activeTab === 'sales' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('sales')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-              activeTab === 'sales' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            {isRtl ? 'المبيعات' : 'Sales'}
-          </Button>
+          </div>
         </div>
       </div>
+
+      {/* Render Active Table */}
       <AnimatePresence>
-        {activeTab === 'orders' && renderOrderTable(orderData[selectedMonth] || [], isRtl ? 'تقرير الطلبات' : 'Orders Report', selectedMonth)}
-        {activeTab === 'stockIn' && renderStockTable(stockInData[selectedMonth] || [], isRtl ? 'تقرير إدخال المخزون' : 'Stock In Report', selectedMonth, true)}
-        {activeTab === 'stockOut' && renderStockTable(stockOutData[selectedMonth] || [], isRtl ? 'تقرير إخراج المخزون' : 'Stock Out Report', selectedMonth, false)}
-        {activeTab === 'returns' && renderReturnTable(returnData[selectedMonth] || [], isRtl ? 'تقرير المرتجعات' : 'Returns Report', selectedMonth)}
-        {activeTab === 'sales' && renderSalesTable(salesData[selectedMonth] || [], isRtl ? 'تقرير المبيعات' : 'Sales Report', selectedMonth)}
+        {activeTab === 'orders' && renderOrderTable(
+          reportData?.orders?.[selectedMonth] || [],
+          isRtl ? 'تقرير الطلبات' : 'Orders Report',
+          periodLabel
+        )}
+        {activeTab === 'stockIn' && renderStockTable(
+          reportData?.stockIn?.[selectedMonth] || [],
+          isRtl ? 'تقرير إدخال المخزون' : 'Stock In Report',
+          periodLabel,
+          true
+        )}
+        {activeTab === 'stockOut' && renderStockTable(
+          reportData?.stockOut?.[selectedMonth] || [],
+          isRtl ? 'تقرير إخراج المخزون' : 'Stock Out Report',
+          periodLabel,
+          false
+        )}
+        {activeTab === 'returns' && renderReturnTable(
+          reportData?.returns?.[selectedMonth] || [],
+          isRtl ? 'تقرير المرتجعات' : 'Returns Report',
+          periodLabel
+        )}
+        {activeTab === 'sales' && renderSalesTable(
+          reportData?.sales?.[selectedMonth] || [],
+          isRtl ? 'تقرير المبيعات' : 'Sales Report',
+          periodLabel
+        )}
       </AnimatePresence>
     </div>
   );
 };
 
 export default ProductionReport;
-
