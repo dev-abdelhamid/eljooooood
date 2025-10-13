@@ -38,9 +38,7 @@ import { ChefDetails } from './pages/ChefDetails';
 import BranchSalesAnalytics from './pages/BranchSalesAnalytics';
 import SalesAnalytics from './pages/SalesAnalytics';
 import ReturnStats from './pages/ReturnStats';
-import ProductionTrackingPage from './pages/ProductionTrackingPage';
 import ProductionInventory from './pages/ProductionInventory';
-import FactoryInventory from './pages/FactoryInventory';
 
 
 // إعداد QueryClient لإدارة الاستعلامات
@@ -87,7 +85,6 @@ function AppContent() {
                   <Route path="/orders/new" element={<NewOrder />} />
                   <Route path="/orders/review" element={<Orders />} />
                   <Route path="/returns" element={<BranchReturns />} />
-                  <Route path="/FactoryInventory" element={<FactoryInventory />} />
                   <Route path="/production-report" element={<ProductionReport />} />
                                     <Route path="/production" element={<ProductionInventory />} />
 
