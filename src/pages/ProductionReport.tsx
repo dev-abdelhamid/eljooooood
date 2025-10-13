@@ -43,7 +43,6 @@ interface ReturnRow {
   totalReturns: number;
   dailyReturns: number[];
   totalValue: number;
-  shortageStatus: 'returns' | 'sales' | 'balanced';
 }
 
 interface SalesRow {
@@ -54,7 +53,6 @@ interface SalesRow {
   totalSales: number;
   dailySales: number[];
   totalValue: number;
-  shortageStatus: 'returns' | 'sales' | 'balanced';
 }
 
 interface Branch {
@@ -208,8 +206,8 @@ const generatePDFTable = (
       headers.map((_, i) => [i, { cellWidth: tableColumnWidths[i], halign: 'center' }])
     ),
     headStyles: {
-      fillColor: [59, 130, 246],
-      textColor: [255, 255, 255],
+      fillColor: [255, 193, 7],
+      textColor: [33, 33, 33],
       fontSize: 10,
       halign: 'center',
       font: fontLoaded ? fontName : 'helvetica',
@@ -225,7 +223,7 @@ const generatePDFTable = (
       fillColor: [255, 255, 255],
       cellPadding: 3,
     },
-    alternateRowStyles: { fillColor: [240, 248, 255] },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
     didParseCell: (data) => {
       if (data.section === 'body' && data.column.index >= (isRtl ? 0 : headers.length - 2)) {
         data.cell.styles.fontStyle = 'bold';
@@ -488,11 +486,10 @@ const ProductionReport: React.FC = () => {
                       totalReturns: 0,
                       dailyReturns: Array(daysInMonthCount).fill(0),
                       totalValue: 0,
-                      shortageStatus: 'balanced',
                     });
                   }
                   const row = returnMap.get(key)!;
-                  row.dailyReturns[day - 1] -= Math.abs(quantity);
+                  row.dailyReturns[day - 1] -= Math.abs(quantity); // Negative for returns
                   row.totalReturns -= Math.abs(quantity);
                   row.totalValue += Math.abs(quantity) * details.price;
                 } else if (movement.type === 'out') {
@@ -509,7 +506,7 @@ const ProductionReport: React.FC = () => {
                     });
                   }
                   const row = stockOutMap.get(key)!;
-                  row.dailyQuantities[day - 1] -= Math.abs(quantity);
+                  row.dailyQuantities[day - 1] -= Math.abs(quantity); // Negative for stock out
                   row.totalQuantity -= Math.abs(quantity);
                   row.totalPrice += Math.abs(quantity) * details.price;
                   row.changes[day - 1] = { value: -Math.abs(quantity), type: movement.type };
@@ -560,7 +557,6 @@ const ProductionReport: React.FC = () => {
                 totalSales: 0,
                 dailySales: Array(daysInMonthCount).fill(0),
                 totalValue: 0,
-                shortageStatus: 'balanced',
               });
             }
             const row = salesMap.get(key)!;
@@ -570,23 +566,6 @@ const ProductionReport: React.FC = () => {
               row.totalValue += (sale.quantity || 0) * details.price;
             });
           });
-
-          // Calculate shortage status
-          for (const [key, returnRow] of returnMap) {
-            const salesRow = salesMap.get(key);
-            if (salesRow) {
-              const netQuantity = salesRow.totalSales + returnRow.totalReturns;
-              returnRow.shortageStatus = netQuantity < 0 ? 'returns' : netQuantity > 0 ? 'sales' : 'balanced';
-              salesRow.shortageStatus = returnRow.shortageStatus;
-            } else {
-              returnRow.shortageStatus = returnRow.totalReturns < 0 ? 'returns' : 'balanced';
-            }
-          }
-          for (const [key, salesRow] of salesMap) {
-            if (!returnMap.has(key)) {
-              salesRow.shortageStatus = salesRow.totalSales > 0 ? 'sales' : 'balanced';
-            }
-          }
 
           monthlyOrderData[month] = Array.from(orderMap.values());
           monthlyStockInData[month] = Array.from(stockInMap.values());
@@ -701,7 +680,7 @@ const ProductionReport: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
-            className="text-center py-12 bg-white shadow-lg rounded-xl border border-gray-200"
+            className="text-center py-12 bg-white shadow-md rounded-xl border border-gray-200"
           >
             <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>
           </motion.div>
@@ -711,28 +690,28 @@ const ProductionReport: React.FC = () => {
       return (
         <div className="mb-8">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <h2 className="text-xl font-bold text-gray-900">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
-            <div className="flex gap-3">
+            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
+            <div className="flex gap-2">
               <Button
                 variant={data.length > 0 ? 'primary' : 'secondary'}
                 onClick={data.length > 0 ? () => exportTable('excel') : undefined}
-                className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-all duration-300 ${
-                  data.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+                  data.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
                 disabled={data.length === 0}
               >
-                <Upload className="w-5 h-5" />
+                <Upload className="w-4 h-4" />
                 {isRtl ? 'تصدير إكسل' : 'Export Excel'}
               </Button>
               <Button
                 variant={data.length > 0 ? 'primary' : 'secondary'}
                 onClick={data.length > 0 ? () => exportTable('pdf') : undefined}
-                className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-all duration-300 ${
-                  data.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-md' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+                  data.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
                 disabled={data.length === 0}
               >
-                <Upload className="w-5 h-5" />
+                <Upload className="w-4 h-4" />
                 {isRtl ? 'تصدير PDF' : 'Export PDF'}
               </Button>
             </div>
@@ -741,29 +720,29 @@ const ProductionReport: React.FC = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className="overflow-x-auto rounded-xl shadow-lg border border-gray-200 bg-white"
+            className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
           >
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-blue-600 text-white sticky top-0">
+            <table className="min-w-full divide-y divide-gray-200 text-xs">
+              <thead className="bg-blue-100 sticky top-0">
                 <tr className={isRtl ? 'flex-row-reverse' : ''}>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[100px]">{isRtl ? 'الكود' : 'Code'}</th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[150px]">{isRtl ? 'المنتج' : 'Product'}</th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[100px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
                   {allBranches.map(branch => (
-                    <th key={branch} className="px-6 py-4 font-semibold text-center min-w-[120px]">
+                    <th key={branch} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
                       {branch}
                     </th>
                   ))}
-                  <th className="px-6 py-4 font-semibold text-center min-w-[120px]">
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
                     {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
                   </th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[120px]">
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
                     {isRtl ? 'المبيعات الفعلية' : 'Actual Sales'}
                   </th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[120px]">
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
                     {isRtl ? 'السعر الإجمالي' : 'Total Price'}
                   </th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[120px]">
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
                     {isRtl ? 'نسبة المبيعات %' : 'Sales Percentage %'}
                   </th>
                 </tr>
@@ -771,14 +750,14 @@ const ProductionReport: React.FC = () => {
               <tbody className="divide-y divide-gray-200">
                 {data.map(row => (
                   <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                    <td className="px-6 py-4 text-gray-700 text-center truncate">{row.code}</td>
-                    <td className="px-6 py-4 text-gray-700 text-center truncate">{row.product}</td>
-                    <td className="px-6 py-4 text-gray-700 text-center truncate">{row.unit}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
                     {allBranches.map(branch => (
                       <td
                         key={branch}
-                        className={`px-6 py-4 text-center ${
-                          row.branchQuantities[branch] > 0 ? 'bg-green-100 text-green-800' : row.branchQuantities[branch] < 0 ? 'bg-red-100 text-red-800' : 'text-gray-700'
+                        className={`px-4 py-3 text-center ${
+                          row.branchQuantities[branch] > 0 ? 'bg-green-50 text-green-700' : row.branchQuantities[branch] < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
                         }`}
                         data-tooltip-id="branch-quantity"
                         data-tooltip-content={`${isRtl ? 'الكمية في ' : 'Quantity in '} ${branch}: ${formatNumber(row.branchQuantities[branch] || 0, isRtl)}`}
@@ -786,33 +765,33 @@ const ProductionReport: React.FC = () => {
                         {formatNumber(row.branchQuantities[branch] || 0, isRtl)}
                       </td>
                     ))}
-                    <td className="px-6 py-4 text-gray-800 text-center font-semibold">{formatNumber(row.totalQuantity, isRtl)}</td>
-                    <td className="px-6 py-4 text-gray-800 text-center font-semibold">{formatNumber(row.actualSales, isRtl)}</td>
-                    <td className="px-6 py-4 text-gray-800 text-center font-semibold">{formatPrice(row.totalPrice, isRtl)}</td>
-                    <td className="px-6 py-4 text-gray-800 text-center font-semibold">
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.actualSales, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.totalPrice, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">
                       {formatNumber(row.totalQuantity > 0 ? ((row.actualSales / row.totalQuantity) * 100).toFixed(2) : '0.00', isRtl)}%
                     </td>
                   </tr>
                 ))}
                 <tr className={`font-semibold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  <td className="px-6 py-4 text-gray-800 text-center"></td>
-                  <td className="px-6 py-4 text-gray-800 text-center">{isRtl ? 'الإجمالي' : 'Total'}</td>
-                  <td className="px-6 py-4 text-gray-800 text-center"></td>
+                  <td className="px-4 py-3 text-gray-800 text-center"></td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{isRtl ? 'الإجمالي' : 'Total'}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center"></td>
                   {allBranches.map(branch => (
-                    <td key={branch} className="px-6 py-4 text-gray-800 text-center">
+                    <td key={branch} className="px-4 py-3 text-gray-800 text-center">
                       {formatNumber(totalQuantities[branch] || 0, isRtl)}
                     </td>
                   ))}
-                  <td className="px-6 py-4 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
-                  <td className="px-6 py-4 text-gray-800 text-center">{formatNumber(grandActualSales, isRtl)}</td>
-                  <td className="px-6 py-4 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
-                  <td className="px-6 py-4 text-gray-800 text-center">
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandActualSales, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">
                     {formatNumber(grandTotalQuantity > 0 ? ((grandActualSales / grandTotalQuantity) * 100).toFixed(2) : '0.00', isRtl)}%
                   </td>
                 </tr>
               </tbody>
             </table>
-            <Tooltip id="branch-quantity" place="top" effect="solid" className="bg-gray-800 text-white rounded-md px-2 py-1 text-xs" />
+            <Tooltip id="branch-quantity" place="top" effect="solid" className="custom-tooltip" />
           </motion.div>
         </div>
       );
@@ -890,7 +869,7 @@ const ProductionReport: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
-            className="text-center py-12 bg-white shadow-lg rounded-xl border border-gray-200"
+            className="text-center py-12 bg-white shadow-md rounded-xl border border-gray-200"
           >
             <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>
           </motion.div>
@@ -900,28 +879,28 @@ const ProductionReport: React.FC = () => {
       return (
         <div className="mb-8">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <h2 className="text-xl font-bold text-gray-900">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
-            <div className="flex gap-3">
+            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
+            <div className="flex gap-2">
               <Button
                 variant={data.length > 0 ? 'primary' : 'secondary'}
                 onClick={data.length > 0 ? () => exportTable('excel') : undefined}
-                className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-all duration-300 ${
-                  data.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+                  data.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
                 disabled={data.length === 0}
               >
-                <Upload className="w-5 h-5" />
+                <Upload className="w-4 h-4" />
                 {isRtl ? 'تصدير إكسل' : 'Export Excel'}
               </Button>
               <Button
                 variant={data.length > 0 ? 'primary' : 'secondary'}
                 onClick={data.length > 0 ? () => exportTable('pdf') : undefined}
-                className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-all duration-300 ${
-                  data.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-md' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+                  data.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
                 disabled={data.length === 0}
               >
-                <Upload className="w-5 h-5" />
+                <Upload className="w-4 h-4" />
                 {isRtl ? 'تصدير PDF' : 'Export PDF'}
               </Button>
             </div>
@@ -930,24 +909,24 @@ const ProductionReport: React.FC = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className="overflow-x-auto rounded-xl shadow-lg border border-gray-200 bg-white"
+            className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
           >
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-blue-600 text-white sticky top-0">
+            <table className="min-w-full divide-y divide-gray-200 text-xs">
+              <thead className="bg-blue-100 sticky top-0">
                 <tr className={isRtl ? 'flex-row-reverse' : ''}>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[50px]">{isRtl ? 'رقم' : 'No.'}</th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[100px]">{isRtl ? 'الكود' : 'Code'}</th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[150px]">{isRtl ? 'المنتج' : 'Product'}</th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[100px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
                   {daysInMonth.map((day, i) => (
-                    <th key={i} className="px-6 py-4 font-semibold text-center min-w-[100px]">
+                    <th key={i} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
                       {day}
                     </th>
                   ))}
-                  <th className="px-6 py-4 font-semibold text-center min-w-[120px]">
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
                     {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
                   </th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[120px]">
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
                     {isRtl ? 'السعر الإجمالي' : 'Total Price'}
                   </th>
                 </tr>
@@ -955,15 +934,15 @@ const ProductionReport: React.FC = () => {
               <tbody className="divide-y divide-gray-200">
                 {data.map((row, index) => (
                   <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                    <td className="px-6 py-4 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
-                    <td className="px-6 py-4 text-gray-700 text-center truncate">{row.code}</td>
-                    <td className="px-6 py-4 text-gray-700 text-center truncate">{row.product}</td>
-                    <td className="px-6 py-4 text-gray-700 text-center truncate">{row.unit}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
                     {row.changes.map((change, i) => (
                       <td
                         key={i}
-                        className={`px-6 py-4 text-center font-semibold ${
-                          change.value > 0 ? 'bg-green-100 text-green-800' : change.value < 0 ? 'bg-red-100 text-red-800' : 'text-gray-700'
+                        className={`px-4 py-3 text-center font-medium ${
+                          change.value > 0 ? 'bg-green-50 text-green-700' : change.value < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
                         }`}
                         data-tooltip-id="stock-change"
                         data-tooltip-content={
@@ -975,23 +954,23 @@ const ProductionReport: React.FC = () => {
                         {change.value !== 0 ? `${change.value > 0 ? '+' : ''}${formatNumber(change.value, isRtl)}` : '0'}
                       </td>
                     ))}
-                    <td className="px-6 py-4 text-gray-800 text-center font-semibold">{formatNumber(row.totalQuantity, isRtl)}</td>
-                    <td className="px-6 py-4 text-gray-800 text-center font-semibold">{formatPrice(row.totalPrice, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.totalPrice, isRtl)}</td>
                   </tr>
                 ))}
                 <tr className={`font-semibold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  <td className="px-6 py-4 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
                   {daysInMonth.map((_, i) => (
-                    <td key={i} className="px-6 py-4 text-gray-800 text-center">
+                    <td key={i} className="px-4 py-3 text-gray-800 text-center">
                       {formatNumber(data.reduce((sum, row) => sum + row.dailyQuantities[i], 0), isRtl)}
                     </td>
                   ))}
-                  <td className="px-6 py-4 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
-                  <td className="px-6 py-4 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
                 </tr>
               </tbody>
             </table>
-            <Tooltip id="stock-change" place="top" effect="solid" className="bg-gray-800 text-white rounded-md px-2 py-1 text-xs" />
+            <Tooltip id="stock-change" place="top" effect="solid" className="custom-tooltip" />
           </motion.div>
         </div>
       );
@@ -1014,7 +993,6 @@ const ProductionReport: React.FC = () => {
           ...daysInMonth,
           isRtl ? 'إجمالي المرتجعات' : 'Total Returns',
           isRtl ? 'القيمة الإجمالية' : 'Total Value',
-          isRtl ? 'حالة النقصان' : 'Shortage Status',
         ];
         const rows = [
           ...data.map((row, index) => ({
@@ -1025,9 +1003,6 @@ const ProductionReport: React.FC = () => {
             ...Object.fromEntries(row.dailyReturns.map((qty, i) => [daysInMonth[i], qty])),
             totalReturns: row.totalReturns,
             totalValue: formatPrice(row.totalValue, isRtl),
-            shortageStatus: isRtl
-              ? row.shortageStatus === 'returns' ? 'نقصان مرتجعات' : row.shortageStatus === 'sales' ? 'نقصان مبيعات' : 'متوازن'
-              : row.shortageStatus,
           })),
           {
             no: '',
@@ -1037,7 +1012,6 @@ const ProductionReport: React.FC = () => {
             ...Object.fromEntries(daysInMonth.map((_, i) => [daysInMonth[i], data.reduce((sum, row) => sum + row.dailyReturns[i], 0)])),
             totalReturns: grandTotalReturns,
             totalValue: formatPrice(grandTotalValue, isRtl),
-            shortageStatus: '',
           },
         ];
         const dataRows = rows.map(row => [
@@ -1048,13 +1022,12 @@ const ProductionReport: React.FC = () => {
           ...daysInMonth.map(day => row[day]),
           row.totalReturns,
           row.totalValue,
-          row.shortageStatus,
         ]);
 
         if (format === 'excel') {
           const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
           if (isRtl) ws['!views'] = [{ RTL: true }];
-          ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }, { wch: 20 }];
+          ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }];
           const wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
@@ -1075,7 +1048,7 @@ const ProductionReport: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
-            className="text-center py-12 bg-white shadow-lg rounded-xl border border-gray-200"
+            className="text-center py-12 bg-white shadow-md rounded-xl border border-gray-200"
           >
             <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات مرتجعات' : 'No return data available'}</p>
           </motion.div>
@@ -1085,28 +1058,28 @@ const ProductionReport: React.FC = () => {
       return (
         <div className="mb-8">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <h2 className="text-xl font-bold text-gray-900">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
-            <div className="flex gap-3">
+            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
+            <div className="flex gap-2">
               <Button
                 variant={data.length > 0 ? 'primary' : 'secondary'}
                 onClick={data.length > 0 ? () => exportTable('excel') : undefined}
-                className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-all duration-300 ${
-                  data.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+                  data.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
                 disabled={data.length === 0}
               >
-                <Upload className="w-5 h-5" />
+                <Upload className="w-4 h-4" />
                 {isRtl ? 'تصدير إكسل' : 'Export Excel'}
               </Button>
               <Button
                 variant={data.length > 0 ? 'primary' : 'secondary'}
                 onClick={data.length > 0 ? () => exportTable('pdf') : undefined}
-                className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-all duration-300 ${
-                  data.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-md' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+                  data.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
                 disabled={data.length === 0}
               >
-                <Upload className="w-5 h-5" />
+                <Upload className="w-4 h-4" />
                 {isRtl ? 'تصدير PDF' : 'Export PDF'}
               </Button>
             </div>
@@ -1115,75 +1088,62 @@ const ProductionReport: React.FC = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className="overflow-x-auto rounded-xl shadow-lg border border-gray-200 bg-white"
+            className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
           >
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-blue-600 text-white sticky top-0">
+            <table className="min-w-full divide-y divide-gray-200 text-xs">
+              <thead className="bg-blue-100 sticky top-0">
                 <tr className={isRtl ? 'flex-row-reverse' : ''}>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[50px]">{isRtl ? 'رقم' : 'No.'}</th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[100px]">{isRtl ? 'الكود' : 'Code'}</th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[150px]">{isRtl ? 'المنتج' : 'Product'}</th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[100px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
                   {daysInMonth.map((day, i) => (
-                    <th key={i} className="px-6 py-4 font-semibold text-center min-w-[100px]">
+                    <th key={i} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
                       {day}
                     </th>
                   ))}
-                  <th className="px-6 py-4 font-semibold text-center min-w-[120px]">
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
                     {isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
                   </th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[120px]">
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
                     {isRtl ? 'القيمة الإجمالية' : 'Total Value'}
-                  </th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[120px]">
-                    {isRtl ? 'حالة النقصان' : 'Shortage Status'}
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {data.map((row, index) => (
                   <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                    <td className="px-6 py-4 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
-                    <td className="px-6 py-4 text-gray-700 text-center truncate">{row.code}</td>
-                    <td className="px-6 py-4 text-gray-700 text-center truncate">{row.product}</td>
-                    <td className="px-6 py-4 text-gray-700 text-center truncate">{row.unit}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
                     {row.dailyReturns.map((qty, i) => (
                       <td
                         key={i}
-                        className="px-6 py-4 text-center font-semibold text-red-800 bg-red-100"
+                        className="px-4 py-3 text-center font-medium text-red-700"
                         data-tooltip-id="return-tooltip"
                         data-tooltip-content={`${isRtl ? 'مرتجع' : 'Return'}: ${formatNumber(qty, isRtl)}`}
                       >
                         {qty !== 0 ? formatNumber(qty, isRtl) : '0'}
                       </td>
                     ))}
-                    <td className="px-6 py-4 text-gray-800 text-center font-semibold">{formatNumber(row.totalReturns, isRtl)}</td>
-                    <td className="px-6 py-4 text-gray-800 text-center font-semibold">{formatPrice(row.totalValue, isRtl)}</td>
-                    <td
-                      className={`px-6 py-4 text-center font-semibold ${
-                        row.shortageStatus === 'returns' ? 'text-red-800 bg-red-100' : row.shortageStatus === 'sales' ? 'text-green-800 bg-green-100' : 'text-gray-700 bg-gray-100'
-                      }`}
-                    >
-                      {isRtl
-                        ? row.shortageStatus === 'returns' ? 'نقصان مرتجعات' : row.shortageStatus === 'sales' ? 'نقصان مبيعات' : 'متوازن'
-                        : row.shortageStatus}
-                    </td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalReturns, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.totalValue, isRtl)}</td>
                   </tr>
                 ))}
                 <tr className={`font-semibold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  <td className="px-6 py-4 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
                   {daysInMonth.map((_, i) => (
-                    <td key={i} className="px-6 py-4 text-gray-800 text-center">
+                    <td key={i} className="px-4 py-3 text-gray-800 text-center">
                       {formatNumber(data.reduce((sum, row) => sum + row.dailyReturns[i], 0), isRtl)}
                     </td>
                   ))}
-                  <td className="px-6 py-4 text-gray-800 text-center">{formatNumber(grandTotalReturns, isRtl)}</td>
-                  <td className="px-6 py-4 text-gray-800 text-center">{formatPrice(grandTotalValue, isRtl)}</td>
-                  <td className="px-6 py-4 text-gray-800 text-center"></td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalReturns, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatPrice(grandTotalValue, isRtl)}</td>
                 </tr>
               </tbody>
             </table>
-            <Tooltip id="return-tooltip" place="top" effect="solid" className="bg-gray-800 text-white rounded-md px-2 py-1 text-xs" />
+            <Tooltip id="return-tooltip" place="top" effect="solid" className="custom-tooltip" />
           </motion.div>
         </div>
       );
@@ -1206,7 +1166,6 @@ const ProductionReport: React.FC = () => {
           ...daysInMonth,
           isRtl ? 'إجمالي المبيعات' : 'Total Sales',
           isRtl ? 'القيمة الإجمالية' : 'Total Value',
-          isRtl ? 'حالة النقصان' : 'Shortage Status',
         ];
         const rows = [
           ...data.map((row, index) => ({
@@ -1217,9 +1176,6 @@ const ProductionReport: React.FC = () => {
             ...Object.fromEntries(row.dailySales.map((qty, i) => [daysInMonth[i], qty])),
             totalSales: row.totalSales,
             totalValue: formatPrice(row.totalValue, isRtl),
-            shortageStatus: isRtl
-              ? row.shortageStatus === 'returns' ? 'نقصان مرتجعات' : row.shortageStatus === 'sales' ? 'نقصان مبيعات' : 'متوازن'
-              : row.shortageStatus,
           })),
           {
             no: '',
@@ -1229,7 +1185,6 @@ const ProductionReport: React.FC = () => {
             ...Object.fromEntries(daysInMonth.map((_, i) => [daysInMonth[i], data.reduce((sum, row) => sum + row.dailySales[i], 0)])),
             totalSales: grandTotalSales,
             totalValue: formatPrice(grandTotalValue, isRtl),
-            shortageStatus: '',
           },
         ];
         const dataRows = rows.map(row => [
@@ -1240,13 +1195,12 @@ const ProductionReport: React.FC = () => {
           ...daysInMonth.map(day => row[day]),
           row.totalSales,
           row.totalValue,
-          row.shortageStatus,
         ]);
 
         if (format === 'excel') {
           const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
           if (isRtl) ws['!views'] = [{ RTL: true }];
-          ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }, { wch: 20 }];
+          ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }];
           const wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
@@ -1267,7 +1221,7 @@ const ProductionReport: React.FC = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.3 }}
-            className="text-center py-12 bg-white shadow-lg rounded-xl border border-gray-200"
+            className="text-center py-12 bg-white shadow-md rounded-xl border border-gray-200"
           >
             <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات مبيعات' : 'No sales data available'}</p>
           </motion.div>
@@ -1277,28 +1231,28 @@ const ProductionReport: React.FC = () => {
       return (
         <div className="mb-8">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <h2 className="text-xl font-bold text-gray-900">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
-            <div className="flex gap-3">
+            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
+            <div className="flex gap-2">
               <Button
                 variant={data.length > 0 ? 'primary' : 'secondary'}
                 onClick={data.length > 0 ? () => exportTable('excel') : undefined}
-                className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-all duration-300 ${
-                  data.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-md' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+                  data.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
                 disabled={data.length === 0}
               >
-                <Upload className="w-5 h-5" />
+                <Upload className="w-4 h-4" />
                 {isRtl ? 'تصدير إكسل' : 'Export Excel'}
               </Button>
               <Button
                 variant={data.length > 0 ? 'primary' : 'secondary'}
                 onClick={data.length > 0 ? () => exportTable('pdf') : undefined}
-                className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition-all duration-300 ${
-                  data.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-md' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+                  data.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
                 disabled={data.length === 0}
               >
-                <Upload className="w-5 h-5" />
+                <Upload className="w-4 h-4" />
                 {isRtl ? 'تصدير PDF' : 'Export PDF'}
               </Button>
             </div>
@@ -1307,75 +1261,62 @@ const ProductionReport: React.FC = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className="overflow-x-auto rounded-xl shadow-lg border border-gray-200 bg-white"
+            className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
           >
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-blue-600 text-white sticky top-0">
+            <table className="min-w-full divide-y divide-gray-200 text-xs">
+              <thead className="bg-blue-100 sticky top-0">
                 <tr className={isRtl ? 'flex-row-reverse' : ''}>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[50px]">{isRtl ? 'رقم' : 'No.'}</th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[100px]">{isRtl ? 'الكود' : 'Code'}</th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[150px]">{isRtl ? 'المنتج' : 'Product'}</th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[100px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
                   {daysInMonth.map((day, i) => (
-                    <th key={i} className="px-6 py-4 font-semibold text-center min-w-[100px]">
+                    <th key={i} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
                       {day}
                     </th>
                   ))}
-                  <th className="px-6 py-4 font-semibold text-center min-w-[120px]">
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
                     {isRtl ? 'إجمالي المبيعات' : 'Total Sales'}
                   </th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[120px]">
+                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
                     {isRtl ? 'القيمة الإجمالية' : 'Total Value'}
-                  </th>
-                  <th className="px-6 py-4 font-semibold text-center min-w-[120px]">
-                    {isRtl ? 'حالة النقصان' : 'Shortage Status'}
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {data.map((row, index) => (
                   <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                    <td className="px-6 py-4 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
-                    <td className="px-6 py-4 text-gray-700 text-center truncate">{row.code}</td>
-                    <td className="px-6 py-4 text-gray-700 text-center truncate">{row.product}</td>
-                    <td className="px-6 py-4 text-gray-700 text-center truncate">{row.unit}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
                     {row.dailySales.map((qty, i) => (
                       <td
                         key={i}
-                        className="px-6 py-4 text-center font-semibold text-green-800 bg-green-100"
+                        className="px-4 py-3 text-center font-medium text-green-700 bg-green-50"
                         data-tooltip-id="sales-tooltip"
                         data-tooltip-content={`${isRtl ? 'مبيعات' : 'Sales'}: ${formatNumber(qty, isRtl)}`}
                       >
-                        {qty !== 0 ? formatNumber(qty, isRtl) : '0'}
+                        {qty !== 0 ? `+${formatNumber(qty, isRtl)}` : '0'}
                       </td>
                     ))}
-                    <td className="px-6 py-4 text-gray-800 text-center font-semibold">{formatNumber(row.totalSales, isRtl)}</td>
-                    <td className="px-6 py-4 text-gray-800 text-center font-semibold">{formatPrice(row.totalValue, isRtl)}</td>
-                    <td
-                      className={`px-6 py-4 text-center font-semibold ${
-                        row.shortageStatus === 'returns' ? 'text-red-800 bg-red-100' : row.shortageStatus === 'sales' ? 'text-green-800 bg-green-100' : 'text-gray-700 bg-gray-100'
-                      }`}
-                    >
-                      {isRtl
-                        ? row.shortageStatus === 'returns' ? 'نقصان مرتجعات' : row.shortageStatus === 'sales' ? 'نقصان مبيعات' : 'متوازن'
-                        : row.shortageStatus}
-                    </td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalSales, isRtl)}</td>
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.totalValue, isRtl)}</td>
                   </tr>
                 ))}
                 <tr className={`font-semibold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  <td className="px-6 py-4 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
                   {daysInMonth.map((_, i) => (
-                    <td key={i} className="px-6 py-4 text-gray-800 text-center">
+                    <td key={i} className="px-4 py-3 text-gray-800 text-center">
                       {formatNumber(data.reduce((sum, row) => sum + row.dailySales[i], 0), isRtl)}
                     </td>
                   ))}
-                  <td className="px-6 py-4 text-gray-800 text-center">{formatNumber(grandTotalSales, isRtl)}</td>
-                  <td className="px-6 py-4 text-gray-800 text-center">{formatPrice(grandTotalValue, isRtl)}</td>
-                  <td className="px-6 py-4 text-gray-800 text-center"></td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalSales, isRtl)}</td>
+                  <td className="px-4 py-3 text-gray-800 text-center">{formatPrice(grandTotalValue, isRtl)}</td>
                 </tr>
               </tbody>
             </table>
-            <Tooltip id="sales-tooltip" place="top" effect="solid" className="bg-gray-800 text-white rounded-md px-2 py-1 text-xs" />
+            <Tooltip id="sales-tooltip" place="top" effect="solid" className="custom-tooltip" />
           </motion.div>
         </div>
       );
@@ -1384,152 +1325,83 @@ const ProductionReport: React.FC = () => {
   );
 
   return (
-    <div className={`p-6 max-w-7xl mx-auto bg-gray-50 min-h-screen ${isRtl ? 'text-right' : 'text-left'}`}>
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="mb-8"
-      >
-        <h1 className="text-3xl font-bold text-gray-900 mb-4">{isRtl ? 'تقرير الإنتاج' : 'Production Report'}</h1>
-        <div className={`flex flex-col sm:flex-row gap-4 items-start sm:items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
-          <div className="relative w-full sm:w-64">
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(Number(e.target.value))}
-              className="w-full p-2 pr-8 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 appearance-none text-sm"
-            >
-              {months.map((month) => (
-                <option key={month.value} value={month.value}>
-                  {month.label}
-                </option>
-              ))}
-            </select>
-            <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-              <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-              </svg>
-            </div>
-          </div>
-          <div className="flex gap-2 flex-wrap">
+    <div className={`min-h-screen px-6 py-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-100`}>
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">{isRtl ? 'تقارير الإنتاج' : 'Production Reports'}</h1>
+      <div className="mb-8 bg-white shadow-md rounded-xl p-4">
+        <div className="flex flex-wrap gap-2 mb-4 justify-center">
+          {months.map(month => (
             <Button
-              variant={activeTab === 'orders' ? 'primary' : 'secondary'}
-              onClick={() => setActiveTab('orders')}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition-all duration-300 ${
-                activeTab === 'orders'
-                  ? 'bg-blue-600 text-white shadow-md'
+              key={month.value}
+              variant={selectedMonth === month.value ? 'primary' : 'secondary'}
+              onClick={() => setSelectedMonth(month.value)}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                selectedMonth === month.value
+                  ? 'bg-blue-600 text-white'
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
-              {isRtl ? 'الطلبات' : 'Orders'}
+              {month.label}
             </Button>
-            <Button
-              variant={activeTab === 'stockIn' ? 'primary' : 'secondary'}
-              onClick={() => setActiveTab('stockIn')}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition-all duration-300 ${
-                activeTab === 'stockIn'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              {isRtl ? 'إدخال المخزون' : 'Stock In'}
-            </Button>
-            <Button
-              variant={activeTab === 'stockOut' ? 'primary' : 'secondary'}
-              onClick={() => setActiveTab('stockOut')}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition-all duration-300 ${
-                activeTab === 'stockOut'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              {isRtl ? 'إخراج المخزون' : 'Stock Out'}
-            </Button>
-            <Button
-              variant={activeTab === 'returns' ? 'primary' : 'secondary'}
-              onClick={() => setActiveTab('returns')}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition-all duration-300 ${
-                activeTab === 'returns'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              {isRtl ? 'المرتجعات' : 'Returns'}
-            </Button>
-            <Button
-              variant={activeTab === 'sales' ? 'primary' : 'secondary'}
-              onClick={() => setActiveTab('sales')}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition-all duration-300 ${
-                activeTab === 'sales'
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              {isRtl ? 'المبيعات' : 'Sales'}
-            </Button>
-          </div>
+          ))}
         </div>
-      </motion.div>
-
-      <AnimatePresence mode="wait">
-        {activeTab === 'orders' && (
-          <motion.div
-            key="orders"
-            initial={{ opacity: 0, x: isRtl ? 100 : -100 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: isRtl ? -100 : 100 }}
-            transition={{ duration: 0.3 }}
+        <div className={`flex flex-wrap gap-2 justify-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <Button
+            variant={activeTab === 'orders' ? 'primary' : 'secondary'}
+            onClick={() => setActiveTab('orders')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+              activeTab === 'orders' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
           >
-            {renderOrderTable(orderData[selectedMonth] || [], isRtl ? 'تقرير الطلبات' : 'Orders Report', selectedMonth)}
-          </motion.div>
-        )}
-        {activeTab === 'stockIn' && (
-          <motion.div
-            key="stockIn"
-            initial={{ opacity: 0, x: isRtl ? 100 : -100 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: isRtl ? -100 : 100 }}
-            transition={{ duration: 0.3 }}
+            {isRtl ? 'الطلبات' : 'Orders'}
+          </Button>
+          <Button
+            variant={activeTab === 'stockIn' ? 'primary' : 'secondary'}
+            onClick={() => setActiveTab('stockIn')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+              activeTab === 'stockIn' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
           >
-            {renderStockTable(stockInData[selectedMonth] || [], isRtl ? 'تقرير إدخال المخزون' : 'Stock In Report', selectedMonth, true)}
-          </motion.div>
-        )}
-        {activeTab === 'stockOut' && (
-          <motion.div
-            key="stockOut"
-            initial={{ opacity: 0, x: isRtl ? 100 : -100 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: isRtl ? -100 : 100 }}
-            transition={{ duration: 0.3 }}
+            {isRtl ? 'إدخال المخزون' : 'Stock In'}
+          </Button>
+          <Button
+            variant={activeTab === 'stockOut' ? 'primary' : 'secondary'}
+            onClick={() => setActiveTab('stockOut')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+              activeTab === 'stockOut' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
           >
-            {renderStockTable(stockOutData[selectedMonth] || [], isRtl ? 'تقرير إخراج المخزون' : 'Stock Out Report', selectedMonth, false)}
-          </motion.div>
-        )}
-        {activeTab === 'returns' && (
-          <motion.div
-            key="returns"
-            initial={{ opacity: 0, x: isRtl ? 100 : -100 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: isRtl ? -100 : 100 }}
-            transition={{ duration: 0.3 }}
+            {isRtl ? 'إخراج المخزون' : 'Stock Out'}
+          </Button>
+          <Button
+            variant={activeTab === 'returns' ? 'primary' : 'secondary'}
+            onClick={() => setActiveTab('returns')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+              activeTab === 'returns' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
           >
-            {renderReturnTable(returnData[selectedMonth] || [], isRtl ? 'تقرير المرتجعات' : 'Returns Report', selectedMonth)}
-          </motion.div>
-        )}
-        {activeTab === 'sales' && (
-          <motion.div
-            key="sales"
-            initial={{ opacity: 0, x: isRtl ? 100 : -100 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: isRtl ? -100 : 100 }}
-            transition={{ duration: 0.3 }}
+            {isRtl ? 'المرتجعات' : 'Returns'}
+          </Button>
+          <Button
+            variant={activeTab === 'sales' ? 'primary' : 'secondary'}
+            onClick={() => setActiveTab('sales')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+              activeTab === 'sales' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
           >
-            {renderSalesTable(salesData[selectedMonth] || [], isRtl ? 'تقرير المبيعات' : 'Sales Report', selectedMonth)}
-          </motion.div>
-        )}
+            {isRtl ? 'المبيعات' : 'Sales'}
+          </Button>
+        </div>
+      </div>
+      <AnimatePresence>
+        {activeTab === 'orders' && renderOrderTable(orderData[selectedMonth] || [], isRtl ? 'تقرير الطلبات' : 'Orders Report', selectedMonth)}
+        {activeTab === 'stockIn' && renderStockTable(stockInData[selectedMonth] || [], isRtl ? 'تقرير إدخال المخزون' : 'Stock In Report', selectedMonth, true)}
+        {activeTab === 'stockOut' && renderStockTable(stockOutData[selectedMonth] || [], isRtl ? 'تقرير إخراج المخزون' : 'Stock Out Report', selectedMonth, false)}
+        {activeTab === 'returns' && renderReturnTable(returnData[selectedMonth] || [], isRtl ? 'تقرير المرتجعات' : 'Returns Report', selectedMonth)}
+        {activeTab === 'sales' && renderSalesTable(salesData[selectedMonth] || [], isRtl ? 'تقرير المبيعات' : 'Sales Report', selectedMonth)}
       </AnimatePresence>
     </div>
   );
 };
 
 export default ProductionReport;
+
