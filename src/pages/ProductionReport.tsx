@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -33,6 +33,10 @@ interface StockRow {
   dailyQuantities: number[];
   dailyBranchDetails: { [branch: string]: number }[];
   totalPrice: number;
+  dailySales?: number[];
+  dailyReturns?: number[];
+  dailySalesDetails?: { [branch: string]: number }[];
+  dailyReturnsDetails?: { [branch: string]: number }[];
 }
 
 interface ReturnRow {
@@ -53,6 +57,7 @@ interface SalesRow {
   unit: string;
   totalSales: number;
   dailySales: number[];
+  dailyBranchDetails: { [branch: string]: number }[];
   totalValue: number;
 }
 
@@ -414,7 +419,7 @@ const ProductionReport: React.FC = () => {
                 const productId = item.product?._id || item.productId;
                 if (!productId) return;
                 const details = productDetails.get(productId) || {
-                  code: item.product?.code || `code-${Math.random().toString(36).substring(2)}`,
+                  code: item.product.product?.code || `code-${Math.random().toString(36).substring(2)}`,
                   product: isRtl
                     ? (item.product?.name || 'منتج غير معروف')
                     : (item.product?.nameEn || item.product?.name || 'Unknown Product'),
@@ -479,11 +484,9 @@ const ProductionReport: React.FC = () => {
               const prodMonth = date.getMonth();
               const year = date.getFullYear();
               if (year === currentYear && prodMonth === month) {
-                const day = date.getDate();
+                const day = date.getDate() - 1;
                 const key = `${productId}-${month}`;
                 const quantity = Number(movement.quantity) || 0;
-                const absQty = Math.abs(quantity);
-                const qty = -absQty;
                 if (movement.type === 'in') {
                   if (!stockInMap.has(key)) {
                     stockInMap.set(key, {
@@ -498,14 +501,39 @@ const ProductionReport: React.FC = () => {
                     });
                   }
                   const row = stockInMap.get(key)!;
-                  row.dailyQuantities[day - 1] += absQty;
-                  row.dailyBranchDetails[day - 1][branchName] = (row.dailyBranchDetails[day - 1][branchName] || 0) + absQty;
-                  row.totalQuantity += absQty;
-                  row.totalPrice += absQty * details.price;
+                  row.dailyQuantities[day] += quantity;
+                  row.dailyBranchDetails[day][branchName] = (row.dailyBranchDetails[day][branchName] || 0) + quantity;
+                  row.totalQuantity += quantity;
+                  row.totalPrice += quantity * details.price;
                 } else if (movement.type === 'out') {
+                  if (!stockOutMap.has(key)) {
+                    stockOutMap.set(key, {
+                      id: key,
+                      code: details.code,
+                      product: details.product,
+                      unit: details.unit,
+                      totalQuantity: 0,
+                      dailyQuantities: Array(daysInMonthCount).fill(0),
+                      dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+                      totalPrice: 0,
+                      dailySales: Array(daysInMonthCount).fill(0),
+                      dailyReturns: Array(daysInMonthCount).fill(0),
+                      dailySalesDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+                      dailyReturnsDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+                    });
+                  }
+                  const row = stockOutMap.get(key)!;
+                  const qty = -quantity;
+                  row.dailyQuantities[day] += qty;
+                  row.dailyBranchDetails[day][branchName] = (row.dailyBranchDetails[day][branchName] || 0) + qty;
+                  row.totalQuantity += qty;
+                  row.totalPrice += quantity * details.price;
+
                   const isReturn = movement.reference?.includes('مرتجع') || movement.reference?.includes('RET-');
                   const isSale = movement.reference?.includes('بيع') || movement.reference?.includes('SALE-');
                   if (isReturn) {
+                    row.dailyReturns![day] += qty;
+                    row.dailyReturnsDetails![day][branchName] = (row.dailyReturnsDetails![day][branchName] || 0) + qty;
                     if (!returnMap.has(key)) {
                       returnMap.set(key, {
                         id: key,
@@ -518,12 +546,14 @@ const ProductionReport: React.FC = () => {
                         totalValue: 0,
                       });
                     }
-                    const row = returnMap.get(key)!;
-                    row.dailyReturns[day - 1] += qty;
-                    row.dailyBranchDetails[day - 1][branchName] = (row.dailyBranchDetails[day - 1][branchName] || 0) + qty;
-                    row.totalReturns += qty;
-                    row.totalValue += absQty * details.price;
+                    const returnRow = returnMap.get(key)!;
+                    returnRow.dailyReturns[day] += qty;
+                    returnRow.dailyBranchDetails[day][branchName] = (returnRow.dailyBranchDetails[day][branchName] || 0) + qty;
+                    returnRow.totalReturns += qty;
+                    returnRow.totalValue += quantity * details.price;
                   } else if (isSale) {
+                    row.dailySales![day] += qty;
+                    row.dailySalesDetails![day][branchName] = (row.dailySalesDetails![day][branchName] || 0) + qty;
                     if (!salesMap.has(key)) {
                       salesMap.set(key, {
                         id: key,
@@ -536,29 +566,11 @@ const ProductionReport: React.FC = () => {
                         totalValue: 0,
                       });
                     }
-                    const row = salesMap.get(key)!;
-                    row.dailySales[day - 1] += absQty;
-                    row.dailyBranchDetails[day - 1][branchName] = (row.dailyBranchDetails[day - 1][branchName] || 0) + absQty;
-                    row.totalSales += absQty;
-                    row.totalValue += absQty * details.price;
-                  } else {
-                    if (!stockOutMap.has(key)) {
-                      stockOutMap.set(key, {
-                        id: key,
-                        code: details.code,
-                        product: details.product,
-                        unit: details.unit,
-                        totalQuantity: 0,
-                        dailyQuantities: Array(daysInMonthCount).fill(0),
-                        dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
-                        totalPrice: 0,
-                      });
-                    }
-                    const row = stockOutMap.get(key)!;
-                    row.dailyQuantities[day - 1] += qty;
-                    row.dailyBranchDetails[day - 1][branchName] = (row.dailyBranchDetails[day - 1][branchName] || 0) + qty;
-                    row.totalQuantity += qty;
-                    row.totalPrice += absQty * details.price;
+                    const salesRow = salesMap.get(key)!;
+                    salesRow.dailySales[day] += qty;
+                    salesRow.dailyBranchDetails[day][branchName] = (salesRow.dailyBranchDetails[day][branchName] || 0) + qty;
+                    salesRow.totalSales += qty;
+                    salesRow.totalValue += quantity * details.price;
                   }
                 }
               }
@@ -734,7 +746,7 @@ const ProductionReport: React.FC = () => {
             className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
           >
             <table className="min-w-full divide-y divide-gray-200 text-xs">
-              <thead className="bg-blue-100 sticky top-0">
+              <thead className="bg-blue-50 sticky top-0">
                 <tr className={isRtl ? 'flex-row-reverse' : ''}>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
@@ -767,7 +779,7 @@ const ProductionReport: React.FC = () => {
                     {allBranches.map(branch => (
                       <td
                         key={branch}
-                        className={`px-4 py-3 text-center ${
+                        className={`px-4 py-3 text-center font-medium ${
                           row.branchQuantities[branch] > 0 ? 'bg-green-50 text-green-700' : row.branchQuantities[branch] < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
                         }`}
                         data-tooltip-id="branch-quantity"
@@ -786,7 +798,7 @@ const ProductionReport: React.FC = () => {
                     </td>
                   </tr>
                 ))}
-                <tr className={`font-semibold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <td className="px-4 py-3 text-gray-800 text-center"></td>
                   <td className="px-4 py-3 text-gray-800 text-center">{isRtl ? 'الإجمالي' : 'Total'}</td>
                   <td className="px-4 py-3 text-gray-800 text-center"></td>
@@ -820,22 +832,41 @@ const ProductionReport: React.FC = () => {
       const monthName = months[month].label;
 
       const exportTable = (format: 'excel' | 'pdf') => {
-        const headers = [
+        const baseHeaders = [
           isRtl ? 'رقم' : 'No.',
           isRtl ? 'الكود' : 'Code',
           isRtl ? 'المنتج' : 'Product',
           isRtl ? 'وحدة المنتج' : 'Product Unit',
-          ...daysInMonth,
+        ];
+        let dayHeaders: string[] = daysInMonth;
+        if (type === 'out') {
+          dayHeaders = daysInMonth.flatMap(day => [
+            isRtl ? `${day} - مبيعات` : `${day} - Sales`,
+            isRtl ? `${day} - مرتجعات` : `${day} - Returns`,
+            isRtl ? `${day} - إجمالي` : `${day} - Total`,
+          ]);
+        }
+        const totalHeaders = [
           isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
           isRtl ? 'السعر الإجمالي' : 'Total Price',
         ];
+        const headers = [...baseHeaders, ...dayHeaders, ...totalHeaders];
+
         const rows = [
           ...data.map((row, index) => ({
             no: index + 1,
             code: row.code,
             product: row.product,
             unit: row.unit,
-            ...Object.fromEntries(row.dailyQuantities.map((qty, i) => [daysInMonth[i], qty])),
+            ...(type === 'out'
+              ? Object.fromEntries(
+                  daysInMonth.flatMap((day, i) => [
+                    [`${day} - ${isRtl ? 'مبيعات' : 'Sales'}`, row.dailySales![i]],
+                    [`${day} - ${isRtl ? 'مرتجعات' : 'Returns'}`, row.dailyReturns![i]],
+                    [`${day} - ${isRtl ? 'إجمالي' : 'Total'}`, row.dailyQuantities[i]],
+                  ])
+                )
+              : Object.fromEntries(row.dailyQuantities.map((qty, i) => [daysInMonth[i], qty]))),
             totalQuantity: row.totalQuantity,
             totalPrice: formatPrice(row.totalPrice, isRtl),
           })),
@@ -844,7 +875,17 @@ const ProductionReport: React.FC = () => {
             code: '',
             product: isRtl ? 'الإجمالي' : 'Total',
             unit: '',
-            ...Object.fromEntries(daysInMonth.map((_, i) => [daysInMonth[i], data.reduce((sum, row) => sum + row.dailyQuantities[i], 0)])),
+            ...(type === 'out'
+              ? Object.fromEntries(
+                  daysInMonth.flatMap((day, i) => [
+                    [`${day} - ${isRtl ? 'مبيعات' : 'Sales'}`, data.reduce((sum, row) => sum + row.dailySales![i], 0)],
+                    [`${day} - ${isRtl ? 'مرتجعات' : 'Returns'}`, data.reduce((sum, row) => sum + row.dailyReturns![i], 0)],
+                    [`${day} - ${isRtl ? 'إجمالي' : 'Total'}`, data.reduce((sum, row) => sum + row.dailyQuantities[i], 0)],
+                  ])
+                )
+              : Object.fromEntries(
+                  daysInMonth.map((day, i) => [day, data.reduce((sum, row) => sum + row.dailyQuantities[i], 0)])
+                )),
             totalQuantity: grandTotalQuantity,
             totalPrice: formatPrice(grandTotalPrice, isRtl),
           },
@@ -854,7 +895,7 @@ const ProductionReport: React.FC = () => {
           row.code,
           row.product,
           row.unit,
-          ...daysInMonth.map(day => row[day]),
+          ...dayHeaders.map(header => row[header]),
           row.totalQuantity,
           row.totalPrice,
         ]);
@@ -862,7 +903,7 @@ const ProductionReport: React.FC = () => {
         if (format === 'excel') {
           const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
           if (isRtl) ws['!views'] = [{ RTL: true }];
-          ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }];
+          ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...dayHeaders.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }];
           const wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
@@ -926,17 +967,33 @@ const ProductionReport: React.FC = () => {
             className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
           >
             <table className="min-w-full divide-y divide-gray-200 text-xs">
-              <thead className="bg-blue-100 sticky top-0">
+              <thead className="bg-blue-50 sticky top-0">
                 <tr className={isRtl ? 'flex-row-reverse' : ''}>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
-                  {daysInMonth.map((day, i) => (
-                    <th key={i} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
-                      {day}
-                    </th>
-                  ))}
+                  {type === 'out' ? (
+                    daysInMonth.map((day, i) => (
+                      <Fragment key={i}>
+                        <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
+                          {isRtl ? `${day} - مبيعات` : `${day} - Sales`}
+                        </th>
+                        <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
+                          {isRtl ? `${day} - مرتجعات` : `${day} - Returns`}
+                        </th>
+                        <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
+                          {isRtl ? `${day} - إجمالي` : `${day} - Total`}
+                        </th>
+                      </Fragment>
+                    ))
+                  ) : (
+                    daysInMonth.map((day, i) => (
+                      <th key={i} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
+                        {day}
+                      </th>
+                    ))
+                  )}
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
                     {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
                   </th>
@@ -952,35 +1009,87 @@ const ProductionReport: React.FC = () => {
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
-                    {row.dailyQuantities.map((qty, i) => (
-                      <td
-                        key={i}
-                        className={`px-4 py-3 text-center font-medium ${
-                          qty > 0 ? 'bg-green-50 text-green-700' : qty < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
-                        }`}
-                        data-tooltip-id="stock-change"
-                        data-tooltip-content={getTooltipContent(qty, row.dailyBranchDetails[i], isRtl, type)}
-                      >
-                        {qty !== 0 ? `${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}` : '0'}
-                      </td>
-                    ))}
+                    {type === 'out' ? (
+                      daysInMonth.map((day, i) => (
+                        <Fragment key={i}>
+                          <td
+                            className={`px-4 py-3 text-center font-medium ${
+                              row.dailySales![i] !== 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
+                            }`}
+                            data-tooltip-id="sales-tooltip"
+                            data-tooltip-content={getTooltipContent(row.dailySales![i], row.dailySalesDetails![i], isRtl, 'sales')}
+                          >
+                            {row.dailySales![i] !== 0 ? `${formatNumber(row.dailySales![i], isRtl)}` : '0'}
+                          </td>
+                          <td
+                            className={`px-4 py-3 text-center font-medium ${
+                              row.dailyReturns![i] !== 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
+                            }`}
+                            data-tooltip-id="returns-tooltip"
+                            data-tooltip-content={getTooltipContent(row.dailyReturns![i], row.dailyReturnsDetails![i], isRtl, 'return')}
+                          >
+                            {row.dailyReturns![i] !== 0 ? `${formatNumber(row.dailyReturns![i], isRtl)}` : '0'}
+                          </td>
+                          <td
+                            className={`px-4 py-3 text-center font-medium ${
+                              row.dailyQuantities[i] < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
+                            }`}
+                            data-tooltip-id="stock-change"
+                            data-tooltip-content={getTooltipContent(row.dailyQuantities[i], row.dailyBranchDetails[i], isRtl, 'out')}
+                          >
+                            {row.dailyQuantities[i] !== 0 ? `${formatNumber(row.dailyQuantities[i], isRtl)}` : '0'}
+                          </td>
+                        </Fragment>
+                      ))
+                    ) : (
+                      row.dailyQuantities.map((qty, i) => (
+                        <td
+                          key={i}
+                          className={`px-4 py-3 text-center font-medium ${
+                            qty > 0 ? 'bg-green-50 text-green-700' : qty < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
+                          }`}
+                          data-tooltip-id="stock-change"
+                          data-tooltip-content={getTooltipContent(qty, row.dailyBranchDetails[i], isRtl, type)}
+                        >
+                          {qty !== 0 ? `${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}` : '0'}
+                        </td>
+                      ))
+                    )}
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.totalPrice, isRtl)}</td>
                   </tr>
                 ))}
-                <tr className={`font-semibold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
-                  {daysInMonth.map((_, i) => (
-                    <td key={i} className="px-4 py-3 text-gray-800 text-center">
-                      {formatNumber(data.reduce((sum, row) => sum + row.dailyQuantities[i], 0), isRtl)}
-                    </td>
-                  ))}
+                  {type === 'out' ? (
+                    daysInMonth.map((day, i) => (
+                      <Fragment key={i}>
+                        <td className="px-4 py-3 text-gray-800 text-center">
+                          {formatNumber(data.reduce((sum, row) => sum + row.dailySales![i], 0), isRtl)}
+                        </td>
+                        <td className="px-4 py-3 text-gray-800 text-center">
+                          {formatNumber(data.reduce((sum, row) => sum + row.dailyReturns![i], 0), isRtl)}
+                        </td>
+                        <td className="px-4 py-3 text-gray-800 text-center">
+                          {formatNumber(data.reduce((sum, row) => sum + row.dailyQuantities[i], 0), isRtl)}
+                        </td>
+                      </Fragment>
+                    ))
+                  ) : (
+                    daysInMonth.map((_, i) => (
+                      <td key={i} className="px-4 py-3 text-gray-800 text-center">
+                        {formatNumber(data.reduce((sum, row) => sum + row.dailyQuantities[i], 0), isRtl)}
+                      </td>
+                    ))
+                  )}
                   <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
                   <td className="px-4 py-3 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
                 </tr>
               </tbody>
             </table>
             <Tooltip id="stock-change" place="top" effect="solid" className="custom-tooltip" />
+            <Tooltip id="sales-tooltip" place="top" effect="solid" className="custom-tooltip" />
+            <Tooltip id="returns-tooltip" place="top" effect="solid" className="custom-tooltip" />
           </motion.div>
         </div>
       );
@@ -1101,7 +1210,7 @@ const ProductionReport: React.FC = () => {
             className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
           >
             <table className="min-w-full divide-y divide-gray-200 text-xs">
-              <thead className="bg-blue-100 sticky top-0">
+              <thead className="bg-blue-50 sticky top-0">
                 <tr className={isRtl ? 'flex-row-reverse' : ''}>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
@@ -1141,7 +1250,7 @@ const ProductionReport: React.FC = () => {
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.totalValue, isRtl)}</td>
                   </tr>
                 ))}
-                <tr className={`font-semibold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
                   {daysInMonth.map((_, i) => (
                     <td key={i} className="px-4 py-3 text-gray-800 text-center">
@@ -1161,7 +1270,7 @@ const ProductionReport: React.FC = () => {
     [loading, isRtl, daysInMonth, months, formatPrice]
   );
 
-    const renderSalesTable = useCallback(
+  const renderSalesTable = useCallback(
     (data: SalesRow[], title: string, month: number) => {
       const grandTotalSales = data.reduce((sum, row) => sum + row.totalSales, 0);
       const grandTotalValue = data.reduce((sum, row) => sum + row.totalValue, 0);
@@ -1274,7 +1383,7 @@ const ProductionReport: React.FC = () => {
             className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
           >
             <table className="min-w-full divide-y divide-gray-200 text-xs">
-              <thead className="bg-blue-100 sticky top-0">
+              <thead className="bg-blue-50 sticky top-0">
                 <tr className={isRtl ? 'flex-row-reverse' : ''}>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
@@ -1304,19 +1413,19 @@ const ProductionReport: React.FC = () => {
                       <td
                         key={i}
                         className={`px-4 py-3 text-center font-medium ${
-                          qty !== 0 ? 'bg-green-100 text-green-800' : 'text-gray-700'
+                          qty !== 0 ? 'bg-green-50 text-green-700' : 'text-gray-700'
                         }`}
                         data-tooltip-id={qty !== 0 ? 'sales-tooltip' : undefined}
                         data-tooltip-content={getTooltipContent(qty, row.dailyBranchDetails[i], isRtl, 'sales')}
                       >
-                        {qty !== 0 ? `+${formatNumber(qty, isRtl)}` : ''}
+                        {qty !== 0 ? `${formatNumber(qty, isRtl)}` : '0'}
                       </td>
                     ))}
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalSales, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.totalValue, isRtl)}</td>
                   </tr>
                 ))}
-                <tr className={`font-semibold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
                   {daysInMonth.map((_, i) => (
                     <td key={i} className="px-4 py-3 text-gray-800 text-center">
