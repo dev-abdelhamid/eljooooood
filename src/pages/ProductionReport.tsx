@@ -53,6 +53,7 @@ interface SalesRow {
   unit: string;
   totalSales: number;
   dailySales: number[];
+  dailyBranchDetails: { [branch: string]: number }[];
   totalValue: number;
 }
 
@@ -326,7 +327,6 @@ const ProductionReport: React.FC = () => {
         const monthlyReturnData: { [month: number]: ReturnRow[] } = {};
         const monthlySalesData: { [month: number]: SalesRow[] } = {};
 
-        // Process branches
         const fetchedBranches = branchesResponse
           .filter((branch: any) => branch && branch._id)
           .map((branch: any) => ({
@@ -340,7 +340,6 @@ const ProductionReport: React.FC = () => {
 
         const branchMap = new Map<string, string>(fetchedBranches.map(b => [b._id, b.displayName]));
 
-        // Process product details with language support
         const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
         inventory.forEach((item: any) => {
           if (item?.product?._id) {
@@ -353,7 +352,6 @@ const ProductionReport: React.FC = () => {
           }
         });
 
-        // Process orders with fallback data
         let orders = Array.isArray(ordersResponse) ? ordersResponse : [];
         if (orders.length === 0) {
           orders = inventory
@@ -387,7 +385,6 @@ const ProductionReport: React.FC = () => {
             });
         }
 
-        // Process data for each month
         for (let month = 0; month < 12; month++) {
           const daysInMonthCount = new Date(currentYear, month + 1, 0).getDate();
           const orderMap = new Map<string, OrderRow>();
@@ -396,7 +393,6 @@ const ProductionReport: React.FC = () => {
           const returnMap = new Map<string, ReturnRow>();
           const salesMap = new Map<string, SalesRow>();
 
-          // Process orders
           orders.forEach((order: any) => {
             const status = order.status || order.orderStatus;
             if (status !== 'completed') return;
@@ -447,7 +443,6 @@ const ProductionReport: React.FC = () => {
             }
           });
 
-          // Set actualSales for selected month
           if (month === selectedMonth) {
             for (const row of orderMap.values()) {
               const salesItem = salesResponse.productSales?.find((s: any) => s.productId === row.id.split('-')[0]);
@@ -457,7 +452,6 @@ const ProductionReport: React.FC = () => {
             }
           }
 
-          // Process inventory movements
           inventory.forEach((item: any) => {
             const productId = item?.product?._id;
             if (!productId) return;
@@ -483,7 +477,7 @@ const ProductionReport: React.FC = () => {
                 const key = `${productId}-${month}`;
                 const quantity = Number(movement.quantity) || 0;
                 const absQty = Math.abs(quantity);
-                const qty = -absQty;
+                const qty = movement.type === 'out' ? -absQty : absQty;
                 if (movement.type === 'in') {
                   if (!stockInMap.has(key)) {
                     stockInMap.set(key, {
@@ -498,10 +492,10 @@ const ProductionReport: React.FC = () => {
                     });
                   }
                   const row = stockInMap.get(key)!;
-                  row.dailyQuantities[day - 1] += absQty;
-                  row.dailyBranchDetails[day - 1][branchName] = (row.dailyBranchDetails[day - 1][branchName] || 0) + absQty;
-                  row.totalQuantity += absQty;
-                  row.totalPrice += absQty * details.price;
+                  row.dailyQuantities[day - 1] += qty;
+                  row.dailyBranchDetails[day - 1][branchName] = (row.dailyBranchDetails[day - 1][branchName] || 0) + qty;
+                  row.totalQuantity += qty;
+                  row.totalPrice += qty * details.price;
                 } else if (movement.type === 'out') {
                   const isReturn = movement.reference?.includes('مرتجع') || movement.reference?.includes('RET-');
                   const isSale = movement.reference?.includes('بيع') || movement.reference?.includes('SALE-');
@@ -537,9 +531,9 @@ const ProductionReport: React.FC = () => {
                       });
                     }
                     const row = salesMap.get(key)!;
-                    row.dailySales[day - 1] += absQty;
-                    row.dailyBranchDetails[day - 1][branchName] = (row.dailyBranchDetails[day - 1][branchName] || 0) + absQty;
-                    row.totalSales += absQty;
+                    row.dailySales[day - 1] += qty;
+                    row.dailyBranchDetails[day - 1][branchName] = (row.dailyBranchDetails[day - 1][branchName] || 0) + qty;
+                    row.totalSales += qty;
                     row.totalValue += absQty * details.price;
                   } else {
                     if (!stockOutMap.has(key)) {
@@ -590,18 +584,21 @@ const ProductionReport: React.FC = () => {
     fetchData();
   }, [isRtl, currentYear, selectedMonth, language]);
 
-  const getTooltipContent = (dailyQuantity: number, branchDetails: { [branch: string]: number }, isRtl: boolean, type: 'in' | 'out' | 'return' | 'sales') => {
-    let header = '';
-    if (type === 'in') header = isRtl ? 'زيادة مخزون' : 'Stock In';
-    if (type === 'out') header = isRtl ? 'نقص مخزون' : 'Stock Out';
-    if (type === 'return') header = isRtl ? 'مرتجع' : 'Return';
-    if (type === 'sales') header = isRtl ? 'مبيعات' : 'Sales';
-    let content = `${header}: ${dailyQuantity > 0 ? '+' : ''}${formatNumber(dailyQuantity, isRtl)}`;
-    if (Object.keys(branchDetails).length > 0) {
-      content += '\n' + Object.entries(branchDetails).map(([branch, qty]) => `${branch}: ${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}`).join('\n');
-    }
-    return content;
-  };
+  const getTooltipContent = useCallback(
+    (dailyQuantity: number, branchDetails: { [branch: string]: number }, isRtl: boolean, type: 'in' | 'out' | 'return' | 'sales') => {
+      let header = '';
+      if (type === 'in') header = isRtl ? 'زيادة مخزون' : 'Stock In';
+      if (type === 'out') header = isRtl ? 'نقص مخزون' : 'Stock Out';
+      if (type === 'return') header = isRtl ? 'مرتجع' : 'Return';
+      if (type === 'sales') header = isRtl ? 'مبيعات' : 'Sales';
+      let content = `${header}: ${dailyQuantity > 0 ? '+' : ''}${formatNumber(dailyQuantity, isRtl)}`;
+      if (Object.keys(branchDetails).length > 0) {
+        content += '\n' + Object.entries(branchDetails).map(([branch, qty]) => `${branch}: ${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}`).join('\n');
+      }
+      return content;
+    },
+    [formatNumber]
+  );
 
   const renderOrderTable = useCallback(
     (data: OrderRow[], title: string, month: number) => {
@@ -862,7 +859,15 @@ const ProductionReport: React.FC = () => {
         if (format === 'excel') {
           const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
           if (isRtl) ws['!views'] = [{ RTL: true }];
-          ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }];
+          ws['!cols'] = [
+            { wch: 8 },
+            { wch: 15 },
+            { wch: 25 },
+            { wch: 12 },
+            ...daysInMonth.map(() => ({ wch: 10 })),
+            { wch: 15 },
+            { wch: 15 },
+          ];
           const wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
@@ -893,12 +898,12 @@ const ProductionReport: React.FC = () => {
       return (
         <div className="mb-8">
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-            <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
+            <h2 className="text-xl font-bold text-gray-900">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
             <div className="flex gap-2">
               <Button
                 variant={data.length > 0 ? 'primary' : 'secondary'}
                 onClick={data.length > 0 ? () => exportTable('excel') : undefined}
-                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 ${
                   data.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
                 disabled={data.length === 0}
@@ -909,7 +914,7 @@ const ProductionReport: React.FC = () => {
               <Button
                 variant={data.length > 0 ? 'primary' : 'secondary'}
                 onClick={data.length > 0 ? () => exportTable('pdf') : undefined}
-                className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+                className={`flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 ${
                   data.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
                 disabled={data.length === 0}
@@ -923,69 +928,138 @@ const ProductionReport: React.FC = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
+            className="overflow-x-auto rounded-xl shadow-lg border border-gray-100 bg-white"
           >
-            <table className="min-w-full divide-y divide-gray-200 text-xs">
-              <thead className="bg-blue-100 sticky top-0">
+            <table className="min-w-full divide-y divide-gray-100 text-sm">
+              <thead className="bg-gradient-to-r from-blue-50 to-blue-100 sticky top-0 z-10">
                 <tr className={isRtl ? 'flex-row-reverse' : ''}>
-                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
-                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
-                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
-                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
+                  <th className="px-4 py-3.5 font-semibold text-gray-800 text-center min-w-[50px]">{isRtl ? 'رقم' : 'No.'}</th>
+                  <th className="px-4 py-3.5 font-semibold text-gray-800 text-center min-w-[100px]">{isRtl ? 'الكود' : 'Code'}</th>
+                  <th className="px-4 py-3.5 font-semibold text-gray-800 text-center min-w-[150px]">{isRtl ? 'المنتج' : 'Product'}</th>
+                  <th className="px-4 py-3.5 font-semibold text-gray-800 text-center min-w-[100px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
                   {daysInMonth.map((day, i) => (
-                    <th key={i} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
+                    <th
+                      key={i}
+                      className="px-4 py-3.5 font-semibold text-gray-800 text-center min-w-[90px] whitespace-nowrap"
+                      data-tooltip-id="day-tooltip"
+                      data-tooltip-content={isRtl ? `التاريخ: ${day}` : `Date: ${day}`}
+                    >
                       {day}
                     </th>
                   ))}
-                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                  <th className="px-4 py-3.5 font-semibold text-gray-800 text-center min-w-[120px]">
                     {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
                   </th>
-                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                  <th className="px-4 py-3.5 font-semibold text-gray-800 text-center min-w-[120px]">
                     {isRtl ? 'السعر الإجمالي' : 'Total Price'}
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-100">
                 {data.map((row, index) => (
-                  <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                    <td className="px-4 py-3 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
+                  <tr
+                    key={row.id}
+                    className={`hover:bg-blue-50/50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}
+                  >
+                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(index + 1, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
-                    {row.dailyQuantities.map((qty, i) => (
-                      <td
-                        key={i}
-                        className={`px-4 py-3 text-center font-medium ${
-                          qty > 0 ? 'bg-green-50 text-green-700' : qty < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
-                        }`}
-                        data-tooltip-id="stock-change"
-                        data-tooltip-content={getTooltipContent(qty, row.dailyBranchDetails[i], isRtl, type)}
-                      >
-                        {qty !== 0 ? `${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}` : '0'}
-                      </td>
-                    ))}
-                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
-                    <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.totalPrice, isRtl)}</td>
+                    {row.dailyQuantities.map((qty, i) => {
+                      const isSale = type === 'out' && (row.dailyBranchDetails[i].reference?.includes('بيع') || row.dailyBranchDetails[i].reference?.includes('SALE-'));
+                      const isReturn = type === 'out' && (row.dailyBranchDetails[i].reference?.includes('مرتجع') || row.dailyBranchDetails[i].reference?.includes('RET-'));
+                      return (
+                        <td
+                          key={i}
+                          className={`px-4 py-3 text-center font-medium transition-colors duration-150 ${
+                            qty > 0
+                              ? 'bg-green-50 text-green-800'
+                              : qty < 0
+                              ? isSale
+                                ? 'bg-orange-50 text-orange-800'
+                                : isReturn
+                                ? 'bg-red-50 text-red-800'
+                                : 'bg-red-50 text-red-800'
+                              : 'text-gray-700'
+                          }`}
+                          data-tooltip-id={qty !== 0 ? `stock-change-${row.id}-${i}` : undefined}
+                          data-tooltip-content={getTooltipContent(qty, row.dailyBranchDetails[i], isRtl, type)}
+                        >
+                          {qty !== 0 ? `${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}` : '—'}
+                        </td>
+                      );
+                    })}
+                    <td
+                      className={`px-4 py-3 text-center font-semibold ${
+                        row.totalQuantity > 0 ? 'text-green-800' : row.totalQuantity < 0 ? 'text-red-800' : 'text-gray-700'
+                      }`}
+                      data-tooltip-id={`total-quantity-${row.id}`}
+                      data-tooltip-content={`${isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}: ${formatNumber(row.totalQuantity, isRtl)}`}
+                    >
+                      {formatNumber(row.totalQuantity, isRtl)}
+                    </td>
+                    <td className="px-4 py-3 text-gray-800 text-center font-semibold">{formatPrice(row.totalPrice, isRtl)}</td>
                   </tr>
                 ))}
-                <tr className={`font-semibold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                  <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
-                  {daysInMonth.map((_, i) => (
-                    <td key={i} className="px-4 py-3 text-gray-800 text-center">
-                      {formatNumber(data.reduce((sum, row) => sum + row.dailyQuantities[i], 0), isRtl)}
-                    </td>
-                  ))}
-                  <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
-                  <td className="px-4 py-3 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
+                <tr className={`font-bold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <td className="px-4 py-3 text-gray-900 text-center" colSpan={4}>
+                    {isRtl ? 'الإجمالي' : 'Total'}
+                  </td>
+                  {daysInMonth.map((_, i) => {
+                    const dailyTotal = data.reduce((sum, row) => sum + row.dailyQuantities[i], 0);
+                    return (
+                      <td
+                        key={i}
+                        className={`px-4 py-3 text-center font-semibold ${
+                          dailyTotal > 0 ? 'text-green-800' : dailyTotal < 0 ? 'text-red-800' : 'text-gray-900'
+                        }`}
+                      >
+                        {formatNumber(dailyTotal, isRtl)}
+                      </td>
+                    );
+                  })}
+                  <td className="px-4 py-3 text-gray-900 text-center font-semibold">
+                    {formatNumber(grandTotalQuantity, isRtl)}
+                  </td>
+                  <td className="px-4 py-3 text-gray-900 text-center font-semibold">
+                    {formatPrice(grandTotalPrice, isRtl)}
+                  </td>
                 </tr>
               </tbody>
             </table>
-            <Tooltip id="stock-change" place="top" effect="solid" className="custom-tooltip" />
+            {data.map((row, index) =>
+              row.dailyQuantities.map((qty, i) => (
+                qty !== 0 && (
+                  <Tooltip
+                    key={`stock-change-${row.id}-${i}`}
+                    id={`stock-change-${row.id}-${i}`}
+                    place="top"
+                    effect="solid"
+                    className="custom-tooltip text-xs bg-gray-800 text-white rounded-lg p-2 max-w-xs"
+                  />
+                )
+              ))
+            )}
+            {data.map(row => (
+              <Tooltip
+                key={`total-quantity-${row.id}`}
+                id={`total-quantity-${row.id}`}
+                place="top"
+                effect="solid"
+                className="custom-tooltip text-xs bg-gray-800 text-white rounded-lg p-2 max-w-xs"
+              />
+            ))}
+            <Tooltip
+              id="day-tooltip"
+              place="top"
+              effect="solid"
+              className="custom-tooltip text-xs bg-gray-800 text-white rounded-lg p-2"
+            />
           </motion.div>
         </div>
       );
     },
-    [loading, isRtl, daysInMonth, months, formatPrice]
+    [loading, isRtl, daysInMonth, months, formatPrice, getTooltipContent]
   );
 
   const renderReturnTable = useCallback(
@@ -1158,10 +1232,10 @@ const ProductionReport: React.FC = () => {
         </div>
       );
     },
-    [loading, isRtl, daysInMonth, months, formatPrice]
+    [loading, isRtl, daysInMonth, months, formatPrice, getTooltipContent]
   );
 
-    const renderSalesTable = useCallback(
+  const renderSalesTable = useCallback(
     (data: SalesRow[], title: string, month: number) => {
       const grandTotalSales = data.reduce((sum, row) => sum + row.totalSales, 0);
       const grandTotalValue = data.reduce((sum, row) => sum + row.totalValue, 0);
@@ -1285,7 +1359,7 @@ const ProductionReport: React.FC = () => {
                       {day}
                     </th>
                   ))}
-                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                                    <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
                     {isRtl ? 'إجمالي المبيعات' : 'Total Sales'}
                   </th>
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
@@ -1303,13 +1377,11 @@ const ProductionReport: React.FC = () => {
                     {row.dailySales.map((qty, i) => (
                       <td
                         key={i}
-                        className={`px-4 py-3 text-center font-medium ${
-                          qty !== 0 ? 'bg-green-100 text-green-800' : 'text-gray-700'
-                        }`}
-                        data-tooltip-id={qty !== 0 ? 'sales-tooltip' : undefined}
+                        className="px-4 py-3 text-center font-medium text-orange-700"
+                        data-tooltip-id="sales-tooltip"
                         data-tooltip-content={getTooltipContent(qty, row.dailyBranchDetails[i], isRtl, 'sales')}
                       >
-                        {qty !== 0 ? `+${formatNumber(qty, isRtl)}` : ''}
+                        {qty !== 0 ? formatNumber(qty, isRtl) : '0'}
                       </td>
                     ))}
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalSales, isRtl)}</td>
@@ -1333,84 +1405,106 @@ const ProductionReport: React.FC = () => {
         </div>
       );
     },
-    [loading, isRtl, daysInMonth, months, formatPrice]
+    [loading, isRtl, daysInMonth, months, formatPrice, getTooltipContent]
   );
 
-
   return (
-    <div className={`min-h-screen px-6 py-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-100`}>
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">{isRtl ? 'تقارير الإنتاج' : 'Production Reports'}</h1>
-      <div className="mb-8 bg-white shadow-md rounded-xl p-4">
-        <div className="flex flex-wrap gap-2 mb-4 justify-center">
-          {months.map(month => (
+    <div className={`container mx-auto px-4 py-8 ${isRtl ? 'text-right' : 'text-left'}`}>
+      <h1 className="text-2xl font-bold text-gray-900 mb-6">{isRtl ? 'تقرير الإنتاج' : 'Production Report'}</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
+        <div className="flex-1">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {isRtl ? 'اختر الشهر' : 'Select Month'}
+          </label>
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(Number(e.target.value))}
+            className={`w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none ${isRtl ? 'text-right' : 'text-left'}`}
+          >
+            {months.map((month) => (
+              <option key={month.value} value={month.value}>
+                {month.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {[
+            { id: 'orders', label: isRtl ? 'الطلبات' : 'Orders' },
+            { id: 'stockIn', label: isRtl ? 'زيادة المخزون' : 'Stock In' },
+            { id: 'stockOut', label: isRtl ? 'نقص المخزون' : 'Stock Out' },
+            { id: 'returns', label: isRtl ? 'المرتجعات' : 'Returns' },
+            { id: 'sales', label: isRtl ? 'المبيعات' : 'Sales' },
+          ].map((tab) => (
             <Button
-              key={month.value}
-              variant={selectedMonth === month.value ? 'primary' : 'secondary'}
-              onClick={() => setSelectedMonth(month.value)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-                selectedMonth === month.value
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              key={tab.id}
+              variant={activeTab === tab.id ? 'primary' : 'secondary'}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 ${
+                activeTab === tab.id ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
-              {month.label}
+              {tab.label}
             </Button>
           ))}
         </div>
-        <div className={`flex flex-wrap gap-2 justify-center ${isRtl ? 'flex-row-reverse' : ''}`}>
-          <Button
-            variant={activeTab === 'orders' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('orders')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-              activeTab === 'orders' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            {isRtl ? 'الطلبات' : 'Orders'}
-          </Button>
-          <Button
-            variant={activeTab === 'stockIn' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('stockIn')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-              activeTab === 'stockIn' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            {isRtl ? 'إدخال المخزون' : 'Stock In'}
-          </Button>
-          <Button
-            variant={activeTab === 'stockOut' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('stockOut')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-              activeTab === 'stockOut' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            {isRtl ? 'إخراج المخزون' : 'Stock Out'}
-          </Button>
-          <Button
-            variant={activeTab === 'returns' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('returns')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-              activeTab === 'returns' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            {isRtl ? 'المرتجعات' : 'Returns'}
-          </Button>
-          <Button
-            variant={activeTab === 'sales' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('sales')}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
-              activeTab === 'sales' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            {isRtl ? 'المبيعات' : 'Sales'}
-          </Button>
-        </div>
       </div>
-      <AnimatePresence>
-        {activeTab === 'orders' && renderOrderTable(orderData[selectedMonth] || [], isRtl ? 'تقرير الطلبات' : 'Orders Report', selectedMonth)}
-        {activeTab === 'stockIn' && renderStockTable(stockInData[selectedMonth] || [], isRtl ? 'تقرير إدخال المخزون' : 'Stock In Report', selectedMonth, 'in')}
-        {activeTab === 'stockOut' && renderStockTable(stockOutData[selectedMonth] || [], isRtl ? 'تقرير إخراج المخزون' : 'Stock Out Report', selectedMonth, 'out')}
-        {activeTab === 'returns' && renderReturnTable(returnData[selectedMonth] || [], isRtl ? 'تقرير المرتجعات' : 'Returns Report', selectedMonth)}
-        {activeTab === 'sales' && renderSalesTable(salesData[selectedMonth] || [], isRtl ? 'تقرير المبيعات' : 'Sales Report', selectedMonth)}
+      <AnimatePresence mode="wait">
+        {activeTab === 'orders' && (
+          <motion.div
+            key="orders"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {renderOrderTable(orderData[selectedMonth] || [], isRtl ? 'تقرير الطلبات' : 'Orders Report', selectedMonth)}
+          </motion.div>
+        )}
+        {activeTab === 'stockIn' && (
+          <motion.div
+            key="stockIn"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {renderStockTable(stockInData[selectedMonth] || [], isRtl ? 'تقرير زيادة المخزون' : 'Stock In Report', selectedMonth, 'in')}
+          </motion.div>
+        )}
+        {activeTab === 'stockOut' && (
+          <motion.div
+            key="stockOut"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {renderStockTable(stockOutData[selectedMonth] || [], isRtl ? 'تقرير نقص المخزون' : 'Stock Out Report', selectedMonth, 'out')}
+          </motion.div>
+        )}
+        {activeTab === 'returns' && (
+          <motion.div
+            key="returns"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {renderReturnTable(returnData[selectedMonth] || [], isRtl ? 'تقرير المرتجعات' : 'Returns Report', selectedMonth)}
+          </motion.div>
+        )}
+        {activeTab === 'sales' && (
+          <motion.div
+            key="sales"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+          >
+            {renderSalesTable(salesData[selectedMonth] || [], isRtl ? 'تقرير المبيعات' : 'Sales Report', selectedMonth)}
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );
