@@ -39,6 +39,7 @@ import BranchSalesAnalytics from './pages/BranchSalesAnalytics';
 import SalesAnalytics from './pages/SalesAnalytics';
 import ReturnStats from './pages/ReturnStats';
 import ProductionTrackingPage from './pages/ProductionTrackingPage';
+import ProductionInventory from './pages/ProductionInventory';
 import FactoryInventory from './pages/FactoryInventory';
 
 
@@ -88,7 +89,7 @@ function AppContent() {
                   <Route path="/returns" element={<BranchReturns />} />
                   <Route path="/FactoryInventory" element={<FactoryInventory />} />
                   <Route path="/production-report" element={<ProductionReport />} />
-                                    <Route path="/production" element={<ProductionTrackingPage />} />
+                                    <Route path="/production" element={<ProductionInventory />} />
 
                                     
 

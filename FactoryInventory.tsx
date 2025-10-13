@@ -15,41 +15,6 @@ import { inventoryAPI, ordersAPI, branchesAPI } from '../services/api';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../components/UI/Tooltip';
 
-interface OrderRow {
-  id: string;
-  product: string;
-  branchQuantities: { [branch: string]: number };
-  totalQuantity: number;
-  totalPrice: number;
-}
-
-interface StockRow {
-  id: string;
-  product: string;
-  totalQuantity: number;
-  dailyQuantities: number[];
-  changes: number[];
-  totalPrice: number;
-}
-
-interface SalesRow {
-  id: string;
-  product: string;
-  totalQuantity: number;
-  dailyQuantities: number[];
-  changes: number[];
-  totalPrice: number;
-}
-
-interface ReturnRow {
-  id: string;
-  product: string;
-  totalQuantity: number;
-  dailyQuantities: number[];
-  changes: number[];
-  totalPrice: number;
-}
-
 interface InventoryRow {
   id: string;
   product: string;
@@ -57,67 +22,65 @@ interface InventoryRow {
   totalQuantity: number;
 }
 
-interface ProductionRequest {
-  _id: string;
-  type: 'branch' | 'production';
-  branchName: string;
-  status: string;
-  items: { productName: string; quantity: number }[];
-  createdBy: string;
-  approvedBy: string;
-  deliveredBy: string;
-  createdAt: string;
-  notes: string;
-  assignedChef: string;
-}
-
 interface Branch {
   _id: string;
   name: string;
   nameEn: string;
   displayName: string;
+  isWarehouse: boolean;
 }
 
-const ProductionInventory: React.FC = () => {
+const FactoryInventory: React.FC = () => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [inventoryData, setInventoryData] = useState<InventoryRow[]>([]);
-  const [productionRequests, setProductionRequests] = useState<ProductionRequest[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [filterType, setFilterType] = useState<'all' | 'branch' | 'production'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'branch' | 'warehouse'>('all');
   const [selectedBranch, setSelectedBranch] = useState('');
-  const [selectedType, setSelectedType] = useState<'branch' | 'production'>('branch');
-  const [isCreateRequestModalOpen, setIsCreateRequestModalOpen] = useState(false);
-  const [requestItems, setRequestItems] = useState([{ productId: '', quantity: 1 }]);
-  const [selectedRequest, setSelectedRequest] = useState<ProductionRequest | null>(null);
-  const [isAssignChefModalOpen, setIsAssignChefModalOpen] = useState(false);
-  const [chefId, setChefId] = useState('');
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [inventoryResponse, branchesResponse, productionRequestsResponse] = await Promise.all([
-          inventoryAPI.getFactoryInventory({ lang: language }),
+        const [inventoryResponse, branchesResponse] = await Promise.all([
+          inventoryAPI.getInventory({}, isRtl),
           branchesAPI.getAll(),
-          inventoryAPI.getProductionRequests({ lang: language }),
         ]);
 
         const fetchedBranches = branchesResponse
-          .filter((branch) => branch && branch._id)
-          .map((branch) => ({
+          .filter((branch: any) => branch && branch._id)
+          .map((branch: any) => ({
             _id: branch._id,
             name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
             nameEn: branch.nameEn,
             displayName: isRtl ? branch.name : branch.nameEn || branch.name,
+            isWarehouse: branch.isWarehouse || false, // Assume added to Branch model
           }))
-          .sort((a, b) => a.displayName.localeCompare(b.displayName, language));
+          .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language));
         setBranches(fetchedBranches);
 
-        setInventoryData(inventoryResponse.inventory || []);
-        setProductionRequests(productionRequestsResponse.requests || []);
+        const inventoryMap = new Map<string, InventoryRow>();
+        inventoryResponse.forEach((item: any) => {
+          const product = item.productName || item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product');
+          const key = product;
+          if (!inventoryMap.has(key)) {
+            inventoryMap.set(key, {
+              id: key,
+              product,
+              branchQuantities: {},
+              totalQuantity: 0,
+            });
+          }
+          const row = inventoryMap.get(key)!;
+          const branch = item.branch?.displayName || item.branch?.name || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
+          const quantity = Number(item.currentStock) || 0;
+          row.branchQuantities[branch] = (row.branchQuantities[branch] || 0) + quantity;
+          row.totalQuantity += quantity;
+        });
+
+        setInventoryData(Array.from(inventoryMap.values()));
       } catch (error) {
         console.error('Failed to fetch data:', error);
       } finally {
@@ -129,14 +92,15 @@ const ProductionInventory: React.FC = () => {
 
   const filteredBranches = useMemo(() => {
     return branches.filter(b => {
-      if (filterType === 'branch') return true;
+      if (filterType === 'branch') return !b.isWarehouse;
+      if (filterType === 'warehouse') return b.isWarehouse;
       return true;
     });
   }, [branches, filterType]);
 
   const filteredData = useMemo(() => {
     if (selectedBranch) {
-      return inventoryData.map((row) => ({
+      return inventoryData.map(row => ({
         ...row,
         branchQuantities: { [selectedBranch]: row.branchQuantities[selectedBranch] || 0 },
         totalQuantity: row.branchQuantities[selectedBranch] || 0,
@@ -147,48 +111,67 @@ const ProductionInventory: React.FC = () => {
 
   const allBranches = useMemo(() => {
     const branchesSet = new Set<string>();
-    inventoryData.forEach((row) => {
+    inventoryData.forEach(row => {
       Object.keys(row.branchQuantities).forEach(branch => branchesSet.add(branch));
     });
-    return Array.from(branchesSet);
+    return Array.from(branchesSet).sort();
   }, [inventoryData]);
 
-  const filteredProductionRequests = useMemo(() => {
-    return productionRequests.filter((req) => req.type === selectedType);
-  }, [productionRequests, selectedType]);
-
   const renderInventoryTable = useCallback(
-    (data, title) => {
+    (data: InventoryRow[], title: string) => {
       const totalQuantities = allBranches.reduce((acc, branch) => {
         acc[branch] = data.reduce((sum, row) => sum + (row.branchQuantities[branch] || 0), 0);
         return acc;
       }, {} as { [branch: string]: number });
       const grandTotalQuantity = data.reduce((sum, row) => sum + row.totalQuantity, 0);
 
-      const exportTable = (format) => {
-        const exportData = data.map((row) => ({
-          Product: row.product,
-          ...row.branchQuantities,
-          Total: row.totalQuantity,
-        }));
-        exportData.push({
-          Product: isRtl ? 'الإجمالي' : 'Total',
-          ...totalQuantities,
-          Total: grandTotalQuantity,
-        });
+      const exportTable = (format: 'excel' | 'pdf') => {
+        const headers = [
+          isRtl ? 'المنتج' : 'Product',
+          ...allBranches,
+          isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
+        ];
+        const rows = [
+          ...data.map(row => ({
+            product: row.product,
+            ...allBranches.reduce((acc, branch) => {
+              acc[branch] = row.branchQuantities[branch] || 0;
+              return acc;
+            }, {} as { [key: string]: number }),
+            totalQuantity: row.totalQuantity,
+          })),
+          {
+            product: isRtl ? 'الإجمالي' : 'Total',
+            ...allBranches.reduce((acc, branch) => {
+              acc[branch] = totalQuantities[branch] || 0;
+              return acc;
+            }, {} as { [key: string]: number }),
+            totalQuantity: grandTotalQuantity,
+          },
+        ];
 
         if (format === 'excel') {
-          const ws = XLSX.utils.json_to_sheet(exportData);
+          const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
+          if (isRtl) ws['!views'] = [{ RTL: true }];
+          ws['!cols'] = [{ wch: 20 }, ...allBranches.map(() => ({ wch: 15 })), { wch: 15 }];
           const wb = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(wb, ws, 'Inventory');
-          XLSX.writeFile(wb, `Production_Inventory_${new Date().toISOString().slice(0, 10)}.xlsx`);
+          XLSX.utils.book_append_sheet(wb, ws, title);
+          XLSX.writeFile(wb, `${title}.xlsx`);
         } else if (format === 'pdf') {
           const doc = new jsPDF();
           doc.autoTable({
-            head: [['Product', ...allBranches, 'Total']],
-            body: exportData.map((row) => [row.Product, ...allBranches.map((b) => row[b]), row.Total]),
+            head: [headers],
+            body: rows.map(row => [
+              row.product,
+              ...allBranches.map(branch => row[branch]),
+              row.totalQuantity,
+            ]),
+            styles: { font: isRtl ? 'Amiri' : 'Helvetica', halign: isRtl ? 'right' : 'left', fontSize: 10 },
+            headStyles: { fillColor: [59, 130, 246], textColor: [255, 255, 255], fontSize: 10 },
+            bodyStyles: { fontSize: 9 },
+            footStyles: { fillColor: [240, 240, 240], fontSize: 10, fontStyle: 'bold' },
           });
-          doc.save(`Production_Inventory_${new Date().toISOString().slice(0, 10)}.pdf`);
+          doc.save(`${title}.pdf`);
         }
       };
 
@@ -279,116 +262,6 @@ const ProductionInventory: React.FC = () => {
     [loading, isRtl, allBranches]
   );
 
-  const renderProductionRequests = useCallback(
-    (requests) => {
-      if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
-      if (requests.length === 0) {
-        return (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="text-center py-12 bg-white shadow-sm rounded-lg border border-gray-100"
-          >
-            <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد طلبات' : 'No requests available'}</p>
-          </motion.div>
-        );
-      }
-
-      return (
-        <div className="mb-8">
-          <h2 className="text-lg font-semibold text-gray-800 mb-4">{isRtl ? 'طلبات الإنتاج' : 'Production Requests'}</h2>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-            className="overflow-x-auto rounded-lg shadow-sm border border-gray-100 bg-white"
-          >
-            <table className="min-w-full divide-y divide-gray-100 text-xs">
-              <thead className="bg-blue-50 sticky top-0">
-                <tr className={isRtl ? 'flex-row-reverse' : ''}>
-                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'النوع' : 'Type'}</th>
-                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'الفرع' : 'Branch'}</th>
-                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'الحالة' : 'Status'}</th>
-                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[150px]">{isRtl ? 'العناصر' : 'Items'}</th>
-                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'تم الإنشاء بواسطة' : 'Created By'}</th>
-                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'تاريخ الإنشاء' : 'Created At'}</th>
-                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'الشيف المخصص' : 'Assigned Chef'}</th>
-                  <th className="px-3 py-2.5 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'إجراءات' : 'Actions'}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {requests.map((request) => (
-                  <tr key={request._id} className={`hover:bg-blue-50/50 transition-colors ${isRtl ? 'flex-row-reverse' : ''}`}>
-                    <td className="px-3 py-2 text-gray-700 text-center">{isRtl ? (request.type === 'branch' ? 'فرع' : 'إنتاج') : request.type}</td>
-                    <td className="px-3 py-2 text-gray-700 text-center">{request.branchName || 'مصنع'}</td>
-                    <td className="px-3 py-2 text-gray-700 text-center">{request.status}</td>
-                    <td className="px-3 py-2 text-gray-700 text-center">
-                      {request.items.map((item, idx) => (
-                        <div key={idx}>{`${item.productName}: ${item.quantity}`}</div>
-                      ))}
-                    </td>
-                    <td className="px-3 py-2 text-gray-700 text-center">{request.createdBy}</td>
-                    <td className="px-3 py-2 text-gray-700 text-center">{new Date(request.createdAt).toLocaleDateString(language)}</td>
-                    <td className="px-3 py-2 text-gray-700 text-center">{request.assignedChef || (isRtl ? 'غير مخصص' : 'Not Assigned')}</td>
-                    <td className="px-3 py-2 text-gray-700 text-center">
-                      <Button
-                        onClick={() => {
-                          setSelectedRequest(request);
-                          setIsAssignChefModalOpen(true);
-                        }}
-                        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
-                      >
-                        {isRtl ? 'تخصيص شيف' : 'Assign Chef'}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </motion.div>
-        </div>
-      );
-    },
-    [loading, isRtl, language]
-  );
-
-  const handleCreateRequest = async () => {
-    const payload = {
-      type: selectedType,
-      branchId: selectedBranch,
-      items: requestItems.filter((item) => item.productId && item.quantity > 0),
-      notes: '',
-    };
-    try {
-      await inventoryAPI.createRestockRequest(payload);
-      setIsCreateRequestModalOpen(false);
-      setRequestItems([{ productId: '', quantity: 1 }]);
-      const [newRequests] = await Promise.all([inventoryAPI.getRestockRequests({ lang: language })]);
-      setProductionRequests(newRequests.requests || []);
-    } catch (error) {
-      console.error('Failed to create request:', error);
-    }
-  };
-
-  const handleAssignChef = async () => {
-    if (selectedRequest) {
-      const payload = {
-        requestId: selectedRequest._id,
-        chefId,
-      };
-      try {
-        await inventoryAPI.assignChef(payload);
-        setIsAssignChefModalOpen(false);
-        setChefId('');
-        const [newRequests] = await Promise.all([inventoryAPI.getRestockRequests({ lang: language })]);
-        setProductionRequests(newRequests.requests || []);
-      } catch (error) {
-        console.error('Failed to assign chef:', error);
-      }
-    }
-  };
-
   return (
     <div className={`px-4 py-6 min-h-screen ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-50`}>
       <h1 className="text-2xl font-bold text-gray-800 mb-6">{isRtl ? 'المخزون الكامل للمصنع' : 'Full Factory Inventory'}</h1>
@@ -398,124 +271,27 @@ const ProductionInventory: React.FC = () => {
             options={[
               { value: 'all', label: isRtl ? 'الكل' : 'All' },
               { value: 'branch', label: isRtl ? 'فروع' : 'Branches' },
+              { value: 'warehouse', label: isRtl ? 'مستودعات' : 'Warehouses' },
             ]}
             value={filterType}
-            onChange={(value) => setFilterType(value as 'all' | 'branch' | 'production')}
+            onChange={(value) => setFilterType(value as 'all' | 'branch' | 'warehouse')}
             className="w-full sm:w-auto"
           />
           <Select
-            options={filteredBranches.map((b) => ({ value: b._id, label: b.displayName }))}
+            options={filteredBranches.map(b => ({ value: b._id, label: b.displayName }))}
             value={selectedBranch}
             onChange={(value) => setSelectedBranch(value)}
             className="w-full sm:w-auto"
           />
         </div>
       </div>
-      {renderInventoryTable(filteredData, isRtl ? 'تقرير المخزون' : 'Inventory Report')}
-      <h2 className="text-xl font-bold text-gray-800 mb-4">{isRtl ? 'طلبات الإنتاج' : 'Production Requests'}</h2>
-      <div className="mb-4">
-        <Select
-          options={[
-            { value: 'branch', label: isRtl ? 'من الفروع' : 'From Branches' },
-            { value: 'production', label: isRtl ? 'إنتاج داخلي' : 'Internal Production' },
-          ]}
-          value={selectedType}
-          onChange={(value) => setSelectedType(value as 'branch' | 'production')}
-          className="w-full sm:w-auto"
-        />
-      </div>
-      {renderProductionRequests(filteredProductionRequests)}
-      <Button
-        onClick={() => setIsCreateRequestModalOpen(true)}
-        className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
-      >
-        {isRtl ? 'إنشاء طلب إنتاج' : 'Create Production Request'}
-      </Button>
-
-      {isCreateRequestModalOpen && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-        >
-          <motion.div
-            initial={{ scale: 0.95 }}
-            animate={{ scale: 1 }}
-            className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md"
-          >
-            <h2 className="text-xl font-bold text-gray-900 mb-4">{isRtl ? 'إنشاء طلب إنتاج' : 'Create Production Request'}</h2>
-            <Select
-              options={[
-                { value: 'branch', label: isRtl ? 'من فرع' : 'From Branch' },
-                { value: 'production', label: isRtl ? 'إنتاج داخلي' : 'Internal Production' },
-              ]}
-              value={selectedType}
-              onChange={(value) => setSelectedType(value as 'branch' | 'production')}
-              className="w-full mb-4"
-            />
-            <Select
-              options={filteredBranches.map((b) => ({ value: b._id, label: b.displayName }))}
-              value={selectedBranch}
-              onChange={(value) => setSelectedBranch(value)}
-              className="w-full mb-4"
-            />
-            {requestItems.map((item, idx) => (
-              <div key={idx} className="flex gap-2 mb-2">
-                <Select
-                  options={inventoryData.map((prod) => ({ value: prod.productId, label: prod.productName }))}
-                  value={item.productId}
-                  onChange={(value) => {
-                    const newItems = [...requestItems];
-                    newItems[idx].productId = value;
-                    setRequestItems(newItems);
-                  }}
-                  className="flex-1"
-                />
-                <Input
-                  type="number"
-                  value={item.quantity}
-                  onChange={(e) => {
-                    const newItems = [...requestItems];
-                    newItems[idx].quantity = Math.max(1, parseInt(e.target.value) || 1);
-                    setRequestItems(newItems);
-                  }}
-                  className="w-20"
-                />
-                {idx > 0 && (
-                  <Button
-                    variant="danger"
-                    onClick={() => setRequestItems(requestItems.filter((_, i) => i !== idx))}
-                  >
-                    {isRtl ? 'حذف' : 'Remove'}
-                  </Button>
-                )}
-              </div>
-            ))}
-            <Button
-              onClick={() => setRequestItems([...requestItems, { productId: '', quantity: 1 }])}
-              className="mt-2"
-            >
-              {isRtl ? 'إضافة منتج' : 'Add Product'}
-            </Button>
-            <div className="mt-4 flex justify-end gap-2">
-              <Button
-                variant="secondary"
-                onClick={() => setIsCreateRequestModalOpen(false)}
-              >
-                {isRtl ? 'إلغاء' : 'Cancel'}
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleCreateRequest}
-              >
-                {isRtl ? 'إنشاء' : 'Create'}
-              </Button>
-            </div>
-          </motion.div>
+      <AnimatePresence mode="wait">
+        <motion.div key="inventory" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+          {renderInventoryTable(filteredData, isRtl ? 'تقرير المخزون الكامل' : 'Full Inventory Report')}
         </motion.div>
-      )}
+      </AnimatePresence>
     </div>
   );
 };
 
-export default ProductionInventory;
+export default FactoryInventory;
