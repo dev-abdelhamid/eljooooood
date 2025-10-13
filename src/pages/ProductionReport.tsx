@@ -31,7 +31,6 @@ interface StockRow {
   unit: string;
   totalQuantity: number;
   dailyQuantities: number[];
-  changes: { value: number; type: 'in' | 'out' | 'return' }[];
   totalPrice: number;
 }
 
@@ -53,7 +52,6 @@ interface SalesRow {
   totalSales: number;
   dailySales: number[];
   totalValue: number;
-  shortageStatus: 'returns' | 'sales' | 'balanced';
 }
 
 interface Branch {
@@ -92,7 +90,8 @@ const formatPrice = (amount: number, isRtl: boolean, isStats: boolean = false): 
 };
 
 const formatNumber = (num: number, isRtl: boolean): string => {
-  return isRtl ? toArabicNumerals(num) : num.toString();
+  const str = num.toString();
+  return isRtl ? toArabicNumerals(str) : str;
 };
 
 const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
@@ -284,7 +283,7 @@ const ProductionReport: React.FC = () => {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(8); // September 2025
   const [activeTab, setActiveTab] = useState<'orders' | 'stockIn' | 'stockOut' | 'returns' | 'sales'>('orders');
-  const currentDate = new Date('2025-10-13T05:11:00+03:00');
+  const currentDate = new Date('2025-10-13T02:39:00+03:00');
   const currentYear = currentDate.getFullYear();
   const months = Array.from({ length: 12 }, (_, i) => ({
     value: i,
@@ -445,11 +444,13 @@ const ProductionReport: React.FC = () => {
             }
           });
 
-          // Set actualSales
-          for (const row of orderMap.values()) {
-            const salesItem = salesResponse.productSales?.find((s: any) => s.productId === row.id.split('-')[0]);
-            if (salesItem) {
-              row.actualSales = Number(salesItem.totalQuantity) || 0;
+          if (month === selectedMonth) {
+            // Set actualSales only for selected month
+            for (const row of orderMap.values()) {
+              const salesItem = salesResponse.productSales?.find((s: any) => s.productId === row.id.split('-')[0]);
+              if (salesItem) {
+                row.actualSales = Number(salesItem.totalQuantity) || 0;
+              }
             }
           }
 
@@ -502,7 +503,6 @@ const ProductionReport: React.FC = () => {
                       unit: details.unit,
                       totalQuantity: 0,
                       dailyQuantities: Array(daysInMonthCount).fill(0),
-                      changes: Array(daysInMonthCount).fill({ value: 0, type: movement.type }),
                       totalPrice: 0,
                     });
                   }
@@ -510,7 +510,6 @@ const ProductionReport: React.FC = () => {
                   row.dailyQuantities[day - 1] -= Math.abs(quantity); // Negative for stock out
                   row.totalQuantity -= Math.abs(quantity);
                   row.totalPrice += Math.abs(quantity) * details.price;
-                  row.changes[day - 1] = { value: -Math.abs(quantity), type: movement.type };
                 } else {
                   if (!stockInMap.has(key)) {
                     stockInMap.set(key, {
@@ -520,7 +519,6 @@ const ProductionReport: React.FC = () => {
                       unit: details.unit,
                       totalQuantity: 0,
                       dailyQuantities: Array(daysInMonthCount).fill(0),
-                      changes: Array(daysInMonthCount).fill({ value: 0, type: movement.type }),
                       totalPrice: 0,
                     });
                   }
@@ -528,55 +526,9 @@ const ProductionReport: React.FC = () => {
                   row.dailyQuantities[day - 1] += Math.abs(quantity);
                   row.totalQuantity += Math.abs(quantity);
                   row.totalPrice += Math.abs(quantity) * details.price;
-                  row.changes[day - 1] = { value: quantity, type: movement.type };
                 }
               }
             });
-          });
-
-          // Process sales
-          salesResponse.productSales?.forEach((s: any) => {
-            const productId = s.productId;
-            if (!productId) return;
-            const details = productDetails.get(productId) || {
-              code: s.product?.code || `code-${Math.random().toString(36).substring(2)}`,
-              product: isRtl
-                ? (s.product?.name || 'منتج غير معروف')
-                : (s.product?.nameEn || s.product?.name || 'Unknown Product'),
-              unit: isRtl
-                ? (s.product?.unit || 'غير محدد')
-                : (s.product?.unitEn || s.product?.unit || 'N/A'),
-              price: s.totalRevenue / s.totalQuantity || 0,
-            };
-            const key = `${productId}-${month}`;
-            if (!salesMap.has(key)) {
-              salesMap.set(key, {
-                id: key,
-                code: details.code,
-                product: details.product,
-                unit: details.unit,
-                totalSales: 0,
-                dailySales: Array(daysInMonthCount).fill(0),
-                totalValue: 0,
-                shortageStatus: 'balanced',
-              });
-            }
-            const row = salesMap.get(key)!;
-            s.dailySales?.forEach((sale: any, index: number) => {
-              row.dailySales[index] = sale.quantity || 0;
-              row.totalSales += sale.quantity || 0;
-              row.totalValue += (sale.quantity || 0) * details.price;
-            });
-            // Calculate shortage status
-            const returnRow = returnMap.get(key);
-            const totalReturns = returnRow ? Math.abs(returnRow.totalReturns) : 0;
-            if (totalReturns > row.totalSales) {
-              row.shortageStatus = 'returns';
-            } else if (row.totalSales > totalReturns) {
-              row.shortageStatus = 'sales';
-            } else {
-              row.shortageStatus = 'balanced';
-            }
           });
 
           monthlyOrderData[month] = Array.from(orderMap.values());
@@ -585,6 +537,44 @@ const ProductionReport: React.FC = () => {
           monthlyReturnData[month] = Array.from(returnMap.values());
           monthlySalesData[month] = Array.from(salesMap.values());
         }
+
+        // Process sales only for selected month
+        const salesMap = new Map<string, SalesRow>();
+        const daysInSelectedMonth = new Date(currentYear, selectedMonth + 1, 0).getDate();
+        salesResponse.productSales?.forEach((s: any) => {
+          const productId = s.productId;
+          if (!productId) return;
+          const details = productDetails.get(productId) || {
+            code: s.product?.code || `code-${Math.random().toString(36).substring(2)}`,
+            product: isRtl
+              ? (s.product?.name || 'منتج غير معروف')
+              : (s.product?.nameEn || s.product?.name || 'Unknown Product'),
+            unit: isRtl
+              ? (s.product?.unit || 'غير محدد')
+              : (s.product?.unitEn || s.product?.unit || 'N/A'),
+            price: s.totalRevenue / s.totalQuantity || 0,
+          };
+          const key = `${productId}-${selectedMonth}`;
+          if (!salesMap.has(key)) {
+            salesMap.set(key, {
+              id: key,
+              code: details.code,
+              product: details.product,
+              unit: details.unit,
+              totalSales: 0,
+              dailySales: Array(daysInSelectedMonth).fill(0),
+              totalValue: 0,
+            });
+          }
+          const row = salesMap.get(key)!;
+          s.dailySales?.forEach((sale: any, index: number) => {
+            const qty = sale.quantity || 0;
+            row.dailySales[index] += qty;
+            row.totalSales += qty;
+            row.totalValue += qty * details.price;
+          });
+        });
+        monthlySalesData[selectedMonth] = Array.from(salesMap.values());
 
         setOrderData(monthlyOrderData);
         setStockInData(monthlyStockInData);
@@ -950,22 +940,23 @@ const ProductionReport: React.FC = () => {
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
                     <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
-                    {row.changes.map((change, i) => (
-                      <td
-                        key={i}
-                        className={`px-4 py-3 text-center font-medium ${
-                          change.value > 0 ? 'bg-green-50 text-green-700' : change.value < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
-                        }`}
-                        data-tooltip-id="stock-change"
-                        data-tooltip-content={
-                          isRtl
-                            ? `${change.type === 'in' ? 'زيادة مخزون' : 'نقص مخزون'}: ${change.value > 0 ? '+' : ''}${formatNumber(change.value, isRtl)}`
-                            : `${change.type === 'in' ? 'Stock In' : 'Stock Out'}: ${change.value > 0 ? '+' : ''}${formatNumber(change.value, isRtl)}`
-                        }
-                      >
-                        {change.value !== 0 ? `${change.value > 0 ? '+' : ''}${formatNumber(change.value, isRtl)}` : '0'}
-                      </td>
-                    ))}
+                    {row.dailyQuantities.map((qty, i) => {
+                      const display = qty !== 0
+                        ? (isIn && qty > 0 ? `+${formatNumber(qty, isRtl)}` : formatNumber(qty, isRtl))
+                        : '0';
+                      return (
+                        <td
+                          key={i}
+                          className={`px-4 py-3 text-center font-medium ${
+                            qty > 0 ? 'bg-green-50 text-green-700' : qty < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
+                          }`}
+                          data-tooltip-id="stock-change"
+                          data-tooltip-content={`${isRtl ? (isIn ? 'زيادة مخزون' : 'نقص مخزون') : (isIn ? 'Stock In' : 'Stock Out')}: ${display}`}
+                        >
+                          {display}
+                        </td>
+                      );
+                    })}
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalQuantity, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.totalPrice, isRtl)}</td>
                   </tr>
@@ -1178,7 +1169,6 @@ const ProductionReport: React.FC = () => {
           ...daysInMonth,
           isRtl ? 'إجمالي المبيعات' : 'Total Sales',
           isRtl ? 'القيمة الإجمالية' : 'Total Value',
-          isRtl ? 'حالة النقصان' : 'Shortage Status',
         ];
         const rows = [
           ...data.map((row, index) => ({
@@ -1189,9 +1179,6 @@ const ProductionReport: React.FC = () => {
             ...Object.fromEntries(row.dailySales.map((qty, i) => [daysInMonth[i], qty])),
             totalSales: row.totalSales,
             totalValue: formatPrice(row.totalValue, isRtl),
-            shortageStatus: isRtl
-              ? row.shortageStatus === 'returns' ? 'نقصان مرتجعات' : row.shortageStatus === 'sales' ? 'نقصان مبيعات' : 'متوازن'
-              : row.shortageStatus,
           })),
           {
             no: '',
@@ -1201,7 +1188,6 @@ const ProductionReport: React.FC = () => {
             ...Object.fromEntries(daysInMonth.map((_, i) => [daysInMonth[i], data.reduce((sum, row) => sum + row.dailySales[i], 0)])),
             totalSales: grandTotalSales,
             totalValue: formatPrice(grandTotalValue, isRtl),
-            shortageStatus: '',
           },
         ];
         const dataRows = rows.map(row => [
@@ -1212,13 +1198,12 @@ const ProductionReport: React.FC = () => {
           ...daysInMonth.map(day => row[day]),
           row.totalSales,
           row.totalValue,
-          row.shortageStatus,
         ]);
 
         if (format === 'excel') {
           const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
           if (isRtl) ws['!views'] = [{ RTL: true }];
-          ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }, { wch: 20 }];
+          ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }];
           const wb = XLSX.utils.book_new();
           XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
           XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
@@ -1299,9 +1284,6 @@ const ProductionReport: React.FC = () => {
                   <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
                     {isRtl ? 'القيمة الإجمالية' : 'Total Value'}
                   </th>
-                  <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">
-                    {isRtl ? 'حالة النقصان' : 'Shortage Status'}
-                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
@@ -1323,27 +1305,17 @@ const ProductionReport: React.FC = () => {
                     ))}
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalSales, isRtl)}</td>
                     <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.totalValue, isRtl)}</td>
-                    <td
-                      className={`px-4 py-3 text-center font-medium ${
-                        row.shortageStatus === 'returns' ? 'text-red-700 bg-red-50' : row.shortageStatus === 'sales' ? 'text-green-700 bg-green-50' : 'text-gray-700 bg-gray-50'
-                      }`}
-                    >
-                      {isRtl
-                        ? row.shortageStatus === 'returns' ? 'نقصان مرتجعات' : row.shortageStatus === 'sales' ? 'نقصان مبيعات' : 'متوازن'
-                        : row.shortageStatus}
-                    </td>
                   </tr>
                 ))}
                 <tr className={`font-semibold bg-gray-100 ${isRtl ? 'flex-row-reverse' : ''}`}>
                   <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
-                  {daysInMonth.map((_, i) =>(
+                  {daysInMonth.map((_, i) => (
                     <td key={i} className="px-4 py-3 text-gray-800 text-center">
                       {formatNumber(data.reduce((sum, row) => sum + row.dailySales[i], 0), isRtl)}
                     </td>
                   ))}
                   <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalSales, isRtl)}</td>
                   <td className="px-4 py-3 text-gray-800 text-center">{formatPrice(grandTotalValue, isRtl)}</td>
-                  <td className="px-4 py-3 text-gray-800 text-center"></td>
                 </tr>
               </tbody>
             </table>
@@ -1356,80 +1328,79 @@ const ProductionReport: React.FC = () => {
   );
 
   return (
-    <div dir={isRtl ? 'rtl' : 'ltr'} className="p-6 max-w-7xl mx-auto">
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="mb-8"
-      >
-        <h1 className="text-2xl font-bold text-gray-800 mb-4">
-          {isRtl ? 'تقرير الإنتاج' : 'Production Report'}
-        </h1>
-        <div className={`flex flex-col sm:flex-row gap-4 ${isRtl ? 'sm:flex-row-reverse' : ''}`}>
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(Number(e.target.value))}
-            className="border border-gray-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-          >
-            {months.map((month) => (
-              <option key={month.value} value={month.value}>
-                {month.label}
-              </option>
-            ))}
-          </select>
-          <div className="flex flex-wrap gap-2">
-            {[
-              { id: 'orders', label: isRtl ? 'الطلبات' : 'Orders' },
-              { id: 'stockIn', label: isRtl ? 'الواردات' : 'Stock In' },
-              { id: 'stockOut', label: isRtl ? 'الصادرات' : 'Stock Out' },
-              { id: 'returns', label: isRtl ? 'المرتجعات' : 'Returns' },
-              { id: 'sales', label: isRtl ? 'المبيعات' : 'Sales' },
-            ].map((tab) => (
-              <Button
-                key={tab.id}
-                variant={activeTab === tab.id ? 'primary' : 'secondary'}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
-                  activeTab === tab.id
-                    ? 'bg-blue-600 text-white shadow-sm'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-              >
-                {tab.label}
-              </Button>
-            ))}
-          </div>
+    <div className={`min-h-screen px-6 py-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-100`}>
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">{isRtl ? 'تقارير الإنتاج' : 'Production Reports'}</h1>
+      <div className="mb-8 bg-white shadow-md rounded-xl p-4">
+        <div className="flex flex-wrap gap-2 mb-4 justify-center">
+          {months.map(month => (
+            <Button
+              key={month.value}
+              variant={selectedMonth === month.value ? 'primary' : 'secondary'}
+              onClick={() => setSelectedMonth(month.value)}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+                selectedMonth === month.value
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              }`}
+            >
+              {month.label}
+            </Button>
+          ))}
         </div>
-      </motion.div>
+        <div className={`flex flex-wrap gap-2 justify-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <Button
+            variant={activeTab === 'orders' ? 'primary' : 'secondary'}
+            onClick={() => setActiveTab('orders')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+              activeTab === 'orders' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            {isRtl ? 'الطلبات' : 'Orders'}
+          </Button>
+          <Button
+            variant={activeTab === 'stockIn' ? 'primary' : 'secondary'}
+            onClick={() => setActiveTab('stockIn')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+              activeTab === 'stockIn' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            {isRtl ? 'إدخال المخزون' : 'Stock In'}
+          </Button>
+          <Button
+            variant={activeTab === 'stockOut' ? 'primary' : 'secondary'}
+            onClick={() => setActiveTab('stockOut')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+              activeTab === 'stockOut' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            {isRtl ? 'إخراج المخزون' : 'Stock Out'}
+          </Button>
+          <Button
+            variant={activeTab === 'returns' ? 'primary' : 'secondary'}
+            onClick={() => setActiveTab('returns')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+              activeTab === 'returns' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            {isRtl ? 'المرتجعات' : 'Returns'}
+          </Button>
+          <Button
+            variant={activeTab === 'sales' ? 'primary' : 'secondary'}
+            onClick={() => setActiveTab('sales')}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-200 ${
+              activeTab === 'sales' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            }`}
+          >
+            {isRtl ? 'المبيعات' : 'Sales'}
+          </Button>
+        </div>
+      </div>
       <AnimatePresence>
-        {activeTab === 'orders' && renderOrderTable(
-          orderData[selectedMonth] || [],
-          isRtl ? 'تقرير الطلبات' : 'Orders Report',
-          selectedMonth
-        )}
-        {activeTab === 'stockIn' && renderStockTable(
-          stockInData[selectedMonth] || [],
-          isRtl ? 'تقرير الواردات' : 'Stock In Report',
-          selectedMonth,
-          true
-        )}
-        {activeTab === 'stockOut' && renderStockTable(
-          stockOutData[selectedMonth] || [],
-          isRtl ? 'تقرير الصادرات' : 'Stock Out Report',
-          selectedMonth,
-          false
-        )}
-        {activeTab === 'returns' && renderReturnTable(
-          returnData[selectedMonth] || [],
-          isRtl ? 'تقرير المرتجعات' : 'Returns Report',
-          selectedMonth
-        )}
-        {activeTab === 'sales' && renderSalesTable(
-          salesData[selectedMonth] || [],
-          isRtl ? 'تقرير المبيعات' : 'Sales Report',
-          selectedMonth
-        )}
+        {activeTab === 'orders' && renderOrderTable(orderData[selectedMonth] || [], isRtl ? 'تقرير الطلبات' : 'Orders Report', selectedMonth)}
+        {activeTab === 'stockIn' && renderStockTable(stockInData[selectedMonth] || [], isRtl ? 'تقرير إدخال المخزون' : 'Stock In Report', selectedMonth, true)}
+        {activeTab === 'stockOut' && renderStockTable(stockOutData[selectedMonth] || [], isRtl ? 'تقرير إخراج المخزون' : 'Stock Out Report', selectedMonth, false)}
+        {activeTab === 'returns' && renderReturnTable(returnData[selectedMonth] || [], isRtl ? 'تقرير المرتجعات' : 'Returns Report', selectedMonth)}
+        {activeTab === 'sales' && renderSalesTable(salesData[selectedMonth] || [], isRtl ? 'تقرير المبيعات' : 'Sales Report', selectedMonth)}
       </AnimatePresence>
     </div>
   );
