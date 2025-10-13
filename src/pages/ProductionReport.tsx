@@ -255,7 +255,6 @@ const exportToPDF = async (
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
     const fontName = 'Amiri';
     const fontLoaded = await loadFont(doc);
-    generatePDFHeader(doc, isRtl, title, monthName, totalItems, totalQuantity, totalPrice, fontName, fontLoaded);
     generatePDFTable(doc, headers, data, isRtl, fontLoaded, fontName, allBranches);
     const fileName = generateFileName(title, monthName, isRtl);
     doc.save(fileName);
