@@ -1644,10 +1644,13 @@ const ProductionReport: React.FC = () => {
                         {formatNumber(data.reduce((sum, row) => sum + row.dailyReturns[i], 0), isRtl)}
                       </td>
                       <td className="px-4 py-3 text-gray-800 text-center">
-                        {formatNumber((data.reduce((sum, row) => sum + row.dailyOrders[i], 0) > 0 ? (data.reduce((sum, row) => sum + row.dailyReturns[i], 0) / data.reduce((sum, row) => sum + row.dailyOrders[i], 0) * 100).toFixed(2) : '0.00', isRtl)}%
-                      </td>
+                        {formatNumber(
+                          data.reduce((sum, row) => sum + (row.dailyReturns[i] / row.dailyOrders[i] * 100), 0).toFixed(2),  isRtl
+                        ) + '%'}
+                      </td> 
                     </Fragment>
                   ))}
+                     غ
                   <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalOrders, isRtl)}</td>
                   <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalReturns, isRtl)}</td>
                   <td className="px-4 py-3 text-gray-800 text-center">{grandTotalRatio}%</td>
