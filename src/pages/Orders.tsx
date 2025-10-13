@@ -22,8 +22,6 @@ import AssignChefsModal from '../components/Shared/AssignChefsModal';
 import  OrderTable  from '../components/Shared/OrderTable';
 import OrderCard from '../components/Shared/OrderCard';
 
-
-
 // Normalize text for search
 const normalizeText = (text: string) => {
   return text
@@ -279,7 +277,7 @@ const exportToExcel = (orders: Order[], isRtl: boolean, calculateAdjustedTotal: 
     const productsStr = order.items.map(i => `${i.displayProductName} (${i.quantity} ${translateUnit(i.unit, isRtl)})`).join(', ');
     const totalAmount = calculateAdjustedTotal(order);
     const totalQuantity = `${calculateTotalQuantity(order)} ${isRtl ? 'وحدة' : 'units'}`;
-    const statusLabel = isRtl ? {pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى'}[order.status] : order.status;
+    const statusLabel = isRtl ? { 'pending': 'قيد الانتظار', 'approved': 'تم الموافقة', 'in_production': 'في الإنتاج', 'completed': 'مكتمل', 'in_transit': 'في النقل', 'delivered': 'تم التسليم', 'cancelled': 'ملغى' }[order.status] : order.status;
     return {
       [headers[0]]: order.orderNumber,
       [headers[1]]: order.branch.displayName,
@@ -618,14 +616,14 @@ export const Orders: React.FC = () => {
             totalAmount: Number(order.totalAmount) || 0,
             adjustedTotal: Number(order.adjustedTotal) || 0,
             date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
-            requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : null,
+            requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : undefined,
             notes: order.notes || '',
             priority: order.priority || 'medium',
             createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
             approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
-            approvedAt: order.approvedAt ? new Date(order.approvedAt) : null,
-            deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : null,
-            transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : null,
+            approvedAt: order.approvedAt ? new Date(order.approvedAt) : undefined,
+            deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : undefined,
+            transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : undefined,
             statusHistory: Array.isArray(order.statusHistory)
               ? order.statusHistory.map((history: any) => ({
                   status: history.status || 'pending',
@@ -717,22 +715,25 @@ export const Orders: React.FC = () => {
     [state.orders, state.searchQuery, state.filterStatus, state.filterBranch, user]
   );
 
-  const sortedOrders = useMemo(() => {
-    const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 };
-    return [...filteredOrders].sort((a, b) => {
-      if (state.sortBy === 'date') {
-        return state.sortOrder === 'asc'
-          ? new Date(a.date).getTime() - new Date(b.date).getTime()
-          : new Date(b.date).getTime() - new Date(a.date).getTime();
-      } else if (state.sortBy === 'totalAmount') {
-        return state.sortOrder === 'asc' ? a.adjustedTotal - b.adjustedTotal : b.adjustedTotal - a.adjustedTotal;
-      } else {
-        return state.sortOrder === 'asc'
-          ? priorityOrder[a.priority] - priorityOrder[b.priority]
-          : priorityOrder[b.priority] - priorityOrder[a.priority];
-      }
-    });
-  }, [filteredOrders, state.sortBy, state.sortOrder]);
+  const sortedOrders = useMemo(
+    () => {
+      const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 };
+      return [...filteredOrders].sort((a, b) => {
+        if (state.sortBy === 'date') {
+          return state.sortOrder === 'asc'
+            ? new Date(a.date).getTime() - new Date(b.date).getTime()
+            : new Date(b.date).getTime() - new Date(a.date).getTime();
+        } else if (state.sortBy === 'totalAmount') {
+          return state.sortOrder === 'asc' ? a.adjustedTotal - b.adjustedTotal : b.adjustedTotal - a.adjustedTotal;
+        } else {
+          return state.sortOrder === 'asc'
+            ? priorityOrder[a.priority] - priorityOrder[b.priority]
+            : priorityOrder[b.priority] - priorityOrder[a.priority];
+        }
+      });
+    },
+    [filteredOrders, state.sortBy, state.sortOrder]
+  );
 
   const paginatedOrders = useMemo(
     () => sortedOrders.slice((state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode], state.currentPage * ORDERS_PER_PAGE[state.viewMode]),
@@ -882,7 +883,7 @@ export const Orders: React.FC = () => {
   return (
     <div className="px-2 py-4">
       <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: 'easeOut' }} className="mb-6">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
           <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <div className="w-full sm:w-auto text-center sm:text-start">
               <h1 className="text-xl font-bold text-gray-900 flex items-center justify-center sm:justify-start gap-2">
@@ -1005,7 +1006,7 @@ export const Orders: React.FC = () => {
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ duration: 0.3 }}
                     >
-                      <OrderTableSkeleton isRtl={isRtl} rows={ORDERS_PER_PAGE.table} />
+                      <OrderTableSkeleton isRtl={isRtl} />
                     </motion.div>
                   )}
                 </motion.div>
