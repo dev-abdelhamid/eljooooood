@@ -1,10 +1,11 @@
-import React, { useState, useCallback, memo } from 'react';
+import React, { useState, useCallback, memo, useMemo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../UI/Button';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, Check, Package, Truck, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Order, OrderStatus, ItemStatus } from '../../types/types';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 const STATUS_COLORS: Record<OrderStatus, { color: string; icon: React.FC; label: string; progress: number }> = {
   pending: { color: 'bg-yellow-100 text-yellow-800', icon: Clock, label: 'pending', progress: 0 },
@@ -36,268 +37,258 @@ interface OrderCardProps {
   calculateAdjustedTotal: (order: Order) => string;
   calculateTotalQuantity: (order: Order) => number;
   translateUnit: (unit: string, isRtl: boolean) => string;
-  updateOrderStatus: (orderId: string, newStatus: OrderStatus) => void;
+  updateOrderStatus: (orderId: string, newStatus: OrderStatus) => Promise<void>;
   openAssignModal: (order: Order) => void;
   submitting: string | null;
   isRtl: boolean;
 }
 
-const OrderCard: React.FC<OrderCardProps> = memo(
-  ({ order, calculateAdjustedTotal, calculateTotalQuantity, translateUnit, updateOrderStatus, openAssignModal, submitting, isRtl }) => {
-    const { user } = useAuth();
-    const [isItemsExpanded, setIsItemsExpanded] = useState(false);
-    const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS.pending;
-    const StatusIcon = statusInfo.icon;
-    const unassignedItems = order.items.filter((item) => !item.assignedTo);
+const OrderCard: React.FC<OrderCardProps> = ({
+  order,
+  calculateAdjustedTotal,
+  calculateTotalQuantity,
+  translateUnit,
+  updateOrderStatus,
+  openAssignModal,
+  submitting,
+  isRtl,
+}) => {
+  const { user } = useAuth();
+  const { t } = useLanguage();
+  const [isExpanded, setIsExpanded] = useState(false);
 
-    const toggleItemsExpanded = useCallback(() => {
-      setIsItemsExpanded((prev) => !prev);
-    }, []);
+  const validTransitions: Record<OrderStatus, OrderStatus[]> = useMemo(
+    () => ({
+      pending: ['approved', 'cancelled'],
+      approved: ['in_production', 'cancelled'],
+      in_production: ['completed', 'cancelled'],
+      completed: ['in_transit'],
+      in_transit: ['delivered'],
+      delivered: [],
+      cancelled: [],
+    }),
+    []
+  );
 
-    const statusTranslations = {
-      pending: isRtl ? 'قيد الانتظار' : 'Pending',
-      approved: isRtl ? 'تم الموافقة' : 'Approved',
-      in_production: isRtl ? 'في الإنتاج' : 'In Production',
-      completed: isRtl ? 'مكتمل' : 'Completed',
-      in_transit: isRtl ? 'في النقل' : 'In Transit',
-      delivered: isRtl ? 'تم التسليم' : 'Delivered',
-      cancelled: isRtl ? 'ملغى' : 'Cancelled',
-    };
+  const toggleExpand = useCallback(() => {
+    setIsExpanded(prev => !prev);
+  }, []);
 
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="mb-4"
-        role="region"
-        aria-labelledby={`order-${order.id}`}
-      >
-        <div className="p-3 bg-white shadow-md rounded-lg border border-gray-200 hover:shadow-lg transition-shadow duration-300">
-          <div className="flex flex-col gap-3">
-            <div className={`flex items-center justify-between ${isRtl ? 'flex-row' : ''}`}>
-              <div className="flex items-center gap-1">
-                <h3 id={`order-${order.id}`} className="text-base font-semibold text-gray-800 truncate max-w-[220px]">
-                  {isRtl ? `طلب ${order.orderNumber || 'غير معروف'}` : `Order #${order.orderNumber || 'Unknown'}`}
-                </h3>
-                {order.priority !== 'medium' && (
-                  <span
-                    className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${PRIORITY_COLORS[order.priority]} ${
-                      isRtl ? 'mr-1' : 'ml-1'
-                    }`}
-                  >
-                    {isRtl ? { urgent: 'عاجل', high: 'مرتفع', medium: 'متوسط', low: 'منخفض' }[order.priority] : order.priority}
-                  </span>
-                )}
-              </div>
+  const handleStatusChange = useCallback(
+    (newStatus: OrderStatus) => {
+      if (validTransitions[order.status].includes(newStatus)) {
+        updateOrderStatus(order.id, newStatus);
+      }
+    },
+    [order.id, order.status, updateOrderStatus, validTransitions]
+  );
+
+  const statusOptions = useMemo(
+    () =>
+      validTransitions[order.status].map(status => ({
+        value: status,
+        label: t(`order_status.${status}`),
+      })),
+    [order.status, validTransitions, t]
+  );
+
+  const isActionDisabled = useCallback(
+    (status: OrderStatus) =>
+      submitting === order.id || !validTransitions[order.status].includes(status),
+    [submitting, order.id, order.status, validTransitions]
+  );
+
+  const itemsList = useMemo(
+    () =>
+      order.items.map(item => ({
+        ...item,
+        displayUnit: translateUnit(item.unit, isRtl),
+        statusLabel: t(`item_status.${item.status}`),
+        statusColor: ITEM_STATUS_COLORS[item.status]?.color || 'bg-gray-50 text-gray-600',
+        StatusIcon: ITEM_STATUS_COLORS[item.status]?.icon || Clock,
+      })),
+    [order.items, isRtl, translateUnit, t]
+  );
+
+  const canAssignChefs = useMemo(
+    () =>
+      ['admin', 'production'].includes(user?.role || '') &&
+      order.status === 'approved' &&
+      order.items.some(item => !item.assignedTo),
+    [user?.role, order.status, order.items]
+  );
+
+  return (
+    <motion.div
+      className={`bg-white shadow-md rounded-xl border border-gray-100 p-4 ${
+        isRtl ? 'text-right' : 'text-left'
+      }`}
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.3 }}
+    >
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div className="flex flex-col w-full">
+          <div className={`flex items-center justify-between ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-sm text-gray-900">
+                {t('orders.order')} #{order.orderNumber}
+              </span>
               <span
-                className={`px-1.5 py-0.5 rounded-full text-xs font-medium flex items-center gap-1 ${statusInfo.color} ${
-                  isRtl ? 'flex-row-reverse' : ''
+                className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  PRIORITY_COLORS[order.priority]
                 }`}
               >
-                <StatusIcon className="w-3 h-3" />
-                {statusTranslations[order.status]}
+                {t(`priority.${order.priority}`)}
               </span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-1.5">
-              <div
-                className="bg-amber-600 h-1.5 rounded-full transition-all duration-500"
-                style={{ width: `${statusInfo.progress}%` }}
-              />
-            </div>
-            {unassignedItems.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="p-1.5 bg-yellow-50 border border-yellow-100 rounded-md flex items-center gap-1.5"
-                role="alert"
-              >
-                <AlertCircle className="w-3 h-3 text-yellow-600" />
-                <span className="text-xs text-yellow-600">
-                  {isRtl ? `${unassignedItems.length} عناصر غير معينة` : `${unassignedItems.length} unassigned items`}
-                </span>
-              </motion.div>
-            )}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <div>
-                <p className="text-xs text-gray-500">{isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}</p>
-                <p className="text-xs font-medium text-gray-800">
-                  {isRtl ? `${calculateTotalQuantity(order)} عنصر` : `${calculateTotalQuantity(order)} items`}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">{isRtl ? 'إجمالي المبلغ' : 'Total Amount'}</p>
-                <p className="text-xs font-semibold text-teal-600">{calculateAdjustedTotal(order)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">{isRtl ? 'التاريخ' : 'Date'}</p>
-                <p className="text-xs font-medium text-gray-800 truncate">{order.date}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">{isRtl ? 'الفرع' : 'Branch'}</p>
-                <p className="text-xs font-medium text-gray-800 truncate">{order.branch.displayName || 'غير معروف'}</p>
-              </div>
-            </div>
-            <div>
-              <button
-                onClick={toggleItemsExpanded}
-                className="flex items-center justify-between w-full p-2 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors duration-200"
-                aria-expanded={isItemsExpanded}
-                aria-controls={`items-${order.id}`}
-              >
-                <h4 className="text-xs font-semibold text-gray-900">{isRtl ? 'المنتجات' : 'Products'}</h4>
-                {isItemsExpanded ? (
-                  <ChevronUp className="w-4 h-4 text-gray-600" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-gray-600" />
-                )}
-              </button>
-              <AnimatePresence>
-                {isItemsExpanded && (
-                  <motion.div
-                    id={`items-${order.id}`}
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="overflow-hidden max-h-48"
-                  >
-                    <div className="space-y-2 mt-2 overflow-y-auto">
-                      {order.items.map((item) => {
-                        const itemStatusInfo = ITEM_STATUS_COLORS[item.status] || ITEM_STATUS_COLORS.pending;
-                        const ItemStatusIcon = itemStatusInfo.icon;
-                        return (
-                          <motion.div
-                            key={item._id}
-                            initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="p-2 bg-gray-50 rounded-md"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-xs font-medium text-gray-900 truncate flex-1">
-                                {item.displayProductName} ({item.quantity} {item.displayUnit})
-                              </p>
-                              <span
-                                className={`px-1.5 py-0.5 rounded-full text-xs font-small flex items-center gap-1 ${itemStatusInfo.color} ${
-                                  isRtl ? 'flex-row-reverse' : ''
-                                }`}
-                              >
-                                <ItemStatusIcon className="w-3 h-3" />
-                                {isRtl ? { pending: 'قيد الانتظار', assigned: 'معين', in_progress: 'قيد التقدم', completed: 'مكتمل', cancelled: 'ملغى' }[item.status] : itemStatusInfo.label}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between gap-2 mt-1">
-                              {item.assignedTo && (
-                                <p className="text-xs text-gray-600 truncate">
-                                  {isRtl
-                                    ? `معين لـ: شيف ${item.assignedTo.displayName} (${item.department?.displayName || 'غير معروف'})`
-                                    : `Assigned to: Chef ${item.assignedTo.displayName} (${item.department?.displayName || 'Unknown'})`}
-                                </p>
-                              )}
-                            </div>
-                          </motion.div>
-                        );
-                      })}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-            {order.notes && (
-              <div className="mt-1 p-1.5 bg-amber-50 rounded-md">
-                <p className="text-xs text-amber-800 truncate">
-                  <strong>{isRtl ? 'ملاحظات:' : 'Notes:'}</strong> {order.notes}
-                </p>
-              </div>
-            )}
-            {order.returns?.length > 0 && (
-              <div className="mt-1 p-1.5 bg-amber-50 rounded-md">
-                <p className="text-xs font-medium text-amber-800">{isRtl ? 'الإرجاعات' : 'Returns'}</p>
-                {order.returns.map((r, i) => (
-                  <p key={i} className="text-xs text-amber-700 truncate">
-                    {isRtl
-                      ? `${r.items
-                          .map((item) => `${item.quantity} ${item.displayUnit} ${item.reason}`)
-                          .join(', ')} - الحالة: ${
-                          isRtl ? { pending: 'قيد الانتظار', approved: 'تمت الموافقة', rejected: 'مرفوض', processed: 'تمت المعالجة' }[r.status] : r.status
-                        }`
-                      : `${r.items
-                          .map((item) => `${item.quantity} ${item.displayUnit} ${item.reason}`)
-                          .join(', ')} - Status: ${r.status}`}
-                  </p>
-                ))}
-              </div>
-            )}
-            <div className={`flex flex-wrap gap-1.5 ${isRtl ? 'justify-end' : 'justify-start'}`}>
-              <Link to={`/orders/${order.id}`}>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-2.5 py-1 text-xs"
-                  aria-label={isRtl ? `عرض طلب رقم ${order.orderNumber}` : `View order #${order.orderNumber}`}
-                >
-                  {isRtl ? 'عرض' : 'View'}
-                </Button>
-              </Link>
-              {user?.role === 'production' && order.status === 'pending' && (
-                <>
-                  <Button
-                    variant="success"
-                    size="sm"
-                    icon={Check}
-                    onClick={() => updateOrderStatus(order.id, 'approved')}
-                    className="bg-green-500 hover:bg-green-600 text-white rounded-full px-3 py-1 text-xs"
-                    disabled={submitting === order.id}
-                    aria-label={isRtl ? `الموافقة على طلب رقم ${order.orderNumber}` : `Approve order #${order.orderNumber}`}
-                  >
-                    {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : (isRtl ? 'موافقة' : 'Approve')}
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    icon={AlertCircle}
-                    onClick={() => updateOrderStatus(order.id, 'cancelled')}
-                    className="bg-red-500 hover:bg-red-600 text-white rounded-full px-3 py-1 text-xs"
-                    disabled={submitting === order.id}
-                    aria-label={isRtl ? `إلغاء طلب رقم ${order.orderNumber}` : `Cancel order #${order.orderNumber}`}
-                  >
-                    {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : (isRtl ? 'إلغاء' : 'Cancel')}
-                  </Button>
-                </>
+            <Button
+              variant="ghost"
+              onClick={toggleExpand}
+              className="p-1 text-gray-500 hover:text-gray-700"
+            >
+              {isExpanded ? (
+                <ChevronUp className="w-5 h-5" />
+              ) : (
+                <ChevronDown className="w-5 h-5" />
               )}
-              {user?.role === 'production' && order.status === 'approved' && unassignedItems.length > 0 && (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  icon={Package}
-                  onClick={() => openAssignModal(order)}
-                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-3 py-1 text-xs"
-                  disabled={submitting === order.id}
-                  aria-label={isRtl ? `تعيين طلب رقم ${order.orderNumber}` : `Assign order #${order.orderNumber}`}
-                >
-                  {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : (isRtl ? 'توزيع' : 'Assign')}
-                </Button>
-              )}
-              {user?.role === 'production' && order.status === 'completed' && (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  icon={Truck}
-                  onClick={() => updateOrderStatus(order.id, 'in_transit')}
-                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-3 py-1 text-xs"
-                  disabled={submitting === order.id}
-                  aria-label={isRtl ? `شحن طلب رقم ${order.orderNumber}` : `Ship order #${order.orderNumber}`}
-                >
-                  {submitting === order.id ? (isRtl ? 'جارٍ...' : 'Loading...') : (isRtl ? 'شحن' : 'Ship')}
-                </Button>
-              )}
-            </div>
+            </Button>
+          </div>
+          <div className="text-xs text-gray-600 mt-1">
+            {t('orders.branch')}: {order.branch.displayName}
+          </div>
+          <div className="text-xs text-gray-600">
+            {t('orders.date')}: {order.date}
           </div>
         </div>
-      </motion.div>
-    );
-  }
-);
+        <div className="flex flex-col items-start sm:items-end w-full sm:w-auto">
+          <div
+            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+              STATUS_COLORS[order.status].color
+            }`}
+          >
+            <STATUS_COLORS[order.status].icon className="w-4 h-4" />
+            {t(`order_status.${STATUS_COLORS[order.status].label}`)}
+          </div>
+          <div className="text-xs text-gray-600 mt-1">
+            {t('orders.total_amount')}: {calculateAdjustedTotal(order)}
+          </div>
+          <div className="text-xs text-gray-600">
+            {t('orders.total_quantity')}: {calculateTotalQuantity(order)}{' '}
+            {isRtl ? 'وحدة' : 'units'}
+          </div>
+        </div>
+      </div>
 
-export default OrderCard;
+      <AnimatePresence>
+        {isExpanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mt-4 border-t border-gray-200 pt-3"
+          >
+            <div className="mb-3">
+              <h4 className="text-xs font-semibold text-gray-800 mb-2">
+                {t('orders.items')}
+              </h4>
+              <div className="space-y-2 max-h-60 overflow-y-auto">
+                {itemsList.length > 0 ? (
+                  itemsList.map(item => (
+                    <div
+                      key={item._id}
+                      className={`flex justify-between items-center p-2 rounded-lg ${
+                        item.statusColor
+                      } ${isRtl ? 'flex-row-reverse' : ''}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <item.StatusIcon className="w-4 h-4" />
+                        <span className="text-xs">
+                          {item.displayProductName} ({item.quantity}{' '}
+                          {item.displayUnit})
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs">
+                          {item.assignedTo
+                            ? `${t('orders.assigned_to')}: ${
+                                item.assignedTo.displayName
+                              }`
+                            : t('orders.unassigned')}
+                        </span>
+                        <span className="text-xs font-medium">
+                          {item.statusLabel}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-xs text-gray-500">
+                    {t('orders.no_items')}
+                  </div>
+                )}
+              </div>
+            </div>
+            {order.notes && (
+              <div className="mb-3">
+                <h4 className="text-xs font-semibold text-gray-800 mb-1">
+                  {t('orders.notes')}
+                </h4>
+                <p className="text-xs text-gray-600">{order.notes}</p>
+              </div>
+            )}
+            <div className="flex flex-col sm:flex-row gap-2 mt-3">
+              {['admin', 'branch'].includes(user?.role || '') &&
+                statusOptions.length > 0 && (
+                  <div className={`flex gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                    {statusOptions.map(option => (
+                      <Button
+                        key={option.value}
+                        variant={
+                          submitting === order.id ? 'secondary' : 'primary'
+                        }
+                        onClick={() => handleStatusChange(option.value as OrderStatus)}
+                        disabled={isActionDisabled(option.value as OrderStatus)}
+                        className={`text-xs px-3 py-1 rounded-full ${
+                          submitting === order.id
+                            ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                            : 'bg-amber-600 hover:bg-amber-700 text-white'
+                        }`}
+                      >
+                        {option.label}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+              {canAssignChefs && (
+                <Button
+                  variant={submitting === order.id ? 'secondary' : 'primary'}
+                  onClick={() => openAssignModal(order)}
+                  disabled={submitting === order.id}
+                  className={`text-xs px-3 py-1 rounded-full ${
+                    submitting === order.id
+                      ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                      : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  } ${isRtl ? 'mr-auto' : 'ml-auto'}`}
+                >
+                  {t('orders.assign_chefs')}
+                </Button>
+              )}
+              <Link to={`/orders/${order.id}`}>
+                <Button
+                  variant="outline"
+                  className="text-xs px-3 py-1 rounded-full border-amber-600 text-amber-600 hover:bg-amber-50"
+                >
+                  {t('orders.view_details')}
+                </Button>
+              </Link>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+};
+
+export default memo(OrderCard);
