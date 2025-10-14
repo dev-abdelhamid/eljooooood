@@ -20,7 +20,6 @@ interface SocketEventData {
   }>;
   eventId?: string;
   status?: string;
-  returnId?: string;
   itemId?: string;
   productName?: string;
 }
@@ -96,18 +95,14 @@ export const useOrderNotifications = (
               },
               status: item.status || 'pending',
               assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || t('chefs.unknown') } : undefined,
-              returnedQuantity: Number(item.returnedQuantity) || 0,
-              returnReason: item.returnReason || '',
             })),
             status: data.status || 'pending',
             totalAmount: Number(data.totalAmount) || 0,
-            adjustedTotal: Number(data.adjustedTotal) || 0,
             date: formatDate(data.createdAt || new Date(), language),
             notes: data.notes || '',
             priority: data.priority || 'medium',
             createdBy: data.createdBy?.name || t('orders.unknown'),
             statusHistory: data.statusHistory || [],
-            returns: data.returns || [],
           };
 
           dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
@@ -279,48 +274,6 @@ export const useOrderNotifications = (
             type: 'success',
             message: t('notifications.order_delivered', { orderNumber: data.orderNumber, branchName: data.branchName }),
             data: { orderId: data.orderId, eventId: data.eventId },
-            read: false,
-            createdAt: new Date().toISOString(),
-          });
-        },
-      },
-      {
-        name: 'returnStatusUpdated',
-        handler: (data: SocketEventData) => {
-          if (!data.orderId || !data.returnId || !data.status || !data.orderNumber) return;
-          if (!['admin', 'branch', 'production'].includes(user.role)) return;
-
-          dispatch({ type: 'RETURN_STATUS_UPDATED', orderId: data.orderId, returnId: data.returnId, status: data.status });
-          addNotification({
-            _id: data.eventId || crypto.randomUUID(),
-            type: 'info',
-            message: t('notifications.return_status_updated', {
-              orderNumber: data.orderNumber,
-              status: t(`returns.${data.status}`),
-              branchName: data.branchName,
-            }),
-            data: { orderId: data.orderId, returnId: data.returnId, eventId: data.eventId },
-            read: false,
-            createdAt: new Date().toISOString(),
-          });
-        },
-      },
-      {
-        name: 'missingAssignments',
-        handler: (data: SocketEventData) => {
-          if (!data.orderId || !data.itemId || !data.orderNumber || !data.productName) return;
-          if (!['admin', 'production'].includes(user.role)) return;
-
-          dispatch({ type: 'MISSING_ASSIGNMENTS', orderId: data.orderId, itemId: data.itemId, productName: data.productName });
-          addNotification({
-            _id: data.eventId || crypto.randomUUID(),
-            type: 'warning',
-            message: t('notifications.missing_assignments', {
-              orderNumber: data.orderNumber,
-              productName: data.productName,
-              branchName: data.branchName,
-            }),
-            data: { orderId: data.orderId, itemId: data.itemId, eventId: data.eventId },
             read: false,
             createdAt: new Date().toISOString(),
           });
