@@ -61,8 +61,9 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
     const eventId = data.eventId || crypto.randomUUID();
-    console.log(`[${new Date().toISOString()}] Emitting event: ${event} with eventId: ${eventId}`);
-    socket.emit(event, { ...data, eventId });
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] Emitting event: ${event} with eventId: ${eventId}`);
+    socket.emit(event, { ...data, eventId, timestamp });
   };
 
   useEffect(() => {
