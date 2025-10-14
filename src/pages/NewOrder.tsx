@@ -74,6 +74,11 @@ const translations = {
     orderCreated: 'تم إنشاء الطلب بنجاح',
     orderCleared: 'تم مسح الطلب',
     scrollToSummary: 'التمرير للملخص',
+    orderType: 'نوع الطلب',
+    orderTypePlaceholder: 'اختر نوع الطلب',
+    branchOrder: 'طلب فرع',
+    stockProduction: 'إنتاج مخزون',
+    chefRequest: 'طلب شيف',
   },
   en: {
     createOrder: 'Create New Order',
@@ -106,6 +111,11 @@ const translations = {
     orderCreated: 'Order created successfully',
     orderCleared: 'Order cleared',
     scrollToSummary: 'Scroll to Summary',
+    orderType: 'Order Type',
+    orderTypePlaceholder: 'Select Order Type',
+    branchOrder: 'Branch Order',
+    stockProduction: 'Stock Production',
+    chefRequest: 'Chef Request',
   },
 };
 
@@ -357,6 +367,7 @@ export function NewOrder() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [orderItems, setOrderItems] = useState<OrderItem[]>([]);
   const [branch, setBranch] = useState<string>(user?.branchId?.toString() || '');
+  const [orderType, setOrderType] = useState<string>(user?.role === 'branch' ? 'branch_order' : (user?.role === 'chef' ? 'chef_request' : ''));
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -413,8 +424,16 @@ export function NewOrder() {
     return filteredProducts.length > 0 ? filteredProducts.length : 6;
   }, [filteredProducts]);
 
+  const showBranchSelection = useMemo(() => {
+    return user?.role === 'admin' && orderType === 'branch_order';
+  }, [user, orderType]);
+
+  const showTypeSelection = useMemo(() => {
+    return ['admin', 'production'].includes(user?.role || '');
+  }, [user]);
+
   useEffect(() => {
-    if (!user || !['admin', 'branch'].includes(user.role)) {
+    if (!user || !['admin', 'branch', 'production', 'chef'].includes(user.role)) {
       setError(t.unauthorized);
       toast.error(t.unauthorized, { position: isRtl ? 'top-right' : 'top-left' });
       return;
@@ -423,12 +442,14 @@ export function NewOrder() {
     const loadData = async () => {
       try {
         setLoading(true);
-        const [productsResponse, branchesResponse, departmentsResponse] = await Promise.all([
+        const [productsResponse, departmentsResponse] = await Promise.all([
           productsAPI.getAll({ department: filterDepartment, search: searchTerm, limit: 0 }),
-          branchesAPI.getAll(),
           departmentAPI.getAll({ limit: 100 }),
         ]);
-
+        let branchesResponse = [];
+        if (['admin', 'branch'].includes(user.role) && (user.role === 'admin' || orderType === 'branch_order')) {
+          branchesResponse = await branchesAPI.getAll();
+        }
         const productsWithDisplay = productsResponse.data.map((product: Product) => ({
           ...product,
           displayName: isRtl ? product.name : (product.nameEn || product.name),
@@ -457,6 +478,11 @@ export function NewOrder() {
         );
         if (user?.role === 'branch' && user?.branchId) {
           setBranch(user.branchId.toString());
+          setOrderType('branch_order');
+        } else if (user?.role === 'chef') {
+          setOrderType('chef_request');
+        } else if (user?.role === 'production') {
+          setOrderType('stock_production');
         }
         setError('');
       } catch (err: any) {
@@ -468,7 +494,7 @@ export function NewOrder() {
       }
     };
     loadData();
-  }, [user, t, isRtl, filterDepartment, searchTerm]);
+  }, [user, t, isRtl, filterDepartment, searchTerm, orderType]);
 
   // تحديث displayName و displayUnit للمنتجات و orderItems عند تغيير اللغة
   useEffect(() => {
@@ -623,14 +649,14 @@ export function NewOrder() {
         toast.error(t.cartEmpty, { position: isRtl ? 'top-right' : 'top-left' });
         return;
       }
-      if (!branch && user?.role === 'admin') {
+      if (orderType === 'branch_order' && !branch && user?.role !== 'branch') {
         setError(t.branchRequired);
         toast.error(t.branchRequired, { position: isRtl ? 'top-right' : 'top-left' });
         return;
       }
       setShowConfirmModal(true);
     },
-    [orderItems, branch, user, t, isRtl]
+    [orderItems, orderType, branch, user, t, isRtl]
   );
 
   const confirmOrder = async () => {
@@ -639,7 +665,7 @@ export function NewOrder() {
       const eventId = crypto.randomUUID();
       const orderData = {
         orderNumber: `ORD-${Date.now()}`,
-        branchId: user?.role === 'branch' ? user?.branchId?.toString() : branch,
+        branchId: orderType === 'branch_order' ? (user?.role === 'branch' ? user?.branchId?.toString() : branch) : null,
         items: orderItems.map((item) => ({
           product: item.productId,
           quantity: item.quantity,
@@ -653,6 +679,7 @@ export function NewOrder() {
         status: 'pending',
         priority: 'medium',
         createdBy: user?.id || user?._id,
+        type: orderType,
         isRtl,
         eventId,
       };
@@ -831,7 +858,24 @@ export function NewOrder() {
             </div>
             <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100">
               <form onSubmit={handleSubmit} className="space-y-6">
-                {user?.role === 'admin' && (
+                {showTypeSelection && (
+                  <div>
+                    <label htmlFor="orderType" className="block text-sm font-medium text-gray-700 mb-2">
+                      {t.orderType}
+                    </label>
+                    <ProductDropdown
+                      value={orderType}
+                      onChange={setOrderType}
+                      options={[
+                        { value: '', label: t.orderTypePlaceholder },
+                        { value: 'branch_order', label: t.branchOrder },
+                        { value: 'stock_production', label: t.stockProduction },
+                      ]}
+                      ariaLabel={t.orderType}
+                    />
+                  </div>
+                )}
+                {showBranchSelection && (
                   <div>
                     <label htmlFor="branch" className="block text-sm font-medium text-gray-700 mb-2">
                       {t.branch}
@@ -862,7 +906,7 @@ export function NewOrder() {
                   <button
                     type="submit"
                     className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 shadow-sm"
-                    disabled={orderItems.length === 0 || submitting}
+                    disabled={orderItems.length === 0 || submitting || !orderType || (orderType === 'branch_order' && !branch && user?.role !== 'branch')}
                     aria-label={submitting ? t.submitting : t.submitOrder}
                   >
                     {submitting ? t.submitting : t.submitOrder}
@@ -884,4 +928,4 @@ export function NewOrder() {
       />
     </div>
   );
-}
+} 

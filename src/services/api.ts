@@ -390,20 +390,21 @@ const createErrorMessage = (errorType, isRtl) => {
 
 export const ordersAPI = {
   create: async (orderData, isRtl = false) => {
-    if (!isValidObjectId(orderData.branchId)) {
+    if (orderData.type === 'branch_order' && !isValidObjectId(orderData.branchId)) {
       console.error(`[${new Date().toISOString()}] ordersAPI.create - Invalid branchId:`, orderData.branchId);
       throw new Error(createErrorMessage('invalidBranchId', isRtl));
     }
     try {
       const response = await api.post('/orders', {
         orderNumber: orderData.orderNumber.trim(),
-        branchId: orderData.branchId,
+        branch: orderData.branchId,
         items: orderData.items.map(item => ({
           product: item.product,
           quantity: item.quantity,
           price: item.price,
         })),
         status: orderData.status.trim(),
+        type: orderData.type,
       });
       console.log(`[${new Date().toISOString()}] ordersAPI.create - Response:`, response);
       return response;
@@ -1009,7 +1010,7 @@ export const factoryInventoryAPI = {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getFactoryInventory - Invalid department ID:`, params.department);
       throw new Error('Invalid department ID');
     }
-    const response = await api.get('/factory', { params });
+    const response = await api.get('/factoryInventory', { params });
     console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getFactoryInventory - Response:`, response);
     return response.inventory || [];
   },
@@ -1022,7 +1023,7 @@ export const factoryInventoryAPI = {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.createFactoryInventory - Invalid stock quantity:`, data.currentStock);
       throw new Error('Stock quantity must be non-negative');
     }
-    const response = await api.post('/factory', {
+    const response = await api.post('/factoryInventory', {
       productId: data.productId,
       department: data.department,
       currentStock: data.currentStock,
@@ -1054,7 +1055,7 @@ export const factoryInventoryAPI = {
       console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateFactoryInventory - Max stock level less than min:`, { minStockLevel: data.minStockLevel, maxStockLevel: data.maxStockLevel });
       throw new Error('Maximum stock level must be greater than minimum');
     }
-    const response = await api.put(`/factory/${id}`, {
+    const response = await api.put(`/factoryInventory/${id}`, {
       currentStock: data.currentStock,
       minStockLevel: data.minStockLevel,
       maxStockLevel: data.maxStockLevel,
@@ -1078,7 +1079,7 @@ export const productionRequestsAPI = {
       console.error(`[${new Date().toISOString()}] productionRequestsAPI.createProductionRequest - Invalid items:`, data.items);
       throw new Error('Invalid items');
     }
-    const response = await api.post('/factory/production-requests', {
+    const response = await api.post('/factoryInventory/production-requests', {
       type: data.type,
       branchId: data.type === 'branch' ? data.branchId : null,
       items: data.items,
@@ -1096,7 +1097,7 @@ export const productionRequestsAPI = {
       console.error(`[${new Date().toISOString()}] productionRequestsAPI.getProductionRequests - Invalid request status:`, params.status);
       throw new Error('Invalid request status');
     }
-    const response = await api.get('/factory/production-requests', { params });
+    const response = await api.get('/factoryInventory/production-requests', { params });
     console.log(`[${new Date().toISOString()}] productionRequestsAPI.getProductionRequests - Response:`, response);
     return response.requests || [];
   },
@@ -1109,7 +1110,7 @@ export const productionRequestsAPI = {
       console.error(`[${new Date().toISOString()}] productionRequestsAPI.updateProductionRequestStatus - Invalid status:`, data.status);
       throw new Error('Invalid status');
     }
-    const response = await api.patch(`/factory/production-requests/${requestId}/status`, {
+    const response = await api.patch(`/factoryInventory/production-requests/${requestId}/status`, {
       status: data.status,
     });
     console.log(`[${new Date().toISOString()}] productionRequestsAPI.updateProductionRequestStatus - Response:`, response);
