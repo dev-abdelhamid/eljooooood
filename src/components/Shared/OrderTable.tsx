@@ -18,25 +18,6 @@ const STATUS_COLORS: Record<OrderStatus, { color: string; label: string; icon: R
   cancelled: { color: 'bg-red-100 text-red-700', label: 'cancelled', icon: AlertCircle },
 };
 
-const PRIORITY_COLORS: Record<Order['priority'], string> = {
-  low: 'bg-gray-100 text-gray-700',
-  medium: 'bg-blue-100 text-blue-700',
-  high: 'bg-orange-100 text-orange-700',
-  urgent: 'bg-red-100 text-red-700',
-};
-
-interface OrderTableProps {
-  orders: Order[];
-  calculateAdjustedTotal: (order: Order) => string;
-  calculateTotalQuantity: (order: Order) => number;
-  translateUnit: (unit: string, isRtl: boolean) => string;
-  updateOrderStatus: (orderId: string, status: OrderStatus) => void;
-  openAssignModal: (order: Order) => void;
-  submitting: string | null;
-  isRtl: boolean;
-  startIndex: number;
-}
-
 export const OrderTableSkeleton: React.FC<{ isRtl: boolean }> = ({ isRtl }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
@@ -80,7 +61,7 @@ const OrderTable: React.FC<OrderTableProps> = memo(
       return order.items
         .map(item => `(${item.quantity} ${item.displayUnit} ${item.displayProductName})`)
         .join(' + ');
-    }, [isRtl, translateUnit]);
+    }, [translateUnit]);
 
     const statusTranslations = {
       pending: isRtl ? 'قيد الانتظار' : 'Pending',
@@ -90,16 +71,6 @@ const OrderTable: React.FC<OrderTableProps> = memo(
       in_transit: isRtl ? 'في النقل' : 'In Transit',
       delivered: isRtl ? 'تم التسليم' : 'Delivered',
       cancelled: isRtl ? 'ملغى' : 'Cancelled',
-    };
-
-    const validTransitions = {
-      pending: [OrderStatus.Approved, OrderStatus.Cancelled],
-      approved: [OrderStatus.InProduction, OrderStatus.Cancelled],
-      in_production: [OrderStatus.Completed, OrderStatus.Cancelled],
-      completed: [OrderStatus.InTransit],
-      in_transit: [OrderStatus.Delivered],
-      delivered: [],
-      cancelled: [],
     };
 
     return (
