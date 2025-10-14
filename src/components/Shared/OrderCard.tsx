@@ -211,6 +211,24 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                 </p>
               </div>
             )}
+            {order.returns?.length > 0 && (
+              <div className="mt-1 p-1.5 bg-amber-50 rounded-md">
+                <p className="text-xs font-medium text-amber-800">{isRtl ? 'الإرجاعات' : 'Returns'}</p>
+                {order.returns.map((r, i) => (
+                  <p key={i} className="text-xs text-amber-700 truncate">
+                    {isRtl
+                      ? `${r.items
+                          .map((item) => `${item.quantity} ${item.displayUnit} ${item.reason}`)
+                          .join(', ')} - الحالة: ${
+                          isRtl ? { pending: 'قيد الانتظار', approved: 'تمت الموافقة', rejected: 'مرفوض', processed: 'تمت المعالجة' }[r.status] : r.status
+                        }`
+                      : `${r.items
+                          .map((item) => `${item.quantity} ${item.displayUnit} ${item.reason}`)
+                          .join(', ')} - Status: ${r.status}`}
+                  </p>
+                ))}
+              </div>
+            )}
             <div className={`flex flex-wrap gap-1.5 ${isRtl ? 'justify-end' : 'justify-start'}`}>
               <Link to={`/orders/${order.id}`}>
                 <Button

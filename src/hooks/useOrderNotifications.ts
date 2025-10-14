@@ -20,9 +20,9 @@ interface SocketEventData {
   }>;
   eventId?: string;
   status?: string;
+  returnId?: string;
   itemId?: string;
   productName?: string;
-  chefId?: string; // أضفت ده للتحقق من الشيف
 }
 
 export const useOrderNotifications = (
@@ -34,7 +34,6 @@ export const useOrderNotifications = (
   const { socket } = useSocket();
   const { t, language } = useLanguage();
   const isRtl = language === 'ar';
-  const notifiedEvents = new Set(); // لمنع التكرار
 
   const translateUnit = (unit: string | undefined) => {
     const translations: Record<string, { ar: string; en: string }> = {
@@ -61,8 +60,7 @@ export const useOrderNotifications = (
       {
         name: 'orderCreated',
         handler: (data: any) => {
-          if (!data._id || !data.orderNumber || !data.branch?.name || !Array.isArray(data.items) || notifiedEvents.has(data.eventId)) return;
-          notifiedEvents.add(data.eventId);
+          if (!data._id || !data.orderNumber || !data.branch?.name || !Array.isArray(data.items)) return;
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
           if (user.role === 'branch' && data.branch?._id !== user.branchId) return;
           if (user.role === 'production' && !data.items.some((item: any) => item.product?.department?._id === user.department?._id)) return;
@@ -98,6 +96,8 @@ export const useOrderNotifications = (
               },
               status: item.status || 'pending',
               assignedTo: item.assignedTo ? { _id: item.assignedTo._id, name: item.assignedTo.name || t('chefs.unknown') } : undefined,
+              returnedQuantity: Number(item.returnedQuantity) || 0,
+              returnReason: item.returnReason || '',
             })),
             status: data.status || 'pending',
             totalAmount: Number(data.totalAmount) || 0,
@@ -107,6 +107,7 @@ export const useOrderNotifications = (
             priority: data.priority || 'medium',
             createdBy: data.createdBy?.name || t('orders.unknown'),
             statusHistory: data.statusHistory || [],
+            returns: data.returns || [],
           };
 
           dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
@@ -123,12 +124,11 @@ export const useOrderNotifications = (
       {
         name: 'orderConfirmed',
         handler: (data: SocketEventData) => {
-          if (!data.orderId || !data.orderNumber || !data.branchName || notifiedEvents.has(data.eventId)) return;
-          notifiedEvents.add(data.eventId);
-          if (!['admin', 'branch', 'production'].includes(user.role)) return;
+          if (!data.orderId || !data.orderNumber || !data.branchName) return;
+          if (!['admin', 'branch'].includes(user.role)) return;
           if (user.role === 'branch' && data.branchId !== user.branchId) return;
 
-          dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: data.status || 'confirmed' });
+          dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'confirmed' });
           addNotification({
             _id: data.eventId || crypto.randomUUID(),
             type: 'success',
@@ -142,8 +142,7 @@ export const useOrderNotifications = (
       {
         name: 'taskAssigned',
         handler: (data: SocketEventData) => {
-          if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName || notifiedEvents.has(data.eventId)) return;
-          notifiedEvents.add(data.eventId);
+          if (!data.orderId || !data.orderNumber || !Array.isArray(data.items) || !data.branchName) return;
           if (!['admin', 'production', 'chef'].includes(user.role)) return;
           if (user.role === 'chef' && !data.items.some((item: any) => item.assignedTo?._id === user.id)) return;
 
@@ -185,8 +184,7 @@ export const useOrderNotifications = (
       {
         name: 'itemStatusUpdated',
         handler: async (data: SocketEventData) => {
-          if (!data.orderId || !data.itemId || !data.status || !data.orderNumber || !data.branchName || notifiedEvents.has(data.eventId)) return;
-          notifiedEvents.add(data.eventId);
+          if (!data.orderId || !data.itemId || !data.status || !data.orderNumber || !data.branchName) return;
           if (!['admin', 'production', 'chef'].includes(user.role)) return;
           if (user.role === 'chef' && data.chefId !== user.id) return;
 
@@ -214,10 +212,8 @@ export const useOrderNotifications = (
       {
         name: 'orderStatusUpdated',
         handler: (data: SocketEventData) => {
-          if (!data.orderId || !data.status || !data.orderNumber || !data.branchName || notifiedEvents.has(data.eventId)) return;
-          notifiedEvents.add(data.eventId);
+          if (!data.orderId || !data.status || !data.orderNumber || !data.branchName) return;
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
-          if (user.role === 'branch' && data.branchId !== user.branchId) return;
 
           dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: data.status });
           addNotification({
@@ -237,9 +233,9 @@ export const useOrderNotifications = (
       {
         name: 'orderCompleted',
         handler: (data: SocketEventData) => {
-          if (!data.orderId || !data.orderNumber || !data.branchName || notifiedEvents.has(data.eventId)) return;
-          notifiedEvents.add(data.eventId);
-          if (!['admin', 'production'].includes(user.role)) return;
+          if (!data.orderId || !data.orderNumber || !data.branchName) return;
+          if (!['admin', 'branch', 'production'].includes(user.role)) return;
+          if (user.role === 'branch' && data.branchId !== user.branchId) return;
 
           dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'completed' });
           addNotification({
@@ -255,8 +251,7 @@ export const useOrderNotifications = (
       {
         name: 'orderShipped',
         handler: (data: SocketEventData) => {
-          if (!data.orderId || !data.orderNumber || !data.branchName || !data.branchId || notifiedEvents.has(data.eventId)) return;
-          notifiedEvents.add(data.eventId);
+          if (!data.orderId || !data.orderNumber || !data.branchName || !data.branchId) return;
           if (!['admin', 'branch', 'production'].includes(user.role)) return;
           if (user.role === 'branch' && data.branchId !== user.branchId) return;
 
@@ -274,9 +269,9 @@ export const useOrderNotifications = (
       {
         name: 'orderDelivered',
         handler: (data: SocketEventData) => {
-          if (!data.orderId || !data.orderNumber || !data.branchName || notifiedEvents.has(data.eventId)) return;
-          notifiedEvents.add(data.eventId);
-          if (!['admin', 'production'].includes(user.role)) return;
+          if (!data.orderId || !data.orderNumber || !data.branchName) return;
+          if (!['admin', 'branch', 'production'].includes(user.role)) return;
+          if (user.role === 'branch' && data.branchId !== user.branchId) return;
 
           dispatch({ type: 'UPDATE_ORDER_STATUS', orderId: data.orderId, status: 'delivered' });
           addNotification({
@@ -284,6 +279,48 @@ export const useOrderNotifications = (
             type: 'success',
             message: t('notifications.order_delivered', { orderNumber: data.orderNumber, branchName: data.branchName }),
             data: { orderId: data.orderId, eventId: data.eventId },
+            read: false,
+            createdAt: new Date().toISOString(),
+          });
+        },
+      },
+      {
+        name: 'returnStatusUpdated',
+        handler: (data: SocketEventData) => {
+          if (!data.orderId || !data.returnId || !data.status || !data.orderNumber) return;
+          if (!['admin', 'branch', 'production'].includes(user.role)) return;
+
+          dispatch({ type: 'RETURN_STATUS_UPDATED', orderId: data.orderId, returnId: data.returnId, status: data.status });
+          addNotification({
+            _id: data.eventId || crypto.randomUUID(),
+            type: 'info',
+            message: t('notifications.return_status_updated', {
+              orderNumber: data.orderNumber,
+              status: t(`returns.${data.status}`),
+              branchName: data.branchName,
+            }),
+            data: { orderId: data.orderId, returnId: data.returnId, eventId: data.eventId },
+            read: false,
+            createdAt: new Date().toISOString(),
+          });
+        },
+      },
+      {
+        name: 'missingAssignments',
+        handler: (data: SocketEventData) => {
+          if (!data.orderId || !data.itemId || !data.orderNumber || !data.productName) return;
+          if (!['admin', 'production'].includes(user.role)) return;
+
+          dispatch({ type: 'MISSING_ASSIGNMENTS', orderId: data.orderId, itemId: data.itemId, productName: data.productName });
+          addNotification({
+            _id: data.eventId || crypto.randomUUID(),
+            type: 'warning',
+            message: t('notifications.missing_assignments', {
+              orderNumber: data.orderNumber,
+              productName: data.productName,
+              branchName: data.branchName,
+            }),
+            data: { orderId: data.orderId, itemId: data.itemId, eventId: data.eventId },
             read: false,
             createdAt: new Date().toISOString(),
           });
