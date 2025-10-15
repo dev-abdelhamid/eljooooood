@@ -10,9 +10,10 @@ import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, inventoryAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
-import { ProductDropdown } from './NewOrder';
+import { ProductDropdown } from './NewOrder'; // افتراض وجود المكون
 import { useQuery } from '@tanstack/react-query';
 
+// تعريف واجهات إضافية للمخزون
 interface InventoryItem {
   _id: string;
   product: {
@@ -28,34 +29,8 @@ interface InventoryItem {
   currentStock: number;
   minStockLevel: number;
   maxStockLevel: number;
+  damagedStock: number;
   pendingReturnStock: number;
-}
-
-interface ReturnRequest {
-  _id: string;
-  product: {
-    _id: string;
-    name: string;
-    nameEn?: string;
-    unit: string;
-    unitEn?: string;
-  };
-  branch: { _id: string; name: string; nameEn?: string };
-  quantity: number;
-  status: 'pending' | 'approved' | 'rejected';
-  createdAt: string;
-}
-
-interface InventoryLog {
-  _id: string;
-  product: {
-    _id: string;
-    name: string;
-    nameEn?: string;
-  };
-  type: 'add' | 'remove' | 'return';
-  quantity: number;
-  createdAt: string;
 }
 
 interface InventoryStats {
@@ -63,6 +38,7 @@ interface InventoryStats {
   lowStockItems: number;
   normalStockItems: number;
   fullStockItems: number;
+  totalDamagedStock: number;
   totalPendingReturnStock: number;
 }
 
@@ -76,7 +52,7 @@ interface Stats {
   completedTasks: number;
   inProgressTasks: number;
   averageOrderValue: number;
-  inventoryStats?: InventoryStats;
+  inventoryStats?: InventoryStats; // إضافة إحصائيات المخزون
 }
 
 interface Task {
@@ -105,7 +81,7 @@ interface BranchPerformance {
 }
 
 interface ChefPerformance {
-  _id: string; // تغيير من chefId إلى _id للتوافق مع Chefs
+  chefId: string;
   chefName: string;
   chefNameEn?: string;
   performance: number;
@@ -398,8 +374,6 @@ export const Dashboard: React.FC = () => {
   const [branchPerformance, setBranchPerformance] = useState<BranchPerformance[]>([]);
   const [chefPerformance, setChefPerformance] = useState<ChefPerformance[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
-  const [returnRequests, setReturnRequests] = useState<ReturnRequest[]>([]);
-  const [inventoryLogs, setInventoryLogs] = useState<InventoryLog[]>([]);
   const [stats, setStats] = useState<Stats>({
     totalOrders: 0,
     pendingOrders: 0,
@@ -415,6 +389,7 @@ export const Dashboard: React.FC = () => {
       lowStockItems: 0,
       normalStockItems: 0,
       fullStockItems: 0,
+      totalDamagedStock: 0,
       totalPendingReturnStock: 0,
     },
   });
@@ -427,7 +402,7 @@ export const Dashboard: React.FC = () => {
 
   const cacheKey = useMemo(() => `${user?.id || user?._id}-${user?.role}-${timeFilter}`, [user, timeFilter]);
 
-  // جلب بيانات المخزون
+  // جلب بيانات المخزون باستخدام react-query
   const { data: inventoryData, isLoading: isInventoryLoading } = useQuery({
     queryKey: ['inventory', user?.branchId],
     queryFn: async () => {
@@ -435,29 +410,7 @@ export const Dashboard: React.FC = () => {
       return await inventoryAPI.getByBranch(user.branchId);
     },
     enabled: user?.role === 'branch' && !!user?.branchId,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  // جلب طلبات الإرجاع
-  const { data: returnRequestsData, isLoading: isReturnRequestsLoading } = useQuery({
-    queryKey: ['returnRequests', user?.branchId],
-    queryFn: async () => {
-      if (!user?.branchId) throw new Error(isRtl ? 'لم يتم العثور على فرع' : 'No branch found');
-      return await inventoryAPI.getReturnRequests(user.branchId);
-    },
-    enabled: user?.role === 'branch' && !!user?.branchId,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  // جلب سجل حركات المخزون
-  const { data: inventoryLogData, isLoading: isInventoryLogLoading } = useQuery({
-    queryKey: ['inventoryLog', user?.branchId],
-    queryFn: async () => {
-      if (!user?.branchId) throw new Error(isRtl ? 'لم يتم العثور على فرع' : 'No branch found');
-      return await inventoryAPI.getInventoryLog(user.branchId);
-    },
-    enabled: user?.role === 'branch' && !!user?.branchId,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 5 * 60 * 1000, // التخزين المؤقت لمدة 5 دقائق
   });
 
   // حساب إحصائيات المخزون
@@ -467,6 +420,7 @@ export const Dashboard: React.FC = () => {
       lowStockItems: 0,
       normalStockItems: 0,
       fullStockItems: 0,
+      totalDamagedStock: 0,
       totalPendingReturnStock: 0,
     };
 
@@ -475,6 +429,7 @@ export const Dashboard: React.FC = () => {
       lowStockItems: inventoryData.filter(item => item.currentStock <= item.minStockLevel).length,
       normalStockItems: inventoryData.filter(item => item.currentStock > item.minStockLevel && item.currentStock < item.maxStockLevel).length,
       fullStockItems: inventoryData.filter(item => item.currentStock >= item.maxStockLevel).length,
+      totalDamagedStock: inventoryData.reduce((sum, item) => sum + item.damagedStock, 0),
       totalPendingReturnStock: inventoryData.reduce((sum, item) => sum + item.pendingReturnStock, 0),
     };
   }, [inventoryData]);
@@ -506,8 +461,6 @@ export const Dashboard: React.FC = () => {
         setBranchPerformance(cachedData.branchPerformance);
         setChefPerformance(cachedData.chefPerformance);
         setStats(cachedData.stats);
-        setReturnRequests(cachedData.returnRequests || []);
-        setInventoryLogs(cachedData.inventoryLogs || []);
         setLoading(false);
         setIsInitialLoad(false);
         return;
@@ -542,8 +495,6 @@ export const Dashboard: React.FC = () => {
         let tasksResponse: any[] = [];
         let chefsResponse: any[] = [];
         let branchesResponse: any[] = [];
-        let returnRequestsResponse: any[] = [];
-        let inventoryLogResponse: any[] = [];
 
         if (user.role === 'chef') {
           const chefProfile = await chefsAPI.getByUserId(user.id || user._id);
@@ -572,16 +523,8 @@ export const Dashboard: React.FC = () => {
               console.error(`[${new Date().toISOString()}] Error fetching branches:`, err);
               return [];
             }) : Promise.resolve([]),
-            user.role === 'branch' && user.branchId ? inventoryAPI.getReturnRequests(user.branchId).catch((err) => {
-              console.error(`[${new Date().toISOString()}] Error fetching return requests:`, err);
-              return [];
-            }) : Promise.resolve([]),
-            user.role === 'branch' && user.branchId ? inventoryAPI.getInventoryLog(user.branchId).catch((err) => {
-              console.error(`[${new Date().toISOString()}] Error fetching inventory log:`, err);
-              return [];
-            }) : Promise.resolve([]),
           ];
-          [ordersResponse, tasksResponse, chefsResponse, branchesResponse, returnRequestsResponse, inventoryLogResponse] = await Promise.all(promises);
+          [ordersResponse, tasksResponse, chefsResponse, branchesResponse] = await Promise.all(promises);
         }
 
         const mappedOrders = ordersResponse.map((order: any) => ({
@@ -646,37 +589,6 @@ export const Dashboard: React.FC = () => {
           }))
           .sort((a: any, b: any) => a.name.localeCompare(b.name));
 
-        const mappedReturnRequests = returnRequestsResponse.map((request: any) => ({
-          _id: request._id || crypto.randomUUID(),
-          product: {
-            _id: request.product?._id || 'unknown',
-            name: request.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
-            nameEn: request.product?.nameEn || request.product?.name || 'Unknown',
-            unit: request.product?.unit || 'غير محدد',
-            unitEn: request.product?.unitEn || request.product?.unit || 'N/A',
-          },
-          branch: {
-            _id: request.branch?._id || 'unknown',
-            name: request.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
-            nameEn: request.branch?.nameEn || request.branch?.name || 'Unknown',
-          },
-          quantity: Number(request.quantity) || 0,
-          status: request.status || 'pending',
-          createdAt: formatDate(request.createdAt || new Date(), language),
-        }));
-
-        const mappedInventoryLogs = inventoryLogResponse.map((log: any) => ({
-          _id: log._id || crypto.randomUUID(),
-          product: {
-            _id: log.product?._id || 'unknown',
-            name: log.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
-            nameEn: log.product?.nameEn || log.product?.name || 'Unknown',
-          },
-          type: log.type || 'unknown',
-          quantity: Number(log.quantity) || 0,
-          createdAt: formatDate(log.createdAt || new Date(), language),
-        }));
-
         const branchPerf = mappedBranches.map((branch: any) => {
           const branchOrders = mappedOrders.filter((o) => o.branchId === branch._id);
           const total = branchOrders.length;
@@ -702,7 +614,7 @@ export const Dashboard: React.FC = () => {
           const completed = chefTasks.filter((t) => t.status === 'completed').length;
           const perf = total > 0 ? (completed / total) * 100 : 0;
           return {
-            _id: chef._id, // تغيير من chefId إلى _id
+            chefId: chef.userId,
             chefName: chef.name,
             chefNameEn: chef.nameEn,
             performance: perf,
@@ -730,8 +642,6 @@ export const Dashboard: React.FC = () => {
           branches: mappedBranches,
           branchPerformance: branchPerf,
           chefPerformance: chefPerf,
-          returnRequests: mappedReturnRequests,
-          inventoryLogs: mappedInventoryLogs,
           stats: {
             totalOrders,
             pendingOrders,
@@ -753,10 +663,8 @@ export const Dashboard: React.FC = () => {
         setBranches(newData.branches);
         setBranchPerformance(newData.branchPerformance);
         setChefPerformance(newData.chefPerformance);
-        setInventoryItems(inventoryData || []);
-        setReturnRequests(mappedReturnRequests);
-        setInventoryLogs(mappedInventoryLogs);
         setStats(newData.stats);
+        setInventoryItems(inventoryData || []);
         setError('');
         setIsInitialLoad(false);
       } catch (err: any) {
@@ -1022,6 +930,7 @@ export const Dashboard: React.FC = () => {
       fetchDashboardData(true);
     });
 
+    // مستمعات تحديثات المخزون
     socket.on('inventoryUpdated', (data: any) => {
       if (!data.branchId || data.branchId !== user.branchId || user.role !== 'branch') return;
       fetchDashboardData(true);
@@ -1216,35 +1125,6 @@ export const Dashboard: React.FC = () => {
       .slice(0, 8);
   }, [orders]);
 
-  const sortedReturnRequests = useMemo(() => {
-    return [...returnRequests]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 8);
-  }, [returnRequests]);
-
-  const sortedInventoryLogs = useMemo(() => {
-    return [...inventoryLogs]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 8);
-  }, [inventoryLogs]);
-
-  const handleChefNavigation = (chefId: string) => {
-    if (!chefId || !/^[0-9a-fA-F]{24}$/.test(chefId)) {
-      const errorMessage = isRtl ? 'معرف الشيف غير صالح' : 'Invalid chef ID';
-      toast.error(errorMessage, { toastId: `invalid-chef-${chefId}`, position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
-      addNotification({
-        _id: `error-chef-nav-${Date.now()}`,
-        type: 'error',
-        message: errorMessage,
-        read: false,
-        createdAt: new Date().toLocaleString(language),
-        path: '/dashboard',
-      });
-      return;
-    }
-    navigate(`/chefs/${chefId}`);
-  };
-
   const renderStats = () => (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -1322,11 +1202,11 @@ export const Dashboard: React.FC = () => {
             ariaLabel={isRtl ? 'المخزون المنخفض' : 'Low Stock Items'}
           />
           <StatsCard
-            title={isRtl ? 'طلبات الإرجاع المعلقة' : 'Pending Return Requests'}
-            value={stats.inventoryStats.totalPendingReturnStock.toString()}
-            icon={Package}
+            title={isRtl ? 'المخزون التالف' : 'Damaged Stock'}
+            value={stats.inventoryStats.totalDamagedStock.toString()}
+            icon={AlertCircle}
             color="orange"
-            ariaLabel={isRtl ? 'طلبات الإرجاع المعلقة' : 'Pending Return Requests'}
+            ariaLabel={isRtl ? 'المخزون التالف' : 'Damaged Stock'}
           />
         </>
       )}
@@ -1391,12 +1271,13 @@ export const Dashboard: React.FC = () => {
           ) : (
             chefPerformance.map((chef, index) => (
               <motion.div
-                key={chef._id}                initial={{ opacity: 0, y: 10 }}
+                key={chef.chefId}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2, delay: index * 0.1 }}
                 className="flex items-center justify-between p-2 border-b border-gray-100 cursor-pointer hover:bg-amber-50 transition-colors duration-200"
-                onClick={() => handleChefNavigation(chef._id)}
+                onClick={() => navigate(`/chefs/${chef.chefId}`)} // تم تعديل chef.id إلى chef.chefId
               >
                 <div>
                   <p className="text-xs font-medium text-gray-800">{isRtl ? chef.chefName : chef.chefNameEn || chef.chefName}</p>
@@ -1422,297 +1303,154 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 
-  const renderOrders = () => (
-    <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
-      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
-        <ShoppingCart className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
-        {isRtl ? 'أحدث الطلبات' : 'Latest Orders'}
-      </h3>
-      <div className="space-y-2 max-h-64 overflow-y-auto">
-        <AnimatePresence>
-          {sortedPendingOrders.length === 0 ? (
-            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد طلبات' : 'No orders available'}</p>
-          ) : (
-            sortedPendingOrders.map((order) => (
-              <motion.div
-                key={order.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="border border-amber-100 rounded-lg p-2 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
-                onClick={() => navigate(`/orders/${order.id}`)}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-semibold text-xs text-gray-800 truncate">
-                    {isRtl ? `طلب رقم ${order.orderNumber}` : `Order #${order.orderNumber}`}
-                  </h4>
-                  <span
-                    className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
-                      order.status === 'pending'
-                        ? 'bg-amber-100 text-amber-800'
-                        : order.status === 'in_production'
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-green-100 text-green-800'
-                    }`}
-                  >
-                    {isRtl
-                      ? order.status === 'pending'
-                        ? 'معلق'
-                        : order.status === 'in_production'
-                        ? 'قيد الإنتاج'
-                        : 'مكتمل'
-                      : order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                  </span>
-                </div>
-                <p className="text-xs text-gray-600 mb-2 truncate">{isRtl ? order.branchName : order.branchNameEn || order.branchName}</p>
-                <p className="text-xs text-gray-500">{isRtl ? `تم الإنشاء في: ${order.date}` : `Created At: ${order.date}`}</p>
-              </motion.div>
-            ))
-          )}
-        </AnimatePresence>
-      </div>
-    </div>
-  );
-
-  const renderReturnRequests = () => (
-    <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 mt-4">
-      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
-        <Package className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
-        {isRtl ? 'أحدث طلبات الإرجاع' : 'Latest Return Requests'}
-      </h3>
-      <div className="space-y-2 max-h-64 overflow-y-auto">
-        <AnimatePresence>
-          {isReturnRequestsLoading ? (
-            <p className="text-gray-500 text-xs">{isRtl ? 'جارٍ تحميل طلبات الإرجاع...' : 'Loading return requests...'}</p>
-          ) : sortedReturnRequests.length === 0 ? (
-            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد طلبات إرجاع' : 'No return requests available'}</p>
-          ) : (
-            sortedReturnRequests.map((request) => (
-              <motion.div
-                key={request._id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="border border-amber-100 rounded-lg p-2 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
-                onClick={() => navigate(`/returns/${request._id}`)}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-semibold text-xs text-gray-800 truncate">
-                    {isRtl ? request.product.name : request.product.nameEn || request.product.name}
-                  </h4>
-                  <span
-                    className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
-                      request.status === 'pending'
-                        ? 'bg-amber-100 text-amber-800'
-                        : request.status === 'approved'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}
-                  >
-                    {isRtl
-                      ? request.status === 'pending'
-                        ? 'معلق'
-                        : request.status === 'approved'
-                        ? 'مقبول'
-                        : 'مرفوض'
-                      : request.status.charAt(0).toUpperCase() + request.status.slice(1)}
-                  </span>
-                </div>
-                <p className="text-xs text-gray-600 mb-2 truncate">
-                  {isRtl
-                    ? `${request.quantity} ${request.product.unit}`
-                    : `${request.quantity} ${request.product.unitEn || request.product.unit}`}
-                </p>
-                <p className="text-xs text-gray-500">{isRtl ? `تم الإنشاء في: ${request.createdAt}` : `Created At: ${request.createdAt}`}</p>
-              </motion.div>
-            ))
-          )}
-        </AnimatePresence>
-      </div>
-    </div>
-  );
-
   const renderInventoryList = () => (
     <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 mt-4">
       <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
         <Package className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
-        {isRtl ? 'المخزون' : 'Inventory'}
+        {isRtl ? 'قائمة المخزون' : 'Inventory List'}
       </h3>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="space-y-2 max-h-64 overflow-y-auto">
-          <AnimatePresence>
-            {isInventoryLoading ? (
-              <p className="text-gray-500 text-xs">{isRtl ? 'جارٍ تحميل المخزون...' : 'Loading inventory...'}</p>
-            ) : inventoryItems.length === 0 ? (
-              <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد عناصر في المخزون' : 'No inventory items available'}</p>
-            ) : (
-              inventoryItems.map((item) => {
-                const stockStatus = item.currentStock <= item.minStockLevel
-                  ? 'low'
-                  : item.currentStock >= item.maxStockLevel
-                  ? 'full'
-                  : 'normal';
-                return (
-                  <motion.div
-                    key={item._id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.2 }}
-                    className="border border-amber-100 rounded-lg p-2 bg-amber-50 shadow-sm"
+      <div className="space-y-2 max-h-64 overflow-y-auto">
+        <AnimatePresence>
+          {isInventoryLoading ? (
+            <p className="text-gray-500 text-xs">{isRtl ? 'جاري تحميل المخزون...' : 'Loading inventory...'}</p>
+          ) : inventoryItems.length === 0 ? (
+            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد عناصر في المخزون' : 'No inventory items available'}</p>
+          ) : (
+            inventoryItems.slice(0, 8).map((item, index) => (
+              <motion.div
+                key={item._id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2, delay: index * 0.1 }}
+                className="flex items-center justify-between p-2 border-b border-gray-100 cursor-pointer hover:bg-amber-50 transition-colors duration-200"
+                onClick={() => navigate(`/inventory/${item._id}`)}
+              >
+                <div>
+                  <p className="text-xs font-medium text-gray-800">{isRtl ? item.product.name : item.product.nameEn || item.product.name}</p>
+                  <p className="text-xs text-gray-500">
+                    {isRtl ? `الكمية: ${item.currentStock} ${item.product.unit}` : `Quantity: ${item.currentStock} ${item.product.unitEn || item.product.unit}`}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {isRtl ? `القسم: ${item.product.department.name}` : `Department: ${item.product.department.nameEn || item.product.department.name}`}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
+                      item.currentStock <= item.minStockLevel
+                        ? 'bg-red-100 text-red-800'
+                        : item.currentStock >= item.maxStockLevel
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-green-100 text-green-800'
+                    }`}
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-semibold text-xs text-gray-800 truncate">
-                        {isRtl ? item.product.name : item.product.nameEn || item.product.name}
-                      </h4>
-                      <span
-                        className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
-                          stockStatus === 'low'
-                            ? 'bg-red-100 text-red-800'
-                            : stockStatus === 'normal'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-blue-100 text-blue-800'
-                        }`}
-                      >
-                        {isRtl
-                          ? stockStatus === 'low'
-                            ? 'منخفض'
-                            : stockStatus === 'normal'
-                            ? 'عادي'
-                            : 'ممتلئ'
-                          : stockStatus.charAt(0).toUpperCase() + stockStatus.slice(1)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-600 mb-2 truncate">
-                      {isRtl
-                        ? `${item.currentStock} ${item.product.unit}`
-                        : `${item.currentStock} ${item.product.unitEn || item.product.unit}`}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {isRtl ? `القسم: ${item.product.department.name}` : `Department: ${item.product.department.nameEn || item.product.department.name}`}
-                    </p>
-                  </motion.div>
-                );
-              })
-            )}
-          </AnimatePresence>
-        </div>
-        <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
-          <h4 className="text-sm font-semibold text-gray-800 mb-3">{isRtl ? 'سجل حركات المخزون' : 'Inventory Movement Log'}</h4>
-          <div className="space-y-2 max-h-64 overflow-y-auto">
-            <AnimatePresence>
-              {isInventoryLogLoading ? (
-                <p className="text-gray-500 text-xs">{isRtl ? 'جارٍ تحميل سجل الحركات...' : 'Loading inventory log...'}</p>
-              ) : sortedInventoryLogs.length === 0 ? (
-                <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد حركات مخزون' : 'No inventory movements available'}</p>
-              ) : (
-                <table className="w-full text-xs text-gray-700">
-                  <thead>
-                    <tr className="border-b border-gray-200">
-                      <th className={`py-2 text-left ${isRtl ? 'pr-2' : 'pl-2'}`}>{isRtl ? 'المنتج' : 'Product'}</th>
-                      <th className="py-2">{isRtl ? 'نوع الحركة' : 'Type'}</th>
-                      <th className="py-2">{isRtl ? 'الكمية' : 'Quantity'}</th>
-                      <th className="py-2">{isRtl ? 'التاريخ' : 'Date'}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedInventoryLogs.map((log) => (
-                      <motion.tr
-                        key={log._id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.2 }}
-                        className="border-b border-gray-100 hover:bg-amber-50"
-                      >
-                        <td className={`py-2 ${isRtl ? 'pr-2' : 'pl-2'}`}>
-                          {isRtl ? log.product.name : log.product.nameEn || log.product.name}
-                        </td>
-                        <td className="py-2 text-center">
-                          {isRtl
-                            ? log.type === 'add'
-                              ? 'إضافة'
-                              : log.type === 'remove'
-                              ? 'إزالة'
-                              : 'إرجاع'
-                            : log.type.charAt(0).toUpperCase() + log.type.slice(1)}
-                        </td>
-                        <td className="py-2 text-center">{log.quantity}</td>
-                        <td className="py-2 text-center">{log.createdAt}</td>
-                      </motion.tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </AnimatePresence>
-          </div>
-        </div>
+                    {isRtl
+                      ? item.currentStock <= item.minStockLevel
+                        ? 'منخفض'
+                        : item.currentStock >= item.maxStockLevel
+                        ? 'ممتلئ'
+                        : 'عادي'
+                      : item.currentStock <= item.minStockLevel
+                      ? 'Low'
+                      : item.currentStock >= item.maxStockLevel
+                      ? 'Full'
+                      : 'Normal'}
+                  </span>
+                </div>
+              </motion.div>
+            ))
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );
 
+  if (loading && isInitialLoad) return <Loader />;
+  if (error) return <div className="text-center text-red-600 p-4">{error}</div>;
+
   return (
-    <div className="mx-auto px-4 py-6 min-h-screen" dir={isRtl ? 'rtl' : 'ltr'}>
-      {isInitialLoad && loading ? (
-        <Loader />
+    <div className={`py-6 px-4 mx-auto max-w-7xl`}>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl md:text-2xl font-bold text-gray-800 flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-amber-600" />
+          {isRtl ? 'لوحة التحكم' : 'Dashboard'}
+        </h1>
+        <ProductDropdown
+          options={timeFilterOptions}
+          value={timeFilter}
+          onChange={(value) => setTimeFilter(value)}
+          placeholder={isRtl ? 'اختر الفترة' : 'Select Period'}
+          aria-label={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
+        />
+      </div>
+      {user.role === 'chef' ? (
+        <ChefDashboard
+          stats={stats}
+          tasks={tasks}
+          orders={orders}
+          isRtl={isRtl}
+          language={language}
+          handleStartTask={handleStartTask}
+          handleCompleteTask={handleCompleteTask}
+        />
       ) : (
         <>
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-3"
-          >
-            <div className="flex items-center gap-2">
-              <BarChart3 className="w-6 h-6 text-amber-600" />
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">{isRtl ? 'لوحة التحكم' : 'Dashboard'}</h1>
-                <p className="text-gray-600 text-xs">{isRtl ? 'نظرة عامة على الأداء' : 'Overview of performance'}</p>
+          {renderStats()}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="space-y-3">
+              <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
+                <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
+                  <ShoppingCart className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+                  {isRtl ? 'أحدث الطلبات' : 'Latest Orders'}
+                </h3>
+                <div className="space-y-2 max-h-80 overflow-y-auto">
+                  <AnimatePresence>
+                    {sortedPendingOrders.length === 0 ? (
+                      <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد طلبات' : 'No orders available'}</p>
+                    ) : (
+                      sortedPendingOrders.map((order) => (
+                                          <motion.div
+                          key={order.id}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -10 }}
+                          transition={{ duration: 0.2 }}
+                          className="border border-amber-100 rounded-lg p-2 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
+                          onClick={() => navigate(`/orders/${order.id}`)}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <h4 className="font-semibold text-xs text-gray-800 truncate">
+                              {isRtl ? `طلب رقم ${order.orderNumber}` : `Order #${order.orderNumber}`}
+                            </h4>
+                            <span
+                              className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
+                                order.status === 'pending'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : order.status === 'in_production'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-green-100 text-green-800'
+                              }`}
+                            >
+                              {isRtl
+                                ? order.status === 'pending'
+                                  ? 'معلق'
+                                  : order.status === 'in_production'
+                                  ? 'قيد الإنتاج'
+                                  : 'مكتمل'
+                                : order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-600 mb-2 truncate">{isRtl ? order.branchName : order.branchNameEn || order.branchName}</p>
+                          <p className="text-xs text-gray-500">{isRtl ? `تم الإنشاء في: ${order.date}` : `Created At: ${order.date}`}</p>
+                        </motion.div>
+                      ))
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
+              {user.role === 'branch' && renderInventoryList()}
             </div>
-            <ProductDropdown
-              options={timeFilterOptions}
-              value={timeFilter}
-              onChange={setTimeFilter}
-              placeholder={isRtl ? 'اختر الفترة' : 'Select Period'}
-              aria-label={isRtl ? 'الفترة الزمنية' : 'Time Period'}
-            />
-          </motion.div>
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.15 }}
-                className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 shadow-sm"
-              >
-                <AlertCircle className="w-4 h-4 text-red-600" />
-                <span className="text-red-600 text-xs">{error}</span>
-              </motion.div>
-            )}
-          </AnimatePresence>
-          <div className="space-y-4">
-            {renderStats()}
-            {user.role === 'chef' ? (
-              <ChefDashboard
-                stats={stats}
-                tasks={tasks}
-                orders={orders}
-                isRtl={isRtl}
-                language={language}
-                handleStartTask={handleStartTask}
-                handleCompleteTask={handleCompleteTask}
-              />
-            ) : (
-              <>
-                {renderOrders()}
-                {user.role === 'branch' && renderReturnRequests()}
-                {user.role === 'branch' && renderInventoryList()}
-              </>
-            )}
             {['admin', 'production'].includes(user.role) && (
               <>
                 {renderBranchPerformance()}
