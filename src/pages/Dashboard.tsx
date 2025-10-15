@@ -1489,20 +1489,20 @@ return (
            
            
            
-                                                  {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
         
 
-             </div>
+          </div>
+                                                  {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
 
 
             
               <div >
                           {user.role === 'branch' && renderLowStockItems()}
                           {user.role === 'branch' && renderRecentInventoryHistory()}
-              </div>
+           
 
         
-          <div>
+         
                    {['admin', 'production'].includes(user.role) && renderBranchPerformance()}
                   {['admin', 'production'].includes(user.role) && renderChefPerformance()}
           </div>
