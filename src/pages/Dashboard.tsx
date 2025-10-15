@@ -1486,26 +1486,12 @@ return (
                 </AnimatePresence>
               </div> 
             </div>
-           
-           
-           
-        
-
-          </div>
-                                                  {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
-
-
-            
-              <div >
+             {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
                           {user.role === 'branch' && renderLowStockItems()}
                           {user.role === 'branch' && renderRecentInventoryHistory()}
-           
-
-        
-         
                    {['admin', 'production'].includes(user.role) && renderBranchPerformance()}
                   {['admin', 'production'].includes(user.role) && renderChefPerformance()}
-          </div>
+          </div>                                                
 
                     
 
