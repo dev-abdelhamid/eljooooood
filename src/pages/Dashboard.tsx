@@ -324,7 +324,7 @@ const ChefDashboard: React.FC<{
                               <li key={item._id}>
                                 {isRtl
                                   ? `${item.quantity} ${item.productName} `
-                                  : `${item.quantity} ${item.productNameEn || item.productName}})`}
+                                  : `${item.quantity} ${item.productNameEn || item.productName}`}
                               </li>
                             ))}
                           </ul>
