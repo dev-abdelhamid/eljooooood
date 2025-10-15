@@ -1459,7 +1459,7 @@ return (
     ) : (
       <>
         {renderStats()}
-        <div className="grid grid-cols-1 md:grid-cols-2  gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2   gap-6">
           <div className="space-y-6">
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
@@ -1530,6 +1530,12 @@ return (
                   )}
                 </AnimatePresence>
               </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2">
+                 {user.role === 'branch' && renderRecentInventoryHistory()}
+             {user.role === 'branch' && renderLowStockItems()}
+              </div>
+                 
             </div>
           </div>
           <div className="space-y-6">
@@ -1537,8 +1543,8 @@ return (
             {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
             {['admin', 'production'].includes(user.role) && renderBranchPerformance()}
             {['admin', 'production'].includes(user.role) && renderChefPerformance()}
-             {user.role === 'branch' && renderLowStockItems()}
-            {user.role === 'branch' && renderRecentInventoryHistory()}
+         
+           
           </div>
         </div>
       </>
