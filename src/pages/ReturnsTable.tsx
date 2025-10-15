@@ -64,6 +64,9 @@ const ReturnsTable: React.FC<Props> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState('all');
   const [selectedBranches, setSelectedBranches] = useState<string[]>(allBranches);
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const currentYear = new Date().getFullYear();
 
   const periods = useMemo(() => {
     const periodsList = [{ value: 'all', label: isRtl ? 'الكل' : 'All' }];
@@ -78,16 +81,24 @@ const ReturnsTable: React.FC<Props> = ({
       });
       week++;
     }
+    periodsList.push({ value: 'custom', label: isRtl ? 'مخصص' : 'Custom' });
     return periodsList;
   }, [daysInMonth, isRtl, toArabicNumerals]);
 
   const filteredDayIndices = useMemo(() => {
     if (selectedPeriod === 'all') return Array.from({ length: daysInMonth.length }, (_, i) => i);
+    if (selectedPeriod === 'custom' && startDate && endDate) {
+      const startD = new Date(startDate);
+      const endD = new Date(endDate);
+      const startIdx = startD.getDate() - 1;
+      const endIdx = endD.getDate() - 1;
+      return Array.from({ length: endIdx - startIdx + 1 }, (_, i) => startIdx + i);
+    }
     const weekNum = parseInt(selectedPeriod.replace('week', ''));
     const start = (weekNum - 1) * 7;
     const end = Math.min(start + 6, daysInMonth.length - 1);
     return Array.from({ length: end - start + 1 }, (_, i) => start + i);
-  }, [selectedPeriod, daysInMonth]);
+  }, [selectedPeriod, startDate, endDate, daysInMonth]);
 
   const filteredData = useMemo(() => {
     return data.filter(row =>
@@ -104,6 +115,7 @@ const ReturnsTable: React.FC<Props> = ({
   const grandTotalReturns = filteredData.reduce((sum, row) => sum + filteredDayIndices.reduce((s, i) => s + getDailyReturn(row, i), 0), 0);
   const grandTotalValue = filteredData.reduce((sum, row) => sum + row.totalValue, 0);
   const grandTotalOrders = filteredData.reduce((sum, row) => sum + (row.totalOrders || 0), 0);
+
   const monthName = months[month].label;
 
   const exportTable = (format: 'excel' | 'pdf') => {
@@ -166,6 +178,9 @@ const ReturnsTable: React.FC<Props> = ({
     }
   };
 
+  const monthStart = new Date(currentYear, month, 1);
+  const monthEnd = new Date(currentYear, month + 1, 0);
+
   if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
 
   if (filteredData.length === 0) {
@@ -190,22 +205,48 @@ const ReturnsTable: React.FC<Props> = ({
           placeholder={isRtl ? 'بحث حسب المنتج أو الكود' : 'Search by product or code'}
           value={searchTerm}
           onChange={e => setSearchTerm(e.target.value)}
-          className="px-4 py-2 border rounded-md"
+          className="px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
         <select
           value={selectedPeriod}
           onChange={e => setSelectedPeriod(e.target.value)}
-          className="px-4 py-2 border rounded-md"
+          className="px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {periods.map(p => (
             <option key={p.value} value={p.value}>{p.label}</option>
           ))}
         </select>
+        {selectedPeriod === 'custom' && (
+          <div className="flex gap-4">
+            <label>
+              {isRtl ? 'من' : 'From'}
+              <input
+                type="date"
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+                min={monthStart.toISOString().split('T')[0]}
+                max={monthEnd.toISOString().split('T')[0]}
+                className="px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ml-2"
+              />
+            </label>
+            <label>
+              {isRtl ? 'إلى' : 'To'}
+              <input
+                type="date"
+                value={endDate}
+                onChange={e => setEndDate(e.target.value)}
+                min={monthStart.toISOString().split('T')[0]}
+                max={monthEnd.toISOString().split('T')[0]}
+                className="px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ml-2"
+              />
+            </label>
+          </div>
+        )}
         <select
           multiple
           value={selectedBranches}
           onChange={e => setSelectedBranches(Array.from(e.target.selectedOptions, option => option.value))}
-          className="px-4 py-2 border rounded-md"
+          className="px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {allBranches.map(branch => (
             <option key={branch} value={branch}>{branch}</option>
@@ -215,8 +256,8 @@ const ReturnsTable: React.FC<Props> = ({
           <Button
             variant={filteredData.length > 0 ? 'primary' : 'secondary'}
             onClick={filteredData.length > 0 ? () => exportTable('excel') : undefined}
-            className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
-              filteredData.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+            className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 shadow-sm hover:shadow-md ${
+              filteredData.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
             }`}
             disabled={filteredData.length === 0}
           >
@@ -226,8 +267,8 @@ const ReturnsTable: React.FC<Props> = ({
           <Button
             variant={filteredData.length > 0 ? 'primary' : 'secondary'}
             onClick={filteredData.length > 0 ? () => exportTable('pdf') : undefined}
-            className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
-              filteredData.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+            className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 shadow-sm hover:shadow-md ${
+              filteredData.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
             }`}
             disabled={filteredData.length === 0}
           >
@@ -310,7 +351,7 @@ const ReturnsTable: React.FC<Props> = ({
             </tr>
           </tbody>
         </table>
-        <Tooltip id="return-tooltip" place="top" />
+        <Tooltip id="return-tooltip" place="top" effect="solid" className="custom-tooltip" />
       </motion.div>
     </div>
   );

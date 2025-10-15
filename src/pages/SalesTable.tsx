@@ -61,9 +61,43 @@ const SalesTable: React.FC<Props> = ({
   getTooltipContent,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedPeriod, setSelectedPeriod] = useState('all');
   const [selectedBranches, setSelectedBranches] = useState<string[]>(allBranches);
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const currentYear = new Date().getFullYear();
+
+  const periods = useMemo(() => {
+    const periodsList = [{ value: 'all', label: isRtl ? 'الكل' : 'All' }];
+    let week = 1;
+    const daysCount = daysInMonth.length;
+    for (let d = 1; d <= daysCount; d += 7) {
+      const start = d;
+      const end = Math.min(d + 6, daysCount);
+      periodsList.push({
+        value: `week${week}`,
+        label: isRtl ? `الأسبوع ${toArabicNumerals(week)} (${toArabicNumerals(start)}-${toArabicNumerals(end)})` : `Week ${week} (${start}-${end})`,
+      });
+      week++;
+    }
+    periodsList.push({ value: 'custom', label: isRtl ? 'مخصص' : 'Custom' });
+    return periodsList;
+  }, [daysInMonth, isRtl, toArabicNumerals]);
+
+  const filteredDayIndices = useMemo(() => {
+    if (selectedPeriod === 'all') return Array.from({ length: daysInMonth.length }, (_, i) => i);
+    if (selectedPeriod === 'custom' && startDate && endDate) {
+      const startD = new Date(startDate);
+      const endD = new Date(endDate);
+      const startIdx = startD.getDate() - 1;
+      const endIdx = endD.getDate() - 1;
+      return Array.from({ length: endIdx - startIdx + 1 }, (_, i) => startIdx + i);
+    }
+    const weekNum = parseInt(selectedPeriod.replace('week', ''));
+    const start = (weekNum - 1) * 7;
+    const end = Math.min(start + 6, daysInMonth.length - 1);
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  }, [selectedPeriod, startDate, endDate, daysInMonth]);
 
   const filteredData = useMemo(() => {
     return data.filter(row =>
@@ -72,29 +106,15 @@ const SalesTable: React.FC<Props> = ({
     );
   }, [data, searchTerm]);
 
-  const monthName = months[month].label;
-
-  const filteredDayIndices = useMemo(() => {
-    let startIdx = 0;
-    let endIdx = daysInMonth.length - 1;
-    if (startDate) {
-      const startD = new Date(startDate);
-      startIdx = startD.getDate() - 1;
-    }
-    if (endDate) {
-      const endD = new Date(endDate);
-      endIdx = endD.getDate() - 1;
-    }
-    return Array.from({ length: endIdx - startIdx + 1 }, (_, i) => startIdx + i);
-  }, [startDate, endDate, daysInMonth]);
-
-  const grandTotalSales = filteredData.reduce((sum, row) => sum + row.totalSales, 0);
-  const grandTotalValue = filteredData.reduce((sum, row) => sum + row.totalValue, 0);
-
   const getDailySale = (row: SalesRow, i: number) => {
     if (selectedBranches.length === 0) return row.dailySales[i];
     return selectedBranches.reduce((sum, b) => sum + (row.dailyBranchDetails[i][b] || 0), 0);
   };
+
+  const grandTotalSales = filteredData.reduce((sum, row) => sum + filteredDayIndices.reduce((s, i) => s + getDailySale(row, i), 0), 0);
+  const grandTotalValue = filteredData.reduce((sum, row) => sum + row.totalValue, 0);
+
+  const monthName = months[month].label;
 
   const exportTable = (format: 'excel' | 'pdf') => {
     const headers = [
@@ -181,30 +201,41 @@ const SalesTable: React.FC<Props> = ({
           onChange={e => setSearchTerm(e.target.value)}
           className="px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
-        <div className="flex gap-4">
-          <label>
-            {isRtl ? 'من' : 'From'}
-            <input
-              type="date"
-              value={startDate}
-              onChange={e => setStartDate(e.target.value)}
-              min={monthStart.toISOString().split('T')[0]}
-              max={monthEnd.toISOString().split('T')[0]}
-              className="px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ml-2"
-            />
-          </label>
-          <label>
-            {isRtl ? 'إلى' : 'To'}
-            <input
-              type="date"
-              value={endDate}
-              onChange={e => setEndDate(e.target.value)}
-              min={monthStart.toISOString().split('T')[0]}
-              max={monthEnd.toISOString().split('T')[0]}
-              className="px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ml-2"
-            />
-          </label>
-        </div>
+        <select
+          value={selectedPeriod}
+          onChange={e => setSelectedPeriod(e.target.value)}
+          className="px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          {periods.map(p => (
+            <option key={p.value} value={p.value}>{p.label}</option>
+          ))}
+        </select>
+        {selectedPeriod === 'custom' && (
+          <div className="flex gap-4">
+            <label>
+              {isRtl ? 'من' : 'From'}
+              <input
+                type="date"
+                value={startDate}
+                onChange={e => setStartDate(e.target.value)}
+                min={monthStart.toISOString().split('T')[0]}
+                max={monthEnd.toISOString().split('T')[0]}
+                className="px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ml-2"
+              />
+            </label>
+            <label>
+              {isRtl ? 'إلى' : 'To'}
+              <input
+                type="date"
+                value={endDate}
+                onChange={e => setEndDate(e.target.value)}
+                min={monthStart.toISOString().split('T')[0]}
+                max={monthEnd.toISOString().split('T')[0]}
+                className="px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ml-2"
+              />
+            </label>
+          </div>
+        )}
         <select
           multiple
           value={selectedBranches}
@@ -307,7 +338,7 @@ const SalesTable: React.FC<Props> = ({
             </tr>
           </tbody>
         </table>
-        <Tooltip id="sales-tooltip" place="top" />
+        <Tooltip id="sales-tooltip" place="top" effect="solid" className="custom-tooltip" />
       </motion.div>
     </div>
   );
