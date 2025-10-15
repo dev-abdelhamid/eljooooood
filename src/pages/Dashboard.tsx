@@ -1329,15 +1329,7 @@ export const Dashboard: React.FC = () => {
         <AlertCircle className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-red-600`} />
         {isRtl ? 'منتجات تحتاج تجديد' : 'Low Stock Products'}
       </h3>
-      <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-3">
-        <ProductSearchInput
-          value={inventoryFilter.search}
-          onChange={(value) => setInventoryFilter((prev) => ({ ...prev, search: value ?? '' }))}
-          placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
-          ariaLabel={isRtl ? 'البحث' : 'Search'}
-          className="w-full sm:w-48 rounded-lg border-gray-200 focus:ring-amber-500"
-        />
-      </div>
+    
       <div className="space-y-3 max-h-64 overflow-y-auto">
         <AnimatePresence>
           {lowStockItems.length === 0 ? (
@@ -1403,27 +1395,7 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 
-  const renderInventoryFilters = () => (
-    <div className="flex flex-col sm:flex-row gap-3 mb-4">
-      <ProductDropdown
-             value={timeFilter}
-      onChange={(value) => setTimeFilter(value)}
-      options={timeFilterOptions.map((option) => ({
-        value: option.value,
-        label: isRtl ? option.label : option.enLabel,
-      }))}
-      ariaLabel={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
-      className="w-full sm:w-48 rounded-lg border-gray-200 focus:ring-amber-500"
-    />
-    <ProductSearchInput
-      value={inventoryFilter.search}
-      onChange={(value) => setInventoryFilter((prev) => ({ ...prev, search: value ?? '' }))}
-      placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
-      ariaLabel={isRtl ? 'البحث' : 'Search'}
-      className="w-full sm:w-48 rounded-lg border-gray-200 focus:ring-amber-500"
-    />
-  </div>
-);
+
 
 if (loading && isInitialLoad) return <Loader />;
 if (error) return <div className="text-center text-red-600 p-4">{error}</div>;
@@ -1535,8 +1507,11 @@ return (
                      {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
           </div>
           </div>
-          {user.role === 'branch' && renderLowStockItems()}
+              <div className="space-y-6">
+         {user.role === 'branch' && renderLowStockItems()}
           {user.role === 'branch' && renderRecentInventoryHistory()}
+          </div>
+        
           <div className="space-y-6">
             {['admin', 'production'].includes(user.role) && renderBranchPerformance()}
             {['admin', 'production'].includes(user.role) && renderChefPerformance()}
