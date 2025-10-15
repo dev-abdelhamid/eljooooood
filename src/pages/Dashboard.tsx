@@ -10,6 +10,7 @@ import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, returnsAPI, inventoryAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
+import { ProductDropdown } from './NewOrder';
 
 // تعريف الواجهات
 interface Stats {
@@ -170,7 +171,7 @@ const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color:
         <Icon className={`w-5 h-5 text-${color}-600`} />
         <div>
           <p className="text-xs text-gray-600">{title}</p>
-          <p className="text-sm font-semibold text-gray-800">{value}</p>
+          <p className="text-sm font-semibold text-gray-900">{value}</p>
         </div>
       </div>
     </div>
@@ -202,6 +203,11 @@ const ChefDashboard: React.FC<{
 
   const toggleExpandTask = (taskId: string) => {
     setExpandedTaskId(expandedTaskId === taskId ? null : taskId);
+  };
+
+  // دالة لعرض الوحدة بشكل صحيح
+  const getDisplayUnit = (unit: string, unitEn: string | undefined) => {
+    return isRtl ? (unit || 'غير محدد') : (unitEn || unit || 'N/A');
   };
 
   return (
@@ -243,18 +249,19 @@ const ChefDashboard: React.FC<{
             {isRtl ? 'أحدث الطلبات قيد الإنتاج' : 'Latest In Production'}
           </h3>
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <select
+            <ProductDropdown
               value={filter.status}
-              onChange={(e) => setFilter((prev) => ({ ...prev, status: e.target.value }))}
-              className="w-full sm:w-40 p-1.5 rounded-lg border border-gray-200 text-xs focus:ring-2 focus:ring-blue-500 bg-white"
-              aria-label={isRtl ? 'حالة المهمة' : 'Task Status'}
-            >
-              <option value="all">{isRtl ? 'الكل' : 'All'}</option>
-              <option value="pending">{isRtl ? 'معلق' : 'Pending'}</option>
-              <option value="assigned">{isRtl ? 'معين' : 'Assigned'}</option>
-              <option value="in_progress">{isRtl ? 'قيد التنفيذ' : 'In Progress'}</option>
-              <option value="completed">{isRtl ? 'مكتمل' : 'Completed'}</option>
-            </select>
+              onChange={(value) => setFilter((prev) => ({ ...prev, status: value }))}
+              options={[
+                { value: 'all', label: isRtl ? 'الكل' : 'All' },
+                { value: 'pending', label: isRtl ? 'معلق' : 'Pending' },
+                { value: 'assigned', label: isRtl ? 'معين' : 'Assigned' },
+                { value: 'in_progress', label: isRtl ? 'قيد التنفيذ' : 'In Progress' },
+                { value: 'completed', label: isRtl ? 'مكتمل' : 'Completed' },
+              ]}
+              ariaLabel={isRtl ? 'حالة المهمة' : 'Task Status'}
+              className="w-full sm:w-40"
+            />
             <input
               type="text"
               value={filter.search}
@@ -323,8 +330,8 @@ const ChefDashboard: React.FC<{
                             {order.items.map((item) => (
                               <li key={item._id}>
                                 {isRtl
-                                  ? `${item.quantity} ${item.productName} `
-                                  : `${item.quantity} ${item.productNameEn || item.productName}`}
+                                  ? `${item.quantity} ${item.productName} (${getDisplayUnit(item.unit, item.unitEn)})`
+                                  : `${item.quantity} ${item.productNameEn || item.productName} (${getDisplayUnit(item.unit, item.unitEn)})`}
                               </li>
                             ))}
                           </ul>
@@ -713,7 +720,7 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     fetchDashboardData();
     return () => fetchDashboardData.cancel();
-  }, [fetchDashboardData, timeFilter, language]); // Added language dependency
+  }, [fetchDashboardData, timeFilter, language]);
 
   useEffect(() => {
     if (refreshTasks) {
@@ -1170,12 +1177,6 @@ export const Dashboard: React.FC = () => {
       .slice(0, 8);
   }, [orders]);
 
-  const sortedLatestReturns = useMemo(() => {
-    return [...returns]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 8);
-  }, [returns]);
-
   const renderStats = () => (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -1424,18 +1425,13 @@ export const Dashboard: React.FC = () => {
           <BarChart3 className="w-5 h-5 text-amber-600" />
           {isRtl ? 'لوحة التحكم' : 'Dashboard'}
         </h1>
-        <select
+        <ProductDropdown
           value={timeFilter}
-          onChange={(e) => setTimeFilter(e.target.value)}
-          className="p-1.5 rounded-lg border border-gray-200 text-xs focus:ring-2 focus:ring-blue-500 bg-white"
-          aria-label={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
-        >
-          {timeFilterOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {isRtl ? option.label : option.enLabel}
-            </option>
-          ))}
-        </select>
+          onChange={setTimeFilter}
+          options={timeFilterOptions.map(option => ({ value: option.value, label: isRtl ? option.label : option.enLabel }))}
+          ariaLabel={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
+          className="w-auto min-w-[150px]"
+        />
       </div>
       {user.role === 'chef' ? (
         <ChefDashboard
