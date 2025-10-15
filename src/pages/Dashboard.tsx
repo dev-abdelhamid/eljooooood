@@ -1496,10 +1496,6 @@ return (
 
 
              
-              <div >
-                          {user.role === 'branch' && renderLowStockItems()}
-                          {user.role === 'branch' && renderRecentInventoryHistory()}
-              </div>
 
         
           <div>
@@ -1510,6 +1506,12 @@ return (
                     
 
         </div>
+
+        
+              <div >
+                          {user.role === 'branch' && renderLowStockItems()}
+                          {user.role === 'branch' && renderRecentInventoryHistory()}
+              </div>
       </>
     )}
   </div>
