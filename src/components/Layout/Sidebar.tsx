@@ -22,6 +22,7 @@ import {
   XCircle,
   ChevronLeft,
   ChevronRight,
+  AlertCircle,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -141,6 +142,37 @@ export function Sidebar({
     collapsed: { width: '64px', transition: { duration: 0.3, ease: 'easeInOut' } },
   };
 
+  // ✅ دالة لعرض الإشعار في حالة التصغير
+  const renderNotificationBadge = (count: number, isCollapsed: boolean) => {
+    if (count === 0) return null;
+    
+    if (isCollapsed) {
+      return (
+        <motion.div
+          className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white shadow-sm flex items-center justify-center"
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          whileHover={{ scale: 1.2 }}
+        >
+          <span className="text-xs text-white font-bold leading-none">
+            {count > 9 ? '9+' : count}
+          </span>
+        </motion.div>
+      );
+    }
+
+    return (
+      <motion.span
+        className="ml-2 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow-sm min-w-[20px] text-center"
+        initial={{ scale: 0 }}
+        animate={{ scale: 1 }}
+        whileHover={{ scale: 1.05 }}
+      >
+        {count > 99 ? '99+' : count}
+      </motion.span>
+    );
+  };
+
   return (
     <AnimatePresence>
       {(isOpen || isLargeScreen) && (
@@ -179,43 +211,53 @@ export function Sidebar({
                 </button>
               </div>
             )}
+            
             <nav className="flex flex-col flex-grow p-1 sm:p-2 space-y-1 scrollbar-thin scrollbar-w-1 scrollbar-thumb-amber-400/80 scrollbar-track-amber-100/50 hover:scrollbar-thumb-amber-400">
               {navItems.map((item) => {
                 const count = unreadByPath[item.path] || 0;
+                const isCollapsed = isLargeScreen && !isExpanded;
+                
                 return (
                   <NavLink
                     key={item.path}
                     to={item.path}
                     onClick={() => !isLargeScreen && onClose()}
                     className={({ isActive }) =>
-                      `flex items-center text-amber-800 rounded-lg p-1 sm:p-2 cursor-pointer hover:bg-amber-200/50 hover:shadow-sm transition-all duration-200 ${
+                      `relative flex ${isCollapsed ? 'justify-center' : 'items-center'} text-amber-800 rounded-lg p-1 sm:p-2 cursor-pointer hover:bg-amber-200/50 hover:shadow-sm transition-all duration-200 ${
                         isActive ? 'bg-amber-200 font-semibold text-amber-900 shadow-sm' : ''
-                      }`
+                      } ${isCollapsed ? 'py-3' : ''}`
                     }
-                    title={item.label}
+                    title={isCollapsed ? `${item.label} (${count > 0 ? count : 0} notifications)` : item.label}
                   >
-                    <item.icon
-                      size={isLargeScreen && !isExpanded ? 18 : isSmallScreen ? 16 : 20}
-                      className="text-amber-600 min-w-[20px]"
-                    />
-                    <span
+                    {/* ✅ Container للأيقونة والإشعار */}
+                    <motion.div 
+                      className={`relative flex ${isCollapsed ? 'justify-center items-center w-full' : ''}`}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      whileHover={{ scale: isCollapsed ? 1.1 : 1 }}
+                    >
+                      <item.icon
+                        size={isCollapsed ? 20 : (isSmallScreen ? 16 : 20)}
+                        className={`text-amber-600 ${isCollapsed ? 'mx-auto' : 'min-w-[20px]'} transition-colors ${
+                          isActive ? 'text-amber-800' : ''
+                        }`}
+                      />
+                      
+                      {/* ✅ إشعار محسن */}
+                      {renderNotificationBadge(count, isCollapsed)}
+                    </motion.div>
+                    
+                    {/* النص - مخفي في التصغير */}
+                    <motion.span
                       className={`${
-                        isLargeScreen && !isExpanded ? 'hidden' : 'block m-1 font-medium text-xs sm:text-sm'
+                        isCollapsed ? 'hidden' : 'block m-1 font-medium text-xs sm:text-sm'
                       } truncate text-amber-900`}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={isCollapsed ? { opacity: 0, x: -10 } : { opacity: 1, x: 0 }}
+                      transition={{ duration: 0.2 }}
                     >
                       {item.label}
-                    </span>
-                    {count > 0 && (
-                      <span
-                        className={`ml-auto text-xs font-bold px-1 py-0.5 rounded-full shadow-sm ${
-                          isLargeScreen && !isExpanded
-                            ? 'w-2 h-2 bg-red-500'
-                            : 'bg-red-500 text-white min-w-[16px] sm:min-w-[18px] text-center'
-                        }`}
-                      >
-                        {isLargeScreen && !isExpanded ? '' : count > 9 ? '9+' : count}
-                      </span>
-                    )}
+                    </motion.span>
                   </NavLink>
                 );
               })}
@@ -228,61 +270,72 @@ export function Sidebar({
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3 }}
             >
-              {/* معلومات المستخدم */}
+              {/* معلومات المستخدم - مُحسنة للتصغير */}
               <div className="flex flex-col gap-2 p-2 sm:p-3 rounded-lg bg-white/60 backdrop-blur-sm border border-amber-100/30">
-                {/* الاسم */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <div className={`flex ${isLargeScreen && !isExpanded ? 'justify-center' : 'items-center justify-between'}`}>
+                  <div className={`flex items-center gap-2 ${isLargeScreen && !isExpanded ? 'justify-center w-full' : ''}`}>
                     <UserCircle2 
-                      size={isSmallScreen ? 16 : 18} 
-                      className="text-amber-600 min-w-[18px] flex-shrink-0" 
+                      size={isLargeScreen && !isExpanded ? 20 : (isSmallScreen ? 16 : 18)} 
+                      className="text-amber-600 flex-shrink-0 transition-all" 
                     />
-                    <span className={`${
-                      isLargeScreen && !isExpanded ? 'hidden' : 'block truncate font-semibold text-amber-900 text-xs sm:text-sm'
-                    }`}>
+                    <motion.span 
+                      className={`${
+                        isLargeScreen && !isExpanded ? 'hidden' : 'block truncate font-semibold text-amber-900 text-xs sm:text-sm'
+                      }`}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={isLargeScreen && !isExpanded ? { opacity: 0, x: -10 } : { opacity: 1, x: 0 }}
+                    >
                       {displayName}
-                    </span>
+                    </motion.span>
                   </div>
                   
-                  {/* ✅ Badge للدور */}
-                  {userRoleLabel && (
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      isLargeScreen && !isExpanded ? 'hidden' : 'block'
-                    } ${
-                      user?.role === 'admin' 
-                        ? 'bg-amber-100 text-amber-800 border border-amber-200' 
-                        : user?.role === 'branch' 
-                        ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                        : user?.role === 'chef'
-                        ? 'bg-green-100 text-green-800 border border-green-200'
-                        : 'bg-purple-100 text-purple-800 border border-purple-200'
-                    }`}>
+                  {/* Badge للدور - مخفي في التصغير */}
+                  {userRoleLabel && isLargeScreen && isExpanded && (
+                    <motion.span 
+                      className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                        user?.role === 'admin' 
+                          ? 'bg-amber-100 text-amber-800 border border-amber-200' 
+                          : user?.role === 'branch' 
+                          ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                          : user?.role === 'chef'
+                          ? 'bg-green-100 text-green-800 border border-green-200'
+                          : 'bg-purple-100 text-purple-800 border border-purple-200'
+                      }`}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      whileHover={{ scale: 1.05 }}
+                    >
                       {userRoleLabel}
-                    </span>
+                    </motion.span>
                   )}
                 </div>
-                
-           
               </div>
 
-              {/* ✅ زر تسجيل الخروج المحسن */}
+              {/* ✅ زر تسجيل الخروج - مُحسن للتصغير */}
               <motion.button
                 onClick={logout}
-                className="flex items-center justify-center gap-2 p-2 sm:p-2.5 rounded-lg bg-gradient-to-r from-red-50/80 to-red-100/80 
+                className={`flex ${isLargeScreen && !isExpanded ? 'justify-center' : 'items-center justify-center'} gap-2 p-2 sm:p-2.5 rounded-lg bg-gradient-to-r from-red-50/80 to-red-100/80 
                            text-red-700 hover:from-red-100/80 hover:to-red-200/80 hover:text-red-800 
                            transition-all duration-200 border border-red-200/30 shadow-sm 
                            hover:shadow-md hover:scale-[1.02] active:scale-[0.98]
-                           font-medium text-xs sm:text-sm"
+                           font-medium text-xs sm:text-sm ${isLargeScreen && !isExpanded ? 'py-3' : ''}`}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 aria-label={t('header.logout')}
               >
-                <LogOut size={isSmallScreen ? 16 : 18} className="text-red-500 min-w-[18px] flex-shrink-0" />
-                <span className={`${
-                  isLargeScreen && !isExpanded ? 'hidden' : 'block truncate'
-                }`}>
+                <LogOut 
+                  size={isLargeScreen && !isExpanded ? 20 : (isSmallScreen ? 16 : 18)} 
+                  className="text-red-500 flex-shrink-0 transition-all" 
+                />
+                <motion.span 
+                  className={`${
+                    isLargeScreen && !isExpanded ? 'hidden' : 'block truncate'
+                  }`}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={isLargeScreen && !isExpanded ? { opacity: 0, x: -10 } : { opacity: 1, x: 0 }}
+                >
                   {t('header.logout')}
-                </span>
+                </motion.span>
               </motion.button>
             </motion.div>
 
