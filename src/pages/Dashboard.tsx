@@ -1489,10 +1489,10 @@ return (
            
            
            
-                                             
+                                                  {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
+        
 
              </div>
-             {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
 
 
             
