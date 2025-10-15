@@ -29,7 +29,7 @@ export function Sidebar({
 }: SidebarProps) {
   const { user, logout } = useAuth();
   const { t, language } = useLanguage();
-  const { unreadByPath, totalUnread } = useNotifications();
+  const { unreadByPath } = useNotifications();
   const isRtl = language === 'ar';
 
   // عرض الاسم الصحيح حسب اللغة
@@ -43,16 +43,9 @@ export function Sidebar({
       { path: '/dashboard', icon: Home, label: t('dashboard'), notifications: unreadByPath['/dashboard'] || 0 },
     ];
     
-    // إضافة إشعار عام في الأعلى
-    const notificationItem = totalUnread > 0 ? [{
-      path: '/notifications', 
-      icon: Bell, 
-      label: t('notifications') || 'Notifications',
-      notifications: totalUnread
-    }] : [];
+
 
     const adminItems = [
-      ...notificationItem,
       { path: '/products', icon: Box, label: t('products.manage'), notifications: unreadByPath['/products'] || 0 },
       { path: '/branches', icon: Store, label: t('branches.manage'), notifications: unreadByPath['/branches'] || 0 },
       { path: '/chefs', icon: ChefHat, label: t('chefs.manage'), notifications: unreadByPath['/chefs'] || 0 },
@@ -65,7 +58,6 @@ export function Sidebar({
     ];
 
     const branchItems = [
-      ...notificationItem,
       { path: '/orders/new', icon: ShoppingBag, label: t('orders.create'), notifications: unreadByPath['/orders/new'] || 0 },
       { path: '/branch-orders', icon: ShoppingBag, label: t('orders.review'), notifications: unreadByPath['/branch-orders'] || 0 },
       { path: '/branch-sales/new', icon: ListTodo, label: t('sales.create'), notifications: unreadByPath['/branch-sales/new'] || 0 },
@@ -76,13 +68,11 @@ export function Sidebar({
     ];
 
     const chefItems = [
-      ...notificationItem,
       { path: '/production-tasks', icon: ListTodo, label: t('productionTasks'), notifications: unreadByPath['/production-tasks'] || 0 },
       { path: '/profile', icon: Settings2, label: t('settings'), notifications: 0 },
     ];
 
     const productionItems = [
-      ...notificationItem,
       { path: '/products', icon: Box, label: t('products.manage'), notifications: unreadByPath['/products'] || 0 },
       { path: '/departments', icon: Users2, label: t('departments'), notifications: unreadByPath['/departments'] || 0 },
       { path: '/orders', icon: ShoppingBag, label: t('orders'), notifications: unreadByPath['/orders'] || 0 },
@@ -99,7 +89,7 @@ export function Sidebar({
       case 'production': roleItems = productionItems; break;
     }
     return [...baseItems, ...roleItems];
-  }, [user, t, unreadByPath, totalUnread]);
+  }, [user, t, unreadByPath]);
 
   const sidebarVariants = {
     open: { x: 0, opacity: 1, transition: { duration: 0.3, ease: 'easeOut' } },
