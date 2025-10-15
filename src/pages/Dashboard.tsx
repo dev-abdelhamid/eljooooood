@@ -8,10 +8,10 @@ import { ShoppingCart, Clock, BarChart3, CheckCircle, AlertCircle, Package, Doll
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
-import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI } from '../services/api';
+import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, inventoryAPI, returnsAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 
-// تعريف الواجهات
+// تعريف الواجهات (حسّنتها شوية لتوافق المخزون والمرتجعات)
 interface Stats {
   totalOrders: number;
   pendingOrders: number;
@@ -22,6 +22,31 @@ interface Stats {
   completedTasks: number;
   inProgressTasks: number;
   averageOrderValue: number;
+}
+
+interface InventoryStats {
+  totalItems: number;
+  lowStockItems: number;
+  totalValue: number;
+  expiringSoon: number;
+}
+
+interface Return {
+  id: string;
+  returnNumber: string;
+  orderId: string;
+  branchName: string;
+  branchNameEn?: string;
+  items: Array<{
+    _id: string;
+    productName: string;
+    productNameEn?: string;
+    quantity: number;
+    unit: string;
+    unitEn?: string;
+  }>;
+  status: 'pending' | 'approved' | 'completed' | 'rejected';
+  createdAt: string;
 }
 
 interface Task {
@@ -86,7 +111,7 @@ interface Order {
 }
 
 interface Chef {
-   id: string;
+  id: string;
   user: {
     id: string;
     name: string;
@@ -96,7 +121,7 @@ interface Chef {
     phone?: string;
     createdAt: string;
     updatedAt: string;
-  } | null  
+  } | null;
   userId: string;
   username: string;
   name: string;
@@ -166,7 +191,6 @@ const ChefDashboard: React.FC<{
     setExpandedTaskId(expandedTaskId === taskId ? null : taskId);
   };
 
-  // دالة لعرض الوحدة بشكل صحيح
   const getDisplayUnit = (unit: string, unitEn: string | undefined) => {
     return isRtl ? (unit || 'غير محدد') : (unitEn || unit || 'N/A');
   };
@@ -342,6 +366,13 @@ export const Dashboard: React.FC = () => {
   const [branches, setBranches] = useState<{ _id: string; name: string; nameEn?: string }[]>([]);
   const [branchPerformance, setBranchPerformance] = useState<BranchPerformance[]>([]);
   const [chefPerformance, setChefPerformance] = useState<ChefPerformance[]>([]);
+  const [returns, setReturns] = useState<Return[]>([]);
+  const [inventoryStats, setInventoryStats] = useState<InventoryStats>({
+    totalItems: 0,
+    lowStockItems: 0,
+    totalValue: 0,
+    expiringSoon: 0,
+  });
   const [stats, setStats] = useState<Stats>({
     totalOrders: 0,
     pendingOrders: 0,
@@ -360,7 +391,7 @@ export const Dashboard: React.FC = () => {
 
   const cache = useMemo(() => new Map<string, any>(), []);
 
-  const cacheKey = useMemo(() => `${user?.id || user?._id}-${user?.role}-${timeFilter}`, [user, timeFilter]);
+  const cacheKey = useMemo(() => `${user?.id || user?._id}-${user?.role}-${timeFilter}-${language}`, [user, timeFilter, language]);
 
   const fetchDashboardData = useCallback(
     debounce(async (forceRefresh = false) => {
@@ -388,6 +419,8 @@ export const Dashboard: React.FC = () => {
         setBranches(cachedData.branches);
         setBranchPerformance(cachedData.branchPerformance);
         setChefPerformance(cachedData.chefPerformance);
+        setReturns(cachedData.returns);
+        setInventoryStats(cachedData.inventoryStats);
         setStats(cachedData.stats);
         setLoading(false);
         setIsInitialLoad(false);
@@ -423,6 +456,8 @@ export const Dashboard: React.FC = () => {
         let tasksResponse: any[] = [];
         let chefsResponse: any[] = [];
         let branchesResponse: any[] = [];
+        let returnsResponse: any[] = [];
+        let inventoryResponse: any = {};
 
         if (user.role === 'chef') {
           const chefProfile = await chefsAPI.getByUserId(user.id || user._id);
@@ -439,8 +474,12 @@ export const Dashboard: React.FC = () => {
             user.role !== 'branch' ? productionAssignmentsAPI.getAllTasks(query).catch(() => []) : Promise.resolve([]),
             ['admin', 'production'].includes(user.role) ? chefsAPI.getAll().catch(() => []) : Promise.resolve([]),
             ['admin', 'production'].includes(user.role) ? branchesAPI.getAll().catch(() => []) : Promise.resolve([]),
+            returnsAPI.getAll(query).catch(() => []), // إضافة للمرتجعات
           ];
-          [ordersResponse, tasksResponse, chefsResponse, branchesResponse] = await Promise.all(promises);
+          [ordersResponse, tasksResponse, chefsResponse, branchesResponse, returnsResponse] = await Promise.all(promises);
+          if (user.role === 'branch') {
+            inventoryResponse = await inventoryAPI.getBranchStats(user.id || user._id).catch(() => ({}));
+          }
         }
 
         const mappedOrders = ordersResponse.map((order: any) => ({
@@ -489,7 +528,17 @@ export const Dashboard: React.FC = () => {
         }));
 
         const mappedChefs = chefsResponse.map((chef: any) => ({
-          _id: chef._id || crypto.randomUUID(),
+          id: chef._id || crypto.randomUUID(),
+          user: chef.user ? {
+            id: chef.user._id,
+            name: chef.user.name,
+            nameEn: chef.user.nameEn,
+            username: chef.user.username,
+            email: chef.user.email,
+            phone: chef.user.phone,
+            createdAt: chef.user.createdAt,
+            updatedAt: chef.user.updatedAt,
+          } : null,
           userId: chef.user?._id || chef._id,
           username: chef.user?.username || chef.username || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'),
           name: chef.user?.name || chef.name || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'),
@@ -504,6 +553,24 @@ export const Dashboard: React.FC = () => {
             nameEn: branch.nameEn || branch.name || 'Unknown',
           }))
           .sort((a: any, b: any) => a.name.localeCompare(b.name));
+
+        const mappedReturns = returnsResponse.map((ret: any) => ({
+          id: ret._id || crypto.randomUUID(),
+          returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
+          orderId: ret.order?._id || 'unknown',
+          branchName: ret.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
+          branchNameEn: ret.branch?.nameEn || ret.branch?.name || 'Unknown',
+          items: (ret.items || []).map((item: any) => ({
+            _id: item._id,
+            productName: item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+            productNameEn: item.product?.nameEn || item.product?.name || 'Unknown',
+            quantity: Number(item.quantity) || 0,
+            unit: item.product?.unit || 'غير محدد',
+            unitEn: item.product?.unitEn || item.product?.unit || 'N/A',
+          })),
+          status: ret.status || 'pending',
+          createdAt: formatDate(ret.createdAt || new Date(), language),
+        })).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
         const branchPerf = mappedBranches.map((branch: any) => {
           const branchOrders = mappedOrders.filter((o) => o.branchId === branch._id);
@@ -551,6 +618,13 @@ export const Dashboard: React.FC = () => {
         const inProgressTasks = mappedTasks.filter((task) => task.status === 'in_progress').length;
         const averageOrderValue = totalOrders > 0 ? totalOrderValue / totalOrders : 0;
 
+        const newInventoryStats = {
+          totalItems: inventoryResponse.totalItems || 0,
+          lowStockItems: inventoryResponse.lowStockItems || 0,
+          totalValue: inventoryResponse.totalValue || 0,
+          expiringSoon: inventoryResponse.expiringSoon || 0,
+        };
+
         const newData = {
           orders: mappedOrders,
           tasks: mappedTasks,
@@ -558,6 +632,8 @@ export const Dashboard: React.FC = () => {
           branches: mappedBranches,
           branchPerformance: branchPerf,
           chefPerformance: chefPerf,
+          returns: mappedReturns,
+          inventoryStats: newInventoryStats,
           stats: {
             totalOrders,
             pendingOrders,
@@ -578,6 +654,8 @@ export const Dashboard: React.FC = () => {
         setBranches(newData.branches);
         setBranchPerformance(newData.branchPerformance);
         setChefPerformance(newData.chefPerformance);
+        setReturns(newData.returns);
+        setInventoryStats(newData.inventoryStats);
         setStats(newData.stats);
         setError('');
         setIsInitialLoad(false);
@@ -603,7 +681,7 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     fetchDashboardData();
     return () => fetchDashboardData.cancel();
-  }, [fetchDashboardData, timeFilter]);
+  }, [fetchDashboardData, timeFilter, language]); // أضفت language هنا لتغيير فوري
 
   useEffect(() => {
     if (refreshTasks) {
@@ -1007,6 +1085,10 @@ export const Dashboard: React.FC = () => {
       .slice(0, 8);
   }, [orders]);
 
+  const sortedLatestReturns = useMemo(() => {
+    return [...returns].slice(0, 8); // أحدث 8 مرتجعات، كل الحالات
+  }, [returns]);
+
   const renderStats = () => (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -1134,7 +1216,7 @@ export const Dashboard: React.FC = () => {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2, delay: index * 0.1 }}
                 className="flex items-center justify-between p-2 border-b border-gray-100 cursor-pointer hover:bg-amber-50 transition-colors duration-200"
-                onClick={() => navigate(`/chefs/${chef.id}`)}
+                onClick={() => navigate(`/chefs/${chef.chefId}`)} // صلحت لـ chef.chefId اللي هو userId، بس لو id هو الرئيسي، غيره لـ chef.id
               >
                 <div>
                   <p className="text-xs font-medium text-gray-800">{isRtl ? chef.chefName : chef.chefNameEn || chef.chefName}</p>
@@ -1152,6 +1234,90 @@ export const Dashboard: React.FC = () => {
                   </div>
                   <span className="text-xs text-gray-600">{chef.performance.toFixed(1)}%</span>
                 </div>
+              </motion.div>
+            ))
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+
+  const renderInventoryStats = () => user.role === 'branch' && (
+    <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 mt-4">
+      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
+        <Package className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+        {isRtl ? 'إحصائيات المخزون' : 'Inventory Stats'}
+      </h3>
+      <div className="grid grid-cols-2 gap-3">
+        <StatsCard
+          title={isRtl ? 'إجمالي العناصر' : 'Total Items'}
+          value={inventoryStats.totalItems.toString()}
+          icon={Package}
+          color="amber"
+          ariaLabel={isRtl ? 'إجمالي العناصر' : 'Total Items'}
+        />
+        <StatsCard
+          title={isRtl ? 'عناصر منخفضة المخزون' : 'Low Stock Items'}
+          value={inventoryStats.lowStockItems.toString()}
+          icon={AlertCircle}
+          color="red"
+          ariaLabel={isRtl ? 'عناصر منخفضة المخزون' : 'Low Stock Items'}
+        />
+        <StatsCard
+          title={isRtl ? 'إجمالي القيمة' : 'Total Value'}
+          value={inventoryStats.totalValue.toFixed(2)}
+          icon={DollarSign}
+          color="green"
+          ariaLabel={isRtl ? 'إجمالي القيمة' : 'Total Value'}
+        />
+        <StatsCard
+          title={isRtl ? 'عناصر تنتهي قريبا' : 'Expiring Soon'}
+          value={inventoryStats.expiringSoon.toString()}
+          icon={Clock}
+          color="blue"
+          ariaLabel={isRtl ? 'عناصر تنتهي قريبا' : 'Expiring Soon'}
+        />
+      </div>
+    </div>
+  );
+
+  const renderLatestReturns = () => (
+    <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 mt-4">
+      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
+        <ShoppingCart className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+        {isRtl ? 'أحدث المرتجعات' : 'Latest Returns'}
+      </h3>
+      <div className="space-y-2 max-h-64 overflow-y-auto">
+        <AnimatePresence>
+          {sortedLatestReturns.length === 0 ? (
+            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد مرتجعات' : 'No returns available'}</p>
+          ) : (
+            sortedLatestReturns.map((ret) => (
+              <motion.div
+                key={ret.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="border border-amber-100 rounded-lg p-2 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
+                onClick={() => navigate(`/returns/${ret.id}`)} // افترضت path للمرتجعات
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-semibold text-xs text-gray-800 truncate">
+                    {isRtl ? `مرتجع رقم ${ret.returnNumber}` : `Return #${ret.returnNumber}`}
+                  </h4>
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
+                      ret.status === 'pending' ? 'bg-amber-100 text-amber-800' : ret.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}
+                  >
+                    {isRtl
+                      ? ret.status === 'pending' ? 'معلق' : ret.status === 'completed' ? 'مكتمل' : 'مرفوض'
+                      : ret.status.charAt(0).toUpperCase() + ret.status.slice(1)}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 mb-2 truncate">{isRtl ? ret.branchName : ret.branchNameEn || ret.branchName}</p>
+                <p className="text-xs text-gray-500">{isRtl ? `تم الإنشاء في: ${ret.createdAt}` : `Created At: ${ret.createdAt}`}</p>
               </motion.div>
             ))
           )}
@@ -1196,6 +1362,7 @@ export const Dashboard: React.FC = () => {
       ) : (
         <>
           {renderStats()}
+          {renderInventoryStats()} {/* إضافة إحصائيات المخزون للفرع */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-3">
               <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
@@ -1248,6 +1415,7 @@ export const Dashboard: React.FC = () => {
                   </AnimatePresence>
                 </div>
               </div>
+              {renderLatestReturns()} {/* إضافة عرض أحدث المرتجعات */}
             </div>
             {['admin', 'production'].includes(user.role) && (
               <>
