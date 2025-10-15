@@ -10,7 +10,7 @@ import { Button } from '../components/UI/Button';
 import { ProductDropdown } from './NewOrder';
 import OrderTableSkeleton  from '../components/Shared/OrderTableSkeleton';
 import OrdersTable from './OrdersTable';
-import DailyOrdersTable from './DailyOrdersTable';
+import {DailyOrdersTable} from './DailyOrdersTable';
 
 interface Branch {
   id: string;
