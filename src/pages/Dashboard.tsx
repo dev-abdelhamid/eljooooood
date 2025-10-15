@@ -296,7 +296,7 @@ const ChefDashboard: React.FC<{
                     </span>
                   </div>
                   <p className="text-sm text-gray-600 mb-2 truncate">
-                    {`${task.quantity} ${isRtl ? task.productName : task.productNameEn || task.productName} (${isRtl ? task.unit : task.unitEn || task.unit})`}
+                    {`${task.quantity} ${isRtl ? task.productName : task.productNameEn || task.productName} `}
                   </p>
                   <p className="text-sm text-gray-500 mb-2">{isRtl ? `تم الإنشاء في: ${task.createdAt}` : `Created At: ${task.createdAt}`}</p>
                   <div className="flex items-center gap-2">
