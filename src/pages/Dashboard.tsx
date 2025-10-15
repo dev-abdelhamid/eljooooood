@@ -323,8 +323,8 @@ const ChefDashboard: React.FC<{
                             {order.items.map((item) => (
                               <li key={item._id}>
                                 {isRtl
-                                  ? `${item.quantity} ${item.productName} (${getDisplayUnit(item.unit, item.unitEn)})`
-                                  : `${item.quantity} ${item.productNameEn || item.productName} (${getDisplayUnit(item.unit, item.unitEn)})`}
+                                  ? `${item.quantity} ${item.productName} `
+                                  : `${item.quantity} ${item.productNameEn || item.productName}})`}
                               </li>
                             ))}
                           </ul>
