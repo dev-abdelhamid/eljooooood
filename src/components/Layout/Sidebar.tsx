@@ -173,52 +173,66 @@ export function Sidebar({
               </motion.div>
             )}
 
-            {/* Navigation */}
+            {/* Navigation - مُصحح */}
             <nav className="flex-1 p-2 space-y-1.5 overflow-y-auto scrollbar-thin scrollbar-thumb-amber-300/50 scrollbar-track-transparent">
               {navItems.map((item) => (
                 <NavLink
                   key={item.path}
                   to={item.path}
                   onClick={() => !isLargeScreen && onClose()}
-                  className={({ isActive }) =>
+                  className={({ isActive: active }) => // ✅ إصلاح isActive
                     `group relative flex items-center p-2.5 rounded-xl transition-all duration-300 cursor-pointer overflow-hidden ${
-                      isActive 
+                      active 
                         ? 'bg-gradient-to-r from-amber-100 to-amber-200 text-amber-900 font-semibold shadow-sm border border-amber-300/30' 
                         : 'text-amber-700 hover:bg-amber-50/80 hover:text-amber-900 hover:shadow-sm'
                     }`
                   }
                 >
-                  <item.icon 
-                    size={isLargeScreen && !isExpanded ? 20 : 18}
-                    className={`min-w-[20px] transition-colors ${isExpanded || !isLargeScreen ? 'mr-3' : ''}`}
-                  />
-                  
-                  <motion.span 
-                    className={`${
-                      isLargeScreen && !isExpanded ? 'hidden' : 'block flex-1 font-medium text-sm truncate'
-                    }`}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={isLargeScreen && !isExpanded ? { opacity: 0 } : { opacity: 1, x: 0 }}
-                  >
-                    {item.label}
-                  </motion.span>
+                  {({ isActive: active }) => ( // ✅ استخدام destructuring صحيح
+                    <>
+                      <item.icon 
+                        size={isLargeScreen && !isExpanded ? 20 : 18}
+                        className={`min-w-[20px] transition-colors ${isExpanded || !isLargeScreen ? 'mr-3' : ''} ${
+                          active ? 'text-amber-700' : 'text-amber-600'
+                        }`}
+                      />
+                      
+                      <motion.span 
+                        className={`${
+                          isLargeScreen && !isExpanded ? 'hidden' : 'block flex-1 font-medium text-sm truncate'
+                        }`}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={isLargeScreen && !isExpanded ? { opacity: 0 } : { opacity: 1, x: 0 }}
+                      >
+                        {item.label}
+                      </motion.span>
 
-                  {/* إشعارات محسنة */}
-                  {item.notifications > 0 && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className={`ml-2 flex items-center justify-center min-w-[20px] h-5 rounded-full shadow-lg ${
-                        isLargeScreen && !isExpanded 
-                          ? 'w-2 h-2 bg-red-500' 
-                          : 'bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs font-bold'
-                      }`}
-                    >
-                      {isLargeScreen && !isExpanded ? '' : item.notifications > 99 ? '99+' : item.notifications}
-                    </motion.div>
+                      {/* إشعارات محسنة */}
+                      {item.notifications > 0 && (
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          className={`ml-2 flex items-center justify-center min-w-[20px] h-5 rounded-full shadow-lg ${
+                            isLargeScreen && !isExpanded 
+                              ? 'w-2 h-2 bg-red-500' 
+                              : 'bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs font-bold'
+                          }`}
+                        >
+                          {isLargeScreen && !isExpanded ? '' : item.notifications > 99 ? '99+' : item.notifications}
+                        </motion.div>
+                      )}
+
+                      {/* مؤشر النشاط - مُصحح */}
+                      {active && (
+                        <motion.div 
+                          className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-amber-400 to-amber-600"
+                          layoutId="active-indicator"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                        />
+                      )}
+                    </>
                   )}
-
-                 
                 </NavLink>
               ))}
             </nav>
@@ -252,13 +266,13 @@ export function Sidebar({
                   <div className="space-y-1 pt-1 border-t border-amber-100/50">
                     {user.email && (
                       <div className="flex items-center gap-2 text-xs text-amber-700">
-                        <Mail size={12} className="text-amber-500" />
+                        <Mail size={12} className="text-amber-500 flex-shrink-0" />
                         <span className="truncate">{user.email}</span>
                       </div>
                     )}
                     {user.phone && (
                       <div className="flex items-center gap-2 text-xs text-amber-700">
-                        <Phone size={12} className="text-amber-500" />
+                        <Phone size={12} className="text-amber-500 flex-shrink-0" />
                         <span className="truncate">{user.phone}</span>
                       </div>
                     )}
@@ -273,7 +287,7 @@ export function Sidebar({
                 onClick={logout}
                 className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-gradient-to-r from-red-50 to-red-100/50 text-red-700 hover:from-red-100 hover:to-red-200 transition-all duration-200 border border-red-200/30 shadow-sm"
               >
-                <LogOut size={16} className="text-red-500" />
+                <LogOut size={16} className="text-red-500 flex-shrink-0" />
                 <span className={`${
                   isLargeScreen && !isExpanded ? 'hidden' : 'block text-sm font-medium'
                 }`}>
