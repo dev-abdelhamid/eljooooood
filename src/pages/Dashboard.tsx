@@ -1500,9 +1500,9 @@ return (
 
         
           <div className="space-y-6">
-                  {['admin', 'production'].includes(user.role) && renderChefPerformance()}
           </div>
                            {['admin', 'production'].includes(user.role) && renderBranchPerformance()}
+                  {['admin', 'production'].includes(user.role) && renderChefPerformance()}
 
         </div>
       </>
