@@ -4,12 +4,13 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { ShoppingCart, Clock, BarChart3, CheckCircle, AlertCircle, Package, DollarSign, ChefHat } from 'lucide-react';
+import { ShoppingCart, Clock, BarChart3, CheckCircle, AlertCircle, Package, DollarSign, ChefHat, RotateCcw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
-import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI } from '../services/api';
+import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, returnsAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
+import { ProductDropdown } from './NewOrder';
 
 // تعريف الواجهات
 interface Stats {
@@ -22,6 +23,10 @@ interface Stats {
   completedTasks: number;
   inProgressTasks: number;
   averageOrderValue: number;
+  totalInventoryItems?: number;
+  lowStockItems?: number;
+  totalInventoryValue?: number;
+  pendingReturns?: number;
 }
 
 interface Task {
@@ -85,18 +90,30 @@ interface Order {
   createdAt: string;
 }
 
+interface Return {
+  id: string;
+  returnNumber: string;
+  branchName: string;
+  branchNameEn?: string;
+  branchId: string;
+  items: Array<{
+    productId: string;
+    productName: string;
+    productNameEn?: string;
+    quantity: number;
+    reason: string;
+    reasonEn?: string;
+  }>;
+  status: 'pending_approval' | 'approved' | 'rejected';
+  createdByName: string;
+  createdByNameEn?: string;
+  reviewNotes?: string;
+  reviewNotesEn?: string;
+  createdAt: string;
+}
+
 interface Chef {
-   id: string;
-  user: {
-    id: string;
-    name: string;
-    nameEn?: string;
-    username: string;
-    email?: string;
-    phone?: string;
-    createdAt: string;
-    updatedAt: string;
-  } | null  
+  _id: string;
   userId: string;
   username: string;
   name: string;
@@ -107,6 +124,28 @@ interface Chef {
 interface FilterState {
   status: string;
   search: string;
+}
+
+interface InventoryItem {
+  _id: string;
+  product: {
+    _id: string;
+    name: string;
+    nameEn: string;
+    code: string;
+    unit: string;
+    unitEn: string;
+    department: { _id: string; name: string; nameEn: string } | null;
+    displayName: string;
+    displayUnit: string;
+  } | null;
+  branch: { _id: string; name: string; nameEn: string; displayName: string } | null;
+  currentStock: number;
+  pendingReturnStock: number;
+  damagedStock: number;
+  minStockLevel: number;
+  maxStockLevel: number;
+  status: 'low' | 'normal' | 'full';
 }
 
 const timeFilterOptions = [
@@ -125,7 +164,7 @@ const Loader: React.FC = () => (
 const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color: string; ariaLabel: string }> = React.memo(
   ({ title, value, icon: Icon, color, ariaLabel }) => (
     <div
-      className={`p-3 bg-gradient-to-r from-${color}-50 to-${color}-100 rounded-lg border border-${color}-200 cursor-pointer hover:bg-${color}-200 transition-colors duration-200`}
+      className={`p-3 bg-${color}-50 rounded-lg border border-${color}-100 cursor-pointer hover:bg-${color}-100 transition-colors duration-200`}
       aria-label={ariaLabel}
     >
       <div className="flex items-center gap-2">
@@ -138,6 +177,39 @@ const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color:
     </div>
   )
 );
+
+// مكون احصائيات المخزون
+const InventoryStats: React.FC<{ inventory: InventoryItem[]; isRtl: boolean }> = React.memo(({ inventory, isRtl }) => {
+  const totalItems = inventory.length;
+  const lowStock = inventory.filter(item => item.status === 'low').length;
+  const totalValue = inventory.reduce((sum, item) => sum + (item.currentStock * (item.product?.price || 0)), 0);
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+      <StatsCard
+        title={isRtl ? 'إجمالي عناصر المخزون' : 'Total Inventory Items'}
+        value={totalItems.toString()}
+        icon={Package}
+        color="blue"
+        ariaLabel={isRtl ? 'إجمالي عناصر المخزون' : 'Total Inventory Items'}
+      />
+      <StatsCard
+        title={isRtl ? 'عناصر منخفضة المخزون' : 'Low Stock Items'}
+        value={lowStock.toString()}
+        icon={AlertCircle}
+        color="red"
+        ariaLabel={isRtl ? 'عناصر منخفضة المخزون' : 'Low Stock Items'}
+      />
+      <StatsCard
+        title={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
+        value={totalValue.toFixed(2)}
+        icon={DollarSign}
+        color="green"
+        ariaLabel={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
+      />
+    </div>
+  );
+});
 
 const ChefDashboard: React.FC<{
   stats: Stats;
@@ -164,11 +236,6 @@ const ChefDashboard: React.FC<{
 
   const toggleExpandTask = (taskId: string) => {
     setExpandedTaskId(expandedTaskId === taskId ? null : taskId);
-  };
-
-  // دالة لعرض الوحدة بشكل صحيح
-  const getDisplayUnit = (unit: string, unitEn: string | undefined) => {
-    return isRtl ? (unit || 'غير محدد') : (unitEn || unit || 'N/A');
   };
 
   return (
@@ -340,6 +407,8 @@ export const Dashboard: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [chefs, setChefs] = useState<Chef[]>([]);
   const [branches, setBranches] = useState<{ _id: string; name: string; nameEn?: string }[]>([]);
+  const [returns, setReturns] = useState<Return[]>([]);
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [branchPerformance, setBranchPerformance] = useState<BranchPerformance[]>([]);
   const [chefPerformance, setChefPerformance] = useState<ChefPerformance[]>([]);
   const [stats, setStats] = useState<Stats>({
@@ -352,6 +421,10 @@ export const Dashboard: React.FC = () => {
     completedTasks: 0,
     inProgressTasks: 0,
     averageOrderValue: 0,
+    totalInventoryItems: 0,
+    lowStockItems: 0,
+    totalInventoryValue: 0,
+    pendingReturns: 0,
   });
   const [timeFilter, setTimeFilter] = useState('week');
   const [loading, setLoading] = useState(true);
@@ -360,7 +433,7 @@ export const Dashboard: React.FC = () => {
 
   const cache = useMemo(() => new Map<string, any>(), []);
 
-  const cacheKey = useMemo(() => `${user?.id || user?._id}-${user?.role}-${timeFilter}`, [user, timeFilter]);
+  const cacheKey = useMemo(() => `${user?.id || user?._id}-${user?.role}-${timeFilter}-${language}`, [user, timeFilter, language]);
 
   const fetchDashboardData = useCallback(
     debounce(async (forceRefresh = false) => {
@@ -386,6 +459,8 @@ export const Dashboard: React.FC = () => {
         setTasks(cachedData.tasks);
         setChefs(cachedData.chefs);
         setBranches(cachedData.branches);
+        setReturns(cachedData.returns);
+        setInventory(cachedData.inventory);
         setBranchPerformance(cachedData.branchPerformance);
         setChefPerformance(cachedData.chefPerformance);
         setStats(cachedData.stats);
@@ -423,6 +498,8 @@ export const Dashboard: React.FC = () => {
         let tasksResponse: any[] = [];
         let chefsResponse: any[] = [];
         let branchesResponse: any[] = [];
+        let returnsResponse: any[] = [];
+        let inventoryResponse: any[] = [];
 
         if (user.role === 'chef') {
           const chefProfile = await chefsAPI.getByUserId(user.id || user._id);
@@ -439,8 +516,10 @@ export const Dashboard: React.FC = () => {
             user.role !== 'branch' ? productionAssignmentsAPI.getAllTasks(query).catch(() => []) : Promise.resolve([]),
             ['admin', 'production'].includes(user.role) ? chefsAPI.getAll().catch(() => []) : Promise.resolve([]),
             ['admin', 'production'].includes(user.role) ? branchesAPI.getAll().catch(() => []) : Promise.resolve([]),
+            returnsAPI.getAll(query).catch(() => []),
+            user.role === 'branch' && user.branchId ? inventoryAPI.getByBranch(user.branchId, query).catch(() => []) : Promise.resolve([]),
           ];
-          [ordersResponse, tasksResponse, chefsResponse, branchesResponse] = await Promise.all(promises);
+          [ordersResponse, tasksResponse, chefsResponse, branchesResponse, returnsResponse, inventoryResponse] = await Promise.all(promises);
         }
 
         const mappedOrders = ordersResponse.map((order: any) => ({
@@ -504,6 +583,28 @@ export const Dashboard: React.FC = () => {
             nameEn: branch.nameEn || branch.name || 'Unknown',
           }))
           .sort((a: any, b: any) => a.name.localeCompare(b.name));
+
+        const mappedReturns = returnsResponse.map((ret: any) => ({
+          id: ret._id || crypto.randomUUID(),
+          returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
+          branchName: ret.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
+          branchNameEn: ret.branch?.nameEn || ret.branch?.name || 'Unknown',
+          branchId: ret.branch?._id || 'unknown',
+          items: (ret.items || []).map((item: any) => ({
+            productId: item.product?._id || 'unknown',
+            productName: item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
+            productNameEn: item.product?.nameEn || item.product?.name || 'Unknown',
+            quantity: Number(item.quantity) || 0,
+            reason: item.reason || '',
+            reasonEn: item.reasonEn || item.reason || '',
+          })),
+          status: ret.status || 'pending_approval',
+          createdByName: ret.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+          createdByNameEn: ret.createdBy?.nameEn || ret.createdBy?.name || 'Unknown',
+          reviewNotes: ret.reviewNotes || '',
+          reviewNotesEn: ret.reviewNotesEn || ret.reviewNotes || '',
+          createdAt: formatDate(ret.createdAt || new Date(), language),
+        }));
 
         const branchPerf = mappedBranches.map((branch: any) => {
           const branchOrders = mappedOrders.filter((o) => o.branchId === branch._id);
@@ -1007,6 +1108,12 @@ export const Dashboard: React.FC = () => {
       .slice(0, 8);
   }, [orders]);
 
+  const sortedLatestReturns = useMemo(() => {
+    return [...returns]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 8);
+  }, [returns]);
+
   const renderStats = () => (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -1049,6 +1156,38 @@ export const Dashboard: React.FC = () => {
         color="purple"
         ariaLabel={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
       />
+      {user.role === 'branch' && (
+        <>
+          <StatsCard
+            title={isRtl ? 'إجمالي عناصر المخزون' : 'Total Inventory Items'}
+            value={stats.totalInventoryItems?.toString() || '0'}
+            icon={Package}
+            color="blue"
+            ariaLabel={isRtl ? 'إجمالي عناصر المخزون' : 'Total Inventory Items'}
+          />
+          <StatsCard
+            title={isRtl ? 'عناصر منخفضة المخزون' : 'Low Stock Items'}
+            value={stats.lowStockItems?.toString() || '0'}
+            icon={AlertCircle}
+            color="red"
+            ariaLabel={isRtl ? 'عناصر منخفضة المخزون' : 'Low Stock Items'}
+          />
+          <StatsCard
+            title={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
+            value={stats.totalInventoryValue?.toFixed(2) || '0'}
+            icon={DollarSign}
+            color="green"
+            ariaLabel={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
+          />
+          <StatsCard
+            title={isRtl ? 'المرتجعات المعلقة' : 'Pending Returns'}
+            value={stats.pendingReturns?.toString() || '0'}
+            icon={RotateCcw}
+            color="amber"
+            ariaLabel={isRtl ? 'المرتجعات المعلقة' : 'Pending Returns'}
+          />
+        </>
+      )}
       {['admin', 'production'].includes(user.role) && (
         <>
           <StatsCard
@@ -1134,7 +1273,7 @@ export const Dashboard: React.FC = () => {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2, delay: index * 0.1 }}
                 className="flex items-center justify-between p-2 border-b border-gray-100 cursor-pointer hover:bg-amber-50 transition-colors duration-200"
-                onClick={() => navigate(`/chefs/${chef.id}`)}
+                onClick={() => navigate(`/chefs/${chef.chefId}`)}
               >
                 <div>
                   <p className="text-xs font-medium text-gray-800">{isRtl ? chef.chefName : chef.chefNameEn || chef.chefName}</p>
@@ -1249,6 +1388,7 @@ export const Dashboard: React.FC = () => {
                 </div>
               </div>
             </div>
+            {renderLatestReturns()}
             {['admin', 'production'].includes(user.role) && (
               <>
                 {renderBranchPerformance()}
