@@ -18,7 +18,7 @@ interface Stats {
   inProductionOrders: number;
   inTransitOrders: number;
   deliveredOrders: number;
-  totalOrderValue: number; // تم تغيير الاسم من totalSales إلى totalOrderValue
+  totalOrderValue: number;
   completedTasks: number;
   inProgressTasks: number;
   averageOrderValue: number;
@@ -103,18 +103,16 @@ const timeFilterOptions = [
   { value: 'year', label: 'هذا العام', enLabel: 'This Year' },
 ];
 
-// مكون تحميل محسن
 const Loader: React.FC = () => (
   <div className="flex justify-center items-center h-screen">
     <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-amber-600"></div>
   </div>
 );
 
-// مكون بطاقة الإحصائيات مع تحسينات في الأسلوب
 const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color: string; ariaLabel: string }> = React.memo(
   ({ title, value, icon: Icon, color, ariaLabel }) => (
     <div
-      className={`p-3 bg-${color}-50 rounded-lg border border-${color}-100 cursor-pointer hover:bg-${color}-100 transition-colors duration-200`}
+      className={`p-3 bg-gradient-to-r from-${color}-50 to-${color}-100 rounded-lg border border-${color}-200 cursor-pointer hover:bg-${color}-200 transition-colors duration-200`}
       aria-label={ariaLabel}
     >
       <div className="flex items-center gap-2">
@@ -128,15 +126,15 @@ const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color:
   )
 );
 
-// مكون لوحة تحكم الشيف
 const ChefDashboard: React.FC<{
   stats: Stats;
   tasks: Task[];
+  orders: Order[];
   isRtl: boolean;
   language: string;
   handleStartTask: (taskId: string, orderId: string) => void;
   handleCompleteTask: (taskId: string, orderId: string) => void;
-}> = React.memo(({ stats, tasks, isRtl, language, handleStartTask, handleCompleteTask }) => {
+}> = React.memo(({ stats, tasks, orders, isRtl, language, handleStartTask, handleCompleteTask }) => {
   const [filter, setFilter] = useState<FilterState>({ status: 'all', search: '' });
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
 
@@ -221,83 +219,90 @@ const ChefDashboard: React.FC<{
             {filteredTasks.length === 0 ? (
               <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد مهام' : 'No tasks available'}</p>
             ) : (
-              filteredTasks.map((task) => (
-                <motion.div
-                  key={task.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  transition={{ duration: 0.2 }}
-                  className="border border-amber-100 rounded-lg p-2 bg-amber-50 shadow-sm"
-                >
-                  <div className="flex items-center justify-between mb-2 cursor-pointer" onClick={() => toggleExpandTask(task.id)}>
-                    <h4 className="font-semibold text-xs text-gray-800 truncate">
-                      {isRtl ? `طلب رقم ${task.orderNumber}` : `Order #${task.orderNumber}`}
-                    </h4>
-                    <span
-                      className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
-                        task.status === 'pending' || task.status === 'assigned'
-                          ? 'bg-amber-100 text-amber-800'
-                          : task.status === 'in_progress'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-green-100 text-green-800'
-                      }`}
-                    >
-                      {isRtl
-                        ? task.status === 'pending'
-                          ? 'معلق'
-                          : task.status === 'assigned'
-                          ? 'معين'
-                          : task.status === 'in_progress'
-                          ? 'قيد التنفيذ'
-                          : 'مكتمل'
-                        : task.status.charAt(0).toUpperCase() + task.status.slice(1)}
-                    </span>
-                  </div>
-                  <p className="text-xs text-gray-600 mb-2 truncate">
-                    {`${task.quantity} ${isRtl ? task.productName : task.productNameEn || task.productName} (${isRtl ? task.unit : task.unitEn || task.unit})`}
-                  </p>
-                  <p className="text-xs text-gray-500 mb-2">{isRtl ? `تم الإنشاء في: ${task.createdAt}` : `Created At: ${task.createdAt}`}</p>
-                  <AnimatePresence>
-                    {expandedTaskId === task.id && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.3 }}
-                        className="overflow-hidden"
+              filteredTasks.map((task) => {
+                const order = orders.find((o) => o.id === task.orderId);
+                return (
+                  <motion.div
+                    key={task.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    transition={{ duration: 0.2 }}
+                    className="border border-amber-100 rounded-lg p-2 bg-amber-50 shadow-sm"
+                  >
+                    <div className="flex items-center justify-between mb-2 cursor-pointer" onClick={() => toggleExpandTask(task.id)}>
+                      <h4 className="font-semibold text-xs text-gray-800 truncate">
+                        {isRtl ? `طلب رقم ${task.orderNumber}` : `Order #${task.orderNumber}`}
+                      </h4>
+                      <span
+                        className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
+                          task.status === 'pending' || task.status === 'assigned'
+                            ? 'bg-amber-100 text-amber-800'
+                            : task.status === 'in_progress'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-green-100 text-green-800'
+                        }`}
                       >
-                        <p className="text-xs text-gray-700 mb-1">{isRtl ? 'تفاصيل المهمة:' : 'Task Details:'}</p>
-                        <ul className="text-xs text-gray-600 list-disc pl-4">
-                          <li>{isRtl ? `فرع: ${task.branchName}` : `Branch: ${task.branchNameEn || task.branchName}`}</li>
-                          <li>{isRtl ? `حالة: ${task.status}` : `Status: ${task.status}`}</li>
-                          <li>{isRtl ? `كمية: ${task.quantity}` : `Quantity: ${task.quantity}`}</li>
-                        </ul>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                  <div className="flex items-center gap-2 mt-2">
-                    {(task.status === 'pending' || task.status === 'assigned') && (
-                      <button
-                        onClick={() => handleStartTask(task.id, task.orderId)}
-                        className="bg-amber-600 text-white px-2 py-1 rounded text-xs hover:bg-amber-700 transition-colors duration-200"
-                        aria-label={isRtl ? 'بدء المهمة' : 'Start Task'}
-                      >
-                        {isRtl ? 'بدء' : 'Start'}
-                      </button>
-                    )}
-                    {task.status === 'in_progress' && (
-                      <button
-                        onClick={() => handleCompleteTask(task.id, task.orderId)}
-                        className="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition-colors duration-200"
-                        aria-label={isRtl ? 'إكمال المهمة' : 'Complete Task'}
-                      >
-                        {isRtl ? 'إكمال' : 'Complete'}
-                      </button>
-                    )}
-                  </div>
-                </motion.div>
-              ))
+                        {isRtl
+                          ? task.status === 'pending'
+                            ? 'معلق'
+                            : task.status === 'assigned'
+                            ? 'معين'
+                            : task.status === 'in_progress'
+                            ? 'قيد التنفيذ'
+                            : 'مكتمل'
+                          : task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 mb-2 truncate">
+                      {`${task.quantity} ${isRtl ? task.productName : task.productNameEn || task.productName} (${isRtl ? task.unit : task.unitEn || task.unit})`}
+                    </p>
+                    <p className="text-xs text-gray-500 mb-2">{isRtl ? `تم الإنشاء في: ${task.createdAt}` : `Created At: ${task.createdAt}`}</p>
+                    <AnimatePresence>
+                      {expandedTaskId === task.id && order && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.3 }}
+                          className="overflow-hidden"
+                        >
+                          <p className="text-xs text-gray-700 mb-1">{isRtl ? 'تفاصيل الطلب:' : 'Order Details:'}</p>
+                          <ul className="text-xs text-gray-600 list-disc pl-4">
+                            {order.items.map((item) => (
+                              <li key={item._id}>
+                                {isRtl
+                                  ? `${item.quantity} ${item.productName} (${item.unit})`
+                                  : `${item.quantity} ${item.productNameEn || item.productName} (${item.unitEn || item.unit})`}
+                              </li>
+                            ))}
+                          </ul>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                    <div className="flex items-center gap-2 mt-2">
+                      {(task.status === 'pending' || task.status === 'assigned') && (
+                        <button
+                          onClick={() => handleStartTask(task.id, task.orderId)}
+                          className="bg-amber-600 text-white px-2 py-1 rounded text-xs hover:bg-amber-700 transition-colors duration-200"
+                          aria-label={isRtl ? 'بدء المهمة' : 'Start Task'}
+                        >
+                          {isRtl ? 'بدء' : 'Start'}
+                        </button>
+                      )}
+                      {task.status === 'in_progress' && (
+                        <button
+                          onClick={() => handleCompleteTask(task.id, task.orderId)}
+                          className="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 transition-colors duration-200"
+                          aria-label={isRtl ? 'إكمال المهمة' : 'Complete Task'}
+                        >
+                          {isRtl ? 'إكمال' : 'Complete'}
+                        </button>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })
             )}
           </AnimatePresence>
         </div>
@@ -307,7 +312,7 @@ const ChefDashboard: React.FC<{
 });
 
 export const Dashboard: React.FC = () => {
-  const { t, language } = useLanguage();
+  const { language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
   const { socket, isConnected } = useSocket();
@@ -345,7 +350,7 @@ export const Dashboard: React.FC = () => {
         const errorMessage = isRtl ? 'الوصول غير مصرح به' : 'Unauthorized access';
         setError(errorMessage);
         setLoading(false);
-        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
+        toast.error(errorMessage, { toastId: 'auth-error', position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
         addNotification({
           _id: `error-noUserId-${Date.now()}`,
           type: 'error',
@@ -552,7 +557,7 @@ export const Dashboard: React.FC = () => {
       } catch (err: any) {
         const errorMessage = err.status === 403 ? (isRtl ? 'الوصول غير مصرح به' : 'Unauthorized access') : (isRtl ? 'خطأ في الخادم' : 'Server error');
         setError(errorMessage);
-        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
+        toast.error(errorMessage, { toastId: 'server-error', position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
         addNotification({
           _id: `error-fetch-${Date.now()}`,
           type: 'error',
@@ -594,32 +599,97 @@ export const Dashboard: React.FC = () => {
       });
     });
 
+    socket.on('orderCreated', (data: any) => {
+      if (!data.orderId || !data.orderNumber || !data.branchName || !data.eventId) return;
+      if (!['admin', 'production', 'branch'].includes(user.role) || (user.role === 'branch' && data.branchId !== user.branchId)) return;
+
+      addNotification({
+        _id: data.eventId,
+        type: 'info',
+        message: isRtl ? `طلب جديد: ${data.orderNumber} - ${data.branchName}` : `New order: ${data.orderNumber} - ${data.branchName}`,
+        data: { orderId: data.orderId, eventId: data.eventId },
+        read: false,
+        createdAt: formatDate(new Date(), language),
+        sound: '/sounds/order-created.mp3',
+        vibrate: [300, 100, 300],
+        path: '/dashboard',
+      });
+      fetchDashboardData(true);
+    });
+
+    socket.on('orderApproved', (data: any) => {
+      if (!data.orderId || !data.orderNumber || !data.branchName || !data.eventId) return;
+      if (!['admin', 'production', 'branch'].includes(user.role) || (user.role === 'branch' && data.branchId !== user.branchId)) return;
+
+      setOrders((prev) =>
+        prev.map((order) => (order.id === data.orderId ? { ...order, status: 'approved' } : order))
+      );
+      addNotification({
+        _id: data.eventId,
+        type: 'success',
+        message: isRtl ? `تم الموافقة على الطلب ${data.orderNumber} - ${data.branchName}` : `Order approved: ${data.orderNumber} - ${data.branchName}`,
+        data: { orderId: data.orderId, eventId: data.eventId },
+        read: false,
+        createdAt: formatDate(new Date(), language),
+        sound: '/sounds/order-approved.mp3',
+        vibrate: [200, 100, 200],
+        path: '/dashboard',
+      });
+      fetchDashboardData(true);
+    });
+
+    socket.on('orderRejected', (data: any) => {
+      if (!data.orderId || !data.orderNumber || !data.branchName || !data.eventId) return;
+      if (!['admin', 'production', 'branch'].includes(user.role) || (user.role === 'branch' && data.branchId !== user.branchId)) return;
+
+      setOrders((prev) =>
+        prev.map((order) => (order.id === data.orderId ? { ...order, status: 'cancelled' } : order))
+      );
+      addNotification({
+        _id: data.eventId,
+        type: 'error',
+        message: isRtl ? `تم رفض الطلب ${data.orderNumber} - ${data.branchName}` : `Order rejected: ${data.orderNumber} - ${data.branchName}`,
+        data: { orderId: data.orderId, eventId: data.eventId },
+        read: false,
+        createdAt: formatDate(new Date(), language),
+        sound: '/sounds/order-rejected.mp3',
+        vibrate: [200, 100, 200],
+        path: '/dashboard',
+      });
+      fetchDashboardData(true);
+    });
+
     socket.on('taskAssigned', (data: any) => {
       if (!data.taskId || !data.orderId || !data.productName || !data.orderNumber || !data.branchName || !data.quantity || !data.eventId) {
         console.warn(`[${new Date().toISOString()}] Invalid task assigned data:`, data);
         return;
       }
-      if (data.chefId !== (user?.id || user?._id) || !['admin', 'production', 'chef'].includes(user.role)) return;
+      if (!['admin', 'production', 'chef'].includes(user.role) || (user.role === 'chef' && data.chefId !== user._id)) return;
 
       const notification = {
         _id: data.eventId,
-        type: 'info' as const,
+        type: 'info',
         message: isRtl
-          ? `تم تعيين مهمة: ${data.productName} (${data.quantity} ${data.unit}) للطلب ${data.orderNumber} - ${data.branchName}`
-          : `Task assigned: ${data.productName} (${data.quantity} ${data.unit}) for order ${data.orderNumber} - ${data.branchName}`,
-        data: {
-          orderId: data.orderId,
-          taskId: data.taskId,
-          chefId: data.chefId,
-          eventId: data.eventId,
-        },
+          ? `تم تعيين مهمة: ${data.productName} (${data.quantity} ${isRtl ? data.unit : data.unitEn || data.unit}) للطلب ${data.orderNumber} - ${data.branchName}`
+          : `Task assigned: ${data.productName} (${data.quantity} ${isRtl ? data.unit : data.unitEn || data.unit}) for order ${data.orderNumber} - ${data.branchName}`,
+        data: { orderId: data.orderId, taskId: data.taskId, chefId: data.chefId, eventId: data.eventId },
         read: false,
         createdAt: formatDate(new Date(), language),
         sound: '/sounds/task-assigned.mp3',
         vibrate: [400, 100, 400],
         path: '/dashboard',
       };
-      addNotification(notification);
+      addNotification({
+        _id: data.eventId,
+        type: 'info',
+        message: notification.message,
+        data: notification.data,
+        read: false,
+        createdAt: notification.createdAt,
+        sound: notification.sound,
+        vibrate: notification.vibrate,
+        path: notification.path,
+      });
       if (user.role === 'chef') {
         setTasks((prev) => [
           {
@@ -643,27 +713,6 @@ export const Dashboard: React.FC = () => {
       fetchDashboardData(true);
     });
 
-    socket.on('orderCompleted', (data: any) => {
-      if (!data.orderId || !data.orderNumber || !data.branchName || !data.eventId) return;
-      if (!['admin', 'branch', 'production'].includes(user.role)) return;
-
-      addNotification({
-        _id: data.eventId,
-        type: 'success' as const,
-        message: isRtl ? `تم إكمال الطلب ${data.orderNumber} - ${data.branchName}` : `Order completed: ${data.orderNumber} - ${data.branchName}`,
-        data: {
-          orderId: data.orderId,
-          eventId: data.eventId,
-        },
-        read: false,
-        createdAt: formatDate(new Date(), language),
-        sound: '/sounds/order-completed.mp3',
-        vibrate: [400, 100, 400],
-        path: '/dashboard',
-      });
-      fetchDashboardData(true);
-    });
-
     socket.on('itemStatusUpdated', (data: any) => {
       if (!data.orderId || !data.itemId || !data.status || !data.orderNumber || !data.branchName || !data.productName || !data.eventId) {
         console.warn(`[${new Date().toISOString()}] Invalid item status update data:`, data);
@@ -674,6 +723,18 @@ export const Dashboard: React.FC = () => {
       setTasks((prev) =>
         prev.map((task) =>
           task.id === data.itemId && task.orderId === data.orderId ? { ...task, status: data.status } : task
+        )
+      );
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.id === data.orderId
+            ? {
+                ...order,
+                items: order.items.map((item) =>
+                  item._id === data.itemId ? { ...item, status: data.status } : item
+                ),
+              }
+            : order
         )
       );
       addNotification({
@@ -692,11 +753,79 @@ export const Dashboard: React.FC = () => {
       fetchDashboardData(true);
     });
 
+    socket.on('orderCompleted', (data: any) => {
+      if (!data.orderId || !data.orderNumber || !data.branchName || !data.eventId) return;
+      if (!['admin', 'production'].includes(user.role)) return;
+
+      setOrders((prev) =>
+        prev.map((order) => (order.id === data.orderId ? { ...order, status: 'completed' } : order))
+      );
+      addNotification({
+        _id: data.eventId,
+        type: 'success',
+        message: isRtl ? `تم إكمال الطلب ${data.orderNumber} - ${data.branchName}` : `Order completed: ${data.orderNumber} - ${data.branchName}`,
+        data: { orderId: data.orderId, eventId: data.eventId },
+        read: false,
+        createdAt: formatDate(new Date(), language),
+        sound: '/sounds/order-completed.mp3',
+        vibrate: [400, 100, 400],
+        path: '/dashboard',
+      });
+      fetchDashboardData(true);
+    });
+
+    socket.on('orderInTransit', (data: any) => {
+      if (!data.orderId || !data.orderNumber || !data.branchName || !data.eventId) return;
+      if (!['admin', 'production', 'branch'].includes(user.role) || (user.role === 'branch' && data.branchId !== user.branchId)) return;
+
+      setOrders((prev) =>
+        prev.map((order) => (order.id === data.orderId ? { ...order, status: 'in_transit' } : order))
+      );
+      addNotification({
+        _id: data.eventId,
+        type: 'info',
+        message: isRtl ? `الطلب ${data.orderNumber} في الطريق إلى ${data.branchName}` : `Order ${data.orderNumber} is in transit to ${data.branchName}`,
+        data: { orderId: data.orderId, eventId: data.eventId },
+        read: false,
+        createdAt: formatDate(new Date(), language),
+        sound: '/sounds/order-in-transit.mp3',
+        vibrate: [300, 100, 300],
+        path: '/dashboard',
+      });
+      fetchDashboardData(true);
+    });
+
+    socket.on('orderDelivered', (data: any) => {
+      if (!data.orderId || !data.orderNumber || !data.branchName || !data.eventId) return;
+      if (!['admin', 'production', 'branch'].includes(user.role) || (user.role === 'branch' && data.branchId !== user.branchId)) return;
+
+      setOrders((prev) =>
+        prev.map((order) => (order.id === data.orderId ? { ...order, status: 'delivered' } : order))
+      );
+      addNotification({
+        _id: data.eventId,
+        type: 'success',
+        message: isRtl ? `تم تسليم الطلب ${data.orderNumber} إلى ${data.branchName}` : `Order ${data.orderNumber} delivered to ${data.branchName}`,
+        data: { orderId: data.orderId, eventId: data.eventId },
+        read: false,
+        createdAt: formatDate(new Date(), language),
+        sound: '/sounds/order-delivered.mp3',
+        vibrate: [400, 100, 400],
+        path: '/dashboard',
+      });
+      fetchDashboardData(true);
+    });
+
     return () => {
       socket.off('connect_error');
+      socket.off('orderCreated');
+      socket.off('orderApproved');
+      socket.off('orderRejected');
       socket.off('taskAssigned');
-      socket.off('orderCompleted');
       socket.off('itemStatusUpdated');
+      socket.off('orderCompleted');
+      socket.off('orderInTransit');
+      socket.off('orderDelivered');
     };
   }, [socket, user, isRtl, language, addNotification, fetchDashboardData, isConnected]);
 
@@ -718,6 +847,18 @@ export const Dashboard: React.FC = () => {
         await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'in_progress' });
         const task = tasks.find((t) => t.id === taskId);
         setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: 'in_progress' } : t)));
+        setOrders((prev) =>
+          prev.map((order) =>
+            order.id === orderId
+              ? {
+                  ...order,
+                  items: order.items.map((item) =>
+                    item._id === taskId ? { ...item, status: 'in_progress' } : item
+                  ),
+                }
+              : order
+          )
+        );
         const eventId = crypto.randomUUID();
         socket.emit('itemStatusUpdated', {
           orderId,
@@ -746,7 +887,7 @@ export const Dashboard: React.FC = () => {
         });
       } catch (err: any) {
         const errorMessage = err.message || (isRtl ? 'فشل تحديث المهمة' : 'Failed to update task');
-        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
+        toast.error(errorMessage, { toastId: `error-task-${taskId}`, position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
         addNotification({
           _id: `error-task-${taskId}-${Date.now()}`,
           type: 'error',
@@ -778,6 +919,18 @@ export const Dashboard: React.FC = () => {
         await productionAssignmentsAPI.updateTaskStatus(orderId, taskId, { status: 'completed' });
         const task = tasks.find((t) => t.id === taskId);
         setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, status: 'completed' } : t)));
+        setOrders((prev) =>
+          prev.map((order) =>
+            order.id === orderId
+              ? {
+                  ...order,
+                  items: order.items.map((item) =>
+                    item._id === taskId ? { ...item, status: 'completed' } : item
+                  ),
+                }
+              : order
+          )
+        );
         const eventId = crypto.randomUUID();
         socket.emit('itemStatusUpdated', {
           orderId,
@@ -806,7 +959,7 @@ export const Dashboard: React.FC = () => {
         });
       } catch (err: any) {
         const errorMessage = err.message || (isRtl ? 'فشل تحديث المهمة' : 'Failed to update task');
-        toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
+        toast.error(errorMessage, { toastId: `error-complete-${taskId}`, position: isRtl ? 'top-left' : 'top-right', autoClose: 2000 });
         addNotification({
           _id: `error-complete-${taskId}-${Date.now()}`,
           type: 'error',
@@ -982,7 +1135,7 @@ export const Dashboard: React.FC = () => {
   if (error) return <div className="text-center text-red-600 p-4">{error}</div>;
 
   return (
-    <div className={`py-6 px-4 mx-auto`}>
+    <div className={`py-6 px-4 mx-auto max-w-7xl`}>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl md:text-2xl font-bold text-gray-800 flex items-center gap-2">
           <BarChart3 className="w-5 h-5 text-amber-600" />
@@ -1005,6 +1158,7 @@ export const Dashboard: React.FC = () => {
         <ChefDashboard
           stats={stats}
           tasks={tasks}
+          orders={orders}
           isRtl={isRtl}
           language={language}
           handleStartTask={handleStartTask}
