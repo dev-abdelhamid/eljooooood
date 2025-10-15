@@ -1429,7 +1429,7 @@ if (loading && isInitialLoad) return <Loader />;
 if (error) return <div className="text-center text-red-600 p-4">{error}</div>;
 
 return (
-  <div className={`py-8 px-6 mx-auto max-w-7xl ${isRtl ? 'rtl' : 'ltr'}`}>
+  <div className={`py-8 px-6 mx-auto  ${isRtl ? 'rtl' : 'ltr'}`}>
     <div className="flex items-center justify-between mb-6">
       <h1 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-3">
         <BarChart3 className="w-6 h-6 text-amber-600" />
@@ -1459,7 +1459,7 @@ return (
     ) : (
       <>
         {renderStats()}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2  gap-6">
           <div className="space-y-6">
             <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
               <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
@@ -1531,13 +1531,14 @@ return (
                 </AnimatePresence>
               </div>
             </div>
-            {user.role === 'branch' && renderLowStockItems()}
-            {user.role === 'branch' && renderRecentInventoryHistory()}
           </div>
           <div className="space-y-6">
+            
             {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
             {['admin', 'production'].includes(user.role) && renderBranchPerformance()}
             {['admin', 'production'].includes(user.role) && renderChefPerformance()}
+             {user.role === 'branch' && renderLowStockItems()}
+            {user.role === 'branch' && renderRecentInventoryHistory()}
           </div>
         </div>
       </>
