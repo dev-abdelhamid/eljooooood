@@ -1089,7 +1089,7 @@ export const Dashboard: React.FC = () => {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3 mb-4"
+      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4"
     >
       <StatsCard
         title={isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
@@ -1397,7 +1397,7 @@ export const Dashboard: React.FC = () => {
         <Clock className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
         {isRtl ? 'أحدث سجل المخزون' : 'Recent Inventory History'}
       </h3>
-      <div className="space-y-2 max-h-64 overflow-y-auto">
+      <div className="space-y-2 w-full sm:w-48 overflow-y-auto">
         <AnimatePresence>
           {recentHistory.length === 0 ? (
             <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد سجلات' : 'No history available'}</p>
@@ -1409,7 +1409,7 @@ export const Dashboard: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2, delay: index * 0.1 }}
-                className="flex items-center justify-between p-2 border-b border-gray-100 hover:bg-amber-50/50 transition-all duration-200"
+                className="flex items-center  justify-between p-2 border-b border-gray-100 hover:bg-amber-50/50 transition-all duration-200"
               >
                 <div>
                   <p className="text-xs font-medium text-gray-800">{isRtl ? entry.type : entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}</p>
@@ -1502,20 +1502,22 @@ export const Dashboard: React.FC = () => {
   if (error) return <div className="text-center text-red-600 p-4 text-sm">{error}</div>;
   return (
     <div className={`container mx-auto p-4 ${isRtl ? 'rtl' : 'ltr'}`}>
-      <h1 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
-        <BarChart3 className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+      <div className="flex items-center justify-between mb-6">
+      <h1 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-3">
+        <BarChart3 className="w-6 h-6 text-amber-600" />
         {isRtl ? 'لوحة التحكم' : 'Dashboard'}
       </h1>
-      <div className="mb-4">
-        <ProductDropdown
-          options={timeFilterOptions}
-          value={timeFilter}
-          onChange={(value) => setTimeFilter(value)}
-          placeholder={isRtl ? 'اختر فترة زمنية' : 'Select Time Period'}
-          className="w-full sm:w-48 rounded-lg border-gray-200 focus:ring-amber-500"
-          ariaLabel={isRtl ? 'اختيار الفترة الزمنية' : 'Select Time Period'}
-        />
-      </div>
+      <ProductDropdown
+        value={timeFilter}
+        onChange={(value) => setTimeFilter(value)}
+        options={timeFilterOptions.map((option) => ({
+          value: option.value,
+          label: isRtl ? option.label : option.enLabel,
+        }))}
+        ariaLabel={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
+        className="w-48 rounded-lg border-gray-200 focus:ring-amber-500"
+      />
+    </div>
       {user.role === 'chef' ? (
         <ChefDashboard
           stats={stats}
