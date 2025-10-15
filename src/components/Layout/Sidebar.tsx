@@ -149,7 +149,7 @@ export function Sidebar({
     if (isCollapsed) {
       return (
         <motion.div
-          className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white shadow-sm flex items-center justify-center z-10"
+          className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border border-white shadow-sm flex items-center justify-center z-10"
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           whileHover={{ scale: 1.2 }}
@@ -193,7 +193,7 @@ export function Sidebar({
             initial={isLargeScreen ? (isExpanded ? 'expanded' : 'collapsed') : 'closed'}
             animate={isLargeScreen ? (isExpanded ? 'expanded' : 'collapsed') : 'open'}
             exit={isLargeScreen ? undefined : 'closed'}
-            className={`fixed top-16 bottom-0 z-50 flex flex-col bg-amber-100 shadow-lg overflow-y-auto overflow-x-hidden ${
+            className={`fixed top-16 bottom-0 z-50 flex flex-col bg-amber-100/50 shadow-lg overflow-y-auto overflow-x-hidden ${
               isRtl ? 'right-0 border-r border-amber-200' : 'left-0 border-l border-amber-200'
             }`}
             style={{
