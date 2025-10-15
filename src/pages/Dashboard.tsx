@@ -8,9 +8,8 @@ import { ShoppingCart, Clock, BarChart3, CheckCircle, AlertCircle, Package, Doll
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
-import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, inventoryAPI, returnsAPI } from '../services/api';
+import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
-import { ProductDropdown } from './NewOrder';
 
 // تعريف الواجهات
 interface Stats {
@@ -23,53 +22,6 @@ interface Stats {
   completedTasks: number;
   inProgressTasks: number;
   averageOrderValue: number;
-}
-
-interface InventoryStats {
-  totalItems: number;
-  lowStockItems: number;
-  totalValue: number;
-  expiringSoon: number;
-}
-
-interface InventoryItem {
-  _id: string;
-  product: {
-    _id: string;
-    name: string;
-    nameEn: string;
-    code: string;
-    unit: string;
-    unitEn: string;
-    department: { _id: string; name: string; nameEn: string } | null;
-    displayName: string;
-    displayUnit: string;
-  } | null;
-  branch: { _id: string; name: string; nameEn: string; displayName: string } | null;
-  currentStock: number;
-  pendingReturnStock: number;
-  damagedStock: number;
-  minStockLevel: number;
-  maxStockLevel: number;
-  status: 'low' | 'normal' | 'full';
-}
-
-interface Return {
-  id: string;
-  returnNumber: string;
-  orderId: string;
-  branchName: string;
-  branchNameEn?: string;
-  items: Array<{
-    _id: string;
-    productName: string;
-    productNameEn?: string;
-    quantity: number;
-    unit: string;
-    unitEn?: string;
-  }>;
-  status: 'pending' | 'approved' | 'completed' | 'rejected';
-  createdAt: string;
 }
 
 interface Task {
@@ -89,7 +41,6 @@ interface Task {
 }
 
 interface BranchPerformance {
-  branchId: string;
   branchName: string;
   branchNameEn?: string;
   performance: number;
@@ -119,8 +70,6 @@ interface Order {
     productNameEn?: string;
     quantity: number;
     price: number;
-    unit: string;
-    unitEn?: string;
     department: { _id: string; name: string; nameEn?: string };
     assignedTo?: { _id: string; username: string; name: string; nameEn?: string };
     status: 'pending' | 'assigned' | 'in_progress' | 'completed';
@@ -134,17 +83,7 @@ interface Order {
 }
 
 interface Chef {
-  id: string;
-  user: {
-    id: string;
-    name: string;
-    nameEn?: string;
-    username: string;
-    email?: string;
-    phone?: string;
-    createdAt: string;
-    updatedAt: string;
-  } | null;
+  _id: string;
   userId: string;
   username: string;
   name: string;
@@ -212,10 +151,6 @@ const ChefDashboard: React.FC<{
 
   const toggleExpandTask = (taskId: string) => {
     setExpandedTaskId(expandedTaskId === taskId ? null : taskId);
-  };
-
-  const getDisplayUnit = (unit: string, unitEn: string | undefined) => {
-    return isRtl ? (unit || 'غير محدد') : (unitEn || unit || 'N/A');
   };
 
   return (
@@ -320,7 +255,7 @@ const ChefDashboard: React.FC<{
                       </span>
                     </div>
                     <p className="text-xs text-gray-600 mb-2 truncate">
-                      {`${task.quantity} ${isRtl ? task.productName : task.productNameEn || task.productName} (${getDisplayUnit(task.unit, task.unitEn)})`}
+                      {`${task.quantity} ${isRtl ? task.productName : task.productNameEn || task.productName} (${isRtl ? task.unit : task.unitEn || task.unit})`}
                     </p>
                     <p className="text-xs text-gray-500 mb-2">{isRtl ? `تم الإنشاء في: ${task.createdAt}` : `Created At: ${task.createdAt}`}</p>
                     <AnimatePresence>
@@ -337,8 +272,8 @@ const ChefDashboard: React.FC<{
                             {order.items.map((item) => (
                               <li key={item._id}>
                                 {isRtl
-                                  ? `${item.quantity} ${item.productName} (${getDisplayUnit(item.unit, item.unitEn)})`
-                                  : `${item.quantity} ${item.productNameEn || item.productName} (${getDisplayUnit(item.unit, item.unitEn)})`}
+                                  ? `${item.quantity} ${item.productName} (${item.unit})`
+                                  : `${item.quantity} ${item.productNameEn || item.productName} (${item.unitEn || item.unit})`}
                               </li>
                             ))}
                           </ul>
@@ -389,14 +324,6 @@ export const Dashboard: React.FC = () => {
   const [branches, setBranches] = useState<{ _id: string; name: string; nameEn?: string }[]>([]);
   const [branchPerformance, setBranchPerformance] = useState<BranchPerformance[]>([]);
   const [chefPerformance, setChefPerformance] = useState<ChefPerformance[]>([]);
-  const [returns, setReturns] = useState<Return[]>([]);
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
-  const [inventoryStats, setInventoryStats] = useState<InventoryStats>({
-    totalItems: 0,
-    lowStockItems: 0,
-    totalValue: 0,
-    expiringSoon: 0,
-  });
   const [stats, setStats] = useState<Stats>({
     totalOrders: 0,
     pendingOrders: 0,
@@ -415,7 +342,7 @@ export const Dashboard: React.FC = () => {
 
   const cache = useMemo(() => new Map<string, any>(), []);
 
-  const cacheKey = useMemo(() => `${user?.id || user?._id}-${user?.role}-${timeFilter}-${language}`, [user, timeFilter, language]);
+  const cacheKey = useMemo(() => `${user?.id || user?._id}-${user?.role}-${timeFilter}`, [user, timeFilter]);
 
   const fetchDashboardData = useCallback(
     debounce(async (forceRefresh = false) => {
@@ -443,9 +370,6 @@ export const Dashboard: React.FC = () => {
         setBranches(cachedData.branches);
         setBranchPerformance(cachedData.branchPerformance);
         setChefPerformance(cachedData.chefPerformance);
-        setReturns(cachedData.returns);
-        setInventoryItems(cachedData.inventoryItems);
-        setInventoryStats(cachedData.inventoryStats);
         setStats(cachedData.stats);
         setLoading(false);
         setIsInitialLoad(false);
@@ -476,14 +400,11 @@ export const Dashboard: React.FC = () => {
             startDate.setDate(now.getDate() - 7);
         }
 
-        const query: Record<string, any> = { startDate: startDate.toISOString(), endDate: now.toISOString(), limit: 20, context: { isRtl } };
+        const query: Record<string, any> = { startDate: startDate.toISOString(), endDate: now.toISOString(), limit: 20 };
         let ordersResponse: any[] = [];
         let tasksResponse: any[] = [];
         let chefsResponse: any[] = [];
         let branchesResponse: any[] = [];
-        let returnsResponse: any[] = [];
-        let inventoryResponse: any = {};
-        let inventoryItemsResponse: any[] = [];
 
         if (user.role === 'chef') {
           const chefProfile = await chefsAPI.getByUserId(user.id || user._id);
@@ -491,7 +412,7 @@ export const Dashboard: React.FC = () => {
           if (!chefId || !/^[0-9a-fA-F]{24}$/.test(chefId)) {
             throw new Error(isRtl ? 'بيانات الشيف غير صالحة' : 'Invalid chef data');
           }
-          tasksResponse = await productionAssignmentsAPI.getChefTasks(chefId, { limit: 20, context: { isRtl } });
+          tasksResponse = await productionAssignmentsAPI.getChefTasks(chefId, { limit: 20 });
         } else {
           if (user.role === 'branch') query.branch = user.id || user._id;
           if (user.role === 'production' && user.department) query.departmentId = user.department._id;
@@ -500,13 +421,8 @@ export const Dashboard: React.FC = () => {
             user.role !== 'branch' ? productionAssignmentsAPI.getAllTasks(query).catch(() => []) : Promise.resolve([]),
             ['admin', 'production'].includes(user.role) ? chefsAPI.getAll().catch(() => []) : Promise.resolve([]),
             ['admin', 'production'].includes(user.role) ? branchesAPI.getAll().catch(() => []) : Promise.resolve([]),
-            returnsAPI.getAll(query).catch(() => []), 
           ];
-          [ordersResponse, tasksResponse, chefsResponse, branchesResponse, returnsResponse] = await Promise.all(promises);
-          if (user.role === 'branch') {
-            inventoryResponse = await inventoryAPI.getBranchStats(user.id || user._id).catch(() => ({}));
-            inventoryItemsResponse = await inventoryAPI.getByBranch(user.id || user._id).catch(() => []);
-          }
+          [ordersResponse, tasksResponse, chefsResponse, branchesResponse] = await Promise.all(promises);
         }
 
         const mappedOrders = ordersResponse.map((order: any) => ({
@@ -522,8 +438,6 @@ export const Dashboard: React.FC = () => {
             productNameEn: item.product?.nameEn || item.product?.name || 'Unknown',
             quantity: Number(item.quantity) || 1,
             price: Number(item.price) || 0,
-            unit: item.product?.unit || 'غير محدد',
-            unitEn: item.product?.unitEn || item.product?.unit || 'N/A',
             department: item.product?.department || { _id: 'unknown', name: isRtl ? 'قسم غير معروف' : 'Unknown Department', nameEn: 'Unknown' },
             status: item.status || 'pending',
             assignedTo: item.assignedTo
@@ -546,8 +460,8 @@ export const Dashboard: React.FC = () => {
           productName: task.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
           productNameEn: task.product?.nameEn || task.product?.name || 'Unknown',
           quantity: Number(task.quantity) || 0,
-          unit: task.product?.unit || 'غير محدد',
-          unitEn: task.product?.unitEn || task.product?.unit || 'N/A',
+          unit: task.product?.unit || 'unit',
+          unitEn: task.product?.unitEn || task.product?.unit || 'unit',
           status: task.status || 'pending',
           branchName: task.order?.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
           branchNameEn: task.order?.branch?.nameEn || task.order?.branch?.name || 'Unknown',
@@ -555,17 +469,7 @@ export const Dashboard: React.FC = () => {
         }));
 
         const mappedChefs = chefsResponse.map((chef: any) => ({
-          id: chef._id || crypto.randomUUID(),
-          user: chef.user ? {
-            id: chef.user._id,
-            name: chef.user.name,
-            nameEn: chef.user.nameEn,
-            username: chef.user.username,
-            email: chef.user.email,
-            phone: chef.user.phone,
-            createdAt: chef.user.createdAt,
-            updatedAt: chef.user.updatedAt,
-          } : null,
+          _id: chef._id || crypto.randomUUID(),
           userId: chef.user?._id || chef._id,
           username: chef.user?.username || chef.username || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'),
           name: chef.user?.name || chef.name || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'),
@@ -581,59 +485,12 @@ export const Dashboard: React.FC = () => {
           }))
           .sort((a: any, b: any) => a.name.localeCompare(b.name));
 
-        const mappedReturns = returnsResponse.map((ret: any) => ({
-          id: ret._id || crypto.randomUUID(),
-          returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
-          orderId: ret.order?._id || 'unknown',
-          branchName: ret.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
-          branchNameEn: ret.branch?.nameEn || ret.branch?.name || 'Unknown',
-          items: (ret.items || []).map((item: any) => ({
-            _id: item._id,
-            productName: item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
-            productNameEn: item.product?.nameEn || item.product?.name || 'Unknown',
-            quantity: Number(item.quantity) || 0,
-            unit: item.product?.unit || 'غير محدد',
-            unitEn: item.product?.unitEn || item.product?.unit || 'N/A',
-          })),
-          status: ret.status || 'pending',
-          createdAt: formatDate(ret.createdAt || new Date(), language),
-        })).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-        const mappedInventoryItems = inventoryItemsResponse.map((item: any) => ({
-          _id: item._id || crypto.randomUUID(),
-          product: item.product ? {
-            _id: item.product._id,
-            name: item.product.name,
-            nameEn: item.product.nameEn,
-            code: item.product.code,
-            unit: item.product.unit || 'غير محدد',
-            unitEn: item.product.unitEn || item.product.unit || 'N/A',
-            department: item.product.department,
-            displayName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
-            displayUnit: isRtl ? (item.product.unit || 'غير محدد') : item.product.unitEn || item.product.unit || 'N/A',
-          } : null,
-          branch: item.branch,
-          currentStock: item.currentStock,
-          pendingReturnStock: item.pendingReturnStock,
-          damagedStock: item.damagedStock,
-          minStockLevel: item.minStockLevel,
-          maxStockLevel: item.maxStockLevel,
-          status: item.currentStock <= item.minStockLevel ? 'low' : item.currentStock >= item.maxStockLevel ? 'full' : 'normal',
-        })).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
         const branchPerf = mappedBranches.map((branch: any) => {
           const branchOrders = mappedOrders.filter((o) => o.branchId === branch._id);
           const total = branchOrders.length;
           const completed = branchOrders.filter((o) => o.status === 'completed' || o.status === 'delivered').length;
           const perf = total > 0 ? (completed / total) * 100 : 0;
-          return {
-            branchId: branch._id,
-            branchName: branch.name,
-            branchNameEn: branch.nameEn,
-            performance: perf,
-            totalOrders: total,
-            completedOrders: completed,
-          };
+          return { branchName: branch.name, branchNameEn: branch.nameEn, performance: perf, totalOrders: total, completedOrders: completed };
         }).filter((b: any) => b.totalOrders > 0);
 
         const chefPerf = mappedChefs.map((chef: any) => {
@@ -667,13 +524,6 @@ export const Dashboard: React.FC = () => {
         const inProgressTasks = mappedTasks.filter((task) => task.status === 'in_progress').length;
         const averageOrderValue = totalOrders > 0 ? totalOrderValue / totalOrders : 0;
 
-        const newInventoryStats = {
-          totalItems: inventoryResponse.totalItems || 0,
-          lowStockItems: inventoryResponse.lowStockItems || 0,
-          totalValue: inventoryResponse.totalValue || 0,
-          expiringSoon: inventoryResponse.expiringSoon || 0,
-        };
-
         const newData = {
           orders: mappedOrders,
           tasks: mappedTasks,
@@ -681,9 +531,6 @@ export const Dashboard: React.FC = () => {
           branches: mappedBranches,
           branchPerformance: branchPerf,
           chefPerformance: chefPerf,
-          returns: mappedReturns,
-          inventoryItems: mappedInventoryItems,
-          inventoryStats: newInventoryStats,
           stats: {
             totalOrders,
             pendingOrders,
@@ -704,9 +551,6 @@ export const Dashboard: React.FC = () => {
         setBranches(newData.branches);
         setBranchPerformance(newData.branchPerformance);
         setChefPerformance(newData.chefPerformance);
-        setReturns(newData.returns);
-        setInventoryItems(newData.inventoryItems);
-        setInventoryStats(newData.inventoryStats);
         setStats(newData.stats);
         setError('');
         setIsInitialLoad(false);
@@ -732,7 +576,7 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     fetchDashboardData();
     return () => fetchDashboardData.cancel();
-  }, [fetchDashboardData, timeFilter, language]); // أضفت language لتغيير فوري
+  }, [fetchDashboardData, timeFilter]);
 
   useEffect(() => {
     if (refreshTasks) {
@@ -856,8 +700,8 @@ export const Dashboard: React.FC = () => {
             productName: data.productName,
             productNameEn: data.productNameEn || data.productName,
             quantity: Number(data.quantity) || 0,
-            unit: data.unit || 'غير محدد',
-            unitEn: data.unitEn || data.unit || 'N/A',
+            unit: data.unit || 'unit',
+            unitEn: data.unitEn || data.unit || 'unit',
             status: data.status || 'assigned',
             branchName: data.branchName,
             branchNameEn: data.branchNameEn || data.branchName,
@@ -1028,8 +872,8 @@ export const Dashboard: React.FC = () => {
           productName: task?.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
           productNameEn: task?.productNameEn || task?.productName || 'Unknown',
           quantity: task?.quantity || 0,
-          unit: task?.unit || 'غير محدد',
-          unitEn: task?.unitEn || task?.unit || 'N/A',
+          unit: task?.unit || 'unit',
+          unitEn: task?.unitEn || task?.unit || 'unit',
         });
         addNotification({
           _id: `success-task-${taskId}-${Date.now()}`,
@@ -1100,8 +944,8 @@ export const Dashboard: React.FC = () => {
           productName: task?.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
           productNameEn: task?.productNameEn || task?.productName || 'Unknown',
           quantity: task?.quantity || 0,
-          unit: task?.unit || 'غير محدد',
-          unitEn: task?.unitEn || task?.unit || 'N/A',
+          unit: task?.unit || 'unit',
+          unitEn: task?.unitEn || task?.unit || 'unit',
         });
         addNotification({
           _id: `success-complete-${taskId}-${Date.now()}`,
@@ -1135,14 +979,6 @@ export const Dashboard: React.FC = () => {
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 8);
   }, [orders]);
-
-  const sortedLatestReturns = useMemo(() => {
-    return [...returns].slice(0, 8); // أحدث 8، كل الحالات
-  }, [returns]);
-
-  const sortedLatestInventoryItems = useMemo(() => {
-    return [...inventoryItems].slice(0, 8); // أحدث 8 منتجات
-  }, [inventoryItems]);
 
   const renderStats = () => (
     <motion.div
@@ -1220,13 +1056,12 @@ export const Dashboard: React.FC = () => {
           ) : (
             branchPerformance.map((branch, index) => (
               <motion.div
-                key={branch.branchId}
+                key={branch.branchName}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2, delay: index * 0.1 }}
-                className="flex items-center justify-between p-2 border-b border-gray-100 cursor-pointer hover:bg-amber-50 transition-colors duration-200"
-                onClick={() => navigate(`/branches/${branch.branchId}`)}
+                className="flex items-center justify-between p-2 border-b border-gray-100"
               >
                 <div>
                   <p className="text-xs font-medium text-gray-800">{isRtl ? branch.branchName : branch.branchNameEn || branch.branchName}</p>
@@ -1270,8 +1105,7 @@ export const Dashboard: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2, delay: index * 0.1 }}
-                className="flex items-center justify-between p-2 border-b border-gray-100 cursor-pointer hover:bg-amber-50 transition-colors duration-200"
-                onClick={() => navigate(`/chefs/${chef.id}`)}
+                className="flex items-center justify-between p-2 border-b border-gray-100"
               >
                 <div>
                   <p className="text-xs font-medium text-gray-800">{isRtl ? chef.chefName : chef.chefNameEn || chef.chefName}</p>
@@ -1297,144 +1131,8 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 
-  const renderInventoryStats = () => user.role === 'branch' && (
-    <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 mt-4">
-      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
-        <Package className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
-        {isRtl ? 'إحصائيات المخزون' : 'Inventory Stats'}
-      </h3>
-      <div className="grid grid-cols-2 gap-3">
-        <StatsCard
-          title={isRtl ? 'إجمالي العناصر' : 'Total Items'}
-          value={inventoryStats.totalItems.toString()}
-          icon={Package}
-          color="amber"
-          ariaLabel={isRtl ? 'إجمالي العناصر' : 'Total Items'}
-        />
-        <StatsCard
-          title={isRtl ? 'عناصر منخفضة المخزون' : 'Low Stock Items'}
-          value={inventoryStats.lowStockItems.toString()}
-          icon={AlertCircle}
-          color="red"
-          ariaLabel={isRtl ? 'عناصر منخفضة المخزون' : 'Low Stock Items'}
-        />
-        <StatsCard
-          title={isRtl ? 'إجمالي القيمة' : 'Total Value'}
-          value={inventoryStats.totalValue.toFixed(2)}
-          icon={DollarSign}
-          color="green"
-          ariaLabel={isRtl ? 'إجمالي القيمة' : 'Total Value'}
-        />
-        <StatsCard
-          title={isRtl ? 'عناصر تنتهي قريبا' : 'Expiring Soon'}
-          value={inventoryStats.expiringSoon.toString()}
-          icon={Clock}
-          color="blue"
-          ariaLabel={isRtl ? 'عناصر تنتهي قريبا' : 'Expiring Soon'}
-        />
-      </div>
-    </div>
-  );
-
-  const renderLatestReturns = () => (
-    <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 mt-4">
-      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
-        <ShoppingCart className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
-        {isRtl ? 'أحدث المرتجعات' : 'Latest Returns'}
-      </h3>
-      <div className="space-y-2 max-h-64 overflow-y-auto">
-        <AnimatePresence>
-          {sortedLatestReturns.length === 0 ? (
-            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد مرتجعات' : 'No returns available'}</p>
-          ) : (
-            sortedLatestReturns.map((ret) => (
-              <motion.div
-                key={ret.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="border border-amber-100 rounded-lg p-2 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
-                onClick={() => navigate(`/returns/${ret.id}`)}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-semibold text-xs text-gray-800 truncate">
-                    {isRtl ? `مرتجع رقم ${ret.returnNumber}` : `Return #${ret.returnNumber}`}
-                  </h4>
-                  <span
-                    className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
-                      ret.status === 'pending' ? 'bg-amber-100 text-amber-800' : ret.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                    }`}
-                  >
-                    {isRtl
-                      ? ret.status === 'pending' ? 'معلق' : ret.status === 'completed' ? 'مكتمل' : 'مرفوض'
-                      : ret.status.charAt(0).toUpperCase() + ret.status.slice(1)}
-                  </span>
-                </div>
-                <p className="text-xs text-gray-600 mb-2 truncate">{isRtl ? ret.branchName : ret.branchNameEn || ret.branchName}</p>
-                <p className="text-xs text-gray-500">{isRtl ? `تم الإنشاء في: ${ret.createdAt}` : `Created At: ${ret.createdAt}`}</p>
-              </motion.div>
-            ))
-          )}
-        </AnimatePresence>
-      </div>
-    </div>
-  );
-
-  const renderLatestInventoryItems = () => user.role === 'branch' && (
-    <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 mt-4">
-      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
-        <Package className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
-        {isRtl ? 'أحدث المنتجات في المخزون' : 'Latest Inventory Items'}
-      </h3>
-      <div className="space-y-2 max-h-64 overflow-y-auto">
-        <AnimatePresence>
-          {sortedLatestInventoryItems.length === 0 ? (
-            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد منتجات في المخزون' : 'No inventory items available'}</p>
-          ) : (
-            sortedLatestInventoryItems.map((item) => item.product && (
-              <motion.div
-                key={item._id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="border border-amber-100 rounded-lg p-2 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
-                onClick={() => navigate(`/inventory/${item._id}`)}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-semibold text-xs text-gray-800 truncate">
-                    {isRtl ? item.product.name : item.product.nameEn || item.product.name}
-                  </h4>
-                  <span
-                    className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
-                      item.status === 'low' ? 'bg-red-100 text-red-800' : item.status === 'full' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
-                    }`}
-                  >
-                    {isRtl
-                      ? item.status === 'low' ? 'منخفض' : item.status === 'full' ? 'ممتلئ' : 'عادي'
-                      : item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-                  </span>
-                </div>
-                <p className="text-xs text-gray-600 mb-2 truncate">
-                  {`${item.currentStock} (${getDisplayUnit(item.product.unit, item.product.unitEn)})`}
-                </p>
-                <p className="text-xs text-gray-500">{isRtl ? item.product.department?.name : item.product.department?.nameEn || item.product.department?.name}</p>
-              </motion.div>
-            ))
-          )}
-        </AnimatePresence>
-      </div>
-    </div>
-  );
-
   if (loading && isInitialLoad) return <Loader />;
   if (error) return <div className="text-center text-red-600 p-4">{error}</div>;
-
-  const timeOptions = timeFilterOptions.map((option) => ({
-    value: option.value,
-    label: isRtl ? option.label : option.enLabel,
-  }));
 
   return (
     <div className={`py-6 px-4 mx-auto max-w-7xl`}>
@@ -1443,13 +1141,18 @@ export const Dashboard: React.FC = () => {
           <BarChart3 className="w-5 h-5 text-amber-600" />
           {isRtl ? 'لوحة التحكم' : 'Dashboard'}
         </h1>
-        <ProductDropdown
+        <select
           value={timeFilter}
-          onChange={setTimeFilter}
-          options={timeOptions}
-          ariaLabel={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
-          className="w-40"
-        />
+          onChange={(e) => setTimeFilter(e.target.value)}
+          className="p-1.5 rounded-lg border border-gray-200 text-xs focus:ring-2 focus:ring-blue-500 bg-white"
+          aria-label={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
+        >
+          {timeFilterOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {isRtl ? option.label : option.enLabel}
+            </option>
+          ))}
+        </select>
       </div>
       {user.role === 'chef' ? (
         <ChefDashboard
@@ -1464,7 +1167,6 @@ export const Dashboard: React.FC = () => {
       ) : (
         <>
           {renderStats()}
-          {renderInventoryStats()}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-3">
               <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
@@ -1517,8 +1219,6 @@ export const Dashboard: React.FC = () => {
                   </AnimatePresence>
                 </div>
               </div>
-              {renderLatestReturns()}
-              {renderLatestInventoryItems()}
             </div>
             {['admin', 'production'].includes(user.role) && (
               <>
