@@ -10,9 +10,9 @@ import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, inventoryAPI, returnsAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
-import { ProductDropdown } from './NewOrder'; // استوردت ProductDropdown من NewOrder زي في المخزون
+import { ProductDropdown } from './NewOrder';
 
-// تعريف الواجهات (حافظت عليها، بس حسنت للمخزون)
+// تعريف الواجهات
 interface Stats {
   totalOrders: number;
   pendingOrders: number;
@@ -500,7 +500,7 @@ export const Dashboard: React.FC = () => {
             user.role !== 'branch' ? productionAssignmentsAPI.getAllTasks(query).catch(() => []) : Promise.resolve([]),
             ['admin', 'production'].includes(user.role) ? chefsAPI.getAll().catch(() => []) : Promise.resolve([]),
             ['admin', 'production'].includes(user.role) ? branchesAPI.getAll().catch(() => []) : Promise.resolve([]),
-            returnsAPI.getAll(query).catch(() => []), // إضافة للمرتجعات
+            returnsAPI.getAll(query).catch(() => []), 
           ];
           [ordersResponse, tasksResponse, chefsResponse, branchesResponse, returnsResponse] = await Promise.all(promises);
           if (user.role === 'branch') {
@@ -619,7 +619,7 @@ export const Dashboard: React.FC = () => {
           minStockLevel: item.minStockLevel,
           maxStockLevel: item.maxStockLevel,
           status: item.currentStock <= item.minStockLevel ? 'low' : item.currentStock >= item.maxStockLevel ? 'full' : 'normal',
-        })).sort((a, b) => b.currentStock - a.currentStock); // مثال: مرتب حسب المخزون الأعلى
+        })).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
         const branchPerf = mappedBranches.map((branch: any) => {
           const branchOrders = mappedOrders.filter((o) => o.branchId === branch._id);
@@ -732,7 +732,7 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     fetchDashboardData();
     return () => fetchDashboardData.cancel();
-  }, [fetchDashboardData, timeFilter, language]);
+  }, [fetchDashboardData, timeFilter, language]); // أضفت language لتغيير فوري
 
   useEffect(() => {
     if (refreshTasks) {
@@ -1137,16 +1137,12 @@ export const Dashboard: React.FC = () => {
   }, [orders]);
 
   const sortedLatestReturns = useMemo(() => {
-    return [...returns].slice(0, 8);
+    return [...returns].slice(0, 8); // أحدث 8، كل الحالات
   }, [returns]);
 
   const sortedLatestInventoryItems = useMemo(() => {
-    return [...inventoryItems].slice(0, 8); // أحدث 8 منتجات في المخزون للفرع
+    return [...inventoryItems].slice(0, 8); // أحدث 8 منتجات
   }, [inventoryItems]);
-
-  const getDisplayUnit = (unit: string, unitEn: string | undefined) => {
-    return isRtl ? (unit || 'غير محدد') : (unitEn || unit || 'N/A'); // مطابق لكود المخزون
-  };
 
   const renderStats = () => (
     <motion.div
@@ -1275,7 +1271,7 @@ export const Dashboard: React.FC = () => {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2, delay: index * 0.1 }}
                 className="flex items-center justify-between p-2 border-b border-gray-100 cursor-pointer hover:bg-amber-50 transition-colors duration-200"
-                onClick={() => navigate(`/chefs/${chef.chefId}`)}
+                onClick={() => navigate(`/chefs/${chef.id}`)}
               >
                 <div>
                   <p className="text-xs font-medium text-gray-800">{isRtl ? chef.chefName : chef.chefNameEn || chef.chefName}</p>
@@ -1404,7 +1400,7 @@ export const Dashboard: React.FC = () => {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
                 className="border border-amber-100 rounded-lg p-2 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
-                onClick={() => navigate(`/inventory/${item._id}`)} // افترضت path لتفاصيل المنتج
+                onClick={() => navigate(`/inventory/${item._id}`)}
               >
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="font-semibold text-xs text-gray-800 truncate">
@@ -1522,7 +1518,7 @@ export const Dashboard: React.FC = () => {
                 </div>
               </div>
               {renderLatestReturns()}
-              {renderLatestInventoryItems()} // إضافة قائمة المنتجات للفرع فقط
+              {renderLatestInventoryItems()}
             </div>
             {['admin', 'production'].includes(user.role) && (
               <>
