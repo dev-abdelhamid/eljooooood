@@ -41,6 +41,7 @@ interface Task {
 }
 
 interface BranchPerformance {
+  branchId: string;
   branchName: string;
   branchNameEn?: string;
   performance: number;
@@ -70,6 +71,8 @@ interface Order {
     productNameEn?: string;
     quantity: number;
     price: number;
+    unit: string;
+    unitEn?: string;
     department: { _id: string; name: string; nameEn?: string };
     assignedTo?: { _id: string; username: string; name: string; nameEn?: string };
     status: 'pending' | 'assigned' | 'in_progress' | 'completed';
@@ -151,6 +154,11 @@ const ChefDashboard: React.FC<{
 
   const toggleExpandTask = (taskId: string) => {
     setExpandedTaskId(expandedTaskId === taskId ? null : taskId);
+  };
+
+  // دالة لعرض الوحدة بشكل صحيح
+  const getDisplayUnit = (unit: string, unitEn: string | undefined) => {
+    return isRtl ? (unit || 'غير محدد') : (unitEn || unit || 'N/A');
   };
 
   return (
@@ -255,7 +263,7 @@ const ChefDashboard: React.FC<{
                       </span>
                     </div>
                     <p className="text-xs text-gray-600 mb-2 truncate">
-                      {`${task.quantity} ${isRtl ? task.productName : task.productNameEn || task.productName} (${isRtl ? task.unit : task.unitEn || task.unit})`}
+                      {`${task.quantity} ${isRtl ? task.productName : task.productNameEn || task.productName} (${getDisplayUnit(task.unit, task.unitEn)})`}
                     </p>
                     <p className="text-xs text-gray-500 mb-2">{isRtl ? `تم الإنشاء في: ${task.createdAt}` : `Created At: ${task.createdAt}`}</p>
                     <AnimatePresence>
@@ -272,8 +280,8 @@ const ChefDashboard: React.FC<{
                             {order.items.map((item) => (
                               <li key={item._id}>
                                 {isRtl
-                                  ? `${item.quantity} ${item.productName} (${item.unit})`
-                                  : `${item.quantity} ${item.productNameEn || item.productName} (${item.unitEn || item.unit})`}
+                                  ? `${item.quantity} ${item.productName} (${getDisplayUnit(item.unit, item.unitEn)})`
+                                  : `${item.quantity} ${item.productNameEn || item.productName} (${getDisplayUnit(item.unit, item.unitEn)})`}
                               </li>
                             ))}
                           </ul>
@@ -400,7 +408,7 @@ export const Dashboard: React.FC = () => {
             startDate.setDate(now.getDate() - 7);
         }
 
-        const query: Record<string, any> = { startDate: startDate.toISOString(), endDate: now.toISOString(), limit: 20 };
+        const query: Record<string, any> = { startDate: startDate.toISOString(), endDate: now.toISOString(), limit: 20, context: { isRtl } };
         let ordersResponse: any[] = [];
         let tasksResponse: any[] = [];
         let chefsResponse: any[] = [];
@@ -412,7 +420,7 @@ export const Dashboard: React.FC = () => {
           if (!chefId || !/^[0-9a-fA-F]{24}$/.test(chefId)) {
             throw new Error(isRtl ? 'بيانات الشيف غير صالحة' : 'Invalid chef data');
           }
-          tasksResponse = await productionAssignmentsAPI.getChefTasks(chefId, { limit: 20 });
+          tasksResponse = await productionAssignmentsAPI.getChefTasks(chefId, { limit: 20, context: { isRtl } });
         } else {
           if (user.role === 'branch') query.branch = user.id || user._id;
           if (user.role === 'production' && user.department) query.departmentId = user.department._id;
@@ -438,6 +446,8 @@ export const Dashboard: React.FC = () => {
             productNameEn: item.product?.nameEn || item.product?.name || 'Unknown',
             quantity: Number(item.quantity) || 1,
             price: Number(item.price) || 0,
+            unit: item.product?.unit || 'غير محدد',
+            unitEn: item.product?.unitEn || item.product?.unit || 'N/A',
             department: item.product?.department || { _id: 'unknown', name: isRtl ? 'قسم غير معروف' : 'Unknown Department', nameEn: 'Unknown' },
             status: item.status || 'pending',
             assignedTo: item.assignedTo
@@ -460,8 +470,8 @@ export const Dashboard: React.FC = () => {
           productName: task.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
           productNameEn: task.product?.nameEn || task.product?.name || 'Unknown',
           quantity: Number(task.quantity) || 0,
-          unit: task.product?.unit || 'unit',
-          unitEn: task.product?.unitEn || task.product?.unit || 'unit',
+          unit: task.product?.unit || 'غير محدد',
+          unitEn: task.product?.unitEn || task.product?.unit || 'N/A',
           status: task.status || 'pending',
           branchName: task.order?.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
           branchNameEn: task.order?.branch?.nameEn || task.order?.branch?.name || 'Unknown',
@@ -490,7 +500,14 @@ export const Dashboard: React.FC = () => {
           const total = branchOrders.length;
           const completed = branchOrders.filter((o) => o.status === 'completed' || o.status === 'delivered').length;
           const perf = total > 0 ? (completed / total) * 100 : 0;
-          return { branchName: branch.name, branchNameEn: branch.nameEn, performance: perf, totalOrders: total, completedOrders: completed };
+          return {
+            branchId: branch._id,
+            branchName: branch.name,
+            branchNameEn: branch.nameEn,
+            performance: perf,
+            totalOrders: total,
+            completedOrders: completed,
+          };
         }).filter((b: any) => b.totalOrders > 0);
 
         const chefPerf = mappedChefs.map((chef: any) => {
@@ -700,8 +717,8 @@ export const Dashboard: React.FC = () => {
             productName: data.productName,
             productNameEn: data.productNameEn || data.productName,
             quantity: Number(data.quantity) || 0,
-            unit: data.unit || 'unit',
-            unitEn: data.unitEn || data.unit || 'unit',
+            unit: data.unit || 'غير محدد',
+            unitEn: data.unitEn || data.unit || 'N/A',
             status: data.status || 'assigned',
             branchName: data.branchName,
             branchNameEn: data.branchNameEn || data.branchName,
@@ -872,8 +889,8 @@ export const Dashboard: React.FC = () => {
           productName: task?.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
           productNameEn: task?.productNameEn || task?.productName || 'Unknown',
           quantity: task?.quantity || 0,
-          unit: task?.unit || 'unit',
-          unitEn: task?.unitEn || task?.unit || 'unit',
+          unit: task?.unit || 'غير محدد',
+          unitEn: task?.unitEn || task?.unit || 'N/A',
         });
         addNotification({
           _id: `success-task-${taskId}-${Date.now()}`,
@@ -944,8 +961,8 @@ export const Dashboard: React.FC = () => {
           productName: task?.productName || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
           productNameEn: task?.productNameEn || task?.productName || 'Unknown',
           quantity: task?.quantity || 0,
-          unit: task?.unit || 'unit',
-          unitEn: task?.unitEn || task?.unit || 'unit',
+          unit: task?.unit || 'غير محدد',
+          unitEn: task?.unitEn || task?.unit || 'N/A',
         });
         addNotification({
           _id: `success-complete-${taskId}-${Date.now()}`,
@@ -1056,12 +1073,13 @@ export const Dashboard: React.FC = () => {
           ) : (
             branchPerformance.map((branch, index) => (
               <motion.div
-                key={branch.branchName}
+                key={branch.branchId}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2, delay: index * 0.1 }}
-                className="flex items-center justify-between p-2 border-b border-gray-100"
+                className="flex items-center justify-between p-2 border-b border-gray-100 cursor-pointer hover:bg-amber-50 transition-colors duration-200"
+                onClick={() => navigate(`/branches/${branch.branchId}`)}
               >
                 <div>
                   <p className="text-xs font-medium text-gray-800">{isRtl ? branch.branchName : branch.branchNameEn || branch.branchName}</p>
@@ -1105,7 +1123,8 @@ export const Dashboard: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2, delay: index * 0.1 }}
-                className="flex items-center justify-between p-2 border-b border-gray-100"
+                className="flex items-center justify-between p-2 border-b border-gray-100 cursor-pointer hover:bg-amber-50 transition-colors duration-200"
+                onClick={() => navigate(`/chefs/${chef.id}`)}
               >
                 <div>
                   <p className="text-xs font-medium text-gray-800">{isRtl ? chef.chefName : chef.chefNameEn || chef.chefName}</p>
