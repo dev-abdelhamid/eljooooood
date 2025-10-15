@@ -12,7 +12,7 @@ import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, returnsAPI,
 import { formatDate } from '../utils/formatDate';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
 
-// Interfaces (unchanged from original)
+// Interfaces (unchanged from previous)
 interface Stats {
   totalOrders: number;
   pendingOrders: number;
@@ -50,7 +50,7 @@ interface Task {
 interface BranchPerformance {
   branchName: string;
   branchNameEn?: string;
-  branchId: string; // Added for navigation
+  branchId: string;
   performance: number;
   totalOrders: number;
   completedOrders: number;
@@ -173,7 +173,7 @@ const Loader: React.FC = () => (
   </div>
 );
 
-// StatsCard Component with Enhanced Styling
+// StatsCard Component
 const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color: string; ariaLabel: string }> = React.memo(
   ({ title, value, icon: Icon, color, ariaLabel }) => (
     <motion.div
@@ -192,7 +192,7 @@ const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color:
   )
 );
 
-// ChefDashboard Component (unchanged except for styling)
+// ChefDashboard Component
 const ChefDashboard: React.FC<{
   stats: Stats;
   tasks: Task[];
@@ -204,13 +204,14 @@ const ChefDashboard: React.FC<{
   const [filter, setFilter] = useState<FilterState>({ search: '' });
 
   const filteredTasks = useMemo(() => {
+    const searchTerm = typeof filter.search === 'string' ? filter.search.toLowerCase() : '';
     return tasks
       .filter(
         (task) =>
           (isRtl ? task.productName : task.productNameEn || task.productName)
-            .toLowerCase()
-            .includes(filter.search.toLowerCase()) ||
-          task.orderNumber.toLowerCase().includes(filter.search.toLowerCase())
+            ?.toLowerCase()
+            .includes(searchTerm) ||
+          task.orderNumber.toLowerCase().includes(searchTerm)
       )
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 6);
@@ -257,7 +258,7 @@ const ChefDashboard: React.FC<{
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <ProductSearchInput
               value={filter.search}
-              onChange={(value) => setFilter((prev) => ({ ...prev, search: value }))}
+              onChange={(value) => setFilter((prev) => ({ ...prev, search: value ?? '' }))}
               placeholder={isRtl ? 'ابحث عن اسم المنتج أو رقم الطلب' : 'Search by product name or order number'}
               ariaLabel={isRtl ? 'البحث' : 'Search'}
               className="w-full sm:w-48 rounded-lg border-gray-200 focus:ring-amber-500"
@@ -305,7 +306,7 @@ const ChefDashboard: React.FC<{
                   <p className="text-sm text-gray-600 mb-2 truncate">
                     {`${task.quantity} ${isRtl ? task.productName : task.productNameEn || task.productName} (${isRtl ? task.unit : task.unitEn || task.unit})`}
                   </p>
-                  <p className="text-sm text-gray-500 mb-2">{isRtl ? `تم الإنشاء في: ${formatDate(task.createdAt, language)}` : `Created At: ${formatDate(task.createdAt, language)}`}</p>
+                  <p className="text-sm text-gray-500 mb-2">{isRtl ? `تم الإنشاء في: ${task.createdAt}` : `Created At: ${task.createdAt}`}</p>
                   <div className="flex items-center gap-2">
                     {(task.status === 'pending' || task.status === 'assigned') && (
                       <button
@@ -523,7 +524,7 @@ export const Dashboard: React.FC = () => {
           date: formatDate(order.createdAt || new Date(), language),
           priority: order.priority || 'medium',
           createdBy: order.createdBy?.username || (isRtl ? 'غير معروف' : 'Unknown'),
-          createdAt: order.createdAt || new Date().toISOString(),
+          createdAt: formatDate(order.createdAt || new Date(), language),
         }));
         const mappedTasks = tasksResponse.map((task: any) => ({
           id: task._id || crypto.randomUUID(),
@@ -601,7 +602,13 @@ export const Dashboard: React.FC = () => {
             maxStockLevel: item.maxStockLevel,
             status: item.status,
           }));
-          mappedHistory = historyResponse;
+          mappedHistory = historyResponse.map((entry: any) => ({
+            _id: entry._id,
+            date: formatDate(entry.date || new Date(), language),
+            type: entry.type,
+            quantity: entry.quantity,
+            description: entry.description,
+          }));
         }
         const branchPerf = mappedBranches.map((branch: any) => {
           const branchOrders = mappedOrders.filter((o) => o.branchId === branch._id);
@@ -611,10 +618,10 @@ export const Dashboard: React.FC = () => {
           return {
             branchName: branch.name,
             branchNameEn: branch.nameEn,
-            branchId: branch._id, // Added for navigation
+            branchId: branch._id,
             performance: perf,
             totalOrders: total,
-            completedOrders: completed
+            completedOrders: completed,
           };
         }).filter((b: any) => b.totalOrders > 0);
         const chefPerf = mappedChefs.map((chef: any) => {
@@ -736,7 +743,7 @@ export const Dashboard: React.FC = () => {
         type: 'error',
         message: errorMessage,
         read: false,
-        createdAt: new Date().toLocaleString(language),
+        createdAt: formatDate(new Date(), language),
         path: '/dashboard',
       });
     });
@@ -903,7 +910,7 @@ export const Dashboard: React.FC = () => {
           type: 'warning',
           message: isRtl ? 'الاتصال بالسوكت غير متاح' : 'Socket disconnected',
           read: false,
-          createdAt: new Date().toLocaleString(language),
+          createdAt: formatDate(new Date(), language),
           path: '/dashboard',
         });
         return;
@@ -933,7 +940,7 @@ export const Dashboard: React.FC = () => {
           type: 'success',
           message: isRtl ? 'تم بدء المهمة' : 'Task started',
           read: false,
-          createdAt: new Date().toLocaleString(language),
+          createdAt: formatDate(new Date(), language),
           path: '/dashboard',
           sound: '/sounds/task-status-updated.mp3',
           vibrate: [200, 100, 200],
@@ -946,7 +953,7 @@ export const Dashboard: React.FC = () => {
           type: 'error',
           message: errorMessage,
           read: false,
-          createdAt: new Date().toLocaleString(language),
+          createdAt: formatDate(new Date(), language),
           path: '/dashboard',
         });
       }
@@ -962,7 +969,7 @@ export const Dashboard: React.FC = () => {
           type: 'warning',
           message: isRtl ? 'الاتصال بالسوكت غير متاح' : 'Socket disconnected',
           read: false,
-          createdAt: new Date().toLocaleString(language),
+          createdAt: formatDate(new Date(), language),
           path: '/dashboard',
         });
         return;
@@ -992,7 +999,7 @@ export const Dashboard: React.FC = () => {
           type: 'success',
           message: isRtl ? 'تم إكمال المهمة' : 'Task completed',
           read: false,
-          createdAt: new Date().toLocaleString(language),
+          createdAt: formatDate(new Date(), language),
           path: '/dashboard',
           sound: '/sounds/task-completed.mp3',
           vibrate: [400, 100, 400],
@@ -1005,7 +1012,7 @@ export const Dashboard: React.FC = () => {
           type: 'error',
           message: errorMessage,
           read: false,
-          createdAt: new Date().toLocaleString(language),
+          createdAt: formatDate(new Date(), language),
           path: '/dashboard',
         });
       }
@@ -1036,9 +1043,10 @@ export const Dashboard: React.FC = () => {
   );
 
   const filteredInventory = useMemo(() => {
+    const searchTerm = typeof inventoryFilter.search === 'string' ? inventoryFilter.search.toLowerCase() : '';
     return inventory.filter((item) => {
       const name = isRtl ? item.product?.name : item.product?.nameEn || item.product?.name;
-      return name?.toLowerCase().includes(inventoryFilter.search.toLowerCase());
+      return name?.toLowerCase().includes(searchTerm);
     });
   }, [inventory, inventoryFilter.search, isRtl]);
 
@@ -1048,7 +1056,7 @@ export const Dashboard: React.FC = () => {
 
   const sortedPendingOrders = useMemo(() => {
     return [...orders]
-      .filter((order) => ['pending', 'approved', 'in_production', 'in_transit'].includes(order.status)) // Exclude 'completed' and 'delivered'
+      .filter((order) => ['pending', 'approved', 'in_production', 'in_transit'].includes(order.status))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       .slice(0, 8);
   }, [orders]);
@@ -1101,7 +1109,7 @@ export const Dashboard: React.FC = () => {
             value={stats.totalOrderValue.toFixed(2)}
             icon={DollarSign}
             color="purple"
-            ariaLabel={isRtl ? 'إجمالي قيمة المخزون' : 'Total inventory Value'}
+            ariaLabel={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
           />
           <StatsCard
             title={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
@@ -1109,7 +1117,7 @@ export const Dashboard: React.FC = () => {
             icon={RotateCcw}
             color="orange"
             ariaLabel={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
-          />
+      />
           <StatsCard
             title={isRtl ? 'المرتجعات المعلقة' : 'Pending Returns'}
             value={stats.pendingReturns.toString()}
@@ -1306,7 +1314,7 @@ export const Dashboard: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-sm text-gray-600 mb-2 truncate">{isRtl ? ret.branchName : ret.branchNameEn || ret.branchName}</p>
-                <p className="text-sm text-gray-500">{isRtl ? `تم الإنشاء في: ${formatDate(ret.createdAt, language)}` : `Created At: ${formatDate(ret.createdAt, language)}`}</p>
+                <p className="text-sm text-gray-500">{isRtl ? `تم الإنشاء في: ${ret.createdAt}` : `Created At: ${ret.createdAt}`}</p>
               </motion.div>
             ))
           )}
@@ -1324,7 +1332,7 @@ export const Dashboard: React.FC = () => {
       <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-3">
         <ProductSearchInput
           value={inventoryFilter.search}
-          onChange={(value) => setInventoryFilter((prev) => ({ ...prev, search: value }))}
+          onChange={(value) => setInventoryFilter((prev) => ({ ...prev, search: value ?? '' }))}
           placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
           ariaLabel={isRtl ? 'البحث' : 'Search'}
           className="w-full sm:w-48 rounded-lg border-gray-200 focus:ring-amber-500"
@@ -1385,7 +1393,7 @@ export const Dashboard: React.FC = () => {
                 </div>
                 <div className="text-right">
                   <p className="text-sm text-gray-600">{entry.quantity}</p>
-                  <p className="text-sm text-gray-500">{formatDate(entry.date, language)}</p>
+                  <p className="text-sm text-gray-500">{entry.date}</p>
                 </div>
               </motion.div>
             ))
@@ -1398,6 +1406,36 @@ export const Dashboard: React.FC = () => {
   const renderInventoryFilters = () => (
     <div className="flex flex-col sm:flex-row gap-3 mb-4">
       <ProductDropdown
+             value={timeFilter}
+      onChange={(value) => setTimeFilter(value)}
+      options={timeFilterOptions.map((option) => ({
+        value: option.value,
+        label: isRtl ? option.label : option.enLabel,
+      }))}
+      ariaLabel={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
+      className="w-full sm:w-48 rounded-lg border-gray-200 focus:ring-amber-500"
+    />
+    <ProductSearchInput
+      value={inventoryFilter.search}
+      onChange={(value) => setInventoryFilter((prev) => ({ ...prev, search: value ?? '' }))}
+      placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
+      ariaLabel={isRtl ? 'البحث' : 'Search'}
+      className="w-full sm:w-48 rounded-lg border-gray-200 focus:ring-amber-500"
+    />
+  </div>
+);
+
+if (loading && isInitialLoad) return <Loader />;
+if (error) return <div className="text-center text-red-600 p-4">{error}</div>;
+
+return (
+  <div className={`py-8 px-6 mx-auto max-w-7xl ${isRtl ? 'rtl' : 'ltr'}`}>
+    <div className="flex items-center justify-between mb-6">
+      <h1 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-3">
+        <BarChart3 className="w-6 h-6 text-amber-600" />
+        {isRtl ? 'لوحة التحكم' : 'Dashboard'}
+      </h1>
+      <ProductDropdown
         value={timeFilter}
         onChange={(value) => setTimeFilter(value)}
         options={timeFilterOptions.map((option) => ({
@@ -1405,136 +1443,107 @@ export const Dashboard: React.FC = () => {
           label: isRtl ? option.label : option.enLabel,
         }))}
         ariaLabel={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
-        className="w-full sm:w-48 rounded-lg border-gray-200 focus:ring-amber-500"
-      />
-      <ProductSearchInput
-        value={inventoryFilter.search}
-        onChange={(value) => setInventoryFilter((prev) => ({ ...prev, search: value }))}
-        placeholder={isRtl ? 'ابحث عن المنتجات...' : 'Search products...'}
-        ariaLabel={isRtl ? 'البحث' : 'Search'}
-        className="w-full sm:w-48 rounded-lg border-gray-200 focus:ring-amber-500"
+        className="w-48 rounded-lg border-gray-200 focus:ring-amber-500"
       />
     </div>
-  );
 
-  if (loading && isInitialLoad) return <Loader />;
-  if (error) return <div className="text-center text-red-600 p-4">{error}</div>;
-
-  return (
-    <div className={`py-8 px-6 mx-auto max-w-7xl`}>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-3">
-          <BarChart3 className="w-6 h-6 text-amber-600" />
-          {isRtl ? 'لوحة التحكم' : 'Dashboard'}
-        </h1>
-        <ProductDropdown
-          value={timeFilter}
-          onChange={(value) => setTimeFilter(value)}
-          options={timeFilterOptions.map((option) => ({
-            value: option.value,
-            label: isRtl ? option.label : option.enLabel,
-          }))}
-          ariaLabel={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
-          className="w-48 rounded-lg border-gray-200 focus:ring-amber-500"
-        />
-      </div>
-      {user.role === 'chef' ? (
-        <ChefDashboard
-          stats={stats}
-          tasks={tasks}
-          isRtl={isRtl}
-          language={language}
-          handleStartTask={handleStartTask}
-          handleCompleteTask={handleCompleteTask}
-        />
-      ) : (
-        <>
-          {renderStats()}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-6">
-              <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                  <ShoppingCart className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
-                  {isRtl ? 'أحدث الطلبات' : 'Latest Orders'}
-                </h3>
-                <div className="space-y-3 max-h-80 overflow-y-auto">
-                  <AnimatePresence>
-                    {sortedPendingOrders.length === 0 ? (
-                      <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد طلبات' : 'No orders available'}</p>
-                    ) : (
-                      sortedPendingOrders.map((order, index) => (
-                        <motion.div
-                          key={order.id}
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          transition={{ duration: 0.2, delay: index * 0.1 }}
-                          className="border border-amber-100 rounded-lg p-3 bg-amber-50/50 shadow-sm cursor-pointer hover:bg-amber-100 transition-all duration-200"
-                          onClick={() => navigate(`/orders/${order.id}`)}
-                        >
-                          <div className="flex items-center justify-between mb-2">
-                            <h4 className="font-semibold text-sm text-gray-800 truncate">
-                              {isRtl ? `طلب رقم ${order.orderNumber}` : `Order #${order.orderNumber}`}
-                            </h4>
-                            <span
-                              className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                order.status === 'pending' || order.status === 'approved'
-                                  ? 'bg-amber-100 text-amber-800'
-                                  : order.status === 'in_production'
-                                  ? 'bg-blue-100 text-blue-800'
-                                  : 'bg-purple-100 text-purple-800'
-                              }`}
-                            >
-                              {isRtl
-                                ? order.status === 'pending'
-                                  ? 'معلق'
-                                  : order.status === 'approved'
-                                  ? 'موافق عليه'
-                                  : order.status === 'in_production'
-                                  ? 'قيد الإنتاج'
-                                  : 'في الطريق'
-                                : order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                            </span>
-                          </div>
-                          <p className="text-sm text-gray-600 mb-2 truncate">
-                            {isRtl ? order.branchName : order.branchNameEn || order.branchName}
-                          </p>
-                          <p className="text-sm text-gray-500">
+    {user.role === 'chef' ? (
+      <ChefDashboard
+        stats={stats}
+        tasks={tasks}
+        isRtl={isRtl}
+        language={language}
+        handleStartTask={handleStartTask}
+        handleCompleteTask={handleCompleteTask}
+      />
+    ) : (
+      <>
+        {renderStats()}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-6">
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                <ShoppingCart className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+                {isRtl ? 'أحدث الطلبات' : 'Latest Orders'}
+              </h3>
+              <div className="space-y-3 max-h-80 overflow-y-auto">
+                <AnimatePresence>
+                  {sortedPendingOrders.length === 0 ? (
+                    <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد طلبات' : 'No orders available'}</p>
+                  ) : (
+                    sortedPendingOrders.map((order, index) => (
+                      <motion.div
+                        key={order.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.2, delay: index * 0.1 }}
+                        className="border border-amber-100 rounded-lg p-3 bg-amber-50/50 shadow-sm cursor-pointer hover:bg-amber-100 transition-all duration-200"
+                        onClick={() => navigate(`/orders/${order.id}`)}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-semibold text-sm text-gray-800 truncate">
+                            {isRtl ? `طلب رقم ${order.orderNumber}` : `Order #${order.orderNumber}`}
+                          </h4>
+                          <span
+                            className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              order.status === 'pending' || order.status === 'approved'
+                                ? 'bg-amber-100 text-amber-800'
+                                : order.status === 'in_production'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-purple-100 text-purple-800'
+                            }`}
+                          >
                             {isRtl
-                              ? `تم الإنشاء في: ${formatDate(order.createdAt, language)}`
-                              : `Created At: ${formatDate(order.createdAt, language)}`}
-                          </p>
-                          {order.status === 'in_transit' && user.role === 'branch' && (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleConfirmDelivery(order.id, order.branchId);
-                              }}
-                              className="mt-2 bg-green-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-green-700 transition-all duration-200"
-                              aria-label={isRtl ? 'تأكيد التسليم' : 'Confirm Delivery'}
-                            >
-                              {isRtl ? 'تأكيد التسليم' : 'Confirm Delivery'}
-                            </button>
-                          )}
-                        </motion.div>
-                      ))
-                    )}
-                  </AnimatePresence>
-                </div>
+                              ? order.status === 'pending'
+                                ? 'معلق'
+                                : order.status === 'approved'
+                                ? 'موافق عليه'
+                                : order.status === 'in_production'
+                                ? 'قيد الإنتاج'
+                                : 'في الطريق'
+                              : order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 mb-2 truncate">
+                          {isRtl ? order.branchName : order.branchNameEn || order.branchName}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {isRtl
+                            ? `تم الإنشاء في: ${order.createdAt}`
+                            : `Created At: ${order.createdAt}`}
+                        </p>
+                        {order.status === 'in_transit' && user.role === 'branch' && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleConfirmDelivery(order.id, order.branchId);
+                            }}
+                            className="mt-2 bg-green-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-green-700 transition-all duration-200"
+                            aria-label={isRtl ? 'تأكيد التسليم' : 'Confirm Delivery'}
+                          >
+                            {isRtl ? 'تأكيد التسليم' : 'Confirm Delivery'}
+                          </button>
+                        )}
+                      </motion.div>
+                    ))
+                  )}
+                </AnimatePresence>
               </div>
-              {user.role === 'branch' && renderLowStockItems()}
-              {user.role === 'branch' && renderRecentInventoryHistory()}
             </div>
-            <div className="space-y-6">
-              {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
-              {['admin', 'production'].includes(user.role) && renderBranchPerformance()}
-              {['admin', 'production'].includes(user.role) && renderChefPerformance()}
-            </div>
+            {user.role === 'branch' && renderLowStockItems()}
+            {user.role === 'branch' && renderRecentInventoryHistory()}
           </div>
-        </>
-      )}
-    </div>
-  );
+          <div className="space-y-6">
+            {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
+            {['admin', 'production'].includes(user.role) && renderBranchPerformance()}
+            {['admin', 'production'].includes(user.role) && renderChefPerformance()}
+          </div>
+        </div>
+      </>
+    )}
+  </div>
+);
 };
 
 export default Dashboard;
