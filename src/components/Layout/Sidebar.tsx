@@ -149,12 +149,12 @@ export function Sidebar({
     if (isCollapsed) {
       return (
         <motion.div
-          className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white shadow-sm flex items-center justify-center"
+          className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white shadow-sm flex items-center justify-center z-10"
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
           whileHover={{ scale: 1.2 }}
         >
-          <span className="text-xs text-white font-bold leading-none">
+          <span className="text-[10px] text-white font-bold leading-none">
             {count > 9 ? '9+' : count}
           </span>
         </motion.div>
@@ -222,42 +222,46 @@ export function Sidebar({
                     key={item.path}
                     to={item.path}
                     onClick={() => !isLargeScreen && onClose()}
-                    className={({ isActive }) =>
+                    className={({ isActive: active }) => // ✅ إصلاح isActive
                       `relative flex ${isCollapsed ? 'justify-center' : 'items-center'} text-amber-800 rounded-lg p-1 sm:p-2 cursor-pointer hover:bg-amber-200/50 hover:shadow-sm transition-all duration-200 ${
-                        isActive ? 'bg-amber-200 font-semibold text-amber-900 shadow-sm' : ''
+                        active ? 'bg-amber-200 font-semibold text-amber-900 shadow-sm' : ''
                       } ${isCollapsed ? 'py-3' : ''}`
                     }
                     title={isCollapsed ? `${item.label} (${count > 0 ? count : 0} notifications)` : item.label}
                   >
-                    {/* ✅ Container للأيقونة والإشعار */}
-                    <motion.div 
-                      className={`relative flex ${isCollapsed ? 'justify-center items-center w-full' : ''}`}
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      whileHover={{ scale: isCollapsed ? 1.1 : 1 }}
-                    >
-                      <item.icon
-                        size={isCollapsed ? 20 : (isSmallScreen ? 16 : 20)}
-                        className={`text-amber-600 ${isCollapsed ? 'mx-auto' : 'min-w-[20px]'} transition-colors ${
-                          isActive ? 'text-amber-800' : ''
-                        }`}
-                      />
-                      
-                      {/* ✅ إشعار محسن */}
-                      {renderNotificationBadge(count, isCollapsed)}
-                    </motion.div>
-                    
-                    {/* النص - مخفي في التصغير */}
-                    <motion.span
-                      className={`${
-                        isCollapsed ? 'hidden' : 'block m-1 font-medium text-xs sm:text-sm'
-                      } truncate text-amber-900`}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={isCollapsed ? { opacity: 0, x: -10 } : { opacity: 1, x: 0 }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      {item.label}
-                    </motion.span>
+                    {({ isActive: active }) => ( // ✅ استخدام render prop صحيح
+                      <>
+                        {/* ✅ Container للأيقونة والإشعار */}
+                        <motion.div 
+                          className={`relative flex ${isCollapsed ? 'justify-center items-center w-full' : ''}`}
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          whileHover={{ scale: isCollapsed ? 1.1 : 1 }}
+                        >
+                          <item.icon
+                            size={isCollapsed ? 20 : (isSmallScreen ? 16 : 20)}
+                            className={`text-amber-600 ${isCollapsed ? 'mx-auto' : 'min-w-[20px]'} transition-colors ${
+                              active ? 'text-amber-800' : ''
+                            }`}
+                          />
+                          
+                          {/* ✅ إشعار محسن */}
+                          {renderNotificationBadge(count, isCollapsed)}
+                        </motion.div>
+                        
+                        {/* النص - مخفي في التصغير */}
+                        <motion.span
+                          className={`${
+                            isCollapsed ? 'hidden' : 'block m-1 font-medium text-xs sm:text-sm'
+                          } truncate text-amber-900`}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={isCollapsed ? { opacity: 0, x: -10 } : { opacity: 1, x: 0 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          {item.label}
+                        </motion.span>
+                      </>
+                    )}
                   </NavLink>
                 );
               })}
