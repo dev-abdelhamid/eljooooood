@@ -231,7 +231,21 @@ export function Sidebar({
                   >
                     {({ isActive: active }) => ( // ✅ استخدام render prop صحيح
                       <>
-                        {/* ✅ Container للأيقونة والإشعار */}
+                     
+                        
+                        {/* النص - مخفي في التصغير */}
+                        <motion.span
+                          className={`${
+                            isCollapsed ? 'hidden' : 'block m-1 font-medium text-xs sm:text-sm'
+                          } truncate text-amber-900`}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={isCollapsed ? { opacity: 0, x: -10 } : { opacity: 1, x: 0 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          {item.label}
+                        </motion.span>
+
+                           {/* ✅ Container للأيقونة والإشعار */}
                         <motion.div 
                           className={`relative flex ${isCollapsed ? 'justify-center items-center w-full' : ''}`}
                           initial={{ opacity: 0, scale: 0.8 }}
@@ -248,18 +262,6 @@ export function Sidebar({
                           {/* ✅ إشعار محسن */}
                           {renderNotificationBadge(count, isCollapsed)}
                         </motion.div>
-                        
-                        {/* النص - مخفي في التصغير */}
-                        <motion.span
-                          className={`${
-                            isCollapsed ? 'hidden' : 'block m-1 font-medium text-xs sm:text-sm'
-                          } truncate text-amber-900`}
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={isCollapsed ? { opacity: 0, x: -10 } : { opacity: 1, x: 0 }}
-                          transition={{ duration: 0.2 }}
-                        >
-                          {item.label}
-                        </motion.span>
                       </>
                     )}
                   </NavLink>
