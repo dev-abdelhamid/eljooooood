@@ -1193,11 +1193,11 @@ export const Dashboard: React.FC = () => {
             ariaLabel={isRtl ? 'متوسط وقت الإنتاج' : 'Average Production Time'}
           />
           <StatsCard
-            title={isRtl ? 'معدل استخدام الطهاة' : 'Chef Utilization'}
+            title={isRtl ? 'معدل استجابة الطهاة' : 'Chef Utilization'}
             value={`${stats.chefUtilizationRate?.toFixed(1) || '0'}%`}
             icon={Users}
             color="indigo"
-            ariaLabel={isRtl ? 'معدل استخدام الطهاة' : 'Chef Utilization Rate'}
+            ariaLabel={isRtl ? 'معدل استجابة الطهاة' : 'Chef Utilization Rate'}
           />
         </>
       )}
@@ -1353,7 +1353,7 @@ export const Dashboard: React.FC = () => {
         <AlertCircle className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-red-600`} />
         {isRtl ? 'منتجات تحتاج تجديد' : 'Low Stock Products'}
       </h3>
-    
+   
       <div className="space-y-2 max-h-64 overflow-y-auto">
         <AnimatePresence>
           {lowStockItems.length === 0 ? (
@@ -1389,7 +1389,7 @@ export const Dashboard: React.FC = () => {
         <Clock className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
         {isRtl ? 'أحدث سجل المخزون' : 'Recent Inventory History'}
       </h3>
-      <div className="space-y-2 w-full sm:w-48 overflow-y-auto">
+      <div className="space-y-2 w-full max-h-64  overflow-y-auto">
         <AnimatePresence>
           {recentHistory.length === 0 ? (
             <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد سجلات' : 'No history available'}</p>
