@@ -1353,15 +1353,7 @@ export const Dashboard: React.FC = () => {
         <AlertCircle className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-red-600`} />
         {isRtl ? 'منتجات تحتاج تجديد' : 'Low Stock Products'}
       </h3>
-      <div className="flex flex-col sm:flex-row items-center justify-between mb-3 gap-2">
-        <ProductSearchInput
-          value={inventoryFilter.search}
-          onChange={(value) => setInventoryFilter({ search: value })}
-          placeholder={isRtl ? 'ابحث في المخزون...' : 'Search inventory...'}
-          className="w-full sm:w-48 rounded-lg border-gray-200 focus:ring-amber-500"
-          ariaLabel={isRtl ? 'البحث في المخزون' : 'Search inventory'}
-        />
-      </div>
+    
       <div className="space-y-2 max-h-64 overflow-y-auto">
         <AnimatePresence>
           {lowStockItems.length === 0 ? (
