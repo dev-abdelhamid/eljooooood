@@ -4,7 +4,7 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { ShoppingCart, Clock, BarChart3, CheckCircle, AlertCircle, Package, DollarSign, ChefHat, RotateCcw } from 'lucide-react';
+import { ShoppingCart, Clock, BarChart3, CheckCircle, AlertCircle, Package, DollarSign, ChefHat, RotateCcw, Timer, Users } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
@@ -29,6 +29,8 @@ interface Stats {
   averageOrderValue: number;
   totalInventoryValue?: number;
   lowStockItems?: number;
+  averageProductionTime?: number;
+  chefUtilizationRate?: number;
 }
 
 interface Task {
@@ -177,15 +179,15 @@ const Loader: React.FC = () => (
 const StatsCard: React.FC<{ title: string; value: string; icon: React.FC; color: string; ariaLabel: string }> = React.memo(
   ({ title, value, icon: Icon, color, ariaLabel }) => (
     <motion.div
-      whileHover={{ scale: 1.02, boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)' }}
-      className={`p-4 bg-gradient-to-br from-${color}-50 to-${color}-100 rounded-xl border border-${color}-200 cursor-pointer hover:bg-${color}-100 transition-all duration-200 shadow-sm`}
+      whileHover={{ scale: 1.02 }}
+      className={`p-3 bg-gradient-to-br from-${color}-50 to-${color}-100 rounded-lg border border-${color}-200 cursor-pointer hover:bg-${color}-100 transition-all duration-200 shadow-sm`}
       aria-label={ariaLabel}
     >
-      <div className="flex items-center gap-3">
-        <Icon className={`w-6 h-6 text-${color}-600`} />
+      <div className="flex items-center gap-2">
+        <Icon className={`w-5 h-5 text-${color}-600`} />
         <div>
-          <p className="text-sm text-gray-600 font-medium">{title}</p>
-          <p className="text-lg font-bold text-gray-900">{value}</p>
+          <p className="text-xs text-gray-600 font-medium">{title}</p>
+          <p className="text-base font-semibold text-gray-900">{value}</p>
         </div>
       </div>
     </motion.div>
@@ -204,7 +206,7 @@ const ChefDashboard: React.FC<{
   const [filter, setFilter] = useState<FilterState>({ search: '' });
 
   const filteredTasks = useMemo(() => {
-    const searchTerm = typeof filter.search === 'string' ? filter.search.toLowerCase() : '';
+    const searchTerm = filter.search.toLowerCase();
     return tasks
       .filter(
         (task) =>
@@ -219,7 +221,7 @@ const ChefDashboard: React.FC<{
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3">
         <StatsCard
           title={isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
           value={stats.totalOrders.toString()}
@@ -249,18 +251,24 @@ const ChefDashboard: React.FC<{
           ariaLabel={isRtl ? 'الطلبات المعلقة' : 'Pending Orders'}
         />
       </div>
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-        <div className="flex flex-col sm:flex-row items-center justify-between mb-4 gap-3">
-          <h3 className="text-lg font-semibold text-gray-800 flex items-center">
-            <ChefHat className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+      <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+        <div className="flex flex-col sm:flex-row items-center justify-between mb-3 gap-2">
+          <h3 className="text-base font-semibold text-gray-800 flex items-center">
+            <ChefHat className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
             {isRtl ? 'أحدث الطلبات قيد الإنتاج' : 'Latest In Production'}
           </h3>
-       
+          <ProductSearchInput
+            value={filter.search}
+            onChange={(value) => setFilter({ search: value })}
+            placeholder={isRtl ? 'ابحث في المهام...' : 'Search tasks...'}
+            className="w-full sm:w-48 rounded-lg border-gray-200 focus:ring-amber-500"
+            ariaLabel={isRtl ? 'البحث في المهام' : 'Search tasks'}
+          />
         </div>
-        <div className="space-y-3 overflow-y-auto max-h-80">
+        <div className="space-y-2 overflow-y-auto max-h-80">
           <AnimatePresence>
             {filteredTasks.length === 0 ? (
-              <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد مهام' : 'No tasks available'}</p>
+              <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد مهام' : 'No tasks available'}</p>
             ) : (
               filteredTasks.map((task) => (
                 <motion.div
@@ -269,14 +277,14 @@ const ChefDashboard: React.FC<{
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ duration: 0.2 }}
-                  className="border border-amber-100 rounded-lg p-3 bg-amber-50/50 shadow-sm hover:bg-amber-100 transition-all duration-200"
+                  className="border border-amber-100 rounded-lg p-2 bg-amber-50/50 shadow-sm hover:bg-amber-100 transition-all duration-200"
                 >
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-semibold text-sm text-gray-800 truncate">
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className="font-semibold text-xs text-gray-800 truncate">
                       {isRtl ? `طلب رقم ${task.orderNumber}` : `Order #${task.orderNumber}`}
                     </h4>
                     <span
-                      className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                         task.status === 'pending' || task.status === 'assigned'
                           ? 'bg-amber-100 text-amber-800'
                           : task.status === 'in_progress'
@@ -295,15 +303,15 @@ const ChefDashboard: React.FC<{
                         : task.status.charAt(0).toUpperCase() + task.status.slice(1)}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-600 mb-2 truncate">
-                    {`${task.quantity} ${isRtl ? task.productName : task.productNameEn || task.productName} `}
+                  <p className="text-xs text-gray-600 truncate">
+                    {`${task.quantity} ${isRtl ? task.productName : task.productNameEn || task.productName}`}
                   </p>
-                  <p className="text-sm text-gray-500 mb-2">{isRtl ? `تم الإنشاء في: ${task.createdAt}` : `Created At: ${task.createdAt}`}</p>
-                  <div className="flex items-center gap-2">
+                  <p className="text-xs text-gray-500">{isRtl ? `تم الإنشاء في: ${task.createdAt}` : `Created At: ${task.createdAt}`}</p>
+                  <div className="flex items-center gap-2 mt-1">
                     {(task.status === 'pending' || task.status === 'assigned') && (
                       <button
                         onClick={() => handleStartTask(task.id, task.orderId)}
-                        className="bg-amber-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-amber-700 transition-all duration-200"
+                        className="bg-amber-600 text-white px-2 py-0.5 rounded-lg text-xs hover:bg-amber-700 transition-all duration-200"
                         aria-label={isRtl ? 'بدء المهمة' : 'Start Task'}
                       >
                         {isRtl ? 'بدء' : 'Start'}
@@ -312,7 +320,7 @@ const ChefDashboard: React.FC<{
                     {task.status === 'in_progress' && (
                       <button
                         onClick={() => handleCompleteTask(task.id, task.orderId)}
-                        className="bg-green-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-green-700 transition-all duration-200"
+                        className="bg-green-600 text-white px-2 py-0.5 rounded-lg text-xs hover:bg-green-700 transition-all duration-200"
                         aria-label={isRtl ? 'إكمال المهمة' : 'Complete Task'}
                       >
                         {isRtl ? 'إكمال' : 'Complete'}
@@ -361,6 +369,8 @@ export const Dashboard: React.FC = () => {
     averageOrderValue: 0,
     totalInventoryValue: 0,
     lowStockItems: 0,
+    averageProductionTime: 0,
+    chefUtilizationRate: 0,
   });
   const [timeFilter, setTimeFilter] = useState('week');
   const [inventoryFilter, setInventoryFilter] = useState<FilterState>({ search: '' });
@@ -651,9 +661,22 @@ export const Dashboard: React.FC = () => {
         const averageOrderValue = totalOrders > 0 ? totalOrderValue / totalOrders : 0;
         let totalInventoryValue = 0;
         let lowStockItems = 0;
+        let averageProductionTime = 0;
+        let chefUtilizationRate = 0;
         if (user.role === 'branch') {
           totalInventoryValue = mappedInventory.reduce((sum, item) => sum + (item.currentStock * (item.product?.price || 0)), 0);
           lowStockItems = mappedInventory.filter((item) => item.currentStock <= item.minStockLevel).length;
+        }
+        if (['admin', 'production'].includes(user.role)) {
+          const completedOrders = mappedOrders.filter((o) => o.status === 'completed' || o.status === 'delivered');
+          const totalProductionTime = completedOrders.reduce((sum, order) => {
+            const created = new Date(order.createdAt).getTime();
+            const completed = new Date(order.date).getTime();
+            return sum + (completed - created);
+          }, 0);
+          averageProductionTime = completedOrders.length > 0 ? totalProductionTime / completedOrders.length / (1000 * 60 * 60) : 0; // Convert to hours
+          const activeChefs = chefPerf.filter((c) => c.totalTasks > 0).length;
+          chefUtilizationRate = mappedChefs.length > 0 ? (activeChefs / mappedChefs.length) * 100 : 0;
         }
         const newData = {
           orders: mappedOrders,
@@ -681,6 +704,8 @@ export const Dashboard: React.FC = () => {
             averageOrderValue,
             totalInventoryValue,
             lowStockItems,
+            averageProductionTime,
+            chefUtilizationRate,
           },
         };
         cache.set(cacheKey, newData);
@@ -1035,7 +1060,7 @@ export const Dashboard: React.FC = () => {
   );
 
   const filteredInventory = useMemo(() => {
-    const searchTerm = typeof inventoryFilter.search === 'string' ? inventoryFilter.search.toLowerCase() : '';
+    const searchTerm = inventoryFilter.search.toLowerCase();
     return inventory.filter((item) => {
       const name = isRtl ? item.product?.name : item.product?.nameEn || item.product?.name;
       return name?.toLowerCase().includes(searchTerm);
@@ -1064,7 +1089,7 @@ export const Dashboard: React.FC = () => {
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
-      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 mb-6"
+      className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3 mb-4"
     >
       <StatsCard
         title={isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
@@ -1096,14 +1121,13 @@ export const Dashboard: React.FC = () => {
       />
       {['admin', 'production', 'branch'].includes(user.role) && (
         <>
-       
           <StatsCard
             title={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
             value={stats.totalReturns.toString()}
             icon={RotateCcw}
             color="orange"
             ariaLabel={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
-      />
+          />
           <StatsCard
             title={isRtl ? 'المرتجعات المعلقة' : 'Pending Returns'}
             value={stats.pendingReturns.toString()}
@@ -1161,21 +1185,35 @@ export const Dashboard: React.FC = () => {
             color="blue"
             ariaLabel={isRtl ? 'المهام قيد التنفيذ' : 'In Progress Tasks'}
           />
+          <StatsCard
+            title={isRtl ? 'متوسط وقت الإنتاج' : 'Avg Production Time'}
+            value={`${stats.averageProductionTime?.toFixed(1) || '0'} ${isRtl ? 'ساعات' : 'hours'}`}
+            icon={Timer}
+            color="teal"
+            ariaLabel={isRtl ? 'متوسط وقت الإنتاج' : 'Average Production Time'}
+          />
+          <StatsCard
+            title={isRtl ? 'معدل استخدام الطهاة' : 'Chef Utilization'}
+            value={`${stats.chefUtilizationRate?.toFixed(1) || '0'}%`}
+            icon={Users}
+            color="indigo"
+            ariaLabel={isRtl ? 'معدل استخدام الطهاة' : 'Chef Utilization Rate'}
+          />
         </>
       )}
     </motion.div>
   );
 
   const renderBranchPerformance = () => (
-    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mt-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-        <BarChart3 className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mt-4">
+      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
+        <BarChart3 className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
         {isRtl ? 'أداء الفروع' : 'Branch Performance'}
       </h3>
-      <div className="space-y-3 max-h-64 overflow-y-auto">
+      <div className="space-y-2 max-h-64 overflow-y-auto">
         <AnimatePresence>
           {branchPerformance.length === 0 ? (
-            <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد بيانات أداء' : 'No performance data available'}</p>
+            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد بيانات أداء' : 'No performance data available'}</p>
           ) : (
             branchPerformance.map((branch, index) => (
               <motion.div
@@ -1184,24 +1222,24 @@ export const Dashboard: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2, delay: index * 0.1 }}
-                className="flex items-center justify-between p-3 border-b border-gray-100 cursor-pointer hover:bg-amber-50/50 transition-all duration-200"
+                className="flex items-center justify-between p-2 border-b border-gray-100 cursor-pointer hover:bg-amber-50/50 transition-all duration-200"
                 onClick={() => navigate(`/branches/${branch.branchId}`)}
               >
                 <div>
-                  <p className="text-sm font-medium text-gray-800">{isRtl ? branch.branchName : branch.branchNameEn || branch.branchName}</p>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-xs font-medium text-gray-800">{isRtl ? branch.branchName : branch.branchNameEn || branch.branchName}</p>
+                  <p className="text-xs text-gray-500">
                     {isRtl ? `${branch.totalOrders} طلبات` : `${branch.totalOrders} Orders`} -{' '}
                     {isRtl ? `${branch.completedOrders} مكتمل` : `${branch.completedOrders} Completed`}
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-24 bg-gray-200 rounded-full h-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-20 bg-gray-200 rounded-full h-1.5">
                     <div
-                      className="bg-amber-600 h-2 rounded-full"
+                      className="bg-amber-600 h-1.5 rounded-full"
                       style={{ width: `${Math.min(branch.performance, 100)}%` }}
                     ></div>
                   </div>
-                  <span className="text-sm text-gray-600">{branch.performance.toFixed(1)}%</span>
+                  <span className="text-xs text-gray-600">{branch.performance.toFixed(1)}%</span>
                 </div>
               </motion.div>
             ))
@@ -1212,15 +1250,15 @@ export const Dashboard: React.FC = () => {
   );
 
   const renderChefPerformance = () => (
-    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mt-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-        <ChefHat className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mt-4">
+      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
+        <ChefHat className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
         {isRtl ? 'أداء الطهاة' : 'Chef Performance'}
       </h3>
-      <div className="space-y-3 max-h-64 overflow-y-auto">
+      <div className="space-y-2 max-h-64 overflow-y-auto">
         <AnimatePresence>
           {chefPerformance.length === 0 ? (
-            <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد بيانات أداء' : 'No performance data available'}</p>
+            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد بيانات أداء' : 'No performance data available'}</p>
           ) : (
             chefPerformance.map((chef, index) => (
               <motion.div
@@ -1229,24 +1267,24 @@ export const Dashboard: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2, delay: index * 0.1 }}
-                className="flex items-center justify-between p-3 border-b border-gray-100 cursor-pointer hover:bg-amber-50/50 transition-all duration-200"
+                className="flex items-center justify-between p-2 border-b border-gray-100 cursor-pointer hover:bg-amber-50/50 transition-all duration-200"
                 onClick={() => navigate(`/chefs/${chef.chefId}`)}
               >
                 <div>
-                  <p className="text-sm font-medium text-gray-800">{isRtl ? chef.chefName : chef.chefNameEn || chef.chefName}</p>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-xs font-medium text-gray-800">{isRtl ? chef.chefName : chef.chefNameEn || chef.chefName}</p>
+                  <p className="text-xs text-gray-500">
                     {isRtl ? `${chef.totalTasks} مهام` : `${chef.totalTasks} Tasks`} -{' '}
                     {isRtl ? `${chef.completedTasks} مكتمل` : `${chef.completedTasks} Completed`}
                   </p>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-24 bg-gray-200 rounded-full h-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-20 bg-gray-200 rounded-full h-1.5">
                     <div
-                      className="bg-amber-600 h-2 rounded-full"
+                      className="bg-amber-600 h-1.5 rounded-full"
                       style={{ width: `${Math.min(chef.performance, 100)}%` }}
                     ></div>
                   </div>
-                  <span className="text-sm text-gray-600">{chef.performance.toFixed(1)}%</span>
+                  <span className="text-xs text-gray-600">{chef.performance.toFixed(1)}%</span>
                 </div>
               </motion.div>
             ))
@@ -1257,15 +1295,15 @@ export const Dashboard: React.FC = () => {
   );
 
   const renderLatestReturns = () => (
-    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-        <RotateCcw className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
+        <RotateCcw className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
         {isRtl ? 'أحدث المرتجعات' : 'Latest Returns'}
       </h3>
-      <div className="space-y-3 max-h-80 overflow-y-auto">
+      <div className="space-y-2 max-h-80 overflow-y-auto">
         <AnimatePresence>
           {sortedLatestReturns.length === 0 ? (
-            <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد مرتجعات' : 'No returns available'}</p>
+            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد مرتجعات' : 'No returns available'}</p>
           ) : (
             sortedLatestReturns.map((ret) => (
               <motion.div
@@ -1274,15 +1312,15 @@ export const Dashboard: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
-                className="border border-amber-100 rounded-lg p-3 bg-amber-50/50 shadow-sm cursor-pointer hover:bg-amber-100 transition-all duration-200"
+                className="border border-amber-100 rounded-lg p-2 bg-amber-50/50 shadow-sm cursor-pointer hover:bg-amber-100 transition-all duration-200"
                 onClick={() => navigate(`/returns/${ret.id}`)}
               >
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-semibold text-sm text-gray-800 truncate">
+                <div className="flex items-center justify-between mb-1">
+                  <h4 className="font-semibold text-xs text-gray-800 truncate">
                     {isRtl ? `مرتجع رقم ${ret.returnNumber}` : `Return #${ret.returnNumber}`}
                   </h4>
                   <span
-                    className={`px-2 py-1 rounded-full text-xs font-medium ${
+                    className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                       ret.status === 'pending_approval'
                         ? 'bg-amber-100 text-amber-800'
                         : ret.status === 'approved'
@@ -1299,8 +1337,8 @@ export const Dashboard: React.FC = () => {
                       : ret.status.charAt(0).toUpperCase() + ret.status.slice(1)}
                   </span>
                 </div>
-                <p className="text-sm text-gray-600 mb-2 truncate">{isRtl ? ret.branchName : ret.branchNameEn || ret.branchName}</p>
-                <p className="text-sm text-gray-500">{isRtl ? `تم الإنشاء في: ${ret.createdAt}` : `Created At: ${ret.createdAt}`}</p>
+                <p className="text-xs text-gray-600 truncate">{isRtl ? ret.branchName : ret.branchNameEn || ret.branchName}</p>
+                <p className="text-xs text-gray-500">{isRtl ? `تم الإنشاء في: ${ret.createdAt}` : `Created At: ${ret.createdAt}`}</p>
               </motion.div>
             ))
           )}
@@ -1310,16 +1348,24 @@ export const Dashboard: React.FC = () => {
   );
 
   const renderLowStockItems = () => (
-    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mt-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-        <AlertCircle className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-red-600`} />
+    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mt-4">
+      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
+        <AlertCircle className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-red-600`} />
         {isRtl ? 'منتجات تحتاج تجديد' : 'Low Stock Products'}
       </h3>
-    
-      <div className="space-y-3 max-h-64 overflow-y-auto">
+      <div className="flex flex-col sm:flex-row items-center justify-between mb-3 gap-2">
+        <ProductSearchInput
+          value={inventoryFilter.search}
+          onChange={(value) => setInventoryFilter({ search: value })}
+          placeholder={isRtl ? 'ابحث في المخزون...' : 'Search inventory...'}
+          className="w-full sm:w-48 rounded-lg border-gray-200 focus:ring-amber-500"
+          ariaLabel={isRtl ? 'البحث في المخزون' : 'Search inventory'}
+        />
+      </div>
+      <div className="space-y-2 max-h-64 overflow-y-auto">
         <AnimatePresence>
           {lowStockItems.length === 0 ? (
-            <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد منتجات منخفضة المخزون' : 'No low stock products'}</p>
+            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد منتجات منخفضة المخزون' : 'No low stock products'}</p>
           ) : (
             lowStockItems.map((item, index) => (
               <motion.div
@@ -1328,15 +1374,15 @@ export const Dashboard: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2, delay: index * 0.1 }}
-                className="flex items-center justify-between p-3 border-b border-gray-100 hover:bg-amber-50/50 transition-all duration-200"
+                className="flex items-center justify-between p-2 border-b border-gray-100 hover:bg-amber-50/50 transition-all duration-200"
               >
                 <div>
-                  <p className="text-sm font-medium text-gray-800">{item.product?.displayName}</p>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-xs font-medium text-gray-800">{item.product?.displayName}</p>
+                  <p className="text-xs text-gray-500">
                     {isRtl ? 'المخزون الحالي' : 'Current Stock'}: {item.currentStock} {item.product?.displayUnit}
                   </p>
                 </div>
-                <span className="text-sm text-red-600">{isRtl ? 'منخفض' : 'Low'}</span>
+                <span className="text-xs text-red-600">{isRtl ? 'منخفض' : 'Low'}</span>
               </motion.div>
             ))
           )}
@@ -1346,15 +1392,15 @@ export const Dashboard: React.FC = () => {
   );
 
   const renderRecentInventoryHistory = () => (
-    <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mt-6">
-      <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-        <Clock className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 mt-4">
+      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
+        <Clock className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
         {isRtl ? 'أحدث سجل المخزون' : 'Recent Inventory History'}
       </h3>
-      <div className="space-y-3 max-h-64 overflow-y-auto">
+      <div className="space-y-2 max-h-64 overflow-y-auto">
         <AnimatePresence>
           {recentHistory.length === 0 ? (
-            <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد سجلات' : 'No history available'}</p>
+            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد سجلات' : 'No history available'}</p>
           ) : (
             recentHistory.map((entry, index) => (
               <motion.div
@@ -1363,15 +1409,15 @@ export const Dashboard: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2, delay: index * 0.1 }}
-                className="flex items-center justify-between p-3 border-b border-gray-100 hover:bg-amber-50/50 transition-all duration-200"
+                className="flex items-center justify-between p-2 border-b border-gray-100 hover:bg-amber-50/50 transition-all duration-200"
               >
                 <div>
-                  <p className="text-sm font-medium text-gray-800">{isRtl ? entry.type : entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}</p>
-                  <p className="text-sm text-gray-500">{entry.description}</p>
+                  <p className="text-xs font-medium text-gray-800">{isRtl ? entry.type : entry.type.charAt(0).toUpperCase() + entry.type.slice(1)}</p>
+                  <p className="text-xs text-gray-500">{entry.description}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm text-gray-600">{entry.quantity}</p>
-                  <p className="text-sm text-gray-500">{entry.date}</p>
+                  <p className="text-xs text-gray-600">{entry.quantity}</p>
+                  <p className="text-xs text-gray-500">{entry.date}</p>
                 </div>
               </motion.div>
             ))
@@ -1381,141 +1427,117 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 
+  const renderLatestOrders = () => (
+    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
+      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
+        <ShoppingCart className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+        {isRtl ? 'أحدث الطلبات' : 'Latest Orders'}
+      </h3>
+      <div className="space-y-2 max-h-80 overflow-y-auto">
+        <AnimatePresence>
+          {sortedPendingOrders.length === 0 ? (
+            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد طلبات' : 'No orders available'}</p>
+          ) : (
+            sortedPendingOrders.map((order) => (
+              <motion.div
+                key={order.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="border border-amber-100 rounded-lg p-2 bg-amber-50/50 shadow-sm cursor-pointer hover:bg-amber-100 transition-all duration-200"
+                onClick={() => navigate(`/orders/${order.id}`)}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <h4 className="font-semibold text-xs text-gray-800 truncate">
+                    {isRtl ? `طلب رقم ${order.orderNumber}` : `Order #${order.orderNumber}`}
+                  </h4>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      order.status === 'pending' || order.status === 'approved'
+                        ? 'bg-amber-100 text-amber-800'
+                        : order.status === 'in_production'
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-purple-100 text-purple-800'
+                    }`}
+                  >
+                    {isRtl
+                      ? order.status === 'pending'
+                        ? 'معلق'
+                        : order.status === 'approved'
+                        ? 'موافق عليه'
+                        : order.status === 'in_production'
+                        ? 'قيد الإنتاج'
+                        : 'في الطريق'
+                      : order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 truncate">
+                  {isRtl ? order.branchName : order.branchNameEn || order.branchName}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {isRtl ? `تم الإنشاء في: ${order.createdAt}` : `Created At: ${order.createdAt}`}
+                </p>
+                {order.status === 'in_transit' && user.role === 'branch' && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleConfirmDelivery(order.id, order.branchId);
+                    }}
+                    className="mt-1 bg-green-600 text-white px-2 py-0.5 rounded-lg text-xs hover:bg-green-700 transition-all duration-200"
+                    aria-label={isRtl ? 'تأكيد التسليم' : 'Confirm Delivery'}
+                  >
+                    {isRtl ? 'تأكيد التسليم' : 'Confirm Delivery'}
+                  </button>
+                )}
+              </motion.div>
+            ))
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
 
-
-if (loading && isInitialLoad) return <Loader />;
-if (error) return <div className="text-center text-red-600 p-4">{error}</div>;
-
-return (
-  <div className={`py-8 px-6 mx-auto  ${isRtl ? 'rtl' : 'ltr'}`}>
-    <div className="flex items-center justify-between mb-6">
-      <h1 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-3">
-        <BarChart3 className="w-6 h-6 text-amber-600" />
+  if (loading && isInitialLoad) return <Loader />;
+  if (error) return <div className="text-center text-red-600 p-4 text-sm">{error}</div>;
+  return (
+    <div className={`container mx-auto p-4 ${isRtl ? 'rtl' : 'ltr'}`}>
+      <h1 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+        <BarChart3 className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
         {isRtl ? 'لوحة التحكم' : 'Dashboard'}
       </h1>
-      <ProductDropdown
-        value={timeFilter}
-        onChange={(value) => setTimeFilter(value)}
-        options={timeFilterOptions.map((option) => ({
-          value: option.value,
-          label: isRtl ? option.label : option.enLabel,
-        }))}
-        ariaLabel={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
-        className="w-48 rounded-lg border-gray-200 focus:ring-amber-500"
-      />
-    </div>
-
-    {user.role === 'chef' ? (
-      <ChefDashboard
-        stats={stats}
-        tasks={tasks}
-        isRtl={isRtl}
-        language={language}
-        handleStartTask={handleStartTask}
-        handleCompleteTask={handleCompleteTask}
-      />
-    ) : (
-      <>
-        {renderStats()}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-6">
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center">
-                <ShoppingCart className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
-                {isRtl ? 'أحدث الطلبات' : 'Latest Orders'}
-              </h3>
-              <div className="space-y-3 max-h-80 overflow-y-auto">
-                <AnimatePresence>
-                  {sortedPendingOrders.length === 0 ? (
-                    <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد طلبات' : 'No orders available'}</p>
-                  ) : (
-                    sortedPendingOrders.map((order) => (
-                      <motion.div
-                        key={order.id}
-                    
-                        className="border border-amber-100 rounded-lg p-3 bg-amber-50/50 shadow-sm cursor-pointer hover:bg-amber-100 transition-all duration-200"
-                        onClick={() => navigate(`/orders/${order.id}`)}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="font-semibold text-sm text-gray-800 truncate">
-                            {isRtl ? `طلب رقم ${order.orderNumber}` : `Order #${order.orderNumber}`}
-                          </h4>
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              order.status === 'pending' || order.status === 'approved'
-                                ? 'bg-amber-100 text-amber-800'
-                                : order.status === 'in_production'
-                                ? 'bg-blue-100 text-blue-800'
-                                : 'bg-purple-100 text-purple-800'
-                            }`}
-                          >
-                            {isRtl
-                              ? order.status === 'pending'
-                                ? 'معلق'
-                                : order.status === 'approved'
-                                ? 'موافق عليه'
-                                : order.status === 'in_production'
-                                ? 'قيد الإنتاج'
-                                : 'في الطريق'
-                              : order.status.charAt(0).toUpperCase() + order.status.slice(1)}
-                          </span>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-2 truncate">
-                          {isRtl ? order.branchName : order.branchNameEn || order.branchName}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {isRtl
-                            ? `تم الإنشاء في: ${order.createdAt}`
-                            : `Created At: ${order.createdAt}`}
-                        </p>
-                        {order.status === 'in_transit' && user.role === 'branch' && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleConfirmDelivery(order.id, order.branchId);
-                            }}
-                            className="mt-2 bg-green-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-green-700 transition-all duration-200"
-                            aria-label={isRtl ? 'تأكيد التسليم' : 'Confirm Delivery'}
-                          >
-                            {isRtl ? 'تأكيد التسليم' : 'Confirm Delivery'}
-                          </button>
-                        )}
-                      </motion.div>
-                    ))
-                  )}
-                </AnimatePresence>
-              </div> 
-            </div>
-           
-           
-           
-                                             
-
-             </div>
-             {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
-
-
-             
-
-        
-          <div>
-                   {['admin', 'production'].includes(user.role) && renderBranchPerformance()}
-                  {['admin', 'production'].includes(user.role) && renderChefPerformance()}
+      <div className="mb-4">
+        <ProductDropdown
+          options={timeFilterOptions}
+          value={timeFilter}
+          onChange={(value) => setTimeFilter(value)}
+          placeholder={isRtl ? 'اختر فترة زمنية' : 'Select Time Period'}
+          className="w-full sm:w-48 rounded-lg border-gray-200 focus:ring-amber-500"
+          ariaLabel={isRtl ? 'اختيار الفترة الزمنية' : 'Select Time Period'}
+        />
+      </div>
+      {user.role === 'chef' ? (
+        <ChefDashboard
+          stats={stats}
+          tasks={tasks}
+          isRtl={isRtl}
+          language={language}
+          handleStartTask={handleStartTask}
+          handleCompleteTask={handleCompleteTask}
+        />
+      ) : (
+        <div className="space-y-4">
+          {renderStats()}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {renderLatestOrders()}
+            {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
+            {user.role === 'branch' && renderLowStockItems()}
+            {user.role === 'branch' && renderRecentInventoryHistory()}
+            {['admin', 'production'].includes(user.role) && renderBranchPerformance()}
+            {['admin', 'production'].includes(user.role) && renderChefPerformance()}
           </div>
-
-                    
-
         </div>
-
-        
-              <div >
-                          {user.role === 'branch' && renderLowStockItems()}
-                          {user.role === 'branch' && renderRecentInventoryHistory()}
-              </div>
-      </>
-    )}
-  </div>
-);
+      )}
+    </div>
+  );
 };
-
-export default Dashboard;
