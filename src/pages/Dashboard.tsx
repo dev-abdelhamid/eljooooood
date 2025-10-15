@@ -10,8 +10,9 @@ import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
 import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, inventoryAPI, returnsAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
+import { ProductDropdown } from './NewOrder'; // استوردت ProductDropdown من NewOrder زي في المخزون
 
-// تعريف الواجهات (حسّنتها شوية لتوافق المخزون والمرتجعات)
+// تعريف الواجهات (حافظت عليها، بس حسنت للمخزون)
 interface Stats {
   totalOrders: number;
   pendingOrders: number;
@@ -29,6 +30,28 @@ interface InventoryStats {
   lowStockItems: number;
   totalValue: number;
   expiringSoon: number;
+}
+
+interface InventoryItem {
+  _id: string;
+  product: {
+    _id: string;
+    name: string;
+    nameEn: string;
+    code: string;
+    unit: string;
+    unitEn: string;
+    department: { _id: string; name: string; nameEn: string } | null;
+    displayName: string;
+    displayUnit: string;
+  } | null;
+  branch: { _id: string; name: string; nameEn: string; displayName: string } | null;
+  currentStock: number;
+  pendingReturnStock: number;
+  damagedStock: number;
+  minStockLevel: number;
+  maxStockLevel: number;
+  status: 'low' | 'normal' | 'full';
 }
 
 interface Return {
@@ -367,6 +390,7 @@ export const Dashboard: React.FC = () => {
   const [branchPerformance, setBranchPerformance] = useState<BranchPerformance[]>([]);
   const [chefPerformance, setChefPerformance] = useState<ChefPerformance[]>([]);
   const [returns, setReturns] = useState<Return[]>([]);
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [inventoryStats, setInventoryStats] = useState<InventoryStats>({
     totalItems: 0,
     lowStockItems: 0,
@@ -420,6 +444,7 @@ export const Dashboard: React.FC = () => {
         setBranchPerformance(cachedData.branchPerformance);
         setChefPerformance(cachedData.chefPerformance);
         setReturns(cachedData.returns);
+        setInventoryItems(cachedData.inventoryItems);
         setInventoryStats(cachedData.inventoryStats);
         setStats(cachedData.stats);
         setLoading(false);
@@ -458,6 +483,7 @@ export const Dashboard: React.FC = () => {
         let branchesResponse: any[] = [];
         let returnsResponse: any[] = [];
         let inventoryResponse: any = {};
+        let inventoryItemsResponse: any[] = [];
 
         if (user.role === 'chef') {
           const chefProfile = await chefsAPI.getByUserId(user.id || user._id);
@@ -479,6 +505,7 @@ export const Dashboard: React.FC = () => {
           [ordersResponse, tasksResponse, chefsResponse, branchesResponse, returnsResponse] = await Promise.all(promises);
           if (user.role === 'branch') {
             inventoryResponse = await inventoryAPI.getBranchStats(user.id || user._id).catch(() => ({}));
+            inventoryItemsResponse = await inventoryAPI.getByBranch(user.id || user._id).catch(() => []);
           }
         }
 
@@ -572,6 +599,28 @@ export const Dashboard: React.FC = () => {
           createdAt: formatDate(ret.createdAt || new Date(), language),
         })).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
+        const mappedInventoryItems = inventoryItemsResponse.map((item: any) => ({
+          _id: item._id || crypto.randomUUID(),
+          product: item.product ? {
+            _id: item.product._id,
+            name: item.product.name,
+            nameEn: item.product.nameEn,
+            code: item.product.code,
+            unit: item.product.unit || 'غير محدد',
+            unitEn: item.product.unitEn || item.product.unit || 'N/A',
+            department: item.product.department,
+            displayName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
+            displayUnit: isRtl ? (item.product.unit || 'غير محدد') : item.product.unitEn || item.product.unit || 'N/A',
+          } : null,
+          branch: item.branch,
+          currentStock: item.currentStock,
+          pendingReturnStock: item.pendingReturnStock,
+          damagedStock: item.damagedStock,
+          minStockLevel: item.minStockLevel,
+          maxStockLevel: item.maxStockLevel,
+          status: item.currentStock <= item.minStockLevel ? 'low' : item.currentStock >= item.maxStockLevel ? 'full' : 'normal',
+        })).sort((a, b) => b.currentStock - a.currentStock); // مثال: مرتب حسب المخزون الأعلى
+
         const branchPerf = mappedBranches.map((branch: any) => {
           const branchOrders = mappedOrders.filter((o) => o.branchId === branch._id);
           const total = branchOrders.length;
@@ -633,6 +682,7 @@ export const Dashboard: React.FC = () => {
           branchPerformance: branchPerf,
           chefPerformance: chefPerf,
           returns: mappedReturns,
+          inventoryItems: mappedInventoryItems,
           inventoryStats: newInventoryStats,
           stats: {
             totalOrders,
@@ -655,6 +705,7 @@ export const Dashboard: React.FC = () => {
         setBranchPerformance(newData.branchPerformance);
         setChefPerformance(newData.chefPerformance);
         setReturns(newData.returns);
+        setInventoryItems(newData.inventoryItems);
         setInventoryStats(newData.inventoryStats);
         setStats(newData.stats);
         setError('');
@@ -681,7 +732,7 @@ export const Dashboard: React.FC = () => {
   useEffect(() => {
     fetchDashboardData();
     return () => fetchDashboardData.cancel();
-  }, [fetchDashboardData, timeFilter, language]); // أضفت language هنا لتغيير فوري
+  }, [fetchDashboardData, timeFilter, language]);
 
   useEffect(() => {
     if (refreshTasks) {
@@ -1086,8 +1137,16 @@ export const Dashboard: React.FC = () => {
   }, [orders]);
 
   const sortedLatestReturns = useMemo(() => {
-    return [...returns].slice(0, 8); // أحدث 8 مرتجعات، كل الحالات
+    return [...returns].slice(0, 8);
   }, [returns]);
+
+  const sortedLatestInventoryItems = useMemo(() => {
+    return [...inventoryItems].slice(0, 8); // أحدث 8 منتجات في المخزون للفرع
+  }, [inventoryItems]);
+
+  const getDisplayUnit = (unit: string, unitEn: string | undefined) => {
+    return isRtl ? (unit || 'غير محدد') : (unitEn || unit || 'N/A'); // مطابق لكود المخزون
+  };
 
   const renderStats = () => (
     <motion.div
@@ -1216,7 +1275,7 @@ export const Dashboard: React.FC = () => {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2, delay: index * 0.1 }}
                 className="flex items-center justify-between p-2 border-b border-gray-100 cursor-pointer hover:bg-amber-50 transition-colors duration-200"
-                onClick={() => navigate(`/chefs/${chef.chefId}`)} // صلحت لـ chef.chefId اللي هو userId، بس لو id هو الرئيسي، غيره لـ chef.id
+                onClick={() => navigate(`/chefs/${chef.chefId}`)}
               >
                 <div>
                   <p className="text-xs font-medium text-gray-800">{isRtl ? chef.chefName : chef.chefNameEn || chef.chefName}</p>
@@ -1300,7 +1359,7 @@ export const Dashboard: React.FC = () => {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
                 className="border border-amber-100 rounded-lg p-2 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
-                onClick={() => navigate(`/returns/${ret.id}`)} // افترضت path للمرتجعات
+                onClick={() => navigate(`/returns/${ret.id}`)}
               >
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="font-semibold text-xs text-gray-800 truncate">
@@ -1326,8 +1385,60 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 
+  const renderLatestInventoryItems = () => user.role === 'branch' && (
+    <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100 mt-4">
+      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
+        <Package className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
+        {isRtl ? 'أحدث المنتجات في المخزون' : 'Latest Inventory Items'}
+      </h3>
+      <div className="space-y-2 max-h-64 overflow-y-auto">
+        <AnimatePresence>
+          {sortedLatestInventoryItems.length === 0 ? (
+            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد منتجات في المخزون' : 'No inventory items available'}</p>
+          ) : (
+            sortedLatestInventoryItems.map((item) => item.product && (
+              <motion.div
+                key={item._id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2 }}
+                className="border border-amber-100 rounded-lg p-2 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
+                onClick={() => navigate(`/inventory/${item._id}`)} // افترضت path لتفاصيل المنتج
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-semibold text-xs text-gray-800 truncate">
+                    {isRtl ? item.product.name : item.product.nameEn || item.product.name}
+                  </h4>
+                  <span
+                    className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
+                      item.status === 'low' ? 'bg-red-100 text-red-800' : item.status === 'full' ? 'bg-yellow-100 text-yellow-800' : 'bg-green-100 text-green-800'
+                    }`}
+                  >
+                    {isRtl
+                      ? item.status === 'low' ? 'منخفض' : item.status === 'full' ? 'ممتلئ' : 'عادي'
+                      : item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+                  </span>
+                </div>
+                <p className="text-xs text-gray-600 mb-2 truncate">
+                  {`${item.currentStock} (${getDisplayUnit(item.product.unit, item.product.unitEn)})`}
+                </p>
+                <p className="text-xs text-gray-500">{isRtl ? item.product.department?.name : item.product.department?.nameEn || item.product.department?.name}</p>
+              </motion.div>
+            ))
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+
   if (loading && isInitialLoad) return <Loader />;
   if (error) return <div className="text-center text-red-600 p-4">{error}</div>;
+
+  const timeOptions = timeFilterOptions.map((option) => ({
+    value: option.value,
+    label: isRtl ? option.label : option.enLabel,
+  }));
 
   return (
     <div className={`py-6 px-4 mx-auto max-w-7xl`}>
@@ -1336,18 +1447,13 @@ export const Dashboard: React.FC = () => {
           <BarChart3 className="w-5 h-5 text-amber-600" />
           {isRtl ? 'لوحة التحكم' : 'Dashboard'}
         </h1>
-        <select
+        <ProductDropdown
           value={timeFilter}
-          onChange={(e) => setTimeFilter(e.target.value)}
-          className="p-1.5 rounded-lg border border-gray-200 text-xs focus:ring-2 focus:ring-blue-500 bg-white"
-          aria-label={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
-        >
-          {timeFilterOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {isRtl ? option.label : option.enLabel}
-            </option>
-          ))}
-        </select>
+          onChange={setTimeFilter}
+          options={timeOptions}
+          ariaLabel={isRtl ? 'تصفية حسب الوقت' : 'Time Filter'}
+          className="w-40"
+        />
       </div>
       {user.role === 'chef' ? (
         <ChefDashboard
@@ -1362,7 +1468,7 @@ export const Dashboard: React.FC = () => {
       ) : (
         <>
           {renderStats()}
-          {renderInventoryStats()} {/* إضافة إحصائيات المخزون للفرع */}
+          {renderInventoryStats()}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-3">
               <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
@@ -1415,7 +1521,8 @@ export const Dashboard: React.FC = () => {
                   </AnimatePresence>
                 </div>
               </div>
-              {renderLatestReturns()} {/* إضافة عرض أحدث المرتجعات */}
+              {renderLatestReturns()}
+              {renderLatestInventoryItems()} // إضافة قائمة المنتجات للفرع فقط
             </div>
             {['admin', 'production'].includes(user.role) && (
               <>
