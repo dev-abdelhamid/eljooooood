@@ -1,15 +1,14 @@
-
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
-import { ShoppingCart, Clock, BarChart3, CheckCircle, AlertCircle, Package, DollarSign, ChefHat, RotateCcw } from 'lucide-react';
+import { ShoppingCart, Clock, BarChart3, CheckCircle, AlertCircle, Package, DollarSign, ChefHat } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { debounce } from 'lodash';
-import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI, returnsAPI } from '../services/api';
+import { ordersAPI, productionAssignmentsAPI, chefsAPI, branchesAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 
 // تعريف الواجهات
@@ -22,10 +21,6 @@ interface Stats {
   totalOrderValue: number; // تم تغيير الاسم من totalSales إلى totalOrderValue
   completedTasks: number;
   inProgressTasks: number;
-  totalReturns: number;
-  pendingReturns: number;
-  approvedReturns: number;
-  rejectedReturns: number;
   averageOrderValue: number;
 }
 
@@ -78,37 +73,12 @@ interface Order {
     department: { _id: string; name: string; nameEn?: string };
     assignedTo?: { _id: string; username: string; name: string; nameEn?: string };
     status: 'pending' | 'assigned' | 'in_progress' | 'completed';
-    returnedQuantity?: number;
-    returnReason?: string;
-    returnReasonEn?: string;
   }>;
   status: 'pending' | 'approved' | 'in_production' | 'completed' | 'in_transit' | 'delivered' | 'cancelled';
   totalAmount: number;
   date: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   createdBy: string;
-  createdAt: string;
-}
-
-interface Return {
-  id: string;
-  returnNumber: string;
-  branchName: string;
-  branchNameEn?: string;
-  branchId: string;
-  items: Array<{
-    productId: string;
-    productName: string;
-    productNameEn?: string;
-    quantity: number;
-    reason: string;
-    reasonEn?: string;
-  }>;
-  status: 'pending_approval' | 'approved' | 'rejected';
-  createdByName: string;
-  createdByNameEn?: string;
-  reviewNotes?: string;
-  reviewNotesEn?: string;
   createdAt: string;
 }
 
@@ -168,6 +138,7 @@ const ChefDashboard: React.FC<{
   handleCompleteTask: (taskId: string, orderId: string) => void;
 }> = React.memo(({ stats, tasks, isRtl, language, handleStartTask, handleCompleteTask }) => {
   const [filter, setFilter] = useState<FilterState>({ status: 'all', search: '' });
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
 
   const filteredTasks = useMemo(() => {
     return tasks
@@ -177,9 +148,12 @@ const ChefDashboard: React.FC<{
           (isRtl ? task.productName : task.productNameEn || task.productName).toLowerCase().includes(filter.search.toLowerCase()) ||
           task.orderNumber.toLowerCase().includes(filter.search.toLowerCase())
       )
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 6);
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [tasks, filter.status, filter.search, isRtl]);
+
+  const toggleExpandTask = (taskId: string) => {
+    setExpandedTaskId(expandedTaskId === taskId ? null : taskId);
+  };
 
   return (
     <div className="space-y-4">
@@ -256,7 +230,7 @@ const ChefDashboard: React.FC<{
                   transition={{ duration: 0.2 }}
                   className="border border-amber-100 rounded-lg p-2 bg-amber-50 shadow-sm"
                 >
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-2 cursor-pointer" onClick={() => toggleExpandTask(task.id)}>
                     <h4 className="font-semibold text-xs text-gray-800 truncate">
                       {isRtl ? `طلب رقم ${task.orderNumber}` : `Order #${task.orderNumber}`}
                     </h4>
@@ -284,7 +258,25 @@ const ChefDashboard: React.FC<{
                     {`${task.quantity} ${isRtl ? task.productName : task.productNameEn || task.productName} (${isRtl ? task.unit : task.unitEn || task.unit})`}
                   </p>
                   <p className="text-xs text-gray-500 mb-2">{isRtl ? `تم الإنشاء في: ${task.createdAt}` : `Created At: ${task.createdAt}`}</p>
-                  <div className="flex items-center gap-2">
+                  <AnimatePresence>
+                    {expandedTaskId === task.id && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className="overflow-hidden"
+                      >
+                        <p className="text-xs text-gray-700 mb-1">{isRtl ? 'تفاصيل المهمة:' : 'Task Details:'}</p>
+                        <ul className="text-xs text-gray-600 list-disc pl-4">
+                          <li>{isRtl ? `فرع: ${task.branchName}` : `Branch: ${task.branchNameEn || task.branchName}`}</li>
+                          <li>{isRtl ? `حالة: ${task.status}` : `Status: ${task.status}`}</li>
+                          <li>{isRtl ? `كمية: ${task.quantity}` : `Quantity: ${task.quantity}`}</li>
+                        </ul>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                  <div className="flex items-center gap-2 mt-2">
                     {(task.status === 'pending' || task.status === 'assigned') && (
                       <button
                         onClick={() => handleStartTask(task.id, task.orderId)}
@@ -315,7 +307,7 @@ const ChefDashboard: React.FC<{
 });
 
 export const Dashboard: React.FC = () => {
-  const { language } = useLanguage();
+  const { t, language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
   const { socket, isConnected } = useSocket();
@@ -325,7 +317,6 @@ export const Dashboard: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [chefs, setChefs] = useState<Chef[]>([]);
   const [branches, setBranches] = useState<{ _id: string; name: string; nameEn?: string }[]>([]);
-  const [returns, setReturns] = useState<Return[]>([]);
   const [branchPerformance, setBranchPerformance] = useState<BranchPerformance[]>([]);
   const [chefPerformance, setChefPerformance] = useState<ChefPerformance[]>([]);
   const [stats, setStats] = useState<Stats>({
@@ -334,13 +325,9 @@ export const Dashboard: React.FC = () => {
     inProductionOrders: 0,
     inTransitOrders: 0,
     deliveredOrders: 0,
-    totalOrderValue: 0, // تغيير من totalSales إلى totalOrderValue
+    totalOrderValue: 0,
     completedTasks: 0,
     inProgressTasks: 0,
-    totalReturns: 0,
-    pendingReturns: 0,
-    approvedReturns: 0,
-    rejectedReturns: 0,
     averageOrderValue: 0,
   });
   const [timeFilter, setTimeFilter] = useState('week');
@@ -376,7 +363,6 @@ export const Dashboard: React.FC = () => {
         setTasks(cachedData.tasks);
         setChefs(cachedData.chefs);
         setBranches(cachedData.branches);
-        setReturns(cachedData.returns);
         setBranchPerformance(cachedData.branchPerformance);
         setChefPerformance(cachedData.chefPerformance);
         setStats(cachedData.stats);
@@ -414,7 +400,6 @@ export const Dashboard: React.FC = () => {
         let tasksResponse: any[] = [];
         let chefsResponse: any[] = [];
         let branchesResponse: any[] = [];
-        let returnsResponse: any = { returns: [], total: 0 };
 
         if (user.role === 'chef') {
           const chefProfile = await chefsAPI.getByUserId(user.id || user._id);
@@ -431,14 +416,8 @@ export const Dashboard: React.FC = () => {
             user.role !== 'branch' ? productionAssignmentsAPI.getAllTasks(query).catch(() => []) : Promise.resolve([]),
             ['admin', 'production'].includes(user.role) ? chefsAPI.getAll().catch(() => []) : Promise.resolve([]),
             ['admin', 'production'].includes(user.role) ? branchesAPI.getAll().catch(() => []) : Promise.resolve([]),
-            ['admin', 'production', 'branch'].includes(user.role)
-              ? returnsAPI.getAll(query).catch((err) => {
-                  console.warn(`[${new Date().toISOString()}] Error fetching returns:`, err);
-                  return { returns: [], total: 0 };
-                })
-              : Promise.resolve({ returns: [], total: 0 }),
           ];
-          [ordersResponse, tasksResponse, chefsResponse, branchesResponse, returnsResponse] = await Promise.all(promises);
+          [ordersResponse, tasksResponse, chefsResponse, branchesResponse] = await Promise.all(promises);
         }
 
         const mappedOrders = ordersResponse.map((order: any) => ({
@@ -459,9 +438,6 @@ export const Dashboard: React.FC = () => {
             assignedTo: item.assignedTo
               ? { _id: item.assignedTo._id, username: item.assignedTo.username, name: item.assignedTo.name || (isRtl ? 'شيف غير معروف' : 'Unknown Chef'), nameEn: item.assignedTo.nameEn || item.assignedTo.name || 'Unknown' }
               : undefined,
-            returnedQuantity: Number(item.returnedQuantity) || 0,
-            returnReason: item.returnReason || '',
-            returnReasonEn: item.returnReasonEn || item.returnReason || '',
           })),
           status: order.status || 'pending',
           totalAmount: Number(order.totalAmount || order.totalPrice) || 0,
@@ -504,28 +480,6 @@ export const Dashboard: React.FC = () => {
           }))
           .sort((a: any, b: any) => a.name.localeCompare(b.name));
 
-        const mappedReturns = returnsResponse.returns.map((ret: any) => ({
-          id: ret._id || crypto.randomUUID(),
-          returnNumber: ret.returnNumber || (isRtl ? 'غير معروف' : 'Unknown'),
-          branchName: ret.branch?.name || (isRtl ? 'فرع غير معروف' : 'Unknown Branch'),
-          branchNameEn: ret.branch?.nameEn || ret.branch?.name || 'Unknown',
-          branchId: ret.branch?._id || 'unknown',
-          items: (ret.items || []).map((item: any) => ({
-            productId: item.product?._id || 'unknown',
-            productName: item.product?.name || (isRtl ? 'منتج غير معروف' : 'Unknown Product'),
-            productNameEn: item.product?.nameEn || item.product?.name || 'Unknown',
-            quantity: Number(item.quantity) || 0,
-            reason: item.reason || '',
-            reasonEn: item.reasonEn || item.reason || '',
-          })),
-          status: ret.status || 'pending_approval',
-          createdByName: ret.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-          createdByNameEn: ret.createdBy?.nameEn || ret.createdBy?.name || 'Unknown',
-          reviewNotes: ret.reviewNotes || '',
-          reviewNotesEn: ret.reviewNotesEn || ret.reviewNotes || '',
-          createdAt: formatDate(ret.createdAt || new Date(), language),
-        }));
-
         const branchPerf = mappedBranches.map((branch: any) => {
           const branchOrders = mappedOrders.filter((o) => o.branchId === branch._id);
           const total = branchOrders.length;
@@ -563,10 +517,6 @@ export const Dashboard: React.FC = () => {
         const totalOrderValue = mappedOrders.reduce((sum, order) => sum + Number(order.totalAmount || 0), 0);
         const completedTasks = mappedTasks.filter((task) => task.status === 'completed').length;
         const inProgressTasks = mappedTasks.filter((task) => task.status === 'in_progress').length;
-        const totalReturns = mappedReturns.length;
-        const pendingReturns = mappedReturns.filter((r) => r.status === 'pending_approval').length;
-        const approvedReturns = mappedReturns.filter((r) => r.status === 'approved').length;
-        const rejectedReturns = mappedReturns.filter((r) => r.status === 'rejected').length;
         const averageOrderValue = totalOrders > 0 ? totalOrderValue / totalOrders : 0;
 
         const newData = {
@@ -574,7 +524,6 @@ export const Dashboard: React.FC = () => {
           tasks: mappedTasks,
           chefs: mappedChefs,
           branches: mappedBranches,
-          returns: mappedReturns,
           branchPerformance: branchPerf,
           chefPerformance: chefPerf,
           stats: {
@@ -586,10 +535,6 @@ export const Dashboard: React.FC = () => {
             totalOrderValue,
             completedTasks,
             inProgressTasks,
-            totalReturns,
-            pendingReturns,
-            approvedReturns,
-            rejectedReturns,
             averageOrderValue,
           },
         };
@@ -599,7 +544,6 @@ export const Dashboard: React.FC = () => {
         setTasks(newData.tasks);
         setChefs(newData.chefs);
         setBranches(newData.branches);
-        setReturns(newData.returns);
         setBranchPerformance(newData.branchPerformance);
         setChefPerformance(newData.chefPerformance);
         setStats(newData.stats);
@@ -748,64 +692,11 @@ export const Dashboard: React.FC = () => {
       fetchDashboardData(true);
     });
 
-    socket.on('returnCreated', (data: any) => {
-      if (!data.returnId || !data.returnNumber || !data.branchId || !data.branchName || !data.items || !data.status || !data.eventId) {
-        console.warn(`[${new Date().toISOString()}] Invalid return created data:`, data);
-        return;
-      }
-      if (!['admin', 'production', 'branch'].includes(user.role) || (user.role === 'branch' && data.branchId !== user.branchId)) return;
-
-      addNotification({
-        _id: data.eventId,
-        type: 'info',
-        message: isRtl
-          ? `تم إنشاء مرتجع جديد: ${data.returnNumber} من ${data.branchName}`
-          : `New return created: ${data.returnNumber} from ${data.branchName}`,
-        data: { returnId: data.returnId, branchId: data.branchId, eventId: data.eventId },
-        read: false,
-        createdAt: formatDate(new Date(), language),
-        sound: '/sounds/return-created.mp3',
-        vibrate: [300, 100, 300],
-        path: '/returns',
-      });
-      fetchDashboardData(true);
-    });
-
-    socket.on('returnStatusUpdated', (data: any) => {
-      if (!data.returnId || !data.returnNumber || !data.status || !data.branchId || !data.branchName || !data.eventId) {
-        console.warn(`[${new Date().toISOString()}] Invalid return status update data:`, data);
-        return;
-      }
-      if (!['admin', 'production', 'branch'].includes(user.role) || (user.role === 'branch' && data.branchId !== user.branchId)) return;
-
-      setReturns((prev) =>
-        prev.map((ret) =>
-          ret.id === data.returnId ? { ...ret, status: data.status, reviewNotes: data.reviewNotes || '', reviewNotesEn: data.reviewNotesEn || data.reviewNotes || '' } : ret
-        )
-      );
-      addNotification({
-        _id: data.eventId,
-        type: 'info',
-        message: isRtl
-          ? `تم تحديث حالة المرتجع ${data.returnNumber} إلى ${data.status === 'approved' ? 'موافق عليه' : 'مرفوض'}`
-          : `Return ${data.returnNumber} status updated to ${data.status}`,
-        data: { returnId: data.returnId, branchId: data.branchId, eventId: data.eventId },
-        read: false,
-        createdAt: formatDate(new Date(), language),
-        path: '/returns',
-        sound: '/sounds/return-status-updated.mp3',
-        vibrate: [200, 100, 200],
-      });
-      fetchDashboardData(true);
-    });
-
     return () => {
       socket.off('connect_error');
       socket.off('taskAssigned');
       socket.off('orderCompleted');
       socket.off('itemStatusUpdated');
-      socket.off('returnCreated');
-      socket.off('returnStatusUpdated');
     };
   }, [socket, user, isRtl, language, addNotification, fetchDashboardData, isConnected]);
 
@@ -936,12 +827,6 @@ export const Dashboard: React.FC = () => {
       .slice(0, 8);
   }, [orders]);
 
-  const sortedLatestReturns = useMemo(() => {
-    return [...returns]
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 8);
-  }, [returns]);
-
   const renderStats = () => (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -977,45 +862,13 @@ export const Dashboard: React.FC = () => {
         color="green"
         ariaLabel={isRtl ? 'الطلبات المسلمة' : 'Delivered Orders'}
       />
-      {['admin', 'production', 'branch'].includes(user.role) && (
-        <>
-          <StatsCard
-            title={isRtl ? 'إجمالي قيمة المخزون' : 'Total  Inventory Value'} 
-            value={stats.totalOrderValue.toFixed(2)}
-            icon={DollarSign}
-            color="purple"
-            ariaLabel={isRtl ? 'إجمالي قيمة المخزون ' : 'Total inventory Value'}
-          />
-          <StatsCard
-            title={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
-            value={stats.totalReturns.toString()}
-            icon={RotateCcw}
-            color="orange"
-            ariaLabel={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
-          />
-          <StatsCard
-            title={isRtl ? 'المرتجعات المعلقة' : 'Pending Returns'}
-            value={stats.pendingReturns.toString()}
-            icon={AlertCircle}
-            color="red"
-            ariaLabel={isRtl ? 'المرتجعات المعلقة' : 'Pending Returns'}
-          />
-          <StatsCard
-            title={isRtl ? 'المرتجعات الموافق عليها' : 'Approved Returns'}
-            value={stats.approvedReturns.toString()}
-            icon={CheckCircle}
-            color="green"
-            ariaLabel={isRtl ? 'المرتجعات الموافق عليها' : 'Approved Returns'}
-          />
-          <StatsCard
-            title={isRtl ? 'المرتجعات المرفوضة' : 'Rejected Returns'}
-            value={stats.rejectedReturns.toString()}
-            icon={AlertCircle}
-            color="red"
-            ariaLabel={isRtl ? 'المرتجعات المرفوضة' : 'Rejected Returns'}
-          />
-        </>
-      )}
+      <StatsCard
+        title={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
+        value={stats.totalOrderValue.toFixed(2)}
+        icon={DollarSign}
+        color="purple"
+        ariaLabel={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
+      />
       {['admin', 'production'].includes(user.role) && (
         <>
           <StatsCard
@@ -1125,59 +978,6 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 
-  const renderLatestReturns = () => (
-    <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
-      <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
-        <RotateCcw className={`w-4 h-4 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
-        {isRtl ? 'أحدث المرتجعات' : 'Latest Returns'}
-      </h3>
-      <div className="space-y-2 max-h-80 overflow-y-auto">
-        <AnimatePresence>
-          {sortedLatestReturns.length === 0 ? (
-            <p className="text-gray-500 text-xs">{isRtl ? 'لا توجد مرتجعات' : 'No returns available'}</p>
-          ) : (
-            sortedLatestReturns.map((ret) => (
-              <motion.div
-                key={ret.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="border border-amber-100 rounded-lg p-2 bg-amber-50 shadow-sm cursor-pointer hover:bg-amber-100 transition-colors duration-200"
-                onClick={() => navigate(`/returns/${ret.id}`)}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="font-semibold text-xs text-gray-800 truncate">
-                    {isRtl ? `مرتجع رقم ${ret.returnNumber}` : `Return #${ret.returnNumber}`}
-                  </h4>
-                  <span
-                    className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
-                      ret.status === 'pending_approval'
-                        ? 'bg-amber-100 text-amber-800'
-                        : ret.status === 'approved'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}
-                  >
-                    {isRtl
-                      ? ret.status === 'pending_approval'
-                        ? 'معلق'
-                        : ret.status === 'approved'
-                        ? 'موافق عليه'
-                        : 'مرفوض'
-                      : ret.status.charAt(0).toUpperCase() + ret.status.slice(1)}
-                  </span>
-                </div>
-                <p className="text-xs text-gray-600 mb-2 truncate">{isRtl ? ret.branchName : ret.branchNameEn || ret.branchName}</p>
-                <p className="text-xs text-gray-500">{isRtl ? `تم الإنشاء في: ${ret.createdAt}` : `Created At: ${ret.createdAt}`}</p>
-              </motion.div>
-            ))
-          )}
-        </AnimatePresence>
-      </div>
-    </div>
-  );
-
   if (loading && isInitialLoad) return <Loader />;
   if (error) return <div className="text-center text-red-600 p-4">{error}</div>;
 
@@ -1213,7 +1013,7 @@ export const Dashboard: React.FC = () => {
       ) : (
         <>
           {renderStats()}
-          <div className="grid grid-cols-1 md:grid-cols-2  gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-3">
               <div className="bg-white p-3 rounded-lg shadow-sm border border-gray-100">
                 <h3 className="text-base font-semibold text-gray-800 mb-3 flex items-center">
@@ -1266,7 +1066,6 @@ export const Dashboard: React.FC = () => {
                 </div>
               </div>
             </div>
-            {renderLatestReturns()}
             {['admin', 'production'].includes(user.role) && (
               <>
                 {renderBranchPerformance()}
