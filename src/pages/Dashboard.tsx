@@ -255,15 +255,7 @@ const ChefDashboard: React.FC<{
             <ChefHat className={`w-5 h-5 ${isRtl ? 'ml-2' : 'mr-2'} text-amber-600`} />
             {isRtl ? 'أحدث الطلبات قيد الإنتاج' : 'Latest In Production'}
           </h3>
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <ProductSearchInput
-              value={filter.search}
-              onChange={(value) => setFilter((prev) => ({ ...prev, search: value ?? '' }))}
-              placeholder={isRtl ? 'ابحث عن اسم المنتج أو رقم الطلب' : 'Search by product name or order number'}
-              ariaLabel={isRtl ? 'البحث' : 'Search'}
-              className="w-full sm:w-48 rounded-lg border-gray-200 focus:ring-amber-500"
-            />
-          </div>
+       
         </div>
         <div className="space-y-3 overflow-y-auto max-h-80">
           <AnimatePresence>
@@ -1104,13 +1096,7 @@ export const Dashboard: React.FC = () => {
       />
       {['admin', 'production', 'branch'].includes(user.role) && (
         <>
-          <StatsCard
-            title={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
-            value={stats.totalOrderValue.toFixed(2)}
-            icon={DollarSign}
-            color="purple"
-            ariaLabel={isRtl ? 'إجمالي قيمة المخزون' : 'Total Inventory Value'}
-          />
+       
           <StatsCard
             title={isRtl ? 'إجمالي المرتجعات' : 'Total Returns'}
             value={stats.totalReturns.toString()}
@@ -1443,13 +1429,10 @@ return (
                   {sortedPendingOrders.length === 0 ? (
                     <p className="text-gray-500 text-sm">{isRtl ? 'لا توجد طلبات' : 'No orders available'}</p>
                   ) : (
-                    sortedPendingOrders.map((order, index) => (
+                    sortedPendingOrders.map((order) => (
                       <motion.div
                         key={order.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        transition={{ duration: 0.2, delay: index * 0.1 }}
+                    
                         className="border border-amber-100 rounded-lg p-3 bg-amber-50/50 shadow-sm cursor-pointer hover:bg-amber-100 transition-all duration-200"
                         onClick={() => navigate(`/orders/${order.id}`)}
                       >
@@ -1501,20 +1484,23 @@ return (
                     ))
                   )}
                 </AnimatePresence>
-              </div>
+              </div> 
+                          {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
             </div>
-             <div className="space-y-6">
-                     {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
-          </div>
-          </div>
+           
+           
+           
+                   
+             </div>
               <div className="space-y-6">
-         {user.role === 'branch' && renderLowStockItems()}
-          {user.role === 'branch' && renderRecentInventoryHistory()}
-          </div>
+                          {user.role === 'branch' && renderLowStockItems()}
+                          {user.role === 'branch' && renderRecentInventoryHistory()}
+              </div>
+
         
           <div className="space-y-6">
-            {['admin', 'production'].includes(user.role) && renderBranchPerformance()}
-            {['admin', 'production'].includes(user.role) && renderChefPerformance()}
+                 {['admin', 'production'].includes(user.role) && renderBranchPerformance()}
+                  {['admin', 'production'].includes(user.role) && renderChefPerformance()}
           </div>
         </div>
       </>
