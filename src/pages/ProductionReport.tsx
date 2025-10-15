@@ -6,11 +6,11 @@ import * as XLSX from 'xlsx';
 import { toast } from 'react-toastify';
 import { Upload } from 'lucide-react';
 import { Tooltip } from 'react-tooltip';
-import { Button } from '../components/UI/Button';
-import { ProductDropdown } from './NewOrder';
-import OrderTableSkeleton  from '../components/Shared/OrderTableSkeleton';
+import {Button} from '../components/UI/Button';
+import {ProductDropdown} from './NewOrder';
+import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 import OrdersTable from './OrdersTable';
-import {DailyOrdersTable} from './DailyOrdersTable';
+import DailyOrdersTable from './DailyOrdersTable';
 
 interface Branch {
   id: string;
@@ -137,7 +137,6 @@ const ProductionReport: React.FC = () => {
       extraColumns: string[]
     ) => {
       // تنفيذ تصدير PDF باستخدام مكتبة مثل jsPDF
-      // يتم إضافته لاحقًا بناءً على متطلبات العميل
       toast.success(isRtl ? 'تم تصدير ملف PDF بنجاح' : 'PDF exported successfully', {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
@@ -150,47 +149,56 @@ const ProductionReport: React.FC = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // محاكاة جلب البيانات من الواجهة الخلفية
+        // جلب الفروع
         const branchesResponse = await fetch('/api/branches');
         const branches = await branchesResponse.json();
         setAllBranches(branches);
 
+        // حساب تواريخ الشهر المحدد
         const startDate = format(startOfMonth(new Date(2025, selectedMonth, 1)), 'yyyy-MM-dd');
         const endDate = format(endOfMonth(new Date(2025, selectedMonth, 1)), 'yyyy-MM-dd');
 
-        const ordersResponse = await fetch(`/api/orders?startDate=${startDate}&endDate=${endDate}`);
+        // جلب البيانات لكل نوع
+        const [ordersResponse, dailyOrdersResponse, stockInResponse, stockOutResponse, returnsResponse, salesResponse, ordersVsReturnsResponse] = await Promise.all([
+          fetch(`/api/orders?startDate=${startDate}&endDate=${endDate}`),
+          fetch(`/api/daily-orders?startDate=${startDate}&endDate=${endDate}`),
+          fetch(`/api/stock-in?startDate=${startDate}&endDate=${endDate}`),
+          fetch(`/api/stock-out?startDate=${startDate}&endDate=${endDate}`),
+          fetch(`/api/returns?startDate=${startDate}&endDate=${endDate}`),
+          fetch(`/api/sales?startDate=${startDate}&endDate=${endDate}`),
+          fetch(`/api/orders-vs-returns?startDate=${startDate}&endDate=${endDate}`),
+        ]);
+
         const orders = await ordersResponse.json();
-        setOrderData({ [selectedMonth]: orders });
-
-        const dailyOrdersResponse = await fetch(`/api/daily-orders?startDate=${startDate}&endDate=${endDate}`);
         const dailyOrders = await dailyOrdersResponse.json();
-        setDailyOrderData({ [selectedMonth]: dailyOrders });
-
-        const stockInResponse = await fetch(`/api/stock-in?startDate=${startDate}&endDate=${endDate}`);
         const stockIn = await stockInResponse.json();
-        setStockInData({ [selectedMonth]: stockIn });
-
-        const stockOutResponse = await fetch(`/api/stock-out?startDate=${startDate}&endDate=${endDate}`);
         const stockOut = await stockOutResponse.json();
-        setStockOutData({ [selectedMonth]: stockOut });
-
-        const returnsResponse = await fetch(`/api/returns?startDate=${startDate}&endDate=${endDate}`);
         const returns = await returnsResponse.json();
-        setReturnData({ [selectedMonth]: returns });
-
-        const salesResponse = await fetch(`/api/sales?startDate=${startDate}&endDate=${endDate}`);
         const sales = await salesResponse.json();
-        setSalesData({ [selectedMonth]: sales });
-
-        const ordersVsReturnsResponse = await fetch(`/api/orders-vs-returns?startDate=${startDate}&endDate=${endDate}`);
         const ordersVsReturns = await ordersVsReturnsResponse.json();
-        setOrdersVsReturnsData({ [selectedMonth]: ordersVsReturns });
+
+        // تحديث الحالة مع التحقق من البيانات
+        setOrderData({ [selectedMonth]: orders || [] });
+        setDailyOrderData({ [selectedMonth]: dailyOrders || [] });
+        setStockInData({ [selectedMonth]: stockIn || [] });
+        setStockOutData({ [selectedMonth]: stockOut || [] });
+        setReturnData({ [selectedMonth]: returns || [] });
+        setSalesData({ [selectedMonth]: sales || [] });
+        setOrdersVsReturnsData({ [selectedMonth]: ordersVsReturns || [] });
       } catch (error) {
         console.error('Error fetching data:', error);
         toast.error(isRtl ? 'فشل في جلب البيانات' : 'Failed to fetch data', {
           position: isRtl ? 'top-left' : 'top-right',
           autoClose: 3000,
         });
+        // تعيين بيانات افتراضية فارغة في حالة الخطأ
+        setOrderData({ [selectedMonth]: [] });
+        setDailyOrderData({ [selectedMonth]: [] });
+        setStockInData({ [selectedMonth]: [] });
+        setStockOutData({ [selectedMonth]: [] });
+        setReturnData({ [selectedMonth]: [] });
+        setSalesData({ [selectedMonth]: [] });
+        setOrdersVsReturnsData({ [selectedMonth]: [] });
       } finally {
         setLoading(false);
       }
