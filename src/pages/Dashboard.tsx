@@ -1493,11 +1493,14 @@ return (
 
              
              {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
-             
+              <div >
+          </div>
+
+ <div>
+  
                           {user.role === 'branch' && renderLowStockItems()}
                           {user.role === 'branch' && renderRecentInventoryHistory()}
-              </div>
-
+ </div>
         
           <div>
                    {['admin', 'production'].includes(user.role) && renderBranchPerformance()}
