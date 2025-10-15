@@ -5,24 +5,9 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Home,
-  Box,
-  ShoppingBag,
-  RefreshCcw,
-  BarChart2,
-  Store,
-  ChefHat,
-  Settings2,
-  Warehouse,
-  TrendingUp,
-  Users2,
-  ListTodo,
-  UserCircle2,
-  LogOut,
-  XCircle,
-  ChevronLeft,
-  ChevronRight,
-  User as UserIcon,
+  Home, Box, ShoppingBag, RefreshCcw, BarChart2, Store, ChefHat,
+  Settings2, Warehouse, TrendingUp, Users2, ListTodo, UserCircle2,
+  LogOut, XCircle, ChevronLeft, ChevronRight, Bell, Mail, Phone
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -44,10 +29,10 @@ export function Sidebar({
 }: SidebarProps) {
   const { user, logout } = useAuth();
   const { t, language } = useLanguage();
-  const { unreadByPath } = useNotifications();
+  const { unreadByPath, totalUnread } = useNotifications();
   const isRtl = language === 'ar';
 
-  // عرض الاسم الصحيح حسب اللغة (نفس منطق Users component)
+  // عرض الاسم الصحيح حسب اللغة
   const displayName = user 
     ? (isRtl ? user.name : (user.nameEn || user.name)) 
     : (t('header.guest') || 'Guest');
@@ -55,57 +40,66 @@ export function Sidebar({
   const navItems = React.useMemo(() => {
     if (!user) return [];
     const baseItems = [
-      { path: '/dashboard', icon: Home, label: t('dashboard') },
+      { path: '/dashboard', icon: Home, label: t('dashboard'), notifications: unreadByPath['/dashboard'] || 0 },
     ];
+    
+    // إضافة إشعار عام في الأعلى
+    const notificationItem = totalUnread > 0 ? [{
+      path: '/notifications', 
+      icon: Bell, 
+      label: t('notifications') || 'Notifications',
+      notifications: totalUnread
+    }] : [];
+
     const adminItems = [
-      { path: '/products', icon: Box, label: t('products.manage') },
-      { path: '/branches', icon: Store, label: t('branches.manage') },
-      { path: '/chefs', icon: ChefHat, label: t('chefs.manage') },
-      { path: '/departments', icon: Users2, label: t('departments') },
-      { path: '/orders', icon: ShoppingBag, label: t('orders') },
-      { path: '/returns', icon: RefreshCcw, label: t('returns') },
-      { path: '/sales', icon: TrendingUp, label: t('sales') },
-      { path: '/reports', icon: BarChart2, label: t('reports') },
-      { path: '/profile', icon: Settings2, label: t('settings') },
+      ...notificationItem,
+      { path: '/products', icon: Box, label: t('products.manage'), notifications: unreadByPath['/products'] || 0 },
+      { path: '/branches', icon: Store, label: t('branches.manage'), notifications: unreadByPath['/branches'] || 0 },
+      { path: '/chefs', icon: ChefHat, label: t('chefs.manage'), notifications: unreadByPath['/chefs'] || 0 },
+      { path: '/departments', icon: Users2, label: t('departments'), notifications: unreadByPath['/departments'] || 0 },
+      { path: '/orders', icon: ShoppingBag, label: t('orders'), notifications: unreadByPath['/orders'] || 0 },
+      { path: '/returns', icon: RefreshCcw, label: t('returns'), notifications: unreadByPath['/returns'] || 0 },
+      { path: '/sales', icon: TrendingUp, label: t('sales'), notifications: unreadByPath['/sales'] || 0 },
+      { path: '/reports', icon: BarChart2, label: t('reports'), notifications: unreadByPath['/reports'] || 0 },
+      { path: '/profile', icon: Settings2, label: t('settings'), notifications: 0 },
     ];
+
     const branchItems = [
-      { path: '/orders/new', icon: ShoppingBag, label: t('orders.create') },
-      { path: '/branch-orders', icon: ShoppingBag, label: t('orders.review') },
-      { path: '/branch-sales/new', icon: ListTodo, label: t('sales.create') },
-      { path: '/branch-sales', icon: TrendingUp, label: t('sales.review') },
-      { path: '/branch-returns', icon: RefreshCcw, label: t('returns.review') },
-      { path: '/branch-inventory', icon: Warehouse, label: t('inventory') },
-      { path: '/profile', icon: Settings2, label: t('settings') },
+      ...notificationItem,
+      { path: '/orders/new', icon: ShoppingBag, label: t('orders.create'), notifications: unreadByPath['/orders/new'] || 0 },
+      { path: '/branch-orders', icon: ShoppingBag, label: t('orders.review'), notifications: unreadByPath['/branch-orders'] || 0 },
+      { path: '/branch-sales/new', icon: ListTodo, label: t('sales.create'), notifications: unreadByPath['/branch-sales/new'] || 0 },
+      { path: '/branch-sales', icon: TrendingUp, label: t('sales.review'), notifications: unreadByPath['/branch-sales'] || 0 },
+      { path: '/branch-returns', icon: RefreshCcw, label: t('returns.review'), notifications: unreadByPath['/branch-returns'] || 0 },
+      { path: '/branch-inventory', icon: Warehouse, label: t('inventory'), notifications: unreadByPath['/branch-inventory'] || 0 },
+      { path: '/profile', icon: Settings2, label: t('settings'), notifications: 0 },
     ];
+
     const chefItems = [
-      { path: '/production-tasks', icon: ListTodo, label: t('productionTasks') },
-      { path: '/profile', icon: Settings2, label: t('settings') },
+      ...notificationItem,
+      { path: '/production-tasks', icon: ListTodo, label: t('productionTasks'), notifications: unreadByPath['/production-tasks'] || 0 },
+      { path: '/profile', icon: Settings2, label: t('settings'), notifications: 0 },
     ];
+
     const productionItems = [
-      { path: '/products', icon: Box, label: t('products.manage') },
-      { path: '/departments', icon: Users2, label: t('departments') },
-      { path: '/orders', icon: ShoppingBag, label: t('orders') },
-      { path: '/returns', icon: RefreshCcw, label: t('returns') },
-      { path: '/reports', icon: BarChart2, label: t('reports') },
-      { path: '/profile', icon: Settings2, label: t('settings') },
+      ...notificationItem,
+      { path: '/products', icon: Box, label: t('products.manage'), notifications: unreadByPath['/products'] || 0 },
+      { path: '/departments', icon: Users2, label: t('departments'), notifications: unreadByPath['/departments'] || 0 },
+      { path: '/orders', icon: ShoppingBag, label: t('orders'), notifications: unreadByPath['/orders'] || 0 },
+      { path: '/returns', icon: RefreshCcw, label: t('returns'), notifications: unreadByPath['/returns'] || 0 },
+      { path: '/reports', icon: BarChart2, label: t('reports'), notifications: unreadByPath['/reports'] || 0 },
+      { path: '/profile', icon: Settings2, label: t('settings'), notifications: 0 },
     ];
+
     let roleItems = [];
     switch (user.role) {
-      case 'admin':
-        roleItems = adminItems;
-        break;
-      case 'branch':
-        roleItems = branchItems;
-        break;
-      case 'chef':
-        roleItems = chefItems;
-        break;
-      case 'production':
-        roleItems = productionItems;
-        break;
+      case 'admin': roleItems = adminItems; break;
+      case 'branch': roleItems = branchItems; break;
+      case 'chef': roleItems = chefItems; break;
+      case 'production': roleItems = productionItems; break;
     }
     return [...baseItems, ...roleItems];
-  }, [user, t]);
+  }, [user, t, unreadByPath, totalUnread]);
 
   const sidebarVariants = {
     open: { x: 0, opacity: 1, transition: { duration: 0.3, ease: 'easeOut' } },
@@ -113,200 +107,208 @@ export function Sidebar({
   };
 
   const expandVariants = {
-    expanded: { width: '240px', transition: { duration: 0.3, ease: 'easeInOut' } },
-    collapsed: { width: '64px', transition: { duration: 0.3, ease: 'easeInOut' } },
+    expanded: { width: '260px', transition: { duration: 0.3, ease: 'easeInOut' } },
+    collapsed: { width: '72px', transition: { duration: 0.3, ease: 'easeInOut' } },
   };
 
   return (
     <AnimatePresence>
       {(isOpen || isLargeScreen) && (
         <>
+          {/* Overlay بـ Z-index عالي جداً */}
           {!isLargeScreen && isOpen && (
             <motion.div
               initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
+              animate={{ opacity: 0.6 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/50 z-[999] backdrop-blur-sm"
+              className="fixed inset-0 bg-black/60 z-[9999] backdrop-blur-sm"
               onClick={onClose}
+              style={{ pointerEvents: 'auto' }}
               aria-hidden="true"
             />
           )}
+          
+          {/* Sidebar بـ Z-index أعلى */}
           <motion.aside
             variants={isLargeScreen ? expandVariants : sidebarVariants}
             initial={isLargeScreen ? (isExpanded ? 'expanded' : 'collapsed') : 'closed'}
             animate={isLargeScreen ? (isExpanded ? 'expanded' : 'collapsed') : 'open'}
             exit={isLargeScreen ? undefined : 'closed'}
-            className={`fixed top-16 bottom-0 z-[1000] flex flex-col bg-gradient-to-b from-amber-50 to-amber-100 shadow-xl overflow-y-auto overflow-x-hidden ${
-              isRtl ? 'right-0 border-r border-amber-200' : 'left-0 border-l border-amber-200'
+            className={`fixed top-16 bottom-0 z-[10000] flex flex-col bg-gradient-to-b from-amber-50 via-amber-50 to-amber-100 shadow-2xl overflow-hidden border-r border-amber-200/50 ${
+              isRtl ? 'right-0 rounded-l-xl' : 'left-0 rounded-r-xl'
             }`}
             style={{
-              width: isLargeScreen ? (isExpanded ? '240px' : '64px') : isSmallScreen ? 'min(160px, 65vw)' : 'min(200px, 70vw)',
+              width: isLargeScreen ? (isExpanded ? '260px' : '72px') : isSmallScreen ? 'min(280px, 85vw)' : 'min(300px, 80vw)',
+              boxShadow: isRtl 
+                ? '-10px 0 40px -5px rgba(0, 0, 0, 0.15)' 
+                : '10px 0 40px -5px rgba(0, 0, 0, 0.15)',
             }}
           >
-            {/* زر الإغلاق الهادئ والإبداعي */}
+            {/* Header مع زر الإغلاق المحسن */}
             {!isLargeScreen && (
               <motion.div 
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex justify-end p-2 border-b border-amber-200 bg-amber-50/90 backdrop-blur-sm"
+                className="p-3 border-b border-amber-200/50 bg-white/95 backdrop-blur-sm flex justify-between items-center"
               >
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center shadow-sm">
+                    <span className="text-white font-semibold text-sm">
+                      {displayName[0]?.toUpperCase() || 'U'}
+                    </span>
+                  </div>
+                  <span className="text-sm font-semibold text-amber-800 truncate max-w-[140px]">
+                    {displayName}
+                  </span>
+                </div>
                 <motion.button
-                  whileHover={{ scale: 1.05, backgroundColor: '#fde68a' }}
+                  whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={onClose}
-                  aria-label={t('sidebar.close')}
-                  className="relative p-2 rounded-full bg-amber-200 text-amber-700 transition-all duration-300 shadow-sm hover:shadow-md border border-amber-300/50"
+                  className="p-2 rounded-full bg-amber-100/80 hover:bg-amber-200/80 text-amber-700 hover:text-amber-800 transition-all duration-200 shadow-sm border border-amber-300/30"
                 >
-                  <motion.div
-                    animate={{ rotate: isOpen ? 0 : 90 }}
-                    transition={{ duration: 0.3, ease: 'easeInOut' }}
-                  >
-                    <XCircle size={18} />
-                  </motion.div>
-                  {/* تأثير الضوء الهادئ */}
-                  <motion.div
-                    className="absolute inset-0 rounded-full bg-amber-300/20"
-                    animate={{ scale: 1.2, opacity: [0, 0.3, 0] }}
-                    transition={{ duration: 1, repeat: Infinity }}
-                  />
+                  <XCircle size={18} />
                 </motion.button>
               </motion.div>
             )}
 
-            {/* Navigation - محسن بهدوء */}
-            <nav className="flex flex-col flex-grow p-1 sm:p-2 space-y-1 scrollbar-thin scrollbar-w-1 scrollbar-thumb-amber-400/80 scrollbar-track-amber-100/50 hover:scrollbar-thumb-amber-400">
-              {navItems.map((item) => {
-                const count = unreadByPath[item.path] || 0;
-                return (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    onClick={() => !isLargeScreen && onClose()}
-                    className={({ isActive }) =>
-                      `group relative flex items-center text-amber-800 rounded-lg p-1 sm:p-2 cursor-pointer hover:bg-amber-200/60 hover:shadow-sm transition-all duration-300 ${
-                        isActive ? 'bg-amber-200/80 font-semibold text-amber-900 shadow-md border border-amber-300/30' : ''
-                      }`
-                    }
-                    title={item.label}
+            {/* Navigation */}
+            <nav className="flex-1 p-2 space-y-1.5 overflow-y-auto scrollbar-thin scrollbar-thumb-amber-300/50 scrollbar-track-transparent">
+              {navItems.map((item) => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  onClick={() => !isLargeScreen && onClose()}
+                  className={({ isActive }) =>
+                    `group relative flex items-center p-2.5 rounded-xl transition-all duration-300 cursor-pointer overflow-hidden ${
+                      isActive 
+                        ? 'bg-gradient-to-r from-amber-100 to-amber-200 text-amber-900 font-semibold shadow-sm border border-amber-300/30' 
+                        : 'text-amber-700 hover:bg-amber-50/80 hover:text-amber-900 hover:shadow-sm'
+                    }`
+                  }
+                >
+                  <item.icon 
+                    size={isLargeScreen && !isExpanded ? 20 : 18}
+                    className={`min-w-[20px] transition-colors ${isExpanded || !isLargeScreen ? 'mr-3' : ''}`}
+                  />
+                  
+                  <motion.span 
+                    className={`${
+                      isLargeScreen && !isExpanded ? 'hidden' : 'block flex-1 font-medium text-sm truncate'
+                    }`}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={isLargeScreen && !isExpanded ? { opacity: 0 } : { opacity: 1, x: 0 }}
                   >
-                    <item.icon
-                      size={isLargeScreen && !isExpanded ? 18 : isSmallScreen ? 16 : 20}
-                      className="text-amber-600 min-w-[20px] group-hover:text-amber-700 transition-colors"
-                    />
-                    <motion.span
-                      initial={{ opacity: 0, x: -5 }}
-                      whileHover={{ x: 2 }}
-                      className={`${
-                        isLargeScreen && !isExpanded ? 'hidden' : 'block m-1 font-medium text-xs sm:text-sm'
-                      } truncate text-amber-900 transition-transform`}
+                    {item.label}
+                  </motion.span>
+
+                  {/* إشعارات محسنة */}
+                  {item.notifications > 0 && (
+                    <motion.div
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className={`ml-2 flex items-center justify-center min-w-[20px] h-5 rounded-full shadow-lg ${
+                        isLargeScreen && !isExpanded 
+                          ? 'w-2 h-2 bg-red-500' 
+                          : 'bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs font-bold'
+                      }`}
                     >
-                      {item.label}
-                    </motion.span>
-                    {count > 0 && (
-                      <motion.span
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        className={`ml-auto text-xs font-bold px-1 py-0.5 rounded-full shadow-sm ${
-                          isLargeScreen && !isExpanded
-                            ? 'w-2 h-2 bg-red-500'
-                            : 'bg-gradient-to-r from-red-500 to-pink-500 text-white min-w-[16px] sm:min-w-[18px] text-center'
-                        }`}
-                      >
-                        {isLargeScreen && !isExpanded ? '' : count > 9 ? '9+' : count}
-                      </motion.span>
-                    )}
-                    {/* خط سفلي هادئ عند الـ hover */}
+                      {isLargeScreen && !isExpanded ? '' : item.notifications > 99 ? '99+' : item.notifications}
+                    </motion.div>
+                  )}
+
+                  {/* مؤشر النشاط */}
+                  {isActive && (
                     <motion.div 
-                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-400 opacity-0"
-                      whileHover={{ opacity: 1, height: '1px' }}
-                      transition={{ duration: 0.2 }}
+                      className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-amber-400 to-amber-600"
+                      layoutId="active-indicator"
                     />
-                  </NavLink>
-                );
-              })}
+                  )}
+                </NavLink>
+              ))}
             </nav>
 
-            {/* User Info - محسن مع الاسم الصحيح */}
+            {/* User Info Section محسن */}
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="p-1 sm:p-2 border-t border-amber-200 bg-amber-100/80 flex flex-col gap-1"
+              className="p-3 border-t border-amber-200/50 bg-white/90 backdrop-blur-sm space-y-2"
             >
-              {/* User Profile مع الاسم الصحيح */}
-              <motion.div 
-                whileHover={{ scale: 1.02 }}
-                className="flex items-center gap-2 text-amber-900 text-xs sm:text-sm font-medium p-1 sm:p-2 rounded-lg hover:bg-amber-200/60 transition-all duration-200 cursor-default"
-              >
-                <UserCircle2 
-                  size={isSmallScreen ? 16 : 18} 
-                  className="text-amber-600 min-w-[18px] transition-colors hover:text-amber-700" 
-                />
-                <motion.span 
-                  className={`${isLargeScreen && !isExpanded ? 'hidden' : 'block truncate font-semibold'}`}
-                  title={displayName}
-                  whileHover={{ x: 2 }}
-                >
-                  {displayName}
-                </motion.span>
-              </motion.div>
+              {/* معلومات المستخدم */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <UserCircle2 size={16} className="text-amber-600" />
+                    <span className={`${
+                      isLargeScreen && !isExpanded ? 'hidden' : 'block text-sm font-semibold text-amber-900 truncate max-w-[140px]'
+                    }`}>
+                      {displayName}
+                    </span>
+                  </div>
+                  {user?.role === 'admin' && (
+                    <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-xs font-medium rounded-full">
+                      Admin
+                    </span>
+                  )}
+                </div>
+                
+                {/* الإيميل والهاتف في حالة التوسع */}
+                {isLargeScreen && isExpanded && user && (
+                  <div className="space-y-1 pt-1 border-t border-amber-100/50">
+                    {user.email && (
+                      <div className="flex items-center gap-2 text-xs text-amber-700">
+                        <Mail size={12} className="text-amber-500" />
+                        <span className="truncate">{user.email}</span>
+                      </div>
+                    )}
+                    {user.phone && (
+                      <div className="flex items-center gap-2 text-xs text-amber-700">
+                        <Phone size={12} className="text-amber-500" />
+                        <span className="truncate">{user.phone}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
-              {/* Logout Button الهادئ */}
+              {/* Logout Button */}
               <motion.button
-                whileHover={{ scale: 1.02, backgroundColor: '#fee2e2' }}
+                whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={logout}
-                className="group flex items-center gap-2 text-amber-900 text-xs sm:text-sm font-medium p-1 sm:p-2 rounded-lg hover:bg-red-50/80 transition-all duration-200 relative overflow-hidden"
-                aria-label={t('header.logout')}
+                className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-gradient-to-r from-red-50 to-red-100/50 text-red-700 hover:from-red-100 hover:to-red-200 transition-all duration-200 border border-red-200/30 shadow-sm"
               >
-                <LogOut 
-                  size={isSmallScreen ? 16 : 18} 
-                  className="text-red-500 min-w-[18px] group-hover:scale-110 transition-transform" 
-                />
-                <motion.span 
-                  className={`${isLargeScreen && !isExpanded ? 'hidden' : 'block truncate'}`}
-                  whileHover={{ x: 2 }}
-                >
+                <LogOut size={16} className="text-red-500" />
+                <span className={`${
+                  isLargeScreen && !isExpanded ? 'hidden' : 'block text-sm font-medium'
+                }`}>
                   {t('header.logout')}
-                </motion.span>
-                {/* تأثير موجة هادئة */}
-                <motion.div
-                  className="absolute inset-0 bg-red-100/50"
-                  initial={{ scaleX: 0 }}
-                  whileHover={{ scaleX: 1 }}
-                  transition={{ duration: 0.3, ease: 'easeOut' }}
-                  style={{ originX: isRtl ? 1 : 0 }}
-                />
+                </span>
               </motion.button>
             </motion.div>
 
-            {/* زر التوسيع/التصغير الهادئ والإبداعي */}
+            {/* زر التوسيع/التصغير المحسن */}
             {isLargeScreen && (
               <motion.button
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={onToggleExpand}
-                aria-label={isExpanded ? t('sidebar.collapse') : t('sidebar.expand')}
-                className={`absolute top-1/2 transform -translate-y-1/2 p-2 bg-amber-100/90 hover:bg-amber-200/90 text-amber-700 rounded-full shadow-sm hover:shadow-md transition-all duration-300 border border-amber-300/30 backdrop-blur-sm ${
-                  isRtl ? 'left-0 -translate-x-1/2' : 'right-0 translate-x-1/2'
+                className={`absolute top-1/2 -translate-y-1/2 p-2.5 bg-white/90 hover:bg-white text-amber-700 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 border border-amber-200/30 backdrop-blur-sm ${
+                  isRtl ? 'left-0 -ml-2' : 'right-0 -mr-2'
                 }`}
+                style={{ zIndex: 10001 }}
               >
                 <motion.div
                   animate={{ rotate: isExpanded ? 180 : 0 }}
                   transition={{ duration: 0.3 }}
                 >
                   {isExpanded ? (
-                    <ChevronRight size={14} className={isRtl ? 'rotate-180' : ''} />
+                    <ChevronRight size={16} className={isRtl ? 'rotate-180' : ''} />
                   ) : (
-                    <ChevronLeft size={14} className={isRtl ? 'rotate-180' : ''} />
+                    <ChevronLeft size={16} className={isRtl ? 'rotate-180' : ''} />
                   )}
                 </motion.div>
-                {/* حلقة ضوء هادئة */}
-                <motion.div
-                  className="absolute inset-0 rounded-full bg-amber-400/20"
-                  animate={{ scale: [1, 1.2, 1], opacity: [0, 0.2, 0] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                />
               </motion.button>
             )}
           </motion.aside>
