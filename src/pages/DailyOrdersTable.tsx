@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, Fragment } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '../components/UI/Button';
 import { Upload, Search, Calendar } from 'lucide-react';
@@ -10,22 +10,22 @@ import { useLanguage } from '../contexts/LanguageContext';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
-interface OrderRow {
+interface DailyOrderRow {
   id: string;
   code: string;
   product: string;
   unit: string;
-  branchQuantities: { [branch: string]: number };
-  totalQuantity: number;
+  dailyOrders: number[];
+  totalOrders: number;
   totalPrice: number;
-  sales: number;
-  actualSales: number;
+  dailyBranchDetails: { [branch: string]: number }[];
 }
 
-interface OrdersTableProps {
-  data: OrderRow[];
+interface DailyOrdersTableProps {
+  data: DailyOrderRow[];
   title: string;
   month: number;
+  daysInMonth: string[];
   allBranches: string[];
   isRtl: boolean;
   months: { value: number; label: string }[];
@@ -44,10 +44,11 @@ interface OrdersTableProps {
   ) => void;
 }
 
-export const OrdersTable: React.FC<OrdersTableProps> = ({
+export const DailyOrdersTable: React.FC<DailyOrdersTableProps> = ({
   data,
   title,
   month,
+  daysInMonth,
   allBranches,
   isRtl,
   months,
@@ -70,73 +71,74 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
       );
     }
     if (selectedBranch !== 'all') {
-      result = result.filter((row) => row.branchQuantities[selectedBranch] > 0);
+      result = result.filter((row) =>
+        row.dailyBranchDetails.some((details) => details[selectedBranch] > 0)
+      );
     }
     if (startDate && endDate) {
-      result = result.filter((row) => {
-        // Assume data is for the selected month; filter by date range if needed
-        return true; // Add date range logic if orders have specific dates
-      });
+      const startDay = startDate.getDate() - 1;
+      const endDay = endDate.getDate() - 1;
+      result = result.map((row) => ({
+        ...row,
+        dailyOrders: row.dailyOrders.map((qty, i) => (i >= startDay && i <= endDay ? qty : 0)),
+        dailyBranchDetails: row.dailyBranchDetails.map((details, i) =>
+          i >= startDay && i <= endDay ? details : {}
+        ),
+        totalOrders: row.dailyOrders
+          .slice(startDay, endDay + 1)
+          .reduce((sum, qty) => sum + qty, 0),
+      }));
     }
     return result;
   }, [data, searchTerm, selectedBranch, startDate, endDate]);
 
-  const totalQuantities = useMemo(
-    () =>
-      allBranches.reduce((acc, branch) => {
-        acc[branch] = filteredData.reduce((sum, row) => sum + (row.branchQuantities[branch] || 0), 0);
-        return acc;
-      }, {} as { [branch: string]: number }),
-    [filteredData, allBranches]
-  );
-
-  const grandTotalQuantity = filteredData.reduce((sum, row) => sum + row.totalQuantity, 0);
+  const grandTotalOrders = filteredData.reduce((sum, row) => sum + row.totalOrders, 0);
   const grandTotalPrice = filteredData.reduce((sum, row) => sum + row.totalPrice, 0);
-  const grandActualSales = filteredData.reduce((sum, row) => sum + row.actualSales, 0);
   const monthName = months[month].label;
 
   const exportTable = (format: 'excel' | 'pdf') => {
     const headers = [
+      isRtl ? 'رقم' : 'No.',
       isRtl ? 'الكود' : 'Code',
       isRtl ? 'المنتج' : 'Product',
       isRtl ? 'وحدة المنتج' : 'Product Unit',
-      ...allBranches,
-      isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
-      isRtl ? 'المبيعات الفعلية' : 'Actual Sales',
+      ...daysInMonth,
+      isRtl ? 'إجمالي الطلبات' : 'Total Orders',
       isRtl ? 'السعر الإجمالي' : 'Total Price',
-      isRtl ? 'نسبة المبيعات %' : 'Sales Percentage %',
     ];
     const rows = [
-      ...filteredData.map((row) => ({
+      ...filteredData.map((row, index) => ({
+        no: index + 1,
         code: row.code,
         product: row.product,
         unit: row.unit,
-        ...Object.fromEntries(allBranches.map((branch) => [branch, row.branchQuantities[branch] || 0])),
-        totalQuantity: row.totalQuantity,
-        actualSales: row.actualSales,
+        ...Object.fromEntries(row.dailyOrders.map((qty, i) => [daysInMonth[i], qty])),
+        totalOrders: row.totalOrders,
         totalPrice: formatPrice(row.totalPrice, isRtl),
-        salesPercentage: row.totalQuantity > 0 ? ((row.actualSales / row.totalQuantity) * 100).toFixed(2) : '0.00',
       })),
       {
+        no: '',
         code: '',
         product: isRtl ? 'الإجمالي' : 'Total',
         unit: '',
-        ...Object.fromEntries(allBranches.map((branch) => [branch, totalQuantities[branch] || 0])),
-        totalQuantity: grandTotalQuantity,
-        actualSales: grandActualSales,
+        ...Object.fromEntries(
+          daysInMonth.map((_, i) => [
+            daysInMonth[i],
+            filteredData.reduce((sum, row) => sum + row.dailyOrders[i], 0),
+          ])
+        ),
+        totalOrders: grandTotalOrders,
         totalPrice: formatPrice(grandTotalPrice, isRtl),
-        salesPercentage: grandTotalQuantity > 0 ? ((grandActualSales / grandTotalQuantity) * 100).toFixed(2) : '0.00',
       },
     ];
     const dataRows = rows.map((row) => [
+      row.no,
       row.code,
       row.product,
       row.unit,
-      ...allBranches.map((branch) => row[branch]),
-      row.totalQuantity,
-      row.actualSales,
+      ...daysInMonth.map((day) => row[day]),
+      row.totalOrders,
       row.totalPrice,
-      `${row.salesPercentage}%`,
     ]);
 
     if (format === 'excel') {
@@ -145,12 +147,11 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
       });
       if (isRtl) ws['!views'] = [{ RTL: true }];
       ws['!cols'] = [
+        { wch: 10 },
         { wch: 15 },
-        { wch: 25 },
+        { wch: 20 },
         { wch: 15 },
-        ...allBranches.map(() => ({ wch: 15 })),
-        { wch: 15 },
-        { wch: 15 },
+        ...daysInMonth.map(() => ({ wch: 12 })),
         { wch: 15 },
         { wch: 15 },
       ];
@@ -162,7 +163,7 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
         autoClose: 3000,
       });
     } else if (format === 'pdf') {
-      exportToPDF(dataRows, title, monthName, headers, isRtl, filteredData.length, grandTotalQuantity, grandTotalPrice, allBranches);
+      exportToPDF(dataRows, title, monthName, headers, isRtl, filteredData.length, grandTotalOrders, grandTotalPrice, []);
     }
   };
 
@@ -170,6 +171,16 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
     { value: 'all', label: isRtl ? 'جميع الفروع' : 'All Branches' },
     ...allBranches.map((branch) => ({ value: branch, label: branch })),
   ];
+
+  const getTooltipContent = (qty: number, branchDetails: { [branch: string]: number }, isRtl: boolean) => {
+    let content = `${isRtl ? 'الطلبات' : 'Orders'}: ${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}`;
+    if (Object.keys(branchDetails).length > 0) {
+      content += `\n${Object.entries(branchDetails)
+        .map(([branch, qty]) => `${branch}: ${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}`)
+        .join('\n')}`;
+    }
+    return content;
+  };
 
   return (
     <div className="mb-8">
@@ -233,92 +244,94 @@ export const OrdersTable: React.FC<OrdersTableProps> = ({
         <table className="min-w-full divide-y divide-gray-200 text-xs">
           <thead className="bg-blue-50 sticky top-0">
             <tr className={isRtl ? 'flex-row-reverse' : ''}>
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
               <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
               <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
               <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
+              {daysInMonth.map((day, i) => (
+                <th key={i} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
+                  {day}
+                </th>
+              ))}
               {allBranches.map((branch) => (
                 <th key={branch} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
-                  {branch}
+                  {isRtl ? `طلبات ${branch}` : `${branch} Orders`}
                 </th>
               ))}
               <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
-                {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
-              </th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
-                {isRtl ? 'المبيعات الفعلية' : 'Actual Sales'}
+                {isRtl ? 'إجمالي الطلبات' : 'Total Orders'}
               </th>
               <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
                 {isRtl ? 'السعر الإجمالي' : 'Total Price'}
               </th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
-                {isRtl ? 'نسبة المبيعات %' : 'Sales Percentage %'}
-              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {filteredData.map((row) => (
+            {filteredData.map((row, index) => (
               <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <td className="px-4 py-3 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
                 <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
                 <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
                 <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
+                {row.dailyOrders.map((qty, i) => (
+                  <td
+                    key={i}
+                    className={`px-4 py-3 text-center font-medium ${
+                      qty > 0 ? 'bg-green-50 text-green-700' : 'text-gray-700'
+                    }`}
+                    data-tooltip-id="daily-orders-tooltip"
+                    data-tooltip-content={getTooltipContent(qty, row.dailyBranchDetails[i], isRtl)}
+                  >
+                    {qty !== 0 ? `${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}` : '0'}
+                  </td>
+                ))}
                 {allBranches.map((branch) => (
                   <td
                     key={branch}
-                    className={`px-4 py-3 text-center font-medium ${
-                      row.branchQuantities[branch] > 0
-                        ? 'bg-green-50 text-green-700'
-                        : row.branchQuantities[branch] < 0
-                        ? 'bg-red-50 text-red-700'
-                        : 'text-gray-700'
-                    }`}
-                    data-tooltip-id="branch-quantity"
-                    data-tooltip-content={`${isRtl ? 'الكمية في ' : 'Quantity in '} ${branch}: ${formatNumber(
-                      row.branchQuantities[branch] || 0,
+                    className="px-4 py-3 text-center font-medium text-gray-700"
+                    data-tooltip-id="branch-orders-tooltip"
+                    data-tooltip-content={`${isRtl ? 'طلبات ' : 'Orders in '} ${branch}: ${formatNumber(
+                      row.dailyBranchDetails.reduce((sum, details) => sum + (details[branch] || 0), 0),
                       isRtl
                     )}`}
                   >
-                    {formatNumber(row.branchQuantities[branch] || 0, isRtl)}
+                    {formatNumber(
+                      row.dailyBranchDetails.reduce((sum, details) => sum + (details[branch] || 0), 0),
+                      isRtl
+                    )}
                   </td>
                 ))}
-                <td
-                  className="px-4 py-3 text-gray-700 text-center font-medium"
-                  data-tooltip-id="total-quantity"
-                  data-tooltip-content={`${isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}: ${formatNumber(
-                    row.totalQuantity,
-                    isRtl
-                  )}\n${Object.entries(row.branchQuantities)
-                    .map(([branch, qty]) => `${branch}: ${formatNumber(qty, isRtl)}`)
-                    .join('\n')}`}
-                >
-                  {formatNumber(row.totalQuantity, isRtl)}
-                </td>
-                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.actualSales, isRtl)}</td>
+                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalOrders, isRtl)}</td>
                 <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.totalPrice, isRtl)}</td>
-                <td className="px-4 py-3 text-gray-700 text-center font-medium">
-                  {formatNumber(row.totalQuantity > 0 ? ((row.actualSales / row.totalQuantity) * 100).toFixed(2) : '0.00', isRtl)}%
-                </td>
               </tr>
             ))}
             <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
-              <td className="px-4 py-3 text-gray-800 text-center"></td>
-              <td className="px-4 py-3 text-gray-800 text-center">{isRtl ? 'الإجمالي' : 'Total'}</td>
-              <td className="px-4 py-3 text-gray-800 text-center"></td>
-              {allBranches.map((branch) => (
-                <td key={branch} className="px-4 py-3 text-gray-800 text-center">
-                  {formatNumber(totalQuantities[branch] || 0, isRtl)}
+              <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>
+                {isRtl ? 'الإجمالي' : 'Total'}
+              </td>
+              {daysInMonth.map((_, i) => (
+                <td key={i} className="px-4 py-3 text-gray-800 text-center">
+                  {formatNumber(filteredData.reduce((sum, row) => sum + row.dailyOrders[i], 0), isRtl)}
                 </td>
               ))}
-              <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
-              <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandActualSales, isRtl)}</td>
+              {allBranches.map((branch) => (
+                <td key={branch} className="px-4 py-3 text-gray-800 text-center">
+                  {formatNumber(
+                    filteredData.reduce(
+                      (sum, row) => sum + row.dailyBranchDetails.reduce((s, details) => s + (details[branch] || 0), 0),
+                      0
+                    ),
+                    isRtl
+                  )}
+                </td>
+              ))}
+              <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalOrders, isRtl)}</td>
               <td className="px-4 py-3 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
-              <td className="px-4 py-3 text-gray-800 text-center">
-                {formatNumber(grandTotalQuantity > 0 ? ((grandActualSales / grandTotalQuantity) * 100).toFixed(2) : '0.00', isRtl)}%
-              </td>
             </tr>
           </tbody>
         </table>
-        <Tooltip id="branch-quantity" place="top" effect="solid" className="custom-tooltip" />
-        <Tooltip id="total-quantity" place="top" effect="solid" className="custom-tooltip" />
+        <Tooltip id="daily-orders-tooltip" place="top" effect="solid" className="custom-tooltip" />
+        <Tooltip id="branch-orders-tooltip" place="top" effect="solid" className="custom-tooltip" />
       </motion.div>
     </div>
   );
