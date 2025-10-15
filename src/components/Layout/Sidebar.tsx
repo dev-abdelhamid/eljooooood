@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -6,23 +5,9 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Home,
-  Box,
-  ShoppingBag,
-  RefreshCcw,
-  BarChart2,
-  Store,
-  ChefHat,
-  Settings2,
-  Warehouse,
-  TrendingUp,
-  Users2,
-  ListTodo,
-  UserCircle2,
-  LogOut,
-  XCircle,
-  ChevronLeft,
-  ChevronRight,
+  Home, Box, ShoppingBag, RefreshCcw, BarChart2, Store, ChefHat,
+  Settings2, Warehouse, TrendingUp, Users2, ListTodo, UserCircle2,
+  LogOut, XCircle, ChevronLeft, ChevronRight, Crown
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -47,124 +32,176 @@ export function Sidebar({
   const { unreadByPath } = useNotifications();
   const isRtl = language === 'ar';
 
+  // نفس المنطق المستخدم في Users component
+  const getDisplayName = (userData: any) => {
+    return isRtl ? userData.name : (userData.nameEn || userData.name);
+  };
+
+  const getRoleDisplay = (role: string) => {
+    const roleTranslations = isRtl ? {
+      admin: 'مدير النظام',
+      branch: 'فرع',
+      chef: 'شيف',
+      production: 'إنتاج'
+    } : {
+      admin: 'System Admin',
+      branch: 'Branch',
+      chef: 'Chef',
+      production: 'Production'
+    };
+    return roleTranslations[role as keyof typeof roleTranslations] || role;
+  };
+
+  const userDisplayInfo = React.useMemo(() => {
+    if (!user) return null;
+    
+    return {
+      displayName: getDisplayName(user),
+      displayRole: getRoleDisplay(user.role),
+      avatarInitial: getDisplayName(user)[0]?.toUpperCase() || 'U',
+      roleColor: {
+        admin: 'from-purple-600 via-pink-600 to-purple-700',
+        branch: 'from-emerald-500 via-green-500 to-emerald-600',
+        chef: 'from-orange-500 via-red-500 to-orange-600',
+        production: 'from-blue-500 via-indigo-500 to-blue-600'
+      }[user.role] || 'from-gray-500 to-gray-600'
+    };
+  }, [user, isRtl]);
+
   const navItems = React.useMemo(() => {
     if (!user) return [];
 
     const baseItems = [
-      { path: '/dashboard', icon: Home, label: t('dashboard') },
+      { path: '/dashboard', icon: Home, label: t('dashboard') || 'Dashboard' },
     ];
 
-    const adminItems = [
-      { path: '/products', icon: Box, label: t('products.manage') },
-      { path: '/branches', icon: Store, label: t('branches.manage') },
-      { path: '/chefs', icon: ChefHat, label: t('chefs.manage') },
-      { path: '/departments', icon: Users2, label: t('departments') },
-      { path: '/orders', icon: ShoppingBag, label: t('orders') },
-      { path: '/returns', icon: RefreshCcw, label: t('returns') },
-      { path: '/sales', icon: TrendingUp, label: t('sales') },
-      { path: '/reports', icon: BarChart2, label: t('reports') },
-      { path: '/profile', icon: Settings2, label: t('settings') },
+    const roleItems = {
+      admin: [
+        { path: '/products', icon: Box, label: t('products.manage') || 'Products' },
+        { path: '/branches', icon: Store, label: t('branches.manage') || 'Branches' },
+        { path: '/chefs', icon: ChefHat, label: t('chefs.manage') || 'Chefs' },
+        { path: '/departments', icon: Users2, label: t('departments') || 'Departments' },
+        { path: '/orders', icon: ShoppingBag, label: t('orders') || 'Orders' },
+        { path: '/returns', icon: RefreshCcw, label: t('returns') || 'Returns' },
+        { path: '/sales', icon: TrendingUp, label: t('sales') || 'Sales' },
+        { path: '/reports', icon: BarChart2, label: t('reports') || 'Reports' },
+      ],
+      branch: [
+        { path: '/orders/new', icon: ShoppingBag, label: t('orders.create') || 'New Order' },
+        { path: '/branch-orders', icon: ShoppingBag, label: t('orders.review') || 'Orders' },
+        { path: '/branch-sales/new', icon: ListTodo, label: t('sales.create') || 'New Sale' },
+        { path: '/branch-sales', icon: TrendingUp, label: t('sales.review') || 'Sales' },
+        { path: '/branch-returns', icon: RefreshCcw, label: t('returns.review') || 'Returns' },
+        { path: '/branch-inventory', icon: Warehouse, label: t('inventory') || 'Inventory' },
+      ],
+      chef: [
+        { path: '/production-tasks', icon: ListTodo, label: t('productionTasks') || 'Tasks' },
+      ],
+      production: [
+        { path: '/products', icon: Box, label: t('products.manage') || 'Products' },
+        { path: '/departments', icon: Users2, label: t('departments') || 'Departments' },
+        { path: '/orders', icon: ShoppingBag, label: t('orders') || 'Orders' },
+        { path: '/returns', icon: RefreshCcw, label: t('returns') || 'Returns' },
+        { path: '/reports', icon: BarChart2, label: t('reports') || 'Reports' },
+      ]
+    };
+
+    return [
+      ...baseItems, 
+      ...(roleItems[user.role as keyof typeof roleItems] || []),
+      { path: '/profile', icon: Settings2, label: t('settings') || 'Settings' }
     ];
-
-    const branchItems = [
-      { path: '/orders/new', icon: ShoppingBag, label: t('orders.create') },
-      { path: '/branch-orders', icon: ShoppingBag, label: t('orders.review') },
-            { path: '/branch-sales/new', icon: ListTodo, label: t('sales.create') },
-
-      { path: '/branch-sales', icon: TrendingUp, label: t('sales.review') },
-      { path: '/branch-returns', icon: RefreshCcw, label: t('returns.review') },
-      { path: '/branch-inventory', icon: Warehouse, label: t('inventory') },
-            { path: '/profile', icon: Settings2, label: t('settings') },
-
-    ];
-
-    const chefItems = [
-      { path: '/production-tasks', icon: ListTodo, label: t('productionTasks') },
-            { path: '/profile', icon: Settings2, label: t('settings') },
-
-    ];
-
-    const productionItems = [
-
-
-      { path: '/products', icon: Box, label: t('products.manage') },
-      { path: '/departments', icon: Users2, label: t('departments') },
-      { path: '/orders', icon: ShoppingBag, label: t('orders') },
-      { path: '/returns', icon: RefreshCcw, label: t('returns') },
-      { path: '/reports', icon: BarChart2, label: t('reports') },
-            { path: '/profile', icon: Settings2, label: t('settings') },
-
-    ];
-
-    let roleItems = [];
-    switch (user.role) {
-      case 'admin':
-        roleItems = adminItems;
-        break;
-      case 'branch':
-        roleItems = branchItems;
-        break;
-      case 'chef':
-        roleItems = chefItems;
-        break;
-      case 'production':
-        roleItems = productionItems;
-        break;
-    }
-
-    return [...baseItems, ...roleItems];
   }, [user, t]);
 
   const sidebarVariants = {
-    open: { x: 0, opacity: 1, transition: { duration: 0.3, ease: 'easeOut' } },
-    closed: { x: isRtl ? '100%' : '-100%', opacity: 0, transition: { duration: 0.3, ease: 'easeIn' } },
+    open: { 
+      x: 0, 
+      opacity: 1, 
+      transition: { duration: 0.4, ease: "easeOut" } 
+    },
+    closed: { 
+      x: isRtl ? '100%' : '-100%', 
+      opacity: 0, 
+      transition: { duration: 0.3, ease: "easeIn" } 
+    },
   };
 
   const expandVariants = {
-    expanded: { width: '240px', transition: { duration: 0.3, ease: 'easeInOut' } },
-    collapsed: { width: '64px', transition: { duration: 0.3, ease: 'easeInOut' } },
+    expanded: { width: '280px', transition: { duration: 0.3 } },
+    collapsed: { width: '72px', transition: { duration: 0.3 } },
   };
 
+  if (!userDisplayInfo) return null;
+
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       {(isOpen || isLargeScreen) && (
         <>
+          {/* Overlay محسن */}
           {!isLargeScreen && isOpen && (
             <motion.div
               initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
+              animate={{ opacity: 0.7 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/50 z-40"
+              className={`fixed inset-0 z-40 bg-black/50 backdrop-blur-sm ${
+                isRtl ? 'rounded-r-3xl' : 'rounded-l-3xl'
+              }`}
               onClick={onClose}
-              aria-hidden="true"
             />
           )}
+
+          {/* الـ Sidebar */}
           <motion.aside
             variants={isLargeScreen ? expandVariants : sidebarVariants}
-            initial={isLargeScreen ? (isExpanded ? 'expanded' : 'collapsed') : 'closed'}
-            animate={isLargeScreen ? (isExpanded ? 'expanded' : 'collapsed') : 'open'}
-            exit={isLargeScreen ? undefined : 'closed'}
-            className={`fixed top-16 bottom-0 z-50 flex flex-col bg-gradient-to-b from-amber-50 to-amber-100 shadow-lg overflow-y-auto overflow-x-hidden ${
-              isRtl ? 'right-0 border-r border-amber-200' : 'left-0 border-l border-amber-200'
-            }`}
+            initial={isLargeScreen ? (isExpanded ? "expanded" : "collapsed") : "closed"}
+            animate={isLargeScreen ? (isExpanded ? "expanded" : "collapsed") : "open"}
+            exit="closed"
+            className={`
+              fixed top-16 bottom-0 z-50 flex flex-col
+              bg-gradient-to-b from-white via-amber-50/90 to-amber-100/80
+              border-r-2 border-amber-200/60 dark:border-amber-800/50
+              shadow-2xl rounded-r-2xl ${isRtl ? 'right-0 rounded-r-none rounded-l-2xl border-r-0 border-l-2' : 'left-0'}
+              overflow-hidden
+            `}
             style={{
-              width: isLargeScreen ? (isExpanded ? '240px' : '64px') : isSmallScreen ? 'min(160px, 65vw)' : 'min(200px, 70vw)',
+              width: isLargeScreen 
+                ? (isExpanded ? '280px' : '72px') 
+                : isSmallScreen ? 'min(240px, 80vw)' : '280px',
+              boxShadow: isRtl 
+                ? '-20px 0 60px -10px rgba(0,0,0,0.1)' 
+                : '20px 0 60px -10px rgba(0,0,0,0.1)'
             }}
           >
+            {/* Header مع زر الإغلاق */}
             {!isLargeScreen && (
-              <div className="flex justify-end p-1 border-b border-amber-200">
-                <button
+              <motion.div
+                initial={{ y: -20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                className="p-4 border-b border-amber-200/50 bg-white/80 backdrop-blur-sm flex justify-between items-center"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-full ${userDisplayInfo.roleColor} flex items-center justify-center text-white font-bold text-sm shadow-lg`}>
+                    {userDisplayInfo.avatarInitial}
+                  </div>
+                  <span className="text-sm font-semibold text-amber-800 truncate max-w-[120px]">
+                    {userDisplayInfo.displayName}
+                  </span>
+                </div>
+                <motion.button
+                  whileHover={{ scale: 1.1, rotate: 90 }}
+                  whileTap={{ scale: 0.9 }}
                   onClick={onClose}
-                  aria-label={t('sidebar.close')}
-                  className="p-1 rounded-full bg-amber-200 hover:bg-amber-300 text-amber-700 transition shadow-sm"
+                  className="p-2 rounded-full bg-red-100 hover:bg-red-200 text-red-600 hover:text-red-700 transition-all duration-200 shadow-sm"
                 >
-                  <XCircle size={16} />
-                </button>
-              </div>
+                  <XCircle size={18} />
+                </motion.button>
+              </motion.div>
             )}
-            <nav className="flex flex-col flex-grow p-1 sm:p-2 space-y-1 scrollbar-thin scrollbar-w-1 scrollbar-thumb-amber-400/80 scrollbar-track-amber-100/50 hover:scrollbar-thumb-amber-400">
-              {navItems.map((item) => {
+
+            {/* Navigation */}
+            <nav className="flex-1 p-4 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-amber-400/60 scrollbar-track-amber-100/30">
+              {navItems.map((item, index) => {
                 const count = unreadByPath[item.path] || 0;
                 return (
                   <NavLink
@@ -172,70 +209,114 @@ export function Sidebar({
                     to={item.path}
                     onClick={() => !isLargeScreen && onClose()}
                     className={({ isActive }) =>
-                      `flex items-center text-amber-800 rounded-lg p-1 sm:p-2 cursor-pointer hover:bg-amber-200/50 hover:shadow-sm transition-all duration-200 ${
-                        isActive ? 'bg-amber-200 font-semibold text-amber-900 shadow-sm' : ''
+                      `group relative flex items-center p-3 rounded-xl transition-all duration-300 cursor-pointer
+                      ${isActive 
+                        ? 'bg-gradient-to-r from-amber-500/20 to-amber-600/20 text-amber-800 border border-amber-300/50 shadow-md font-semibold' 
+                        : 'text-gray-700 hover:bg-amber-100/50 hover:text-amber-800 hover:shadow-sm border border-transparent'
                       }`
                     }
-                    title={item.label}
                   >
-                    <item.icon
-                      size={isLargeScreen && !isExpanded ? 18 : isSmallScreen ? 16 : 20}
-                      className="text-amber-600 min-w-[20px]"
+                    <item.icon 
+                      size={isLargeScreen && !isExpanded ? 20 : 18}
+                      className={`min-w-6 ${isExpanded || !isLargeScreen ? 'mr-3' : ''} transition-colors group-hover:text-amber-600`}
                     />
-                    <span
+                    
+                    <motion.span 
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={isLargeScreen && !isExpanded ? { opacity: 0, x: -10 } : { opacity: 1, x: 0 }}
                       className={`${
-                        isLargeScreen && !isExpanded ? 'hidden' : 'block m-1 font-medium text-xs sm:text-sm'
-                      } truncate text-amber-900`}
+                        isLargeScreen && !isExpanded ? 'hidden' : 'block'
+                      } text-sm font-medium truncate flex-1`}
                     >
                       {item.label}
-                    </span>
+                    </motion.span>
+
                     {count > 0 && (
-                      <span
-                        className={`ml-auto text-xs font-bold px-1 py-0.5 rounded-full shadow-sm ${
-                          isLargeScreen && !isExpanded
-                            ? 'w-2 h-2 bg-red-500'
-                            : 'bg-red-500 text-white min-w-[16px] sm:min-w-[18px] text-center'
-                        }`}
+                      <motion.span
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="ml-2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-lg"
                       >
-                        {isLargeScreen && !isExpanded ? '' : count > 9 ? '9+' : count}
-                      </span>
+                        {count > 99 ? '99+' : count}
+                      </motion.span>
                     )}
+
+                    {/* Active indicator */}
+                    <motion.div 
+                      className="absolute left-0 top-0 bottom-0 w-1 bg-amber-500 opacity-0"
+                      animate={{ opacity: isLargeScreen && !isExpanded ? 0 : 1 }}
+                    />
                   </NavLink>
                 );
               })}
             </nav>
-            <div className="p-1 sm:p-2 border-t border-amber-200 bg-amber-100/80 flex flex-col gap-1">
-              <div className="flex items-center gap-1 text-amber-900 text-xs sm:text-sm font-medium p-1 sm:p-2 rounded-lg hover:bg-amber-200/50 transition-all">
-                <UserCircle2 size={isSmallScreen ? 16 : 18} className="text-amber-600 min-w-[18px]" />
-                <span className={`${isLargeScreen && !isExpanded ? 'hidden' : 'block truncate'}`}>
-                  {user?.name || t('header.guest')}
-                </span>
+
+            {/* User Info Footer */}
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-4 border-t border-amber-200/50 bg-gradient-to-t from-amber-50/80 to-transparent"
+            >
+              <div className="space-y-3">
+                {/* User Profile */}
+                <motion.div
+                  whileHover={{ scale: 1.02 }}
+                  className="flex items-center gap-3 p-3 rounded-xl bg-white/70 backdrop-blur-sm border border-amber-200/30 shadow-sm"
+                >
+                  <div className={`w-10 h-10 rounded-full ${userDisplayInfo.roleColor} flex items-center justify-center text-white font-bold shadow-lg`}>
+                    {userDisplayInfo.avatarInitial}
+                  </div>
+                  
+                  <div className={`${isLargeScreen && !isExpanded ? 'hidden' : 'flex-1 min-w-0'} space-y-1`}>
+                    <p className="font-semibold text-sm text-gray-900 truncate">
+                      {userDisplayInfo.displayName}
+                    </p>
+                    <p className="text-xs text-amber-600 font-medium capitalize truncate">
+                      {userDisplayInfo.displayRole}
+                    </p>
+                  </div>
+                  
+                  {user?.role === 'admin' && (
+                    <Crown className="w-4 h-4 text-yellow-500 flex-shrink-0" />
+                  )}
+                </motion.div>
+
+                {/* Logout Button */}
+                <motion.button
+                  whileHover={{ scale: 1.02, backgroundColor: '#fee2e2' }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={logout}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl bg-red-50/80 border border-red-200/50 
+                             text-red-700 hover:bg-red-100/80 hover:text-red-800 transition-all duration-200 shadow-sm
+                             text-sm font-medium"
+                >
+                  <LogOut size={16} className="text-red-500" />
+                  <span className={`${isLargeScreen && !isExpanded ? 'hidden' : 'block'}`}>
+                    {t('header.logout') || 'Logout'}
+                  </span>
+                </motion.button>
               </div>
-              <button
-                onClick={logout}
-                className="flex items-center gap-1 text-amber-900 text-xs sm:text-sm font-medium p-1 sm:p-2 rounded-lg hover:bg-amber-200/50 transition-all"
-                aria-label={t('header.logout')}
-              >
-                <LogOut size={isSmallScreen ? 16 : 18} className="text-amber-600 min-w-[18px]" />
-                <span className={`${isLargeScreen && !isExpanded ? 'hidden' : 'block truncate'}`}>
-                  {t('header.logout')}
-                </span>
-              </button>
-            </div>
+            </motion.div>
+
+            {/* Expand/Collapse Button */}
             {isLargeScreen && (
-              <button
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
                 onClick={onToggleExpand}
-                aria-label={isExpanded ? t('sidebar.collapse') : t('sidebar.expand')}
-                className={`absolute top-1/2 transform -translate-y-1/2 p-1 bg-amber-100/80 hover:bg-amber-200 text-amber-700 rounded-full shadow-sm transition-all duration-200 opacity-50 hover:opacity-100 ${
-                  isRtl ? 'left-0 -translate-x-1/2' : 'right-0 translate-x-1/2'
-                }`}
+                className={`
+                  absolute top-1/2 -translate-y-1/2 p-2 rounded-full
+                  bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-lg
+                  border border-amber-400/50 hover:shadow-xl transition-all duration-300
+                  ${isRtl ? 'left-0 -ml-3' : 'right-0 -mr-3'}
+                `}
               >
                 {isExpanded ? (
-                  <ChevronRight size={14} className={isRtl ? 'rotate-180' : ''} />
+                  <ChevronRight size={16} />
                 ) : (
-                  <ChevronLeft size={14} className={isRtl ? 'rotate-180' : ''} />
+                  <ChevronLeft size={16} className={isRtl ? 'rotate-180' : ''} />
                 )}
-              </button>
+              </motion.button>
             )}
           </motion.aside>
         </>
