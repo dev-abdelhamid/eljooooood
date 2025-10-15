@@ -86,7 +86,17 @@ interface Order {
 }
 
 interface Chef {
-  _id: string;
+   id: string;
+  user: {
+    id: string;
+    name: string;
+    nameEn?: string;
+    username: string;
+    email?: string;
+    phone?: string;
+    createdAt: string;
+    updatedAt: string;
+  } | null  
   userId: string;
   username: string;
   name: string;
@@ -1124,7 +1134,7 @@ export const Dashboard: React.FC = () => {
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2, delay: index * 0.1 }}
                 className="flex items-center justify-between p-2 border-b border-gray-100 cursor-pointer hover:bg-amber-50 transition-colors duration-200"
-                onClick={() => navigate(`/chefs/${chef.chefId}`)}
+                onClick={() => navigate(`/chefs/${chef.id}`)}
               >
                 <div>
                   <p className="text-xs font-medium text-gray-800">{isRtl ? chef.chefName : chef.chefNameEn || chef.chefName}</p>
