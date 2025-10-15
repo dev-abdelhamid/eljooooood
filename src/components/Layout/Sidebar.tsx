@@ -262,21 +262,7 @@ export function Sidebar({
                   )}
                 </div>
                 
-                {/* ✅ معلومات إضافية في حالة التوسع */}
-                {isLargeScreen && isExpanded && user && (
-                  <div className="mt-2 pt-2 border-t border-amber-100/50 space-y-1">
-                    {user.email && (
-                      <div className="flex items-center gap-2 text-xs text-amber-700 truncate">
-                        📧 {user.email}
-                      </div>
-                    )}
-                    {user.phone && (
-                      <div className="flex items-center gap-2 text-xs text-amber-700 truncate">
-                        📱 {user.phone}
-                      </div>
-                    )}
-                  </div>
-                )}
+           
               </div>
 
               {/* ✅ زر تسجيل الخروج المحسن */}
