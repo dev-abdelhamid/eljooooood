@@ -5,9 +5,23 @@ import { useLanguage } from '../../contexts/LanguageContext';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Home, Box, ShoppingBag, RefreshCcw, BarChart2, Store, ChefHat,
-  Settings2, Warehouse, TrendingUp, Users2, ListTodo, UserCircle2,
-  LogOut, XCircle, ChevronLeft, ChevronRight, Bell, Mail, Phone
+  Home,
+  Box,
+  ShoppingBag,
+  RefreshCcw,
+  BarChart2,
+  Store,
+  ChefHat,
+  Settings2,
+  Warehouse,
+  TrendingUp,
+  Users2,
+  ListTodo,
+  UserCircle2,
+  LogOut,
+  XCircle,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -32,64 +46,90 @@ export function Sidebar({
   const { unreadByPath } = useNotifications();
   const isRtl = language === 'ar';
 
-  // عرض الاسم الصحيح حسب اللغة
+  // ✅ عرض اسم المستخدم حسب اللغة
   const displayName = user 
     ? (isRtl ? user.name : (user.nameEn || user.name)) 
     : (t('header.guest') || 'Guest');
 
+  // ✅ ترجمة الأدوار حسب اللغة
+  const roleTranslations = {
+    ar: {
+      admin: 'مدير',
+      branch: 'فرع',
+      chef: 'شيف',
+      production: 'إنتاج'
+    },
+    en: {
+      admin: 'Admin',
+      branch: 'Branch',
+      chef: 'Chef',
+      production: 'Production'
+    }
+  };
+  
+  const userRoleLabel = user?.role ? roleTranslations[language === 'ar' ? 'ar' : 'en'][user.role] : '';
+
   const navItems = React.useMemo(() => {
     if (!user) return [];
-    const baseItems = [
-      { path: '/dashboard', icon: Home, label: t('dashboard'), notifications: unreadByPath['/dashboard'] || 0 },
-    ];
-    
 
+    const baseItems = [
+      { path: '/dashboard', icon: Home, label: t('dashboard') },
+    ];
 
     const adminItems = [
-      { path: '/products', icon: Box, label: t('products.manage'), notifications: unreadByPath['/products'] || 0 },
-      { path: '/branches', icon: Store, label: t('branches.manage'), notifications: unreadByPath['/branches'] || 0 },
-      { path: '/chefs', icon: ChefHat, label: t('chefs.manage'), notifications: unreadByPath['/chefs'] || 0 },
-      { path: '/departments', icon: Users2, label: t('departments'), notifications: unreadByPath['/departments'] || 0 },
-      { path: '/orders', icon: ShoppingBag, label: t('orders'), notifications: unreadByPath['/orders'] || 0 },
-      { path: '/returns', icon: RefreshCcw, label: t('returns'), notifications: unreadByPath['/returns'] || 0 },
-      { path: '/sales', icon: TrendingUp, label: t('sales'), notifications: unreadByPath['/sales'] || 0 },
-      { path: '/reports', icon: BarChart2, label: t('reports'), notifications: unreadByPath['/reports'] || 0 },
-      { path: '/profile', icon: Settings2, label: t('settings'), notifications: 0 },
+      { path: '/products', icon: Box, label: t('products.manage') },
+      { path: '/branches', icon: Store, label: t('branches.manage') },
+      { path: '/chefs', icon: ChefHat, label: t('chefs.manage') },
+      { path: '/departments', icon: Users2, label: t('departments') },
+      { path: '/orders', icon: ShoppingBag, label: t('orders') },
+      { path: '/returns', icon: RefreshCcw, label: t('returns') },
+      { path: '/sales', icon: TrendingUp, label: t('sales') },
+      { path: '/reports', icon: BarChart2, label: t('reports') },
+      { path: '/profile', icon: Settings2, label: t('settings') },
     ];
 
     const branchItems = [
-      { path: '/orders/new', icon: ShoppingBag, label: t('orders.create'), notifications: unreadByPath['/orders/new'] || 0 },
-      { path: '/branch-orders', icon: ShoppingBag, label: t('orders.review'), notifications: unreadByPath['/branch-orders'] || 0 },
-      { path: '/branch-sales/new', icon: ListTodo, label: t('sales.create'), notifications: unreadByPath['/branch-sales/new'] || 0 },
-      { path: '/branch-sales', icon: TrendingUp, label: t('sales.review'), notifications: unreadByPath['/branch-sales'] || 0 },
-      { path: '/branch-returns', icon: RefreshCcw, label: t('returns.review'), notifications: unreadByPath['/branch-returns'] || 0 },
-      { path: '/branch-inventory', icon: Warehouse, label: t('inventory'), notifications: unreadByPath['/branch-inventory'] || 0 },
-      { path: '/profile', icon: Settings2, label: t('settings'), notifications: 0 },
+      { path: '/orders/new', icon: ShoppingBag, label: t('orders.create') },
+      { path: '/branch-orders', icon: ShoppingBag, label: t('orders.review') },
+      { path: '/branch-sales/new', icon: ListTodo, label: t('sales.create') },
+      { path: '/branch-sales', icon: TrendingUp, label: t('sales.review') },
+      { path: '/branch-returns', icon: RefreshCcw, label: t('returns.review') },
+      { path: '/branch-inventory', icon: Warehouse, label: t('inventory') },
+      { path: '/profile', icon: Settings2, label: t('settings') },
     ];
 
     const chefItems = [
-      { path: '/production-tasks', icon: ListTodo, label: t('productionTasks'), notifications: unreadByPath['/production-tasks'] || 0 },
-      { path: '/profile', icon: Settings2, label: t('settings'), notifications: 0 },
+      { path: '/production-tasks', icon: ListTodo, label: t('productionTasks') },
+      { path: '/profile', icon: Settings2, label: t('settings') },
     ];
 
     const productionItems = [
-      { path: '/products', icon: Box, label: t('products.manage'), notifications: unreadByPath['/products'] || 0 },
-      { path: '/departments', icon: Users2, label: t('departments'), notifications: unreadByPath['/departments'] || 0 },
-      { path: '/orders', icon: ShoppingBag, label: t('orders'), notifications: unreadByPath['/orders'] || 0 },
-      { path: '/returns', icon: RefreshCcw, label: t('returns'), notifications: unreadByPath['/returns'] || 0 },
-      { path: '/reports', icon: BarChart2, label: t('reports'), notifications: unreadByPath['/reports'] || 0 },
-      { path: '/profile', icon: Settings2, label: t('settings'), notifications: 0 },
+      { path: '/products', icon: Box, label: t('products.manage') },
+      { path: '/departments', icon: Users2, label: t('departments') },
+      { path: '/orders', icon: ShoppingBag, label: t('orders') },
+      { path: '/returns', icon: RefreshCcw, label: t('returns') },
+      { path: '/reports', icon: BarChart2, label: t('reports') },
+      { path: '/profile', icon: Settings2, label: t('settings') },
     ];
 
     let roleItems = [];
     switch (user.role) {
-      case 'admin': roleItems = adminItems; break;
-      case 'branch': roleItems = branchItems; break;
-      case 'chef': roleItems = chefItems; break;
-      case 'production': roleItems = productionItems; break;
+      case 'admin':
+        roleItems = adminItems;
+        break;
+      case 'branch':
+        roleItems = branchItems;
+        break;
+      case 'chef':
+        roleItems = chefItems;
+        break;
+      case 'production':
+        roleItems = productionItems;
+        break;
     }
+
     return [...baseItems, ...roleItems];
-  }, [user, t, unreadByPath]);
+  }, [user, t]);
 
   const sidebarVariants = {
     open: { x: 0, opacity: 1, transition: { duration: 0.3, ease: 'easeOut' } },
@@ -97,217 +137,183 @@ export function Sidebar({
   };
 
   const expandVariants = {
-    expanded: { width: '260px', transition: { duration: 0.3, ease: 'easeInOut' } },
-    collapsed: { width: '72px', transition: { duration: 0.3, ease: 'easeInOut' } },
+    expanded: { width: '240px', transition: { duration: 0.3, ease: 'easeInOut' } },
+    collapsed: { width: '64px', transition: { duration: 0.3, ease: 'easeInOut' } },
   };
 
   return (
     <AnimatePresence>
       {(isOpen || isLargeScreen) && (
         <>
-          {/* Overlay بـ Z-index عالي جداً */}
           {!isLargeScreen && isOpen && (
             <motion.div
               initial={{ opacity: 0 }}
-              animate={{ opacity: 0.6 }}
+              animate={{ opacity: 0.5 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed inset-0 bg-black/60 z-[9999] backdrop-blur-sm"
+              className="fixed inset-0 bg-black/50 z-40"
               onClick={onClose}
-              style={{ pointerEvents: 'auto' }}
               aria-hidden="true"
             />
           )}
-          
-          {/* Sidebar بـ Z-index أعلى */}
           <motion.aside
             variants={isLargeScreen ? expandVariants : sidebarVariants}
             initial={isLargeScreen ? (isExpanded ? 'expanded' : 'collapsed') : 'closed'}
             animate={isLargeScreen ? (isExpanded ? 'expanded' : 'collapsed') : 'open'}
             exit={isLargeScreen ? undefined : 'closed'}
-            className={`fixed top-16 bottom-0 z-[10000] flex flex-col bg-gradient-to-b from-amber-50 via-amber-50 to-amber-100 shadow-2xl overflow-hidden border-r border-amber-200/50 ${
-              isRtl ? 'right-0 rounded-l-xl' : 'left-0 rounded-r-xl'
+            className={`fixed top-16 bottom-0 z-50 flex flex-col bg-gradient-to-b from-amber-50 to-amber-100 shadow-lg overflow-y-auto overflow-x-hidden ${
+              isRtl ? 'right-0 border-r border-amber-200' : 'left-0 border-l border-amber-200'
             }`}
             style={{
-              width: isLargeScreen ? (isExpanded ? '260px' : '72px') : isSmallScreen ? 'min(280px, 85vw)' : 'min(300px, 80vw)',
-              boxShadow: isRtl 
-                ? '-10px 0 40px -5px rgba(0, 0, 0, 0.15)' 
-                : '10px 0 40px -5px rgba(0, 0, 0, 0.15)',
+              width: isLargeScreen ? (isExpanded ? '240px' : '64px') : isSmallScreen ? 'min(160px, 65vw)' : 'min(200px, 70vw)',
             }}
           >
-            {/* Header مع زر الإغلاق المحسن */}
             {!isLargeScreen && (
-              <motion.div 
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-3 border-b border-amber-200/50 bg-white/95 backdrop-blur-sm flex justify-between items-center"
-              >
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-amber-600 rounded-full flex items-center justify-center shadow-sm">
-                    <span className="text-white font-semibold text-sm">
-                      {displayName[0]?.toUpperCase() || 'U'}
-                    </span>
-                  </div>
-                  <span className="text-sm font-semibold text-amber-800 truncate max-w-[140px]">
-                    {displayName}
-                  </span>
-                </div>
-                <motion.button
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+              <div className="flex justify-end p-1 border-b border-amber-200">
+                <button
                   onClick={onClose}
-                  className="p-2 rounded-full bg-amber-100/80 hover:bg-amber-200/80 text-amber-700 hover:text-amber-800 transition-all duration-200 shadow-sm border border-amber-300/30"
+                  aria-label={t('sidebar.close')}
+                  className="p-1 rounded-full bg-amber-200 hover:bg-amber-300 text-amber-700 transition shadow-sm"
                 >
-                  <XCircle size={18} />
-                </motion.button>
-              </motion.div>
+                  <XCircle size={16} />
+                </button>
+              </div>
             )}
-
-            {/* Navigation - مُصحح */}
-            <nav className="flex-1 p-2 space-y-1.5 overflow-y-auto scrollbar-thin scrollbar-thumb-amber-300/50 scrollbar-track-transparent">
-              {navItems.map((item) => (
-                <NavLink
-                  key={item.path}
-                  to={item.path}
-                  onClick={() => !isLargeScreen && onClose()}
-                  className={({ isActive: active }) => // ✅ إصلاح isActive
-                    `group relative flex items-center p-2.5 rounded-xl transition-all duration-300 cursor-pointer overflow-hidden ${
-                      active 
-                        ? 'bg-gradient-to-r from-amber-100 to-amber-200 text-amber-900 font-semibold shadow-sm border border-amber-300/30' 
-                        : 'text-amber-700 hover:bg-amber-50/80 hover:text-amber-900 hover:shadow-sm'
-                    }`
-                  }
-                >
-                  {({ isActive: active }) => ( // ✅ استخدام destructuring صحيح
-                    <>
-                      <item.icon 
-                        size={isLargeScreen && !isExpanded ? 20 : 18}
-                        className={`min-w-[20px] transition-colors ${isExpanded || !isLargeScreen ? 'mr-3' : ''} ${
-                          active ? 'text-amber-700' : 'text-amber-600'
+            <nav className="flex flex-col flex-grow p-1 sm:p-2 space-y-1 scrollbar-thin scrollbar-w-1 scrollbar-thumb-amber-400/80 scrollbar-track-amber-100/50 hover:scrollbar-thumb-amber-400">
+              {navItems.map((item) => {
+                const count = unreadByPath[item.path] || 0;
+                return (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => !isLargeScreen && onClose()}
+                    className={({ isActive }) =>
+                      `flex items-center text-amber-800 rounded-lg p-1 sm:p-2 cursor-pointer hover:bg-amber-200/50 hover:shadow-sm transition-all duration-200 ${
+                        isActive ? 'bg-amber-200 font-semibold text-amber-900 shadow-sm' : ''
+                      }`
+                    }
+                    title={item.label}
+                  >
+                    <item.icon
+                      size={isLargeScreen && !isExpanded ? 18 : isSmallScreen ? 16 : 20}
+                      className="text-amber-600 min-w-[20px]"
+                    />
+                    <span
+                      className={`${
+                        isLargeScreen && !isExpanded ? 'hidden' : 'block m-1 font-medium text-xs sm:text-sm'
+                      } truncate text-amber-900`}
+                    >
+                      {item.label}
+                    </span>
+                    {count > 0 && (
+                      <span
+                        className={`ml-auto text-xs font-bold px-1 py-0.5 rounded-full shadow-sm ${
+                          isLargeScreen && !isExpanded
+                            ? 'w-2 h-2 bg-red-500'
+                            : 'bg-red-500 text-white min-w-[16px] sm:min-w-[18px] text-center'
                         }`}
-                      />
-                      
-                      <motion.span 
-                        className={`${
-                          isLargeScreen && !isExpanded ? 'hidden' : 'block flex-1 font-medium text-sm truncate'
-                        }`}
-                        initial={{ opacity: 0, x: -10 }}
-                        animate={isLargeScreen && !isExpanded ? { opacity: 0 } : { opacity: 1, x: 0 }}
                       >
-                        {item.label}
-                      </motion.span>
-
-                      {/* إشعارات محسنة */}
-                      {item.notifications > 0 && (
-                        <motion.div
-                          initial={{ scale: 0 }}
-                          animate={{ scale: 1 }}
-                          className={`ml-2 flex items-center justify-center min-w-[20px] h-5 rounded-full shadow-lg ${
-                            isLargeScreen && !isExpanded 
-                              ? 'w-2 h-2 bg-red-500' 
-                              : 'bg-gradient-to-r from-red-500 to-pink-500 text-white text-xs font-bold'
-                          }`}
-                        >
-                          {isLargeScreen && !isExpanded ? '' : item.notifications > 99 ? '99+' : item.notifications}
-                        </motion.div>
-                      )}
-
-                      {/* مؤشر النشاط - مُصحح */}
-                      {active && (
-                        <motion.div 
-                          className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-amber-400 to-amber-600"
-                          layoutId="active-indicator"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                        />
-                      )}
-                    </>
-                  )}
-                </NavLink>
-              ))}
+                        {isLargeScreen && !isExpanded ? '' : count > 9 ? '9+' : count}
+                      </span>
+                    )}
+                  </NavLink>
+                );
+              })}
             </nav>
-
-            {/* User Info Section محسن */}
+            
+            {/* ✅ الفوتر المحسن - معلومات المستخدم */}
             <motion.div 
+              className="p-1 sm:p-2 border-t border-amber-200 bg-amber-50/80 flex flex-col gap-1"
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="p-3 border-t border-amber-200/50 bg-white/90 backdrop-blur-sm space-y-2"
+              transition={{ duration: 0.3 }}
             >
               {/* معلومات المستخدم */}
-              <div className="space-y-1">
+              <div className="flex flex-col gap-2 p-2 sm:p-3 rounded-lg bg-white/60 backdrop-blur-sm border border-amber-100/30">
+                {/* الاسم */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <UserCircle2 size={16} className="text-amber-600" />
+                    <UserCircle2 
+                      size={isSmallScreen ? 16 : 18} 
+                      className="text-amber-600 min-w-[18px] flex-shrink-0" 
+                    />
                     <span className={`${
-                      isLargeScreen && !isExpanded ? 'hidden' : 'block text-sm font-semibold text-amber-900 truncate max-w-[140px]'
+                      isLargeScreen && !isExpanded ? 'hidden' : 'block truncate font-semibold text-amber-900 text-xs sm:text-sm'
                     }`}>
                       {displayName}
                     </span>
                   </div>
-                  {user?.role === 'admin' && (
-                    <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-xs font-medium rounded-full">
-                      Admin
+                  
+                  {/* ✅ Badge للدور */}
+                  {userRoleLabel && (
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      isLargeScreen && !isExpanded ? 'hidden' : 'block'
+                    } ${
+                      user?.role === 'admin' 
+                        ? 'bg-amber-100 text-amber-800 border border-amber-200' 
+                        : user?.role === 'branch' 
+                        ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                        : user?.role === 'chef'
+                        ? 'bg-green-100 text-green-800 border border-green-200'
+                        : 'bg-purple-100 text-purple-800 border border-purple-200'
+                    }`}>
+                      {userRoleLabel}
                     </span>
                   )}
                 </div>
                 
-                {/* الإيميل والهاتف في حالة التوسع */}
+                {/* ✅ معلومات إضافية في حالة التوسع */}
                 {isLargeScreen && isExpanded && user && (
-                  <div className="space-y-1 pt-1 border-t border-amber-100/50">
+                  <div className="mt-2 pt-2 border-t border-amber-100/50 space-y-1">
                     {user.email && (
-                      <div className="flex items-center gap-2 text-xs text-amber-700">
-                        <Mail size={12} className="text-amber-500 flex-shrink-0" />
-                        <span className="truncate">{user.email}</span>
+                      <div className="flex items-center gap-2 text-xs text-amber-700 truncate">
+                        📧 {user.email}
                       </div>
                     )}
                     {user.phone && (
-                      <div className="flex items-center gap-2 text-xs text-amber-700">
-                        <Phone size={12} className="text-amber-500 flex-shrink-0" />
-                        <span className="truncate">{user.phone}</span>
+                      <div className="flex items-center gap-2 text-xs text-amber-700 truncate">
+                        📱 {user.phone}
                       </div>
                     )}
                   </div>
                 )}
               </div>
 
-              {/* Logout Button */}
+              {/* ✅ زر تسجيل الخروج المحسن */}
               <motion.button
+                onClick={logout}
+                className="flex items-center justify-center gap-2 p-2 sm:p-2.5 rounded-lg bg-gradient-to-r from-red-50/80 to-red-100/80 
+                           text-red-700 hover:from-red-100/80 hover:to-red-200/80 hover:text-red-800 
+                           transition-all duration-200 border border-red-200/30 shadow-sm 
+                           hover:shadow-md hover:scale-[1.02] active:scale-[0.98]
+                           font-medium text-xs sm:text-sm"
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={logout}
-                className="w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-gradient-to-r from-red-50 to-red-100/50 text-red-700 hover:from-red-100 hover:to-red-200 transition-all duration-200 border border-red-200/30 shadow-sm"
+                aria-label={t('header.logout')}
               >
-                <LogOut size={16} className="text-red-500 flex-shrink-0" />
+                <LogOut size={isSmallScreen ? 16 : 18} className="text-red-500 min-w-[18px] flex-shrink-0" />
                 <span className={`${
-                  isLargeScreen && !isExpanded ? 'hidden' : 'block text-sm font-medium'
+                  isLargeScreen && !isExpanded ? 'hidden' : 'block truncate'
                 }`}>
                   {t('header.logout')}
                 </span>
               </motion.button>
             </motion.div>
 
-            {/* زر التوسيع/التصغير المحسن */}
             {isLargeScreen && (
-              <motion.button
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
+              <button
                 onClick={onToggleExpand}
-                className={`absolute top-1/2 -translate-y-1/2 p-2.5 bg-white/90 hover:bg-white text-amber-700 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 border border-amber-200/30 backdrop-blur-sm ${
-                  isRtl ? 'left-0 -ml-2' : 'right-0 -mr-2'
+                aria-label={isExpanded ? t('sidebar.collapse') : t('sidebar.expand')}
+                className={`absolute top-1/2 transform -translate-y-1/2 p-1 bg-amber-100/80 hover:bg-amber-200 text-amber-700 rounded-full shadow-sm transition-all duration-200 opacity-50 hover:opacity-100 ${
+                  isRtl ? 'left-0 -translate-x-1/2' : 'right-0 translate-x-1/2'
                 }`}
-                style={{ zIndex: 10001 }}
               >
-                <motion.div
-                  animate={{ rotate: isExpanded ? 180 : 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  {isExpanded ? (
-                    <ChevronRight size={16} className={isRtl ? 'rotate-180' : ''} />
-                  ) : (
-                    <ChevronLeft size={16} className={isRtl ? 'rotate-180' : ''} />
-                  )}
-                </motion.div>
-              </motion.button>
+                {isExpanded ? (
+                  <ChevronRight size={14} className={isRtl ? 'rotate-180' : ''} />
+                ) : (
+                  <ChevronLeft size={14} className={isRtl ? 'rotate-180' : ''} />
+                )}
+              </button>
             )}
           </motion.aside>
         </>
