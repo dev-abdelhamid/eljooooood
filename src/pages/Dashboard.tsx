@@ -1493,7 +1493,7 @@ export const Dashboard: React.FC = () => {
   if (loading && isInitialLoad) return <Loader />;
   if (error) return <div className="text-center text-red-600 p-4 text-sm">{error}</div>;
   return (
-    <div className={`container mx-auto p-4 ${isRtl ? 'rtl' : 'ltr'}`}>
+    <div className={` mx-auto px-4 py-8 ${isRtl ? 'rtl' : 'ltr'}`}>
       <div className="flex items-center justify-between mb-6">
       <h1 className="text-2xl md:text-3xl font-bold text-gray-800 flex items-center gap-3">
         <BarChart3 className="w-6 h-6 text-amber-600" />
