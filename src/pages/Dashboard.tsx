@@ -1481,13 +1481,14 @@ const Dashboard: React.FC = () => {
                   </AnimatePresence>
                 </div>
                         </div>
-       {user.role === 'branch' && renderLowStockItems()}
-            {user.role === 'branch' && renderRecentInventoryHistory()}     
+     
           </div>
-          <div className="space-y-6">
+          <div className="space-y-4 grid grid-cols-1 md:grid-cols-2">
             {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
             {['admin', 'production'].includes(user.role) && renderBranchPerformance()}
-            {['admin', 'production'].includes(user.role) && renderChefPerformance()}
+            {['admin', 'production'].includes(user.role) && renderChefPerformance()}  
+             {user.role === 'branch' && renderLowStockItems()}
+            {user.role === 'branch' && renderRecentInventoryHistory()}    
           </div>
         </div>
       </>
