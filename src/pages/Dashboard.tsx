@@ -1494,10 +1494,10 @@ return (
              </div>
               <div className="space-y-6">
                           {user.role === 'branch' && renderLowStockItems()}
+                          {user.role === 'branch' && renderRecentInventoryHistory()}
               </div>
 
-                                  {user.role === 'branch' && renderRecentInventoryHistory()}
-
+        
           <div className="space-y-6">
                   {['admin', 'production'].includes(user.role) && renderChefPerformance()}
           </div>
