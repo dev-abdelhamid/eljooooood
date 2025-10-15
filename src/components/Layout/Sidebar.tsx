@@ -193,8 +193,8 @@ export function Sidebar({
             initial={isLargeScreen ? (isExpanded ? 'expanded' : 'collapsed') : 'closed'}
             animate={isLargeScreen ? (isExpanded ? 'expanded' : 'collapsed') : 'open'}
             exit={isLargeScreen ? undefined : 'closed'}
-            className={`fixed top-16 bottom-0 z-50 flex flex-col bg-gradient-to-b from-amber-50 to-amber-100 shadow-lg overflow-y-auto overflow-x-hidden ${
-              isRtl ? 'right-0 border-r border-amber-200' : 'left-0 border-l border-amber-200'
+            className={`fixed top-16 bottom-0 z-50 flex flex-col bg-amber-100 shadow-lg overflow-y-auto overflow-x-hidden ${
+              isRtl ? 'right-0 border-r border-amber-150' : 'left-0 border-l border-amber-150'
             }`}
             style={{
               width: isLargeScreen ? (isExpanded ? '240px' : '64px') : isSmallScreen ? 'min(160px, 65vw)' : 'min(200px, 70vw)',
