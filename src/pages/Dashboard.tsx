@@ -1491,7 +1491,7 @@ return (
            
                                              
 
-             </div>
+             
              {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
               <div className="space-y-6">
                           {user.role === 'branch' && renderLowStockItems()}
@@ -1500,9 +1500,11 @@ return (
 
         
           <div className="space-y-6">
-          </div>
-                           {['admin', 'production'].includes(user.role) && renderBranchPerformance()}
+                   {['admin', 'production'].includes(user.role) && renderBranchPerformance()}
                   {['admin', 'production'].includes(user.role) && renderChefPerformance()}
+          </div>
+
+                    
 
         </div>
       </>
