@@ -15,6 +15,8 @@ interface OrdersVsReturnsRow {
   unit: string;
   dailyOrders: number[];
   dailyReturns: number[];
+  dailyOrdersBranchDetails: { [branch: string]: number }[];
+  dailyReturnsBranchDetails: { [branch: string]: number }[];
   totalOrders: number;
   totalReturns: number;
   totalRatio: number;
@@ -61,7 +63,7 @@ const OrdersVsReturnsTable: React.FC<Props> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState('all');
-  const [selectedBranches, setSelectedBranches] = useState<string[]>([]); // Note: For orders vs returns, branch details not in row, so perhaps not implement or assume no branch filter for this table
+  const [selectedBranches, setSelectedBranches] = useState<string[]>(allBranches);
 
   const periods = useMemo(() => {
     const periodsList = [{ value: 'all', label: isRtl ? 'الكل' : 'All' }];
@@ -94,8 +96,18 @@ const OrdersVsReturnsTable: React.FC<Props> = ({
     );
   }, [data, searchTerm]);
 
-  const grandTotalOrders = filteredData.reduce((sum, row) => sum + filteredDayIndices.reduce((s, i) => s + row.dailyOrders[i], 0), 0);
-  const grandTotalReturns = filteredData.reduce((sum, row) => sum + filteredDayIndices.reduce((s, i) => s + row.dailyReturns[i], 0), 0);
+  const getDailyOrders = (row: OrdersVsReturnsRow, i: number) => {
+    if (selectedBranches.length === 0) return row.dailyOrders[i];
+    return selectedBranches.reduce((sum, b) => sum + (row.dailyOrdersBranchDetails[i][b] || 0), 0);
+  };
+
+  const getDailyReturns = (row: OrdersVsReturnsRow, i: number) => {
+    if (selectedBranches.length === 0) return row.dailyReturns[i];
+    return selectedBranches.reduce((sum, b) => sum + (row.dailyReturnsBranchDetails[i][b] || 0), 0);
+  };
+
+  const grandTotalOrders = filteredData.reduce((sum, row) => sum + filteredDayIndices.reduce((s, i) => s + getDailyOrders(row, i), 0), 0);
+  const grandTotalReturns = filteredData.reduce((sum, row) => sum + filteredDayIndices.reduce((s, i) => s + getDailyReturns(row, i), 0), 0);
   const grandTotalRatio = grandTotalOrders > 0 ? (grandTotalReturns / grandTotalOrders * 100).toFixed(2) : '0.00';
   const monthName = months[month].label;
 
@@ -126,13 +138,13 @@ const OrdersVsReturnsTable: React.FC<Props> = ({
         unit: row.unit,
         ...Object.fromEntries(
           filteredDayIndices.flatMap((idx) => [
-            [`${daysInMonth[idx]} - ${isRtl ? 'طلبات' : 'Orders'}`, row.dailyOrders[idx]],
-            [`${daysInMonth[idx]} - ${isRtl ? 'مرتجعات' : 'Returns'}`, row.dailyReturns[idx]],
-            [`${daysInMonth[idx]} - ${isRtl ? 'نسبة %' : 'Ratio %'}`, row.dailyOrders[idx] > 0 ? ((row.dailyReturns[idx] / row.dailyOrders[idx]) * 100).toFixed(2) : '0.00'],
+            [`${daysInMonth[idx]} - ${isRtl ? 'طلبات' : 'Orders'}`, getDailyOrders(row, idx)],
+            [`${daysInMonth[idx]} - ${isRtl ? 'مرتجعات' : 'Returns'}`, getDailyReturns(row, idx)],
+            [`${daysInMonth[idx]} - ${isRtl ? 'نسبة %' : 'Ratio %'}`, getDailyOrders(row, idx) > 0 ? ((getDailyReturns(row, idx) / getDailyOrders(row, idx)) * 100).toFixed(2) : '0.00'],
           ])
         ),
-        totalOrders: filteredDayIndices.reduce((s, i) => s + row.dailyOrders[i], 0),
-        totalReturns: filteredDayIndices.reduce((s, i) => s + row.dailyReturns[i], 0),
+        totalOrders: filteredDayIndices.reduce((s, i) => s + getDailyOrders(row, i), 0),
+        totalReturns: filteredDayIndices.reduce((s, i) => s + getDailyReturns(row, i), 0),
         totalRatio: row.totalRatio.toFixed(2),
       })),
       {
@@ -142,9 +154,9 @@ const OrdersVsReturnsTable: React.FC<Props> = ({
         unit: '',
         ...Object.fromEntries(
           filteredDayIndices.flatMap((idx) => [
-            [`${daysInMonth[idx]} - ${isRtl ? 'طلبات' : 'Orders'}`, filteredData.reduce((sum, row) => sum + row.dailyOrders[idx], 0)],
-            [`${daysInMonth[idx]} - ${isRtl ? 'مرتجعات' : 'Returns'}`, filteredData.reduce((sum, row) => sum + row.dailyReturns[idx], 0)],
-            [`${daysInMonth[idx]} - ${isRtl ? 'نسبة %' : 'Ratio %'}`, (filteredData.reduce((sum, row) => sum + row.dailyOrders[idx], 0) > 0) ? ((filteredData.reduce((sum, row) => sum + row.dailyReturns[idx], 0) / filteredData.reduce((sum, row) => sum + row.dailyOrders[idx], 0)) * 100).toFixed(2) : '0.00'],
+            [`${daysInMonth[idx]} - ${isRtl ? 'طلبات' : 'Orders'}`, filteredData.reduce((sum, row) => sum + getDailyOrders(row, idx), 0)],
+            [`${daysInMonth[idx]} - ${isRtl ? 'مرتجعات' : 'Returns'}`, filteredData.reduce((sum, row) => sum + getDailyReturns(row, idx), 0)],
+            [`${daysInMonth[idx]} - ${isRtl ? 'نسبة %' : 'Ratio %'}`, (filteredData.reduce((sum, row) => sum + getDailyOrders(row, idx), 0) > 0) ? ((filteredData.reduce((sum, row) => sum + getDailyReturns(row, idx), 0) / filteredData.reduce((sum, row) => sum + getDailyOrders(row, idx), 0)) * 100).toFixed(2) : '0.00'],
           ])
         ),
         totalOrders: grandTotalOrders,
@@ -293,33 +305,43 @@ const OrdersVsReturnsTable: React.FC<Props> = ({
                 <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
                 <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
                 <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
-                {filteredDayIndices.map((idx) => (
-                  <Fragment key={idx}>
-                    <td
-                      className={`px-4 py-3 text-center font-medium ${
-                        row.dailyOrders[idx] !== 0 ? 'bg-green-50 text-green-700' : 'text-gray-700'
-                      }`}
-                      data-tooltip-id="orders-tooltip"
-                      data-tooltip-content={getTooltipContent(row.dailyOrders[idx], {}, isRtl, 'orders')}
-                    >
-                      {row.dailyOrders[idx] !== 0 ? formatNumber(row.dailyOrders[idx], isRtl) : '0'}
-                    </td>
-                    <td
-                      className={`px-4 py-3 text-center font-medium ${
-                        row.dailyReturns[idx] !== 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
-                      }`}
-                      data-tooltip-id="returns-tooltip"
-                      data-tooltip-content={getTooltipContent(row.dailyReturns[idx], {}, isRtl, 'return')}
-                    >
-                      {row.dailyReturns[idx] !== 0 ? formatNumber(row.dailyReturns[idx], isRtl) : '0'}
-                    </td>
-                    <td className="px-4 py-3 text-center font-medium text-blue-700">
-                      {row.dailyOrders[idx] > 0 ? formatNumber((row.dailyReturns[idx] / row.dailyOrders[idx] * 100).toFixed(2), isRtl) + '%' : '0.00%'}
-                    </td>
-                  </Fragment>
-                ))}
-                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(filteredDayIndices.reduce((s, i) => s + row.dailyOrders[i], 0), isRtl)}</td>
-                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(filteredDayIndices.reduce((s, i) => s + row.dailyReturns[i], 0), isRtl)}</td>
+                {filteredDayIndices.map((idx) => {
+                  const ordersQty = getDailyOrders(row, idx);
+                  const returnsQty = getDailyReturns(row, idx);
+                  const ordersDetails = selectedBranches.length > 0 
+                    ? Object.fromEntries(selectedBranches.map(b => [b, row.dailyOrdersBranchDetails[idx][b] || 0]))
+                    : row.dailyOrdersBranchDetails[idx];
+                  const returnsDetails = selectedBranches.length > 0 
+                    ? Object.fromEntries(selectedBranches.map(b => [b, row.dailyReturnsBranchDetails[idx][b] || 0]))
+                    : row.dailyReturnsBranchDetails[idx];
+                  return (
+                    <Fragment key={idx}>
+                      <td
+                        className={`px-4 py-3 text-center font-medium ${
+                          ordersQty !== 0 ? 'bg-green-50 text-green-700' : 'text-gray-700'
+                        }`}
+                        data-tooltip-id="orders-tooltip"
+                        data-tooltip-content={getTooltipContent(ordersQty, ordersDetails, isRtl, 'orders')}
+                      >
+                        {ordersQty !== 0 ? formatNumber(ordersQty, isRtl) : '0'}
+                      </td>
+                      <td
+                        className={`px-4 py-3 text-center font-medium ${
+                          returnsQty !== 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
+                        }`}
+                        data-tooltip-id="returns-tooltip"
+                        data-tooltip-content={getTooltipContent(returnsQty, returnsDetails, isRtl, 'return')}
+                      >
+                        {returnsQty !== 0 ? formatNumber(returnsQty, isRtl) : '0'}
+                      </td>
+                      <td className="px-4 py-3 text-center font-medium text-blue-700">
+                        {ordersQty > 0 ? formatNumber((returnsQty / ordersQty * 100).toFixed(2), isRtl) + '%' : '0.00%'}
+                      </td>
+                    </Fragment>
+                  );
+                })}
+                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(filteredDayIndices.reduce((s, i) => s + getDailyOrders(row, i), 0), isRtl)}</td>
+                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(filteredDayIndices.reduce((s, i) => s + getDailyReturns(row, i), 0), isRtl)}</td>
                 <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalRatio.toFixed(2), isRtl)}%</td>
               </tr>
             ))}
@@ -328,15 +350,15 @@ const OrdersVsReturnsTable: React.FC<Props> = ({
               {filteredDayIndices.map((idx) => (
                 <Fragment key={idx}>
                   <td className="px-4 py-3 text-gray-800 text-center">
-                    {formatNumber(filteredData.reduce((sum, row) => sum + row.dailyOrders[idx], 0), isRtl)}
+                    {formatNumber(filteredData.reduce((sum, row) => sum + getDailyOrders(row, idx), 0), isRtl)}
                   </td>
                   <td className="px-4 py-3 text-gray-800 text-center">
-                    {formatNumber(filteredData.reduce((sum, row) => sum + row.dailyReturns[idx], 0), isRtl)}
+                    {formatNumber(filteredData.reduce((sum, row) => sum + getDailyReturns(row, idx), 0), isRtl)}
                   </td>
                   <td className="px-4 py-3 text-gray-800 text-center">
                     {(() => {
-                      const dailyReturnsTotal = filteredData.reduce((sum, row) => sum + row.dailyReturns[idx], 0);
-                      const dailyOrdersTotal = filteredData.reduce((sum, row) => sum + row.dailyOrders[idx], 0);
+                      const dailyOrdersTotal = filteredData.reduce((sum, row) => sum + getDailyOrders(row, idx), 0);
+                      const dailyReturnsTotal = filteredData.reduce((sum, row) => sum + getDailyReturns(row, idx), 0);
                       const ratio = dailyOrdersTotal > 0 ? (dailyReturnsTotal / dailyOrdersTotal * 100).toFixed(2) : '0.00';
                       return `${formatNumber(ratio, isRtl)}%`;
                     })()}

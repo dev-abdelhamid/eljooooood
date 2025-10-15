@@ -63,7 +63,7 @@ const ReturnsTable: React.FC<Props> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState('all');
-  const [selectedBranches, setSelectedBranches] = useState<string[]>([]);
+  const [selectedBranches, setSelectedBranches] = useState<string[]>(allBranches);
 
   const periods = useMemo(() => {
     const periodsList = [{ value: 'all', label: isRtl ? 'الكل' : 'All' }];
@@ -102,7 +102,7 @@ const ReturnsTable: React.FC<Props> = ({
   };
 
   const grandTotalReturns = filteredData.reduce((sum, row) => sum + filteredDayIndices.reduce((s, i) => s + getDailyReturn(row, i), 0), 0);
-  const grandTotalValue = filteredData.reduce((sum, row) => sum + row.totalValue, 0); // Note: totalValue is monthly, may need adjust if period filter affects
+  const grandTotalValue = filteredData.reduce((sum, row) => sum + row.totalValue, 0);
   const grandTotalOrders = filteredData.reduce((sum, row) => sum + (row.totalOrders || 0), 0);
   const monthName = months[month].label;
 
@@ -123,7 +123,7 @@ const ReturnsTable: React.FC<Props> = ({
         code: row.code,
         product: row.product,
         unit: row.unit,
-        ...Object.fromEntries(filteredDayIndices.map((idx, j) => [daysInMonth[idx], getDailyReturn(row, idx)])),
+        ...Object.fromEntries(filteredDayIndices.map((idx) => [daysInMonth[idx], getDailyReturn(row, idx)])),
         totalReturns: filteredDayIndices.reduce((s, i) => s + getDailyReturn(row, i), 0),
         totalValue: formatPrice(row.totalValue, isRtl),
         ratio: row.totalOrders > 0 ? ((row.totalReturns / row.totalOrders) * 100).toFixed(2) : '0.00',
@@ -133,7 +133,7 @@ const ReturnsTable: React.FC<Props> = ({
         code: '',
         product: isRtl ? 'الإجمالي' : 'Total',
         unit: '',
-        ...Object.fromEntries(filteredDayIndices.map((idx, j) => [daysInMonth[idx], filteredData.reduce((sum, row) => sum + getDailyReturn(row, idx), 0)])),
+        ...Object.fromEntries(filteredDayIndices.map((idx) => [daysInMonth[idx], filteredData.reduce((sum, row) => sum + getDailyReturn(row, idx), 0)])),
         totalReturns: grandTotalReturns,
         totalValue: formatPrice(grandTotalValue, isRtl),
         ratio: grandTotalOrders > 0 ? ((grandTotalReturns / grandTotalOrders) * 100).toFixed(2) : '0.00',
