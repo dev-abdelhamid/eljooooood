@@ -50,7 +50,7 @@ interface Props {
   getOutTooltip: (qty: number, sales: number, returns: number, salesDetails: { [branch: string]: number }, returnsDetails: { [branch: string]: number }, isRtl: boolean) => string;
 }
 
-const StockOutTable: React.FC<Props> = ({
+export const StockOutTable: React.FC<Props> = ({
   data,
   title,
   month,
