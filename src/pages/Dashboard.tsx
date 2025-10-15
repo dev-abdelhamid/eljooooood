@@ -1489,9 +1489,10 @@ return (
            
            
            
-                                             {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
+                                             
 
              </div>
+             {['admin', 'production', 'branch'].includes(user.role) && renderLatestReturns()}
               <div className="space-y-6">
                           {user.role === 'branch' && renderLowStockItems()}
                           {user.role === 'branch' && renderRecentInventoryHistory()}
