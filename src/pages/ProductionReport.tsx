@@ -321,7 +321,7 @@ const ProductionReport: React.FC = () => {
   const [startDate, setStartDate] = useState<string | null>(null);
   const [endDate, setEndDate] = useState<string | null>(null);
 
-  export const getDaysInMonth = useCallback((month: number) => {
+ const getDaysInMonth = useCallback((month: number) => {
     const daysInMonthCount = new Date(currentYear, month + 1, 0).getDate();
     return Array.from({ length: daysInMonthCount }, (_, i) => {
       const date = new Date(currentYear, month, i + 1);
