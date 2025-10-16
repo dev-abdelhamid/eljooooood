@@ -40,6 +40,7 @@ import SalesAnalytics from './pages/SalesAnalytics';
 import ReturnStats from './pages/ReturnStats';
 import ProductionInventory from './pages/ProductionInventory';
 import { FactoryInventory } from './pages/FactoryInventory';
+import DailyOrdersSummary from './pages/DailyOrdersSummary';
 
 
 // إعداد QueryClient لإدارة الاستعلامات
@@ -107,6 +108,7 @@ function AppContent() {
                   <Route path="/sales/analytics" element={<SalesAnalytics />} />
                   <Route path="/admin-sales" element={<AdminSalesReport />} />
                   <Route path="/returnStats" element={<ReturnStats />} />
+                  <Route path="/dailyOrdersSummary" element={<DailyOrdersSummary />} />
 
 
 
