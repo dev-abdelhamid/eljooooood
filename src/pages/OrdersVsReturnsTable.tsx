@@ -7,7 +7,7 @@ import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
 import { Tooltip } from 'react-tooltip';
 import { motion, AnimatePresence } from 'framer-motion';
-import { formatNumber, toArabicNumerals, generatePDFHeader, generatePDFTable, loadFont, generateFileName } from './ProductionReport';
+import { formatNumber, toArabicNumerals, generatePDFHeader, loadFont, generateFileName } from './ProductionReport';
 
 interface OrdersVsReturnsRow {
   id: string;
