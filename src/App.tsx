@@ -40,7 +40,6 @@ import SalesAnalytics from './pages/SalesAnalytics';
 import ReturnStats from './pages/ReturnStats';
 import ProductionInventory from './pages/ProductionInventory';
 import { FactoryInventory } from './pages/FactoryInventory';
-import OrderTable from './components/Shared/OrderTable';
 
 
 // إعداد QueryClient لإدارة الاستعلامات
@@ -108,7 +107,6 @@ function AppContent() {
                   <Route path="/sales/analytics" element={<SalesAnalytics />} />
                   <Route path="/admin-sales" element={<AdminSalesReport />} />
                   <Route path="/returnStats" element={<ReturnStats />} />
-                                    <Route path="/order-table" element={<OrderTable />} />
 
 
 
