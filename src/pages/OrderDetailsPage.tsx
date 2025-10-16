@@ -1,106 +1,18 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, AlertCircle, Clock, Package, Truck, CheckCircle, X, Download } from 'lucide-react';
+import { ChevronLeft, AlertCircle, Clock, Package, Truck, CheckCircle, X } from 'lucide-react';
 import { ordersAPI, chefsAPI } from '../services/api';
 import { Order, Chef, AssignChefsForm } from '../types';
 import { Input } from '../components/UI/Input';
 import { Select } from '../components/UI/Select';
 import { Button } from '../components/UI/Button';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 
-// Invoice component for PDF rendering
-const Invoice: React.FC<{ order: Order; t: (key: string, params?: any) => string; isRtl: boolean }> = ({ order, t, isRtl }) => {
-  const calculateAdjustedTotal = useCallback(
-    (order: Order): number => {
-      const approvedReturnsTotal = (order.returns || [])
-        .filter(ret => ret.status === 'approved')
-        .reduce((sum, ret) => {
-          const returnTotal = ret.items.reduce((retSum, item) => {
-            const orderItem = order.items.find(i => i._id === item.itemId);
-            return retSum + (orderItem ? orderItem.price * item.quantity : 0);
-          }, 0);
-          return sum + returnTotal;
-        }, 0);
-      return order.totalAmount - approvedReturnsTotal;
-    },
-    []
-  );
 
-  return (
-    <div className="bg-white p-6 rounded-lg shadow-lg max-w-3xl mx-auto text-gray-800">
-      <h1 className="text-2xl font-bold text-center text-amber-600 mb-4">{t('invoice.title', { orderNumber: order.orderNumber })}</h1>
-      <p className="text-center text-sm mb-6">{t('invoice.date')}: {order.date}</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-        <div>
-          <p className="text-sm"><strong>{t('orders.order_number')}:</strong> {order.orderNumber}</p>
-          <p className="text-sm"><strong>{t('orders.branch')}:</strong> {order.branchName}</p>
-          <p className="text-sm"><strong>{t('orders.status')}:</strong> {t(`orders.${order.status}`)}</p>
-        </div>
-        <div className={`text-${isRtl ? 'left' : 'right'}`}>
-          <p className="text-sm"><strong>{t('orders.priority')}:</strong> {t(`orders.${order.priority}`)}</p>
-          <p className="text-sm"><strong>{t('orders.total_amount')}:</strong> {order.totalAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}</p>
-          <p className="text-sm"><strong>{t('orders.adjusted_total')}:</strong> {(order.adjustedTotal ?? calculateAdjustedTotal(order)).toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}</p>
-        </div>
-      </div>
-      <h2 className="text-lg font-semibold mb-2">{t('orders.items')}</h2>
-      <table className="w-full border-collapse mb-6">
-        <thead>
-          <tr className="bg-amber-100">
-            <th className={`p-2 text-${isRtl ? 'right' : 'left'} text-sm font-semibold`}>{t('orders.product')}</th>
-            <th className={`p-2 text-${isRtl ? 'right' : 'left'} text-sm font-semibold`}>{t('orders.quantity')}</th>
-            <th className={`p-2 text-${isRtl ? 'right' : 'left'} text-sm font-semibold`}>{t('orders.status')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {order.items.map(item => (
-            <tr key={item._id} className="border-b">
-              <td className={`p-2 text-${isRtl ? 'right' : 'left'} text-sm`}>{item.product?.name || t('product.unknown')}</td>
-              <td className={`p-2 text-${isRtl ? 'right' : 'left'} text-sm`}>{item.quantity}</td>
-              <td className={`p-2 text-${isRtl ? 'right' : 'left'} text-sm`}>{t(`orders.${item.status}`)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {order.notes && (
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold">{t('orders.notes')}</h2>
-          <p className="text-sm text-gray-600">{order.notes}</p>
-        </div>
-      )}
-      {order.returns && order.returns.length > 0 && (
-        <div>
-          <h2 className="text-lg font-semibold mb-2">{t('orders.returns')}</h2>
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-amber-100">
-                <th className={`p-2 text-${isRtl ? 'right' : 'left'} text-sm font-semibold`}>{t('orders.product')}</th>
-                <th className={`p-2 text-${isRtl ? 'right' : 'left'} text-sm font-semibold`}>{t('orders.quantity')}</th>
-                <th className={`p-2 text-${isRtl ? 'right' : 'left'} text-sm font-semibold`}>{t('orders.reason')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {order.returns.map(ret =>
-                ret.items.map((r, index) => (
-                  <tr key={`${ret.returnId}-${index}`} className="border-b">
-                    <td className={`p-2 text-${isRtl ? 'right' : 'left'} text-sm`}>{order.items.find(i => i._id === r.itemId)?.product?.name || t('product.unknown')}</td>
-                    <td className={`p-2 text-${isRtl ? 'right' : 'left'} text-sm`}>{r.quantity}</td>
-                    <td className={`p-2 text-${isRtl ? 'right' : 'left'} text-sm`}>{t(`returns.${r.reason}`) || t('returns.no_reason')}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-};
 
 export const OrderDetailsPage: React.FC = () => {
   const { t, language } = useLanguage();
@@ -117,7 +29,6 @@ export const OrderDetailsPage: React.FC = () => {
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [assignFormData, setAssignFormData] = useState<AssignChefsForm>({ items: [] });
   const [returnNotes, setReturnNotes] = useState<{ [returnId: string]: string }>({});
-  const invoiceRef = useRef<HTMLDivElement>(null);
 
   const statusIcons = {
     pending: <Clock className="w-5 h-5" />,
@@ -129,32 +40,29 @@ export const OrderDetailsPage: React.FC = () => {
     cancelled: <AlertCircle className="w-5 h-5" />,
   };
 
-  const formatDateTime = useCallback(
-    (dateString: string | Date) => {
-      const date = new Date(dateString);
-      if (isRtl) {
-        const formatter = new Intl.DateTimeFormat('ar-EG', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true,
-        });
-        return formatter.format(date).replace('AM', 'ص').replace('PM', 'م');
-      }
-      return date.toLocaleString('en-US', {
+
+    const formatDateTime = useCallback((dateString: string) => {
+    const date = new Date(dateString);
+    if (isRtl) {
+      const formatter = new Intl.DateTimeFormat('ar-EG', {
         year: 'numeric',
-        month: 'short',
+        month: 'long',
         day: 'numeric',
         hour: 'numeric',
         minute: '2-digit',
         hour12: true,
       });
-    },
-    [isRtl]
-  );
-
+      return formatter.format(date).replace('AM', 'ص').replace('PM', 'م');
+    }
+    return date.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  }, [isRtl]); 
   const fetchOrder = useCallback(async () => {
     if (!id || !user) {
       setError(t('errors.invalid_input'));
@@ -171,16 +79,15 @@ export const OrderDetailsPage: React.FC = () => {
         ...orderResponse,
         branchName: orderResponse.branch?.name || t('branches.unknown'),
         branchId: orderResponse.branch?._id || 'unknown',
-        date: formatDateTime(orderResponse.createdAt),
+        date: formatDateTime(orderResponse.createdAt, language),
         statusHistory: orderResponse.statusHistory?.map((h: any) => ({
           ...h,
-          changedAt: formatDateTime(h.changedAt),
-          changedBy: h.changedByUser?.name || h.changedByUser?.username || t('orders.unknown'),
+          changedAt: formatDateTime(h.changedAt, language),
         })) || [],
         returns: orderResponse.returns?.map((ret: any) => ({
           ...ret,
-          createdAt: formatDateTime(ret.createdAt),
-          reviewedAt: ret.reviewedAt ? formatDateTime(ret.reviewedAt) : null,
+          createdAt: formatDateTime(ret.createdAt, language),
+          reviewedAt: ret.reviewedAt ? formatDateTime(ret.reviewedAt, language) : null,
         })) || [],
       });
       setChefs(
@@ -199,7 +106,7 @@ export const OrderDetailsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [id, user, t, isRtl]);
+  }, [id, user, t, language, isRtl]);
 
   useEffect(() => {
     fetchOrder();
@@ -208,7 +115,7 @@ export const OrderDetailsPage: React.FC = () => {
   const playNotificationSound = useCallback(() => {
     const audio = new Audio('/sounds/notification.mp3');
     audio.play().catch((err) => {
-      console.error(`[${new Date().toISOString()}] Audio playback error:`, err);
+      console.error(`[${new Date().toISOString()}] خطأ تشغيل الصوت:`, err);
     });
   }, []);
 
@@ -218,8 +125,8 @@ export const OrderDetailsPage: React.FC = () => {
       audio.play().then(() => {
         audio.pause();
         audio.currentTime = 0;
-        console.log(`[${new Date().toISOString()}] Audio context initialized`);
-      }).catch((err) => console.error(`[${new Date().toISOString()}] Audio context initialization failed:`, err));
+        console.log(`[${new Date().toISOString()}] تم تهيئة سياق الصوت`);
+      }).catch((err) => console.error(`[${new Date().toISOString()}] فشل تهيئة سياق الصوت:`, err));
       document.removeEventListener('click', handleUserInteraction);
     };
     document.addEventListener('click', handleUserInteraction, { once: true });
@@ -268,21 +175,9 @@ export const OrderDetailsPage: React.FC = () => {
           playNotificationSound();
         }
       },
-      orderStatusUpdated: ({ orderId, status, changedByUser }: { orderId: string; status: string; changedByUser: { name?: string; username: string } }) => {
+      orderStatusUpdated: ({ orderId, status }: { orderId: string; status: string }) => {
         if (orderId === order.id) {
-          setOrder(prev => ({
-            ...prev!,
-            status: status as any,
-            statusHistory: [
-              ...prev!.statusHistory,
-              {
-                status,
-                changedAt: formatDateTime(new Date()),
-                changedBy: changedByUser?.name || changedByUser?.username || t('orders.unknown'),
-                notes: '',
-              },
-            ],
-          }));
+          setOrder(prev => ({ ...prev!, status: status as any }));
           toast.info(t('socket.order_status_updated', { status: t(`orders.${status}`) }), {
             position: isRtl ? 'top-left' : 'top-right',
           });
@@ -301,7 +196,7 @@ export const OrderDetailsPage: React.FC = () => {
                     ...ret,
                     status: status as any,
                     reviewNotes: reviewNotes || ret.reviewNotes,
-                    reviewedAt: formatDateTime(new Date()),
+                    reviewedAt: formatDateTime(new Date(), language),
                   }
                 : ret
             ),
@@ -326,32 +221,15 @@ export const OrderDetailsPage: React.FC = () => {
     return () => {
       Object.keys(handleSocketEvents).forEach(event => socket.off(event, handleSocketEvents[event]));
     };
-  }, [socket, order, t, isRtl, formatDateTime, playNotificationSound]);
+  }, [socket, order, t, isRtl, language, playNotificationSound]);
 
   const updateOrderStatus = useCallback(
     async (orderId: string, newStatus: Order['status']) => {
       setSubmitting(`order-${orderId}`);
       try {
         await ordersAPI.updateStatus(orderId, { status: newStatus });
-        setOrder(prev => ({
-          ...prev!,
-          status: newStatus,
-          statusHistory: [
-            ...prev!.statusHistory,
-            {
-              status: newStatus,
-              changedAt: formatDateTime(new Date()),
-              changedBy: user?.name || user?.username || t('orders.unknown'),
-              notes: '',
-            },
-          ],
-        }));
-        socket?.emit('orderStatusUpdated', {
-          orderId,
-          status: newStatus,
-          changedByUser: { name: user?.name, username: user?.username },
-          timestamp: new Date().toISOString(),
-        });
+        setOrder(prev => ({ ...prev!, status: newStatus }));
+        socket?.emit('orderStatusUpdated', { orderId, status: newStatus, timestamp: new Date().toISOString() });
         toast.success(t('orders.status_updated', { status: t(`orders.${newStatus}`) }), {
           position: isRtl ? 'top-left' : 'top-right',
         });
@@ -362,7 +240,7 @@ export const OrderDetailsPage: React.FC = () => {
         setSubmitting(null);
       }
     },
-    [t, isRtl, socket, user, formatDateTime]
+    [t, isRtl, socket]
   );
 
   const updateReturnStatus = useCallback(
@@ -380,7 +258,7 @@ export const OrderDetailsPage: React.FC = () => {
                   ...ret,
                   status,
                   reviewNotes,
-                  reviewedAt: formatDateTime(new Date()),
+                  reviewedAt: formatDateTime(new Date(), language),
                 }
               : ret
           ),
@@ -404,7 +282,7 @@ export const OrderDetailsPage: React.FC = () => {
         setSubmitting(null);
       }
     },
-    [t, isRtl, socket, order, returnNotes, formatDateTime]
+    [t, isRtl, socket, order, returnNotes, language]
   );
 
   const openAssignModal = useCallback(
@@ -476,47 +354,10 @@ export const OrderDetailsPage: React.FC = () => {
     [t, isRtl, socket, chefs, assignFormData, playNotificationSound]
   );
 
-  const exportInvoice = useCallback(async () => {
-    if (!order || !invoiceRef.current) return;
-    setSubmitting(`export-${order.id}`);
-    try {
-      const canvas = await html2canvas(invoiceRef.current, { scale: 2 });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      });
-      const imgWidth = 190; // A4 width minus margins
-      const pageHeight = 295; // A4 height minus margins
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 10;
-
-      pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
-
-      pdf.save(`invoice_${order.orderNumber}.pdf`);
-      toast.success(t('invoice.export_success'), { position: isRtl ? 'top-left' : 'top-right' });
-    } catch (err: any) {
-      setError(t('errors.pdf_generation') + ': ' + (err.message || t('errors.unknown')));
-      toast.error(t('errors.pdf_generation'), { position: isRtl ? 'top-left' : 'top-right' });
-    } finally {
-      setSubmitting(null);
-    }
-  }, [order, t, isRtl]);
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-amber-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-blue-600"></div>
       </div>
     );
   }
@@ -533,13 +374,13 @@ export const OrderDetailsPage: React.FC = () => {
           <p className="text-lg font-medium text-red-600">{error || t('errors.order_not_found')}</p>
           <Button
             onClick={fetchOrder}
-            className="mt-4 bg-amber-600 text-white hover:bg-amber-700 rounded-full px-4 py-2"
+            className="mt-4 bg-blue-600 text-white hover:bg-blue-700"
           >
             {t('common.retry')}
           </Button>
           <Button
             onClick={() => navigate('/orders')}
-            className="mt-2 bg-gray-200 text-gray-900 hover:bg-gray-300 rounded-full px-4 py-2"
+            className="mt-2 bg-gray-200 text-gray-900 hover:bg-gray-300"
           >
             {t('common.back')}
           </Button>
@@ -549,36 +390,19 @@ export const OrderDetailsPage: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen bg-gray-100 ${isRtl ? 'rtl' : 'ltr'}`}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    <div className={`min-h-screen `}>
+      <div className=" mx-auto ">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex flex-col sm:flex-row justify-between items-center mb-6"
         >
-          <div className="flex items-center gap-2">
-            <Button
-              onClick={() => navigate('/orders')}
-              className="bg-amber-600 text-white hover:bg-amber-700 rounded-full p-2"
-              aria-label={t('common.back')}
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </Button>
-            <h1 className="text-2xl font-bold text-gray-800">
+          <div className="flex items-center ">
+       
+            <h1 className="text-2xl  font-bold text-gray-800">
               {t('orders.order_details', { orderNumber: order.orderNumber })}
             </h1>
           </div>
-          <Button
-            onClick={exportInvoice}
-            disabled={submitting === `export-${order.id}`}
-            className={`bg-amber-600 text-white hover:bg-amber-700 rounded-full px-4 py-2 flex items-center gap-2 ${
-              submitting === `export-${order.id}` ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
-            aria-label={t('invoice.export')}
-          >
-            <Download className="w-5 h-5" />
-            {t('invoice.export')}
-          </Button>
         </motion.div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -610,26 +434,20 @@ export const OrderDetailsPage: React.FC = () => {
                     className="mb-6 relative"
                   >
                     <div className="flex items-center">
-                      <div className="w-8 h-8 bg-amber-600 rounded-full flex items-center justify-center text-white z-10">
+                      <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center text-white z-10">
                         {statusIcons[history.status as keyof typeof statusIcons] || <Clock className="w-5 h-5" />}
                       </div>
                       <div className={`ml-4 ${isRtl ? 'mr-4 ml-0' : ''}`}>
                         <p className="font-medium">{t(`orders.${history.status}`)}</p>
                         <p className="text-sm text-gray-600">{history.changedAt}</p>
-                        <p className="text-sm text-gray-500">{t('orders.changed_by')}: {history.changedBy}</p>
-                        {history.notes && <p className="text-sm text-gray-500 mt-1">{t('orders.notes')}: {history.notes}</p>}
+                        <p className="text-sm text-gray-500">{history.changedBy || t('orders.unknown')}</p>
+                        {history.notes && <p className="text-sm text-gray-500 mt-1">{history.notes}</p>}
                       </div>
                     </div>
                   </motion.div>
                 ))}
               </div>
             </div>
-          </div>
-        </div>
-
-        <div className="hidden">
-          <div ref={invoiceRef}>
-            <Invoice order={order} t={t} isRtl={isRtl} />
           </div>
         </div>
 
@@ -714,9 +532,9 @@ const OrderCard: React.FC<OrderCardProps> = ({
           <p className="text-gray-600">{t('orders.date')}: {order.date}</p>
           <p className="text-gray-600">{t('orders.priority')}: {t(`orders.${order.priority}`)}</p>
         </div>
-        <div className={`text-${isRtl ? 'left' : 'right'}`}>
-          <p className="text-gray-600">{t('orders.total_amount')}: {order.totalAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}</p>
-          <p className="text-gray-600">{t('orders.adjusted_total')}: {(order.adjustedTotal ?? calculateAdjustedTotal(order)).toLocaleString(isRtl ? 'ar-SA' : 'en-US', { style: 'currency', currency: 'SAR' })}</p>
+        <div className={`text-right ${isRtl ? 'text-left' : 'text-right'}`}>
+          <p className="text-gray-600">{t('orders.total_amount')}: {order.totalAmount.toLocaleString('ar-SA', { style: 'currency', currency: 'SAR' })}</p>
+          <p className="text-gray-600">{t('orders.adjusted_total')}: {(order.adjustedTotal ?? calculateAdjustedTotal(order)).toLocaleString('ar-SA', { style: 'currency', currency: 'SAR' })}</p>
           <p className={`text-lg font-semibold ${order.status === 'cancelled' ? 'text-red-600' : 'text-green-600'}`}>
             {t('orders.status')}: {t(`orders.${order.status}`)}
           </p>
@@ -776,28 +594,7 @@ const OrderCard: React.FC<OrderCardProps> = ({
                                 aria-label={t('returns.review_notes')}
                               />
                             </div>
-                            <div className="flex gap-2">
-                              <Button
-                                onClick={() => updateReturnStatus(ret.returnId, 'approved')}
-                                disabled={submitting === `return-${ret.returnId}`}
-                                className={`px-4 py-2 rounded-full text-white ${
-                                  submitting === `return-${ret.returnId}` ? 'bg-gray-400' : 'bg-amber-600 hover:bg-amber-700'
-                                }`}
-                                aria-label={t('returns.approve')}
-                              >
-                                {submitting === `return-${ret.returnId}` ? t('common.loading') : t('returns.approve')}
-                              </Button>
-                              <Button
-                                onClick={() => updateReturnStatus(ret.returnId, 'rejected')}
-                                disabled={submitting === `return-${ret.returnId}`}
-                                className={`px-4 py-2 rounded-full text-white ${
-                                  submitting === `return-${ret.returnId}` ? 'bg-gray-400' : 'bg-amber-600 hover:bg-amber-700'
-                                }`}
-                                aria-label={t('returns.reject')}
-                              >
-                                {submitting === `return-${ret.returnId}` ? t('common.loading') : t('returns.reject')}
-                              </Button>
-                            </div>
+                         
                           </div>
                         )}
                       </div>
@@ -817,35 +614,7 @@ const OrderCard: React.FC<OrderCardProps> = ({
         </div>
       )}
 
-      {(user.role === 'production' || user.role === 'admin') && validTransitions[order.status].length > 0 && (
-        <div className="mt-6 flex gap-4 flex-wrap">
-          {validTransitions[order.status].map(status => (
-            <Button
-              key={status}
-              onClick={() => updateOrderStatus(order.id, status)}
-              disabled={submitting === `order-${order.id}`}
-              className={`px-4 py-2 rounded-full text-white ${
-                submitting === `order-${order.id}` ? 'bg-gray-400' : status === 'in_transit' ? 'bg-blue-300 hover:bg-blue-400' : 'bg-amber-600 hover:bg-amber-700'
-              }`}
-              aria-label={t(`orders.${status}`)}
-            >
-              {submitting === `order-${order.id}` ? t('common.loading') : t(`orders.${status}`)}
-            </Button>
-          ))}
-          {order.status === 'approved' && order.items.some(item => !item.assignedTo) && (
-            <Button
-              onClick={() => openAssignModal(order)}
-              disabled={submitting === `order-${order.id}`}
-              className={`px-4 py-2 rounded-full text-white ${
-                submitting === `order-${order.id}` ? 'bg-gray-400' : 'bg-purple-300 hover:bg-purple-400'
-              }`}
-              aria-label={t('orders.assign')}
-            >
-              {submitting === `order-${order.id}` ? t('common.loading') : t('orders.assign')}
-            </Button>
-          )}
-        </div>
-      )}
+      
     </motion.div>
   );
 };
@@ -904,16 +673,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
             exit={{ scale: 0.8, opacity: 0 }}
             className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-lg"
           >
-            <div className="flex justify-between items-center mb-4">
-              <h2 id="assign-chefs-modal-title" className="text-xl font-semibold">{t('orders.assign_chefs')}</h2>
-              <Button
-                onClick={onClose}
-                className="p-2 bg-gray-200 text-gray-900 hover:bg-gray-300 rounded-full"
-                aria-label={t('common.close')}
-              >
-                <X className="w-5 h-5" />
-              </Button>
-            </div>
+            <h2 id="assign-chefs-modal-title" className="text-xl font-semibold mb-4">{t('orders.assign_chefs')}</h2>
             {assignFormData.items.map(item => {
               const departmentId = order.items.find(i => i._id === item.itemId)?.product?.department?._id;
               const availableChefs = chefs.filter(c => c.department?._id === departmentId);
@@ -940,7 +700,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
             <div className="flex justify-end gap-4 mt-6">
               <Button
                 onClick={onClose}
-                className="px-4 py-2 bg-gray-200 text-gray-900 hover:bg-gray-300 rounded-full"
+                className="px-4 py-2 bg-gray-200 text-gray-900 hover:bg-gray-300"
                 aria-label={t('common.cancel')}
               >
                 {t('common.cancel')}
@@ -953,7 +713,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                 }`}
                 aria-label={t('orders.assign')}
               >
-                {submitting === `order-${order.id}` ? t('common.loading') : t('orders.assign')}
+                {t('orders.assign')}
               </Button>
             </div>
           </motion.div>
