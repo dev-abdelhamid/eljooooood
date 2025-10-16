@@ -119,8 +119,7 @@ function AppContent() {
 
                   {/* New separate pages */}
                   <Route path="/daily-orders" element={<DailyOrdersPage />} />
-                  <Route path="/stock-in" element={<StockInPage />} />
-                  <Route path="/stock-out" element={<StockOutPage />} />
+                
                 </Routes>
               </Layout>
             </ProtectedRoute>
