@@ -132,7 +132,7 @@ const ProductionReport: React.FC = () => {
     });
   }, [currentYear, language]);
   const daysInMonth = useMemo(() => getDaysInMonth(selectedMonth), [selectedMonth, getDaysInMonth]);
-  const allBranches = useMemo(() => branches.map(b => b.displayName).sort(), [branches]);
+  constallBranches = useMemo(() => branches.map(b => b.displayName).sort(), [branches]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -381,24 +381,111 @@ const ProductionReport: React.FC = () => {
               }
             });
           });
-          const productKeys = new Set<string>();
-          orderMap.forEach((_, key) => productKeys.add(key));
-          salesMap.forEach((_, key) => productKeys.add(key));
-          const ordersVsSalesMap = new Map<string, OrdersVsSalesRow>();
-          productKeys.forEach((key) => {
-            const ordersRow = orderMap.get(key) || {
+          const allProductIds = new Set<string>();
+          productDetails.forEach((_, productId) => allProductIds.add(productId));
+          orderMap.forEach((_, key) => allProductIds.add(key.split('-')[0]));
+          returnMap.forEach((_, key) => allProductIds.add(key.split('-')[0]));
+          salesMap.forEach((_, key) => allProductIds.add(key.split('-')[0]));
+          stockInMap.forEach((_, key) => allProductIds.add(key.split('-')[0]));
+          stockOutMap.forEach((_, key) => allProductIds.add(key.split('-')[0]));
+
+          const initializeOrderRow = (key: string, productId: string) => {
+            const details = productDetails.get(productId) || {
+              code: `code-${Math.random().toString(36).substring(2)}`,
+              product: isRtl ? 'منتج غير معروف' : 'Unknown Product',
+              unit: isRtl ? 'غير محدد' : 'N/A',
+              price: 0,
+            };
+            return {
+              id: key,
+              code: details.code,
+              product: details.product,
+              unit: details.unit,
+              totalQuantity: 0,
               dailyQuantities: Array(daysInMonthCount).fill(0),
               dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
-              totalQuantity: 0,
-              code: '',
-              product: '',
-              unit: '',
+              totalPrice: 0,
+              sales: 0,
+              actualSales: 0,
             };
-            const salesRow = salesMap.get(key) || {
+          };
+
+          const initializeStockRow = (key: string, productId: string) => {
+            const details = productDetails.get(productId) || {
+              code: `code-${Math.random().toString(36).substring(2)}`,
+              product: isRtl ? 'منتج غير معروف' : 'Unknown Product',
+              unit: isRtl ? 'غير محدد' : 'N/A',
+              price: 0,
+            };
+            return {
+              id: key,
+              code: details.code,
+              product: details.product,
+              unit: details.unit,
+              totalQuantity: 0,
+              dailyQuantities: Array(daysInMonthCount).fill(0),
+              dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+              totalPrice: 0,
+              dailySales: Array(daysInMonthCount).fill(0),
+              dailyReturns: Array(daysInMonthCount).fill(0),
+              dailySalesDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+              dailyReturnsDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+            };
+          };
+
+          const initializeReturnRow = (key: string, productId: string) => {
+            const details = productDetails.get(productId) || {
+              code: `code-${Math.random().toString(36).substring(2)}`,
+              product: isRtl ? 'منتج غير معروف' : 'Unknown Product',
+              unit: isRtl ? 'غير محدد' : 'N/A',
+              price: 0,
+            };
+            return {
+              id: key,
+              product: details.product,
+              code: details.code,
+              unit: details.unit,
+              totalReturns: 0,
+              dailyReturns: Array(daysInMonthCount).fill(0),
+              dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+              totalValue: 0,
+              totalOrders: 0,
+            };
+          };
+
+          const initializeSalesRow = (key: string, productId: string) => {
+            const details = productDetails.get(productId) || {
+              code: `code-${Math.random().toString(36).substring(2)}`,
+              product: isRtl ? 'منتج غير معروف' : 'Unknown Product',
+              unit: isRtl ? 'غير محدد' : 'N/A',
+              price: 0,
+            };
+            return {
+              id: key,
+              code: details.code,
+              product: details.product,
+              unit: details.unit,
+              totalSales: 0,
               dailySales: Array(daysInMonthCount).fill(0),
               dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
-              totalSales: 0,
+              totalValue: 0,
             };
+          };
+
+          allProductIds.forEach((productId) => {
+            const key = `${productId}-${month}`;
+            if (!orderMap.has(key)) orderMap.set(key, initializeOrderRow(key, productId));
+            if (!stockInMap.has(key)) stockInMap.set(key, initializeStockRow(key, productId));
+            if (!stockOutMap.has(key)) stockOutMap.set(key, initializeStockRow(key, productId));
+            if (!returnMap.has(key)) returnMap.set(key, initializeReturnRow(key, productId));
+            if (!salesMap.has(key)) salesMap.set(key, initializeSalesRow(key, productId));
+          });
+
+          const ordersVsSalesMap = new Map<string, OrdersVsSalesRow>();
+          allProductIds.forEach((productId) => {
+            const key = `${productId}-${month}`;
+            const ordersRow = orderMap.get(key)!;
+            const salesRow = salesMap.get(key)!;
             const totalRatio = ordersRow.totalQuantity > 0 ? (salesRow.totalSales / ordersRow.totalQuantity) * 100 : 0;
             ordersVsSalesMap.set(key, {
               id: key,
@@ -414,21 +501,12 @@ const ProductionReport: React.FC = () => {
               totalRatio,
             });
           });
+
           const ordersVsReturnsMap = new Map<string, OrdersVsReturnsRow>();
-          productKeys.forEach((key) => {
-            const ordersRow = orderMap.get(key) || {
-              dailyQuantities: Array(daysInMonthCount).fill(0),
-              dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
-              totalQuantity: 0,
-              code: '',
-              product: '',
-              unit: '',
-            };
-            const returnsRow = returnMap.get(key) || {
-              dailyReturns: Array(daysInMonthCount).fill(0),
-              dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
-              totalReturns: 0,
-            };
+          allProductIds.forEach((productId) => {
+            const key = `${productId}-${month}`;
+            const ordersRow = orderMap.get(key)!;
+            const returnsRow = returnMap.get(key)!;
             const totalRatio = ordersRow.totalQuantity > 0 ? (returnsRow.totalReturns / ordersRow.totalQuantity) * 100 : 0;
             ordersVsReturnsMap.set(key, {
               id: key,
@@ -444,6 +522,7 @@ const ProductionReport: React.FC = () => {
               totalRatio,
             });
           });
+
           monthlyOrderData[month] = Array.from(orderMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity);
           monthlyStockInData[month] = Array.from(stockInMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity);
           monthlyStockOutData[month] = Array.from(stockOutMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity);
