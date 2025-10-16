@@ -302,16 +302,20 @@ const generatePDFTable = (
     },
     alternateRowStyles: { fillColor: [245, 245, 245] },
     didParseCell: (hookData) => {
-      if (hookData.section === 'body') {
-        if (hookData.cell.text[0] === '' || hookData.cell.text[0] === '0') {
-          hookData.cell.text[0] = '-';
-        }
-        if (isRtl) {
-          hookData.cell.text = hookData.cell.text.map(text => String(text).replace(/[0-9]/g, d => toArabicNumerals(d)));
-        }
-        if (hookData.column.index >= (isRtl ? 0 : headers.length - 4)) {
-          hookData.cell.styles.fontStyle = 'bold';
-        }
+      if (hookData.section === 'body' || hookData.section === 'head') {
+        hookData.cell.text = hookData.cell.text.map(text => {
+          let processedText = text;
+          if (isRtl) {
+            processedText = String(processedText).replace(/[0-9]/g, d => toArabicNumerals(d));
+            if (processedText.match(/^[0-9+-%., ]*$/)) {
+              processedText = processedText.split('').reverse().join('');
+            }
+          }
+          return processedText;
+        });
+      }
+      if (hookData.section === 'body' && hookData.column.index >= (isRtl ? 0 : headers.length - 4)) {
+        hookData.cell.styles.fontStyle = 'bold';
       }
     },
     didDrawPage: () => {
@@ -385,13 +389,15 @@ const DailyOrdersPage: React.FC = () => {
   const isRtl = language === 'ar';
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
+  const currentDay = currentDate.getDate();
+  const initialWeek = `week${Math.ceil(currentDay / 7)}`;
   const [selectedMonth, setSelectedMonth] = useState<string>(currentDate.getMonth().toString());
   const [orderData, setOrderData] = useState<{ [month: number]: OrderRow[] }>({});
   const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedBranch, setSelectedBranch] = useState<string>('all');
-  const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
+  const [selectedPeriod, setSelectedPeriod] = useState<string>(initialWeek);
   const [customStart, setCustomStart] = useState<string>('');
   const [customEnd, setCustomEnd] = useState<string>('');
 
@@ -404,17 +410,15 @@ const DailyOrdersPage: React.FC = () => {
 
   const daysInMonth = useMemo(() => {
     const daysInMonthCount = new Date(currentYear, parseInt(selectedMonth) + 1, 0).getDate();
-    return Array.from({ length: daysInMonthCount }, (_, i) => new Date(currentYear, parseInt(selectedMonth), i + 1).toLocaleString(language, { day: 'numeric', month: 'short' }));
+    return Array.from({ length: daysInMonthCount }, (_, i) => new Date(currentYear, parseInt(selectedMonth), i + 1).toLocaleString(language, { day: 'numeric' }));
   }, [selectedMonth, language, currentYear]);
 
   const daysInMonthCount = daysInMonth.length;
 
-  const allBranches = useMemo(() => branches.map(b => b.displayName).sort(), [branches]);
-
   const branchOptions = useMemo(() => [
     { value: 'all', label: isRtl ? 'كل الفروع' : 'All Branches' },
-    ...allBranches.map(branch => ({ value: branch, label: branch })),
-  ], [allBranches, isRtl]);
+    ...branches.map(b => ({ value: b.displayName, label: b.displayName })).sort((a, b) => a.label.localeCompare(b.label)),
+  ], [branches, isRtl]);
 
   const periodOptions = useMemo(() => [
     { value: 'all', label: isRtl ? 'الشهر كامل' : 'Full Month' },
@@ -680,37 +684,41 @@ const DailyOrdersPage: React.FC = () => {
         toastId: 'excel-export',
       });
       try {
-        const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+        const sheetData = isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows;
+        const sheetHeaders = isRtl ? headers.slice().reverse() : headers;
+        const ws = XLSX.utils.json_to_sheet(sheetData, { header: sheetHeaders });
         if (isRtl) {
           ws['!views'] = [{ RTL: true }];
         }
         ws['!cols'] = [
           { wch: 5 },
-          { wch: 15 },
-          { wch: 30 },
-          { wch: 15 },
-          ...displayedDays.map(() => ({ wch: 8 })),
-          { wch: 15 },
-          { wch: 15 },
-          { wch: 15 },
-          { wch: 15 },
+          { wch: 10 },
+          { wch: 25 },
+          { wch: 10 },
+          ...displayedDays.map(() => ({ wch: 6 })),
+          { wch: 12 },
+          { wch: 12 },
+          { wch: 12 },
+          { wch: 12 },
         ];
         ws['!rows'] = Array(rows.length + 1).fill({ hpt: 15 });
         // Add styles
         const amberColor = 'FFF59E0B'; // Amber ARGB
         const whiteColor = 'FFFFFFFF';
         const blackColor = 'FF000000';
-        for (let c = 0; c < headers.length; c++) {
+        for (let c = 0; c < sheetHeaders.length; c++) {
           const cell = XLSX.utils.encode_cell({ r: 0, c });
-          ws[cell].s = {
-            fill: { fgColor: { rgb: amberColor } },
-            font: { color: { rgb: whiteColor }, bold: true },
-            alignment: { horizontal: 'center' },
-          };
+          if (ws[cell]) {
+            ws[cell].s = {
+              fill: { fgColor: { rgb: amberColor } },
+              font: { color: { rgb: whiteColor }, bold: true },
+              alignment: { horizontal: 'center' },
+            };
+          }
         }
         for (let r = 1; r <= rows.length; r++) {
-          for (let c = 0; c < headers.length; c++) {
-            const cell = XLSX.utils.encode_cell({ r: r - 1, c });
+          for (let c = 0; c < sheetHeaders.length; c++) {
+            const cell = XLSX.utils.encode_cell({ r: r, c });
             if (ws[cell]) {
               ws[cell].s = {
                 alignment: { horizontal: 'center' },
@@ -720,10 +728,10 @@ const DailyOrdersPage: React.FC = () => {
           }
         }
         // Bold the total row
-        for (let c = 0; c < headers.length; c++) {
+        for (let c = 0; c < sheetHeaders.length; c++) {
           const cell = XLSX.utils.encode_cell({ r: rows.length, c });
           if (ws[cell]) {
-            ws[cell].s.font.bold = true;
+            ws[cell].s.font = { ...ws[cell].s.font, bold: true };
           }
         }
         const wb = XLSX.utils.book_new();
@@ -755,23 +763,8 @@ const DailyOrdersPage: React.FC = () => {
     );
   }
 
-  if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
-
-  if (!orderData[parseInt(selectedMonth)] || orderData[parseInt(selectedMonth)].length === 0) {
-    return (
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.3 }}
-        className="text-center py-8 bg-white shadow-md rounded-xl border "
-      >
-        <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>
-      </motion.div>
-    );
-  }
-
   return (
-    <div className={`min-h-screen px-4 py-8 `}>
+    <div className={`min-h-screen px-4 py-6 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-100`}>
       <div className="mb-6 bg-white shadow-md rounded-xl p-4 border border-gray-200">
         <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
           <h2 className="text-lg font-bold text-gray-800">{isRtl ? 'تقرير الطلبات اليومية' : 'Daily Orders Report'} - {monthName}</h2>
@@ -841,87 +834,91 @@ const DailyOrdersPage: React.FC = () => {
           )}
         </div>
       </div>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
-      >
-        <table className="min-w-full divide-y divide-gray-200 text-xs">
-          <thead className="bg-amber-50 sticky top-0 z-10">
-            <tr className={isRtl ? 'flex-row-reverse' : ''}>
-              <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
-              <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
-              <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[150px]">{isRtl ? 'المنتج' : 'Product'}</th>
-              <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
-              {displayedDays.map((day, i) => (
-                <th key={i} className="px-1 py-2 font-semibold text-gray-700 text-center min-w-[50px]">
-                  {day}
+      {loading ? (
+        <OrderTableSkeleton isRtl={isRtl} />
+      ) : (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
+        >
+          <table className="min-w-full divide-y divide-gray-200 text-xs">
+            <thead className="bg-amber-50 sticky top-0 z-10">
+              <tr className={isRtl ? 'flex-row-reverse' : ''}>
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[60px]">{isRtl ? 'الكود' : 'Code'}</th>
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[200px]">{isRtl ? 'المنتج' : 'Product'}</th>
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[70px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
+                {displayedDays.map((day, i) => (
+                  <th key={i} className="px-1 py-2 font-semibold text-gray-700 text-center min-w-[50px]">
+                    {day}
+                  </th>
+                ))}
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
+                  {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
                 </th>
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
+                  {isRtl ? 'المبيعات الفعلية' : 'Actual Sales'}
+                </th>
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
+                  {isRtl ? 'السعر الإجمالي' : 'Total Price'}
+                </th>
+                <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
+                  {isRtl ? 'نسبة المبيعات %' : 'Sales Percentage %'}
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {filteredData.map((row, index) => (
+                <tr key={row.id} className={`hover:bg-amber-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                  <td className="px-2 py-2 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
+                  <td className="px-2 py-2 text-gray-700 text-center truncate">{row.code}</td>
+                  <td className="px-2 py-2 text-gray-700 text-center truncate">{row.product}</td>
+                  <td className="px-2 py-2 text-gray-700 text-center truncate">{row.unit}</td>
+                  {row.displayedDailyQuantities.map((qty, i) => (
+                    <td
+                      key={i}
+                      className={`px-1 py-2 text-center font-medium ${
+                        qty > 0 ? 'bg-green-50 text-green-700' : qty < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
+                      }`}
+                      data-tooltip-id="order-tooltip"
+                      data-tooltip-content={getTooltipContent(qty, selectedBranch === 'all' ? row.displayedDailyBranchDetails[i] : {}, isRtl)}
+                    >
+                      {qty !== 0 ? `${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}` : '-'}
+                    </td>
+                  ))}
+                  <td className="px-2 py-2 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalQuantity, isRtl)}</td>
+                  <td className="px-2 py-2 text-gray-700 text-center font-medium">{formatNumber(row.actualSales, isRtl)}</td>
+                  <td className="px-2 py-2 text-gray-700 text-center font-medium">{formatPrice(row.displayedTotalPrice, isRtl)}</td>
+                  <td className="px-2 py-2 text-gray-700 text-center font-medium">
+                    {formatNumber(row.displayedTotalQuantity > 0 ? ((row.actualSales / row.displayedTotalQuantity) * 100).toFixed(2) : '0.00', isRtl)}%
+                  </td>
+                </tr>
               ))}
-              <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
-                {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
-              </th>
-              <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
-                {isRtl ? 'المبيعات الفعلية' : 'Actual Sales'}
-              </th>
-              <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
-                {isRtl ? 'السعر الإجمالي' : 'Total Price'}
-              </th>
-              <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
-                {isRtl ? 'نسبة المبيعات %' : 'Sales Percentage %'}
-              </th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {filteredData.map((row, index) => (
-              <tr key={row.id} className={`hover:bg-amber-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <td className="px-2 py-2 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
-                <td className="px-2 py-2 text-gray-700 text-center truncate">{row.code}</td>
-                <td className="px-2 py-2 text-gray-700 text-center truncate">{row.product}</td>
-                <td className="px-2 py-2 text-gray-700 text-center truncate">{row.unit}</td>
-                {row.displayedDailyQuantities.map((qty, i) => (
-                  <td
-                    key={i}
-                    className={`px-1 py-2 text-center font-medium ${
-                      qty > 0 ? 'bg-green-50 text-green-700' : qty < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
-                    }`}
-                    data-tooltip-id="order-tooltip"
-                    data-tooltip-content={getTooltipContent(qty, selectedBranch === 'all' ? row.displayedDailyBranchDetails[i] : {}, isRtl)}
-                  >
-                    {qty !== 0 ? `${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}` : '-'}
+              <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <td className="px-2 py-2 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
+                {displayedDays.map((_, i) => (
+                  <td key={i} className="px-1 py-2 text-gray-800 text-center">
+                    {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyQuantities[i], 0), isRtl)}
                   </td>
                 ))}
-                <td className="px-2 py-2 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalQuantity, isRtl)}</td>
-                <td className="px-2 py-2 text-gray-700 text-center font-medium">{formatNumber(row.actualSales, isRtl)}</td>
-                <td className="px-2 py-2 text-gray-700 text-center font-medium">{formatPrice(row.displayedTotalPrice, isRtl)}</td>
-                <td className="px-2 py-2 text-gray-700 text-center font-medium">
-                  {formatNumber(row.displayedTotalQuantity > 0 ? ((row.actualSales / row.displayedTotalQuantity) * 100).toFixed(2) : '0.00', isRtl)}%
+                <td className="px-2 py-2 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
+                <td className="px-2 py-2 text-gray-800 text-center">{formatNumber(grandActualSales, isRtl)}</td>
+                <td className="px-2 py-2 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
+                <td className="px-2 py-2 text-gray-800 text-center">
+                  {formatNumber(grandTotalQuantity > 0 ? ((grandActualSales / grandTotalQuantity) * 100).toFixed(2) : '0.00', isRtl)}%
                 </td>
               </tr>
-            ))}
-            <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
-              <td className="px-2 py-2 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
-              {displayedDays.map((_, i) => (
-                <td key={i} className="px-1 py-2 text-gray-800 text-center">
-                  {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyQuantities[i], 0), isRtl)}
-                </td>
-              ))}
-              <td className="px-2 py-2 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
-              <td className="px-2 py-2 text-gray-800 text-center">{formatNumber(grandActualSales, isRtl)}</td>
-              <td className="px-2 py-2 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
-              <td className="px-2 py-2 text-gray-800 text-center">
-                {formatNumber(grandTotalQuantity > 0 ? ((grandActualSales / grandTotalQuantity) * 100).toFixed(2) : '0.00', isRtl)}%
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <Tooltip
-          id="order-tooltip"
-          place="top"
-          className="custom-tooltip whitespace-pre-line z-[9999] shadow-xl bg-white border border-gray-300 rounded-md p-3 max-w-sm text-xs text-gray-800 font-medium"
-        />
-      </motion.div>
+            </tbody>
+          </table>
+          <Tooltip
+            id="order-tooltip"
+            place="top"
+            className="custom-tooltip whitespace-pre-line z-[9999] shadow-xl bg-white border border-gray-300 rounded-md p-3 max-w-sm text-xs text-gray-800 font-medium"
+          />
+        </motion.div>
+      )}
     </div>
   );
 };
