@@ -14,6 +14,7 @@ import {
   ChefHat,
   Settings2,
   Warehouse,
+  
   TrendingUp,
   Users2,
   ListTodo,
@@ -23,6 +24,7 @@ import {
   ChevronLeft,
   ChevronRight,
   AlertCircle,
+ ClipboardCheck 
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -88,7 +90,7 @@ export function Sidebar({
       { path: '/reports', icon: BarChart2, label: t('reports') },
       { path: '/profile', icon: Settings2, label: t('settings') },
           // New separate report links for production
-      { path: '/daily-orders', icon: ShoppingBag, label: t('dailyOrders') || 'Daily Orders' },
+      { path: '/daily-orders', icon: ClipboardCheck , label: t('dailyOrders') || 'Daily Orders' },
   
     ];
 
@@ -115,7 +117,7 @@ export function Sidebar({
       { path: '/reports', icon: BarChart2, label: t('reports') },
       { path: '/profile', icon: Settings2, label: t('settings') },
           // New separate report links for production
-      { path: '/daily-orders', icon: ShoppingBag, label: t('dailyOrders') || 'Daily Orders' },
+      { path: '/daily-orders', icon: ClipboardCheck , label: t('dailyOrders') || 'Daily Orders' },
 
     ];
 

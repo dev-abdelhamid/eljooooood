@@ -63,6 +63,7 @@ const translations = {
 
     "returns.review": " المرتجعات ",
     // الطلبات
+    "dailyOrders": "حركة الطلبات", 
     "orders": "الطلبات",
     "item_completed": "تم إكمال الصنف",
     "item_pending": "بانتظار المراجعة",
@@ -156,6 +157,7 @@ const translations = {
     "orders.sort_priority": "الأولوية",
     "orders.sort.asc": "تصاعدي",
     "orders.sort.desc": "تنازلي",
+
     "orders.sort_order": "ترتيب العرض",
     "orders.export": "تصدير كـ CSV",
     "orders.changeStatus": "تغيير الحالة",
@@ -383,6 +385,7 @@ const translations = {
     "sales.create": "Create new Sale",
     "password": "Password",
     "dashboard": "Dashboard",
+    "dailyOrders": " Orders movement",
     "save": "Save",
     "cancel": "Cancel",
     "edit": "Edit",
