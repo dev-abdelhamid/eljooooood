@@ -741,7 +741,7 @@ const DailyOrdersPage: React.FC = () => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3 }}
-        className="text-center py-12 bg-white shadow-md rounded-xl border border-gray-200"
+        className="text-center py-12 shadow-md rounded-xl border border-gray-200"
       >
         <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>
       </motion.div>
@@ -749,9 +749,9 @@ const DailyOrdersPage: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen px-4 py-6 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-100`}>
+    <div className={`min-h-screen px-4 py-8 `}>
       <div className="mb-6 bg-white shadow-md rounded-xl p-4 border border-gray-200">
-        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 `}>
           <h2 className="text-lg font-bold text-gray-800">{isRtl ? 'تقرير الطلبات اليومية' : 'Daily Orders Report'} - {monthName}</h2>
           <div className="flex gap-2 items-center">
             <ProductDropdown
