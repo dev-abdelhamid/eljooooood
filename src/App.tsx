@@ -27,7 +27,7 @@ import SalesReport from './pages/SalesReport';
 import BranchSalesReport from './pages/BranchSalesReport';
 import CreateSale from './pages/CreateSale';
 import  AdminSalesReport   from './pages/AdminSalesReport';
-import { OrdersTable } from './pages/OrdersTable';
+import  OrdersTable from './pages/OrdersTable';
 
 
 
