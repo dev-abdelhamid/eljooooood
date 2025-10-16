@@ -31,7 +31,7 @@ interface Props {
   submitting: string | null;
 }
 
-export const OrderTable: React.FC<Props> = memo(
+const OrderTable: React.FC<Props> = memo(
   ({ orders, t, isRtl, calculateTotalQuantity, startIndex, viewOrder, openConfirmDeliveryModal, user, submitting }) => (
     <div className="overflow-x-auto rounded-lg shadow-md border border-gray-200">
       <table className="min-w-full divide-y divide-gray-200 table-auto bg-white">
