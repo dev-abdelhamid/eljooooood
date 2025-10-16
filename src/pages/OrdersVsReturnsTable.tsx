@@ -296,10 +296,10 @@ const OrdersVsReturnsTable: React.FC<OrdersVsReturnsTableProps> = ({ data, title
         unit: row.unit,
         ...Object.fromEntries(
           displayedDays.flatMap((day, i) => [
-            `${day} - ${isRtl ? 'طلبات' : 'Orders'}`, row.displayedDailyOrders[i]],
+            [`${day} - ${isRtl ? 'طلبات' : 'Orders'}`, row.displayedDailyOrders[i]],
             [`${day} - ${isRtl ? 'مرتجعات' : 'Returns'}`, row.displayedDailyReturns[i]],
-            [`${day} - ${isRtl ? 'نسبة %' : 'Ratio %'}`, row.displayedDailyOrders[i] > 0 ? ((row.displayedDailyReturns[i] / row.displayedDailyOrders[i]) * 100).toFixed(2) : '0.00'],
-          )
+            [`${day} - ${isRtl ? 'نسبة %' : 'Ratio %'}`, row.displayedDailyOrders[i] > 0 ? ((row.displayedDailyReturns[i] / row.displayedDailyOrders[i]) * 100).toFixed(2) : '0.00'], 
+          ])
         ),
         totalOrders: row.displayedTotalOrders,
         totalReturns: row.displayedTotalReturns,
