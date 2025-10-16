@@ -307,7 +307,8 @@ const generatePDFTable = (
           let processedText = text;
           if (isRtl) {
             processedText = String(processedText).replace(/[0-9]/g, d => toArabicNumerals(d));
-            if (hookData.section === 'body') {              processedText = processedText.split('').reverse().join('');
+            if (processedText.match(/^[0-9+-%., ]*$/)) {
+              processedText = processedText.split('').reverse().join('');
             }
           }
           return processedText;
