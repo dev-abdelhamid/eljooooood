@@ -93,12 +93,12 @@ interface Branch {
   displayName: string;
 }
 
-const toArabicNumerals = (number: string | number): string => {
+export const toArabicNumerals = (number: string | number): string => {
   const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
   return String(number).replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
 };
 
-const formatPrice = (amount: number, isRtl: boolean, isStats: boolean = false): string => {
+export const formatPrice = (amount: number, isRtl: boolean, isStats: boolean = false): string => {
   const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
   let formatted: string;
   if (isStats) {
@@ -121,11 +121,11 @@ const formatPrice = (amount: number, isRtl: boolean, isStats: boolean = false): 
   return formatted;
 };
 
-const formatNumber = (num: number, isRtl: boolean): string => {
+export const formatNumber = (num: number, isRtl: boolean): string => {
   return isRtl ? toArabicNumerals(num) : num.toString();
 };
 
-const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+export const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   let binary = '';
   const bytes = new Uint8Array(buffer);
   for (let i = 0; i < bytes.length; i++) {
@@ -134,7 +134,7 @@ const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   return window.btoa(binary);
 };
 
-const loadFont = async (doc: jsPDF): Promise<boolean> => {
+export const loadFont = async (doc: jsPDF): Promise<boolean> => {
   const fontName = 'Amiri';
   const fontUrls = {
     regular: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Regular.ttf',
@@ -160,12 +160,12 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
   }
 };
 
-const generateFileName = (title: string, monthName: string, isRtl: boolean): string => {
+export const generateFileName = (title: string, monthName: string, isRtl: boolean): string => {
   const date = new Date().toISOString().split('T')[0];
   return isRtl ? `${title}_${monthName}_${date}.pdf` : `${title}_${monthName}_${date}.pdf`;
 };
 
-const generatePDFHeader = (
+export const generatePDFHeader = (
   doc: jsPDF,
   isRtl: boolean,
   title: string,
@@ -208,7 +208,7 @@ const generatePDFHeader = (
   }
 };
 
-const generatePDFTable = (
+export const generatePDFTable = (
   doc: jsPDF,
   headers: string[],
   data: any[],
@@ -268,7 +268,7 @@ const generatePDFTable = (
   });
 };
 
-const exportToPDF = async (
+export const exportToPDF = async (
   data: any[],
   title: string,
   monthName: string,
