@@ -23,6 +23,7 @@ const Button: React.FC<{
     <button
       onClick={onClick}
       disabled={disabled}
+      
       className={`flex items-center gap-2 rounded-full flex-row   px-4 py-2 text-xs font-medium transition-all duration-200 ${
         variant === 'primary' && !disabled
           ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm'
@@ -50,10 +51,11 @@ export const ProductSearchInput: React.FC<{
   };
 
   return (
-    <div className={`relative group w-full ${className}`}>
+    <div className={`relative group w-full ${className} ` }>
       <motion.div
         className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-500`}
         initial={false}
+        
         animate={{ opacity: value ? 0 : 1, scale: value ? 0.8 : 1 }}
         transition={{ duration: 0.2 }}
       >
@@ -127,6 +129,7 @@ export const ProductDropdown: React.FC<{
           {options.map((option) => (
             <button
               key={option.value}
+              dir={isRtl ? 'rtl' : 'ltr'}
               onClick={() => {
                 onChange(option.value);
                 setIsOpen(false);
