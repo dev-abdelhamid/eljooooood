@@ -1,4 +1,3 @@
-// File 1: ProductionReport.tsx
 import React, { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -140,7 +139,7 @@ const ProductionReport: React.FC = () => {
       try {
         const [inventory, ordersResponse, branchesResponse, salesResponse] = await Promise.all([
           inventoryAPI.getInventory({}, isRtl),
-          ordersAPI.getAll({ page: 1, limit: 10000 }, isRtl), // Removed status: 'completed' to fetch all orders
+          ordersAPI.getAll({ page: 1, limit: 10000 }, isRtl), // جلب كل الطلبات بدون فلتر status لعرض الكل
           branchesAPI.getAll(),
           salesAPI.getAnalytics({
             startDate: new Date(currentYear, selectedMonth, 1).toISOString(),
@@ -219,7 +218,6 @@ const ProductionReport: React.FC = () => {
           const salesMap = new Map<string, SalesRow>();
           orders.forEach((order: any) => {
             const status = order.status || order.orderStatus;
-            // Removed the check for 'completed' to process all orders
             const date = new Date(order.createdAt || order.date);
             if (isNaN(date.getTime())) return;
             const orderMonth = date.getMonth();
@@ -262,12 +260,10 @@ const ProductionReport: React.FC = () => {
               });
             }
           });
-          if (month === selectedMonth) {
+          if (month === selectedMonth && salesResponse && Array.isArray(salesResponse.productSales)) { // تصليح: فحص undefined
             for (const row of orderMap.values()) {
-              const salesItem = salesResponse.productSales?.find((s: any) => s.productId === row.id.split('-')[0]);
-              if (salesItem) {
-                row.actualSales = Number(salesItem.totalQuantity) || 0;
-              }
+              const salesItem = salesResponse.productSales.find((s: any) => s.productId === row.id.split('-')[0]);
+              row.actualSales = salesItem ? Number(salesItem.totalQuantity) || 0 : 0; // fallback إلى 0
             }
           }
           inventory.forEach((item: any) => {
@@ -290,8 +286,8 @@ const ProductionReport: React.FC = () => {
                 const day = date.getDate() - 1;
                 const key = `${productId}-${month}`;
                 const quantity = Number(movement.quantity) || 0;
-                const isReturn = movement.reference?.includes('مرتجع') || movement.reference?.includes('RET-');
-                const isSale = movement.reference?.includes('بيع') || movement.reference?.includes('SALE-');
+                const isReturn = movement.reference?.includes('مرتجع') || movement.reference?.includes('RET-') || false;
+                const isSale = movement.reference?.includes('بيع') || movement.reference?.includes('SALE-') || false;
                 if (movement.type === 'in') {
                   if (!stockInMap.has(key)) {
                     stockInMap.set(key, {
@@ -351,11 +347,11 @@ const ProductionReport: React.FC = () => {
                     });
                   }
                   const row = stockOutMap.get(key)!;
-                  const qty = -quantity; // Make out positive for display if needed, but keep logic
+                  const qty = -quantity; // تحويل السلبي إلى إيجابي للعرض
                   row.dailyQuantities[day] += qty;
                   row.dailyBranchDetails[day][branchName] = (row.dailyBranchDetails[day][branchName] || 0) + qty;
                   row.totalQuantity += qty;
-                  row.totalPrice += qty * details.price; // Adjust for positive
+                  row.totalPrice += qty * details.price;
                   if (isSale) {
                     row.dailySales![day] += qty;
                     row.dailySalesDetails![day][branchName] = (row.dailySalesDetails![day][branchName] || 0) + qty;
@@ -384,6 +380,7 @@ const ProductionReport: React.FC = () => {
           const productKeys = new Set<string>();
           orderMap.forEach((_, key) => productKeys.add(key));
           salesMap.forEach((_, key) => productKeys.add(key));
+          returnMap.forEach((_, key) => productKeys.add(key)); // إضافة لضمان عرض المنتجات في المرتجعات
           const ordersVsSalesMap = new Map<string, OrdersVsSalesRow>();
           productKeys.forEach((key) => {
             const ordersRow = orderMap.get(key) || {

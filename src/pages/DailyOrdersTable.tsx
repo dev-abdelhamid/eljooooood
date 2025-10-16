@@ -228,7 +228,7 @@ interface DailyOrdersTableProps {
   monthName: string;
 }
 
-const DailyOrdersTable: React.FC<DailyOrdersTableProps> = ({ data, title, isRtl, loading, allBranches, daysInMonth, monthName }) => {
+export const DailyOrdersTable: React.FC<DailyOrdersTableProps> = ({ data, title, isRtl, loading, allBranches, daysInMonth, monthName }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBranch, setSelectedBranch] = useState('all');
   const [selectedPeriod, setSelectedPeriod] = useState('all');

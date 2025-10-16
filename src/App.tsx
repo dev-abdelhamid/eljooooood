@@ -27,6 +27,7 @@ import SalesReport from './pages/SalesReport';
 import BranchSalesReport from './pages/BranchSalesReport';
 import CreateSale from './pages/CreateSale';
 import  AdminSalesReport   from './pages/AdminSalesReport';
+import DailyOrdersTable from './pages/DailyOrdersTable';
 
 
 
