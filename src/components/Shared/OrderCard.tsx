@@ -50,6 +50,9 @@ const OrderCard: React.FC<OrderCardProps> = memo(
     const StatusIcon = statusInfo.icon;
     const unassignedItems = order.items.filter((item) => !item.assignedTo);
 
+    const displayedItems = isItemsExpanded ? order.items : order.items.slice(0, 3);
+    const hasMoreItems = order.items.length > 3;
+
     const toggleItemsExpanded = useCallback(() => {
       setIsItemsExpanded((prev) => !prev);
     }, []);
@@ -61,6 +64,14 @@ const OrderCard: React.FC<OrderCardProps> = memo(
       completed: isRtl ? 'مكتمل' : 'Completed',
       in_transit: isRtl ? 'في النقل' : 'In Transit',
       delivered: isRtl ? 'تم التسليم' : 'Delivered',
+      cancelled: isRtl ? 'ملغى' : 'Cancelled',
+    };
+
+    const itemStatusTranslations = {
+      pending: isRtl ? 'قيد الانتظار' : 'Pending',
+      assigned: isRtl ? 'معين' : 'Assigned',
+      in_progress: isRtl ? 'قيد التقدم' : 'In Progress',
+      completed: isRtl ? 'مكتمل' : 'Completed',
       cancelled: isRtl ? 'ملغى' : 'Cancelled',
     };
 
@@ -139,70 +150,74 @@ const OrderCard: React.FC<OrderCardProps> = memo(
               </div>
             </div>
             <div>
-              <button
-                onClick={toggleItemsExpanded}
-                className="flex items-center justify-between w-full p-2 bg-gray-50 rounded-md hover:bg-gray-100 transition-colors duration-200"
-                aria-expanded={isItemsExpanded}
-                aria-controls={`items-${order.id}`}
-              >
+              <div className="p-2 bg-gray-50 rounded-md">
                 <h4 className="text-xs font-semibold text-gray-900">{isRtl ? 'المنتجات' : 'Products'}</h4>
-                {isItemsExpanded ? (
-                  <ChevronUp className="w-4 h-4 text-gray-600" />
-                ) : (
-                  <ChevronDown className="w-4 h-4 text-gray-600" />
-                )}
-              </button>
-              <AnimatePresence>
-                {isItemsExpanded && (
-                  <motion.div
-                    id={`items-${order.id}`}
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="overflow-hidden max-h-48"
-                  >
-                    <div className="space-y-2 mt-2 overflow-y-auto">
-                      {order.items.map((item) => {
-                        const itemStatusInfo = ITEM_STATUS_COLORS[item.status] || ITEM_STATUS_COLORS.pending;
-                        const ItemStatusIcon = itemStatusInfo.icon;
-                        return (
-                          <motion.div
-                            key={item._id}
-                            initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="p-2 bg-gray-50 rounded-md"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-xs font-medium text-gray-900 truncate flex-1">
-                                {item.displayProductName} ({item.quantity} {item.displayUnit})
-                              </p>
-                              <span
-                                className={`px-1.5 py-0.5 rounded-full text-xs font-small flex items-center gap-1 ${itemStatusInfo.color} ${
-                                  isRtl ? 'flex-row-reverse' : ''
-                                }`}
-                              >
-                                <ItemStatusIcon className="w-3 h-3" />
-                                {isRtl ? { pending: 'قيد الانتظار', assigned: 'معين', in_progress: 'قيد التقدم', completed: 'مكتمل', cancelled: 'ملغى' }[item.status] : itemStatusInfo.label}
-                              </span>
-                            </div>
-                            <div className="flex items-center justify-between gap-2 mt-1">
-                              {item.assignedTo && (
-                                <p className="text-xs text-gray-600 truncate">
-                                  {isRtl
-                                    ? `معين لـ: شيف ${item.assignedTo.displayName} (${item.department?.displayName || 'غير معروف'})`
-                                    : `Assigned to: Chef ${item.assignedTo.displayName} (${item.department?.displayName || 'Unknown'})`}
-                                </p>
-                              )}
-                            </div>
-                          </motion.div>
-                        );
-                      })}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                <motion.div
+                  initial={{ height: 'auto' }}
+                  animate={{ height: 'auto' }}
+                  transition={{ duration: 0.3 }}
+                  className="mt-2"
+                >
+                  <ul className="space-y-2">
+                    {displayedItems.map((item) => {
+                      const itemStatusInfo = ITEM_STATUS_COLORS[item.status] || ITEM_STATUS_COLORS.pending;
+                      const ItemStatusIcon = itemStatusInfo.icon;
+                      return (
+                        <motion.li
+                          key={item._id}
+                          initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="p-2 bg-gray-50 rounded-md"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-medium text-gray-900 truncate flex-1">
+                              {isRtl
+                                ? `${item.displayProductName} (${item.quantity} ${item.displayUnit})`
+                                : `${item.displayProductName} (${item.quantity} ${item.displayUnit})`}
+                            </p>
+                            <span
+                              className={`px-1.5 py-0.5 rounded-full text-xs font-small flex items-center gap-1 ${itemStatusInfo.color} ${
+                                isRtl ? 'flex-row-reverse' : ''
+                              }`}
+                            >
+                              <ItemStatusIcon className="w-3 h-3" />
+                              {itemStatusTranslations[item.status]}
+                            </span>
+                          </div>
+                          {item.assignedTo && (
+                            <p className="text-xs text-gray-600 truncate mt-1">
+                              {isRtl
+                                ? `معين لـ: شيف ${item.assignedTo.displayName} (${item.department?.displayName || 'غير معروف'})`
+                                : `Assigned to: Chef ${item.assignedTo.displayName} (${item.department?.displayName || 'Unknown'})`}
+                            </p>
+                          )}
+                        </motion.li>
+                      );
+                    })}
+                  </ul>
+                  {hasMoreItems && (
+                    <button
+                      onClick={toggleItemsExpanded}
+                      className="text-amber-600 hover:text-amber-700 text-xs font-medium mt-2 flex items-center gap-1"
+                      aria-expanded={isItemsExpanded}
+                      aria-controls={`items-${order.id}`}
+                    >
+                      {isItemsExpanded ? (
+                        <>
+                          {isRtl ? 'عرض أقل' : 'Show Less'}
+                          <ChevronUp className="w-4 h-4" />
+                        </>
+                      ) : (
+                        <>
+                          {isRtl ? `+${order.items.length - 3} منتج` : `+${order.items.length - 3} items`}
+                          <ChevronDown className="w-4 h-4" />
+                        </>
+                      )}
+                    </button>
+                  )}
+                </motion.div>
+              </div>
             </div>
             {order.notes && (
               <div className="mt-1 p-1.5 bg-amber-50 rounded-md">
@@ -234,7 +249,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                 <Button
                   variant="primary"
                   size="sm"
-                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-2.5 py-1 text-xs"
+                  className="bg-amber-600 hover:bg-amber-700 text-white rounded-full px-2.5 py-1 text-xs"
                   aria-label={isRtl ? `عرض طلب رقم ${order.orderNumber}` : `View order #${order.orderNumber}`}
                 >
                   {isRtl ? 'عرض' : 'View'}
@@ -247,7 +262,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                     size="sm"
                     icon={Check}
                     onClick={() => updateOrderStatus(order.id, 'approved')}
-                    className="bg-green-500 hover:bg-green-600 text-white rounded-full px-3 py-1 text-xs"
+                    className="bg-amber-600 hover:bg-amber-700 text-white rounded-full px-3 py-1 text-xs"
                     disabled={submitting === order.id}
                     aria-label={isRtl ? `الموافقة على طلب رقم ${order.orderNumber}` : `Approve order #${order.orderNumber}`}
                   >
@@ -258,7 +273,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                     size="sm"
                     icon={AlertCircle}
                     onClick={() => updateOrderStatus(order.id, 'cancelled')}
-                    className="bg-red-500 hover:bg-red-600 text-white rounded-full px-3 py-1 text-xs"
+                    className="bg-amber-600 hover:bg-amber-700 text-white rounded-full px-3 py-1 text-xs"
                     disabled={submitting === order.id}
                     aria-label={isRtl ? `إلغاء طلب رقم ${order.orderNumber}` : `Cancel order #${order.orderNumber}`}
                   >
@@ -272,7 +287,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                   size="sm"
                   icon={Package}
                   onClick={() => openAssignModal(order)}
-                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-3 py-1 text-xs"
+                  className="bg-amber-600 hover:bg-amber-700 text-white rounded-full px-3 py-1 text-xs"
                   disabled={submitting === order.id}
                   aria-label={isRtl ? `تعيين طلب رقم ${order.orderNumber}` : `Assign order #${order.orderNumber}`}
                 >
@@ -285,7 +300,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                   size="sm"
                   icon={Truck}
                   onClick={() => updateOrderStatus(order.id, 'in_transit')}
-                  className="bg-blue-500 hover:bg-blue-600 text-white rounded-full px-3 py-1 text-xs"
+                  className="bg-amber-600 hover:bg-amber-700 text-white rounded-full px-3 py-1 text-xs"
                   disabled={submitting === order.id}
                   aria-label={isRtl ? `شحن طلب رقم ${order.orderNumber}` : `Ship order #${order.orderNumber}`}
                 >
@@ -299,5 +314,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
     );
   }
 );
+
+OrderCard.displayName = 'OrderCard';
 
 export default OrderCard;
