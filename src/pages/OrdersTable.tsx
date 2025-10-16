@@ -274,3 +274,5 @@ export const OrdersTable = ({
     </div>
   );
 };
+
+export default OrdersTable;
