@@ -84,13 +84,14 @@ export function Sidebar({
       { path: '/branches', icon: Store, label: t('branches.manage') },
       { path: '/chefs', icon: ChefHat, label: t('chefs.manage') },
       { path: '/departments', icon: Users2, label: t('departments') },
-      { path: '/orders', icon: ShoppingBag, label: t('orders') },
+      { path: '/orders', icon: ShoppingBag, label: t('orders') },  
+      { path: '/daily-orders', icon: ClipboardCheck , label: t('dailyOrders') || 'Daily Orders' },
+
       { path: '/returns', icon: RefreshCcw, label: t('returns') },
       { path: '/sales', icon: TrendingUp, label: t('sales') },
       { path: '/reports', icon: BarChart2, label: t('reports') },
       { path: '/profile', icon: Settings2, label: t('settings') },
           // New separate report links for production
-      { path: '/daily-orders', icon: ClipboardCheck , label: t('dailyOrders') || 'Daily Orders' },
   
     ];
 
@@ -113,6 +114,9 @@ export function Sidebar({
       { path: '/products', icon: Box, label: t('products.manage') },
       { path: '/departments', icon: Users2, label: t('departments') },
       { path: '/orders', icon: ShoppingBag, label: t('orders') },
+      
+            { path: '/daily-orders', icon: ClipboardCheck , label: t('dailyOrders') || 'Daily Orders' },
+
       { path: '/returns', icon: RefreshCcw, label: t('returns') },
       { path: '/reports', icon: BarChart2, label: t('reports') },
       { path: '/profile', icon: Settings2, label: t('settings') },

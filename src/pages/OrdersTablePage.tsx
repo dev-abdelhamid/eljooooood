@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Search, X, Upload, ChevronDown } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -11,8 +11,37 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 
-// ProductSearchInput component defined directly
-const ProductSearchInput = ({ value, onChange, placeholder, ariaLabel, className }) => {
+// Button component
+const Button: React.FC<{
+  variant: 'primary' | 'secondary';
+  onClick?: () => void;
+  disabled?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}> = ({ variant, onClick, disabled, className, children }) => {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+        variant === 'primary' && !disabled
+          ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm'
+          : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+      } ${className}`}
+    >
+      {children}
+    </button>
+  );
+};
+
+// ProductSearchInput component
+const ProductSearchInput: React.FC<{
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  ariaLabel: string;
+  className?: string;
+}> = ({ value, onChange, placeholder, ariaLabel, className }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
 
@@ -54,21 +83,37 @@ const ProductSearchInput = ({ value, onChange, placeholder, ariaLabel, className
   );
 };
 
-// ProductDropdown component defined directly
-const ProductDropdown = ({
-  value,
-  onChange,
-  options,
-  ariaLabel,
-  disabled = false,
-}) => {
+// ProductDropdown component with close on outside click
+const ProductDropdown: React.FC<{
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  ariaLabel: string;
+  disabled?: boolean;
+  className?: string;
+}> = ({ value, onChange, options, ariaLabel, disabled = false, className }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const selectedOption = options.find((opt) => opt.value === value) || options[0] || { label: isRtl ? 'اختر' : 'Select' };
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
   return (
-    <div className="relative group w-full">
+    <div className={`relative group w-full ${className}`} ref={dropdownRef}>
       <button
         onClick={() => !disabled && setIsOpen(!isOpen)}
         className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-200 bg-white shadow-sm hover:shadow-md text-xs text-gray-700 ${isRtl ? 'text-right' : 'text-left'} flex justify-between items-center ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -78,7 +123,7 @@ const ProductDropdown = ({
         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && !disabled && (
-        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
           {options.map((option) => (
             <button
               key={option.value}
@@ -97,32 +142,15 @@ const ProductDropdown = ({
   );
 };
 
-// Button component
-const Button = ({ variant, onClick, disabled, className, children }) => {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
-        variant === 'primary' && !disabled
-          ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-sm'
-          : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-      } ${className}`}
-    >
-      {children}
-    </button>
-  );
-};
-
 // Utility functions
-const toArabicNumerals = (number) => {
+const toArabicNumerals = (number: string | number): string => {
   const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
   return String(number).replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
 };
 
-const formatPrice = (amount, isRtl, isStats = false) => {
-  const validAmount = Number.isNaN(amount) ? 0 : amount;
-  let formatted;
+const formatPrice = (amount: number, isRtl: boolean, isStats: boolean = false): string => {
+  const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
+  let formatted: string;
   if (isStats) {
     formatted = validAmount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
       minimumFractionDigits: 2,
@@ -143,11 +171,11 @@ const formatPrice = (amount, isRtl, isStats = false) => {
   return formatted;
 };
 
-const formatNumber = (num, isRtl) => {
+const formatNumber = (num: number, isRtl: boolean): string => {
   return isRtl ? toArabicNumerals(num) : num.toString();
 };
 
-const arrayBufferToBase64 = (buffer) => {
+const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   let binary = '';
   const bytes = new Uint8Array(buffer);
   for (let i = 0; i < bytes.length; i++) {
@@ -156,7 +184,7 @@ const arrayBufferToBase64 = (buffer) => {
   return window.btoa(binary);
 };
 
-const loadFont = async (doc) => {
+const loadFont = async (doc: jsPDF): Promise<boolean> => {
   const fontName = 'Amiri';
   const fontUrls = {
     regular: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Regular.ttf',
@@ -177,21 +205,21 @@ const loadFont = async (doc) => {
   }
 };
 
-const generateFileName = (title, monthName, isRtl, format) => {
+const generateFileName = (title: string, monthName: string, isRtl: boolean, format: string): string => {
   const date = new Date().toISOString().split('T')[0];
   return `${title}_${monthName}_${date}.${format}`;
 };
 
 const generatePDFHeader = (
-  doc,
-  isRtl,
-  title,
-  monthName,
-  totalItems,
-  totalQuantity,
-  totalPrice,
-  fontName,
-  fontLoaded
+  doc: jsPDF,
+  isRtl: boolean,
+  title: string,
+  monthName: string,
+  totalItems: number,
+  totalQuantity: number,
+  totalPrice: number,
+  fontName: string,
+  fontLoaded: boolean
 ) => {
   doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
   doc.setFontSize(16);
@@ -205,7 +233,7 @@ const generatePDFHeader = (
     : `Total Products: ${totalItems} | Total Quantity: ${totalQuantity} units | Total Amount: ${formatPrice(totalPrice, isRtl, true)}`;
   doc.text(stats, isRtl ? pageWidth - 20 : 20, 20, { align: isRtl ? 'right' : 'left' });
   doc.setLineWidth(0.5);
-  doc.setDrawColor(245, 158, 11); // Amber color
+  doc.setDrawColor(245, 158, 11);
   doc.line(20, 25, pageWidth - 20, 25);
   const pageCount = doc.getNumberOfPages();
   const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
@@ -226,20 +254,20 @@ const generatePDFHeader = (
 };
 
 const generatePDFTable = (
-  doc,
-  headers,
-  data,
-  isRtl,
-  fontLoaded,
-  fontName
+  doc: jsPDF,
+  headers: string[],
+  data: any[][],
+  isRtl: boolean,
+  fontLoaded: boolean,
+  fontName: string
 ) => {
   const numColumns = headers.length;
   const fontSizeHead = Math.max(6, Math.min(9, Math.floor(280 / numColumns)));
   const fontSizeBody = fontSizeHead - 1;
   const cellPadding = numColumns > 20 ? 1 : 2;
-  const tableColumnStyles = {};
+  const columnStyles = {};
   headers.forEach((_, i) => {
-    tableColumnStyles[i] = {
+    columnStyles[i] = {
       cellWidth: 'auto',
       minCellWidth: 5,
       halign: isRtl ? 'right' : 'left',
@@ -253,9 +281,9 @@ const generatePDFTable = (
     startY: 30,
     margin: { top: 10, bottom: 10, left: 10, right: 10 },
     tableWidth: 'wrap',
-    columnStyles: tableColumnStyles,
+    columnStyles,
     headStyles: {
-      fillColor: [245, 158, 11], // Amber
+      fillColor: [245, 158, 11],
       textColor: [255, 255, 255],
       fontSize: fontSizeHead,
       halign: isRtl ? 'right' : 'left',
@@ -286,21 +314,21 @@ const generatePDFTable = (
         }
       }
     },
-    didDrawPage: (data) => {
+    didDrawPage: () => {
       doc.setFont(fontLoaded ? fontName : 'helvetica', 'normal');
     },
   });
 };
 
 const exportToPDF = async (
-  data,
-  title,
-  monthName,
-  headers,
-  isRtl,
-  totalItems,
-  totalQuantity,
-  totalPrice
+  data: any[][],
+  title: string,
+  monthName: string,
+  headers: string[],
+  isRtl: boolean,
+  totalItems: number,
+  totalQuantity: number,
+  totalPrice: number
 ) => {
   try {
     toast.info(isRtl ? 'جارٍ إنشاء ملف PDF...' : 'Generating PDF...', {
@@ -351,21 +379,21 @@ interface Branch {
 }
 
 // Main DailyOrdersPage component
-const DailyOrdersPage = () => {
+const DailyOrdersPage: React.FC = () => {
   const { language } = useLanguage();
   const { user } = useAuth();
   const isRtl = language === 'ar';
   const currentDate = new Date();
   const currentYear = currentDate.getFullYear();
-  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth().toString());
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentDate.getMonth().toString());
   const [orderData, setOrderData] = useState<{ [month: number]: OrderRow[] }>({});
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedBranch, setSelectedBranch] = useState('all');
-  const [selectedPeriod, setSelectedPeriod] = useState('all');
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
+  const [loading, setLoading] = useState<boolean>(true);
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [selectedBranch, setSelectedBranch] = useState<string>('all');
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('all');
+  const [customStart, setCustomStart] = useState<string>('');
+  const [customEnd, setCustomEnd] = useState<string>('');
 
   const months = useMemo(() => Array.from({ length: 12 }, (_, i) => ({
     value: i.toString(),
@@ -434,20 +462,20 @@ const DailyOrdersPage = () => {
           lang: language,
         }),
       ]);
-      const monthlyOrderData = {};
+      const monthlyOrderData: { [month: number]: OrderRow[] } = {};
       const fetchedBranches = branchesResponse
-        .filter((branch) => branch && branch._id)
-        .map((branch) => ({
+        .filter((branch: any) => branch && branch._id)
+        .map((branch: any) => ({
           _id: branch._id,
           name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
           nameEn: branch.nameEn || branch.name,
           displayName: isRtl ? branch.name : branch.nameEn || branch.name,
         }))
-        .sort((a, b) => a.displayName.localeCompare(b.displayName, language));
+        .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language));
       setBranches(fetchedBranches);
-      const branchMap = new Map(fetchedBranches.map(b => [b._id, b.displayName]));
-      const productDetails = new Map();
-      inventory.forEach((item) => {
+      const branchMap = new Map<string, string>(fetchedBranches.map(b => [b._id, b.displayName]));
+      const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
+      inventory.forEach((item: any) => {
         if (item?.product?._id) {
           productDetails.set(item.product._id, {
             code: item.product.code || `code-${Math.random().toString(36).substring(2)}`,
@@ -459,41 +487,53 @@ const DailyOrdersPage = () => {
       });
       let orders = Array.isArray(ordersResponse) ? ordersResponse : [];
       if (orders.length === 0) {
+        toast.warn(isRtl ? 'لا توجد طلبات، استخدام بيانات احتياطية' : 'No orders found, using fallback data', {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 3000,
+        });
         orders = inventory
-          .filter((item) => item?.product?._id)
-          .flatMap((item) => (item.movements || []).map((movement) => ({
-            status: 'completed',
-            createdAt: movement.createdAt || new Date().toISOString(),
-            branch: { _id: fetchedBranches[Math.floor(Math.random() * fetchedBranches.length)]?._id },
-            items: [{
-              product: {
-                _id: item.product._id,
-                name: item.product.name,
-                nameEn: item.product.nameEn,
-                code: item.product.code,
-                unit: item.product.unit,
-                unitEn: item.product.unitEn,
-                price: item.product.price,
+          .filter((item: any) => item?.product?._id)
+          .flatMap((item: any) => {
+            return (item.movements || []).map((movement: any) => ({
+              status: 'completed',
+              createdAt: movement.createdAt || new Date().toISOString(),
+              branch: {
+                _id: fetchedBranches[Math.floor(Math.random() * fetchedBranches.length)]?._id,
               },
-              quantity: Math.abs(Number(movement.quantity) || 0),
-              price: Number(item.product?.price) || 0,
-              productId: item.product._id,
-              unit: isRtl ? (item.product?.unit || 'غير محدد') : (item.product?.unitEn || item.product?.unit || 'N/A'),
-              sales: Number(item.product?.sales) || (Math.abs(Number(movement.quantity)) * Number(item.product?.price) * 0.1) || 0,
-            }],
-          })));
+              items: [
+                {
+                  product: {
+                    _id: item.product._id,
+                    name: item.product.name,
+                    nameEn: item.product.nameEn,
+                    code: item.product.code,
+                    unit: item.product.unit,
+                    unitEn: item.product.unitEn,
+                    price: item.product.price,
+                  },
+                  quantity: Math.abs(Number(movement.quantity) || 0),
+                  price: Number(item.product?.price) || 0,
+                  productId: item.product._id,
+                  unit: isRtl ? (item.product?.unit || 'غير محدد') : (item.product?.unitEn || item.product?.unit || 'N/A'),
+                  sales: Number(item.product?.sales) || (Math.abs(Number(movement.quantity)) * Number(item.product?.price) * 0.1) || 0,
+                },
+              ],
+            }));
+          });
       }
       for (let month = 0; month < 12; month++) {
         const daysInMonthCount = new Date(currentYear, month + 1, 0).getDate();
-        const orderMap = new Map();
-        orders.forEach((order) => {
+        const orderMap = new Map<string, OrderRow>();
+        orders.forEach((order: any) => {
           const date = new Date(order.createdAt || order.date);
           if (isNaN(date.getTime())) return;
-          if (date.getFullYear() === currentYear && date.getMonth() === month) {
+          const orderMonth = date.getMonth();
+          const year = date.getFullYear();
+          if (year === currentYear && orderMonth === month) {
             const day = date.getDate() - 1;
             const branchId = order.branch?._id || order.branch || order.branchId;
             const branch = branchMap.get(branchId) || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
-            (order.items || []).forEach((item) => {
+            (order.items || []).forEach((item: any) => {
               const productId = item.product?._id || item.productId;
               if (!productId) return;
               const details = productDetails.get(productId) || {
@@ -516,7 +556,7 @@ const DailyOrdersPage = () => {
                   actualSales: 0,
                 });
               }
-              const row = orderMap.get(key);
+              const row = orderMap.get(key)!;
               const quantity = Number(item.quantity) || 0;
               row.dailyQuantities[day] += quantity;
               row.dailyBranchDetails[day][branch] = (row.dailyBranchDetails[day][branch] || 0) + quantity;
@@ -527,7 +567,7 @@ const DailyOrdersPage = () => {
         });
         if (month === parseInt(selectedMonth)) {
           for (const row of orderMap.values()) {
-            const salesItem = salesResponse.productSales?.find((s) => s.productId === row.id.split('-')[0]);
+            const salesItem = salesResponse.productSales?.find((s: any) => s.productId === row.id.split('-')[0]);
             if (salesItem) {
               row.actualSales = Number(salesItem.totalQuantity) || 0;
             }
@@ -577,7 +617,7 @@ const DailyOrdersPage = () => {
   const grandTotalPrice = useMemo(() => filteredData.reduce((sum, row) => sum + row.displayedTotalPrice, 0), [filteredData]);
   const grandActualSales = useMemo(() => filteredData.reduce((sum, row) => sum + row.actualSales, 0), [filteredData]);
 
-  const getTooltipContent = (dailyQuantity, branchDetails, isRtl) => {
+  const getTooltipContent = (dailyQuantity: number, branchDetails: { [branch: string]: number }, isRtl: boolean) => {
     let header = isRtl ? 'طلبات' : 'Orders';
     let content = `${header}: ${dailyQuantity > 0 ? '+' : ''}${formatNumber(dailyQuantity, isRtl)}`;
     if (Object.keys(branchDetails).length > 0) {
@@ -586,7 +626,7 @@ const DailyOrdersPage = () => {
     return content;
   };
 
-  const exportTable = (format) => {
+  const exportTable = (format: 'excel' | 'pdf') => {
     const headers = [
       isRtl ? 'رقم' : 'No.',
       isRtl ? 'الكود' : 'Code',
@@ -640,8 +680,18 @@ const DailyOrdersPage = () => {
         toastId: 'excel-export',
       });
       try {
-        const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
-        if (isRtl) ws['!views'] = [{ RTL: true }];
+        const sheetData = isRtl ? rows.map(row => {
+          const reversedRow = {};
+          const entries = Object.entries(row).reverse();
+          entries.forEach(([key, value]) => {
+            reversedRow[key] = value;
+          });
+          return reversedRow;
+        }) : rows;
+        const ws = XLSX.utils.json_to_sheet(sheetData, { header: isRtl ? headers.slice().reverse() : headers });
+        if (isRtl) {
+          ws['!views'] = [{ RTL: true }];
+        }
         ws['!cols'] = [
           { wch: 5 },
           { wch: 15 },
@@ -653,6 +703,7 @@ const DailyOrdersPage = () => {
           { wch: 15 },
           { wch: 15 },
         ];
+        ws['!rows'] = Array(rows.length + 1).fill({ hpt: 15 });
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, `Orders_${monthName}`);
         XLSX.writeFile(wb, generateFileName('Orders', monthName, isRtl, 'xlsx'));
@@ -698,15 +749,23 @@ const DailyOrdersPage = () => {
   }
 
   return (
-    <div className={`min-h-screen px-6 py-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-100`}>
-      <div className="mb-8 bg-white shadow-md rounded-xl p-6 border border-gray-200">
-        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 ${isRtl ? 'flex-row-reverse' : ''}`}>
-          <h2 className="text-xl font-bold text-gray-800">{isRtl ? 'تقرير الطلبات اليومية' : 'Daily Orders Report'} - {monthName}</h2>
-          <div className="flex gap-3">
+    <div className={`min-h-screen px-4 py-6 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-100`}>
+      <div className="mb-6 bg-white shadow-md rounded-xl p-4 border border-gray-200">
+        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <h2 className="text-lg font-bold text-gray-800">{isRtl ? 'تقرير الطلبات اليومية' : 'Daily Orders Report'} - {monthName}</h2>
+          <div className="flex gap-2 items-center">
+            <ProductDropdown
+              value={selectedMonth}
+              onChange={setSelectedMonth}
+              options={months}
+              ariaLabel={isRtl ? 'اختر الشهر' : 'Select month'}
+              className="w-40"
+            />
             <Button
               variant={filteredData.length > 0 ? 'primary' : 'secondary'}
               onClick={filteredData.length > 0 ? () => exportTable('excel') : undefined}
               disabled={filteredData.length === 0}
+              className="bg-green-600 hover:bg-green-700 text-white"
             >
               <Upload className="w-4 h-4" />
               {isRtl ? 'تصدير إكسل' : 'Export Excel'}
@@ -715,52 +774,48 @@ const DailyOrdersPage = () => {
               variant={filteredData.length > 0 ? 'primary' : 'secondary'}
               onClick={filteredData.length > 0 ? () => exportTable('pdf') : undefined}
               disabled={filteredData.length === 0}
-              className={filteredData.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white' : ''}
+              className="bg-green-600 hover:bg-green-700 text-white"
             >
               <Upload className="w-4 h-4" />
               {isRtl ? 'تصدير PDF' : 'Export PDF'}
             </Button>
           </div>
         </div>
-        <div className={`grid grid-cols-1 md:grid-cols-4 gap-4 items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
           <ProductSearchInput
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder={isRtl ? 'بحث حسب المنتج' : 'Search by product'}
             ariaLabel={isRtl ? 'بحث المنتج' : 'Product search'}
-            className="md:col-span-2 max-w-none"
-          />
-          <ProductDropdown
-            value={selectedMonth}
-            onChange={setSelectedMonth}
-            options={months}
-            ariaLabel={isRtl ? 'اختر الشهر' : 'Select month'}
+            className="md:col-span-1 max-w-none"
           />
           <ProductDropdown
             value={selectedBranch}
             onChange={setSelectedBranch}
             options={branchOptions}
             ariaLabel={isRtl ? 'اختر الفرع' : 'Select branch'}
+            className="md:col-span-1"
           />
           <ProductDropdown
             value={selectedPeriod}
             onChange={setSelectedPeriod}
             options={periodOptions}
             ariaLabel={isRtl ? 'اختر الفترة' : 'Select period'}
+            className="md:col-span-1"
           />
           {selectedPeriod === 'custom' && (
-            <div className="col-span-1 md:col-span-4 flex flex-col sm:flex-row gap-4">
+            <div className="col-span-1 md:col-span-3 flex flex-col sm:flex-row gap-4">
               <input
                 type="date"
                 value={customStart}
                 onChange={(e) => setCustomStart(e.target.value)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
               />
               <input
                 type="date"
                 value={customEnd}
                 onChange={(e) => setCustomEnd(e.target.value)}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
               />
             </div>
           )}
@@ -775,25 +830,25 @@ const DailyOrdersPage = () => {
         <table className="min-w-full divide-y divide-gray-200 text-xs">
           <thead className="bg-amber-50 sticky top-0 z-10">
             <tr className={isRtl ? 'flex-row-reverse' : ''}>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[50px]">{isRtl ? 'رقم' : 'No.'}</th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'الكود' : 'Code'}</th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[200px]">{isRtl ? 'المنتج' : 'Product'}</th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
+              <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
+              <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
+              <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[150px]">{isRtl ? 'المنتج' : 'Product'}</th>
+              <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
               {displayedDays.map((day, i) => (
-                <th key={i} className="px-2 py-3 font-semibold text-gray-700 text-center min-w-[60px]">
+                <th key={i} className="px-1 py-2 font-semibold text-gray-700 text-center min-w-[50px]">
                   {day}
                 </th>
               ))}
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">
+              <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
                 {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
               </th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">
+              <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
                 {isRtl ? 'المبيعات الفعلية' : 'Actual Sales'}
               </th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">
+              <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
                 {isRtl ? 'السعر الإجمالي' : 'Total Price'}
               </th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">
+              <th className="px-2 py-2 font-semibold text-gray-700 text-center min-w-[100px]">
                 {isRtl ? 'نسبة المبيعات %' : 'Sales Percentage %'}
               </th>
             </tr>
@@ -801,14 +856,14 @@ const DailyOrdersPage = () => {
           <tbody className="divide-y divide-gray-200">
             {filteredData.map((row, index) => (
               <tr key={row.id} className={`hover:bg-amber-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                <td className="px-4 py-3 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
-                <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
-                <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
-                <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
+                <td className="px-2 py-2 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
+                <td className="px-2 py-2 text-gray-700 text-center truncate">{row.code}</td>
+                <td className="px-2 py-2 text-gray-700 text-center truncate">{row.product}</td>
+                <td className="px-2 py-2 text-gray-700 text-center truncate">{row.unit}</td>
                 {row.displayedDailyQuantities.map((qty, i) => (
                   <td
                     key={i}
-                    className={`px-2 py-3 text-center font-medium ${
+                    className={`px-1 py-2 text-center font-medium ${
                       qty > 0 ? 'bg-green-50 text-green-700' : qty < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
                     }`}
                     data-tooltip-id="order-tooltip"
@@ -817,25 +872,25 @@ const DailyOrdersPage = () => {
                     {qty !== 0 ? `${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}` : '-'}
                   </td>
                 ))}
-                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalQuantity, isRtl)}</td>
-                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.actualSales, isRtl)}</td>
-                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.displayedTotalPrice, isRtl)}</td>
-                <td className="px-4 py-3 text-gray-700 text-center font-medium">
+                <td className="px-2 py-2 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalQuantity, isRtl)}</td>
+                <td className="px-2 py-2 text-gray-700 text-center font-medium">{formatNumber(row.actualSales, isRtl)}</td>
+                <td className="px-2 py-2 text-gray-700 text-center font-medium">{formatPrice(row.displayedTotalPrice, isRtl)}</td>
+                <td className="px-2 py-2 text-gray-700 text-center font-medium">
                   {formatNumber(row.displayedTotalQuantity > 0 ? ((row.actualSales / row.displayedTotalQuantity) * 100).toFixed(2) : '0.00', isRtl)}%
                 </td>
               </tr>
             ))}
             <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
-              <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
+              <td className="px-2 py-2 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
               {displayedDays.map((_, i) => (
-                <td key={i} className="px-2 py-3 text-gray-800 text-center">
+                <td key={i} className="px-1 py-2 text-gray-800 text-center">
                   {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyQuantities[i], 0), isRtl)}
                 </td>
               ))}
-              <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
-              <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandActualSales, isRtl)}</td>
-              <td className="px-4 py-3 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
-              <td className="px-4 py-3 text-gray-800 text-center">
+              <td className="px-2 py-2 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
+              <td className="px-2 py-2 text-gray-800 text-center">{formatNumber(grandActualSales, isRtl)}</td>
+              <td className="px-2 py-2 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
+              <td className="px-2 py-2 text-gray-800 text-center">
                 {formatNumber(grandTotalQuantity > 0 ? ((grandActualSales / grandTotalQuantity) * 100).toFixed(2) : '0.00', isRtl)}%
               </td>
             </tr>
