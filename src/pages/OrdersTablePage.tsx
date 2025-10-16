@@ -270,7 +270,7 @@ const generatePDFTable = (
     columnStyles[i] = {
       cellWidth: 'auto',
       minCellWidth: 5,
-      halign: isRtl ? 'right' : 'left',
+      halign: 'center',
     };
   });
 
@@ -286,14 +286,14 @@ const generatePDFTable = (
       fillColor: [245, 158, 11],
       textColor: [255, 255, 255],
       fontSize: fontSizeHead,
-      halign: isRtl ? 'right' : 'left',
+      halign: 'center',
       font: fontLoaded ? fontName : 'helvetica',
       fontStyle: 'bold',
       cellPadding,
     },
     bodyStyles: {
       fontSize: fontSizeBody,
-      halign: isRtl ? 'right' : 'left',
+      halign: 'center',
       font: fontLoaded ? fontName : 'helvetica',
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
@@ -680,15 +680,7 @@ const DailyOrdersPage: React.FC = () => {
         toastId: 'excel-export',
       });
       try {
-        const sheetData = isRtl ? rows.map(row => {
-          const reversedRow = {};
-          const entries = Object.entries(row).reverse();
-          entries.forEach(([key, value]) => {
-            reversedRow[key] = value;
-          });
-          return reversedRow;
-        }) : rows;
-        const ws = XLSX.utils.json_to_sheet(sheetData, { header: isRtl ? headers.slice().reverse() : headers });
+        const ws = XLSX.utils.json_to_sheet(rows, { header: headers });
         if (isRtl) {
           ws['!views'] = [{ RTL: true }];
         }
@@ -704,6 +696,36 @@ const DailyOrdersPage: React.FC = () => {
           { wch: 15 },
         ];
         ws['!rows'] = Array(rows.length + 1).fill({ hpt: 15 });
+        // Add styles
+        const amberColor = 'FFF59E0B'; // Amber ARGB
+        const whiteColor = 'FFFFFFFF';
+        const blackColor = 'FF000000';
+        for (let c = 0; c < headers.length; c++) {
+          const cell = XLSX.utils.encode_cell({ r: 0, c });
+          ws[cell].s = {
+            fill: { fgColor: { rgb: amberColor } },
+            font: { color: { rgb: whiteColor }, bold: true },
+            alignment: { horizontal: 'center' },
+          };
+        }
+        for (let r = 1; r <= rows.length; r++) {
+          for (let c = 0; c < headers.length; c++) {
+            const cell = XLSX.utils.encode_cell({ r: r - 1, c });
+            if (ws[cell]) {
+              ws[cell].s = {
+                alignment: { horizontal: 'center' },
+                font: { color: { rgb: blackColor } },
+              };
+            }
+          }
+        }
+        // Bold the total row
+        for (let c = 0; c < headers.length; c++) {
+          const cell = XLSX.utils.encode_cell({ r: rows.length, c });
+          if (ws[cell]) {
+            ws[cell].s.font.bold = true;
+          }
+        }
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, `Orders_${monthName}`);
         XLSX.writeFile(wb, generateFileName('Orders', monthName, isRtl, 'xlsx'));
@@ -741,7 +763,7 @@ const DailyOrdersPage: React.FC = () => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3 }}
-        className="text-center py-12 shadow-md rounded-xl border border-gray-200"
+        className="text-center py-8 bg-white shadow-md rounded-xl border "
       >
         <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>
       </motion.div>
@@ -751,7 +773,7 @@ const DailyOrdersPage: React.FC = () => {
   return (
     <div className={`min-h-screen px-4 py-8 `}>
       <div className="mb-6 bg-white shadow-md rounded-xl p-4 border border-gray-200">
-        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 `}>
+        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
           <h2 className="text-lg font-bold text-gray-800">{isRtl ? 'تقرير الطلبات اليومية' : 'Daily Orders Report'} - {monthName}</h2>
           <div className="flex gap-2 items-center">
             <ProductDropdown
@@ -765,7 +787,6 @@ const DailyOrdersPage: React.FC = () => {
               variant={filteredData.length > 0 ? 'primary' : 'secondary'}
               onClick={filteredData.length > 0 ? () => exportTable('excel') : undefined}
               disabled={filteredData.length === 0}
-              className="bg-green-600 hover:bg-green-700 text-white"
             >
               <Upload className="w-4 h-4" />
               {isRtl ? 'تصدير إكسل' : 'Export Excel'}
@@ -774,7 +795,6 @@ const DailyOrdersPage: React.FC = () => {
               variant={filteredData.length > 0 ? 'primary' : 'secondary'}
               onClick={filteredData.length > 0 ? () => exportTable('pdf') : undefined}
               disabled={filteredData.length === 0}
-              className="bg-green-600 hover:bg-green-700 text-white"
             >
               <Upload className="w-4 h-4" />
               {isRtl ? 'تصدير PDF' : 'Export PDF'}
