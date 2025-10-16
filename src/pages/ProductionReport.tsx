@@ -101,7 +101,7 @@ interface Branch {
 }
 
 const ProductionReport: React.FC = () => {
-  const { language } from useLanguage();
+  const { language } = useLanguage();
   const isRtl = language === 'ar';
   const { user } = useAuth();
   if (!user || (user.role !== 'admin' && user.role !== 'production')) {
