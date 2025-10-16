@@ -779,9 +779,10 @@ const DailyOrdersPage: React.FC = () => {
               variant={filteredData.length > 0 ? 'primary' : 'secondary'}
               onClick={filteredData.length > 0 ? () => exportTable('pdf') : undefined}
               disabled={filteredData.length === 0}
+              className="flex items-center gap-2"
             >
               <Upload className="w-4 h-4" />
-              {isRtl ? 'تصدير PDF' : 'Export PDF'}
+              {isRtl ? ' PDF' : ' PDF'}
             </Button>
           </div>
         </div>
