@@ -1,8 +1,8 @@
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Search, X, ChevronDown, Upload } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { motion } from 'framer-motion';
+import { Search, X, Upload } from 'lucide-react';
 import { useLanguage } from '../contexts/LanguageContext';
-import {useAuth} from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import { inventoryAPI, ordersAPI, branchesAPI, salesAPI } from '../services/api';
 import { toast } from 'react-toastify';
 import { Tooltip } from 'react-tooltip';
@@ -41,7 +41,8 @@ const ProductSearchInput: React.FC<{
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder: string;
   ariaLabel: string;
-}> = ({ value, onChange, placeholder, ariaLabel }) => {
+  className?: string;
+}> = ({ value, onChange, placeholder, ariaLabel, className }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
 
@@ -50,7 +51,7 @@ const ProductSearchInput: React.FC<{
   };
 
   return (
-    <div className="relative group w-full max-w-xs">
+    <div className={`relative group w-full ${className}`}>
       <motion.div
         className={`absolute inset-y-0 ${isRtl ? 'right-3 pr-3' : 'left-3 pl-3'} flex items-center text-gray-400 transition-colors group-focus-within:text-blue-500`}
         initial={false}
@@ -82,10 +83,6 @@ const ProductSearchInput: React.FC<{
     </div>
   );
 };
-
-// ProductSearchInput component
-
-
 
 // Utility functions
 const toArabicNumerals = (number: string | number): string => {
@@ -146,10 +143,6 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
     return true;
   } catch (error) {
     console.error('Font loading error:', error);
-    toast.error(isRtl ? 'فشل في تحميل خط Amiri، يتم استخدام الخط الافتراضي' : 'Failed to load Amiri font, using default', {
-      position: isRtl ? 'top-left' : 'top-right',
-      autoClose: 3000,
-    });
     return false;
   }
 };
@@ -182,7 +175,7 @@ const generatePDFHeader = (
     : `Total Products: ${totalItems} | Total Quantity: ${totalQuantity} units | Total Amount: ${formatPrice(totalPrice, isRtl, true)}`;
   doc.text(stats, isRtl ? pageWidth - 20 : 20, 20, { align: isRtl ? 'right' : 'left' });
   doc.setLineWidth(0.5);
-  doc.setDrawColor(33, 150, 243); // Blue color to match table header
+  doc.setDrawColor(33, 150, 243);
   doc.line(20, 25, pageWidth - 20, 25);
   const pageCount = doc.getNumberOfPages();
   const currentDate = new Date().toLocaleDateString(isRtl ? 'ar-SA' : 'en-US', {
@@ -215,7 +208,7 @@ const generatePDFTable = (
     if (index === 1) return 25; // Code
     if (index === 2) return 45; // Product
     if (index === 3) return 25; // Unit
-    if (index >= 4 && index < headers.length - 2) return 20; // Daily Quantities
+    if (index >= 4 && index < headers.length - 3) return 20; // Daily Quantities
     return 30; // Total Quantity, Actual Sales, Total Price, Sales Percentage
   });
   autoTable(doc, {
@@ -226,20 +219,20 @@ const generatePDFTable = (
     margin: { top: 10, bottom: 10, left: 10, right: 10 },
     tableWidth: 'wrap',
     columnStyles: Object.fromEntries(
-      headers.map((_, i) => [i, { cellWidth: tableColumnWidths[i], halign: 'center' }])
+      headers.map((_, i) => [i, { cellWidth: tableColumnWidths[i], halign: isRtl ? 'right' : 'left' }])
     ),
     headStyles: {
-      fillColor: [33, 150, 243], // Blue-500 to match table header
+      fillColor: [33, 150, 243],
       textColor: [255, 255, 255],
       fontSize: 9,
-      halign: 'center',
+      halign: isRtl ? 'right' : 'left',
       font: fontLoaded ? fontName : 'helvetica',
       fontStyle: 'bold',
       cellPadding: 3,
     },
     bodyStyles: {
       fontSize: 8,
-      halign: 'center',
+      halign: isRtl ? 'right' : 'left',
       font: fontLoaded ? fontName : 'helvetica',
       textColor: [33, 33, 33],
       lineColor: [200, 200, 200],
@@ -248,7 +241,7 @@ const generatePDFTable = (
     },
     alternateRowStyles: { fillColor: [245, 245, 245] },
     didParseCell: (data) => {
-      if (data.section === 'body' && data.column.index >= (isRtl ? 0 : headers.length - 2)) {
+      if (data.section === 'body' && data.column.index >= (isRtl ? 0 : headers.length - 4)) {
         data.cell.styles.fontStyle = 'bold';
       }
       if (isRtl) {
@@ -336,17 +329,20 @@ const DailyOrdersPage: React.FC = () => {
   const [customStart, setCustomStart] = useState('');
   const [customEnd, setCustomEnd] = useState('');
 
-  const months = Array.from({ length: 12 }, (_, i) => ({
-    value: i,
+  const months = useMemo(() => Array.from({ length: 12 }, (_, i) => ({
+    value: i.toString(),
     label: new Date(currentYear, i).toLocaleString(language, { month: 'long' }),
-  }));
-  const monthName = months[selectedMonth].label;
+  })), [currentYear, language]);
+
+  const monthName = useMemo(() => months[selectedMonth]?.label || '', [months, selectedMonth]);
+
   const daysInMonth = useMemo(() => {
     const daysInMonthCount = new Date(currentYear, selectedMonth + 1, 0).getDate();
     return Array.from({ length: daysInMonthCount }, (_, i) => {
       return new Date(currentYear, selectedMonth, i + 1).toLocaleString(language, { day: 'numeric', month: 'short' });
     });
   }, [selectedMonth, language, currentYear]);
+
   const daysInMonthCount = daysInMonth.length;
 
   const allBranches = useMemo(() => branches.map(b => b.displayName).sort(), [branches]);
@@ -379,156 +375,157 @@ const DailyOrdersPage: React.FC = () => {
     return { startDay: s, endDay: e };
   }, [selectedPeriod, customStart, customEnd, daysInMonthCount]);
 
-  const displayedDays = daysInMonth.slice(startDay - 1, endDay);
+  const displayedDays = useMemo(() => daysInMonth.slice(startDay - 1, endDay), [daysInMonth, startDay, endDay]);
+
+  const fetchData = useCallback(async () => {
+    if (!user || (user.role !== 'admin' && user.role !== 'production')) {
+      toast.error(isRtl ? 'لا يوجد صلاحية' : 'No access', {
+        position: isRtl ? 'top-left' : 'top-right',
+        autoClose: 3000,
+      });
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const [inventory, ordersResponse, branchesResponse, salesResponse] = await Promise.all([
+        inventoryAPI.getInventory({}, isRtl),
+        ordersAPI.getAll({ page: 1, limit: 10000 }, isRtl),
+        branchesAPI.getAll(),
+        salesAPI.getAnalytics({
+          startDate: new Date(currentYear, selectedMonth, 1).toISOString(),
+          endDate: new Date(currentYear, selectedMonth + 1, 0).toISOString(),
+          lang: language,
+        }),
+      ]);
+      const monthlyOrderData: { [month: number]: OrderRow[] } = {};
+      const fetchedBranches = branchesResponse
+        .filter((branch: any) => branch && branch._id)
+        .map((branch: any) => ({
+          _id: branch._id,
+          name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
+          nameEn: branch.nameEn || branch.name,
+          displayName: isRtl ? branch.name : branch.nameEn || branch.name,
+        }))
+        .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language));
+      setBranches(fetchedBranches);
+      const branchMap = new Map<string, string>(fetchedBranches.map(b => [b._id, b.displayName]));
+      const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
+      inventory.forEach((item: any) => {
+        if (item?.product?._id) {
+          productDetails.set(item.product._id, {
+            code: item.product.code || `code-${Math.random().toString(36).substring(2)}`,
+            product: isRtl ? (item.product.name || 'منتج غير معروف') : (item.product.nameEn || item.product.name || 'Unknown Product'),
+            unit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
+            price: Number(item.product.price) || 0,
+          });
+        }
+      });
+      let orders = Array.isArray(ordersResponse) ? ordersResponse : (ordersResponse?.data || []);
+      if (orders.length === 0) {
+        toast.warn(isRtl ? 'لا توجد طلبات، استخدام بيانات احتياطية' : 'No orders found, using fallback data', {
+          position: isRtl ? 'top-left' : 'top-right',
+          autoClose: 3000,
+        });
+        orders = inventory
+          .filter((item: any) => item?.product?._id)
+          .flatMap((item: any) => {
+            return (item.movements || []).map((movement: any) => ({
+              status: 'completed',
+              createdAt: movement.createdAt || new Date().toISOString(),
+              branch: {
+                _id: fetchedBranches[Math.floor(Math.random() * fetchedBranches.length)]?._id,
+              },
+              items: [
+                {
+                  product: {
+                    _id: item.product._id,
+                    name: item.product.name,
+                    nameEn: item.product.nameEn,
+                    code: item.product.code,
+                    unit: item.product.unit,
+                    unitEn: item.product.unitEn,
+                    price: item.product.price,
+                  },
+                  quantity: Math.abs(Number(movement.quantity) || 0),
+                  price: Number(item.product?.price) || 0,
+                  productId: item.product._id,
+                  unit: isRtl ? (item.product?.unit || 'غير محدد') : (item.product?.unitEn || item.product?.unit || 'N/A'),
+                  sales: Number(item.product?.sales) || (Math.abs(Number(movement.quantity)) * Number(item.product?.price) * 0.1) || 0,
+                },
+              ],
+            }));
+          });
+      }
+      for (let month = 0; month < 12; month++) {
+        const daysInMonthCount = new Date(currentYear, month + 1, 0).getDate();
+        const orderMap = new Map<string, OrderRow>();
+        orders.forEach((order: any) => {
+          const date = new Date(order.createdAt || order.date);
+          if (isNaN(date.getTime())) return;
+          const orderMonth = date.getMonth();
+          const year = date.getFullYear();
+          if (year === currentYear && orderMonth === month) {
+            const day = date.getDate() - 1;
+            const branchId = order.branch?._id || order.branch || order.branchId;
+            const branch = branchMap.get(branchId) || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
+            (order.items || []).forEach((item: any) => {
+              const productId = item.product?._id || item.productId;
+              if (!productId) return;
+              const details = productDetails.get(productId) || {
+                code: item.product?.code || `code-${Math.random().toString(36).substring(2)}`,
+                product: isRtl ? (item.product?.name || 'منتج غير معروف') : (item.product?.nameEn || item.product?.name || 'Unknown Product'),
+                unit: isRtl ? (item.product?.unit || 'غير محدد') : (item.product?.unitEn || item.product?.unit || 'N/A'),
+                price: Number(item.price) || 0,
+              };
+              const key = `${productId}-${month}`;
+              if (!orderMap.has(key)) {
+                orderMap.set(key, {
+                  id: key,
+                  code: details.code,
+                  product: details.product,
+                  unit: details.unit,
+                  totalQuantity: 0,
+                  dailyQuantities: Array(daysInMonthCount).fill(0),
+                  dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
+                  totalPrice: 0,
+                  actualSales: 0,
+                });
+              }
+              const row = orderMap.get(key)!;
+              const quantity = Number(item.quantity) || 0;
+              row.dailyQuantities[day] += quantity;
+              row.dailyBranchDetails[day][branch] = (row.dailyBranchDetails[day][branch] || 0) + quantity;
+              row.totalQuantity += quantity;
+              row.totalPrice += quantity * details.price;
+            });
+          }
+        });
+        if (month === selectedMonth) {
+          for (const row of orderMap.values()) {
+            const salesItem = salesResponse.productSales?.find((s: any) => s.productId === row.id.split('-')[0]);
+            if (salesItem) {
+              row.actualSales = Number(salesItem.totalQuantity) || 0;
+            }
+          }
+        }
+        monthlyOrderData[month] = Array.from(orderMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity);
+      }
+      setOrderData(monthlyOrderData);
+    } catch (error) {
+      console.error('Failed to fetch data:', error);
+      toast.error(isRtl ? 'فشل في جلب البيانات' : 'Failed to fetch data', {
+        position: isRtl ? 'top-left' : 'top-right',
+        autoClose: 3000,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [isRtl, currentYear, selectedMonth, language, user]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      if (!user || (user.role !== 'admin' && user.role !== 'production')) {
-        toast.error(isRtl ? 'لا يوجد صلاحية' : 'No access', {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        });
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      try {
-        const [inventory, ordersResponse, branchesResponse, salesResponse] = await Promise.all([
-          inventoryAPI.getInventory({}, isRtl),
-          ordersAPI.getAll({ page: 1, limit: 10000 }, isRtl),
-          branchesAPI.getAll(),
-          salesAPI.getAnalytics({
-            startDate: new Date(currentYear, selectedMonth, 1).toISOString(),
-            endDate: new Date(currentYear, selectedMonth + 1, 0).toISOString(),
-            lang: language,
-          }),
-        ]);
-        const monthlyOrderData: { [month: number]: OrderRow[] } = {};
-        const fetchedBranches = branchesResponse
-          .filter((branch: any) => branch && branch._id)
-          .map((branch: any) => ({
-            _id: branch._id,
-            name: branch.name || (isRtl ? 'غير معروف' : 'Unknown'),
-            nameEn: branch.nameEn || branch.name,
-            displayName: isRtl ? branch.name : branch.nameEn || branch.name,
-          }))
-          .sort((a: Branch, b: Branch) => a.displayName.localeCompare(b.displayName, language));
-        setBranches(fetchedBranches);
-        const branchMap = new Map<string, string>(fetchedBranches.map(b => [b._id, b.displayName]));
-        const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
-        inventory.forEach((item: any) => {
-          if (item?.product?._id) {
-            productDetails.set(item.product._id, {
-              code: item.product.code || `code-${Math.random().toString(36).substring(2)}`,
-              product: isRtl ? (item.product.name || 'منتج غير معروف') : (item.product.nameEn || item.product.name || 'Unknown Product'),
-              unit: isRtl ? (item.product.unit || 'غير محدد') : (item.product.unitEn || item.product.unit || 'N/A'),
-              price: Number(item.product.price) || 0,
-            });
-          }
-        });
-        let orders = Array.isArray(ordersResponse) ? ordersResponse : [];
-        if (orders.length === 0) {
-          toast.warn(isRtl ? 'لا توجد طلبات، استخدام بيانات احتياطية' : 'No orders found, using fallback data', {
-            position: isRtl ? 'top-left' : 'top-right',
-            autoClose: 3000,
-          });
-          orders = inventory
-            .filter((item: any) => item?.product?._id)
-            .flatMap((item: any) => {
-              return (item.movements || []).map((movement: any) => ({
-                status: 'completed',
-                createdAt: movement.createdAt || new Date().toISOString(),
-                branch: {
-                  _id: fetchedBranches[Math.floor(Math.random() * fetchedBranches.length)]?._id,
-                },
-                items: [
-                  {
-                    product: {
-                      _id: item.product._id,
-                      name: item.product.name,
-                      nameEn: item.product.nameEn,
-                      code: item.product.code,
-                      unit: item.product.unit,
-                      unitEn: item.product.unitEn,
-                      price: item.product.price,
-                    },
-                    quantity: Math.abs(Number(movement.quantity) || 0),
-                    price: Number(item.product?.price) || 0,
-                    productId: item.product._id,
-                    unit: isRtl ? (item.product?.unit || 'غير محدد') : (item.product?.unitEn || item.product?.unit || 'N/A'),
-                    sales: Number(item.product?.sales) || (Math.abs(Number(movement.quantity)) * Number(item.product?.price) * 0.1) || 0,
-                  },
-                ],
-              }));
-            });
-        }
-        for (let month = 0; month < 12; month++) {
-          const daysInMonthCount = new Date(currentYear, month + 1, 0).getDate();
-          const orderMap = new Map<string, OrderRow>();
-          orders.forEach((order: any) => {
-            const date = new Date(order.createdAt || order.date);
-            if (isNaN(date.getTime())) return;
-            const orderMonth = date.getMonth();
-            const year = date.getFullYear();
-            if (year === currentYear && orderMonth === month) {
-              const day = date.getDate() - 1;
-              const branchId = order.branch?._id || order.branch || order.branchId;
-              const branch = branchMap.get(branchId) || (isRtl ? 'الفرع الرئيسي' : 'Main Branch');
-              (order.items || []).forEach((item: any) => {
-                const productId = item.product?._id || item.productId;
-                if (!productId) return;
-                const details = productDetails.get(productId) || {
-                  code: item.product?.code || `code-${Math.random().toString(36).substring(2)}`,
-                  product: isRtl ? (item.product?.name || 'منتج غير معروف') : (item.product?.nameEn || item.product?.name || 'Unknown Product'),
-                  unit: isRtl ? (item.product?.unit || 'غير محدد') : (item.product?.unitEn || item.product?.unit || 'N/A'),
-                  price: Number(item.price) || 0,
-                };
-                const key = `${productId}-${month}`;
-                if (!orderMap.has(key)) {
-                  orderMap.set(key, {
-                    id: key,
-                    code: details.code,
-                    product: details.product,
-                    unit: details.unit,
-                    totalQuantity: 0,
-                    dailyQuantities: Array(daysInMonthCount).fill(0),
-                    dailyBranchDetails: Array.from({ length: daysInMonthCount }, () => ({})),
-                    totalPrice: 0,
-                    actualSales: 0,
-                  });
-                }
-                const row = orderMap.get(key)!;
-                const quantity = Number(item.quantity) || 0;
-                row.dailyQuantities[day] += quantity;
-                row.dailyBranchDetails[day][branch] = (row.dailyBranchDetails[day][branch] || 0) + quantity;
-                row.totalQuantity += quantity;
-                row.totalPrice += quantity * details.price;
-              });
-            }
-          });
-          if (month === selectedMonth) {
-            for (const row of orderMap.values()) {
-              const salesItem = salesResponse.productSales?.find((s: any) => s.productId === row.id.split('-')[0]);
-              if (salesItem) {
-                row.actualSales = Number(salesItem.totalQuantity) || 0;
-              }
-            }
-          }
-          monthlyOrderData[month] = Array.from(orderMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity);
-        }
-        setOrderData(monthlyOrderData);
-      } catch (error) {
-        console.error('Failed to fetch data:', error);
-        toast.error(isRtl ? 'فشل في جلب البيانات' : 'Failed to fetch data', {
-          position: isRtl ? 'top-left' : 'top-right',
-          autoClose: 3000,
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchData();
-  }, [isRtl, currentYear, selectedMonth, language, user]);
+  }, [fetchData]);
 
   const filteredData = useMemo(() => {
     const data = orderData[selectedMonth] || [];
@@ -552,15 +549,18 @@ const DailyOrdersPage: React.FC = () => {
       }).sort((a, b) => b.displayedTotalQuantity - a.displayedTotalQuantity);
   }, [orderData, selectedMonth, searchTerm, selectedBranch, startDay, endDay]);
 
-  const grandTotalQuantity = filteredData.reduce((sum, row) => sum + row.displayedTotalQuantity, 0);
-  const grandTotalPrice = filteredData.reduce((sum, row) => sum + row.displayedTotalPrice, 0);
-  const grandActualSales = filteredData.reduce((sum, row) => sum + row.actualSales, 0);
+  const grandTotalQuantity = useMemo(() => filteredData.reduce((sum, row) => sum + row.displayedTotalQuantity, 0), [filteredData]);
+  const grandTotalPrice = useMemo(() => filteredData.reduce((sum, row) => sum + row.displayedTotalPrice, 0), [filteredData]);
+  const grandActualSales = useMemo(() => filteredData.reduce((sum, row) => sum + row.actualSales, 0), [filteredData]);
 
   const getTooltipContent = (dailyQuantity: number, branchDetails: { [branch: string]: number }, isRtl: boolean) => {
     let header = isRtl ? 'طلبات' : 'Orders';
     let content = `${header}: ${dailyQuantity > 0 ? '+' : ''}${formatNumber(dailyQuantity, isRtl)}`;
     if (Object.keys(branchDetails).length > 0) {
-      content += '\n' + Object.entries(branchDetails).map(([branch, qty]) => `${branch}: ${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}`).join('\n');
+      content += '\n' + Object.entries(branchDetails)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([branch, qty]) => `${branch}: ${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}`)
+        .join('\n');
     }
     return content;
   };
@@ -622,11 +622,11 @@ const DailyOrdersPage: React.FC = () => {
         const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
         if (isRtl) ws['!views'] = [{ RTL: true }];
         ws['!cols'] = [
-          { wch: 10 }, // No.
+          { wch: 5 }, // No.
           { wch: 15 }, // Code
-          { wch: 20 }, // Product
+          { wch: 30 }, // Product
           { wch: 15 }, // Unit
-          ...displayedDays.map(() => ({ wch: 12 })), // Daily Quantities
+          ...displayedDays.map(() => ({ wch: 10 })), // Daily Quantities
           { wch: 15 }, // Total Quantity
           { wch: 15 }, // Actual Sales
           { wch: 15 }, // Total Price
@@ -678,24 +678,10 @@ const DailyOrdersPage: React.FC = () => {
 
   return (
     <div className={`min-h-screen px-6 py-8 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-100`}>
-      <div className="mb-8 bg-white shadow-md rounded-xl p-4 border border-gray-200">
-        <div className="flex flex-wrap gap-2 mb-4 justify-center">
-          {months.map(month => (
-            <Button
-              key={month.value}
-              variant={selectedMonth === month.value ? 'primary' : 'secondary'}
-              onClick={() => setSelectedMonth(month.value)}
-              className={`px-4 py-2 rounded-full text-xs font-medium transition-all duration-200 ${
-                selectedMonth === month.value ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-              }`}
-            >
-              {month.label}
-            </Button>
-          ))}
-        </div>
-        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-          <h2 className="text-lg font-semibold text-gray-800">{isRtl ? 'تقرير الطلبات اليومية' : 'Daily Orders Report'} - {monthName}</h2>
-          <div className="flex gap-2">
+      <div className="mb-8 bg-white shadow-md rounded-xl p-6 border border-gray-200">
+        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <h2 className="text-xl font-bold text-gray-800">{isRtl ? 'تقرير الطلبات اليومية' : 'Daily Orders Report'} - {monthName}</h2>
+          <div className="flex gap-3">
             <Button
               variant={filteredData.length > 0 ? 'primary' : 'secondary'}
               onClick={filteredData.length > 0 ? () => exportTable('excel') : undefined}
@@ -715,12 +701,19 @@ const DailyOrdersPage: React.FC = () => {
             </Button>
           </div>
         </div>
-        <div className={`flex flex-wrap gap-4 mt-4 items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <div className={`grid grid-cols-1 md:grid-cols-4 gap-4 items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
           <ProductSearchInput
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder={isRtl ? 'بحث حسب المنتج' : 'Search by product'}
             ariaLabel={isRtl ? 'بحث المنتج' : 'Product search'}
+            className="md:col-span-2 max-w-none"
+          />
+          <ProductDropdown
+            value={selectedMonth.toString()}
+            onChange={(value) => setSelectedMonth(parseInt(value))}
+            options={months}
+            ariaLabel={isRtl ? 'اختر الشهر' : 'Select month'}
           />
           <ProductDropdown
             value={selectedBranch}
@@ -735,20 +728,20 @@ const DailyOrdersPage: React.FC = () => {
             ariaLabel={isRtl ? 'اختر الفترة' : 'Select period'}
           />
           {selectedPeriod === 'custom' && (
-            <>
+            <div className="col-span-1 md:col-span-4 flex flex-col sm:flex-row gap-4">
               <input
                 type="date"
                 value={customStart}
                 onChange={(e) => setCustomStart(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
               />
               <input
                 type="date"
                 value={customEnd}
                 onChange={(e) => setCustomEnd(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-300 bg-white shadow-sm hover:shadow-md text-xs"
               />
-            </>
+            </div>
           )}
         </div>
       </div>
@@ -761,25 +754,25 @@ const DailyOrdersPage: React.FC = () => {
         <table className="min-w-full divide-y divide-gray-200 text-xs">
           <thead className="bg-blue-50 sticky top-0 z-10">
             <tr className={isRtl ? 'flex-row-reverse' : ''}>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[40px]">{isRtl ? 'رقم' : 'No.'}</th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[50px]">{isRtl ? 'رقم' : 'No.'}</th>
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'الكود' : 'Code'}</th>
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[200px]">{isRtl ? 'المنتج' : 'Product'}</th>
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
               {displayedDays.map((day, i) => (
                 <th key={i} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
                   {day}
                 </th>
               ))}
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">
                 {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
               </th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">
                 {isRtl ? 'المبيعات الفعلية' : 'Actual Sales'}
               </th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">
                 {isRtl ? 'السعر الإجمالي' : 'Total Price'}
               </th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">
                 {isRtl ? 'نسبة المبيعات %' : 'Sales Percentage %'}
               </th>
             </tr>
@@ -830,7 +823,7 @@ const DailyOrdersPage: React.FC = () => {
         <Tooltip
           id="order-tooltip"
           place="top"
-          className="custom-tooltip whitespace-pre-line z-[100] shadow-lg bg-white border border-gray-200 rounded-lg p-2 max-w-xs text-xs"
+          className="custom-tooltip whitespace-pre-line z-[9999] shadow-xl bg-white border border-gray-300 rounded-md p-3 max-w-sm text-xs text-gray-800 font-medium"
         />
       </motion.div>
     </div>
