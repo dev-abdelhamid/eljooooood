@@ -35,7 +35,7 @@ const Button: React.FC<{
 };
 
 // ProductSearchInput component
-const ProductSearchInput: React.FC<{
+export const ProductSearchInput: React.FC<{
   value: string;
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   placeholder: string;
@@ -84,7 +84,7 @@ const ProductSearchInput: React.FC<{
 };
 
 // ProductDropdown component with close on outside click
-const ProductDropdown: React.FC<{
+export const ProductDropdown: React.FC<{
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];

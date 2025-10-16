@@ -4,9 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { Card } from '../components/UI/Card';
 import { Button } from '../components/UI/Button';
-import { Select } from '../components/UI/Select';
-import { Input } from '../components/UI/Input';
-import { ShoppingCart, AlertCircle, Search, Table2, Grid, Download } from 'lucide-react';
+import { ShoppingCart, AlertCircle, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import * as XLSX from 'xlsx';
@@ -21,8 +19,7 @@ import Pagination from '../components/Shared/Pagination';
 import AssignChefsModal from '../components/Shared/AssignChefsModal';
 import  OrderTable  from '../components/Shared/OrderTable';
 import OrderCard from '../components/Shared/OrderCard';
-
-
+import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 
 // Normalize text for search
 const normalizeText = (text: string) => {
@@ -328,7 +325,7 @@ export const Orders: React.FC = () => {
         }, 0);
         return sum + returnTotal;
       }, 0);
-    const adjusted = (order.adjustedTotal || order.totalAmount || 0) - approvedReturnsTotal;
+    const adjusted = (order.totalAmount || 0) - approvedReturnsTotal;
     return adjusted.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
       style: 'currency',
       currency: 'SAR',
@@ -444,16 +441,16 @@ export const Orders: React.FC = () => {
           : [],
         status: order.status || 'pending',
         totalAmount: Number(order.totalAmount) || 0,
-        adjustedTotal: Number(order.adjustedTotal) || 0,
+        adjustedTotal: Number(order.totalAmount) || 0,
         date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
-        requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : undefined,
+        requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : null,
         notes: order.notes || '',
         priority: order.priority || 'medium',
         createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
         approvedBy: order.approvedBy ? { _id: order.approvedBy._id, name: order.approvedBy.name || (isRtl ? 'غير معروف' : 'Unknown') } : undefined,
-        approvedAt: order.approvedAt ? new Date(order.approvedAt) : undefined,
-        deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : undefined,
-        transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : undefined,
+        approvedAt: order.approvedAt ? new Date(order.approvedAt) : null,
+        deliveredAt: order.deliveredAt ? new Date(order.deliveredAt) : null,
+        transitStartedAt: order.transitStartedAt ? new Date(order.transitStartedAt) : null,
         statusHistory: Array.isArray(order.statusHistory)
           ? order.statusHistory.map((history: any) => ({
               status: history.status || 'pending',
@@ -616,7 +613,7 @@ export const Orders: React.FC = () => {
               : [],
             status: order.status || 'pending',
             totalAmount: Number(order.totalAmount) || 0,
-            adjustedTotal: Number(order.adjustedTotal) || 0,
+            adjustedTotal: Number(order.totalAmount) || 0,
             date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
             requestedDeliveryDate: order.requestedDeliveryDate ? new Date(order.requestedDeliveryDate) : null,
             notes: order.notes || '',
@@ -883,7 +880,7 @@ export const Orders: React.FC = () => {
     <div className="px-2 py-4">
       <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: 'easeOut' }} className="mb-6">
-          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
             <div className="w-full sm:w-auto text-center sm:text-start">
               <h1 className="text-xl font-bold text-gray-900 flex items-center justify-center sm:justify-start gap-2">
                 <ShoppingCart className="w-5 h-5 text-amber-700" />
@@ -916,49 +913,48 @@ export const Orders: React.FC = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
-                <div className="relative">
-                  <Search className={`w-4 h-4 text-gray-500 absolute top-2 ${isRtl ? 'left-2' : 'right-2'}`} />
-                  <Input
-                    value={state.searchQuery}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleSearchChange(e.target.value)}
-                    placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
-                    className={`w-full ${isRtl ? 'pl-8' : 'pr-8'} rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200`}
-                    dir={isRtl ? 'rtl' : 'ltr'}
-                    lang={isRtl ? 'ar' : 'en'}
-                  />
-                </div>
+                <ProductSearchInput
+                  value={state.searchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
+                  ariaLabel={isRtl ? 'بحث' : 'Search'}
+                  className="w-full"
+                />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
-                <Select
+                <ProductDropdown
                   options={statusOptions.map(opt => ({
                     value: opt.value,
                     label: isRtl ? { '': 'كل الحالات', pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', in_transit: 'في النقل', delivered: 'تم التسليم', cancelled: 'ملغى' }[opt.value] : opt.label,
                   }))}
                   value={state.filterStatus}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
-                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
+                  ariaLabel={isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}
+                  className="w-full"
                 />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الفرع' : 'Filter by Branch'}</label>
-                <Select
+                <ProductDropdown
                   options={[{ value: '', label: isRtl ? 'جميع الفروع' : 'All Branches' }, ...state.branches.map(b => ({ value: b._id, label: b.displayName }))]}
                   value={state.filterBranch}
                   onChange={(value) => dispatch({ type: 'SET_FILTER_BRANCH', payload: value })}
-                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
+                  ariaLabel={isRtl ? 'تصفية حسب الفرع' : 'Filter by Branch'}
+                  className="w-full"
                 />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
-                <Select
+                <ProductDropdown
                   options={sortOptions.map(opt => ({
                     value: opt.value,
                     label: isRtl ? { date: 'التاريخ', totalAmount: 'إجمالي المبلغ', priority: 'الأولوية' }[opt.value] : opt.label,
                   }))}
                   value={state.sortBy}
                   onChange={(value) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
-                  className="w-full rounded-full border-gray-200 focus:ring-amber-500 text-xs shadow-sm transition-all duration-200"
+                  ariaLabel={isRtl ? 'ترتيب حسب' : 'Sort By'}
+                  className="w-full"
                 />
               </div>
             </div>
