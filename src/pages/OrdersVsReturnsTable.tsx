@@ -1,3 +1,4 @@
+// File 3: OrdersVsReturnsTable.tsx
 import React, { useState, useMemo, Fragment } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '../components/UI/Button';
@@ -485,32 +486,30 @@ const OrdersVsReturnsTable: React.FC<OrdersVsReturnsTableProps> = ({ data, title
                   <Fragment key={i}>
                     <td
                       className={`px-4 py-3 text-center font-medium ${
-                        row.displayedDailyOrders[i] > 0 ? 'bg-green-100 text-green-800' : 'text-gray-500'
+                        row.displayedDailyOrders[i] > 0 ? 'bg-green-50 text-green-700' : 'text-gray-700'
                       }`}
                       data-tooltip-id="orders-tooltip"
                       data-tooltip-content={getTooltipContent(row.displayedDailyOrders[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsOrders[i] : {}, isRtl, 'orders')}
                     >
-                      {row.displayedDailyOrders[i] !== 0 ? formatNumber(row.displayedDailyOrders[i], isRtl) : ''}
+                      {row.displayedDailyOrders[i] !== 0 ? formatNumber(row.displayedDailyOrders[i], isRtl) : '0'}
                     </td>
                     <td
                       className={`px-4 py-3 text-center font-medium ${
-                        row.displayedDailyReturns[i] > 0 ? 'bg-red-100 text-red-800' : 'text-gray-500'
+                        row.displayedDailyReturns[i] > 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
                       }`}
                       data-tooltip-id="returns-tooltip"
                       data-tooltip-content={getTooltipContent(row.displayedDailyReturns[i], selectedBranch === 'all' ? row.displayedDailyBranchDetailsReturns[i] : {}, isRtl, 'returns')}
                     >
-                      {row.displayedDailyReturns[i] !== 0 ? formatNumber(row.displayedDailyReturns[i], isRtl) : ''}
+                      {row.displayedDailyReturns[i] !== 0 ? formatNumber(row.displayedDailyReturns[i], isRtl) : '0'}
                     </td>
-                    <td className={`px-4 py-3 text-center font-medium ${
-                      row.displayedDailyOrders[i] > 0 && (row.displayedDailyReturns[i] / row.displayedDailyOrders[i] * 100) > 50 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-                    }`}>
-                      {row.displayedDailyOrders[i] > 0 ? formatNumber((row.displayedDailyReturns[i] / row.displayedDailyOrders[i] * 100).toFixed(2), isRtl) + '%' : ''} // فارغ إذا 0، تلوين بناءً على النسبة
+                    <td className="px-4 py-3 text-center font-medium text-blue-700">
+                      {row.displayedDailyOrders[i] > 0 ? formatNumber((row.displayedDailyReturns[i] / row.displayedDailyOrders[i] * 100).toFixed(2), isRtl) + '%' : '0.00%'}
                     </td>
                   </Fragment>
                 ))}
-                <td className="px-4 py-3 text-gray-700 text-center font-medium">{row.displayedTotalOrders !== 0 ? formatNumber(row.displayedTotalOrders, isRtl) : ''}</td>
-                <td className="px-4 py-3 text-gray-700 text-center font-medium">{row.displayedTotalReturns !== 0 ? formatNumber(row.displayedTotalReturns, isRtl) : ''}</td>
-                <td className="px-4 py-3 text-gray-700 text-center font-medium">{row.displayedTotalRatio !== 0 ? formatNumber(row.displayedTotalRatio.toFixed(2), isRtl) + '%' : ''}</td>
+                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalOrders, isRtl)}</td>
+                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalReturns, isRtl)}</td>
+                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalRatio.toFixed(2), isRtl)}%</td>
               </tr>
             ))}
             <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
@@ -518,24 +517,24 @@ const OrdersVsReturnsTable: React.FC<OrdersVsReturnsTableProps> = ({ data, title
               {displayedDays.map((_, i) => (
                 <Fragment key={i}>
                   <td className="px-4 py-3 text-gray-800 text-center">
-                    {filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0) !== 0 ? formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0), isRtl) : ''}
+                    {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0), isRtl)}
                   </td>
                   <td className="px-4 py-3 text-gray-800 text-center">
-                    {filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0) !== 0 ? formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0), isRtl) : ''}
+                    {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0), isRtl)}
                   </td>
                   <td className="px-4 py-3 text-gray-800 text-center">
                     {(() => {
                       const dailyOrdersTotal = filteredData.reduce((sum, row) => sum + row.displayedDailyOrders[i], 0);
                       const dailyReturnsTotal = filteredData.reduce((sum, row) => sum + row.displayedDailyReturns[i], 0);
                       const ratio = dailyOrdersTotal > 0 ? (dailyReturnsTotal / dailyOrdersTotal * 100).toFixed(2) : '0.00';
-                      return ratio !== '0.00' ? `${formatNumber(Number(ratio), isRtl)}%` : '';
+                      return `${formatNumber(Number(ratio), isRtl)}%`;
                     })()}
                   </td>
                 </Fragment>
               ))}
-              <td className="px-4 py-3 text-gray-800 text-center">{grandTotalOrders !== 0 ? formatNumber(grandTotalOrders, isRtl) : ''}</td>
-              <td className="px-4 py-3 text-gray-800 text-center">{grandTotalReturns !== 0 ? formatNumber(grandTotalReturns, isRtl) : ''}</td>
-              <td className="px-4 py-3 text-gray-800 text-center">{grandTotalRatio !== '0.00' ? grandTotalRatio + '%' : ''}</td>
+              <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalOrders, isRtl)}</td>
+              <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalReturns, isRtl)}</td>
+              <td className="px-4 py-3 text-gray-800 text-center">{grandTotalRatio}%</td>
             </tr>
           </tbody>
         </table>

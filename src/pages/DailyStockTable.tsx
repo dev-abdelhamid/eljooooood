@@ -1,3 +1,4 @@
+// File 5: DailyStockTable.tsx
 import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '../components/UI/Button';
@@ -256,8 +257,8 @@ const DailyStockTable: React.FC<DailyStockTableProps> = ({ data, title, type, is
     return data
       .filter(row => row.product.toLowerCase().includes(searchTerm.toLowerCase()))
       .map(row => {
-        let displayedDailyQuantities = row.dailyQuantities?.slice(startDay - 1, endDay) || []; // تصليح undefined
-        let displayedDailyBranchDetails = row.dailyBranchDetails?.slice(startDay - 1, endDay) || Array(endDay - startDay + 1).fill({});
+        let displayedDailyQuantities = row.dailyQuantities.slice(startDay - 1, endDay);
+        let displayedDailyBranchDetails = row.dailyBranchDetails.slice(startDay - 1, endDay);
         let displayedDailySales = (row.dailySales || []).slice(startDay - 1, endDay);
         let displayedDailySalesDetails = (row.dailySalesDetails || []).slice(startDay - 1, endDay);
         let displayedDailyReturns = (row.dailyReturns || []).slice(startDay - 1, endDay);
@@ -484,27 +485,27 @@ const DailyStockTable: React.FC<DailyStockTableProps> = ({ data, title, type, is
                   <td
                     key={i}
                     className={`px-4 py-3 text-center font-medium ${
-                      qty > 0 ? 'bg-green-100 text-green-800' : qty < 0 ? 'bg-red-100 text-red-800' : 'text-gray-500'
-                    }`} // تحسين التلوين: أخضر غامق، أحمر غامق
+                      qty > 0 ? 'bg-green-50 text-green-700' : qty < 0 ? 'bg-red-50 text-red-700' : 'text-gray-700'
+                    }`}
                     data-tooltip-id="stock-tooltip"
                     data-tooltip-content={type === 'out' ? getOutTooltip(qty, row.displayedDailySales[i], row.displayedDailyReturns[i], row.displayedDailySalesDetails[i], row.displayedDailyReturnsDetails[i], isRtl) : getTooltipContent(qty, row.displayedDailyBranchDetails[i], isRtl, type)}
                   >
-                    {qty !== 0 ? `${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}` : ''} // فارغ إذا 0
+                    {qty !== 0 ? `${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}` : '0'}
                   </td>
                 ))}
-                <td className="px-4 py-3 text-gray-700 text-center font-medium">{row.displayedTotalQuantity !== 0 ? formatNumber(row.displayedTotalQuantity, isRtl) : ''}</td>
-                <td className="px-4 py-3 text-gray-700 text-center font-medium">{row.displayedTotalPrice !== 0 ? formatPrice(row.displayedTotalPrice, isRtl) : ''}</td>
+                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.displayedTotalQuantity, isRtl)}</td>
+                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.displayedTotalPrice, isRtl)}</td>
               </tr>
             ))}
             <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
               <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
               {displayedDays.map((_, i) => (
                 <td key={i} className="px-4 py-3 text-gray-800 text-center">
-                  {filteredData.reduce((sum, row) => sum + row.displayedDailyQuantities[i], 0) !== 0 ? formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyQuantities[i], 0), isRtl) : ''}
+                  {formatNumber(filteredData.reduce((sum, row) => sum + row.displayedDailyQuantities[i], 0), isRtl)}
                 </td>
               ))}
-              <td className="px-4 py-3 text-gray-800 text-center">{grandTotalQuantity !== 0 ? formatNumber(grandTotalQuantity, isRtl) : ''}</td>
-              <td className="px-4 py-3 text-gray-800 text-center">{grandTotalPrice !== 0 ? formatPrice(grandTotalPrice, isRtl) : ''}</td>
+              <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalQuantity, isRtl)}</td>
+              <td className="px-4 py-3 text-gray-800 text-center">{formatPrice(grandTotalPrice, isRtl)}</td>
             </tr>
           </tbody>
         </table>
