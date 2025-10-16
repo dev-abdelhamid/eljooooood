@@ -28,52 +28,7 @@ interface OrdersVsReturnsTableProps {
   monthName: string;
 }
 
-export const generatePDFTable = (
-  doc: jsPDF,
-  data: any[][],
-  headers: string[],
-  isRtl: boolean,
-  totalItems: number,
-  totalQuantity: number,
-  totalPrice: number,
-  month: string,
-  title: string,
-) => {
-  const pageWidth = doc.internal.pageSize.width;
-  const pageHeight = doc.internal.pageSize.height;
-  doc.setFont(isRtl ? 'Amiri' : 'Helvetica', 'normal');
-  generatePDFHeader(doc, title, month, isRtl, totalItems, totalQuantity, totalPrice);
-  (doc as any).autoTable({
-    head: [headers],
-    body: data,
-    startY: 60,
-    theme: 'grid',
-    headStyles: {
-      fillColor: [255, 193, 7],
-      textColor: [0, 0, 0],
-      fontSize: 10,
-      font: isRtl ? 'Amiri' : 'Helvetica',
-      halign: isRtl ? 'right' : 'left',
-    },
-    bodyStyles: {
-      fontSize: 9,
-      font: isRtl ? 'Amiri' : 'Helvetica',
-      halign: isRtl ? 'right' : 'left',
-      textColor: [51, 51, 51],
-    },
-    alternateRowStyles: {
-      fillColor: [245, 245, 245],
-    },
-    margin: { top: 60, left: isRtl ? 10 : 10, right: isRtl ? 10 : 10 },
-    didDrawPage: (data: any) => {
-      const pageNumber = doc.getCurrentPageInfo().pageNumber;
-      doc.setFontSize(10);
-      const pageText = isRtl ? `صفحة ${toArabicNumerals(pageNumber)}` : `Page ${pageNumber}`;
-      const pageTextWidth = doc.getTextWidth(pageText);
-      doc.text(pageText, isRtl ? pageWidth - 10 - pageTextWidth : 10, pageHeight - 10);
-    },
-  });
-};
+
 
 const OrdersVsReturnsTable: React.FC<OrdersVsReturnsTableProps> = ({ data, isRtl, daysInMonth, monthName }) => {
   const grandTotalOrders = data.reduce((sum, row) => sum + row.totalOrders, 0);
@@ -159,7 +114,6 @@ const OrdersVsReturnsTable: React.FC<OrdersVsReturnsTableProps> = ({ data, isRtl
       const fontName = 'Amiri';
       const fontLoaded = await loadFont(doc);
       generatePDFHeader(doc, isRtl, isRtl ? 'تقرير الطلبات مقابل المرتجعات' : 'Orders vs Returns Report', monthName, data.length, grandTotalOrders, grandTotalReturns, fontName, fontLoaded);
-      generatePDFTable(doc, headers, dataRows, isRtl, fontLoaded, fontName, []);
       const fileName = generateFileName(isRtl ? 'تقرير الطلبات مقابل المرتجعات' : 'Orders vs Returns Report', monthName, isRtl);
       doc.save(fileName);
       toast.success(isRtl ? 'تم تصدير ملف PDF بنجاح' : 'PDF exported successfully', {
