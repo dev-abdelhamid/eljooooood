@@ -42,7 +42,7 @@ import { FactoryInventory } from './pages/FactoryInventory';
 import DailyOrdersSummary from './pages/DailyOrdersSummary';
 
 // New imports for separate pages
-import DailyOrdersPage from './pages/DailyOrdersPage';
+import OrdersTablePage from './pages/OrdersTablePage';
 
 
 
@@ -118,7 +118,7 @@ function AppContent() {
                   <Route path="/settings" element={<div className="p-8 text-center">قريباً: الإعدادات</div>} />
 
                   {/* New separate pages */}
-                  <Route path="/daily-orders" element={<DailyOrdersPage />} />
+                  <Route path="/daily-orders" element={<OrdersTablePage />} />
                 
                 </Routes>
               </Layout>

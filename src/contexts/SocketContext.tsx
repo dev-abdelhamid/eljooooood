@@ -17,43 +17,82 @@ export interface User {
 const SocketContext = createContext<{ socket: Socket | null; emit: (event: string, data: any) => void; isConnected: boolean } | null>(null);
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
+  const [socket, setSocket] = useState<Socket | null>(null);
 
-  const socket = useMemo(() => {
-    const newSocket = io(process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app', {
-      auth: { token: localStorage.getItem('token') },
-      autoConnect: false,
-      transports: ['websocket', 'polling'],
-      path: '/socket.io',
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-    });
+  useEffect(() => {
+    let socketInstance: Socket | null = null;
+    let retryCount = 0;
+    const maxRetries = 5;
+    const retryDelay = 1000; // 1 ثانية
 
-    newSocket.on('connect', () => {
-      console.log(`[${new Date().toISOString()}] Socket connected: ${newSocket.id}`);
-      setIsConnected(true);
-    });
+    const initializeSocket = () => {
+      const token = localStorage.getItem('token');
+      if (!isAuthenticated || !token) {
+        if (retryCount < maxRetries) {
+          console.log(`[${new Date().toISOString()}] Token not available, retrying (${retryCount + 1}/${maxRetries})...`);
+          setTimeout(initializeSocket, retryDelay);
+          retryCount++;
+          return;
+        } else {
+          console.error(`[${new Date().toISOString()}] Failed to initialize socket: No token after ${maxRetries} retries`);
+          toast.error('فشل الاتصال: لا يوجد توكن متاح', { position: 'top-right', toastId: `no-token-${Date.now()}` });
+          return;
+        }
+      }
 
-    newSocket.on('connect_error', (err) => {
-      console.error(`[${new Date().toISOString()}] Socket connect error: ${err.message}`);
-      setIsConnected(false);
-      toast.error(`فشل الاتصال: ${err.message}`, { position: 'top-right', toastId: `connect-error-${Date.now()}` });
-    });
+      socketInstance = io(process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app', {
+        auth: { token },
+        autoConnect: false,
+        transports: ['websocket', 'polling'],
+        path: '/socket.io',
+        reconnection: true,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000,
+      });
 
-    newSocket.on('reconnect', (attempt) => {
-      console.log(`[${new Date().toISOString()}] Socket reconnected after ${attempt} attempts`);
-      setIsConnected(true);
-    });
+      socketInstance.on('connect', () => {
+        console.log(`[${new Date().toISOString()}] Socket connected: ${socketInstance?.id}`);
+        setIsConnected(true);
+      });
 
-    newSocket.on('disconnect', (reason) => {
-      console.log(`[${new Date().toISOString()}] Socket disconnected: ${reason}`);
-      setIsConnected(false);
-    });
+      socketInstance.on('connect_error', (err) => {
+        console.error(`[${new Date().toISOString()}] Socket connect error: ${err.message}`);
+        setIsConnected(false);
+        toast.error(`فشل الاتصال: ${err.message}`, { position: 'top-right', toastId: `connect-error-${Date.now()}` });
+      });
 
-    return newSocket;
-  }, []);
+      socketInstance.on('reconnect', (attempt) => {
+        console.log(`[${new Date().toISOString()}] Socket reconnected after ${attempt} attempts`);
+        setIsConnected(true);
+      });
+
+      socketInstance.on('disconnect', (reason) => {
+        console.log(`[${new Date().toISOString()}] Socket disconnected: ${reason}`);
+        setIsConnected(false);
+      });
+
+      setSocket(socketInstance);
+      socketInstance.connect();
+    };
+
+    if (isAuthenticated && user) {
+      initializeSocket();
+    }
+
+    return () => {
+      if (socketInstance) {
+        socketInstance.off('connect');
+        socketInstance.off('connect_error');
+        socketInstance.off('reconnect');
+        socketInstance.off('disconnect');
+        socketInstance.disconnect();
+        setSocket(null);
+        setIsConnected(false);
+      }
+    };
+  }, [isAuthenticated, user]);
 
   const emit = (event: string, data: any) => {
     if (!socket || !isConnected) {
@@ -64,39 +103,6 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     console.log(`[${new Date().toISOString()}] Emitting event: ${event} with eventId: ${eventId}`);
     socket.emit(event, { ...data, eventId });
   };
-
-  useEffect(() => {
-    if (!user) {
-      socket.disconnect();
-      setIsConnected(false);
-      return;
-    }
-
-    if (!socket.connected) {
-      socket.connect();
-    }
-
-    const joinRoomOnConnect = () => {
-      if (socket.connected) {
-        emit('joinRoom', {
-          role: user.role,
-          branchId: user.branchId,
-          chefId: user.role === 'chef' ? user._id || user.id : null,
-          departmentId: user.role === 'production' ? user._id || user.departmentId : null,
-          userId: user._id || user.id,
-        });
-      }
-    };
-
-    socket.on('connect', joinRoomOnConnect);
-    socket.on('reconnect', joinRoomOnConnect);
-
-    return () => {
-      socket.off('connect', joinRoomOnConnect);
-      socket.off('reconnect', joinRoomOnConnect);
-      socket.disconnect();
-    };
-  }, [socket, user]);
 
   return <SocketContext.Provider value={{ socket, emit, isConnected }}>{children}</SocketContext.Provider>;
 };
