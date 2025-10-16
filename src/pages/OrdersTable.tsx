@@ -1,69 +1,52 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { motion } from 'framer-motion';
 import { Button } from '../components/UI/Button';
 import { Upload } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify';
+import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 import { Tooltip } from 'react-tooltip';
-import { ProductSearchInput, ProductDropdown } from './NewOrder';
-import { motion } from 'framer-motion';
-import { formatPrice, formatNumber, toArabicNumerals, generatePDFHeader, loadFont, generateFileName } from './ProductionReport';
-
-interface OrderRow {
-  id: string;
-  code: string;
-  product: string;
-  unit: string;
-  branchQuantities: { [branch: string]: number };
-  totalQuantity: number;
-  totalPrice: number;
-  sales: number;
-  actualSales: number;
-}
+import { exportToPDF, formatPrice, formatNumber, toArabicNumerals } from './ProductionReport'; // استيراد الدوال المشتركة
 
 interface OrdersTableProps {
   data: OrderRow[];
+  title: string;
+  month: number;
   isRtl: boolean;
-  branches: string[];
-  monthName: string;
+  loading: boolean;
+  allBranches: string[];
+  months: { value: number; label: string }[];
+  formatPrice: (amount: number, isRtl: boolean) => string;
+  formatNumber: (num: number, isRtl: boolean) => string;
 }
 
-const OrdersTable: React.FC<OrdersTableProps> = ({ data, isRtl, branches, monthName }) => {
-  const [search, setSearch] = useState('');
-  const [selectedBranch, setSelectedBranch] = useState('all');
-
-  const filteredData = data.filter(
-    row =>
-      row.product.toLowerCase().includes(search.toLowerCase()) &&
-      (selectedBranch === 'all' || row.branchQuantities[selectedBranch])
-  );
-
-  const totalQuantities = branches.reduce((acc, branch) => {
-    acc[branch] = filteredData.reduce((sum, row) => sum + (row.branchQuantities[branch] || 0), 0);
+const OrdersTable: React.FC<OrdersTableProps> = ({ data, title, month, isRtl, loading, allBranches, months, formatPrice, formatNumber }) => {
+  const totalQuantities = allBranches.reduce((acc, branch) => {
+    acc[branch] = data.reduce((sum, row) => sum + (row.branchQuantities[branch] || 0), 0);
     return acc;
   }, {} as { [branch: string]: number });
-  const grandTotalQuantity = filteredData.reduce((sum, row) => sum + row.totalQuantity, 0);
-  const grandTotalPrice = filteredData.reduce((sum, row) => sum + row.totalPrice, 0);
-  const grandActualSales = filteredData.reduce((sum, row) => sum + row.actualSales, 0);
+  const grandTotalQuantity = data.reduce((sum, row) => sum + row.totalQuantity, 0);
+  const grandTotalPrice = data.reduce((sum, row) => sum + row.totalPrice, 0);
+  const grandActualSales = data.reduce((sum, row) => sum + row.actualSales, 0);
+  const monthName = months[month].label;
 
-  const exportTable = async (format: 'excel' | 'pdf') => {
+  const exportTable = (format: 'excel' | 'pdf') => {
     const headers = [
       isRtl ? 'الكود' : 'Code',
       isRtl ? 'المنتج' : 'Product',
       isRtl ? 'وحدة المنتج' : 'Product Unit',
-      ...branches,
+      ...allBranches,
       isRtl ? 'الكمية الإجمالية' : 'Total Quantity',
       isRtl ? 'المبيعات الفعلية' : 'Actual Sales',
       isRtl ? 'السعر الإجمالي' : 'Total Price',
       isRtl ? 'نسبة المبيعات %' : 'Sales Percentage %',
     ];
     const rows = [
-      ...filteredData.map(row => ({
+      ...data.map(row => ({
         code: row.code,
         product: row.product,
         unit: row.unit,
-        ...Object.fromEntries(branches.map(branch => [branch, row.branchQuantities[branch] || 0])),
+        ...Object.fromEntries(allBranches.map(branch => [branch, row.branchQuantities[branch] || 0])),
         totalQuantity: row.totalQuantity,
         actualSales: row.actualSales,
         totalPrice: formatPrice(row.totalPrice, isRtl),
@@ -73,7 +56,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ data, isRtl, branches, monthN
         code: '',
         product: isRtl ? 'الإجمالي' : 'Total',
         unit: '',
-        ...Object.fromEntries(branches.map(branch => [branch, totalQuantities[branch] || 0])),
+        ...Object.fromEntries(allBranches.map(branch => [branch, totalQuantities[branch] || 0])),
         totalQuantity: grandTotalQuantity,
         actualSales: grandActualSales,
         totalPrice: formatPrice(grandTotalPrice, isRtl),
@@ -84,7 +67,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ data, isRtl, branches, monthN
       row.code,
       row.product,
       row.unit,
-      ...branches.map(branch => row[branch]),
+      ...allBranches.map(branch => row[branch]),
       row.totalQuantity,
       row.actualSales,
       row.totalPrice,
@@ -98,41 +81,33 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ data, isRtl, branches, monthN
         { wch: 15 },
         { wch: 25 },
         { wch: 15 },
-        ...branches.map(() => ({ wch: 15 })),
+        ...allBranches.map(() => ({ wch: 15 })),
         { wch: 15 },
         { wch: 15 },
         { wch: 15 },
         { wch: 15 },
       ];
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, `Orders_${monthName}`);
-      XLSX.writeFile(wb, `Orders_${monthName}.xlsx`);
+      XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
+      XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
       toast.success(isRtl ? 'تم تصدير ملف Excel بنجاح' : 'Excel exported successfully', {
         position: isRtl ? 'top-left' : 'top-right',
         autoClose: 3000,
       });
     } else if (format === 'pdf') {
-      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-      const fontName = 'Amiri';
-      const fontLoaded = await loadFont(doc);
-      generatePDFHeader(doc, isRtl, isRtl ? 'تقرير الطلبات' : 'Orders Report', monthName, filteredData.length, grandTotalQuantity, grandTotalPrice, fontName, fontLoaded);
-      generatePDFTable(doc, headers, dataRows, isRtl, fontLoaded, fontName, branches);
-      const fileName = generateFileName(isRtl ? 'تقرير الطلبات' : 'Orders Report', monthName, isRtl);
-      doc.save(fileName);
-      toast.success(isRtl ? 'تم تصدير ملف PDF بنجاح' : 'PDF exported successfully', {
-        position: isRtl ? 'top-left' : 'top-right',
-        autoClose: 3000,
-      });
+      exportToPDF(dataRows, title, monthName, headers, isRtl, data.length, grandTotalQuantity, grandTotalPrice, allBranches);
     }
   };
 
-  if (filteredData.length === 0) {
+  if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
+
+  if (data.length === 0) {
     return (
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3 }}
-        className="text-center py-12 bg-white shadow-xl rounded-2xl border border-gray-200"
+        className="text-center py-12 bg-white shadow-md rounded-xl border border-gray-200"
       >
         <p className="text-gray-500 text-sm font-medium">{isRtl ? 'لا توجد بيانات' : 'No data available'}</p>
       </motion.div>
@@ -142,32 +117,26 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ data, isRtl, branches, monthN
   return (
     <div className="mb-8">
       <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
-        <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `تقرير الطلبات - ${monthName}` : `Orders Report - ${monthName}`}</h2>
-        <div className="flex gap-4">
-          <ProductSearchInput
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={isRtl ? 'بحث عن منتج' : 'Search product'}
-            ariaLabel="Search product"
-          />
-          <ProductDropdown
-            value={selectedBranch}
-            onChange={setSelectedBranch}
-            options={[{ value: 'all', label: isRtl ? 'كل الفروع' : 'All Branches' }, ...branches.map(b => ({ value: b, label: b }))]}
-            ariaLabel="Select branch"
-          />
+        <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
+        <div className="flex gap-2">
           <Button
-            variant="primary"
-            onClick={() => exportTable('excel')}
-            className="flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all duration-200"
+            variant={data.length > 0 ? 'primary' : 'secondary'}
+            onClick={data.length > 0 ? () => exportTable('excel') : undefined}
+            className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+              data.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+            }`}
+            disabled={data.length === 0}
           >
             <Upload className="w-4 h-4" />
             {isRtl ? 'تصدير إكسل' : 'Export Excel'}
           </Button>
           <Button
-            variant="primary"
-            onClick={() => exportTable('pdf')}
-            className="flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium bg-green-600 hover:bg-green-700 text-white shadow-sm transition-all duration-200"
+            variant={data.length > 0 ? 'primary' : 'secondary'}
+            onClick={data.length > 0 ? () => exportTable('pdf') : undefined}
+            className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+              data.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+            }`}
+            disabled={data.length === 0}
           >
             <Upload className="w-4 h-4" />
             {isRtl ? 'تصدير PDF' : 'Export PDF'}
@@ -178,7 +147,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ data, isRtl, branches, monthN
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className="overflow-x-auto rounded-2xl shadow-xl border border-gray-200 bg-white"
+        className="overflow-x-auto rounded-xl shadow-md border border-gray-200 bg-white"
       >
         <table className="min-w-full divide-y divide-gray-200 text-xs">
           <thead className="bg-blue-50 sticky top-0">
@@ -186,24 +155,32 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ data, isRtl, branches, monthN
               <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
               <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
               <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
-              {branches.map(branch => (
+              {allBranches.map(branch => (
                 <th key={branch} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
                   {branch}
                 </th>
               ))}
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}</th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'المبيعات الفعلية' : 'Actual Sales'}</th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'السعر الإجمالي' : 'Total Price'}</th>
-              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">{isRtl ? 'نسبة المبيعات %' : 'Sales Percentage %'}</th>
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                {isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}
+              </th>
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                {isRtl ? 'المبيعات الفعلية' : 'Actual Sales'}
+              </th>
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                {isRtl ? 'السعر الإجمالي' : 'Total Price'}
+              </th>
+              <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
+                {isRtl ? 'نسبة المبيعات %' : 'Sales Percentage %'}
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {filteredData.map(row => (
+            {data.map(row => (
               <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
                 <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
                 <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
                 <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
-                {branches.map(branch => (
+                {allBranches.map(branch => (
                   <td
                     key={branch}
                     className={`px-4 py-3 text-center font-medium ${
@@ -215,13 +192,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ data, isRtl, branches, monthN
                     {formatNumber(row.branchQuantities[branch] || 0, isRtl)}
                   </td>
                 ))}
-                <td
-                  className="px-4 py-3 text-gray-700 text-center font-medium"
-                  data-tooltip-id="total-quantity"
-                  data-tooltip-content={`${isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}: ${formatNumber(row.totalQuantity, isRtl)}\n${Object.entries(row.branchQuantities)
-                    .map(([branch, qty]) => `${branch}: ${formatNumber(qty, isRtl)}`)
-                    .join('\n')}`}
-                >
+                <td className="px-4 py-3 text-gray-700 text-center font-medium" data-tooltip-id="total-quantity" data-tooltip-content={`${isRtl ? 'الكمية الإجمالية' : 'Total Quantity'}: ${formatNumber(row.totalQuantity, isRtl)}\n${Object.entries(row.branchQuantities).map(([branch, qty]) => `${branch}: ${formatNumber(qty, isRtl)}`).join('\n')}`}>
                   {formatNumber(row.totalQuantity, isRtl)}
                 </td>
                 <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.actualSales, isRtl)}</td>
@@ -235,7 +206,7 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ data, isRtl, branches, monthN
               <td className="px-4 py-3 text-gray-800 text-center"></td>
               <td className="px-4 py-3 text-gray-800 text-center">{isRtl ? 'الإجمالي' : 'Total'}</td>
               <td className="px-4 py-3 text-gray-800 text-center"></td>
-              {branches.map(branch => (
+              {allBranches.map(branch => (
                 <td key={branch} className="px-4 py-3 text-gray-800 text-center">
                   {formatNumber(totalQuantities[branch] || 0, isRtl)}
                 </td>
@@ -249,8 +220,8 @@ const OrdersTable: React.FC<OrdersTableProps> = ({ data, isRtl, branches, monthN
             </tr>
           </tbody>
         </table>
-        <Tooltip id="branch-quantity" place="top" effect="solid" className="custom-tooltip text-sm bg-gray-800 text-white rounded-lg p-2" />
-        <Tooltip id="total-quantity" place="top" effect="solid" className="custom-tooltip text-sm bg-gray-800 text-white rounded-lg p-2" />
+        <Tooltip id="branch-quantity" place="top" effect="solid" className="custom-tooltip" />
+        <Tooltip id="total-quantity" place="top" effect="solid" className="custom-tooltip" />
       </motion.div>
     </div>
   );
