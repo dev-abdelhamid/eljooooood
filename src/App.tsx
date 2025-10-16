@@ -1,3 +1,4 @@
+// Updated App.tsx
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -29,9 +30,6 @@ import CreateSale from './pages/CreateSale';
 import  AdminSalesReport   from './pages/AdminSalesReport';
 import DailyOrdersTable from './pages/DailyOrdersTable';
 
-
-
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Chefstatics from './pages/Chefstatics';
 import BranchProfile from './pages/BranchProfile';
@@ -42,6 +40,10 @@ import ReturnStats from './pages/ReturnStats';
 import ProductionInventory from './pages/ProductionInventory';
 import { FactoryInventory } from './pages/FactoryInventory';
 import DailyOrdersSummary from './pages/DailyOrdersSummary';
+
+// New imports for separate pages
+import DailyOrdersPage from './pages/DailyOrdersPage';
+
 
 
 // إعداد QueryClient لإدارة الاستعلامات
@@ -89,16 +91,8 @@ function AppContent() {
                   <Route path="/orders/review" element={<Orders />} />
                   <Route path="/returns" element={<BranchReturns />} />
                   <Route path="/production-report" element={<ProductionReport />} />
-                                    <Route path="/production" element={<ProductionInventory />} />
-                                                                        <Route path="/production-inventory" element={<FactoryInventory />} />
-
-
-
-                                    
-
-
-
-           
+                  <Route path="/production" element={<ProductionInventory />} />
+                  <Route path="/production-inventory" element={<FactoryInventory />} />
                   <Route path="/production-tasks" element={<ChefTasks />} />
                   <Route path="/branches" element={<Branches />} />
                   <Route path="/branch-inventory" element={<BranchInventory />} />
@@ -110,10 +104,6 @@ function AppContent() {
                   <Route path="/admin-sales" element={<AdminSalesReport />} />
                   <Route path="/returnStats" element={<ReturnStats />} />
                   <Route path="/dailyOrdersSummary" element={<DailyOrdersSummary />} />
-
-
-
-
                   <Route path="/branch-orders" element={<BranchOrders />} />
                   <Route path="/chefstatics" element={<Chefstatics />} />
                   <Route path="/chefs" element={<Chefs />} />
@@ -126,6 +116,11 @@ function AppContent() {
                   <Route path="/sales" element={<SalesReport />} />
                   <Route path="/reports" element={<div className="p-8 text-center">قريباً: التقارير والتحليلات</div>} />
                   <Route path="/settings" element={<div className="p-8 text-center">قريباً: الإعدادات</div>} />
+
+                  {/* New separate pages */}
+                  <Route path="/daily-orders" element={<DailyOrdersPage />} />
+                  <Route path="/stock-in" element={<StockInPage />} />
+                  <Route path="/stock-out" element={<StockOutPage />} />
                 </Routes>
               </Layout>
             </ProtectedRoute>

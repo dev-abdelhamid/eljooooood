@@ -87,6 +87,9 @@ export function Sidebar({
       { path: '/sales', icon: TrendingUp, label: t('sales') },
       { path: '/reports', icon: BarChart2, label: t('reports') },
       { path: '/profile', icon: Settings2, label: t('settings') },
+          // New separate report links for production
+      { path: '/daily-orders', icon: ShoppingBag, label: t('dailyOrders') || 'Daily Orders' },
+  
     ];
 
     const branchItems = [
@@ -111,6 +114,9 @@ export function Sidebar({
       { path: '/returns', icon: RefreshCcw, label: t('returns') },
       { path: '/reports', icon: BarChart2, label: t('reports') },
       { path: '/profile', icon: Settings2, label: t('settings') },
+          // New separate report links for production
+      { path: '/daily-orders', icon: ShoppingBag, label: t('dailyOrders') || 'Daily Orders' },
+
     ];
 
     let roleItems = [];

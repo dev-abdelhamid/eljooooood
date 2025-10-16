@@ -3,26 +3,28 @@ import { io, Socket } from 'socket.io-client';
 import { toast } from 'react-toastify';
 import { useAuth } from './AuthContext';
 
-export interface User {
-  id: string;
-  username: string;
-  role: 'admin' | 'branch' | 'chef' | 'production';
-  name: string;
-  branchId?: string;
-  chefId?: string;
-  departmentId?: string;
-  _id?: string;
-}
-
 const SocketContext = createContext<{ socket: Socket | null; emit: (event: string, data: any) => void; isConnected: boolean } | null>(null);
 
 export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, loading: authLoading, isAuthenticated } = useAuth();
   const [isConnected, setIsConnected] = useState(false);
 
   const socket = useMemo(() => {
+    // Skip socket initialization if authentication is still loading or user is not authenticated
+    if (authLoading || !isAuthenticated) {
+      console.log(`[${new Date().toISOString()}] Skipping socket initialization: authLoading=${authLoading}, isAuthenticated=${isAuthenticated}`);
+      return null;
+    }
+
+    const token = localStorage.getItem('token');
+    console.log(`[${new Date().toISOString()}] Retrieved token from localStorage: ${token}`);
+    if (!token) {
+      console.warn(`[${new Date().toISOString()}] No token found in localStorage, skipping socket connection`);
+      return null;
+    }
+
     const newSocket = io(process.env.REACT_APP_API_URL || 'https://eljoodia-server-production.up.railway.app', {
-      auth: { token: localStorage.getItem('token') },
+      auth: { token },
       autoConnect: false,
       transports: ['websocket', 'polling'],
       path: '/socket.io',
@@ -39,7 +41,22 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     newSocket.on('connect_error', (err) => {
       console.error(`[${new Date().toISOString()}] Socket connect error: ${err.message}`);
       setIsConnected(false);
-      toast.error(`فشل الاتصال: ${err.message}`, { position: 'top-right', toastId: `connect-error-${Date.now()}` });
+      const isRtl = localStorage.getItem('language') === 'ar';
+      if (err.message.includes('No token provided') || err.message.includes('Invalid token')) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        localStorage.removeItem('refreshToken');
+        window.location.href = '/login';
+        toast.error(isRtl ? 'يرجى تسجيل الدخول مرة أخرى' : 'Please log in again', {
+          position: 'top-right',
+          toastId: `connect-error-${Date.now()}`,
+        });
+      } else {
+        toast.error(`فشل الاتصال: ${err.message}`, {
+          position: 'top-right',
+          toastId: `connect-error-${Date.now()}`,
+        });
+      }
     });
 
     newSocket.on('reconnect', (attempt) => {
@@ -53,7 +70,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     return newSocket;
-  }, []);
+  }, [authLoading, isAuthenticated]);
 
   const emit = (event: string, data: any) => {
     if (!socket || !isConnected) {
@@ -66,8 +83,8 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   useEffect(() => {
-    if (!user) {
-      socket.disconnect();
+    if (!user || !socket || authLoading || !isAuthenticated) {
+      socket?.disconnect();
       setIsConnected(false);
       return;
     }
@@ -96,7 +113,7 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       socket.off('reconnect', joinRoomOnConnect);
       socket.disconnect();
     };
-  }, [socket, user]);
+  }, [socket, user, authLoading, isAuthenticated]);
 
   return <SocketContext.Provider value={{ socket, emit, isConnected }}>{children}</SocketContext.Provider>;
 };
