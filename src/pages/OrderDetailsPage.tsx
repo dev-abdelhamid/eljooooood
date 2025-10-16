@@ -7,12 +7,11 @@ import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronLeft, AlertCircle, Clock, Package, Truck, CheckCircle, X, Download } from 'lucide-react';
 import { ordersAPI, chefsAPI } from '../services/api';
-import { Order, Chef, AssignChefsForm } from '../types/types';
+import { Order, Chef, AssignChefsForm } from '../types';
 import { Input } from '../components/UI/Input';
 import { Select } from '../components/UI/Select';
 import { Button } from '../components/UI/Button';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 
 // Normalize text for consistent bilingual display
 const normalizeText = (text: string) => {
@@ -40,68 +39,153 @@ const translateUnit = (unit: string, isRtl: boolean) => {
   return translations[unit] ? (isRtl ? translations[unit].ar : translations[unit].en) : isRtl ? 'وحدة' : 'unit';
 };
 
-// Invoice component for PDF rendering
-const Invoice: React.FC<{ order: Order; t: (key: string, params?: any) => string; isRtl: boolean }> = ({ order, t, isRtl }) => {
-  const calculateTotalQuantity = useCallback((order: Order) => {
-    return order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
-  }, []);
+const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
+};
 
-  const formatCurrency = (amount: number) => {
-    return amount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
-      style: 'currency',
-      currency: 'SAR',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+const loadFont = async (doc: jsPDF): Promise<boolean> => {
+  const fontName = 'Amiri';
+  const fontUrls = {
+    regular: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Regular.ttf',
+    bold: 'https://raw.githubusercontent.com/aliftype/amiri/master/fonts/Amiri-Bold.ttf',
   };
+  try {
+    const regularFontBytes = await fetch(fontUrls.regular).then((res) => res.arrayBuffer());
+    doc.addFileToVFS(`${fontName}-normal.ttf`, arrayBufferToBase64(regularFontBytes));
+    doc.addFont(`${fontName}-normal.ttf`, fontName, 'normal');
+    const boldFontBytes = await fetch(fontUrls.bold).then((res) => res.arrayBuffer());
+    doc.addFileToVFS(`${fontName}-bold.ttf`, arrayBufferToBase64(boldFontBytes));
+    doc.addFont(`${fontName}-bold.ttf`, fontName, 'bold');
+    doc.setFont(fontName, 'normal');
+    return true;
+  } catch (error) {
+    console.error('Font loading error:', error);
+    return false;
+  }
+};
 
-  return (
-    <div className="bg-white p-4 sm:p-6 rounded-lg shadow-lg max-w-3xl mx-auto text-gray-800 font-sans text-xs leading-tight">
-      <h1 className="text-lg sm:text-xl font-bold text-center text-amber-600 mb-3">{t('invoice.title', { orderNumber: order.orderNumber })}</h1>
-      <p className="text-center text-xs mb-4">{t('invoice.date')}: {order.date}</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-        <div className={`text-${isRtl ? 'right' : 'left'}`}>
-          <p className="text-xs"><strong>{t('orders.order_number')}:</strong> {order.orderNumber}</p>
-          <p className="text-xs"><strong>{t('orders.branch')}:</strong> {order.branch.displayName}</p>
-          <p className="text-xs"><strong>{t('orders.status')}:</strong> {t(`orders.${order.status}`)}</p>
-        </div>
-        <div className={`text-${isRtl ? 'left' : 'right'}`}>
-          <p className="text-xs"><strong>{t('orders.priority')}:</strong> {t(`orders.${order.priority}`)}</p>
-          <p className="text-xs"><strong>{t('orders.total_amount')}:</strong> {formatCurrency(order.totalAmount)}</p>
-          <p className="text-xs"><strong>{t('orders.total_quantity')}:</strong> {calculateTotalQuantity(order)} {t('orders.units')}</p>
-        </div>
-      </div>
-      <h2 className="text-sm font-semibold mb-2">{t('orders.items')}</h2>
-      <table className="w-full border-collapse mb-4 text-xs">
-        <thead>
-          <tr className="bg-amber-50">
-            <th className={`p-2 text-${isRtl ? 'right' : 'left'} font-semibold`}>{t('orders.product')}</th>
-            <th className={`p-2 text-${isRtl ? 'right' : 'left'} font-semibold`}>{t('orders.quantity')}</th>
-            <th className={`p-2 text-${isRtl ? 'right' : 'left'} font-semibold`}>{t('orders.unit')}</th>
-            <th className={`p-2 text-${isRtl ? 'right' : 'left'} font-semibold`}>{t('orders.status')}</th>
-            <th className={`p-2 text-${isRtl ? 'right' : 'left'} font-semibold`}>{t('orders.assigned_to')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {order.items.map(item => (
-            <tr key={item._id} className="border-b">
-              <td className={`p-2 text-${isRtl ? 'right' : 'left'}`}>{item.displayProductName}</td>
-              <td className={`p-2 text-${isRtl ? 'right' : 'left'}`}>{item.quantity}</td>
-              <td className={`p-2 text-${isRtl ? 'right' : 'left'}`}>{translateUnit(item.unit, isRtl)}</td>
-              <td className={`p-2 text-${isRtl ? 'right' : 'left'}`}>{t(`orders.${item.status}`)}</td>
-              <td className={`p-2 text-${isRtl ? 'right' : 'left'}`}>{item.assignedTo?.displayName || t('orders.unassigned')}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {order.notes && (
-        <div className="mb-4">
-          <h2 className="text-sm font-semibold">{t('orders.notes')}</h2>
-          <p className="text-xs text-gray-600">{order.notes}</p>
-        </div>
-      )}
-    </div>
-  );
+const generateInvoicePDF = async (order: Order, t: (key: string, params?: any) => string, isRtl: boolean) => {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const fontLoaded = await loadFont(doc);
+  const pageWidth = doc.internal.pageSize.width;
+  const margin = 15;
+  const contentWidth = pageWidth - 2 * margin;
+  let y = margin;
+
+  // Title
+  doc.setFontSize(16);
+  doc.setTextColor(245, 158, 11); // Amber color
+  doc.setFont(fontLoaded ? 'Amiri' : 'helvetica', 'bold');
+  doc.text(t('invoice.title', { orderNumber: order.orderNumber }), pageWidth / 2, y, { align: 'center' });
+  y += 10;
+
+  // Date
+  doc.setFontSize(12);
+  doc.setTextColor(100, 100, 100);
+  doc.setFont(fontLoaded ? 'Amiri' : 'helvetica', 'normal');
+  doc.text(t('invoice.date') + ': ' + order.date, pageWidth / 2, y, { align: 'center' });
+  y += 15;
+
+  // Order Details
+  doc.setFontSize(12);
+  doc.setTextColor(0, 0, 0);
+  doc.setFont(fontLoaded ? 'Amiri' : 'helvetica', 'bold');
+  doc.text(t('invoice.order_details'), margin, y, { align: isRtl ? 'right' : 'left' });
+  y += 8;
+
+  doc.setFontSize(10);
+  doc.setFont(fontLoaded ? 'Amiri' : 'helvetica', 'normal');
+  doc.text(t('orders.order_number') + ': ' + order.orderNumber, margin, y, { align: isRtl ? 'right' : 'left' });
+  y += 6;
+  doc.text(t('orders.branch') + ': ' + order.branch.displayName, margin, y, { align: isRtl ? 'right' : 'left' });
+  y += 6;
+  doc.text(t('orders.status') + ': ' + t(`orders.${order.status}`), margin, y, { align: isRtl ? 'right' : 'left' });
+  y += 6;
+  doc.text(t('orders.priority') + ': ' + t(`orders.${order.priority}`), margin, y, { align: isRtl ? 'right' : 'left' });
+  y += 6;
+  doc.text(t('orders.total_amount') + ': ' + formatCurrency(order.totalAmount, isRtl), margin, y, { align: isRtl ? 'right' : 'left' });
+  y += 6;
+  doc.text(t('orders.total_quantity') + ': ' + order.items.reduce((sum, item) => sum + item.quantity, 0) + ' ' + t('orders.units'), margin, y, { align: isRtl ? 'right' : 'left' });
+  y += 15;
+
+  // Items Table
+  doc.setFontSize(12);
+  doc.setFont(fontLoaded ? 'Amiri' : 'helvetica', 'bold');
+  doc.text(t('orders.items'), margin, y, { align: isRtl ? 'right' : 'left' });
+  y += 8;
+
+  doc.setFontSize(10);
+  const tableHeaders = [t('orders.product'), t('orders.quantity'), t('orders.unit'), t('orders.price'), t('orders.status')];
+  const tableBody = order.items.map(item => [
+    item.displayProductName,
+    item.quantity.toString(),
+    translateUnit(item.unit, isRtl),
+    formatCurrency(item.price, isRtl),
+    t(`orders.${item.status}`),
+  ]);
+
+  autoTable(doc, {
+    startY: y,
+    head: [isRtl ? tableHeaders.reverse() : tableHeaders],
+    body: isRtl ? tableBody.map(row => row.reverse()) : tableBody,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [245, 158, 11],
+      textColor: [255, 255, 255],
+      fontSize: 8,
+      halign: isRtl ? 'right' : 'left',
+      font: fontLoaded ? 'Amiri' : 'helvetica',
+      fontStyle: 'bold',
+    },
+    bodyStyles: {
+      fontSize: 8,
+      halign: isRtl ? 'right' : 'left',
+      font: fontLoaded ? 'Amiri' : 'helvetica',
+      textColor: [33, 33, 33],
+      lineColor: [200, 200, 200],
+      fillColor: [255, 255, 255],
+    },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
+    margin: { left: margin, right: margin },
+    didParseCell: (hookData) => {
+      if (isRtl && hookData.section === 'body') {
+        hookData.cell.text = hookData.cell.text.map(text => toArabicNumerals(text));
+      }
+    },
+  });
+  y = (doc as any).lastAutoTable.finalY + 15;
+
+  // Notes
+  if (order.notes) {
+    doc.setFontSize(12);
+    doc.setFont(fontLoaded ? 'Amiri' : 'helvetica', 'bold');
+    doc.text(t('orders.notes'), margin, y, { align: isRtl ? 'right' : 'left' });
+    y += 8;
+    doc.setFontSize(10);
+    doc.setFont(fontLoaded ? 'Amiri' : 'helvetica', 'normal');
+    doc.text(order.notes, margin, y, { align: isRtl ? 'right' : 'left', maxWidth: contentWidth });
+  }
+
+  doc.save(`invoice_${order.orderNumber}.pdf`);
+};
+
+const toArabicNumerals = (text: string): string => {
+  const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  return text.replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
+};
+
+const formatCurrency = (amount: number, isRtl: boolean) => {
+  return amount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
+    style: 'currency',
+    currency: 'SAR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 };
 
 export const OrderDetailsPage: React.FC = () => {
@@ -109,7 +193,7 @@ export const OrderDetailsPage: React.FC = () => {
   const isRtl = language === 'ar';
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { socket, isConnected } = useSocket();
+  const { socket } = useSocket();
   const navigate = useNavigate();
   const [order, setOrder] = useState<Order | null>(null);
   const [chefs, setChefs] = useState<Chef[]>([]);
@@ -148,18 +232,6 @@ export const OrderDetailsPage: React.FC = () => {
   const calculateTotalQuantity = useCallback((order: Order) => {
     return order.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
   }, []);
-
-  const formatCurrency = useCallback(
-    (amount: number) => {
-      return amount.toLocaleString(isRtl ? 'ar-SA' : 'en-US', {
-        style: 'currency',
-        currency: 'SAR',
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      });
-    },
-    [isRtl]
-  );
 
   const fetchOrder = useCallback(async () => {
     if (!id || !user) {
@@ -219,30 +291,30 @@ export const OrderDetailsPage: React.FC = () => {
         requestedDeliveryDate: orderResponse.requestedDeliveryDate ? new Date(orderResponse.requestedDeliveryDate) : null,
         notes: orderResponse.notes || '',
         priority: orderResponse.priority || 'medium',
-        createdBy: orderResponse.createdBy ? {
-          _id: orderResponse.createdBy._id,
-          name: orderResponse.createdBy.name || orderResponse.createdBy.username || t('orders.unknown'),
-          nameEn: orderResponse.createdBy.nameEn,
-          displayName: isRtl ? orderResponse.createdBy.name : orderResponse.createdBy.nameEn || orderResponse.createdBy.name,
-        } : { _id: 'unknown', name: t('orders.unknown'), displayName: t('orders.unknown') },
+        createdBy: {
+          _id: orderResponse.createdBy?._id || 'unknown',
+          name: orderResponse.createdBy?.name || orderResponse.createdBy?.username || t('orders.unknown'),
+          nameEn: orderResponse.createdBy?.nameEn,
+          displayName: isRtl ? orderResponse.createdBy?.name : orderResponse.createdBy?.nameEn || orderResponse.createdBy?.name,
+        },
         approvedBy: orderResponse.approvedBy ? {
           _id: orderResponse.approvedBy._id,
           name: orderResponse.approvedBy.name || orderResponse.approvedBy.username || t('orders.unknown'),
           nameEn: orderResponse.approvedBy.nameEn,
           displayName: isRtl ? orderResponse.approvedBy.name : orderResponse.approvedBy.nameEn || orderResponse.approvedBy.name,
         } : undefined,
-        approvedAt: orderResponse.approvedAt ? new Date(orderResponse.approvedAt) : null,
-        deliveredAt: orderResponse.deliveredAt ? new Date(orderResponse.deliveredAt) : null,
-        transitStartedAt: orderResponse.transitStartedAt ? new Date(orderResponse.transitStartedAt) : null,
+        approvedAt: orderResponse.approvedAt ? formatDateTime(new Date(orderResponse.approvedAt)) : null,
+        deliveredAt: orderResponse.deliveredAt ? formatDateTime(new Date(orderResponse.deliveredAt)) : null,
+        transitStartedAt: orderResponse.transitStartedAt ? formatDateTime(new Date(orderResponse.transitStartedAt)) : null,
         statusHistory: Array.isArray(orderResponse.statusHistory)
           ? orderResponse.statusHistory.map((history: any) => ({
               status: history.status || 'pending',
-              changedBy: history.changedBy ? {
-                _id: history.changedBy._id,
-                name: history.changedBy.name || history.changedBy.username || t('orders.unknown'),
-                nameEn: history.changedBy.nameEn,
-                displayName: isRtl ? history.changedBy.name : history.changedBy.nameEn || history.changedBy.name,
-              } : { _id: 'unknown', name: t('orders.unknown'), displayName: t('orders.unknown') },
+              changedBy: {
+                _id: history.changedBy?._id || 'unknown',
+                name: history.changedBy?.name || history.changedBy?.username || t('orders.unknown'),
+                nameEn: history.changedBy?.nameEn,
+                displayName: isRtl ? history.changedBy?.name : history.changedBy?.nameEn || history.changedBy?.name,
+              },
               changedAt: formatDateTime(history.changedAt ? new Date(history.changedAt) : new Date()),
               notes: history.notes || '',
             }))
@@ -356,12 +428,7 @@ export const OrderDetailsPage: React.FC = () => {
               {
                 status,
                 changedAt: formatDateTime(new Date()),
-                changedBy: {
-                  _id: changedByUser._id || 'unknown',
-                  name: changedByUser.name || changedByUser.username || t('orders.unknown'),
-                  nameEn: changedByUser.nameEn,
-                  displayName: isRtl ? changedByUser.name : changedByUser.nameEn || changedByUser.name,
-                },
+                changedBy: changedByUser?.name || changedByUser?.username || t('orders.unknown'),
                 notes: '',
               },
             ],
@@ -369,6 +436,13 @@ export const OrderDetailsPage: React.FC = () => {
           toast.info(t('socket.order_status_updated', { status: t(`orders.${status}`) }), {
             position: isRtl ? 'top-left' : 'top-right',
           });
+          if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+          playNotificationSound();
+        }
+      },
+      newNotification: ({ type, message, data }: { type: string; message: string; data: any }) => {
+        if (data.orderId === order.id) {
+          toast.info(message, { position: isRtl ? 'top-left' : 'top-right' });
           if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
           playNotificationSound();
         }
@@ -398,12 +472,7 @@ export const OrderDetailsPage: React.FC = () => {
             {
               status: newStatus,
               changedAt: formatDateTime(new Date()),
-              changedBy: {
-                _id: user?.id || 'unknown',
-                name: user?.name || user?.username || t('orders.unknown'),
-                nameEn: user?.nameEn,
-                displayName: isRtl ? user?.name : user?.nameEn || user?.name,
-              },
+              changedBy: user?.name || user?.username || t('orders.unknown'),
               notes: '',
             },
           ],
@@ -411,7 +480,7 @@ export const OrderDetailsPage: React.FC = () => {
         socket?.emit('orderStatusUpdated', {
           orderId,
           status: newStatus,
-          changedByUser: { _id: user?.id, name: user?.name, username: user?.username, nameEn: user?.nameEn },
+          changedByUser: { name: user?.name, username: user?.username },
           timestamp: new Date().toISOString(),
         });
         toast.success(t('orders.status_updated', { status: t(`orders.${newStatus}`) }), {
@@ -531,38 +600,10 @@ export const OrderDetailsPage: React.FC = () => {
   );
 
   const exportInvoice = useCallback(async () => {
-    if (!order || !invoiceRef.current) return;
+    if (!order) return;
     setSubmitting(`export-${order.id}`);
     try {
-      const canvas = await html2canvas(invoiceRef.current, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-      });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4',
-      });
-      const imgWidth = 190;
-      const pageHeight = 295;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 10;
-
-      pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight, undefined, 'FAST');
-      heightLeft -= pageHeight;
-
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight + 10;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight, undefined, 'FAST');
-        heightLeft -= pageHeight;
-      }
-
-      pdf.save(`invoice_${normalizeText(order.orderNumber)}.pdf`);
+      await generateInvoicePDF(order, t, isRtl);
       toast.success(t('invoice.export_success'), { position: isRtl ? 'top-left' : 'top-right' });
     } catch (err: any) {
       setError(t('errors.pdf_generation') + ': ' + (err.message || t('errors.unknown')));
@@ -572,20 +613,10 @@ export const OrderDetailsPage: React.FC = () => {
     }
   }, [order, t, isRtl]);
 
-  const validTransitions: Record<Order['status'], Order['status'][]> = {
-    pending: ['approved', 'cancelled'],
-    approved: ['in_production', 'cancelled'],
-    in_production: ['completed', 'cancelled'],
-    completed: ['in_transit'],
-    in_transit: ['delivered'],
-    delivered: [],
-    cancelled: [],
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-10 w-10 border-t-3 border-amber-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-amber-600"></div>
       </div>
     );
   }
@@ -597,23 +628,21 @@ export const OrderDetailsPage: React.FC = () => {
         animate={{ opacity: 1 }}
         className="min-h-screen flex items-center justify-center bg-gray-50"
       >
-        <div className="bg-white p-4 sm:p-6 rounded-lg shadow-md max-w-md text-center">
-          <AlertCircle className="w-6 h-6 text-red-600 mx-auto mb-3" />
+        <div className="bg-white p-4 rounded-lg shadow-md max-w-md text-center">
+          <AlertCircle className="w-6 h-6 text-red-600 mx-auto mb-2" />
           <p className="text-sm font-medium text-red-600">{error || t('errors.order_not_found')}</p>
-          <div className="flex gap-2 mt-4 justify-center">
-            <Button
-              onClick={fetchOrder}
-              className="px-3 py-1.5 bg-amber-600 text-white hover:bg-amber-700 rounded-full text-xs"
-            >
-              {t('common.retry')}
-            </Button>
-            <Button
-              onClick={() => navigate('/orders')}
-              className="px-3 py-1.5 bg-gray-200 text-gray-800 hover:bg-gray-300 rounded-full text-xs"
-            >
-              {t('common.back')}
-            </Button>
-          </div>
+          <Button
+            onClick={fetchOrder}
+            className="mt-3 bg-amber-600 text-white hover:bg-amber-700 rounded-full px-3 py-1 text-xs"
+          >
+            {t('common.retry')}
+          </Button>
+          <Button
+            onClick={() => navigate('/orders')}
+            className="mt-2 bg-gray-200 text-gray-800 hover:bg-gray-300 rounded-full px-3 py-1 text-xs"
+          >
+            {t('common.back')}
+          </Button>
         </div>
       </motion.div>
     );
@@ -621,7 +650,7 @@ export const OrderDetailsPage: React.FC = () => {
 
   return (
     <div className={`min-h-screen bg-gray-50 font-sans text-xs leading-tight ${isRtl ? 'rtl' : 'ltr'}`}>
-      <div className="max-w-6xl mx-auto px-2 sm:px-4 lg:px-6 py-4">
+      <div className="max-w-6xl mx-auto px-2 py-4">
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -630,7 +659,7 @@ export const OrderDetailsPage: React.FC = () => {
           <div className="flex items-center gap-2">
             <Button
               onClick={() => navigate('/orders')}
-              className="p-1.5 bg-amber-600 text-white hover:bg-amber-700 rounded-full"
+              className="p-1 bg-amber-600 text-white hover:bg-amber-700 rounded-full"
               aria-label={t('common.back')}
             >
               <ChevronLeft className="w-4 h-4" />
@@ -642,7 +671,7 @@ export const OrderDetailsPage: React.FC = () => {
           <Button
             onClick={exportInvoice}
             disabled={submitting === `export-${order.id}`}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-white text-xs ${
+            className={`flex items-center gap-1 px-3 py-1 rounded-full text-white text-xs ${
               submitting === `export-${order.id}` ? 'bg-gray-400 cursor-not-allowed' : 'bg-amber-600 hover:bg-amber-700'
             }`}
             aria-label={t('invoice.export')}
@@ -676,17 +705,17 @@ export const OrderDetailsPage: React.FC = () => {
                     initial={{ opacity: 0, x: isRtl ? 10 : -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: index * 0.1 }}
-                    className="mb-4 relative"
+                    className="mb-3 relative"
                   >
                     <div className={`flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-                      <div className="w-6 h-6 bg-amber-600 rounded-full flex items-center justify-center text-white z-10">
-                        {statusIcons[history.status as keyof typeof statusIcons] || <Clock className="w-4 h-4" />}
+                      <div className="w-5 h-5 bg-amber-600 rounded-full flex items-center justify-center text-white z-10">
+                        {statusIcons[history.status as keyof typeof statusIcons] || <Clock className="w-3 h-3" />}
                       </div>
                       <div>
                         <p className="font-medium text-xs">{t(`orders.${history.status}`)}</p>
                         <p className="text-xs text-gray-600">{history.changedAt}</p>
-                        <p className="text-xs text-gray-500">{t('orders.changed_by')}: {history.changedBy.displayName}</p>
-                        {history.notes && <p className="text-xs text-gray-500 mt-1">{t('orders.notes')}: {history.notes}</p>}
+                        <p className="text-xs text-gray-500">{t('orders.changed_by')}: {normalizeText(history.changedBy.displayName)}</p>
+                        {history.notes && <p className="text-xs text-gray-500 mt-1">{t('orders.notes')}: {normalizeText(history.notes)}</p>}
                       </div>
                     </div>
                   </motion.div>
@@ -782,11 +811,11 @@ const OrderCard: React.FC<OrderCardProps> = ({
       className="bg-white rounded-lg shadow-md p-3 sm:p-4 mb-4"
     >
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-        <div className={`text-${isRtl ? 'right' : 'left'}`}>
+        <div>
           <h2 className="text-sm font-semibold">{t('orders.order_number')}: {order.orderNumber}</h2>
-          <p className="text-xs text-gray-600">{t('orders.branch')}: {order.branch.displayName}</p>
+          <p className="text-xs text-gray-600">{t('orders.branch')}: {normalizeText(order.branch.displayName)}</p>
           <p className="text-xs text-gray-600">{t('orders.date')}: {order.date}</p>
-          <p className="text-xs text-gray-600">{t('orders.created_by')}: {order.createdBy.displayName}</p>
+          <p className="text-xs text-gray-600">{t('orders.created_by')}: {normalizeText(order.createdBy.displayName)}</p>
         </div>
         <div className={`text-${isRtl ? 'left' : 'right'}`}>
           <p className="text-xs text-gray-600">{t('orders.priority')}: {t(`orders.${order.priority}`)}</p>
@@ -809,11 +838,11 @@ const OrderCard: React.FC<OrderCardProps> = ({
           >
             <div className="flex flex-col sm:flex-row justify-between gap-3">
               <div>
-                <p className="font-medium text-xs">{item.displayProductName}</p>
+                <p className="font-medium text-xs">{normalizeText(item.displayProductName)}</p>
                 <p className="text-xs text-gray-600">{t('orders.quantity')}: {item.quantity} {translateUnit(item.unit, isRtl)}</p>
-                <p className="text-xs text-gray-600">{t('orders.department')}: {item.department.displayName}</p>
+                <p className="text-xs text-gray-600">{t('orders.department')}: {normalizeText(item.department.displayName)}</p>
                 {item.assignedTo && (
-                  <p className="text-xs text-gray-600">{t('orders.assigned_to')}: {item.assignedTo.displayName}</p>
+                  <p className="text-xs text-gray-600">{t('orders.assigned_to')}: {normalizeText(item.assignedTo.displayName)}</p>
                 )}
                 <p className={`text-xs font-medium ${item.status === 'completed' ? 'text-green-600' : 'text-blue-600'}`}>
                   {t('orders.status')}: {t(`orders.${item.status}`)}
@@ -844,7 +873,7 @@ const OrderCard: React.FC<OrderCardProps> = ({
       {order.notes && (
         <div className="mt-4">
           <h3 className="text-sm font-semibold">{t('orders.notes')}</h3>
-          <p className="text-xs text-gray-600">{order.notes}</p>
+          <p className="text-xs text-gray-600">{normalizeText(order.notes)}</p>
         </div>
       )}
 
@@ -856,7 +885,7 @@ const OrderCard: React.FC<OrderCardProps> = ({
               onClick={() => updateOrderStatus(order.id, status)}
               disabled={submitting === `order-${order.id}`}
               className={`px-3 py-1.5 rounded-full text-xs text-white ${
-                submitting === `order-${order.id}` ? 'bg-gray-400' : status === 'in_transit' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-amber-600 hover:bg-amber-700'
+                submitting === `order-${order.id}` ? 'bg-gray-400' : status === 'in_transit' ? 'bg-blue-300 hover:bg-blue-400' : 'bg-amber-600 hover:bg-amber-700'
               }`}
               aria-label={t(`orders.${status}`)}
             >
@@ -868,7 +897,7 @@ const OrderCard: React.FC<OrderCardProps> = ({
               onClick={() => openAssignModal(order)}
               disabled={submitting === `order-${order.id}`}
               className={`px-3 py-1.5 rounded-full text-xs text-white ${
-                submitting === `order-${order.id}` ? 'bg-gray-400' : 'bg-purple-600 hover:bg-purple-700'
+                submitting === `order-${order.id}` ? 'bg-gray-400' : 'bg-purple-300 hover:bg-purple-400'
               }`}
               aria-label={t('orders.assign')}
             >
@@ -930,28 +959,28 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
           aria-labelledby="assign-chefs-modal-title"
         >
           <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
+            initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-white rounded-lg p-3 sm:p-4 w-full max-w-md"
+            exit={{ scale: 0.8, opacity: 0 }}
+            className="bg-white rounded-lg p-4 sm:p-6 w-full max-w-lg"
           >
-            <div className={`flex justify-between items-center mb-3 ${isRtl ? 'flex-row-reverse' : ''}`}>
-              <h2 id="assign-chefs-modal-title" className="text-sm font-semibold">{t('orders.assign_chefs')}</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 id="assign-chefs-modal-title" className="text-xl font-semibold">{t('orders.assign_chefs')}</h2>
               <Button
                 onClick={onClose}
-                className="p-1.5 bg-gray-200 text-gray-800 hover:bg-gray-300 rounded-full"
+                className="p-2 bg-gray-200 text-gray-900 hover:bg-gray-300 rounded-full"
                 aria-label={t('common.close')}
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </Button>
             </div>
             {assignFormData.items.map(item => {
               const departmentId = order.items.find(i => i._id === item.itemId)?.department._id;
               const availableChefs = chefs.filter(c => c.department?._id === departmentId);
               return (
-                <div key={item.itemId} className="mb-3">
-                  <p className="font-medium text-xs">{item.product}</p>
-                  <p className="text-xs text-gray-600">{t('orders.quantity')}: {item.quantity} {item.unit}</p>
+                <div key={item.itemId} className="mb-4">
+                  <p className="font-medium">{item.product}</p>
+                  <p className="text-sm text-gray-600">{t('orders.quantity')}: {item.quantity} {item.unit}</p>
                   <Select
                     value={item.assignedTo}
                     onChange={(e) => handleAssignChange(item.itemId, e.target.value)}
@@ -968,10 +997,10 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
                 </div>
               );
             })}
-            <div className={`flex justify-end gap-2 mt-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <div className="flex justify-end gap-4 mt-6">
               <Button
                 onClick={onClose}
-                className="px-3 py-1.5 bg-gray-200 text-gray-800 hover:bg-gray-300 rounded-full text-xs"
+                className="px-4 py-2 bg-gray-200 text-gray-900 hover:bg-gray-300 rounded-full"
                 aria-label={t('common.cancel')}
               >
                 {t('common.cancel')}
@@ -979,7 +1008,7 @@ const AssignChefsModal: React.FC<AssignChefsModalProps> = ({
               <Button
                 onClick={() => assignChefs(order.id)}
                 disabled={submitting === `order-${order.id}`}
-                className={`px-3 py-1.5 rounded-full text-xs text-white ${
+                className={`px-4 py-2 rounded-full text-white ${
                   submitting === `order-${order.id}` ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'
                 }`}
                 aria-label={t('orders.assign')}
