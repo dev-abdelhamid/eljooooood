@@ -51,7 +51,7 @@ export const ProductSearchInput: React.FC<{
   };
 
   return (
-    <div className={`relative group w-full ${className} ` }>
+    <div className="relative group">
       <motion.div
         className={`absolute flex items-center align-center ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
         initial={false}

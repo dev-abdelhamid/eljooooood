@@ -2,7 +2,7 @@ import React, { useState, useCallback, memo } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Button } from '../UI/Button';
 import { Link } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Clock, Check, Package, Truck, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { Order, OrderStatus, ItemStatus } from '../../types/types';
 
@@ -49,7 +49,6 @@ const OrderCard: React.FC<OrderCardProps> = memo(
     const statusInfo = STATUS_COLORS[order.status] || STATUS_COLORS.pending;
     const StatusIcon = statusInfo.icon;
     const unassignedItems = order.items.filter((item) => !item.assignedTo);
-
     const displayedItems = isItemsExpanded ? order.items : order.items.slice(0, 3);
     const hasMoreItems = order.items.length > 3;
 
@@ -163,11 +162,8 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                       const itemStatusInfo = ITEM_STATUS_COLORS[item.status] || ITEM_STATUS_COLORS.pending;
                       const ItemStatusIcon = itemStatusInfo.icon;
                       return (
-                        <motion.li
+                        <li
                           key={item._id}
-                          initial={{ opacity: 0, x: isRtl ? 20 : -20 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ duration: 0.2 }}
                           className="p-2 bg-gray-50 rounded-md"
                         >
                           <div className="flex items-center justify-between gap-2">
@@ -182,7 +178,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                               }`}
                             >
                               <ItemStatusIcon className="w-3 h-3" />
-                              {itemStatusTranslations[item.status]}
+                              {isRtl ? { pending: 'قيد الانتظار', assigned: 'معين', in_progress: 'قيد التقدم', completed: 'مكتمل', cancelled: 'ملغى' }[item.status] : itemStatusInfo.label}
                             </span>
                           </div>
                           {item.assignedTo && (
@@ -192,7 +188,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                                 : `Assigned to: Chef ${item.assignedTo.displayName} (${item.department?.displayName || 'Unknown'})`}
                             </p>
                           )}
-                        </motion.li>
+                        </li>
                       );
                     })}
                   </ul>
@@ -287,7 +283,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                   size="sm"
                   icon={Package}
                   onClick={() => openAssignModal(order)}
-                  className="bg-amber-600 hover:bg-amber-700 text-white rounded-full px-3 py-1 text-xs"
+                  className="bg-purple-300 hover:bg-purple-400 text-white rounded-full px-3 py-1 text-xs"
                   disabled={submitting === order.id}
                   aria-label={isRtl ? `تعيين طلب رقم ${order.orderNumber}` : `Assign order #${order.orderNumber}`}
                 >
@@ -300,7 +296,7 @@ const OrderCard: React.FC<OrderCardProps> = memo(
                   size="sm"
                   icon={Truck}
                   onClick={() => updateOrderStatus(order.id, 'in_transit')}
-                  className="bg-amber-600 hover:bg-amber-700 text-white rounded-full px-3 py-1 text-xs"
+                  className="bg-blue-300 hover:bg-blue-400 text-white rounded-full px-3 py-1 text-xs"
                   disabled={submitting === order.id}
                   aria-label={isRtl ? `شحن طلب رقم ${order.orderNumber}` : `Ship order #${order.orderNumber}`}
                 >
