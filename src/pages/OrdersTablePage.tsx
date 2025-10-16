@@ -764,7 +764,7 @@ const DailyOrdersPage: React.FC = () => {
   return (
     <div className={`min-h-screen px-4 py-8 `}>
       <div className="mb-6 bg-white shadow-md rounded-xl p-4 border border-gray-200">
-        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 `}>
           <h2 className="text-lg font-bold text-gray-800">{isRtl ? 'تقرير الطلبات اليومية' : 'Daily Orders Report'} - {monthName}</h2>
           <div className="flex gap-2 items-center">
             <ProductDropdown
@@ -862,7 +862,7 @@ const DailyOrdersPage: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {filteredData.map((row, index) => (
-                <tr key={row.id} className={`hover:bg-amber-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                <tr key={row.id} className={`hover:bg-amber-50 transition-colors duration-200`}>
                   <td className="px-2 py-2 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
                   <td className="px-2 py-2 text-gray-700 text-center truncate">{row.code}</td>
                   <td className="px-2 py-2 text-gray-700 text-center truncate">{row.product}</td>
