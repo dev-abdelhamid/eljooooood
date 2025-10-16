@@ -1606,7 +1606,7 @@ const ProductionReport: React.FC = () => {
     if (type === 'orders') header = isRtl ? 'طلبات' : 'Orders';
     let content = `${header}: ${dailyQuantity > 0 ? '+' : ''}${formatNumber(dailyQuantity, isRtl)}`;
     if (Object.keys(branchDetails).length > 0) {
-      content += '\n' + Object.entries(branchDetails).map(([branch, qty] => `${branch}: ${qty > 0 ? '+' : ''}${formatNumber(qty, isRtl)}`).join('\n');
+      content += '\n' + Object.entries(branchDetails).map(([branch, qty]) => `${branch}: ${formatNumber(qty, isRtl)}`).join('\n');
     }
     return content;
   };
