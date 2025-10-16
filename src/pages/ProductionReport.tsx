@@ -93,12 +93,12 @@ interface Branch {
   displayName: string;
 }
 
- export const toArabicNumerals = (number: string | number): string => {
+const toArabicNumerals = (number: string | number): string => {
   const arabicNumerals = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
   return String(number).replace(/[0-9]/g, (digit) => arabicNumerals[parseInt(digit)]);
 };
 
-export const formatPrice = (amount: number, isRtl: boolean, isStats: boolean = false): string => {
+const formatPrice = (amount: number, isRtl: boolean, isStats: boolean = false): string => {
   const validAmount = (typeof amount === 'number' && !isNaN(amount)) ? amount : 0;
   let formatted: string;
   if (isStats) {
@@ -121,11 +121,11 @@ export const formatPrice = (amount: number, isRtl: boolean, isStats: boolean = f
   return formatted;
 };
 
-export const formatNumber = (num: number, isRtl: boolean): string => {
+const formatNumber = (num: number, isRtl: boolean): string => {
   return isRtl ? toArabicNumerals(num) : num.toString();
 };
 
-export const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
   let binary = '';
   const bytes = new Uint8Array(buffer);
   for (let i = 0; i < bytes.length; i++) {
@@ -160,12 +160,12 @@ const loadFont = async (doc: jsPDF): Promise<boolean> => {
   }
 };
 
-export const generateFileName = (title: string, monthName: string, isRtl: boolean): string => {
+const generateFileName = (title: string, monthName: string, isRtl: boolean): string => {
   const date = new Date().toISOString().split('T')[0];
   return isRtl ? `${title}_${monthName}_${date}.pdf` : `${title}_${monthName}_${date}.pdf`;
 };
 
-export const generatePDFHeader = (
+const generatePDFHeader = (
   doc: jsPDF,
   isRtl: boolean,
   title: string,
@@ -208,7 +208,7 @@ export const generatePDFHeader = (
   }
 };
 
- const generatePDFTable = (
+const generatePDFTable = (
   doc: jsPDF,
   headers: string[],
   data: any[],
@@ -268,7 +268,7 @@ export const generatePDFHeader = (
   });
 };
 
-export const exportToPDF = async (
+const exportToPDF = async (
   data: any[],
   title: string,
   monthName: string,
@@ -723,7 +723,7 @@ const ProductionReport: React.FC = () => {
     } else if (selectedPeriod === 'custom' && startDate && endDate) {
       const start = new Date(startDate).getDate() - 1;
       const end = new Date(endDate).getDate() - 1;
-      if (start <= end && start >= 0 && end < daysCount) {
+      if (start <= end) {
         for (let i = start; i <= end; i++) indices.push(i);
       }
     }
@@ -1054,7 +1054,7 @@ const ProductionReport: React.FC = () => {
       const sortedDayIndices = [...selectedDayIndices].sort((a, b) => a - b);
       const filteredData = useMemo(() => {
         return data
-          .filter(row => row.product.toLowerCase().includes(search.toLowerCase()))
+          .filter(row => row.product.toLowerCase().includes(search.toLowerCase()) || row.code.toLowerCase().includes(search.toLowerCase()))
           .map(row => {
             const filteredDailyQuantities = sortedDayIndices.map(i => {
               if (selectedBranches.length === 0) return row.dailyQuantities[i];

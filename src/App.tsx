@@ -27,7 +27,6 @@ import SalesReport from './pages/SalesReport';
 import BranchSalesReport from './pages/BranchSalesReport';
 import CreateSale from './pages/CreateSale';
 import  AdminSalesReport   from './pages/AdminSalesReport';
-import  OrdersTable from './pages/OrdersTable';
 
 
 
@@ -108,7 +107,6 @@ function AppContent() {
                   <Route path="/sales/analytics" element={<SalesAnalytics />} />
                   <Route path="/admin-sales" element={<AdminSalesReport />} />
                   <Route path="/returnStats" element={<ReturnStats />} />
-                  <Route path="/orders-table" element={<OrdersTable />} />
 
 
 
