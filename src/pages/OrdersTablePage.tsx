@@ -307,7 +307,7 @@ const generatePDFTable = (
           let processedText = text;
           if (isRtl) {
             processedText = String(processedText).replace(/[0-9]/g, d => toArabicNumerals(d));
-            if (processedText.match(/^[0-9+-%., ]*$/)) {
+            if (hookData.section === 'body') {
               processedText = processedText.split('').reverse().join('');
             }
           }
@@ -764,7 +764,7 @@ const DailyOrdersPage: React.FC = () => {
   }
 
   return (
-    <div className={`min-h-screen px-4 py-6 ${isRtl ? 'rtl font-amiri' : 'ltr font-inter'} bg-gray-100`}>
+    <div className={`min-h-screen px-4 py-8 `}>
       <div className="mb-6 bg-white shadow-md rounded-xl p-4 border border-gray-200">
         <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
           <h2 className="text-lg font-bold text-gray-800">{isRtl ? 'تقرير الطلبات اليومية' : 'Daily Orders Report'} - {monthName}</h2>
@@ -776,14 +776,7 @@ const DailyOrdersPage: React.FC = () => {
               ariaLabel={isRtl ? 'اختر الشهر' : 'Select month'}
               className="w-40"
             />
-            <Button
-              variant={filteredData.length > 0 ? 'primary' : 'secondary'}
-              onClick={filteredData.length > 0 ? () => exportTable('excel') : undefined}
-              disabled={filteredData.length === 0}
-            >
-              <Upload className="w-4 h-4" />
-              {isRtl ? 'تصدير إكسل' : 'Export Excel'}
-            </Button>
+           
             <Button
               variant={filteredData.length > 0 ? 'primary' : 'secondary'}
               onClick={filteredData.length > 0 ? () => exportTable('pdf') : undefined}
@@ -794,7 +787,7 @@ const DailyOrdersPage: React.FC = () => {
             </Button>
           </div>
         </div>
-        <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 items-center ${isRtl ? 'flex-row-reverse' : ''}`}>
+        <div className={`grid grid-cols-1 md:grid-cols-3 gap-4 items-center ${isRtl ? 'flex-row' : ''}`}>
           <ProductSearchInput
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
