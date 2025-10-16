@@ -51,9 +51,9 @@ export const ProductSearchInput: React.FC<{
   };
 
   return (
-    <div className="relative group">
+    <div className={`relative group w-full ${className} ` }>
       <motion.div
-        className={`absolute flex items-center align-center ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5 transition-colors group-focus-within:text-amber-500 ${value ? 'opacity-0' : 'opacity-100'}`}
+        className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 transition-colors group-focus-within:text-amber-500`}
         initial={false}
         
         animate={{ opacity: value ? 0 : 1, scale: value ? 0.8 : 1 }}
@@ -75,7 +75,7 @@ export const ProductSearchInput: React.FC<{
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.2 }}
           onClick={handleClear}
-        className={`absolute ${isRtl ? 'left-3' : 'right-3'} top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-500 transition-colors ${value ? 'opacity-100' : 'opacity-0'}`}
+          className={`absolute inset-y-0 ${isRtl ? 'left-3' : 'right-3'} flex items-center text-gray-400 hover:text-amber-500 transition-colors focus:outline-none`}
           aria-label={isRtl ? 'مسح البحث' : 'Clear search'}
         >
           <X className="w-4 h-4" />
