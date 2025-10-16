@@ -1048,7 +1048,7 @@ const ProductionReport: React.FC = () => {
     return content;
   };
 
-  const renderStockTable = useCallback(
+   const renderStockTable = useCallback(
     (data: StockRow[], title: string, month: number, type: 'in' | 'out') => {
       const [search, setSearch] = useState('');
       const sortedDayIndices = [...selectedDayIndices].sort((a, b) => a - b);
