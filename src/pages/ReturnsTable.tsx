@@ -1,5 +1,4 @@
-// ReturnsTable.tsx
-import React, { useState, useMemo } from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
 import { Button } from '../components/UI/Button';
 import { Upload } from 'lucide-react';
@@ -7,20 +6,9 @@ import * as XLSX from 'xlsx';
 import { toast } from 'react-toastify';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 import { Tooltip } from 'react-tooltip';
+import { exportToPDF, formatPrice, formatNumber } from './ProductionReport'; // استيراد الدوال المشتركة
 
-interface ReturnRow {
-  id: string;
-  product: string;
-  code: string;
-  unit: string;
-  totalReturns: number;
-  dailyReturns: number[];
-  dailyBranchDetails: { [branch: string]: number }[];
-  totalValue: number;
-  totalOrders?: number;
-}
-
-interface Props {
+interface ReturnsTableProps {
   data: ReturnRow[];
   title: string;
   month: number;
@@ -28,95 +16,23 @@ interface Props {
   loading: boolean;
   daysInMonth: string[];
   months: { value: number; label: string }[];
-  allBranches: string[];
-  formatPrice: (amount: number, isRtl: boolean, isStats?: boolean) => string;
+  formatPrice: (amount: number, isRtl: boolean) => string;
   formatNumber: (num: number, isRtl: boolean) => string;
-  toArabicNumerals: (number: string | number) => string;
-  exportToPDF: (
-    data: any[],
-    title: string,
-    monthName: string,
-    headers: string[],
-    isRtl: boolean,
-    totalItems: number,
-    totalQuantity: number,
-    totalPrice: number,
-    allBranches: string[]
-  ) => Promise<void>;
-  getTooltipContent: (dailyQuantity: number, branchDetails: { [branch: string]: number }, isRtl: boolean, type: 'in' | 'out' | 'return' | 'sales' | 'orders') => string;
 }
 
-const ReturnsTable: React.FC<Props> = ({
-  data,
-  title,
-  month,
-  isRtl,
-  loading,
-  daysInMonth,
-  months,
-  allBranches,
-  formatPrice,
-  formatNumber,
-  toArabicNumerals,
-  exportToPDF,
-  getTooltipContent,
-}) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedPeriod, setSelectedPeriod] = useState('all');
-  const [selectedBranches, setSelectedBranches] = useState<string[]>(allBranches);
-  const [startDate, setStartDate] = useState<string>('');
-  const [endDate, setEndDate] = useState<string>('');
-  const currentYear = new Date().getFullYear();
-
-  const periods = useMemo(() => {
-    const periodsList = [{ value: 'all', label: isRtl ? 'الكل' : 'All' }];
-    let week = 1;
-    const daysCount = daysInMonth.length;
-    for (let d = 1; d <= daysCount; d += 7) {
-      const start = d;
-      const end = Math.min(d + 6, daysCount);
-      periodsList.push({
-        value: `week${week}`,
-        label: isRtl ? `الأسبوع ${toArabicNumerals(week)} (${toArabicNumerals(start)}-${toArabicNumerals(end)})` : `Week ${week} (${start}-${end})`,
-      });
-      week++;
-    }
-    periodsList.push({ value: 'custom', label: isRtl ? 'مخصص' : 'Custom' });
-    return periodsList;
-  }, [daysInMonth, isRtl, toArabicNumerals]);
-
-  const filteredDayIndices = useMemo(() => {
-    if (selectedPeriod === 'all') return Array.from({ length: daysInMonth.length }, (_, i) => i);
-    if (selectedPeriod === 'custom' && startDate && endDate) {
-      const startD = new Date(startDate);
-      const endD = new Date(endDate);
-      const startIdx = startD.getDate() - 1;
-      const endIdx = endD.getDate() - 1;
-      return Array.from({ length: endIdx - startIdx + 1 }, (_, i) => startIdx + i);
-    }
-    const weekNum = parseInt(selectedPeriod.replace('week', ''));
-    const start = (weekNum - 1) * 7;
-    const end = Math.min(start + 6, daysInMonth.length - 1);
-    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
-  }, [selectedPeriod, startDate, endDate, daysInMonth]);
-
-  const filteredData = useMemo(() => {
-    return data.filter(row =>
-      row.product.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      row.code.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [data, searchTerm]);
-
-  const getDailyReturn = (row: ReturnRow, i: number) => {
-    if (selectedBranches.length === 0) return row.dailyReturns[i];
-    return selectedBranches.reduce((sum, b) => sum + (row.dailyBranchDetails[i][b] || 0), 0);
-  };
-
-  const grandTotalReturns = filteredData.reduce((sum, row) => sum + filteredDayIndices.reduce((s, i) => s + getDailyReturn(row, i), 0), 0);
-  const grandTotalValue = filteredData.reduce((sum, row) => sum + row.totalValue, 0);
-  const grandTotalOrders = filteredData.reduce((sum, row) => sum + (row.totalOrders || 0), 0);
-
+const ReturnsTable: React.FC<ReturnsTableProps> = ({ data, title, month, isRtl, loading, daysInMonth, months, formatPrice, formatNumber }) => {
+  const grandTotalReturns = data.reduce((sum, row) => sum + row.totalReturns, 0);
+  const grandTotalValue = data.reduce((sum, row) => sum + row.totalValue, 0);
+  const grandTotalOrders = data.reduce((sum, row) => sum + (row.totalOrders || 0), 0);
   const monthName = months[month].label;
+
+  const getTooltipContent = (dailyQuantity: number, branchDetails: { [branch: string]: number }, isRtl: boolean) => {
+    let content = `${isRtl ? 'مرتجع' : 'Return'}: ${formatNumber(dailyQuantity, isRtl)}`;
+    if (Object.keys(branchDetails).length > 0) {
+      content += '\n' + Object.entries(branchDetails).map(([branch, qty]) => `${branch}: ${formatNumber(qty, isRtl)}`).join('\n');
+    }
+    return content;
+  };
 
   const exportTable = (format: 'excel' | 'pdf') => {
     const headers = [
@@ -124,19 +40,19 @@ const ReturnsTable: React.FC<Props> = ({
       isRtl ? 'الكود' : 'Code',
       isRtl ? 'المنتج' : 'Product',
       isRtl ? 'وحدة المنتج' : 'Product Unit',
-      ...filteredDayIndices.map(i => daysInMonth[i]),
+      ...daysInMonth,
       isRtl ? 'إجمالي المرتجعات' : 'Total Returns',
       isRtl ? 'القيمة الإجمالية' : 'Total Value',
       isRtl ? 'نسبة %' : 'Ratio %',
     ];
     const rows = [
-      ...filteredData.map((row, index) => ({
+      ...data.map((row, index) => ({
         no: index + 1,
         code: row.code,
         product: row.product,
         unit: row.unit,
-        ...Object.fromEntries(filteredDayIndices.map((idx) => [daysInMonth[idx], getDailyReturn(row, idx)])),
-        totalReturns: filteredDayIndices.reduce((s, i) => s + getDailyReturn(row, i), 0),
+        ...Object.fromEntries(row.dailyReturns.map((qty, i) => [daysInMonth[i], qty])),
+        totalReturns: row.totalReturns,
         totalValue: formatPrice(row.totalValue, isRtl),
         ratio: row.totalOrders > 0 ? ((row.totalReturns / row.totalOrders) * 100).toFixed(2) : '0.00',
       })),
@@ -145,7 +61,7 @@ const ReturnsTable: React.FC<Props> = ({
         code: '',
         product: isRtl ? 'الإجمالي' : 'Total',
         unit: '',
-        ...Object.fromEntries(filteredDayIndices.map((idx) => [daysInMonth[idx], filteredData.reduce((sum, row) => sum + getDailyReturn(row, idx), 0)])),
+        ...Object.fromEntries(daysInMonth.map((_, i) => [daysInMonth[i], data.reduce((sum, row) => sum + row.dailyReturns[i], 0)])),
         totalReturns: grandTotalReturns,
         totalValue: formatPrice(grandTotalValue, isRtl),
         ratio: grandTotalOrders > 0 ? ((grandTotalReturns / grandTotalOrders) * 100).toFixed(2) : '0.00',
@@ -156,7 +72,7 @@ const ReturnsTable: React.FC<Props> = ({
       row.code,
       row.product,
       row.unit,
-      ...filteredDayIndices.map(idx => row[daysInMonth[idx]]),
+      ...daysInMonth.map(day => row[day]),
       row.totalReturns,
       row.totalValue,
       `${row.ratio}%`,
@@ -165,7 +81,7 @@ const ReturnsTable: React.FC<Props> = ({
     if (format === 'excel') {
       const ws = XLSX.utils.json_to_sheet(isRtl ? rows.map(row => Object.fromEntries(Object.entries(row).reverse())) : rows, { header: headers });
       if (isRtl) ws['!views'] = [{ RTL: true }];
-      ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...filteredDayIndices.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }, { wch: 15 }];
+      ws['!cols'] = [{ wch: 10 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, ...daysInMonth.map(() => ({ wch: 12 })), { wch: 15 }, { wch: 15 }, { wch: 15 }];
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, `${title}_${monthName}`);
       XLSX.writeFile(wb, `${title}_${monthName}.xlsx`);
@@ -174,16 +90,13 @@ const ReturnsTable: React.FC<Props> = ({
         autoClose: 3000,
       });
     } else if (format === 'pdf') {
-      exportToPDF(dataRows, title, monthName, headers, isRtl, filteredData.length, grandTotalReturns, grandTotalValue, []);
+      exportToPDF(dataRows, title, monthName, headers, isRtl, data.length, grandTotalReturns, grandTotalValue, []);
     }
   };
 
-  const monthStart = new Date(currentYear, month, 1);
-  const monthEnd = new Date(currentYear, month + 1, 0);
-
   if (loading) return <OrderTableSkeleton isRtl={isRtl} />;
 
-  if (filteredData.length === 0) {
+  if (data.length === 0) {
     return (
       <motion.div
         initial={{ opacity: 0 }}
@@ -200,77 +113,25 @@ const ReturnsTable: React.FC<Props> = ({
     <div className="mb-8">
       <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
         <h2 className="text-lg font-semibold text-gray-800">{isRtl ? `${title} - ${monthName}` : `${title} - ${monthName}`}</h2>
-        <input
-          type="text"
-          placeholder={isRtl ? 'بحث حسب المنتج أو الكود' : 'Search by product or code'}
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
-          className="px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <select
-          value={selectedPeriod}
-          onChange={e => setSelectedPeriod(e.target.value)}
-          className="px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          {periods.map(p => (
-            <option key={p.value} value={p.value}>{p.label}</option>
-          ))}
-        </select>
-        {selectedPeriod === 'custom' && (
-          <div className="flex gap-4">
-            <label>
-              {isRtl ? 'من' : 'From'}
-              <input
-                type="date"
-                value={startDate}
-                onChange={e => setStartDate(e.target.value)}
-                min={monthStart.toISOString().split('T')[0]}
-                max={monthEnd.toISOString().split('T')[0]}
-                className="px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ml-2"
-              />
-            </label>
-            <label>
-              {isRtl ? 'إلى' : 'To'}
-              <input
-                type="date"
-                value={endDate}
-                onChange={e => setEndDate(e.target.value)}
-                min={monthStart.toISOString().split('T')[0]}
-                max={monthEnd.toISOString().split('T')[0]}
-                className="px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ml-2"
-              />
-            </label>
-          </div>
-        )}
-        <select
-          multiple
-          value={selectedBranches}
-          onChange={e => setSelectedBranches(Array.from(e.target.selectedOptions, option => option.value))}
-          className="px-4 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          {allBranches.map(branch => (
-            <option key={branch} value={branch}>{branch}</option>
-          ))}
-        </select>
         <div className="flex gap-2">
           <Button
-            variant={filteredData.length > 0 ? 'primary' : 'secondary'}
-            onClick={filteredData.length > 0 ? () => exportTable('excel') : undefined}
-            className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 shadow-sm hover:shadow-md ${
-              filteredData.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+            variant={data.length > 0 ? 'primary' : 'secondary'}
+            onClick={data.length > 0 ? () => exportTable('excel') : undefined}
+            className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+              data.length > 0 ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
             }`}
-            disabled={filteredData.length === 0}
+            disabled={data.length === 0}
           >
             <Upload className="w-4 h-4" />
             {isRtl ? 'تصدير إكسل' : 'Export Excel'}
           </Button>
           <Button
-            variant={filteredData.length > 0 ? 'primary' : 'secondary'}
-            onClick={filteredData.length > 0 ? () => exportTable('pdf') : undefined}
-            className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 shadow-sm hover:shadow-md ${
-              filteredData.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+            variant={data.length > 0 ? 'primary' : 'secondary'}
+            onClick={data.length > 0 ? () => exportTable('pdf') : undefined}
+            className={`flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium transition-all duration-200 ${
+              data.length > 0 ? 'bg-green-600 hover:bg-green-700 text-white shadow-sm' : 'bg-gray-200 text-gray-500 cursor-not-allowed'
             }`}
-            disabled={filteredData.length === 0}
+            disabled={data.length === 0}
           >
             <Upload className="w-4 h-4" />
             {isRtl ? 'تصدير PDF' : 'Export PDF'}
@@ -290,9 +151,9 @@ const ReturnsTable: React.FC<Props> = ({
               <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'الكود' : 'Code'}</th>
               <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[120px]">{isRtl ? 'المنتج' : 'Product'}</th>
               <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">{isRtl ? 'وحدة المنتج' : 'Product Unit'}</th>
-              {filteredDayIndices.map(idx => (
-                <th key={idx} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
-                  {daysInMonth[idx]}
+              {daysInMonth.map((day, i) => (
+                <th key={i} className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[80px]">
+                  {day}
                 </th>
               ))}
               <th className="px-4 py-3 font-semibold text-gray-700 text-center min-w-[100px]">
@@ -307,29 +168,23 @@ const ReturnsTable: React.FC<Props> = ({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {filteredData.map((row, index) => (
+            {data.map((row, index) => (
               <tr key={row.id} className={`hover:bg-blue-50 transition-colors duration-200 ${isRtl ? 'flex-row-reverse' : ''}`}>
                 <td className="px-4 py-3 text-gray-700 text-center">{formatNumber(index + 1, isRtl)}</td>
                 <td className="px-4 py-3 text-gray-700 text-center truncate">{row.code}</td>
                 <td className="px-4 py-3 text-gray-700 text-center truncate">{row.product}</td>
                 <td className="px-4 py-3 text-gray-700 text-center truncate">{row.unit}</td>
-                {filteredDayIndices.map((idx) => {
-                  const qty = getDailyReturn(row, idx);
-                  const details = selectedBranches.length > 0 
-                    ? Object.fromEntries(selectedBranches.map(b => [b, row.dailyBranchDetails[idx][b] || 0]))
-                    : row.dailyBranchDetails[idx];
-                  return (
-                    <td
-                      key={idx}
-                      className="px-4 py-3 text-center font-medium text-red-700"
-                      data-tooltip-id="return-tooltip"
-                      data-tooltip-content={getTooltipContent(qty, details, isRtl, 'return')}
-                    >
-                      {qty !== 0 ? formatNumber(qty, isRtl) : '0'}
-                    </td>
-                  );
-                })}
-                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(filteredDayIndices.reduce((s, i) => s + getDailyReturn(row, i), 0), isRtl)}</td>
+                {row.dailyReturns.map((qty, i) => (
+                  <td
+                    key={i}
+                    className="px-4 py-3 text-center font-medium text-red-700"
+                    data-tooltip-id="return-tooltip"
+                    data-tooltip-content={getTooltipContent(qty, row.dailyBranchDetails[i], isRtl)}
+                  >
+                    {qty !== 0 ? formatNumber(qty, isRtl) : '0'}
+                  </td>
+                ))}
+                <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatNumber(row.totalReturns, isRtl)}</td>
                 <td className="px-4 py-3 text-gray-700 text-center font-medium">{formatPrice(row.totalValue, isRtl)}</td>
                 <td className="px-4 py-3 text-gray-700 text-center font-medium">
                   {row.totalOrders > 0 ? formatNumber(((row.totalReturns / row.totalOrders) * 100).toFixed(2), isRtl) + '%' : '0.00%'}
@@ -338,9 +193,9 @@ const ReturnsTable: React.FC<Props> = ({
             ))}
             <tr className={`font-semibold bg-gray-50 ${isRtl ? 'flex-row-reverse' : ''}`}>
               <td className="px-4 py-3 text-gray-800 text-center" colSpan={4}>{isRtl ? 'الإجمالي' : 'Total'}</td>
-              {filteredDayIndices.map((idx) => (
-                <td key={idx} className="px-4 py-3 text-gray-800 text-center">
-                  {formatNumber(filteredData.reduce((sum, row) => sum + getDailyReturn(row, idx), 0), isRtl)}
+              {daysInMonth.map((_, i) => (
+                <td key={i} className="px-4 py-3 text-gray-800 text-center">
+                  {formatNumber(data.reduce((sum, row) => sum + row.dailyReturns[i], 0), isRtl)}
                 </td>
               ))}
               <td className="px-4 py-3 text-gray-800 text-center">{formatNumber(grandTotalReturns, isRtl)}</td>
