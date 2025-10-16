@@ -7,10 +7,11 @@ import 'jspdf-autotable';
 import { toast } from 'react-toastify';
 import 'react-tooltip/dist/react-tooltip.css';
 import { Tooltip } from 'react-tooltip';
+import { inventoryAPI, ordersAPI, branchesAPI, salesAPI } from '../services/api'; // استيراد واجهات الـ API
 
-// تعريف واجهة المستخدم
+// تعريف واجهة المستخدم (محاكاة لتجربة الكود)
 const user = {
-  role: 'admin', // افتراضي لتجربة الكود
+  role: 'admin', // يمكن استبدال هذا ببيانات المستخدم الحقيقية من authAPI.getProfile
 };
 
 // تعريف واجهات البيانات
@@ -292,7 +293,7 @@ const exportToPDF = async (
 
 // مكون تقرير الطلبات اليومية
 const DailyOrdersSummary: React.FC = () => {
-  const [language, setLanguage] = useState('ar');
+  const [language, setLanguage] = useState(localStorage.getItem('language') || 'ar');
   const isRtl = language === 'ar';
 
   // التحقق من صلاحيات المستخدم
@@ -364,56 +365,21 @@ const DailyOrdersSummary: React.FC = () => {
     return indices.sort((a, b) => a - b);
   }, [selectedPeriod, startDate, endDate, daysInMonth.length]);
 
-  // جلب البيانات (محاكاة API)
+  // جلب البيانات باستخدام واجهات الـ API
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // محاكاة بيانات المخزون
-        const inventory = [
-          {
-            product: { _id: '1', code: 'P001', name: 'منتج 1', nameEn: 'Product 1', unit: 'وحدة', unitEn: 'Unit', price: 100 },
-            movements: [{ createdAt: new Date(currentYear, selectedMonth, 1), quantity: 10, branchId: 'b1' }],
-          },
-          {
-            product: { _id: '2', code: 'P002', name: 'منتج 2', nameEn: 'Product 2', unit: 'وحدة', unitEn: 'Unit', price: 150 },
-            movements: [{ createdAt: new Date(currentYear, selectedMonth, 2), quantity: 15, branchId: 'b2' }],
-          },
-        ];
-
-        // محاكاة بيانات الطلبات
-        const ordersResponse = [
-          {
-            status: 'completed',
-            createdAt: new Date(currentYear, selectedMonth, 1),
-            branch: { _id: 'b1' },
-            items: [
-              { product: { _id: '1', code: 'P001', name: 'منتج 1', nameEn: 'Product 1', unit: 'وحدة', unitEn: 'Unit' }, quantity: 10, price: 100, productId: '1' },
-            ],
-          },
-          {
-            status: 'completed',
-            createdAt: new Date(currentYear, selectedMonth, 2),
-            branch: { _id: 'b2' },
-            items: [
-              { product: { _id: '2', code: 'P002', name: 'منتج 2', nameEn: 'Product 2', unit: 'وحدة', unitEn: 'Unit' }, quantity: 15, price: 150, productId: '2' },
-            ],
-          },
-        ];
-
-        // محاكاة بيانات الفروع
-        const branchesResponse = [
-          { _id: 'b1', name: 'الفرع 1', nameEn: 'Branch 1' },
-          { _id: 'b2', name: 'الفرع 2', nameEn: 'Branch 2' },
-        ];
-
-        // محاكاة بيانات المبيعات
-        const salesResponse = {
-          productSales: [
-            { productId: '1', totalQuantity: 8 },
-            { productId: '2', totalQuantity: 12 },
-          ],
-        };
+        const [inventoryResponse, ordersResponse, branchesResponse, salesResponse] = await Promise.all([
+          inventoryAPI.getInventory({ lang: language }),
+          ordersAPI.getAll({ status: 'completed', page: 1, limit: 1000, lang: language }),
+          branchesAPI.getAll(),
+          salesAPI.getAnalytics({
+            startDate: new Date(currentYear, selectedMonth, 1).toISOString(),
+            endDate: new Date(currentYear, selectedMonth + 1, 0).toISOString(),
+            lang: language,
+          }),
+        ]);
 
         const fetchedBranches = branchesResponse
           .filter((branch: any) => branch && branch._id)
@@ -428,7 +394,7 @@ const DailyOrdersSummary: React.FC = () => {
 
         const branchMap = new Map<string, string>(fetchedBranches.map(b => [b._id, b.displayName]));
         const productDetails = new Map<string, { code: string; product: string; unit: string; price: number }>();
-        inventory.forEach((item: any) => {
+        inventoryResponse.forEach((item: any) => {
           if (item?.product?._id) {
             productDetails.set(item.product._id, {
               code: item.product.code || `code-${Math.random().toString(36).substring(2)}`,
@@ -441,7 +407,7 @@ const DailyOrdersSummary: React.FC = () => {
 
         let orders = Array.isArray(ordersResponse) ? ordersResponse : [];
         if (orders.length === 0) {
-          orders = inventory
+          orders = inventoryResponse
             .filter((item: any) => item?.product?._id)
             .flatMap((item: any) => {
               return (item.movements || []).map((movement: any) => ({
@@ -524,7 +490,7 @@ const DailyOrdersSummary: React.FC = () => {
         setOrderData(Array.from(orderMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity));
       } catch (error) {
         console.error('Failed to fetch data:', error);
-        toast.error(isRtl ? 'فشل في جلب البيانات' : 'Failed to fetch data');
+        toast.error(isRtl ? `فشل في جلب البيانات: ${error.message}` : `Failed to fetch data: ${error.message}`);
       } finally {
         setLoading(false);
       }
