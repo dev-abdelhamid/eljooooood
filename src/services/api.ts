@@ -1154,10 +1154,10 @@ export const factoryOrdersAPI = {
     console.log(`[${new Date().toISOString()}] factoryOrdersAPI.create - Response:`, response);
     return response;
   },
-  getAll: async () => {
-    const response = await api.get('/factoryOrders');
+  getAll: async (query: { sortBy?: string; sortOrder?: string; department?: string } = {}) => {
+    const response = await api.get('/factoryOrders', { params: query });
     console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Response:`, response);
-    return response;
+    return response.data; // Ensure response.data is returned
   },
   getById: async (id: string) => {
     if (!isValidObjectId(id)) {
@@ -1166,7 +1166,7 @@ export const factoryOrdersAPI = {
     }
     const response = await api.get(`/factoryOrders/${id}`);
     console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getById - Response:`, response);
-    return response;
+    return response.data;
   },
   assignChefs: async (id: string, data: { items: { itemId: string; assignedTo: string }[] }) => {
     if (!isValidObjectId(id) || !Array.isArray(data.items) || data.items.some(item => !isValidObjectId(item.itemId) || !isValidObjectId(item.assignedTo))) {
@@ -1177,14 +1177,14 @@ export const factoryOrdersAPI = {
       items: data.items,
     });
     console.log(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - Response:`, response);
-    return response;
+    return response.data;
   },
-  updateStatus: async (id: string, data: { status: 'pending' | 'in_production' | 'completed' | 'cancelled' }) => {
+  updateStatus: async (id: string, data: { status: 'pending' | 'approved' | 'in_production' | 'completed' | 'cancelled' }) => {
     if (!isValidObjectId(id)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Invalid order ID:`, id);
       throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
     }
-    if (!['pending', 'in_production', 'completed', 'cancelled'].includes(data.status)) {
+    if (!['pending', 'approved', 'in_production', 'completed', 'cancelled'].includes(data.status)) {
       console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Invalid status:`, data.status);
       throw new Error(createErrorMessage('invalidStatus', localStorage.getItem('language') === 'ar'));
     }
@@ -1192,7 +1192,7 @@ export const factoryOrdersAPI = {
       status: data.status,
     });
     console.log(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Response:`, response);
-    return response;
+    return response.data;
   },
   confirmProduction: async (id: string) => {
     if (!isValidObjectId(id)) {
@@ -1201,7 +1201,7 @@ export const factoryOrdersAPI = {
     }
     const response = await api.patch(`/factoryOrders/${id}/confirm-production`, {});
     console.log(`[${new Date().toISOString()}] factoryOrdersAPI.confirmProduction - Response:`, response);
-    return response;
+    return response.data;
   },
 };
 
