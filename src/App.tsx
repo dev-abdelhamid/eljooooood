@@ -43,6 +43,7 @@ import DailyOrdersSummary from './pages/DailyOrdersSummary';
 
 // New imports for separate pages
 import OrdersTablePage from './pages/OrdersTablePage';
+import { FactoryOrders } from './pages/FactoryOrders';
 
 
 
@@ -92,6 +93,7 @@ function AppContent() {
                   <Route path="/returns" element={<BranchReturns />} />
                   <Route path="/production-report" element={<ProductionReport />} />
                   <Route path="/FactoryInventory" element={<FactoryInventory />} />
+                  <Route path="/factoryOrders" element={<FactoryOrders />} />
                   <Route path="/production-tasks" element={<ChefTasks />} />
                   <Route path="/branches" element={<Branches />} />
                   <Route path="/branch-inventory" element={<BranchInventory />} />
