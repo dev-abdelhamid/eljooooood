@@ -3,12 +3,13 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Package, Plus, X, Eye, Edit, AlertCircle, Minus } from 'lucide-react';
-import { factoryOrdersAPI, factoryInventoryAPI, isValidObjectId } from '../services/api';
+import { factoryOrdersAPI, factoryInventoryAPI } from '../services/api';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
+import { isValidObjectId } from '../services/api';
 
 // Enums for type safety
 enum InventoryStatus {
@@ -27,7 +28,7 @@ interface FactoryInventoryItem {
     code: string;
     unit: string;
     unitEn: string;
-    department: { _id: string; name: string; nameEn: string; displayName: string } | null;
+    department: { _id: string; name: string; nameEn: string } | null;
     displayName: string;
     displayUnit: string;
   } | null;
@@ -66,13 +67,6 @@ interface AvailableProduct {
   productName: string;
   unit: string;
   departmentName: string;
-}
-
-interface FactoryOrder {
-  _id: string;
-  orderNumber: string;
-  items: { productId: string; quantity: number; status: string }[];
-  status: 'pending' | 'in_production' | 'completed' | 'cancelled';
 }
 
 // Translations
@@ -215,8 +209,6 @@ const QuantityInput = ({
 }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
-  const t = translations[isRtl ? 'ar' : 'en'];
-
   const handleChange = (val: string) => {
     const num = parseInt(val, 10);
     if (val === '' || isNaN(num) || num < 1) {
@@ -295,7 +287,7 @@ const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
     }
     aggregated[item.product].quantity += item.quantity;
   });
-  return Object.values(aggregated).filter((item) => item.product && isValidObjectId(item.product));
+  return Object.values(aggregated).filter(item => item.product);
 };
 
 export const FactoryInventory: React.FC = () => {
@@ -303,7 +295,7 @@ export const FactoryInventory: React.FC = () => {
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
   const { user } = useAuth();
-  const { socket, isConnected } = useSocket();
+  const { socket } = useSocket();
   const { addNotification } = useNotifications();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState('');
@@ -350,33 +342,29 @@ export const FactoryInventory: React.FC = () => {
         lang: language,
       };
       const response = await factoryInventoryAPI.getAll(params);
-      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Response:`, response);
-      const data = Array.isArray(response) ? response : response?.data?.inventory || response?.inventory || [];
-      if (!Array.isArray(data)) {
-        console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Invalid data format, expected array, got:`, data);
-        return [];
-      }
+      const data = Array.isArray(response) ? response : response?.inventory || response || [];
       return data;
     },
     enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
-    cacheTime: 10 * 60 * 1000,
     select: (data) => {
+      if (!Array.isArray(data)) {
+        console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Invalid data format, expected array, got:`, data);
+        return [];
+      }
       return data
-        .filter((item): item is FactoryInventoryItem => !!item && !!item.product && isValidObjectId(item.product._id))
+        .filter((item): item is FactoryInventoryItem => !!item && !!item.product) // Native filter
         .map((item: FactoryInventoryItem) => ({
           ...item,
           product: item.product
             ? {
                 ...item.product,
                 displayName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
-                displayUnit: isRtl ? (item.product.unit || t.unit) : item.product.unitEn || item.product.unit || 'N/A',
+                displayUnit: isRtl ? (item.product.unit || 'غير محدد') : item.product.unitEn || item.product.unit || 'N/A',
                 department: item.product.department
                   ? {
                       ...item.product.department,
-                      displayName: isRtl
-                        ? item.product.department.name
-                        : item.product.department.nameEn || item.product.department.name,
+                      displayName: isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name,
                     }
                   : null,
               }
@@ -387,45 +375,25 @@ export const FactoryInventory: React.FC = () => {
               : item.currentStock >= item.maxStockLevel
               ? InventoryStatus.FULL
               : InventoryStatus.NORMAL,
-          inProduction:
-            factoryOrdersData?.some(
-              (order) =>
-                (order.status === 'pending' || order.status === 'in_production') &&
-                order.items.some((i) => i.productId === item.product?._id)
-            ) || false,
+          inProduction: factoryOrdersData?.some(order => (order.status === 'pending' || order.status === 'in_production') && order.items.some(i => i.productId === item.product?._id)) || false,
         }));
     },
     onError: (err) => {
-      console.error(`[${new Date().toISOString()}] Inventory query error:`, err.message);
       toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
     },
-    retry: 3,
-    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30000),
   });
 
   // Product History Query
   const { data: productHistory, isLoading: historyLoading } = useQuery<ProductHistoryEntry[], Error>({
     queryKey: ['factoryProductHistory', selectedProductId, language],
     queryFn: async () => {
-      if (!selectedProductId || !isValidObjectId(selectedProductId)) {
-        throw new Error(t.errors.invalidProductId);
-      }
+      if (!selectedProductId) throw new Error(t.errors.productNotFound);
       const response = await factoryInventoryAPI.getHistory({ productId: selectedProductId, lang: language });
-      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Response:`, response);
-      const data = Array.isArray(response) ? response : response?.data?.history || response?.history || [];
-      if (!Array.isArray(data)) {
-        console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Invalid data format, expected array, got:`, data);
-        return [];
-      }
+      const data = Array.isArray(response) ? response : response?.history || response || [];
       return data;
     },
-    enabled: isDetailsModalOpen && !!selectedProductId && isValidObjectId(selectedProductId),
+    enabled: isDetailsModalOpen && !!selectedProductId,
     staleTime: 5 * 60 * 1000,
-    cacheTime: 10 * 60 * 1000,
-    onError: (err) => {
-      console.error(`[${new Date().toISOString()}] Product history query error:`, err.message);
-      toast.error(err.message || t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' });
-    },
   });
 
   // Factory Orders Query for inProduction flag
@@ -433,21 +401,10 @@ export const FactoryInventory: React.FC = () => {
     queryKey: ['factoryOrders', language],
     queryFn: async () => {
       const response = await factoryOrdersAPI.getAll();
-      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Response:`, response);
-      const data = Array.isArray(response) ? response : response?.data || [];
-      if (!Array.isArray(data)) {
-        console.warn(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Invalid data format, expected array, got:`, data);
-        return [];
-      }
-      return data;
+      return response?.data || [];
     },
     enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
-    cacheTime: 10 * 60 * 1000,
-    onError: (err) => {
-      console.error(`[${new Date().toISOString()}] Factory orders query error:`, err.message);
-      toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
-    },
   });
 
   // Available products
@@ -455,28 +412,20 @@ export const FactoryInventory: React.FC = () => {
     const fetchProducts = async () => {
       try {
         const response = await factoryInventoryAPI.getAvailableProducts();
-        console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Response:`, response);
-        const products = Array.isArray(response) ? response : response?.data?.products || response?.products || [];
-        if (!Array.isArray(products)) {
-          console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Invalid data format, expected array, got:`, products);
-          setAvailableProducts([]);
-          return;
-        }
+        const products = Array.isArray(response) ? response : response?.products || response || [];
         setAvailableProducts(
-          products
-            .filter((product: any) => product && product._id && isValidObjectId(product._id))
-            .map((product: any) => ({
-              productId: product._id,
-              productName: isRtl ? product.name : product.nameEn || product.name,
-              unit: isRtl ? (product.unit || t.unit) : product.unitEn || product.unit || 'N/A',
-              departmentName: isRtl
-                ? product.department?.name || t.allDepartments
-                : product.department?.nameEn || product.department?.name || 'Unknown',
-            }))
+          products.map((product: any) => ({
+            productId: product._id,
+            productName: isRtl ? product.name : product.nameEn || product.name,
+            unit: isRtl ? product.unit || t.unit : product.unitEn || product.unit || 'N/A',
+            departmentName: isRtl
+              ? product.department?.name || 'غير معروف'
+              : product.department?.nameEn || product.department?.name || 'Unknown',
+          }))
         );
-      } catch (err: any) {
-        console.error(`[${new Date().toISOString()}] Error fetching products:`, err.message);
-        toast.error(err.message || t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' });
+      } catch (err) {
+        console.error(`[${new Date().toISOString()}] Error fetching products:`, err);
+        toast.error(t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' });
       }
     };
     fetchProducts();
@@ -484,13 +433,9 @@ export const FactoryInventory: React.FC = () => {
 
   // Socket Events
   useEffect(() => {
-    if (!socket || !user?.role || !isConnected) return;
+    if (!socket || !user?.role) return;
 
     const handleFactoryInventoryUpdated = ({ productId }: { productId: string }) => {
-      if (!isValidObjectId(productId)) {
-        console.warn(`[${new Date().toISOString()}] Invalid productId in factoryInventoryUpdated:`, productId);
-        return;
-      }
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
       if (selectedProductId === productId) {
         queryClient.invalidateQueries({ queryKey: ['factoryProductHistory'] });
@@ -509,10 +454,6 @@ export const FactoryInventory: React.FC = () => {
     };
 
     const handleFactoryOrderCreated = ({ orderId, orderNumber, branchId }: { orderId: string; orderNumber: string; branchId?: string }) => {
-      if (!isValidObjectId(orderId)) {
-        console.warn(`[${new Date().toISOString()}] Invalid orderId in factoryOrderCreated:`, orderId);
-        return;
-      }
       const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
       audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
       addNotification({
@@ -527,24 +468,9 @@ export const FactoryInventory: React.FC = () => {
       });
       toast.success(t.notifications.productionCreated, { position: isRtl ? 'top-right' : 'top-left' });
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
-      queryClient.invalidateQueries({ queryKey: ['factoryOrders'] });
     };
 
-    const handleFactoryTaskAssigned = ({
-      factoryOrderId,
-      taskId,
-      chefId,
-      productName,
-    }: {
-      factoryOrderId: string;
-      taskId: string;
-      chefId: string;
-      productName: string;
-    }) => {
-      if (!isValidObjectId(factoryOrderId) || !isValidObjectId(chefId)) {
-        console.warn(`[${new Date().toISOString()}] Invalid factoryOrderId or chefId in factoryTaskAssigned:`, { factoryOrderId, chefId });
-        return;
-      }
+    const handleFactoryTaskAssigned = ({ factoryOrderId, taskId, chefId, productName }: { factoryOrderId: string; taskId: string; chefId: string; productName: string }) => {
       if (user._id === chefId) {
         const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
         audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
@@ -563,10 +489,6 @@ export const FactoryInventory: React.FC = () => {
     };
 
     const handleFactoryOrderCompleted = ({ factoryOrderId, orderNumber }: { factoryOrderId: string; orderNumber: string }) => {
-      if (!isValidObjectId(factoryOrderId)) {
-        console.warn(`[${new Date().toISOString()}] Invalid factoryOrderId in factoryOrderCompleted:`, factoryOrderId);
-        return;
-      }
       const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
       audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
       addNotification({
@@ -581,7 +503,6 @@ export const FactoryInventory: React.FC = () => {
       });
       toast.success(t.notifications.orderCompleted, { position: isRtl ? 'top-right' : 'top-left' });
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
-      queryClient.invalidateQueries({ queryKey: ['factoryOrders'] });
     };
 
     socket.on('factoryInventoryUpdated', handleFactoryInventoryUpdated);
@@ -589,22 +510,13 @@ export const FactoryInventory: React.FC = () => {
     socket.on('factoryTaskAssigned', handleFactoryTaskAssigned);
     socket.on('factoryOrderCompleted', handleFactoryOrderCompleted);
 
-    // WebSocket reconnection logic
-    const reconnectInterval = setInterval(() => {
-      if (!isConnected && socket) {
-        console.log(`[${new Date().toISOString()}] Attempting to reconnect WebSocket...`);
-        socket.connect();
-      }
-    }, 5000);
-
     return () => {
       socket.off('factoryInventoryUpdated', handleFactoryInventoryUpdated);
       socket.off('factoryOrderCreated', handleFactoryOrderCreated);
       socket.off('factoryTaskAssigned', handleFactoryTaskAssigned);
       socket.off('factoryOrderCompleted', handleFactoryOrderCompleted);
-      clearInterval(reconnectInterval);
     };
-  }, [socket, user, isConnected, queryClient, addNotification, t, isRtl, selectedProductId]);
+  }, [socket, user, queryClient, addNotification, t, isRtl, selectedProductId]);
 
   // Department options
   const departmentOptions = useMemo(() => {
@@ -627,7 +539,7 @@ export const FactoryInventory: React.FC = () => {
       { value: '', label: t.allDepartments },
       ...uniqueDepts.map((dept) => ({
         value: dept._id,
-        label: dept.name || t.allDepartments,
+        label: dept.name || 'غير معروف',
       })),
     ];
   }, [inventoryData, isRtl, t]);
@@ -653,7 +565,7 @@ export const FactoryInventory: React.FC = () => {
       })),
     ],
     [availableProducts, t]
-);
+  );
 
   // Filtered and paginated inventory
   const filteredInventory = useMemo(
@@ -712,13 +624,11 @@ export const FactoryInventory: React.FC = () => {
   }, []);
 
   const handleOpenDetailsModal = useCallback((item: FactoryInventoryItem) => {
-    if (item.product && isValidObjectId(item.product._id)) {
+    if (item.product) {
       setSelectedProductId(item.product._id);
       setIsDetailsModalOpen(true);
-    } else {
-      toast.error(t.errors.invalidProductId, { position: isRtl ? 'top-right' : 'top-left' });
     }
-  }, [t, isRtl]);
+  }, []);
 
   const addItemToForm = useCallback(() => {
     dispatchProductionForm({
@@ -729,14 +639,8 @@ export const FactoryInventory: React.FC = () => {
 
   const updateItemInForm = useCallback((index: number, field: keyof ProductionItem, value: string | number) => {
     if (field === 'quantity' && typeof value === 'string') {
-      const numValue = parseInt(value, 10);
-      if (isNaN(numValue) || numValue < 1) {
-        setProductionErrors((prev) => ({
-          ...prev,
-          [`item_${index}_quantity`]: t.errors.invalidQuantityMax,
-        }));
-        return;
-      }
+      const numValue = parseInt(value);
+      if (isNaN(numValue) || numValue < 1) return;
       value = numValue;
     }
     dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
@@ -744,7 +648,7 @@ export const FactoryInventory: React.FC = () => {
       ...prev,
       [`item_${index}_${field}`]: undefined,
     }));
-  }, [t]);
+  }, []);
 
   const handleProductChange = useCallback(
     (index: number, productId: string) => {
@@ -806,40 +710,25 @@ export const FactoryInventory: React.FC = () => {
 
   const validateEditForm = useCallback(() => {
     const errors: Record<string, string> = {};
-    if (editForm.minStockLevel < 0) {
-      errors.minStockLevel = t.errors.nonNegative.replace('{field}', t.minStock);
-    }
-    if (editForm.maxStockLevel < 0) {
-      errors.maxStockLevel = t.errors.nonNegative.replace('{field}', t.maxStock);
-    }
-    if (editForm.maxStockLevel <= editForm.minStockLevel) {
-      errors.maxStockLevel = t.errors.maxGreaterMin;
-    }
+    if (editForm.minStockLevel < 0) errors.minStockLevel = t.errors.nonNegative.replace('{field}', t.minStock);
+    if (editForm.maxStockLevel < 0) errors.maxStockLevel = t.errors.nonNegative.replace('{field}', t.maxStock);
+    if (editForm.maxStockLevel <= editForm.minStockLevel) errors.maxStockLevel = t.errors.maxGreaterMin;
     setEditErrors(errors);
     return Object.keys(errors).length === 0;
   }, [editForm, t]);
 
   const createProductionMutation = useMutation<{ orderId: string; orderNumber: string }, Error, void>({
     mutationFn: async () => {
-      if (!validateProductionForm()) {
-        throw new Error(t.errors.invalidForm);
-      }
-      if (!user?.id) {
-        throw new Error('User not authenticated');
-      }
+      if (!validateProductionForm()) throw new Error(t.errors.invalidForm);
+      if (!user?.id) throw new Error('User not authenticated');
       const aggregatedItems = aggregateItemsByProduct(productionForm.items);
-      if (aggregatedItems.length === 0) {
-        throw new Error(t.errors.noItemSelected);
-      }
       const data = {
         orderNumber: `PROD-${Date.now()}-${Math.random().toString(36).slice(-6)}`,
         items: aggregatedItems,
         notes: productionForm.notes || undefined,
         priority: 'medium',
       };
-      console.log(`[${new Date().toISOString()}] Creating production order:`, data);
       const response = await factoryOrdersAPI.create(data);
-      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.create - Response:`, response);
       return {
         orderId: response?._id || crypto.randomUUID(),
         orderNumber: response?.orderNumber || data.orderNumber,
@@ -847,24 +736,20 @@ export const FactoryInventory: React.FC = () => {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
-      queryClient.invalidateQueries({ queryKey: ['factoryOrders'] });
       setIsProductionModalOpen(false);
       dispatchProductionForm({ type: 'RESET' });
       setProductionErrors({});
       setSelectedItem(null);
       toast.success(t.notifications.productionCreated, { position: isRtl ? 'top-right' : 'top-left' });
-      if (socket && isConnected) {
-        socket.emit('factoryOrderCreated', {
-          orderId: data.orderId,
-          orderNumber: data.orderNumber,
-          branchId: user?.branch?._id,
-          eventId: crypto.randomUUID(),
-          isRtl,
-        });
-      }
+      socket?.emit('factoryOrderCreated', {
+        orderId: data.orderId,
+        orderNumber: data.orderNumber,
+        branchId: user?.branch?._id,
+        eventId: crypto.randomUUID(),
+        isRtl,
+      });
     },
     onError: (err: any) => {
-      console.error(`[${new Date().toISOString()}] Create production order error:`, err.message);
       let errorMessage = err.message || t.errors.createProduction;
       if (err.response?.status === 429) {
         errorMessage = t.errors.tooManyRequests;
@@ -888,17 +773,8 @@ export const FactoryInventory: React.FC = () => {
 
   const updateInventoryMutation = useMutation<void, Error, void>({
     mutationFn: async () => {
-      if (!validateEditForm()) {
-        throw new Error(t.errors.invalidForm);
-      }
-      if (!selectedItem || !isValidObjectId(selectedItem._id)) {
-        throw new Error(t.errors.noItemSelected);
-      }
-      console.log(`[${new Date().toISOString()}] Updating inventory:`, {
-        id: selectedItem._id,
-        minStockLevel: editForm.minStockLevel,
-        maxStockLevel: editForm.maxStockLevel,
-      });
+      if (!validateEditForm()) throw new Error(t.errors.invalidForm);
+      if (!selectedItem) throw new Error(t.errors.noItemSelected);
       await factoryInventoryAPI.updateStock(selectedItem._id, {
         minStockLevel: editForm.minStockLevel,
         maxStockLevel: editForm.maxStockLevel,
@@ -911,16 +787,13 @@ export const FactoryInventory: React.FC = () => {
       setEditErrors({});
       setSelectedItem(null);
       toast.success(t.notifications.inventoryUpdated, { position: isRtl ? 'top-right' : 'top-left' });
-      if (socket && isConnected) {
-        socket.emit('factoryInventoryUpdated', {
-          productId: selectedItem?.product?._id,
-          eventId: crypto.randomUUID(),
-          isRtl,
-        });
-      }
+      socket?.emit('factoryInventoryUpdated', {
+        productId: selectedItem?.product?._id,
+        eventId: crypto.randomUUID(),
+        isRtl,
+      });
     },
     onError: (err) => {
-      console.error(`[${new Date().toISOString()}] Update inventory error:`, err.message);
       const errorMessage = err.response?.status === 429 ? t.errors.tooManyRequests : err.message || t.errors.updateInventory;
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       setEditErrors({ form: errorMessage });
@@ -1052,21 +925,11 @@ export const FactoryInventory: React.FC = () => {
                       </h3>
                       <p className="text-sm text-gray-500">{item.product.code}</p>
                     </div>
-                    <p className="text-sm text-amber-600">
-                      {t.filterByDepartment}: {item.product.department?.displayName || 'N/A'}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      {t.stock}: {item.currentStock}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      {t.minStock}: {item.minStockLevel}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      {t.maxStock}: {item.maxStockLevel}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      {t.unit}: {item.product.displayUnit}
-                    </p>
+                    <p className="text-sm text-amber-600">{t.filterByDepartment}: {item.product.department?.displayName || 'N/A'}</p>
+                    <p className="text-sm text-gray-600">{t.stock}: {item.currentStock}</p>
+                    <p className="text-sm text-gray-600">{t.minStock}: {item.minStockLevel}</p>
+                    <p className="text-sm text-gray-600">{t.maxStock}: {item.maxStockLevel}</p>
+                    <p className="text-sm text-gray-600">{t.unit}: {item.product.displayUnit}</p>
                     <p
                       className={`text-sm font-medium ${
                         item.status === InventoryStatus.LOW
@@ -1076,28 +939,11 @@ export const FactoryInventory: React.FC = () => {
                           : 'text-green-600'
                       }`}
                     >
-                      {item.status === InventoryStatus.LOW
-                        ? t.lowStock
-                        : item.status === InventoryStatus.FULL
-                        ? t.full
-                        : t.normal}
+                      {item.status}
                     </p>
                     {item.inProduction && (
                       <p className="text-sm text-blue-600 flex items-center gap-1">
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                          xmlns="http://www.w3.org/2000/svg"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
-                          />
-                        </svg>
+                        <Hammer className="w-4 h-4" />
                         {t.inProduction}
                       </p>
                     )}
@@ -1228,7 +1074,7 @@ export const FactoryInventory: React.FC = () => {
                         value={item.quantity}
                         onChange={(val) => updateItemInForm(index, 'quantity', val)}
                         onIncrement={() => updateItemInForm(index, 'quantity', item.quantity + 1)}
-                        onDecrement={() => updateItemInForm(index, 'quantity', Math.max(item.quantity - 1, 1))}
+                        onDecrement={() => updateItemInForm(index, 'quantity', item.quantity - 1)}
                       />
                       {productionErrors[`item_${index}_quantity`] && (
                         <p className="text-red-600 text-xs mt-1">{productionErrors[`item_${index}_quantity`]}</p>
