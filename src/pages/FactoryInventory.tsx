@@ -1,5 +1,4 @@
 
-
 // FactoryInventory Component (Frontend)
 import React, { useState, useMemo, useCallback, useEffect, useReducer } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -336,13 +335,8 @@ export const FactoryInventory: React.FC = () => {
         stockStatus: filterStatus || undefined,
         lang: language,
       };
-      const response = await factoryInventoryAPI.getAll(params);
-      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Response:`, response);
-      const data = Array.isArray(response) ? response : response?.data?.inventory || response?.inventory || [];
-      if (!Array.isArray(data)) {
-        console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Invalid data format, expected array, got:`, data);
-        return [];
-      }
+      const data = await factoryInventoryAPI.getAll(params);
+      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Data:`, data);
       return data;
     },
     enabled: !!user?.role && ['production', 'admin'].includes(user.role),
@@ -390,13 +384,8 @@ export const FactoryInventory: React.FC = () => {
       if (!selectedProductId || !isValidObjectId(selectedProductId)) {
         throw new Error(t.errors.invalidProductId);
       }
-      const response = await factoryInventoryAPI.getHistory({ productId: selectedProductId, lang: language });
-      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Response:`, response);
-      const data = Array.isArray(response) ? response : response?.data?.history || response?.history || [];
-      if (!Array.isArray(data)) {
-        console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Invalid data format, expected array, got:`, data);
-        return [];
-      }
+      const data = await factoryInventoryAPI.getHistory({ productId: selectedProductId, lang: language });
+      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Data:`, data);
       return data;
     },
     enabled: isDetailsModalOpen && !!selectedProductId && isValidObjectId(selectedProductId),
@@ -411,13 +400,8 @@ export const FactoryInventory: React.FC = () => {
   const { data: factoryOrdersData } = useQuery<FactoryOrder[], Error>({
     queryKey: ['factoryOrders', language],
     queryFn: async () => {
-      const response = await factoryOrdersAPI.getAll();
-      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Response:`, response);
-      const data = Array.isArray(response) ? response : response?.data || [];
-      if (!Array.isArray(data)) {
-        console.warn(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Invalid data format, expected array, got:`, data);
-        return [];
-      }
+      const data = await factoryOrdersAPI.getAll();
+      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Data:`, data);
       return data;
     },
     enabled: !!user?.role && ['production', 'admin'].includes(user.role),
@@ -445,16 +429,10 @@ export const FactoryInventory: React.FC = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await factoryInventoryAPI.getAvailableProducts();
-        console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Response:`, response);
-        const products = Array.isArray(response) ? response : response?.data?.products || response?.products || [];
-        if (!Array.isArray(products)) {
-          console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Invalid data format, expected array, got:`, products);
-          setAvailableProducts([]);
-          return;
-        }
+        const data = await factoryInventoryAPI.getAvailableProducts();
+        console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Data:`, data);
         setAvailableProducts(
-          products
+          data
             .filter((product: any) => product && product._id && isValidObjectId(product._id))
             .map((product: any) => ({
               productId: product._id,
@@ -930,8 +908,8 @@ export const FactoryInventory: React.FC = () => {
         </motion.div>
       )}
       <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="md:col-span-1">
             <ProductSearchInput
               value={searchInput}
               onChange={handleSearchChange}
@@ -940,7 +918,7 @@ export const FactoryInventory: React.FC = () => {
               className="w-full"
             />
           </div>
-          <div>
+          <div className="md:col-span-1 flex flex-col sm:flex-row gap-4">
             <ProductDropdown
               value={filterStatus}
               onChange={(value) => {
@@ -951,8 +929,6 @@ export const FactoryInventory: React.FC = () => {
               ariaLabel={t.filterByStatus}
               className="w-full"
             />
-          </div>
-          <div>
             <ProductDropdown
               value={filterDepartment}
               onChange={(value) => {
@@ -1440,4 +1416,3 @@ export const FactoryInventory: React.FC = () => {
     </div>
   );
 };
-
