@@ -18,11 +18,10 @@ import Pagination from '../components/Shared/Pagination';
 import AssignChefsModal from '../components/production/AssignChefsModal';
 import OrderTable from '../components/production/OrderTable';
 import OrderCard from '../components/production/OrderCard';
-import { OrderCardSkeleton } from '../components/Shared/OrderSkeletons';
-import { OrderTableSkeleton } from '../components/Shared/OrderSkeletons';
+import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
+import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 import { CreateFactoryOrderRequest } from '../types/types';
-
 
 const normalizeText = (text: string) => {
   return text
@@ -41,7 +40,7 @@ interface Product {
   nameEn?: string;
   unit: string;
   unitEn?: string;
-  department: { _id: string; name: string; nameEn?: string };
+  department: { _id: string; name: string; nameEn?: string; code?: string };
 }
 
 interface State {
@@ -157,14 +156,15 @@ const reducer = (state: State, action: Action): State => {
           ? {
               ...order,
               items: order.items.map(i => {
-                const assignment = action.items?.find(a => a._id === i._id);
+                const assignment = action.items?.find(a => a.itemId === i._id);
                 return assignment
                   ? {
                       ...i,
                       assignedTo: assignment.assignedTo
                         ? {
-                            ...assignment.assignedTo,
-                            displayName: state.isRtl ? assignment.assignedTo.name : (assignment.assignedTo.nameEn || assignment.assignedTo.name),
+                            _id: assignment.assignedTo,
+                            name: state.chefs.find(c => c._id === assignment.assignedTo)?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                            nameEn: state.chefs.find(c => c._id === assignment.assignedTo)?.nameEn,
                           }
                         : undefined,
                       status: assignment.status || i.status,
@@ -179,14 +179,15 @@ const reducer = (state: State, action: Action): State => {
         ? {
             ...state.selectedOrder,
             items: state.selectedOrder.items.map(i => {
-              const assignment = action.items?.find(a => a._id === i._id);
+              const assignment = action.items?.find(a => a.itemId === i._id);
               return assignment
                 ? {
                     ...i,
                     assignedTo: assignment.assignedTo
                       ? {
-                          ...assignment.assignedTo,
-                          displayName: state.isRtl ? assignment.assignedTo.name : (assignment.assignedTo.nameEn || assignment.assignedTo.name),
+                          _id: assignment.assignedTo,
+                          name: state.chefs.find(c => c._id === assignment.assignedTo)?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                          nameEn: state.chefs.find(c => c._id === assignment.assignedTo)?.nameEn,
                         }
                       : undefined,
                     status: assignment.status || i.status,
@@ -401,16 +402,19 @@ export const InventoryOrders: React.FC = () => {
       dispatch({ type: 'SET_LOADING', payload: true });
       try {
         const query: Record<string, any> = {
-          status: state.filterStatus,
-          priority: state.sortBy === 'totalQuantity' ? state.sortOrder : undefined,
+          status: state.filterStatus || undefined,
+          lang: isRtl ? 'ar' : 'en',
         };
-        if (user.role === 'production' && user.department) query.department = user.department._id;
+        if (user.role === 'production' && user.department) {
+          query.department = user.department._id;
+        }
         const [ordersResponse, chefsResponse, productsResponse] = await Promise.all([
-          factoryOrdersAPI.getAll(query),
+          factoryOrdersAPI.getAll(),
           chefsAPI.getAll(),
           productsAPI.getAll(),
         ]);
-        const mappedOrders: FactoryOrder[] = ordersResponse
+
+        const mappedOrders: FactoryOrder[] = ordersResponse.data
           .filter((order: any) => order && order._id && order.orderNumber)
           .map((order: any) => ({
             _id: order._id,
@@ -456,10 +460,11 @@ export const InventoryOrders: React.FC = () => {
             approvedAt: order.approvedAt ? new Date(order.approvedAt).toISOString() : null,
             statusHistory: order.statusHistory || [],
           }));
+
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
         dispatch({
           type: 'SET_CHEFS',
-          payload: chefsResponse
+          payload: chefsResponse.data
             .filter((chef: any) => chef && chef.user?._id)
             .map((chef: any) => ({
               _id: chef._id,
@@ -479,7 +484,7 @@ export const InventoryOrders: React.FC = () => {
         });
         dispatch({
           type: 'SET_PRODUCTS',
-          payload: productsResponse
+          payload: productsResponse.data
             .filter((product: any) => product && product._id)
             .map((product: any) => ({
               _id: product._id,
@@ -507,16 +512,16 @@ export const InventoryOrders: React.FC = () => {
           setTimeout(() => fetchData(retryCount + 1), 2000);
           return;
         }
-        const errorMessage = err.response?.status === 404
+        const errorMessage = err.status === 404
           ? isRtl ? 'لم يتم العثور على طلبات' : 'No orders found'
-          : isRtl ? `خطأ في جلب الطلبات: ${err.message}` : `Error fetching orders: ${err.message}`;
+          : err.message || (isRtl ? 'خطأ في جلب الطلبات' : 'Error fetching orders');
         dispatch({ type: 'SET_ERROR', payload: errorMessage });
         toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
       } finally {
         dispatch({ type: 'SET_LOADING', payload: false });
       }
     },
-    [user, state.filterStatus, state.sortBy, state.sortOrder, isRtl, language]
+    [user, state.filterStatus, isRtl, language]
   );
 
   useEffect(() => {
@@ -585,15 +590,17 @@ export const InventoryOrders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        const response = await factoryOrdersAPI.updateStatus(orderId, { status: newStatus }, isRtl);
+        const response = await factoryOrdersAPI.updateStatus(orderId, { status: newStatus });
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: newStatus });
         if (socket && isConnected) {
           emit('orderStatusUpdated', { orderId, status: newStatus });
         }
-        toast.success(response.message, { position: isRtl ? 'top-left' : 'top-right' });
+        toast.success(isRtl ? 'تم تحديث حالة الطلب بنجاح' : 'Order status updated successfully', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
       } catch (err: any) {
         console.error('Update order status error:', err.message);
-        toast.error(isRtl ? `فشل في تحديث الحالة: ${err.message}` : `Failed to update status: ${err.message}`, {
+        toast.error(err.message || (isRtl ? 'فشل في تحديث الحالة' : 'Failed to update status'), {
           position: isRtl ? 'top-left' : 'top-right',
         });
       } finally {
@@ -607,15 +614,17 @@ export const InventoryOrders: React.FC = () => {
     async (orderId: string) => {
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        const response = await factoryOrdersAPI.confirmProduction(orderId, isRtl);
+        const response = await factoryOrdersAPI.confirmProduction(orderId);
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: 'completed' });
         if (socket && isConnected) {
           emit('factoryOrderCompleted', { orderId, orderNumber: state.orders.find(o => o._id === orderId)?.orderNumber });
         }
-        toast.success(response.message, { position: isRtl ? 'top-left' : 'top-right' });
+        toast.success(isRtl ? 'تم تأكيد الإنتاج بنجاح' : 'Production confirmed successfully', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
       } catch (err: any) {
         console.error('Confirm production error:', err.message);
-        toast.error(isRtl ? `فشل في تأكيد الإنتاج: ${err.message}` : `Failed to confirm production: ${err.message}`, {
+        toast.error(err.message || (isRtl ? 'فشل في تأكيد الإنتاج' : 'Failed to confirm production'), {
           position: isRtl ? 'top-left' : 'top-right',
         });
       } finally {
@@ -635,17 +644,19 @@ export const InventoryOrders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        const response = await factoryOrdersAPI.assignChefs(orderId, formData, isRtl);
-        dispatch({ type: 'TASK_ASSIGNED', orderId, items: response.data.items });
+        const response = await factoryOrdersAPI.assignChefs(orderId, formData);
+        dispatch({ type: 'TASK_ASSIGNED', orderId, items: formData.items });
         dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: false });
         dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
         if (socket && isConnected) {
-          emit('taskAssigned', { orderId, items: response.data.items });
+          emit('taskAssigned', { orderId, items: formData.items });
         }
-        toast.success(response.message, { position: isRtl ? 'top-left' : 'top-right' });
+        toast.success(isRtl ? 'تم تعيين الشيفات بنجاح' : 'Chefs assigned successfully', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
       } catch (err: any) {
         console.error('Assign chefs error:', err.message);
-        toast.error(isRtl ? `فشل في تعيين الشيفات: ${err.message}` : `Failed to assign chefs: ${err.message}`, {
+        toast.error(err.message || (isRtl ? 'فشل في تعيين الشيفات' : 'Failed to assign chefs'), {
           position: isRtl ? 'top-left' : 'top-right',
         });
       } finally {
@@ -673,17 +684,19 @@ export const InventoryOrders: React.FC = () => {
       };
       dispatch({ type: 'SET_SUBMITTING', payload: 'create' });
       try {
-        const response = await factoryOrdersAPI.create(data, isRtl);
+        const response = await factoryOrdersAPI.create(data);
         dispatch({ type: 'ADD_ORDER', payload: response.data });
         dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
         dispatch({ type: 'SET_CREATE_FORM', payload: { productId: '', quantity: '', notes: '', priority: 'medium' } });
         if (socket && isConnected) {
           emit('newFactoryOrder', response.data);
         }
-        toast.success(response.message, { position: isRtl ? 'top-left' : 'top-right' });
+        toast.success(isRtl ? 'تم إنشاء الطلب بنجاح' : 'Order created successfully', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
       } catch (err: any) {
         console.error('Create order error:', err.message);
-        toast.error(isRtl ? `فشل في إنشاء الطلب: ${err.message}` : `Failed to create order: ${err.message}`, {
+        toast.error(err.message || (isRtl ? 'فشل في إنشاء الطلب' : 'Failed to create order'), {
           position: isRtl ? 'top-left' : 'top-right',
         });
       } finally {
@@ -960,6 +973,3 @@ export const InventoryOrders: React.FC = () => {
     </div>
   );
 };
-
-
-export default InventoryOrders;
