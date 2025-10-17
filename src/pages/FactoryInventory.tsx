@@ -1,3 +1,5 @@
+
+
 // FactoryInventory Component (Frontend)
 import React, { useState, useMemo, useCallback, useEffect, useReducer } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -715,7 +717,7 @@ export const FactoryInventory: React.FC = () => {
     setProductionErrors((prev) => ({
       ...prev,
       [`item_${index}_${field}`]: undefined,
-    }));
+    });
   }, [t]);
   const handleProductChange = useCallback(
     (index: number, productId: string) => {
@@ -740,7 +742,7 @@ export const FactoryInventory: React.FC = () => {
       setProductionErrors((prev) => ({
         ...prev,
         [`item_${index}_product`]: undefined,
-      }));
+      });
     },
     [t, productionForm.items]
   );
@@ -1438,3 +1440,4 @@ export const FactoryInventory: React.FC = () => {
     </div>
   );
 };
+
