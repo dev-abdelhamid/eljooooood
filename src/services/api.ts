@@ -1064,58 +1064,7 @@ export const factoryInventoryAPI = {
   },
 };
 
-export const productionRequestsAPI = {
-  createProductionRequest: async (data) => {
-    if (!['branch', 'production'].includes(data.type)) {
-      console.error(`[${new Date().toISOString()}] productionRequestsAPI.createProductionRequest - Invalid request type:`, data.type);
-      throw new Error('Invalid request type');
-    }
-    if (data.type === 'branch' && !isValidObjectId(data.branchId)) {
-      console.error(`[${new Date().toISOString()}] productionRequestsAPI.createProductionRequest - Invalid branch ID:`, data.branchId);
-      throw new Error('Invalid branch ID');
-    }
-    if (!Array.isArray(data.items) || data.items.length === 0 || data.items.some(item => !isValidObjectId(item.productId) || item.quantity < 1)) {
-      console.error(`[${new Date().toISOString()}] productionRequestsAPI.createProductionRequest - Invalid items:`, data.items);
-      throw new Error('Invalid items');
-    }
-    const response = await api.post('/factory/production-requests', {
-      type: data.type,
-      branchId: data.type === 'branch' ? data.branchId : null,
-      items: data.items,
-      notes: data.notes?.trim(),
-    });
-    console.log(`[${new Date().toISOString()}] productionRequestsAPI.createProductionRequest - Response:`, response);
-    return response.request;
-  },
-  getProductionRequests: async (params = {}) => {
-    if (params.type && !['branch', 'production'].includes(params.type)) {
-      console.error(`[${new Date().toISOString()}] productionRequestsAPI.getProductionRequests - Invalid request type:`, params.type);
-      throw new Error('Invalid request type');
-    }
-    if (params.status && !['pending', 'assigned', 'in_progress', 'completed', 'delivered', 'rejected'].includes(params.status)) {
-      console.error(`[${new Date().toISOString()}] productionRequestsAPI.getProductionRequests - Invalid request status:`, params.status);
-      throw new Error('Invalid request status');
-    }
-    const response = await api.get('/factory/production-requests', { params });
-    console.log(`[${new Date().toISOString()}] productionRequestsAPI.getProductionRequests - Response:`, response);
-    return response.requests || [];
-  },
-  updateProductionRequestStatus: async (requestId, data) => {
-    if (!isValidObjectId(requestId)) {
-      console.error(`[${new Date().toISOString()}] productionRequestsAPI.updateProductionRequestStatus - Invalid request ID:`, requestId);
-      throw new Error('Invalid request ID');
-    }
-    if (!['pending', 'assigned', 'in_progress', 'completed', 'delivered', 'rejected'].includes(data.status)) {
-      console.error(`[${new Date().toISOString()}] productionRequestsAPI.updateProductionRequestStatus - Invalid status:`, data.status);
-      throw new Error('Invalid status');
-    }
-    const response = await api.patch(`/factory/production-requests/${requestId}/status`, {
-      status: data.status,
-    });
-    console.log(`[${new Date().toISOString()}] productionRequestsAPI.updateProductionRequestStatus - Response:`, response);
-    return response.request;
-  },
-};
+
 
 export { notificationsAPI, returnsAPI, salesAPI };
 export default api;
