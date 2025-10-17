@@ -1,7 +1,6 @@
 
 
-// Updated FactoryInventory Component
-import React, { useState, useMemo, useCallback, useReducer , useEffect  } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useReducer } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -299,7 +298,7 @@ export const FactoryInventory: React.FC = () => {
   const { addNotification } = useNotifications();
   const queryClient = useQueryClient();
   const [searchInput, setSearchInput] = useState('');
-  const [debouncedSearchQuery] = useDebouncedState(searchInput, 300);
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useDebouncedState(searchInput, 300);
   const [filterStatus, setFilterStatus] = useState<InventoryStatus | ''>('');
   const [filterDepartment, setFilterDepartment] = useState<string>('');
   const [isProductionModalOpen, setIsProductionModalOpen] = useState(false);
@@ -336,7 +335,11 @@ export const FactoryInventory: React.FC = () => {
         stockStatus: filterStatus || undefined,
         lang: language,
       };
+      if (user.role === 'production' && user.department?._id && !params.department) {
+        params.department = user.department._id;
+      }
       const response = await factoryInventoryAPI.getAll(params);
+      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Response:`, response);
       const data = Array.isArray(response) ? response : response?.data?.inventory || response?.inventory || [];
       if (!Array.isArray(data)) {
         console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Invalid data format, expected array, got:`, data);
@@ -386,7 +389,11 @@ export const FactoryInventory: React.FC = () => {
   const { data: availableProductsData, isLoading: productsLoading } = useQuery<AvailableProduct[], Error>({
     queryKey: ['availableProducts', language],
     queryFn: async () => {
-      const products = await factoryInventoryAPI.getAvailableProducts();
+      const params = {};
+      if (user.role === 'production' && user.department?._id) {
+        params.department = user.department._id;
+      }
+      const products = await factoryInventoryAPI.getAvailableProducts(params);
       return products
         .filter((product: any) => product && product._id && isValidObjectId(product._id))
         .map((product: any) => ({
@@ -416,6 +423,7 @@ export const FactoryInventory: React.FC = () => {
         throw new Error(t.errors.invalidProductId);
       }
       const response = await factoryInventoryAPI.getHistory({ productId: selectedProductId, lang: language });
+      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Response:`, response);
       const data = Array.isArray(response) ? response : response?.data?.history || response?.history || [];
       if (!Array.isArray(data)) {
         console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Invalid data format, expected array, got:`, data);
@@ -436,6 +444,7 @@ export const FactoryInventory: React.FC = () => {
     queryKey: ['factoryOrders', language],
     queryFn: async () => {
       const response = await factoryOrdersAPI.getAll();
+      console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Response:`, response);
       const data = Array.isArray(response) ? response : response?.data || [];
       if (!Array.isArray(data)) {
         console.warn(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Invalid data format, expected array, got:`, data);
@@ -588,9 +597,10 @@ export const FactoryInventory: React.FC = () => {
         deptMap.set(product.departmentId, { id: product.departmentId, name: product.departmentName });
       }
     });
+    const uniqueDepts = Array.from(deptMap.values()).sort((a, b) => a.name.localeCompare(b.name));
     return [
       { value: '', label: t.allDepartments },
-      ...Array.from(deptMap.values()).map((dept) => ({
+      ...uniqueDepts.map((dept) => ({
         value: dept.id,
         label: dept.name || t.allDepartments,
       })),
@@ -608,13 +618,15 @@ export const FactoryInventory: React.FC = () => {
   );
   // Product options
   const productOptions = useMemo(
-    () => [
-      { value: '', label: t.selectProduct },
-      ...availableProducts.map((product) => ({
-        value: product.productId,
-        label: `${product.productName} (${t.unit}: ${product.unit}) - ${product.departmentName}`,
-      })),
-    ],
+    () => {
+      const options = availableProducts
+        .sort((a, b) => a.productName.localeCompare(b.productName))
+        .map((product) => ({
+          value: product.productId,
+          label: `${product.productName} (${t.unit}: ${product.unit}) - ${product.departmentName}`,
+        }));
+      return [{ value: '', label: t.selectProduct }, ...options];
+    },
     [availableProducts, t]
   );
   // Filtered and paginated inventory with pending quantities
@@ -628,11 +640,12 @@ export const FactoryInventory: React.FC = () => {
         (item) =>
           (!filterStatus || item.status === filterStatus) &&
           (!filterDepartment || item.product.department?._id === filterDepartment) &&
+          (user.role !== 'production' || !user.department?._id || item.product.department?._id === user.department?._id) &&
           (item.product.displayName.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             item.product.code.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             (item.product.department?.displayName?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ?? false))
       ),
-    [inventoryData, debouncedSearchQuery, filterStatus, filterDepartment, pendingQuantities]
+    [inventoryData, debouncedSearchQuery, filterStatus, filterDepartment, pendingQuantities, user]
   );
   const paginatedInventory = useMemo(
     () => filteredInventory.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
@@ -687,7 +700,10 @@ export const FactoryInventory: React.FC = () => {
       value = numValue;
     }
     dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
-  
+    setProductionErrors((prev) => ({
+      ...prev,
+      [`item_${index}_${field}`]: undefined,
+    }));
   }, [t]);
   const handleProductChange = useCallback(
     (index: number, productId: string) => {
@@ -709,7 +725,10 @@ export const FactoryInventory: React.FC = () => {
         type: 'UPDATE_ITEM',
         payload: { index, field: 'product', value: productId },
       });
-   
+      setProductionErrors((prev) => ({
+        ...prev,
+        [`item_${index}_product`]: undefined,
+      }));
     },
     [t, productionForm.items]
   );
@@ -1131,17 +1150,25 @@ export const FactoryInventory: React.FC = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
               {productsLoading ? (
                 <div className="text-center text-gray-600">{isRtl ? 'جاري تحميل المنتجات...' : 'Loading products...'}</div>
+              ) : availableProducts.length === 0 ? (
+                <p className="text-gray-600 text-sm">{isRtl ? 'لا توجد منتجات متاحة' : 'No available products'}</p>
               ) : (
                 productionForm.items.map((item, index) => (
                   <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                    <ProductDropdown
-                      value={item.product}
-                      onChange={(value) => handleProductChange(index, value)}
-                      options={productOptions}
-                      ariaLabel={`${t.items} ${index + 1}`}
-                      placeholder={t.selectProduct}
-                      className="w-full"
-                    />
+                    {selectedItem ? (
+                      <p className="text-sm text-gray-600">
+                        {t.productDetails}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
+                      </p>
+                    ) : (
+                      <ProductDropdown
+                        value={item.product}
+                        onChange={(value) => handleProductChange(index, value)}
+                        options={productOptions}
+                        ariaLabel={`${t.items} ${index + 1}`}
+                        placeholder={t.selectProduct}
+                        className="w-full"
+                      />
+                    )}
                     {productionErrors[`item_${index}_product`] && (
                       <p className="text-red-600 text-xs">{productionErrors[`item_${index}_product`]}</p>
                     )}
@@ -1158,7 +1185,7 @@ export const FactoryInventory: React.FC = () => {
                           <p className="text-red-600 text-xs mt-1">{productionErrors[`item_${index}_quantity`]}</p>
                         )}
                       </div>
-                      {productionForm.items.length > 1 && (
+                      {!selectedItem && productionForm.items.length > 1 && (
                         <button
                           onClick={() => removeItemFromForm(index)}
                           className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 self-start sm:self-end"
@@ -1171,15 +1198,17 @@ export const FactoryInventory: React.FC = () => {
                   </div>
                 ))
               )}
-              <button
-                onClick={addItemToForm}
-                className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
-                aria-label={t.addItem}
-                disabled={productsLoading}
-              >
-                <Plus className="w-4 h-4" />
-                {t.addItem}
-              </button>
+              {!selectedItem && (
+                <button
+                  onClick={addItemToForm}
+                  className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
+                  aria-label={t.addItem}
+                  disabled={productsLoading}
+                >
+                  <Plus className="w-4 h-4" />
+                  {t.addItem}
+                </button>
+              )}
               {productionErrors.items && <p className="text-red-600 text-xs">{productionErrors.items}</p>}
             </div>
             <div className="flex justify-end gap-3">
