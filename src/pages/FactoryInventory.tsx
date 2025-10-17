@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Package, Plus, X, Eye, Edit, AlertCircle, Minus } from 'lucide-react';
-import { factoryInventoryAPI, productionRequestsAPI, branchesAPI, productsAPI } from '../services/api';
+import { factoryOrdersAPI, factoryInventoryAPI } from '../services/api';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,13 +17,8 @@ enum InventoryStatus {
   FULL = 'full',
 }
 
-enum ProductionType {
-  BRANCH = 'branch',
-  PRODUCTION = 'production',
-}
-
 // Interfaces aligned with backend
-interface InventoryItem {
+interface FactoryInventoryItem {
   _id: string;
   product: {
     _id: string;
@@ -37,46 +32,40 @@ interface InventoryItem {
     displayUnit: string;
   } | null;
   currentStock: number;
-  pendingProductionStock: number;
-  damagedStock: number;
   minStockLevel: number;
   maxStockLevel: number;
   status: InventoryStatus;
 }
 
 interface ProductionItem {
-  productId: string;
+  product: string;
   quantity: number;
+  price: number;
 }
 
 interface ProductionFormState {
   notes: string;
   items: ProductionItem[];
-  type: ProductionType;
-  branchId: string;
 }
 
 interface ProductHistoryEntry {
   _id: string;
   date: string;
-  type: 'in' | 'out' | 'production';
+  type: 'produced_stock' | 'adjustment';
   quantity: number;
   reference: string;
 }
 
 interface EditForm {
-  currentStock: number;
   minStockLevel: number;
   maxStockLevel: number;
 }
 
-interface AvailableItem {
+interface AvailableProduct {
   productId: string;
   productName: string;
-  available: number;
   unit: string;
   departmentName: string;
-  stock: number;
 }
 
 // Translations
@@ -84,11 +73,9 @@ const translations = {
   ar: {
     title: 'إدارة مخزون المصنع',
     description: 'إدارة مخزون المصنع وطلبات الإنتاج',
-    noItems: 'لا توجد عناصر في المخزون',
+    noItems: 'لا توجد عناصر في مخزون المصنع',
     noHistory: 'لا يوجد سجل لهذا المنتج',
     stock: 'المخزون الحالي',
-    pendingStock: 'المخزون المعلق للإنتاج',
-    damagedStock: 'المخزون التالف',
     minStock: 'الحد الأدنى للمخزون',
     maxStock: 'الحد الأقصى للمخزون',
     unit: 'الوحدة',
@@ -118,50 +105,41 @@ const translations = {
     date: 'التاريخ',
     type: 'النوع',
     quantity: 'الكمية',
-    in: 'دخول',
-    out: 'خروج',
-    production: 'إنتاج',
-    available: 'متوفر',
-    branch: 'فرع',
-    productionType: 'إنتاج داخلي',
-    selectType: 'اختر نوع الطلب',
-    selectBranch: 'اختر فرع',
+    produced_stock: 'إنتاج مخزون',
+    adjustment: 'تعديل',
     errors: {
-      noFactory: 'لم يتم العثور على مصنع',
-      fetchInventory: 'خطأ في جلب بيانات المخزون',
-      createRequest: 'خطأ في إنشاء طلب الإنتاج',
+      fetchInventory: 'خطأ في جلب بيانات مخزون المصنع',
+      createProduction: 'خطأ في إنشاء طلب الإنتاج',
       updateInventory: 'خطأ في تحديث المخزون',
       invalidForm: 'البيانات المدخلة غير صالحة',
       required: 'حقل {field} مطلوب',
       nonNegative: 'يجب أن يكون {field} غير سالب',
       maxGreaterMin: 'الحد الأقصى للمخزون يجب أن يكون أكبر من الحد الأدنى',
-      invalidQuantityMax: 'الكمية يجب أن تكون بين 1 و{max}',
+      invalidQuantityMax: 'الكمية يجب أن تكون أكبر من 0',
       noItemSelected: 'لم يتم اختيار عنصر',
       invalidProductId: 'معرف المنتج غير صالح',
-      insufficientQuantity: 'الكمية غير كافية للمنتج في المخزون',
       productNotFound: 'المنتج غير موجود',
       tooManyRequests: 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا',
       duplicateProduct: 'لا يمكن إضافة نفس المنتج أكثر من مرة',
+      invalidPrice: 'السعر يجب أن يكون أكبر من 0',
     },
     notifications: {
-      requestCreated: 'تم إنشاء طلب الإنتاج بنجاح',
+      productionCreated: 'تم إنشاء طلب الإنتاج بنجاح',
     },
   },
   en: {
     title: 'Factory Inventory Management',
-    description: 'Manage factory inventory and production requests',
-    noItems: 'No items found in inventory',
+    description: 'Manage factory inventory and production orders',
+    noItems: 'No items found in factory inventory',
     noHistory: 'No history available for this product',
     stock: 'Current Stock',
-    pendingStock: 'Pending Production Stock',
-    damagedStock: 'Damaged Stock',
     minStock: 'Minimum Stock',
     maxStock: 'Maximum Stock',
     unit: 'Unit',
     lowStock: 'Low Stock',
     normal: 'Normal',
     full: 'Full Stock',
-    create: 'Create Production Request',
+    create: 'Create Production Order',
     viewDetails: 'View Details',
     editStockLimits: 'Edit Stock Limits',
     search: 'Search products...',
@@ -184,33 +162,26 @@ const translations = {
     date: 'Date',
     type: 'Type',
     quantity: 'Quantity',
-    in: 'In',
-    out: 'Out',
-    production: 'Production',
-    available: 'Available',
-    branch: 'Branch',
-    productionType: 'Internal Production',
-    selectType: 'Select Request Type',
-    selectBranch: 'Select Branch',
+    produced_stock: 'Produced Stock',
+    adjustment: 'Adjustment',
     errors: {
-      noFactory: 'No factory found',
-      fetchInventory: 'Error fetching inventory data',
-      createRequest: 'Error creating production request',
+      fetchInventory: 'Error fetching factory inventory data',
+      createProduction: 'Error creating production order',
       updateInventory: 'Error updating inventory',
       invalidForm: 'Invalid form data',
       required: '{field} is required',
       nonNegative: '{field} must be non-negative',
       maxGreaterMin: 'Maximum stock must be greater than minimum stock',
-      invalidQuantityMax: 'Quantity must be between 1 and {max}',
+      invalidQuantityMax: 'Quantity must be greater than 0',
       noItemSelected: 'No item selected',
       invalidProductId: 'Invalid product ID',
-      insufficientQuantity: 'Insufficient quantity for the product in inventory',
       productNotFound: 'Product not found',
       tooManyRequests: 'Too many requests, please try again later',
       duplicateProduct: 'Cannot add the same product multiple times',
+      invalidPrice: 'Price must be greater than 0',
     },
     notifications: {
-      requestCreated: 'Production request created successfully',
+      productionCreated: 'Production order created successfully',
     },
   },
 };
@@ -221,13 +192,11 @@ const QuantityInput = ({
   onChange,
   onIncrement,
   onDecrement,
-  max,
 }: {
   value: number;
   onChange: (val: string) => void;
   onIncrement: () => void;
   onDecrement: () => void;
-  max?: number;
 }) => {
   const { language } = useLanguage();
   const isRtl = language === 'ar';
@@ -235,10 +204,6 @@ const QuantityInput = ({
     const num = parseInt(val, 10);
     if (val === '' || isNaN(num) || num < 1) {
       onChange('1');
-      return;
-    }
-    if (max !== undefined && num > max) {
-      onChange(max.toString());
       return;
     }
     onChange(val);
@@ -258,7 +223,6 @@ const QuantityInput = ({
         type="number"
         value={value}
         onChange={(e) => handleChange(e.target.value)}
-        max={max}
         min={1}
         className="w-12 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
         style={{ appearance: 'none', MozAppearance: 'textfield' }}
@@ -266,9 +230,8 @@ const QuantityInput = ({
       />
       <button
         onClick={onIncrement}
-        className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center disabled:opacity-50"
+        className="w-8 h-8 bg-amber-600 hover:bg-amber-700 rounded-full transition-colors duration-200 flex items-center justify-center"
         aria-label={isRtl ? 'زيادة الكمية' : 'Increase quantity'}
-        disabled={max !== undefined && value >= max}
       >
         <Plus className="w-4 h-4 text-white" />
       </button>
@@ -276,14 +239,47 @@ const QuantityInput = ({
   );
 };
 
-// Reducer for production form (similar to return form)
+// PriceInput Component
+const PriceInput = ({
+  value,
+  onChange,
+}: {
+  value: number;
+  onChange: (val: string) => void;
+}) => {
+  const { language } = useLanguage();
+  const isRtl = language === 'ar';
+  const handleChange = (val: string) => {
+    const num = parseFloat(val);
+    if (val === '' || isNaN(num) || num < 0) {
+      onChange('0');
+      return;
+    }
+    onChange(val);
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="number"
+        value={value}
+        onChange={(e) => handleChange(e.target.value)}
+        min={0}
+        step={0.01}
+        className="w-20 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
+        style={{ appearance: 'none', MozAppearance: 'textfield' }}
+        aria-label={isRtl ? 'السعر' : 'Price'}
+      />
+    </div>
+  );
+};
+
+// Reducer for production form
 type ProductionFormAction =
   | { type: 'SET_NOTES'; payload: string }
   | { type: 'ADD_ITEM'; payload: ProductionItem }
   | { type: 'UPDATE_ITEM'; payload: { index: number; field: keyof ProductionItem; value: string | number } }
   | { type: 'REMOVE_ITEM'; payload: number }
-  | { type: 'SET_TYPE'; payload: ProductionType }
-  | { type: 'SET_BRANCH'; payload: string }
   | { type: 'RESET' };
 
 const productionFormReducer = (state: ProductionFormState, action: ProductionFormAction): ProductionFormState => {
@@ -298,12 +294,8 @@ const productionFormReducer = (state: ProductionFormState, action: ProductionFor
       return { ...state, items: newItems };
     case 'REMOVE_ITEM':
       return { ...state, items: state.items.filter((_, i) => i !== action.payload) };
-    case 'SET_TYPE':
-      return { ...state, type: action.payload };
-    case 'SET_BRANCH':
-      return { ...state, branchId: action.payload };
     case 'RESET':
-      return { notes: '', items: [], type: ProductionType.BRANCH, branchId: '' };
+      return { notes: '', items: [] };
     default:
       return state;
   }
@@ -312,7 +304,23 @@ const productionFormReducer = (state: ProductionFormState, action: ProductionFor
 // Validate ObjectId
 const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
 
-export const FactoryInventory = () => {
+// Aggregate items by product
+const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
+  const aggregated: Record<string, ProductionItem> = {};
+  items.forEach((item) => {
+    if (!aggregated[item.product]) {
+      aggregated[item.product] = {
+        product: item.product,
+        quantity: 0,
+        price: item.price,
+      };
+    }
+    aggregated[item.product].quantity += item.quantity;
+  });
+  return Object.values(aggregated);
+};
+
+export const FactoryInventory: React.FC = () => {
   const { t: languageT, language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
@@ -323,22 +331,17 @@ export const FactoryInventory = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterStatus, setFilterStatus] = useState<InventoryStatus | ''>('');
   const [filterDepartment, setFilterDepartment] = useState<string>('');
-  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+  const [isProductionModalOpen, setIsProductionModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
-  const [selectedRequest, setSelectedRequest] = useState<ProductionRequest | null>(null);
+  const [selectedItem, setSelectedItem] = useState<FactoryInventoryItem | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
-  const [productionForm, dispatchProductionForm] = useReducer(productionFormReducer, { notes: '', items: [], type: ProductionType.BRANCH, branchId: '' });
-  const [editForm, setEditForm] = useState<EditForm>({ currentStock: 0, minStockLevel: 0, maxStockLevel: 0 });
+  const [productionForm, dispatchProductionForm] = useReducer(productionFormReducer, { notes: '', items: [] });
+  const [editForm, setEditForm] = useState<EditForm>({ minStockLevel: 0, maxStockLevel: 0 });
   const [productionErrors, setProductionErrors] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
-  const [availableItems, setAvailableItems] = useState<AvailableItem[]>([]);
-  const [branches, setBranches] = useState([]);
-  const [chefs, setChefs] = useState([]);
-  const [productionRequests, setProductionRequests] = useState([]);
+  const [availableProducts, setAvailableProducts] = useState<AvailableProduct[]>([]);
 
   const ITEMS_PER_PAGE = 10;
 
@@ -356,11 +359,25 @@ export const FactoryInventory = () => {
   const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
 
   // Inventory Query
-  const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError } = useQuery({
+  const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError } = useQuery<
+    FactoryInventoryItem[],
+    Error
+  >({
     queryKey: ['factoryInventory', debouncedSearchQuery, filterStatus, filterDepartment, currentPage, language],
     queryFn: async () => {
-      const response = await factoryInventoryAPI.getFactoryInventory();
-      return response.map(item => ({
+      const response = await factoryInventoryAPI.getAll();
+      return response;
+    },
+    enabled: !!user?.role && ['production', 'admin'].includes(user.role),
+    staleTime: 5 * 60 * 1000,
+    cacheTime: 10 * 60 * 1000,
+    select: (response) => {
+      const inventoryData = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.data)
+        ? response.data
+        : response?.data?.inventory || [];
+      return inventoryData.map((item: FactoryInventoryItem) => ({
         ...item,
         product: item.product
           ? {
@@ -383,102 +400,81 @@ export const FactoryInventory = () => {
             : InventoryStatus.NORMAL,
       }));
     },
-    staleTime: 5 * 60 * 1000,
-    cacheTime: 10 * 60 * 1000,
     onError: (err) => {
-      toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-left' : 'top-right' });
+      toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
     },
-  });
-
-  // Branches Query
-  const { data: branchesData } = useQuery({
-    queryKey: ['branches', language],
-    queryFn: async () => {
-      const response = await branchesAPI.getAll();
-      return response;
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-
-  // Chefs Query
-  const { data: chefsData } = useQuery({
-    queryKey: ['chefs', language],
-    queryFn: async () => {
-      const response = await chefsAPI.getAll();
-      return response;
-    },
-    staleTime: 5 * 60 * 1000,
-  });
-
-  // Production Requests Query
-  const { data: productionRequestsData } = useQuery({
-    queryKey: ['productionRequests', language],
-    queryFn: async () => {
-      const response = await productionRequestsAPI.getFactoryProductionRequests();
-      return response;
-    },
-    staleTime: 5 * 60 * 1000,
   });
 
   // Product History Query
   const { data: productHistory, isLoading: historyLoading } = useQuery<ProductHistoryEntry[], Error>({
-    queryKey: ['productHistory', selectedProductId],
+    queryKey: ['factoryProductHistory', selectedProductId],
     queryFn: async () => {
-      if (!selectedProductId) throw new Error(t.errors.noItemSelected);
-      const response = await factoryInventoryAPI.getFactoryInventoryHistory({ productId: selectedProductId });
+      if (!selectedProductId) throw new Error(t.errors.productNotFound);
+      const response = await factoryInventoryAPI.getHistory({ productId: selectedProductId });
       return response;
     },
     enabled: isDetailsModalOpen && !!selectedProductId,
     staleTime: 5 * 60 * 1000,
   });
 
-  // Update available items
+  // Available products
   useEffect(() => {
-    if (inventoryData) {
-      const items = inventoryData
-        .filter((item) => item.currentStock > 0 && item.product)
-        .map((item) => ({
-          productId: item.product!._id,
-          productName: isRtl ? item.product!.name : item.product!.nameEn || item.product!.name,
-          available: item.currentStock,
-          unit: isRtl ? item.product!.unit || t.unit : item.product!.unitEn || item.product!.unit || 'N/A',
-          departmentName: isRtl
-            ? item.product!.department?.name || 'غير معروف'
-            : item.product!.department?.nameEn || item.product!.department?.name || 'Unknown',
-          stock: item.currentStock,
-        }));
-      setAvailableItems(items);
-    }
-  }, [inventoryData, isRtl, t]);
+    const fetchProducts = async () => {
+      try {
+        const response = await factoryInventoryAPI.getAvailableProducts();
+        const products = Array.isArray(response) ? response : response?.data || [];
+        setAvailableProducts(
+          products.map((product: any) => ({
+            productId: product._id,
+            productName: isRtl ? product.name : product.nameEn || product.name,
+            unit: isRtl ? product.unit || t.unit : product.unitEn || product.unit || 'N/A',
+            departmentName: isRtl
+              ? product.department?.name || 'غير معروف'
+              : product.department?.nameEn || product.department?.name || 'Unknown',
+          }))
+        );
+      } catch (err) {
+        console.error(`[${new Date().toISOString()}] Error fetching products:`, err);
+      }
+    };
+    fetchProducts();
+  }, [isRtl, t]);
 
   // Socket Events
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !user?.role) return;
 
-    const handleInventoryUpdated = () => {
+    const handleFactoryInventoryUpdated = ({ productId }: { productId: string }) => {
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
+      if (selectedProductId === productId) {
+        queryClient.invalidateQueries({ queryKey: ['factoryProductHistory'] });
+      }
     };
 
-    const handleRequestUpdated = ({ requestId, status }) => {
-      queryClient.invalidateQueries({ queryKey: ['productionRequests'] });
+    const handleFactoryOrderCreated = ({ orderId, orderNumber }: { orderId: string; orderNumber: string }) => {
+      const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
+      audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
       addNotification({
         _id: crypto.randomUUID(),
         type: 'success',
-        message: `Production request ${requestId} updated to ${status}`,
+        message: t.notifications.productionCreated,
+        data: { orderId, orderNumber, eventId: crypto.randomUUID() },
         read: false,
         createdAt: new Date().toISOString(),
+        sound: 'https://eljoodia-client.vercel.app/sounds/notification.mp3',
+        vibrate: [200, 100, 200],
       });
-      toast.success(`Production request updated to ${status}`, { position: isRtl ? 'top-left' : 'top-right' });
+      toast.success(t.notifications.productionCreated, { position: isRtl ? 'top-right' : 'top-left' });
     };
 
-    socket.on('inventoryUpdated', handleInventoryUpdated);
-    socket.on('requestUpdated', handleRequestUpdated);
+    socket.on('factoryInventoryUpdated', handleFactoryInventoryUpdated);
+    socket.on('factoryOrderCreated', handleFactoryOrderCreated);
 
     return () => {
-      socket.off('inventoryUpdated', handleInventoryUpdated);
-      socket.off('requestUpdated', handleRequestUpdated);
+      socket.off('factoryInventoryUpdated', handleFactoryInventoryUpdated);
+      socket.off('factoryOrderCreated', handleFactoryOrderCreated);
     };
-  }, [socket, queryClient, addNotification, isRtl]);
+  }, [socket, user, queryClient, addNotification, t, isRtl, selectedProductId]);
 
   // Department options
   const departmentOptions = useMemo(() => {
@@ -521,12 +517,12 @@ export const FactoryInventory = () => {
   const productOptions = useMemo(
     () => [
       { value: '', label: t.selectProduct },
-      ...availableItems.map((availItem) => ({
-        value: availItem.productId,
-        label: `${availItem.productName} (${t.available}: ${availItem.available} ${availItem.unit})`,
+      ...availableProducts.map((product) => ({
+        value: product.productId,
+        label: `${product.productName} (${t.unit}: ${product.unit})`,
       })),
     ],
-    [availableItems, t]
+    [availableProducts, t]
   );
 
   // Filtered and paginated inventory
@@ -557,35 +553,36 @@ export const FactoryInventory = () => {
     setCurrentPage(1);
   }, []);
 
-  const handleOpenRequestModal = useCallback((item?: InventoryItem) => {
+  const handleOpenProductionModal = useCallback((item?: FactoryInventoryItem) => {
     setSelectedItem(item || null);
     dispatchProductionForm({ type: 'RESET' });
     if (item?.product) {
       dispatchProductionForm({
         type: 'ADD_ITEM',
         payload: {
-          productId: item.product._id,
+          product: item.product._id,
           quantity: 1,
+          price: 0,
         },
       });
     } else {
       dispatchProductionForm({
         type: 'ADD_ITEM',
-        payload: { productId: '', quantity: 1 },
+        payload: { product: '', quantity: 1, price: 0 },
       });
     }
     setProductionErrors({});
-    setIsRequestModalOpen(true);
+    setIsProductionModalOpen(true);
   }, []);
 
-  const handleOpenEditModal = useCallback((item: InventoryItem) => {
+  const handleOpenEditModal = useCallback((item: FactoryInventoryItem) => {
     setSelectedItem(item);
-    setEditForm({ currentStock: item.currentStock, minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
+    setEditForm({ minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
     setEditErrors({});
     setIsEditModalOpen(true);
   }, []);
 
-  const handleOpenDetailsModal = useCallback((item: InventoryItem) => {
+  const handleOpenDetailsModal = useCallback((item: FactoryInventoryItem) => {
     if (item.product) {
       setSelectedProductId(item.product._id);
       setIsDetailsModalOpen(true);
@@ -595,21 +592,23 @@ export const FactoryInventory = () => {
   const addItemToForm = useCallback(() => {
     dispatchProductionForm({
       type: 'ADD_ITEM',
-      payload: { productId: '', quantity: 1 },
+      payload: { product: '', quantity: 1, price: 0 },
     });
   }, []);
 
-  const updateItemInForm = useCallback(
-    (index: number, field: keyof ProductionItem, value: string | number) => {
-      if (field === 'quantity' && typeof value === 'string') {
-        const numValue = parseInt(value);
-        if (isNaN(numValue) || numValue < 1) return;
-        value = numValue;
-      }
-      dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
-    },
-    []
-  );
+  const updateItemInForm = useCallback((index: number, field: keyof ProductionItem, value: string | number) => {
+    if (field === 'quantity' && typeof value === 'string') {
+      const numValue = parseInt(value);
+      if (isNaN(numValue) || numValue < 1) return;
+      value = numValue;
+    }
+    if (field === 'price' && typeof value === 'string') {
+      const numValue = parseFloat(value);
+      if (isNaN(numValue) || numValue < 0) return;
+      value = numValue;
+    }
+    dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
+  }, []);
 
   const handleProductChange = useCallback(
     (index: number, productId: string) => {
@@ -620,7 +619,7 @@ export const FactoryInventory = () => {
         }));
         return;
       }
-      if (productionForm.items.some((item, i) => i !== index && item.productId === productId)) {
+      if (productionForm.items.some((item, i) => i !== index && item.product === productId)) {
         setProductionErrors((prev) => ({
           ...prev,
           [`item_${index}_product`]: t.errors.duplicateProduct,
@@ -629,14 +628,10 @@ export const FactoryInventory = () => {
       }
       dispatchProductionForm({
         type: 'UPDATE_ITEM',
-        payload: { index, field: 'productId', value: productId },
-      });
-      dispatchProductionForm({
-        type: 'UPDATE_ITEM',
-        payload: { index, field: 'quantity', value: 1 },
+        payload: { index, field: 'product', value: productId },
       });
     },
-    [productionForm.items, t]
+    [t, productionForm.items]
   );
 
   const removeItemFromForm = useCallback((index: number) => {
@@ -645,20 +640,20 @@ export const FactoryInventory = () => {
 
   const validateProductionForm = useCallback(() => {
     const errors: Record<string, string> = {};
-    if (productionForm.type === ProductionType.BRANCH && !productionForm.branchId) {
-      errors.branchId = t.errors.required.replace('{field}', t.selectBranch);
-    }
     if (productionForm.items.length === 0) {
       errors.items = t.errors.required.replace('{field}', t.items);
     }
     productionForm.items.forEach((item, index) => {
-      if (!item.productId) {
-        errors[`item_${index}_productId`] = t.errors.required.replace('{field}', t.selectProduct);
-      } else if (!isValidObjectId(item.productId)) {
-        errors[`item_${index}_productId`] = t.errors.invalidProductId;
+      if (!item.product) {
+        errors[`item_${index}_product`] = t.errors.required.replace('{field}', t.items);
+      } else if (!isValidObjectId(item.product)) {
+        errors[`item_${index}_product`] = t.errors.invalidProductId;
       }
       if (item.quantity < 1 || isNaN(item.quantity)) {
-        errors[`item_${index}_quantity`] = t.errors.nonNegative.replace('{field}', t.quantity);
+        errors[`item_${index}_quantity`] = t.errors.invalidQuantityMax;
+      }
+      if (item.price <= 0 || isNaN(item.price)) {
+        errors[`item_${index}_price`] = t.errors.invalidPrice;
       }
     });
     setProductionErrors(errors);
@@ -667,7 +662,6 @@ export const FactoryInventory = () => {
 
   const validateEditForm = useCallback(() => {
     const errors: Record<string, string> = {};
-    if (editForm.currentStock < 0) errors.currentStock = t.errors.nonNegative.replace('{field}', t.stock);
     if (editForm.minStockLevel < 0) errors.minStockLevel = t.errors.nonNegative.replace('{field}', t.minStock);
     if (editForm.maxStockLevel < 0) errors.maxStockLevel = t.errors.nonNegative.replace('{field}', t.maxStock);
     if (editForm.maxStockLevel <= editForm.minStockLevel) errors.maxStockLevel = t.errors.maxGreaterMin;
@@ -675,91 +669,94 @@ export const FactoryInventory = () => {
     return Object.keys(errors).length === 0;
   }, [editForm, t]);
 
-  const createRequestMutation = useMutation({
+  const createProductionMutation = useMutation<{ orderId: string; orderNumber: string }, Error, void>({
     mutationFn: async () => {
       if (!validateProductionForm()) throw new Error(t.errors.invalidForm);
+      if (!user?.id) throw new Error('User not authenticated');
+      const aggregatedItems = aggregateItemsByProduct(productionForm.items);
       const data = {
-        type: productionForm.type,
-        branchId: productionForm.type === ProductionType.BRANCH ? productionForm.branchId : null,
-        items: productionForm.items,
-        notes: productionForm.notes,
+        orderNumber: `PROD-${Date.now()}-${Math.random().toString(36).slice(-6)}`,
+        items: aggregatedItems.map((item) => ({
+          product: item.product,
+          quantity: item.quantity,
+          price: item.price,
+        })),
+        notes: productionForm.notes || undefined,
+        priority: 'medium',
       };
-      return await factoryInventoryAPI.createFactoryProductionRequest(data);
+      const response = await factoryOrdersAPI.create(data);
+      return {
+        orderId: response?._id || crypto.randomUUID(),
+        orderNumber: response?.orderNumber || data.orderNumber,
+      };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
-      queryClient.invalidateQueries({ queryKey: ['productionRequests'] });
-      setIsRequestModalOpen(false);
+      setIsProductionModalOpen(false);
       dispatchProductionForm({ type: 'RESET' });
       setProductionErrors({});
       setSelectedItem(null);
-      toast.success(t.notifications.requestCreated, { position: isRtl ? 'top-left' : 'top-right' });
+      toast.success(t.notifications.productionCreated, { position: isRtl ? 'top-right' : 'top-left' });
+      socket?.emit('factoryOrderCreated', {
+        orderId: data.orderId,
+        orderNumber: data.orderNumber,
+        eventId: crypto.randomUUID(),
+      });
     },
-    onError: (err) => {
-      toast.error(err.message || t.errors.createRequest, { position: isRtl ? 'top-left' : 'top-right' });
+    onError: (err: any) => {
+      let errorMessage = err.message || t.errors.createProduction;
+      if (err.status === 429) {
+        errorMessage = t.errors.tooManyRequests;
+      } else if (err.errors?.length > 0) {
+        errorMessage = err.errors.map((e: any) => e.msg).join(', ');
+        err.errors.forEach((e: any, index: number) => {
+          setProductionErrors((prev) => ({
+            ...prev,
+            [`item_${index}_${e.path}`]: e.msg,
+          }));
+        });
+      } else if (err.message.includes('معرف المنتج غير صالح') || err.message.includes('Invalid product ID')) {
+        errorMessage = t.errors.invalidProductId;
+      } else if (err.message.includes('المنتج غير موجود') || err.message.includes('Product not found')) {
+        errorMessage = t.errors.productNotFound;
+      }
+      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+      setProductionErrors((prev) => ({ ...prev, form: errorMessage }));
     },
   });
 
-  const updateInventoryMutation = useMutation({
+  const updateInventoryMutation = useMutation<void, Error, void>({
     mutationFn: async () => {
       if (!validateEditForm()) throw new Error(t.errors.invalidForm);
       if (!selectedItem) throw new Error(t.errors.noItemSelected);
-      await factoryInventoryAPI.updateFactoryInventory(selectedItem._id, editForm);
+      await factoryInventoryAPI.updateStock(selectedItem._id, {
+        minStockLevel: editForm.minStockLevel,
+        maxStockLevel: editForm.maxStockLevel,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
       setIsEditModalOpen(false);
-      setEditForm({ currentStock: 0, minStockLevel: 0, maxStockLevel: 0 });
+      setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
       setEditErrors({});
       setSelectedItem(null);
-      toast.success(t.save, { position: isRtl ? 'top-left' : 'top-right' });
-      socket?.emit('inventoryUpdated', {
+      toast.success(t.save, { position: isRtl ? 'top-right' : 'top-left' });
+      socket?.emit('factoryInventoryUpdated', {
         productId: selectedItem?.product?._id,
         eventId: crypto.randomUUID(),
       });
     },
     onError: (err) => {
-      toast.error(err.message || t.errors.updateInventory, { position: isRtl ? 'top-left' : 'top-right' });
-      setEditErrors({ form: err.message });
+      const errorMessage = err.status === 429 ? t.errors.tooManyRequests : err.message || t.errors.updateInventory;
+      toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
+      setEditErrors({ form: errorMessage });
     },
-  });
-
-  const assignChefMutation = useMutation({
-    mutationFn: async (chefId) => {
-      if (!selectedRequest) throw new Error('No request selected');
-      await factoryInventoryAPI.assignChefToRequest({
-        requestId: selectedRequest._id,
-        chefId,
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['productionRequests'] });
-      setIsAssignModalOpen(false);
-      setSelectedRequest(null);
-      toast.success('Chef assigned successfully');
-      socket?.emit('requestUpdated', { requestId: selectedRequest?._id, status: 'assigned' });
-    },
-    onError: (err) => toast.error(err.message || 'Failed to assign chef'),
-  });
-
-  const completeRequestMutation = useMutation({
-    mutationFn: async () => {
-      if (!selectedRequest) throw new Error('No request selected');
-      await factoryInventoryAPI.completeProductionRequest(selectedRequest._id);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['productionRequests'] });
-      queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
-      toast.success('Request completed successfully');
-      socket?.emit('requestUpdated', { requestId: selectedRequest?._id, status: 'completed' });
-    },
-    onError: (err) => toast.error(err.message || 'Failed to complete request'),
   });
 
   const errorMessage = inventoryError?.message || '';
 
   return (
-    <div className=" mx-auto px-4 py-4">
+    <div className="mx-auto px-4 py-4">
       <div className="mb-8 flex flex-col items-start gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <Package className="w-7 h-7 text-amber-600" />
@@ -769,7 +766,7 @@ export const FactoryInventory = () => {
           </div>
         </div>
         <button
-          onClick={() => handleOpenRequestModal()}
+          onClick={() => handleOpenProductionModal()}
           className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"
           aria-label={t.create}
         >
@@ -854,7 +851,7 @@ export const FactoryInventory = () => {
           <Package className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <p className="text-gray-600 text-sm font-medium">{t.noItems}</p>
           <button
-            onClick={() => handleOpenRequestModal()}
+            onClick={() => handleOpenProductionModal()}
             className="mt-4 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200"
             aria-label={t.create}
           >
@@ -883,12 +880,6 @@ export const FactoryInventory = () => {
                     </div>
                     <p className="text-sm text-amber-600">{t.filterByDepartment}: {item.product.department?.displayName || 'N/A'}</p>
                     <p className="text-sm text-gray-600">{t.stock}: {item.currentStock}</p>
-                    {item.pendingReturnStock > 0 && (
-                      <p className="text-sm text-gray-600">{t.pendingStock}: {item.pendingReturnStock}</p>
-                    )}
-                    {item.damagedStock > 0 && (
-                      <p className="text-sm text-red-600">{t.damagedStock}: {item.damagedStock}</p>
-                    )}
                     <p className="text-sm text-gray-600">{t.minStock}: {item.minStockLevel}</p>
                     <p className="text-sm text-gray-600">{t.maxStock}: {item.maxStockLevel}</p>
                     <p className="text-sm text-gray-600">{t.unit}: {item.product.displayUnit}</p>
@@ -920,9 +911,8 @@ export const FactoryInventory = () => {
                       <Edit className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => handleOpenRequestModal(item)}
-                      disabled={item.currentStock <= 0}
-                      className="p-2 text-red-600 hover:text-red-800 rounded-lg text-sm transition-colors duration-200 disabled:opacity-50"
+                      onClick={() => handleOpenProductionModal(item)}
+                      className="p-2 text-amber-600 hover:text-amber-800 rounded-lg text-sm transition-colors duration-200"
                       aria-label={t.create}
                     >
                       <Plus className="w-4 h-4" />
@@ -961,9 +951,9 @@ export const FactoryInventory = () => {
 
       <motion.div
         initial={{ opacity: 0 }}
-        animate={{ opacity: isRequestModalOpen ? 1 : 0 }}
+        animate={{ opacity: isProductionModalOpen ? 1 : 0 }}
         className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
-          isRequestModalOpen ? '' : 'pointer-events-none'
+          isProductionModalOpen ? '' : 'pointer-events-none'
         }`}
         role="dialog"
         aria-modal="true"
@@ -971,14 +961,14 @@ export const FactoryInventory = () => {
       >
         <motion.div
           initial={{ scale: 0.95, y: 20 }}
-          animate={{ scale: isRequestModalOpen ? 1 : 0.95, y: isRequestModalOpen ? 0 : 20 }}
+          animate={{ scale: isProductionModalOpen ? 1 : 0.95, y: isProductionModalOpen ? 0 : 20 }}
           className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-lg max-h-[90vh] overflow-y-auto"
         >
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-gray-900">{t.create}</h2>
             <button
               onClick={() => {
-                setIsRequestModalOpen(false);
+                setIsProductionModalOpen(false);
                 dispatchProductionForm({ type: 'RESET' });
                 setProductionErrors({});
                 setSelectedItem(null);
@@ -990,34 +980,10 @@ export const FactoryInventory = () => {
             </button>
           </div>
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.selectType}</label>
-              <ProductDropdown
-                value={productionForm.type}
-                onChange={(value) => dispatchProductionForm({ type: 'SET_TYPE', payload: value })}
-                options={[
-                  { value: ProductionType.BRANCH, label: t.branch },
-                  { value: ProductionType.PRODUCTION, label: t.productionType },
-                ]}
-                ariaLabel={t.selectType}
-                className="w-full"
-              />
-            </div>
-            {productionForm.type === ProductionType.BRANCH && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t.selectBranch}</label>
-                <ProductDropdown
-                  value={productionForm.branchId}
-                  onChange={(value) => dispatchProductionForm({ type: 'SET_BRANCH', payload: value })}
-                  options={[
-                    { value: '', label: t.selectBranch },
-                    ...branches.map(b => ({ value: b._id, label: b.displayName })),
-                  ]}
-                  ariaLabel={t.selectBranch}
-                  className="w-full"
-                />
-                {productionErrors.branchId && <p className="text-red-600 text-xs mt-1">{productionErrors.branchId}</p>}
-              </div>
+            {selectedItem?.product && (
+              <p className="text-sm text-gray-600">
+                {t.items}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
+              </p>
             )}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">{t.notes}</label>
@@ -1035,16 +1001,18 @@ export const FactoryInventory = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">{t.items}</label>
               {productionForm.items.map((item, index) => (
                 <div key={index} className="flex flex-col gap-4 mb-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                  <ProductDropdown
-                    value={item.productId}
-                    onChange={(value) => handleProductChange(index, value)}
-                    options={productOptions}
-                    ariaLabel={`${t.items} ${index + 1}`}
-                    placeholder={t.selectProduct}
-                    className="w-full"
-                  />
-                  {productionErrors[`item_${index}_productId`] && (
-                    <p className="text-red-600 text-xs">{productionErrors[`item_${index}_productId`]}</p>
+                  {!selectedItem && (
+                    <ProductDropdown
+                      value={item.product}
+                      onChange={(value) => handleProductChange(index, value)}
+                      options={productOptions}
+                      ariaLabel={`${t.items} ${index + 1}`}
+                      placeholder={t.selectProduct}
+                      className="w-full"
+                    />
+                  )}
+                  {productionErrors[`item_${index}_product`] && (
+                    <p className="text-red-600 text-xs">{productionErrors[`item_${index}_product`]}</p>
                   )}
                   <div className="flex flex-col sm:flex-row gap-4">
                     <div className="flex-1">
@@ -1054,13 +1022,22 @@ export const FactoryInventory = () => {
                         onChange={(val) => updateItemInForm(index, 'quantity', val)}
                         onIncrement={() => updateItemInForm(index, 'quantity', item.quantity + 1)}
                         onDecrement={() => updateItemInForm(index, 'quantity', item.quantity - 1)}
-                        max={item.maxQuantity}
                       />
                       {productionErrors[`item_${index}_quantity`] && (
                         <p className="text-red-600 text-xs mt-1">{productionErrors[`item_${index}_quantity`]}</p>
                       )}
                     </div>
-                    {productionForm.items.length > 1 && (
+                    <div className="flex-1">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'السعر' : 'Price'}</label>
+                      <PriceInput
+                        value={item.price}
+                        onChange={(val) => updateItemInForm(index, 'price', val)}
+                      />
+                      {productionErrors[`item_${index}_price`] && (
+                        <p className="text-red-600 text-xs mt-1">{productionErrors[`item_${index}_price`]}</p>
+                      )}
+                    </div>
+                    {!selectedItem && productionForm.items.length > 1 && (
                       <button
                         onClick={() => removeItemFromForm(index)}
                         className="p-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors duration-200 self-start sm:self-end"
@@ -1072,20 +1049,22 @@ export const FactoryInventory = () => {
                   </div>
                 </div>
               ))}
-              <button
-                onClick={addItemToForm}
-                className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
-                aria-label={t.addItem}
-              >
-                <Plus className="w-4 h-4" />
-                {t.addItem}
-              </button>
+              {!selectedItem && (
+                <button
+                  onClick={addItemToForm}
+                  className="flex items-center gap-2 text-amber-600 hover:text-amber-800 text-sm font-medium"
+                  aria-label={t.addItem}
+                >
+                  <Plus className="w-4 h-4" />
+                  {t.addItem}
+                </button>
+              )}
               {productionErrors.items && <p className="text-red-600 text-xs">{productionErrors.items}</p>}
             </div>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => {
-                  setIsRequestModalOpen(false);
+                  setIsProductionModalOpen(false);
                   dispatchProductionForm({ type: 'RESET' });
                   setProductionErrors({});
                   setSelectedItem(null);
@@ -1096,12 +1075,12 @@ export const FactoryInventory = () => {
                 {t.cancel}
               </button>
               <button
-                onClick={() => createRequestMutation.mutate()}
-                disabled={createRequestMutation.isLoading}
+                onClick={() => createProductionMutation.mutate()}
+                disabled={createProductionMutation.isLoading}
                 className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
-                aria-label={createRequestMutation.isLoading ? t.submitting : t.submit}
+                aria-label={createProductionMutation.isLoading ? t.submitting : t.submit}
               >
-                {createRequestMutation.isLoading ? t.submitting : t.submit}
+                {createProductionMutation.isLoading ? t.submitting : t.submit}
               </button>
             </div>
           </div>
@@ -1110,25 +1089,26 @@ export const FactoryInventory = () => {
 
       <motion.div
         initial={{ opacity: 0 }}
-        animate={{ opacity: isAssignModalOpen ? 1 : 0 }}
+        animate={{ opacity: isEditModalOpen ? 1 : 0 }}
         className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
-          isAssignModalOpen ? '' : 'pointer-events-none'
+          isEditModalOpen ? '' : 'pointer-events-none'
         }`}
         role="dialog"
         aria-modal="true"
-        aria-label="Assign Chef"
+        aria-label={t.editStockLimits}
       >
         <motion.div
           initial={{ scale: 0.95, y: 20 }}
-          animate={{ scale: isAssignModalOpen ? 1 : 0.95, y: isAssignModalOpen ? 0 : 20 }}
+          animate={{ scale: isEditModalOpen ? 1 : 0.95, y: isEditModalOpen ? 0 : 20 }}
           className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
         >
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-bold text-gray-900">Assign Chef</h2>
+            <h2 className="text-xl font-bold text-gray-900">{t.editStockLimits}</h2>
             <button
               onClick={() => {
-                setIsAssignModalOpen(false);
-                setSelectedRequest(null);
+                setIsEditModalOpen(false);
+                setEditErrors({});
+                setSelectedItem(null);
               }}
               className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
               aria-label={t.cancel}
@@ -1137,21 +1117,127 @@ export const FactoryInventory = () => {
             </button>
           </div>
           <div className="space-y-4">
-            <ProductDropdown
-              value={selectedRequest?.assignedChef || ''}
-              onChange={(value) => assignChefMutation.mutate(value)}
-              options={[
-                { value: '', label: 'Select Chef' },
-                ...chefs.map(chef => ({ value: chef._id, label: chef.displayName })),
-              ]}
-              ariaLabel="Assign Chef"
-              className="w-full"
-            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t.minStock}</label>
+              <input
+                type="number"
+                value={editForm.minStockLevel}
+                onChange={(e) => setEditForm({ ...editForm, minStockLevel: parseInt(e.target.value) || 0 })}
+                min={0}
+                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
+                aria-label={t.minStock}
+              />
+              {editErrors.minStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.minStockLevel}</p>}
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t.maxStock}</label>
+              <input
+                type="number"
+                value={editForm.maxStockLevel}
+                onChange={(e) => setEditForm({ ...editForm, maxStockLevel: parseInt(e.target.value) || 0 })}
+                min={0}
+                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
+                aria-label={t.maxStock}
+              />
+              {editErrors.maxStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.maxStockLevel}</p>}
+            </div>
+            {editErrors.form && <p className="text-red-600 text-xs">{editErrors.form}</p>}
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => {
-                  setIsAssignModalOpen(false);
-                  setSelectedRequest(null);
+                  setIsEditModalOpen(false);
+                  setEditErrors({});
+                  setSelectedItem(null);
+                }}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
+                aria-label={t.cancel}
+              >
+                {t.cancel}
+              </button>
+              <button
+                onClick={() => updateInventoryMutation.mutate()}
+                disabled={updateInventoryMutation.isLoading}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium transition-colors duration-200 disabled:opacity-50"
+                aria-label={updateInventoryMutation.isLoading ? t.saving : t.save}
+              >
+                {updateInventoryMutation.isLoading ? t.saving : t.save}
+              </button>
+            </div>
+          </div>
+        </motion.div>
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: isDetailsModalOpen ? 1 : 0 }}
+        className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 ${
+          isDetailsModalOpen ? '' : 'pointer-events-none'
+        }`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={t.productDetails}
+      >
+        <motion.div
+          initial={{ scale: 0.95, y: 20 }}
+          animate={{ scale: isDetailsModalOpen ? 1 : 0.95, y: isDetailsModalOpen ? 0 : 20 }}
+          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-2xl max-h-[90vh] overflow-y-auto"
+        >
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
+            <button
+              onClick={() => {
+                setIsDetailsModalOpen(false);
+                setSelectedProductId('');
+              }}
+              className="p-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg transition-colors duration-200"
+              aria-label={t.cancel}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="space-y-4">
+            {historyLoading ? (
+              <div className="space-y-3 animate-pulse">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="h-24 bg-gray-200 rounded-lg"></div>
+                ))}
+              </div>
+            ) : productHistory && productHistory.length > 0 ? (
+              <div className="space-y-4">
+                {productHistory.map((entry) => (
+                  <div
+                    key={entry._id}
+                    className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex flex-col gap-2"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
+                      <span className="text-sm font-medium text-gray-700">{t.date}</span>
+                      <span className="text-sm text-gray-600">
+                        {new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
+                      </span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
+                      <span className="text-sm font-medium text-gray-700">{t.type}</span>
+                      <span className="text-sm text-gray-600">{t[entry.type]}</span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
+                      <span className="text-sm font-medium text-gray-700">{t.quantity}</span>
+                      <span className="text-sm text-gray-600">{entry.quantity}</span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
+                      <span className="text-sm font-medium text-gray-700">{isRtl ? 'المرجع' : 'Reference'}</span>
+                      <span className="text-sm text-gray-600">{entry.reference}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-600 text-sm font-medium">{t.noHistory}</p>
+            )}
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={() => {
+                  setIsDetailsModalOpen(false);
+                  setSelectedProductId('');
                 }}
                 className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-sm font-medium transition-colors duration-200"
                 aria-label={t.cancel}
@@ -1162,73 +1248,6 @@ export const FactoryInventory = () => {
           </div>
         </motion.div>
       </motion.div>
-
-      {/* Section for Production Requests */}
-      <div className="mt-12">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Production Requests</h2>
-        <div className="overflow-x-auto rounded-xl shadow-sm border border-gray-100 bg-white">
-          <table className="min-w-full divide-y divide-gray-100 text-sm">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">Type</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">Branch</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">Status</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">Items</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">Created By</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">Assigned Chef</th>
-                <th className="px-4 py-3 text-left font-semibold text-gray-700">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {productionRequests.map((request) => (
-                <tr key={request._id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">{request.type}</td>
-                  <td className="px-4 py-3">{request.branchName || 'N/A'}</td>
-                  <td className="px-4 py-3">{request.status}</td>
-                  <td className="px-4 py-3">
-                    {request.items.map((item, i) => (
-                      <div key={i}>{item.productName}: {item.quantity}</div>
-                    ))}
-                  </td>
-                  <td className="px-4 py-3">{request.createdBy}</td>
-                  <td className="px-4 py-3">{request.assignedChef || 'Not Assigned'}</td>
-                  <td className="px-4 py-3">
-                    {request.status === 'pending' && (
-                      <button
-                        onClick={() => {
-                          setSelectedRequest(request);
-                          setIsAssignModalOpen(true);
-                        }}
-                        className="px-3 py-1 bg-blue-600 text-white rounded-md text-xs"
-                      >
-                        Assign Chef
-                      </button>
-                    )}
-                    {request.status === 'assigned' && (
-                      <button
-                        onClick={() => productionRequestsAPI.updateProductionRequestStatus(request._id, { status: 'in_progress' })}
-                        className="px-3 py-1 bg-yellow-600 text-white rounded-md text-xs"
-                      >
-                        Start Production
-                      </button>
-                    )}
-                    {request.status === 'in_progress' && (
-                      <button
-                        onClick={() => completeRequestMutation.mutate()}
-                        className="px-3 py-1 bg-green-600 text-white rounded-md text-xs"
-                      >
-                        Complete
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 };
-
-export default FactoryInventory;

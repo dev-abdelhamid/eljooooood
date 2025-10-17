@@ -999,72 +999,212 @@ export const inventoryAPI = {
   },
 };
 
+
+
+
+
 export const factoryInventoryAPI = {
-  getFactoryInventory: async (params = {}) => {
+  getAll: async (params: { product?: string; department?: string; lowStock?: boolean; stockStatus?: 'low' | 'normal' | 'high'; lang?: string } = {}) => {
     if (params.product && !isValidObjectId(params.product)) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getFactoryInventory - Invalid product ID:`, params.product);
-      throw new Error('Invalid product ID');
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Invalid product ID:`, params.product);
+      throw new Error(createErrorMessage('invalidProductId', params.lang === 'ar'));
     }
     if (params.department && !isValidObjectId(params.department)) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getFactoryInventory - Invalid department ID:`, params.department);
-      throw new Error('Invalid department ID');
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Invalid department ID:`, params.department);
+      throw new Error(createErrorMessage('invalidDepartmentId', params.lang === 'ar'));
     }
-    const response = await api.get('/factory', { params });
-    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getFactoryInventory - Response:`, response);
-    return response.inventory || [];
+    const response = await api.get('/factoryInventory', { params });
+    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Response:`, response);
+    return response; // Return the raw response as expected by FactoryInventory.tsx
   },
-  createFactoryInventory: async (data) => {
-    if (!isValidObjectId(data.productId) || !isValidObjectId(data.department)) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.createFactoryInventory - Invalid data:`, data);
-      throw new Error('Invalid product ID or department ID');
+  create: async (data: { productId: string; userId: string; currentStock: number; minStockLevel?: number; maxStockLevel?: number; orderId?: string }) => {
+    if (!isValidObjectId(data.productId) || !isValidObjectId(data.userId) || (data.orderId && !isValidObjectId(data.orderId))) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.create - Invalid data:`, data);
+      throw new Error(createErrorMessage('invalidProductId', localStorage.getItem('language') === 'ar'));
     }
     if (data.currentStock < 0) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.createFactoryInventory - Invalid stock quantity:`, data.currentStock);
-      throw new Error('Stock quantity must be non-negative');
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.create - Invalid stock quantity:`, data.currentStock);
+      throw new Error(createErrorMessage('invalidStockQuantity', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.post('/factory', {
+    if (data.minStockLevel !== undefined && (data.minStockLevel < 0 || !Number.isInteger(data.minStockLevel))) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.create - Invalid minStockLevel:`, data.minStockLevel);
+      throw new Error(createErrorMessage('invalidMinStockLevel', localStorage.getItem('language') === 'ar'));
+    }
+    if (data.maxStockLevel !== undefined && (data.maxStockLevel < 0 || !Number.isInteger(data.maxStockLevel))) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.create - Invalid maxStockLevel:`, data.maxStockLevel);
+      throw new Error(createErrorMessage('invalidMaxStockLevel', localStorage.getItem('language') === 'ar'));
+    }
+    if (data.minStockLevel !== undefined && data.maxStockLevel !== undefined && data.maxStockLevel <= data.minStockLevel) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.create - Max stock level less than min:`, { minStockLevel: data.minStockLevel, maxStockLevel: data.maxStockLevel });
+      throw new Error(createErrorMessage('maxLessThanMin', localStorage.getItem('language') === 'ar'));
+    }
+    const response = await api.post('/factoryInventory', {
       productId: data.productId,
-      department: data.department,
+      userId: data.userId,
       currentStock: data.currentStock,
       minStockLevel: data.minStockLevel ?? 0,
       maxStockLevel: data.maxStockLevel ?? 1000,
-      userId: data.userId,
+      orderId: data.orderId,
     });
-    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.createFactoryInventory - Response:`, response);
-    return response.inventory;
+    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.create - Response:`, response);
+    return response;
   },
-  updateFactoryInventory: async (id, data) => {
+  bulkCreate: async (data: { userId: string; orderId?: string; items: { productId: string; currentStock: number; minStockLevel?: number; maxStockLevel?: number }[] }) => {
+    if (!isValidObjectId(data.userId) || (data.orderId && !isValidObjectId(data.orderId)) || !Array.isArray(data.items) || data.items.length === 0 || data.items.some(item => !isValidObjectId(item.productId))) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.bulkCreate - Invalid data:`, data);
+      throw new Error(createErrorMessage('invalidUserId', localStorage.getItem('language') === 'ar'));
+    }
+    if (data.items.some(item => item.currentStock < 0)) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.bulkCreate - Invalid stock quantity:`, data.items);
+      throw new Error(createErrorMessage('invalidStockQuantity', localStorage.getItem('language') === 'ar'));
+    }
+    if (data.items.some(item => item.minStockLevel !== undefined && (item.minStockLevel < 0 || !Number.isInteger(item.minStockLevel)))) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.bulkCreate - Invalid minStockLevel:`, data.items);
+      throw new Error(createErrorMessage('invalidMinStockLevel', localStorage.getItem('language') === 'ar'));
+    }
+    if (data.items.some(item => item.maxStockLevel !== undefined && (item.maxStockLevel < 0 || !Number.isInteger(item.maxStockLevel)))) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.bulkCreate - Invalid maxStockLevel:`, data.items);
+      throw new Error(createErrorMessage('invalidMaxStockLevel', localStorage.getItem('language') === 'ar'));
+    }
+    if (data.items.some(item => item.minStockLevel !== undefined && item.maxStockLevel !== undefined && item.maxStockLevel <= item.minStockLevel)) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.bulkCreate - Max stock level less than min:`, data.items);
+      throw new Error(createErrorMessage('maxLessThanMin', localStorage.getItem('language') === 'ar'));
+    }
+    const response = await api.post('/factoryInventory/bulk', {
+      userId: data.userId,
+      orderId: data.orderId,
+      items: data.items.map(item => ({
+        productId: item.productId,
+        currentStock: item.currentStock,
+        minStockLevel: item.minStockLevel ?? 0,
+        maxStockLevel: item.maxStockLevel ?? 1000,
+      })),
+    });
+    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.bulkCreate - Response:`, response);
+    return response;
+  },
+  updateStock: async (id: string, data: { currentStock?: number; minStockLevel?: number; maxStockLevel?: number }) => {
     if (!isValidObjectId(id)) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateFactoryInventory - Invalid inventory ID:`, id);
-      throw new Error('Invalid inventory ID');
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateStock - Invalid inventory ID:`, id);
+      throw new Error(createErrorMessage('invalidInventoryId', localStorage.getItem('language') === 'ar'));
     }
     if (data.currentStock !== undefined && (data.currentStock < 0 || !Number.isInteger(data.currentStock))) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateFactoryInventory - Invalid stock quantity:`, data.currentStock);
-      throw new Error('Stock quantity must be non-negative');
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateStock - Invalid stock quantity:`, data.currentStock);
+      throw new Error(createErrorMessage('invalidStockQuantity', localStorage.getItem('language') === 'ar'));
     }
     if (data.minStockLevel !== undefined && (data.minStockLevel < 0 || !Number.isInteger(data.minStockLevel))) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateFactoryInventory - Invalid minStockLevel:`, data.minStockLevel);
-      throw new Error('Minimum stock level must be a non-negative integer');
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateStock - Invalid minStockLevel:`, data.minStockLevel);
+      throw new Error(createErrorMessage('invalidMinStockLevel', localStorage.getItem('language') === 'ar'));
     }
     if (data.maxStockLevel !== undefined && (data.maxStockLevel < 0 || !Number.isInteger(data.maxStockLevel))) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateFactoryInventory - Invalid maxStockLevel:`, data.maxStockLevel);
-      throw new Error('Maximum stock level must be a non-negative integer');
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateStock - Invalid maxStockLevel:`, data.maxStockLevel);
+      throw new Error(createErrorMessage('invalidMaxStockLevel', localStorage.getItem('language') === 'ar'));
     }
     if (data.minStockLevel !== undefined && data.maxStockLevel !== undefined && data.maxStockLevel <= data.minStockLevel) {
-      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateFactoryInventory - Max stock level less than min:`, { minStockLevel: data.minStockLevel, maxStockLevel: data.maxStockLevel });
-      throw new Error('Maximum stock level must be greater than minimum');
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.updateStock - Max stock level less than min:`, { minStockLevel: data.minStockLevel, maxStockLevel: data.maxStockLevel });
+      throw new Error(createErrorMessage('maxLessThanMin', localStorage.getItem('language') === 'ar'));
     }
-    const response = await api.put(`/factory/${id}`, {
+    const response = await api.put(`/factoryInventory/${id}`, {
       currentStock: data.currentStock,
       minStockLevel: data.minStockLevel,
       maxStockLevel: data.maxStockLevel,
     });
-    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.updateFactoryInventory - Response:`, response);
-    return response.inventory;
+    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.updateStock - Response:`, response);
+    return response;
+  },
+  getHistory: async (params: { productId?: string; department?: string; period?: 'daily' | 'weekly' | 'monthly'; lang?: string } = {}) => {
+    if (params.productId && !isValidObjectId(params.productId)) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Invalid product ID:`, params.productId);
+      throw new Error(createErrorMessage('invalidProductId', params.lang === 'ar'));
+    }
+    if (params.department && !isValidObjectId(params.department)) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Invalid department ID:`, params.department);
+      throw new Error(createErrorMessage('invalidDepartmentId', params.lang === 'ar'));
+    }
+    if (params.period && !['daily', 'weekly', 'monthly'].includes(params.period)) {
+      console.error(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Invalid period:`, params.period);
+      throw new Error(createErrorMessage('invalidStatus', params.lang === 'ar'));
+    }
+    const response = await api.get('/factoryInventory/history', { params });
+    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Response:`, response);
+    return response;
+  },
+  getAvailableProducts: async () => {
+    const response = await api.get('/products');
+    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Response:`, response);
+    return response;
   },
 };
 
-
+export const factoryOrdersAPI = {
+  create: async (data: { orderNumber: string; items: { product: string; quantity: number; price: number }[]; notes?: string; priority?: string }) => {
+    if (!data.orderNumber || !Array.isArray(data.items) || data.items.length === 0 || data.items.some(item => !isValidObjectId(item.product) || item.quantity < 1 || item.price <= 0)) {
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - Invalid data:`, data);
+      throw new Error(createErrorMessage('invalidItems', localStorage.getItem('language') === 'ar'));
+    }
+    const response = await api.post('/factoryOrders', {
+      orderNumber: data.orderNumber.trim(),
+      items: data.items.map(item => ({
+        product: item.product,
+        quantity: item.quantity,
+        price: item.price,
+      })),
+      notes: data.notes?.trim(),
+      priority: data.priority?.trim() || 'medium',
+    });
+    console.log(`[${new Date().toISOString()}] factoryOrdersAPI.create - Response:`, response);
+    return response;
+  },
+  getAll: async () => {
+    const response = await api.get('/factoryOrders');
+    console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getAll - Response:`, response);
+    return response;
+  },
+  getById: async (id: string) => {
+    if (!isValidObjectId(id)) {
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.getById - Invalid order ID:`, id);
+      throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
+    }
+    const response = await api.get(`/factoryOrders/${id}`);
+    console.log(`[${new Date().toISOString()}] factoryOrdersAPI.getById - Response:`, response);
+    return response;
+  },
+  assignChefs: async (id: string, data: { items: { itemId: string; assignedTo: string }[] }) => {
+    if (!isValidObjectId(id) || !Array.isArray(data.items) || data.items.some(item => !isValidObjectId(item.itemId) || !isValidObjectId(item.assignedTo))) {
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - Invalid data:`, { id, data });
+      throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
+    }
+    const response = await api.patch(`/factoryOrders/${id}/assign`, {
+      items: data.items,
+    });
+    console.log(`[${new Date().toISOString()}] factoryOrdersAPI.assignChefs - Response:`, response);
+    return response;
+  },
+  updateStatus: async (id: string, data: { status: 'pending' | 'in_production' | 'completed' | 'cancelled' }) => {
+    if (!isValidObjectId(id)) {
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Invalid order ID:`, id);
+      throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
+    }
+    if (!['pending', 'in_production', 'completed', 'cancelled'].includes(data.status)) {
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Invalid status:`, data.status);
+      throw new Error(createErrorMessage('invalidStatus', localStorage.getItem('language') === 'ar'));
+    }
+    const response = await api.patch(`/factoryOrders/${id}/status`, {
+      status: data.status,
+    });
+    console.log(`[${new Date().toISOString()}] factoryOrdersAPI.updateStatus - Response:`, response);
+    return response;
+  },
+  confirmProduction: async (id: string) => {
+    if (!isValidObjectId(id)) {
+      console.error(`[${new Date().toISOString()}] factoryOrdersAPI.confirmProduction - Invalid order ID:`, id);
+      throw new Error(createErrorMessage('invalidOrderId', localStorage.getItem('language') === 'ar'));
+    }
+    const response = await api.patch(`/factoryOrders/${id}/confirm-production`, {});
+    console.log(`[${new Date().toISOString()}] factoryOrdersAPI.confirmProduction - Response:`, response);
+    return response;
+  },
+};
 
 export { notificationsAPI, returnsAPI, salesAPI };
 export default api;
