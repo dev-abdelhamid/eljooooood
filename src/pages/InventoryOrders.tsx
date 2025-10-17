@@ -22,17 +22,6 @@ import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 
-const normalizeText = (text: string) => {
-  return text
-    .normalize('NFD')
-    .replace(/[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E8\u06EA-\u06ED]/g, '')
-    .replace(/أ|إ|آ|ٱ/g, 'ا')
-    .replace(/ى/g, 'ي')
-    .replace(/ة/g, 'ه')
-    .toLowerCase()
-    .trim();
-};
-
 interface State {
   orders: FactoryOrder[];
   selectedOrder: FactoryOrder | null;
@@ -90,11 +79,11 @@ const initialState: State = {
 
 const reducer = (state: State, action: Action): State => {
   switch (action.type) {
-    case 'SET_ORDERS': return { ...state, orders: action.payload, error: '', currentPage: 1 };
+    case 'SET_ORDERS': return { ...state, orders: action.payload || [], error: '', currentPage: 1 };
     case 'ADD_ORDER': return { ...state, orders: [action.payload, ...state.orders.filter(o => o.id !== action.payload.id)] };
     case 'SET_SELECTED_ORDER': return { ...state, selectedOrder: action.payload };
-    case 'SET_CHEFS': return { ...state, chefs: action.payload };
-    case 'SET_PRODUCTS': return { ...state, products: action.payload };
+    case 'SET_CHEFS': return { ...state, chefs: action.payload || [] };
+    case 'SET_PRODUCTS': return { ...state, products: action.payload || [] };
     case 'SET_ASSIGN_MODAL': return { ...state, isAssignModalOpen: action.isOpen ?? false };
     case 'SET_CREATE_MODAL': return { ...state, isCreateModalOpen: action.isOpen ?? false };
     case 'SET_ASSIGN_FORM': return { ...state, assignFormData: action.payload };
@@ -394,7 +383,10 @@ export const InventoryOrders: React.FC = () => {
           chefsAPI.getAll(),
           productsAPI.getAll(),
         ]);
-        const mappedOrders: FactoryOrder[] = ordersResponse.data
+
+        // Ensure ordersResponse.data is an array
+        const ordersData = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
+        const mappedOrders: FactoryOrder[] = ordersData
           .filter((order: any) => order && order._id && order.orderNumber)
           .map((order: any) => ({
             id: order._id,
@@ -440,50 +432,55 @@ export const InventoryOrders: React.FC = () => {
             priority: order.priority || 'medium',
             createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
           }));
+
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
         dispatch({
           type: 'SET_CHEFS',
-          payload: chefsResponse.data
-            .filter((chef: any) => chef && chef.user?._id)
-            .map((chef: any) => ({
-              _id: chef._id,
-              userId: chef.user._id,
-              name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              nameEn: chef.user?.nameEn || chef.nameEn,
-              displayName: isRtl ? (chef.user?.name || chef.name) : (chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name),
-              department: chef.department
-                ? {
-                    _id: chef.department._id,
-                    name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    nameEn: chef.department.nameEn,
-                    displayName: isRtl ? chef.department.name : (chef.department.nameEn || chef.department.name),
-                  }
-                : null,
-              status: chef.status || 'active',
-            })),
+          payload: Array.isArray(chefsResponse.data)
+            ? chefsResponse.data
+                .filter((chef: any) => chef && chef.user?._id)
+                .map((chef: any) => ({
+                  _id: chef._id,
+                  userId: chef.user._id,
+                  name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                  nameEn: chef.user?.nameEn || chef.nameEn,
+                  displayName: isRtl ? (chef.user?.name || chef.name) : (chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name),
+                  department: chef.department
+                    ? {
+                        _id: chef.department._id,
+                        name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                        nameEn: chef.department.nameEn,
+                        displayName: isRtl ? chef.department.name : (chef.department.nameEn || chef.department.name),
+                      }
+                    : null,
+                  status: chef.status || 'active',
+                }))
+            : [],
         });
         dispatch({
           type: 'SET_PRODUCTS',
-          payload: productsResponse.data
-            .filter((product: any) => product && product._id)
-            .map((product: any) => ({
-              _id: product._id,
-              name: product.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              nameEn: product.nameEn,
-              unit: product.unit || 'unit',
-              unitEn: product.unitEn,
-              department: {
-                _id: product.department?._id || 'unknown',
-                name: product.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: product.department?.nameEn,
-                displayName: isRtl ? product.department?.name : product.department?.nameEn || product.department?.name,
-              },
-            }))
-            .sort((a: Product, b: Product) => {
-              const nameA = isRtl ? a.name : a.nameEn || a.name;
-              const nameB = isRtl ? b.name : b.nameEn || b.name;
-              return nameA.localeCompare(nameB, language);
-            }),
+          payload: Array.isArray(productsResponse.data)
+            ? productsResponse.data
+                .filter((product: any) => product && product._id)
+                .map((product: any) => ({
+                  _id: product._id,
+                  name: product.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                  nameEn: product.nameEn,
+                  unit: product.unit || 'unit',
+                  unitEn: product.unitEn,
+                  department: {
+                    _id: product.department?._id || 'unknown',
+                    name: product.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                    nameEn: product.department?.nameEn,
+                    displayName: isRtl ? product.department?.name : product.department?.nameEn || product.department?.name,
+                  },
+                }))
+                .sort((a: Product, b: Product) => {
+                  const nameA = isRtl ? a.name : a.nameEn || a.name;
+                  const nameB = isRtl ? b.name : b.nameEn || b.name;
+                  return nameA.localeCompare(nameB, language);
+                })
+            : [],
         });
         dispatch({ type: 'SET_ERROR', payload: '' });
       } catch (err: any) {
