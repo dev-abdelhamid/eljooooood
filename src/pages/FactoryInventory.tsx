@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Package, Plus, X, Eye, Edit, AlertCircle, Minus } from 'lucide-react';
-import { factoryOrdersAPI, factoryInventoryAPI } from '../services/api';
+import { factoryOrdersAPI, factoryInventoryAPI, isValidObjectId } from '../services/api';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -311,9 +311,6 @@ const productionFormReducer = (state: ProductionFormState, action: ProductionFor
   }
 };
 
-// Validate ObjectId
-const isValidObjectId = (id: string): boolean => /^[0-9a-fA-F]{24}$/.test(id);
-
 // Aggregate items by product
 const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
   const aggregated: Record<string, ProductionItem> = {};
@@ -382,34 +379,42 @@ export const FactoryInventory: React.FC = () => {
         lang: language,
       };
       const response = await factoryInventoryAPI.getAll(params);
-      return response.data?.inventory || response.data || response || [];
+      // Handle various response formats
+      const data = Array.isArray(response) ? response : response?.inventory || response || [];
+      return data;
     },
     enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
     cacheTime: 10 * 60 * 1000,
     select: (data) => {
-      return data.map((item: FactoryInventoryItem) => ({
-        ...item,
-        product: item.product
-          ? {
-              ...item.product,
-              displayName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
-              displayUnit: isRtl ? (item.product.unit || 'غير محدد') : item.product.unitEn || item.product.unit || 'N/A',
-              department: item.product.department
-                ? {
-                    ...item.product.department,
-                    displayName: isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name,
-                  }
-                : null,
-            }
-          : null,
-        status:
-          item.currentStock <= item.minStockLevel
-            ? InventoryStatus.LOW
-            : item.currentStock >= item.maxStockLevel
-            ? InventoryStatus.FULL
-            : InventoryStatus.NORMAL,
-      }));
+      if (!Array.isArray(data)) {
+        console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Invalid data format, expected array, got:`, data);
+        return [];
+      }
+      return data
+        .filter((item): item is FactoryInventoryItem => !!item && !!item.product) // Native filter instead of R.filter
+        .map((item: FactoryInventoryItem) => ({
+          ...item,
+          product: item.product
+            ? {
+                ...item.product,
+                displayName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
+                displayUnit: isRtl ? (item.product.unit || 'غير محدد') : item.product.unitEn || item.product.unit || 'N/A',
+                department: item.product.department
+                  ? {
+                      ...item.product.department,
+                      displayName: isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name,
+                    }
+                  : null,
+              }
+            : null,
+          status:
+            item.currentStock <= item.minStockLevel
+              ? InventoryStatus.LOW
+              : item.currentStock >= item.maxStockLevel
+              ? InventoryStatus.FULL
+              : InventoryStatus.NORMAL,
+        }));
     },
     onError: (err) => {
       toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
@@ -422,7 +427,8 @@ export const FactoryInventory: React.FC = () => {
     queryFn: async () => {
       if (!selectedProductId) throw new Error(t.errors.productNotFound);
       const response = await factoryInventoryAPI.getHistory({ productId: selectedProductId, lang: language });
-      return response.data?.history || response.data || response || [];
+      const data = Array.isArray(response) ? response : response?.history || response || [];
+      return data;
     },
     enabled: isDetailsModalOpen && !!selectedProductId,
     staleTime: 5 * 60 * 1000,
@@ -433,7 +439,7 @@ export const FactoryInventory: React.FC = () => {
     const fetchProducts = async () => {
       try {
         const response = await factoryInventoryAPI.getAvailableProducts();
-        const products = Array.isArray(response) ? response : response?.data || [];
+        const products = Array.isArray(response) ? response : response?.products || response || [];
         setAvailableProducts(
           products.map((product: any) => ({
             productId: product._id,
@@ -764,8 +770,8 @@ export const FactoryInventory: React.FC = () => {
       };
       const response = await factoryOrdersAPI.create(data);
       return {
-        orderId: response.data?._id || crypto.randomUUID(),
-        orderNumber: response.data?.orderNumber || data.orderNumber,
+        orderId: response?._id || crypto.randomUUID(),
+        orderNumber: response?.orderNumber || data.orderNumber,
       };
     },
     onSuccess: (data) => {
@@ -1198,29 +1204,46 @@ export const FactoryInventory: React.FC = () => {
             </button>
           </div>
           <div className="space-y-4">
+            {selectedItem?.product && (
+              <p className="text-sm text-gray-600">
+                {t.productDetails}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
+              </p>
+            )}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.minStock}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t.minStock}</label>
               <input
                 type="number"
                 value={editForm.minStockLevel}
-                onChange={(e) => setEditForm({ ...editForm, minStockLevel: parseInt(e.target.value) || 0 })}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value, 10);
+                  setEditForm((prev) => ({ ...prev, minStockLevel: isNaN(value) ? 0 : value }));
+                  setEditErrors((prev) => ({ ...prev, minStockLevel: undefined }));
+                }}
                 min={0}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
+                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
                 aria-label={t.minStock}
               />
-              {editErrors.minStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.minStockLevel}</p>}
+              {editErrors.minStockLevel && (
+                <p className="text-red-600 text-xs mt-1">{editErrors.minStockLevel}</p>
+              )}
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t.maxStock}</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t.maxStock}</label>
               <input
                 type="number"
                 value={editForm.maxStockLevel}
-                onChange={(e) => setEditForm({ ...editForm, maxStockLevel: parseInt(e.target.value) || 0 })}
+                onChange={(e) => {
+                  const value = parseInt(e.target.value, 10);
+                  setEditForm((prev) => ({ ...prev, maxStockLevel: isNaN(value) ? 0 : value }));
+                  setEditErrors((prev) => ({ ...prev, maxStockLevel: undefined }));
+                }}
                 min={0}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm"
+                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
                 aria-label={t.maxStock}
               />
-              {editErrors.maxStockLevel && <p className="text-red-600 text-xs mt-1">{editErrors.maxStockLevel}</p>}
+              {editErrors.maxStockLevel && (
+                <p className="text-red-600 text-xs mt-1">{editErrors.maxStockLevel}</p>
+              )}
             </div>
             {editErrors.form && <p className="text-red-600 text-xs">{editErrors.form}</p>}
             <div className="flex justify-end gap-3">
@@ -1261,7 +1284,7 @@ export const FactoryInventory: React.FC = () => {
         <motion.div
           initial={{ scale: 0.95, y: 20 }}
           animate={{ scale: isDetailsModalOpen ? 1 : 0.95, y: isDetailsModalOpen ? 0 : 20 }}
-          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md sm:max-w-2xl max-h-[90vh] overflow-y-auto"
+          className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
         >
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-gray-900">{t.productDetails}</h2>
@@ -1280,41 +1303,36 @@ export const FactoryInventory: React.FC = () => {
             {historyLoading ? (
               <div className="space-y-3 animate-pulse">
                 {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-24 bg-gray-200 rounded-lg"></div>
+                  <div key={i} className="h-4 bg-gray-200 rounded w-full"></div>
                 ))}
               </div>
             ) : productHistory && productHistory.length > 0 ? (
-              <div className="space-y-4">
-                {productHistory.map((entry) => (
-                  <div
-                    key={entry._id}
-                    className="p-4 bg-gray-50 rounded-lg border border-gray-100 flex flex-col gap-2"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
-                      <span className="text-sm font-medium text-gray-700">{t.date}</span>
-                      <span className="text-sm text-gray-600">
-                        {new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}
-                      </span>
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
-                      <span className="text-sm font-medium text-gray-700">{t.type}</span>
-                      <span className="text-sm text-gray-600">{t[entry.type]}</span>
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
-                      <span className="text-sm font-medium text-gray-700">{t.quantity}</span>
-                      <span className="text-sm text-gray-600">{entry.quantity}</span>
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
-                      <span className="text-sm font-medium text-gray-700">{t.reference}</span>
-                      <span className="text-sm text-gray-600">{entry.reference}</span>
-                    </div>
-                  </div>
-                ))}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-gray-600">
+                  <thead>
+                    <tr className="border-b border-gray-200">
+                      <th className="py-2 px-4 text-left font-medium">{t.date}</th>
+                      <th className="py-2 px-4 text-left font-medium">{t.type}</th>
+                      <th className="py-2 px-4 text-left font-medium">{t.quantity}</th>
+                      <th className="py-2 px-4 text-left font-medium">{t.reference}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productHistory.map((entry) => (
+                      <tr key={entry._id} className="border-b border-gray-100">
+                        <td className="py-2 px-4">{new Date(entry.date).toLocaleDateString(isRtl ? 'ar-EG' : 'en-US')}</td>
+                        <td className="py-2 px-4">{t[entry.type]}</td>
+                        <td className="py-2 px-4">{entry.quantity}</td>
+                        <td className="py-2 px-4">{entry.reference || 'N/A'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             ) : (
-              <p className="text-gray-600 text-sm font-medium">{t.noHistory}</p>
+              <p className="text-gray-600 text-sm">{t.noHistory}</p>
             )}
-            <div className="flex justify-end mt-4">
+            <div className="flex justify-end">
               <button
                 onClick={() => {
                   setIsDetailsModalOpen(false);
@@ -1332,5 +1350,3 @@ export const FactoryInventory: React.FC = () => {
     </div>
   );
 };
-
-export default FactoryInventory;
