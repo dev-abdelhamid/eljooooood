@@ -1,3 +1,5 @@
+
+
 // InventoryOrders.tsx
 import React, { useReducer, useEffect, useMemo, useCallback, useRef, Suspense, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -775,8 +777,8 @@ export const InventoryOrders: React.FC = () => {
   );
   const openAssignModal = useCallback(
     (order: FactoryOrder) => {
-      if (order.status !== 'approved') {
-        toast.error(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved', {
+      if (order.status !== 'approved' && order.status !== 'pending') {
+        toast.error(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not ready for assignment', {
           position: isRtl ? 'top-left' : 'top-right',
         });
         return;
@@ -1231,7 +1233,6 @@ export const InventoryOrders: React.FC = () => {
     </div>
   );
 };
-
 
 
 export default InventoryOrders;

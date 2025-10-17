@@ -93,6 +93,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
     }),
     []
   );
+  const allAssigned = order.items.every(i => i.status === 'assigned' || i.status === 'in_progress' || i.status === 'completed');
   return (
     <Card className="p-4 bg-white shadow-md rounded-lg border border-gray-200 hover:shadow-lg transition-shadow duration-300">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -142,7 +143,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
         </ul>
       </div>
       <div className={`mt-4 flex gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
-        {['requested', 'pending'].includes(order.status) && (
+        {order.status === 'requested' && (
           <Button
             variant="primary"
             onClick={() => updateOrderStatus(order.id, 'approved')}
@@ -153,7 +154,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
             {submitting === order.id ? '...' : t.approve}
           </Button>
         )}
-        {order.status === 'approved' && (
+        {['pending', 'approved'].includes(order.status) && !allAssigned && (
           <Button
             variant="secondary"
             onClick={() => openAssignModal(order)}
@@ -164,7 +165,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
             {t.assignChefs}
           </Button>
         )}
-        {order.status === 'in_production' && (
+        {order.status === 'in_production' && order.items.every(i => i.status === 'completed') && (
           <Button
             variant="success"
             onClick={() => updateOrderStatus(order.id, 'completed')}
