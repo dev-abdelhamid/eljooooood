@@ -1,4 +1,3 @@
-// FactoryInventory Component (Frontend)
 import React, { useState, useMemo, useCallback, useEffect, useReducer } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
@@ -10,12 +9,14 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useSocket } from '../contexts/SocketContext';
 import { useNotifications } from '../contexts/NotificationContext';
+
 // Enums for type safety
 enum InventoryStatus {
   LOW = 'low',
   NORMAL = 'normal',
   FULL = 'full',
 }
+
 // Interfaces aligned with backend
 interface FactoryInventoryItem {
   _id: string;
@@ -29,22 +30,24 @@ interface FactoryInventoryItem {
     department: { _id: string; name: string; nameEn: string; displayName: string } | null;
     displayName: string;
     displayUnit: string;
-  };
+  } | null;
   currentStock: number;
   minStockLevel: number;
   maxStockLevel: number;
   status: InventoryStatus;
-  pendingQuantity: number;
   inProduction: boolean;
 }
+
 interface ProductionItem {
   product: string;
   quantity: number;
 }
+
 interface ProductionFormState {
   notes: string;
   items: ProductionItem[];
 }
+
 interface ProductHistoryEntry {
   _id: string;
   date: string;
@@ -52,23 +55,26 @@ interface ProductHistoryEntry {
   quantity: number;
   reference: string;
 }
+
 interface EditForm {
-  currentStock: number;
   minStockLevel: number;
   maxStockLevel: number;
 }
+
 interface AvailableProduct {
   productId: string;
   productName: string;
   unit: string;
   departmentName: string;
 }
+
 interface FactoryOrder {
   _id: string;
   orderNumber: string;
   items: { productId: string; quantity: number; status: string }[];
   status: 'pending' | 'in_production' | 'completed' | 'cancelled';
 }
+
 // Translations
 const translations = {
   ar: {
@@ -85,7 +91,7 @@ const translations = {
     full: 'مخزون ممتلئ',
     create: 'إنشاء طلب إنتاج',
     viewDetails: 'عرض التفاصيل',
-    editStockLimits: 'تعديل المخزون والحدود',
+    editStockLimits: 'تعديل حدود المخزون',
     search: 'البحث عن المنتجات...',
     selectProduct: 'اختر منتج',
     filterByStatus: 'تصفية حسب الحالة',
@@ -110,7 +116,6 @@ const translations = {
     produced_stock: 'إنتاج مخزون',
     adjustment: 'تعديل',
     inProduction: 'في الإنتاج',
-    pendingQuantity: 'كمية الإنتاج المعلق',
     errors: {
       fetchInventory: 'خطأ في جلب بيانات مخزون المصنع',
       createProduction: 'خطأ في إنشاء طلب الإنتاج',
@@ -147,7 +152,7 @@ const translations = {
     full: 'Full Stock',
     create: 'Create Production Order',
     viewDetails: 'View Details',
-    editStockLimits: 'Edit Stock and Limits',
+    editStockLimits: 'Edit Stock Limits',
     search: 'Search products...',
     selectProduct: 'Select Product',
     filterByStatus: 'Filter by Status',
@@ -172,7 +177,6 @@ const translations = {
     produced_stock: 'Produced Stock',
     adjustment: 'Adjustment',
     inProduction: 'In Production',
-    pendingQuantity: 'Pending Production Quantity',
     errors: {
       fetchInventory: 'Error fetching factory inventory data',
       createProduction: 'Error creating production order',
@@ -196,6 +200,7 @@ const translations = {
     },
   },
 };
+
 // QuantityInput Component
 const QuantityInput = ({
   value,
@@ -211,6 +216,7 @@ const QuantityInput = ({
   const { language } = useLanguage();
   const isRtl = language === 'ar';
   const t = translations[isRtl ? 'ar' : 'en'];
+
   const handleChange = (val: string) => {
     const num = parseInt(val, 10);
     if (val === '' || isNaN(num) || num < 1) {
@@ -219,6 +225,7 @@ const QuantityInput = ({
     }
     onChange(val);
   };
+
   return (
     <div className="flex items-center gap-2">
       <button
@@ -248,6 +255,7 @@ const QuantityInput = ({
     </div>
   );
 };
+
 // Reducer for production form
 type ProductionFormAction =
   | { type: 'SET_NOTES'; payload: string }
@@ -255,6 +263,7 @@ type ProductionFormAction =
   | { type: 'UPDATE_ITEM'; payload: { index: number; field: keyof ProductionItem; value: string | number } }
   | { type: 'REMOVE_ITEM'; payload: number }
   | { type: 'RESET' };
+
 const productionFormReducer = (state: ProductionFormState, action: ProductionFormAction): ProductionFormState => {
   switch (action.type) {
     case 'SET_NOTES':
@@ -273,6 +282,7 @@ const productionFormReducer = (state: ProductionFormState, action: ProductionFor
       return state;
   }
 };
+
 // Aggregate items by product
 const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
   const aggregated: Record<string, ProductionItem> = {};
@@ -287,6 +297,7 @@ const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
   });
   return Object.values(aggregated).filter((item) => item.product && isValidObjectId(item.product));
 };
+
 export const FactoryInventory: React.FC = () => {
   const { t: languageT, language } = useLanguage();
   const isRtl = language === 'ar';
@@ -305,11 +316,13 @@ export const FactoryInventory: React.FC = () => {
   const [selectedProductId, setSelectedProductId] = useState<string>('');
   const [currentPage, setCurrentPage] = useState(1);
   const [productionForm, dispatchProductionForm] = useReducer(productionFormReducer, { notes: '', items: [] });
-  const [editForm, setEditForm] = useState<EditForm>({ currentStock: 0, minStockLevel: 0, maxStockLevel: 0 });
+  const [editForm, setEditForm] = useState<EditForm>({ minStockLevel: 0, maxStockLevel: 0 });
   const [productionErrors, setProductionErrors] = useState<Record<string, string>>({});
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const [availableProducts, setAvailableProducts] = useState<AvailableProduct[]>([]);
+
   const ITEMS_PER_PAGE = 10;
+
   // Custom debounce hook
   const useDebouncedState = <T,>(initialValue: T, delay: number) => {
     const [value, setValue] = useState<T>(initialValue);
@@ -320,7 +333,9 @@ export const FactoryInventory: React.FC = () => {
     }, [value, delay]);
     return [value, setValue, debouncedValue] as const;
   };
+
   const [searchInput, setSearchInput, debouncedSearchQuery] = useDebouncedState<string>('', 300);
+
   // Inventory Query
   const { data: inventoryData, isLoading: inventoryLoading, error: inventoryError } = useQuery<
     FactoryInventoryItem[],
@@ -351,27 +366,33 @@ export const FactoryInventory: React.FC = () => {
         .filter((item): item is FactoryInventoryItem => !!item && !!item.product && isValidObjectId(item.product._id))
         .map((item: FactoryInventoryItem) => ({
           ...item,
-          product: {
-            ...item.product,
-            displayName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
-            displayUnit: isRtl ? (item.product.unit || t.unit) : item.product.unitEn || item.product.unit || 'N/A',
-            department: item.product.department
-              ? {
-                  ...item.product.department,
-                  displayName: isRtl
-                    ? item.product.department.name
-                    : item.product.department.nameEn || item.product.department.name,
-                }
-              : null,
-          },
+          product: item.product
+            ? {
+                ...item.product,
+                displayName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
+                displayUnit: isRtl ? (item.product.unit || t.unit) : item.product.unitEn || item.product.unit || 'N/A',
+                department: item.product.department
+                  ? {
+                      ...item.product.department,
+                      displayName: isRtl
+                        ? item.product.department.name
+                        : item.product.department.nameEn || item.product.department.name,
+                    }
+                  : null,
+              }
+            : null,
           status:
             item.currentStock <= item.minStockLevel
               ? InventoryStatus.LOW
               : item.currentStock >= item.maxStockLevel
               ? InventoryStatus.FULL
               : InventoryStatus.NORMAL,
-          pendingQuantity: 0, // Will be calculated later
-          inProduction: false, // Will be calculated later
+          inProduction:
+            factoryOrdersData?.some(
+              (order) =>
+                (order.status === 'pending' || order.status === 'in_production') &&
+                order.items.some((i) => i.productId === item.product?._id)
+            ) || false,
         }));
     },
     onError: (err) => {
@@ -381,6 +402,7 @@ export const FactoryInventory: React.FC = () => {
     retry: 3,
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 30000),
   });
+
   // Product History Query
   const { data: productHistory, isLoading: historyLoading } = useQuery<ProductHistoryEntry[], Error>({
     queryKey: ['factoryProductHistory', selectedProductId, language],
@@ -405,7 +427,8 @@ export const FactoryInventory: React.FC = () => {
       toast.error(err.message || t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' });
     },
   });
-  // Factory Orders Query for pending quantities
+
+  // Factory Orders Query for inProduction flag
   const { data: factoryOrdersData } = useQuery<FactoryOrder[], Error>({
     queryKey: ['factoryOrders', language],
     queryFn: async () => {
@@ -426,19 +449,7 @@ export const FactoryInventory: React.FC = () => {
       toast.error(err.message || t.errors.fetchInventory, { position: isRtl ? 'top-right' : 'top-left' });
     },
   });
-  // Calculate pending quantities
-  const pendingQuantities = useMemo(() => {
-    const map: Record<string, number> = {};
-    factoryOrdersData?.forEach((order) => {
-      if (['pending', 'in_production'].includes(order.status)) {
-        order.items.forEach((i) => {
-          if (!map[i.productId]) map[i.productId] = 0;
-          map[i.productId] += i.quantity;
-        });
-      }
-    });
-    return map;
-  }, [factoryOrdersData]);
+
   // Available products
   useEffect(() => {
     const fetchProducts = async () => {
@@ -470,9 +481,11 @@ export const FactoryInventory: React.FC = () => {
     };
     fetchProducts();
   }, [isRtl, t]);
+
   // Socket Events
   useEffect(() => {
     if (!socket || !user?.role || !isConnected) return;
+
     const handleFactoryInventoryUpdated = ({ productId }: { productId: string }) => {
       if (!isValidObjectId(productId)) {
         console.warn(`[${new Date().toISOString()}] Invalid productId in factoryInventoryUpdated:`, productId);
@@ -494,6 +507,7 @@ export const FactoryInventory: React.FC = () => {
         vibrate: [200, 100, 200],
       });
     };
+
     const handleFactoryOrderCreated = ({ orderId, orderNumber, branchId }: { orderId: string; orderNumber: string; branchId?: string }) => {
       if (!isValidObjectId(orderId)) {
         console.warn(`[${new Date().toISOString()}] Invalid orderId in factoryOrderCreated:`, orderId);
@@ -515,6 +529,7 @@ export const FactoryInventory: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
       queryClient.invalidateQueries({ queryKey: ['factoryOrders'] });
     };
+
     const handleFactoryTaskAssigned = ({
       factoryOrderId,
       taskId,
@@ -546,6 +561,7 @@ export const FactoryInventory: React.FC = () => {
         toast.info(t.notifications.taskAssigned, { position: isRtl ? 'top-right' : 'top-left' });
       }
     };
+
     const handleFactoryOrderCompleted = ({ factoryOrderId, orderNumber }: { factoryOrderId: string; orderNumber: string }) => {
       if (!isValidObjectId(factoryOrderId)) {
         console.warn(`[${new Date().toISOString()}] Invalid factoryOrderId in factoryOrderCompleted:`, factoryOrderId);
@@ -567,10 +583,12 @@ export const FactoryInventory: React.FC = () => {
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
       queryClient.invalidateQueries({ queryKey: ['factoryOrders'] });
     };
+
     socket.on('factoryInventoryUpdated', handleFactoryInventoryUpdated);
     socket.on('factoryOrderCreated', handleFactoryOrderCreated);
     socket.on('factoryTaskAssigned', handleFactoryTaskAssigned);
     socket.on('factoryOrderCompleted', handleFactoryOrderCompleted);
+
     // WebSocket reconnection logic
     const reconnectInterval = setInterval(() => {
       if (!isConnected && socket) {
@@ -578,6 +596,7 @@ export const FactoryInventory: React.FC = () => {
         socket.connect();
       }
     }, 5000);
+
     return () => {
       socket.off('factoryInventoryUpdated', handleFactoryInventoryUpdated);
       socket.off('factoryOrderCreated', handleFactoryOrderCreated);
@@ -586,6 +605,7 @@ export const FactoryInventory: React.FC = () => {
       clearInterval(reconnectInterval);
     };
   }, [socket, user, isConnected, queryClient, addNotification, t, isRtl, selectedProductId]);
+
   // Department options
   const departmentOptions = useMemo(() => {
     const depts = new Set<string>();
@@ -611,6 +631,7 @@ export const FactoryInventory: React.FC = () => {
       })),
     ];
   }, [inventoryData, isRtl, t]);
+
   // Status options
   const statusOptions = useMemo(
     () => [
@@ -621,6 +642,7 @@ export const FactoryInventory: React.FC = () => {
     ],
     [t]
   );
+
   // Product options
   const productOptions = useMemo(
     () => [
@@ -631,34 +653,36 @@ export const FactoryInventory: React.FC = () => {
       })),
     ],
     [availableProducts, t]
-  );
-  // Filtered and paginated inventory with pending quantities
+);
+
+  // Filtered and paginated inventory
   const filteredInventory = useMemo(
     () =>
-      (inventoryData || []).map((item) => ({
-        ...item,
-        pendingQuantity: pendingQuantities[item.product._id] || 0,
-        inProduction: (pendingQuantities[item.product._id] || 0) > 0,
-      })).filter(
+      (inventoryData || []).filter(
         (item) =>
+          item.product &&
           (!filterStatus || item.status === filterStatus) &&
           (!filterDepartment || item.product.department?._id === filterDepartment) &&
           (item.product.displayName.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             item.product.code.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
             (item.product.department?.displayName?.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ?? false))
       ),
-    [inventoryData, debouncedSearchQuery, filterStatus, filterDepartment, pendingQuantities]
+    [inventoryData, debouncedSearchQuery, filterStatus, filterDepartment]
   );
+
   const paginatedInventory = useMemo(
     () => filteredInventory.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE),
     [filteredInventory, currentPage]
   );
+
   const totalInventoryPages = Math.ceil(filteredInventory.length / ITEMS_PER_PAGE);
+
   // Handlers
   const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchInput(e.target.value);
     setCurrentPage(1);
   }, []);
+
   const handleOpenProductionModal = useCallback((item?: FactoryInventoryItem) => {
     setSelectedItem(item || null);
     dispatchProductionForm({ type: 'RESET' });
@@ -679,12 +703,14 @@ export const FactoryInventory: React.FC = () => {
     setProductionErrors({});
     setIsProductionModalOpen(true);
   }, []);
+
   const handleOpenEditModal = useCallback((item: FactoryInventoryItem) => {
     setSelectedItem(item);
-    setEditForm({ currentStock: item.currentStock, minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
+    setEditForm({ minStockLevel: item.minStockLevel, maxStockLevel: item.maxStockLevel });
     setEditErrors({});
     setIsEditModalOpen(true);
   }, []);
+
   const handleOpenDetailsModal = useCallback((item: FactoryInventoryItem) => {
     if (item.product && isValidObjectId(item.product._id)) {
       setSelectedProductId(item.product._id);
@@ -693,12 +719,14 @@ export const FactoryInventory: React.FC = () => {
       toast.error(t.errors.invalidProductId, { position: isRtl ? 'top-right' : 'top-left' });
     }
   }, [t, isRtl]);
+
   const addItemToForm = useCallback(() => {
     dispatchProductionForm({
       type: 'ADD_ITEM',
       payload: { product: '', quantity: 1 },
     });
   }, []);
+
   const updateItemInForm = useCallback((index: number, field: keyof ProductionItem, value: string | number) => {
     if (field === 'quantity' && typeof value === 'string') {
       const numValue = parseInt(value, 10);
@@ -717,6 +745,7 @@ export const FactoryInventory: React.FC = () => {
       [`item_${index}_${field}`]: undefined,
     }));
   }, [t]);
+
   const handleProductChange = useCallback(
     (index: number, productId: string) => {
       if (!isValidObjectId(productId)) {
@@ -744,6 +773,7 @@ export const FactoryInventory: React.FC = () => {
     },
     [t, productionForm.items]
   );
+
   const removeItemFromForm = useCallback((index: number) => {
     dispatchProductionForm({ type: 'REMOVE_ITEM', payload: index });
     setProductionErrors((prev) => {
@@ -754,6 +784,7 @@ export const FactoryInventory: React.FC = () => {
       return newErrors;
     });
   }, []);
+
   const validateProductionForm = useCallback(() => {
     const errors: Record<string, string> = {};
     if (productionForm.items.length === 0) {
@@ -772,11 +803,9 @@ export const FactoryInventory: React.FC = () => {
     setProductionErrors(errors);
     return Object.keys(errors).length === 0;
   }, [productionForm, t]);
+
   const validateEditForm = useCallback(() => {
     const errors: Record<string, string> = {};
-    if (editForm.currentStock < 0) {
-      errors.currentStock = t.errors.nonNegative.replace('{field}', t.stock);
-    }
     if (editForm.minStockLevel < 0) {
       errors.minStockLevel = t.errors.nonNegative.replace('{field}', t.minStock);
     }
@@ -789,6 +818,7 @@ export const FactoryInventory: React.FC = () => {
     setEditErrors(errors);
     return Object.keys(errors).length === 0;
   }, [editForm, t]);
+
   const createProductionMutation = useMutation<{ orderId: string; orderNumber: string }, Error, void>({
     mutationFn: async () => {
       if (!validateProductionForm()) {
@@ -855,6 +885,7 @@ export const FactoryInventory: React.FC = () => {
       setProductionErrors((prev) => ({ ...prev, form: errorMessage }));
     },
   });
+
   const updateInventoryMutation = useMutation<void, Error, void>({
     mutationFn: async () => {
       if (!validateEditForm()) {
@@ -865,12 +896,10 @@ export const FactoryInventory: React.FC = () => {
       }
       console.log(`[${new Date().toISOString()}] Updating inventory:`, {
         id: selectedItem._id,
-        currentStock: editForm.currentStock,
         minStockLevel: editForm.minStockLevel,
         maxStockLevel: editForm.maxStockLevel,
       });
       await factoryInventoryAPI.updateStock(selectedItem._id, {
-        currentStock: editForm.currentStock,
         minStockLevel: editForm.minStockLevel,
         maxStockLevel: editForm.maxStockLevel,
       });
@@ -878,7 +907,7 @@ export const FactoryInventory: React.FC = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
       setIsEditModalOpen(false);
-      setEditForm({ currentStock: 0, minStockLevel: 0, maxStockLevel: 0 });
+      setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
       setEditErrors({});
       setSelectedItem(null);
       toast.success(t.notifications.inventoryUpdated, { position: isRtl ? 'top-right' : 'top-left' });
@@ -897,7 +926,9 @@ export const FactoryInventory: React.FC = () => {
       setEditErrors({ form: errorMessage });
     },
   });
+
   const errorMessage = inventoryError?.message || '';
+
   return (
     <div className="mx-auto px-4 py-4 max-w-7xl">
       <div className="mb-8 flex flex-col items-start gap-4 sm:flex-row sm:justify-between sm:items-center">
@@ -917,6 +948,7 @@ export const FactoryInventory: React.FC = () => {
           {t.create}
         </button>
       </div>
+
       {errorMessage && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -927,6 +959,7 @@ export const FactoryInventory: React.FC = () => {
           <span className="text-red-600 text-sm font-medium">{errorMessage}</span>
         </motion.div>
       )}
+
       <div className="p-6 bg-white rounded-xl shadow-sm border border-gray-100 mb-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
@@ -967,6 +1000,7 @@ export const FactoryInventory: React.FC = () => {
           {isRtl ? `عدد العناصر: ${filteredInventory.length}` : `Items Count: ${filteredInventory.length}`}
         </div>
       </div>
+
       {inventoryLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[...Array(6)].map((_, i) => (
@@ -1001,100 +1035,103 @@ export const FactoryInventory: React.FC = () => {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <AnimatePresence>
-            {paginatedInventory.map((item) => (
-              <motion.div
-                key={item._id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.3 }}
-                className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 hover:border-amber-200"
-              >
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>
-                      {item.product.displayName}
-                    </h3>
-                    <p className="text-sm text-gray-500">{item.product.code}</p>
-                  </div>
-                  <p className="text-sm text-amber-600">
-                    {t.filterByDepartment}: {item.product.department?.displayName || 'N/A'}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    {t.stock}: {item.currentStock}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    {t.minStock}: {item.minStockLevel}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    {t.maxStock}: {item.maxStockLevel}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    {t.unit}: {item.product.displayUnit}
-                  </p>
-                  <p
-                    className={`text-sm font-medium ${
-                      item.status === InventoryStatus.LOW
-                        ? 'text-red-600'
-                        : item.status === InventoryStatus.FULL
-                        ? 'text-yellow-600'
-                        : 'text-green-600'
-                    }`}
-                  >
-                    {item.status === InventoryStatus.LOW
-                      ? t.lowStock
-                      : item.status === InventoryStatus.FULL
-                      ? t.full
-                      : t.normal}
-                  </p>
-                  {item.pendingQuantity > 0 && (
-                    <p className="text-sm text-blue-600 flex items-center gap-1">
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                        xmlns="http://www.w3.org/2000/svg"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
-                        />
-                      </svg>
-                      {t.pendingQuantity}: {item.pendingQuantity}
+            {paginatedInventory.map((item) =>
+              item.product ? (
+                <motion.div
+                  key={item._id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="p-4 bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-100 hover:border-amber-200"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <h3 className="font-bold text-gray-900 text-base truncate" style={{ fontWeight: 700 }}>
+                        {item.product.displayName}
+                      </h3>
+                      <p className="text-sm text-gray-500">{item.product.code}</p>
+                    </div>
+                    <p className="text-sm text-amber-600">
+                      {t.filterByDepartment}: {item.product.department?.displayName || 'N/A'}
                     </p>
-                  )}
-                </div>
-                <div className="mt-4 flex justify-end gap-2">
-                  <button
-                    onClick={() => handleOpenDetailsModal(item)}
-                    className="p-2 text-green-600 hover:text-green-800 rounded-lg text-sm transition-colors duration-200"
-                    aria-label={t.viewDetails}
-                  >
-                    <Eye className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleOpenEditModal(item)}
-                    className="p-2 text-blue-600 hover:text-blue-800 rounded-lg text-sm transition-colors duration-200"
-                    aria-label={t.editStockLimits}
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleOpenProductionModal(item)}
-                    className="p-2 text-amber-600 hover:text-amber-800 rounded-lg text-sm transition-colors duration-200"
-                    aria-label={t.create}
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-              </motion.div>
-            ))}
+                    <p className="text-sm text-gray-600">
+                      {t.stock}: {item.currentStock}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {t.minStock}: {item.minStockLevel}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {t.maxStock}: {item.maxStockLevel}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      {t.unit}: {item.product.displayUnit}
+                    </p>
+                    <p
+                      className={`text-sm font-medium ${
+                        item.status === InventoryStatus.LOW
+                          ? 'text-red-600'
+                          : item.status === InventoryStatus.FULL
+                          ? 'text-yellow-600'
+                          : 'text-green-600'
+                      }`}
+                    >
+                      {item.status === InventoryStatus.LOW
+                        ? t.lowStock
+                        : item.status === InventoryStatus.FULL
+                        ? t.full
+                        : t.normal}
+                    </p>
+                    {item.inProduction && (
+                      <p className="text-sm text-blue-600 flex items-center gap-1">
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"
+                          />
+                        </svg>
+                        {t.inProduction}
+                      </p>
+                    )}
+                  </div>
+                  <div className="mt-4 flex justify-end gap-2">
+                    <button
+                      onClick={() => handleOpenDetailsModal(item)}
+                      className="p-2 text-green-600 hover:text-green-800 rounded-lg text-sm transition-colors duration-200"
+                      aria-label={t.viewDetails}
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleOpenEditModal(item)}
+                      className="p-2 text-blue-600 hover:text-blue-800 rounded-lg text-sm transition-colors duration-200"
+                      aria-label={t.editStockLimits}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => handleOpenProductionModal(item)}
+                      className="p-2 text-amber-600 hover:text-amber-800 rounded-lg text-sm transition-colors duration-200"
+                      aria-label={t.create}
+                    >
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
+                </motion.div>
+              ) : null
+            )}
           </AnimatePresence>
         </div>
       )}
+
       {totalInventoryPages > 1 && (
         <div className="mt-6 flex items-center justify-center gap-3">
           <button
@@ -1118,6 +1155,7 @@ export const FactoryInventory: React.FC = () => {
           </button>
         </div>
       )}
+
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isProductionModalOpen ? 1 : 0 }}
@@ -1245,6 +1283,7 @@ export const FactoryInventory: React.FC = () => {
           </div>
         </motion.div>
       </motion.div>
+
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isEditModalOpen ? 1 : 0 }}
@@ -1280,24 +1319,6 @@ export const FactoryInventory: React.FC = () => {
                 {t.productDetails}: {isRtl ? selectedItem.product.name : selectedItem.product.nameEn}
               </p>
             )}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t.stock}</label>
-              <input
-                type="number"
-                value={editForm.currentStock}
-                onChange={(e) => {
-                  const value = parseInt(e.target.value, 10);
-                  setEditForm((prev) => ({ ...prev, currentStock: isNaN(value) ? 0 : value }));
-                  setEditErrors((prev) => ({ ...prev, currentStock: undefined }));
-                }}
-                min={0}
-                className="w-full p-3 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
-                aria-label={t.stock}
-              />
-              {editErrors.currentStock && (
-                <p className="text-red-600 text-xs mt-1">{editErrors.currentStock}</p>
-              )}
-            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">{t.minStock}</label>
               <input
@@ -1359,6 +1380,7 @@ export const FactoryInventory: React.FC = () => {
           </div>
         </motion.div>
       </motion.div>
+
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: isDetailsModalOpen ? 1 : 0 }}
