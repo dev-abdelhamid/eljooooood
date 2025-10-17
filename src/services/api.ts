@@ -1003,6 +1003,8 @@ export const inventoryAPI = {
 
 
 
+
+// api/factoryInventoryAPI.js and factoryOrdersAPI.js
 export const factoryInventoryAPI = {
   getAll: async (params: { product?: string; department?: string; lowStock?: boolean; stockStatus?: 'low' | 'normal' | 'high'; lang?: string } = {}) => {
     if (params.product && !isValidObjectId(params.product)) {
@@ -1135,7 +1137,6 @@ export const factoryInventoryAPI = {
     return response;
   },
 };
-
 export const factoryOrdersAPI = {
   create: async (data: { orderNumber: string; items: { product: string; quantity: number; }[]; notes?: string; priority?: string }) => {
     if (!data.orderNumber || !Array.isArray(data.items) || data.items.length === 0 || data.items.some(item => !isValidObjectId(item.product) || item.quantity < 1 )) {
@@ -1204,6 +1205,8 @@ export const factoryOrdersAPI = {
     return response;
   },
 };
+
+
 
 export { notificationsAPI, returnsAPI, salesAPI };
 export default api;
