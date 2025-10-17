@@ -105,6 +105,8 @@ const translations = {
     date: 'التاريخ',
     type: 'النوع',
     quantity: 'الكمية',
+    reference: 'المرجع',
+    price: 'السعر',
     produced_stock: 'إنتاج مخزون',
     adjustment: 'تعديل',
     errors: {
@@ -125,6 +127,9 @@ const translations = {
     },
     notifications: {
       productionCreated: 'تم إنشاء طلب الإنتاج بنجاح',
+      inventoryUpdated: 'تم تحديث المخزون بنجاح',
+      taskAssigned: 'تم تعيين مهمة إنتاج جديدة',
+      orderCompleted: 'تم إكمال طلب الإنتاج',
     },
   },
   en: {
@@ -162,6 +167,8 @@ const translations = {
     date: 'Date',
     type: 'Type',
     quantity: 'Quantity',
+    reference: 'Reference',
+    price: 'Price',
     produced_stock: 'Produced Stock',
     adjustment: 'Adjustment',
     errors: {
@@ -182,6 +189,9 @@ const translations = {
     },
     notifications: {
       productionCreated: 'Production order created successfully',
+      inventoryUpdated: 'Inventory updated successfully',
+      taskAssigned: 'New production task assigned',
+      orderCompleted: 'Production order completed',
     },
   },
 };
@@ -317,7 +327,7 @@ const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
     }
     aggregated[item.product].quantity += item.quantity;
   });
-  return Object.values(aggregated);
+  return Object.values(aggregated).filter(item => item.product);
 };
 
 export const FactoryInventory: React.FC = () => {
@@ -365,19 +375,20 @@ export const FactoryInventory: React.FC = () => {
   >({
     queryKey: ['factoryInventory', debouncedSearchQuery, filterStatus, filterDepartment, currentPage, language],
     queryFn: async () => {
-      const response = await factoryInventoryAPI.getAll();
-      return response;
+      const params = {
+        product: debouncedSearchQuery || undefined,
+        department: filterDepartment || undefined,
+        stockStatus: filterStatus || undefined,
+        lang: language,
+      };
+      const response = await factoryInventoryAPI.getAll(params);
+      return response.data?.inventory || response.data || response || [];
     },
     enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
     cacheTime: 10 * 60 * 1000,
-    select: (response) => {
-      const inventoryData = Array.isArray(response)
-        ? response
-        : Array.isArray(response?.data)
-        ? response.data
-        : response?.data?.inventory || [];
-      return inventoryData.map((item: FactoryInventoryItem) => ({
+    select: (data) => {
+      return data.map((item: FactoryInventoryItem) => ({
         ...item,
         product: item.product
           ? {
@@ -407,11 +418,11 @@ export const FactoryInventory: React.FC = () => {
 
   // Product History Query
   const { data: productHistory, isLoading: historyLoading } = useQuery<ProductHistoryEntry[], Error>({
-    queryKey: ['factoryProductHistory', selectedProductId],
+    queryKey: ['factoryProductHistory', selectedProductId, language],
     queryFn: async () => {
       if (!selectedProductId) throw new Error(t.errors.productNotFound);
-      const response = await factoryInventoryAPI.getHistory({ productId: selectedProductId });
-      return response;
+      const response = await factoryInventoryAPI.getHistory({ productId: selectedProductId, lang: language });
+      return response.data?.history || response.data || response || [];
     },
     enabled: isDetailsModalOpen && !!selectedProductId,
     staleTime: 5 * 60 * 1000,
@@ -435,6 +446,7 @@ export const FactoryInventory: React.FC = () => {
         );
       } catch (err) {
         console.error(`[${new Date().toISOString()}] Error fetching products:`, err);
+        toast.error(t.errors.productNotFound, { position: isRtl ? 'top-right' : 'top-left' });
       }
     };
     fetchProducts();
@@ -449,30 +461,81 @@ export const FactoryInventory: React.FC = () => {
       if (selectedProductId === productId) {
         queryClient.invalidateQueries({ queryKey: ['factoryProductHistory'] });
       }
+      toast.success(t.notifications.inventoryUpdated, { position: isRtl ? 'top-right' : 'top-left' });
+      addNotification({
+        _id: crypto.randomUUID(),
+        type: 'success',
+        message: t.notifications.inventoryUpdated,
+        data: { productId, eventId: crypto.randomUUID(), isRtl },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: 'https://eljoodia-client.vercel.app/sounds/notification.mp3',
+        vibrate: [200, 100, 200],
+      });
     };
 
-    const handleFactoryOrderCreated = ({ orderId, orderNumber }: { orderId: string; orderNumber: string }) => {
+    const handleFactoryOrderCreated = ({ orderId, orderNumber, branchId }: { orderId: string; orderNumber: string; branchId?: string }) => {
       const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
       audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
       addNotification({
         _id: crypto.randomUUID(),
         type: 'success',
         message: t.notifications.productionCreated,
-        data: { orderId, orderNumber, eventId: crypto.randomUUID() },
+        data: { orderId, orderNumber, branchId, eventId: crypto.randomUUID(), isRtl },
         read: false,
         createdAt: new Date().toISOString(),
         sound: 'https://eljoodia-client.vercel.app/sounds/notification.mp3',
         vibrate: [200, 100, 200],
       });
       toast.success(t.notifications.productionCreated, { position: isRtl ? 'top-right' : 'top-left' });
+      queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
+    };
+
+    const handleFactoryTaskAssigned = ({ factoryOrderId, taskId, chefId, productName }: { factoryOrderId: string; taskId: string; chefId: string; productName: string }) => {
+      if (user._id === chefId) {
+        const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
+        audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
+        addNotification({
+          _id: crypto.randomUUID(),
+          type: 'info',
+          message: t.notifications.taskAssigned,
+          data: { factoryOrderId, taskId, chefId, productName, eventId: crypto.randomUUID(), isRtl },
+          read: false,
+          createdAt: new Date().toISOString(),
+          sound: 'https://eljoodia-client.vercel.app/sounds/notification.mp3',
+          vibrate: [200, 100, 200],
+        });
+        toast.info(t.notifications.taskAssigned, { position: isRtl ? 'top-right' : 'top-left' });
+      }
+    };
+
+    const handleFactoryOrderCompleted = ({ factoryOrderId, orderNumber }: { factoryOrderId: string; orderNumber: string }) => {
+      const audio = new Audio('https://eljoodia-client.vercel.app/sounds/notification.mp3');
+      audio.play().catch((err) => console.error(`[${new Date().toISOString()}] Audio playback failed:`, err));
+      addNotification({
+        _id: crypto.randomUUID(),
+        type: 'success',
+        message: t.notifications.orderCompleted,
+        data: { factoryOrderId, orderNumber, eventId: crypto.randomUUID(), isRtl },
+        read: false,
+        createdAt: new Date().toISOString(),
+        sound: 'https://eljoodia-client.vercel.app/sounds/notification.mp3',
+        vibrate: [200, 100, 200],
+      });
+      toast.success(t.notifications.orderCompleted, { position: isRtl ? 'top-right' : 'top-left' });
+      queryClient.invalidateQueries({ queryKey: ['factoryInventory'] });
     };
 
     socket.on('factoryInventoryUpdated', handleFactoryInventoryUpdated);
     socket.on('factoryOrderCreated', handleFactoryOrderCreated);
+    socket.on('factoryTaskAssigned', handleFactoryTaskAssigned);
+    socket.on('factoryOrderCompleted', handleFactoryOrderCompleted);
 
     return () => {
       socket.off('factoryInventoryUpdated', handleFactoryInventoryUpdated);
       socket.off('factoryOrderCreated', handleFactoryOrderCreated);
+      socket.off('factoryTaskAssigned', handleFactoryTaskAssigned);
+      socket.off('factoryOrderCompleted', handleFactoryOrderCompleted);
     };
   }, [socket, user, queryClient, addNotification, t, isRtl, selectedProductId]);
 
@@ -519,7 +582,7 @@ export const FactoryInventory: React.FC = () => {
       { value: '', label: t.selectProduct },
       ...availableProducts.map((product) => ({
         value: product.productId,
-        label: `${product.productName} (${t.unit}: ${product.unit})`,
+        label: `${product.productName} (${t.unit}: ${product.unit}) - ${product.departmentName}`,
       })),
     ],
     [availableProducts, t]
@@ -604,10 +667,14 @@ export const FactoryInventory: React.FC = () => {
     }
     if (field === 'price' && typeof value === 'string') {
       const numValue = parseFloat(value);
-      if (isNaN(numValue) || numValue < 0) return;
+      if (isNaN(numValue) || numValue <= 0) return;
       value = numValue;
     }
     dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
+    setProductionErrors((prev) => ({
+      ...prev,
+      [`item_${index}_${field}`]: undefined,
+    }));
   }, []);
 
   const handleProductChange = useCallback(
@@ -630,12 +697,23 @@ export const FactoryInventory: React.FC = () => {
         type: 'UPDATE_ITEM',
         payload: { index, field: 'product', value: productId },
       });
+      setProductionErrors((prev) => ({
+        ...prev,
+        [`item_${index}_product`]: undefined,
+      }));
     },
     [t, productionForm.items]
   );
 
   const removeItemFromForm = useCallback((index: number) => {
     dispatchProductionForm({ type: 'REMOVE_ITEM', payload: index });
+    setProductionErrors((prev) => {
+      const newErrors = { ...prev };
+      Object.keys(newErrors).forEach((key) => {
+        if (key.startsWith(`item_${index}_`)) delete newErrors[key];
+      });
+      return newErrors;
+    });
   }, []);
 
   const validateProductionForm = useCallback(() => {
@@ -686,8 +764,8 @@ export const FactoryInventory: React.FC = () => {
       };
       const response = await factoryOrdersAPI.create(data);
       return {
-        orderId: response?._id || crypto.randomUUID(),
-        orderNumber: response?.orderNumber || data.orderNumber,
+        orderId: response.data?._id || crypto.randomUUID(),
+        orderNumber: response.data?.orderNumber || data.orderNumber,
       };
     },
     onSuccess: (data) => {
@@ -700,16 +778,18 @@ export const FactoryInventory: React.FC = () => {
       socket?.emit('factoryOrderCreated', {
         orderId: data.orderId,
         orderNumber: data.orderNumber,
+        branchId: user?.branch?._id,
         eventId: crypto.randomUUID(),
+        isRtl,
       });
     },
     onError: (err: any) => {
       let errorMessage = err.message || t.errors.createProduction;
-      if (err.status === 429) {
+      if (err.response?.status === 429) {
         errorMessage = t.errors.tooManyRequests;
-      } else if (err.errors?.length > 0) {
-        errorMessage = err.errors.map((e: any) => e.msg).join(', ');
-        err.errors.forEach((e: any, index: number) => {
+      } else if (err.response?.data?.errors?.length > 0) {
+        errorMessage = err.response.data.errors.map((e: any) => e.msg).join(', ');
+        err.response.data.errors.forEach((e: any, index: number) => {
           setProductionErrors((prev) => ({
             ...prev,
             [`item_${index}_${e.path}`]: e.msg,
@@ -740,14 +820,15 @@ export const FactoryInventory: React.FC = () => {
       setEditForm({ minStockLevel: 0, maxStockLevel: 0 });
       setEditErrors({});
       setSelectedItem(null);
-      toast.success(t.save, { position: isRtl ? 'top-right' : 'top-left' });
+      toast.success(t.notifications.inventoryUpdated, { position: isRtl ? 'top-right' : 'top-left' });
       socket?.emit('factoryInventoryUpdated', {
         productId: selectedItem?.product?._id,
         eventId: crypto.randomUUID(),
+        isRtl,
       });
     },
     onError: (err) => {
-      const errorMessage = err.status === 429 ? t.errors.tooManyRequests : err.message || t.errors.updateInventory;
+      const errorMessage = err.response?.status === 429 ? t.errors.tooManyRequests : err.message || t.errors.updateInventory;
       toast.error(errorMessage, { position: isRtl ? 'top-right' : 'top-left' });
       setEditErrors({ form: errorMessage });
     },
@@ -756,7 +837,7 @@ export const FactoryInventory: React.FC = () => {
   const errorMessage = inventoryError?.message || '';
 
   return (
-    <div className="mx-auto px-4 py-4">
+    <div className="mx-auto px-4 py-4 max-w-7xl">
       <div className="mb-8 flex flex-col items-start gap-4 sm:flex-row sm:justify-between sm:items-center">
         <div className="flex items-center gap-3">
           <Package className="w-7 h-7 text-amber-600" />
@@ -1028,7 +1109,7 @@ export const FactoryInventory: React.FC = () => {
                       )}
                     </div>
                     <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">{isRtl ? 'السعر' : 'Price'}</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.price}</label>
                       <PriceInput
                         value={item.price}
                         onChange={(val) => updateItemInForm(index, 'price', val)}
@@ -1224,7 +1305,7 @@ export const FactoryInventory: React.FC = () => {
                       <span className="text-sm text-gray-600">{entry.quantity}</span>
                     </div>
                     <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
-                      <span className="text-sm font-medium text-gray-700">{isRtl ? 'المرجع' : 'Reference'}</span>
+                      <span className="text-sm font-medium text-gray-700">{t.reference}</span>
                       <span className="text-sm text-gray-600">{entry.reference}</span>
                     </div>
                   </div>
@@ -1251,3 +1332,5 @@ export const FactoryInventory: React.FC = () => {
     </div>
   );
 };
+
+export default FactoryInventory;
