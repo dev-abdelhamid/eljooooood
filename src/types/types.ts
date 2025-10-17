@@ -23,6 +23,51 @@ export enum Priority {
   Low = 'low',
 }
 
+
+export interface FactoryOrderItem {
+  _id: string;
+  productId: string;
+  productName: string;
+  productNameEn?: string;
+  displayProductName: string;
+  quantity: number;
+  unit: string;
+  unitEn?: string;
+  displayUnit: string;
+  department: Department;
+  assignedTo?: {
+    _id: string;
+    username: string;
+    name: string;
+    nameEn?: string;
+    displayName: string;
+    department: Department;
+  };
+  status: 'pending' | 'assigned' | 'completed';
+}
+
+export interface FactoryOrder {
+  id: string;
+  orderNumber: string;
+  items: FactoryOrderItem[];
+  status: 'pending' | 'approved' | 'in_production' | 'completed' | 'cancelled';
+  date: string;
+  notes: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  createdBy: string;
+}
+
+export interface AssignChefsForm {
+  items: Array<{
+    itemId: string;
+    assignedTo: string;
+    product: string;
+    quantity: number;
+    unit: string;
+  }>;
+}
+
+
 export interface ReturnForm {
   itemId: string;
   quantity: number;
