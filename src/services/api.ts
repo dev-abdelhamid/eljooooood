@@ -1004,7 +1004,7 @@ export const inventoryAPI = {
 
 
 
-// api/factoryInventoryAPI.js and factoryOrdersAPI.js
+// Updated factoryInventoryAPI with fetching all products
 export const factoryInventoryAPI = {
   getAll: async (params: { product?: string; department?: string; lowStock?: boolean; stockStatus?: 'low' | 'normal' | 'high'; lang?: string } = {}) => {
     if (params.product && !isValidObjectId(params.product)) {
@@ -1131,12 +1131,23 @@ export const factoryInventoryAPI = {
     console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getHistory - Response:`, response);
     return response;
   },
-  getAvailableProducts: async () => {
-    const response = await api.get('/products');
-    console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Response:`, response);
-    return response;
+  getAvailableProducts: async (params = {}) => {
+    let allProducts = [];
+    let page = 1;
+    let totalPages = 1;
+    while (page <= totalPages) {
+      const response = await api.get('/products', { params: { ...params, page, limit: 50 } });
+      console.log(`[${new Date().toISOString()}] factoryInventoryAPI.getAvailableProducts - Page ${page} Response:`, response);
+      const data = response.data;
+      allProducts = [...allProducts, ...(data.data || [])];
+      totalPages = data.totalPages || 1;
+      page++;
+    }
+    return allProducts;
   },
 };
+
+// factoryOrdersAPI remains the same
 export const factoryOrdersAPI = {
   create: async (data: { orderNumber: string; items: { product: string; quantity: number; }[]; notes?: string; priority?: string }) => {
     if (!data.orderNumber || !Array.isArray(data.items) || data.items.length === 0 || data.items.some(item => !isValidObjectId(item.product) || item.quantity < 1 )) {
@@ -1205,7 +1216,6 @@ export const factoryOrdersAPI = {
     return response;
   },
 };
-
 
 
 export { notificationsAPI, returnsAPI, salesAPI };
