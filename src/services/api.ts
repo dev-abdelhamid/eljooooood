@@ -1172,21 +1172,52 @@ export const factoryInventoryAPI = {
 };
 
 export const factoryOrdersAPI = {
-  create: async (data: { orderNumber: string; items: { product: string; quantity: number; price: number }[]; notes?: string; priority?: string }) => {
+  create: async (data: { orderNumber: string; items: { product: string; quantity: number }[]; notes?: string; priority?: string; lang?: string }) => {
     try {
-      if (!data.orderNumber || !Array.isArray(data.items) || data.items.length === 0 || data.items.some(item => !isValidObjectId(item.product) || item.quantity )) {
-        console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - Invalid data:`, data);
-        throw new Error(createErrorMessage('invalidItems', localStorage.getItem('language') === 'ar'));
+      const isArabic = data.lang === 'ar' || localStorage.getItem('language') === 'ar';
+
+      // Validate orderNumber
+      if (!data.orderNumber || typeof data.orderNumber !== 'string' || !data.orderNumber.trim()) {
+        console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - Invalid orderNumber:`, data.orderNumber);
+        throw new Error(createErrorMessage('invalidOrderNumber', isArabic));
       }
+
+      // Validate items array
+      if (!Array.isArray(data.items) || data.items.length === 0) {
+        console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - Invalid items array:`, data.items);
+        throw new Error(createErrorMessage('invalidItems', isArabic));
+      }
+
+      // Validate each item
+      for (const item of data.items) {
+        if (!isValidObjectId(item.product)) {
+          console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - Invalid product ID:`, item.product);
+          throw new Error(createErrorMessage('invalidProductId', isArabic));
+        }
+        if (!Number.isInteger(item.quantity) || item.quantity < 1) {
+          console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - Invalid quantity:`, item.quantity);
+          throw new Error(createErrorMessage('invalidQuantity', isArabic));
+        }
+      }
+
+      // Validate priority
+      const validPriorities = ['low', 'medium', 'high', 'urgent'];
+      if (data.priority && !validPriorities.includes(data.priority)) {
+        console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - Invalid priority:`, data.priority);
+        throw new Error(createErrorMessage('invalidPriority', isArabic));
+      }
+
+      // Prepare data for API call
       const response = await api.post('/factoryOrders', {
         orderNumber: data.orderNumber.trim(),
         items: data.items.map(item => ({
           product: item.product,
           quantity: item.quantity,
         })),
-        notes: data.notes?.trim(),
-        priority: data.priority?.trim() || 'medium',
+        notes: data.notes?.trim() || '', // Default to empty string if undefined
+        priority: data.priority?.trim() || 'medium', // Default to 'medium' if undefined
       });
+
       console.log(`[${new Date().toISOString()}] factoryOrdersAPI.create - Response:`, response);
       return response.data;
     } catch (error) {
