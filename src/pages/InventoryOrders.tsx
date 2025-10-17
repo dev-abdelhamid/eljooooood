@@ -22,6 +22,19 @@ import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 
+
+
+const normalizeText = (text: string) => {
+  return text
+    .normalize('NFD')
+    .replace(/[\u0610-\u061A\u064B-\u065F\u06D6-\u06DC\u06DF-\u06E8\u06EA-\u06ED]/g, '')
+    .replace(/أ|إ|آ|ٱ/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .toLowerCase()
+    .trim();
+};
+
 interface State {
   orders: FactoryOrder[];
   selectedOrder: FactoryOrder | null;
