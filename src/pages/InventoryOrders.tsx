@@ -1,4 +1,5 @@
 
+
 // InventoryOrders.tsx
 import React, { useReducer, useEffect, useMemo, useCallback, useRef, Suspense, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -18,7 +19,7 @@ import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem } from '
 import Pagination from '../components/Shared/Pagination';
 import AssignChefsModal from '../components/production/AssignChefsModal';
 import OrderTable from '../components/production/OrderTable';
-import OrderCard from '../components/production/OrderCard';
+import {OrderCard} from '../components/production/OrderCard';
 import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 // مكون QuantityInput
@@ -1130,7 +1131,7 @@ export const InventoryOrders: React.FC = () => {
                               options={[
                                 { value: '', label: isRtl ? 'اختر منتج' : 'Select Product' },
                                 ...state.products
-                                  .filter(product => user?.role === 'production' && user?.department ? product.department._id === user.department._id : true)
+                                  .filter(product => ['production', 'chef'].includes(user?.role) && user?.department ? product.department._id === user.department._id : true)
                                   .map(product => ({
                                     value: product._id,
                                     label: `${isRtl ? product.name : product.nameEn || product.name} (${translateUnit(product.unit, isRtl)})`,
@@ -1282,5 +1283,4 @@ export const InventoryOrders: React.FC = () => {
     </div>
   );
 };
-
 export default InventoryOrders;
