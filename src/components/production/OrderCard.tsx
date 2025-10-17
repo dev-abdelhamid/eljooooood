@@ -191,3 +191,5 @@ export const OrderCard: React.FC<OrderCardProps> = ({
     </Card>
   );
 };
+
+export default OrderCard;

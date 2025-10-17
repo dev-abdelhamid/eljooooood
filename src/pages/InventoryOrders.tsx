@@ -1,5 +1,4 @@
 
-
 // InventoryOrders.tsx
 import React, { useReducer, useEffect, useMemo, useCallback, useRef, Suspense, useState } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -17,9 +16,9 @@ import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { FactoryOrder, Chef, AssignChefsForm, Product, FactoryOrderItem } from '../types/types';
 import Pagination from '../components/Shared/Pagination';
-import {AssignChefsModal} from '../components/production/AssignChefsModal';
+import AssignChefsModal from '../components/production/AssignChefsModal';
 import OrderTable from '../components/production/OrderTable';
-import {OrderCard} from '../components/production/OrderCard';
+import OrderCard from '../components/production/OrderCard';
 import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 // مكون QuantityInput
@@ -100,7 +99,7 @@ interface State {
   isAssignModalOpen: boolean;
   isCreateModalOpen: boolean;
   assignFormData: AssignChefsForm;
-  createFormData: { notes: string; items: { productId: string; quantity: number }[] };
+  createFormData: { notes: string; items: { productId: string; quantity: number; assignedTo?: string }[] };
   filterStatus: string;
   searchQuery: string;
   debouncedSearchQuery: string;
@@ -600,11 +599,13 @@ export const InventoryOrders: React.FC = () => {
     const t = isRtl ? {
       productRequired: 'المنتج مطلوب',
       quantityRequired: 'الكمية مطلوبة',
-      quantityInvalid: 'الكمية يجب أن تكون أكبر من 0'
+      quantityInvalid: 'الكمية يجب أن تكون أكبر من 0',
+      chefRequired: 'الشيف مطلوب',
     } : {
       productRequired: 'Product is required',
       quantityRequired: 'Quantity is required',
-      quantityInvalid: 'Quantity must be greater than 0'
+      quantityInvalid: 'Quantity must be greater than 0',
+      chefRequired: 'Chef is required',
     };
     state.createFormData.items.forEach((item, index) => {
       if (!item.productId) {
@@ -613,10 +614,13 @@ export const InventoryOrders: React.FC = () => {
       if (!item.quantity || item.quantity < 1) {
         errors[`item_${index}_quantity`] = item.quantity === 0 ? t.quantityRequired : t.quantityInvalid;
       }
+      if (user.role !== 'chef' && !item.assignedTo) {
+        errors[`item_${index}_assignedTo`] = t.chefRequired;
+      }
     });
     dispatch({ type: 'SET_FORM_ERRORS', payload: errors });
     return Object.keys(errors).length === 0;
-  }, [state.createFormData, isRtl]);
+  }, [state.createFormData, isRtl, user.role]);
   // إنشاء طلب جديد
   const createOrder = useCallback(async () => {
     if (!user?.id || !validateCreateForm()) {
@@ -627,7 +631,7 @@ export const InventoryOrders: React.FC = () => {
       const orderNumber = `ORD-${Date.now()}`;
       const response = await factoryOrdersAPI.create({
         orderNumber,
-        items: state.createFormData.items.map(i => ({ product: i.productId, quantity: i.quantity })),
+        items: state.createFormData.items.map(i => ({ product: i.productId, quantity: i.quantity, assignedTo: i.assignedTo })),
         notes: state.createFormData.notes,
         priority: 'medium',
       });
@@ -650,6 +654,21 @@ export const InventoryOrders: React.FC = () => {
             nameEn: item.product.department.nameEn,
             displayName: isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name,
           },
+          assignedTo: item.assignedTo
+            ? {
+                _id: item.assignedTo._id,
+                username: item.assignedTo.username,
+                name: item.assignedTo.name,
+                nameEn: item.assignedTo.nameEn,
+                displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
+                department: {
+                  _id: item.assignedTo.department._id,
+                  name: item.assignedTo.department.name,
+                  nameEn: item.assignedTo.department.nameEn,
+                  displayName: isRtl ? item.assignedTo.department.name : item.assignedTo.department.nameEn || item.assignedTo.department.name,
+                },
+              }
+            : undefined,
           status: item.status || 'pending',
         })),
         status: response.data.status || 'pending',
@@ -1160,6 +1179,36 @@ export const InventoryOrders: React.FC = () => {
                                   <p className="text-red-600 text-xs mt-1">{state.formErrors[`item_${index}_quantity`]}</p>
                                 )}
                               </div>
+                              {user.role !== 'chef' && (
+                                <div className="flex-1">
+                                  <label className={`block text-sm font-medium text-gray-700 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                                    {isRtl ? 'الشيف' : 'Chef'}
+                                  </label>
+                                  <ProductDropdown
+                                    options={[
+                                      { value: '', label: isRtl ? 'اختر شيف' : 'Select Chef' },
+                                      ...state.chefs
+                                        .filter(chef => chef.department?._id === state.products.find(p => p._id === item.productId)?.department._id)
+                                        .map(chef => ({
+                                          value: chef.userId,
+                                          label: chef.displayName,
+                                        })),
+                                    ]}
+                                    value={item.assignedTo || ''}
+                                    onChange={(value) => {
+                                      const newItems = [...state.createFormData.items];
+                                      newItems[index].assignedTo = value;
+                                      dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, items: newItems } });
+                                      dispatch({ type: 'SET_FORM_ERRORS', payload: { ...state.formErrors, [`item_${index}_assignedTo`]: undefined } });
+                                    }}
+                                    ariaLabel={isRtl ? 'اختر شيف' : 'Select Chef'}
+                                    className="w-full rounded-lg border-gray-200 focus:ring-amber-500 text-sm shadow-sm transition-all duration-200"
+                                  />
+                                  {state.formErrors[`item_${index}_assignedTo`] && (
+                                    <p className="text-red-600 text-xs mt-1">{state.formErrors[`item_${index}_assignedTo`]}</p>
+                                  )}
+                                </div>
+                              )}
                               {state.createFormData.items.length > 1 && (
                                 <button
                                   type="button"
@@ -1233,6 +1282,5 @@ export const InventoryOrders: React.FC = () => {
     </div>
   );
 };
-
 
 export default InventoryOrders;
