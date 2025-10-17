@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Package, Plus, X, Eye, Edit, AlertCircle, Minus } from 'lucide-react';
-import { factoryOrdersAPI, factoryInventoryAPI, isValidObjectId } from '../services/api';
+import { factoryOrdersAPI, factoryInventoryAPI } from '../services/api';
 import { ProductSearchInput, ProductDropdown } from './NewOrder';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -35,12 +35,12 @@ interface FactoryInventoryItem {
   minStockLevel: number;
   maxStockLevel: number;
   status: InventoryStatus;
+  inProduction: boolean;
 }
 
 interface ProductionItem {
   product: string;
   quantity: number;
-  price: number;
 }
 
 interface ProductionFormState {
@@ -106,9 +106,9 @@ const translations = {
     type: 'النوع',
     quantity: 'الكمية',
     reference: 'المرجع',
-    price: 'السعر',
     produced_stock: 'إنتاج مخزون',
     adjustment: 'تعديل',
+    inProduction: 'في الإنتاج',
     errors: {
       fetchInventory: 'خطأ في جلب بيانات مخزون المصنع',
       createProduction: 'خطأ في إنشاء طلب الإنتاج',
@@ -123,7 +123,6 @@ const translations = {
       productNotFound: 'المنتج غير موجود',
       tooManyRequests: 'طلبات كثيرة جدًا، حاول مرة أخرى لاحقًا',
       duplicateProduct: 'لا يمكن إضافة نفس المنتج أكثر من مرة',
-      invalidPrice: 'السعر يجب أن يكون أكبر من 0',
     },
     notifications: {
       productionCreated: 'تم إنشاء طلب الإنتاج بنجاح',
@@ -168,9 +167,9 @@ const translations = {
     type: 'Type',
     quantity: 'Quantity',
     reference: 'Reference',
-    price: 'Price',
     produced_stock: 'Produced Stock',
     adjustment: 'Adjustment',
+    inProduction: 'In Production',
     errors: {
       fetchInventory: 'Error fetching factory inventory data',
       createProduction: 'Error creating production order',
@@ -185,7 +184,6 @@ const translations = {
       productNotFound: 'Product not found',
       tooManyRequests: 'Too many requests, please try again later',
       duplicateProduct: 'Cannot add the same product multiple times',
-      invalidPrice: 'Price must be greater than 0',
     },
     notifications: {
       productionCreated: 'Production order created successfully',
@@ -249,41 +247,6 @@ const QuantityInput = ({
   );
 };
 
-// PriceInput Component
-const PriceInput = ({
-  value,
-  onChange,
-}: {
-  value: number;
-  onChange: (val: string) => void;
-}) => {
-  const { language } = useLanguage();
-  const isRtl = language === 'ar';
-  const handleChange = (val: string) => {
-    const num = parseFloat(val);
-    if (val === '' || isNaN(num) || num < 0) {
-      onChange('0');
-      return;
-    }
-    onChange(val);
-  };
-
-  return (
-    <div className="flex items-center gap-2">
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => handleChange(e.target.value)}
-        min={0}
-        step={0.01}
-        className="w-20 h-8 text-center border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent bg-white shadow-sm transition-all duration-200"
-        style={{ appearance: 'none', MozAppearance: 'textfield' }}
-        aria-label={isRtl ? 'السعر' : 'Price'}
-      />
-    </div>
-  );
-};
-
 // Reducer for production form
 type ProductionFormAction =
   | { type: 'SET_NOTES'; payload: string }
@@ -319,7 +282,6 @@ const aggregateItemsByProduct = (items: ProductionItem[]): ProductionItem[] => {
       aggregated[item.product] = {
         product: item.product,
         quantity: 0,
-        price: item.price,
       };
     }
     aggregated[item.product].quantity += item.quantity;
@@ -379,20 +341,18 @@ export const FactoryInventory: React.FC = () => {
         lang: language,
       };
       const response = await factoryInventoryAPI.getAll(params);
-      // Handle various response formats
       const data = Array.isArray(response) ? response : response?.inventory || response || [];
       return data;
     },
     enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
-    cacheTime: 10 * 60 * 1000,
     select: (data) => {
       if (!Array.isArray(data)) {
         console.warn(`[${new Date().toISOString()}] factoryInventoryAPI.getAll - Invalid data format, expected array, got:`, data);
         return [];
       }
       return data
-        .filter((item): item is FactoryInventoryItem => !!item && !!item.product) // Native filter instead of R.filter
+        .filter((item): item is FactoryInventoryItem => !!item && !!item.product) // Native filter
         .map((item: FactoryInventoryItem) => ({
           ...item,
           product: item.product
@@ -414,6 +374,7 @@ export const FactoryInventory: React.FC = () => {
               : item.currentStock >= item.maxStockLevel
               ? InventoryStatus.FULL
               : InventoryStatus.NORMAL,
+          inProduction: factoryOrdersData?.some(order => (order.status === 'pending' || order.status === 'in_production') && order.items.some(i => i.productId === item.product?._id)) || false,
         }));
     },
     onError: (err) => {
@@ -431,6 +392,17 @@ export const FactoryInventory: React.FC = () => {
       return data;
     },
     enabled: isDetailsModalOpen && !!selectedProductId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Factory Orders Query for inProduction flag
+  const { data: factoryOrdersData } = useQuery<FactoryOrder[], Error>({
+    queryKey: ['factoryOrders', language],
+    queryFn: async () => {
+      const response = await factoryOrdersAPI.getAll();
+      return response?.data || [];
+    },
+    enabled: !!user?.role && ['production', 'admin'].includes(user.role),
     staleTime: 5 * 60 * 1000,
   });
 
@@ -631,13 +603,12 @@ export const FactoryInventory: React.FC = () => {
         payload: {
           product: item.product._id,
           quantity: 1,
-          price: 0,
         },
       });
     } else {
       dispatchProductionForm({
         type: 'ADD_ITEM',
-        payload: { product: '', quantity: 1, price: 0 },
+        payload: { product: '', quantity: 1 },
       });
     }
     setProductionErrors({});
@@ -661,7 +632,7 @@ export const FactoryInventory: React.FC = () => {
   const addItemToForm = useCallback(() => {
     dispatchProductionForm({
       type: 'ADD_ITEM',
-      payload: { product: '', quantity: 1, price: 0 },
+      payload: { product: '', quantity: 1 },
     });
   }, []);
 
@@ -669,11 +640,6 @@ export const FactoryInventory: React.FC = () => {
     if (field === 'quantity' && typeof value === 'string') {
       const numValue = parseInt(value);
       if (isNaN(numValue) || numValue < 1) return;
-      value = numValue;
-    }
-    if (field === 'price' && typeof value === 'string') {
-      const numValue = parseFloat(value);
-      if (isNaN(numValue) || numValue <= 0) return;
       value = numValue;
     }
     dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
@@ -736,9 +702,6 @@ export const FactoryInventory: React.FC = () => {
       if (item.quantity < 1 || isNaN(item.quantity)) {
         errors[`item_${index}_quantity`] = t.errors.invalidQuantityMax;
       }
-      if (item.price <= 0 || isNaN(item.price)) {
-        errors[`item_${index}_price`] = t.errors.invalidPrice;
-      }
     });
     setProductionErrors(errors);
     return Object.keys(errors).length === 0;
@@ -760,11 +723,7 @@ export const FactoryInventory: React.FC = () => {
       const aggregatedItems = aggregateItemsByProduct(productionForm.items);
       const data = {
         orderNumber: `PROD-${Date.now()}-${Math.random().toString(36).slice(-6)}`,
-        items: aggregatedItems.map((item) => ({
-          product: item.product,
-          quantity: item.quantity,
-          price: item.price,
-        })),
+        items: aggregatedItems,
         notes: productionForm.notes || undefined,
         priority: 'medium',
       };
@@ -979,8 +938,14 @@ export const FactoryInventory: React.FC = () => {
                           : 'text-green-600'
                       }`}
                     >
-                      {t[item.status]}
+                      {item.status}
                     </p>
+                    {item.inProduction && (
+                      <p className="text-sm text-blue-600 flex items-center gap-1">
+                        <Hammer className="w-4 h-4" />
+                        {t.inProduction}
+                      </p>
+                    )}
                   </div>
                   <div className="mt-4 flex justify-end gap-2">
                     <button
@@ -1112,16 +1077,6 @@ export const FactoryInventory: React.FC = () => {
                       />
                       {productionErrors[`item_${index}_quantity`] && (
                         <p className="text-red-600 text-xs mt-1">{productionErrors[`item_${index}_quantity`]}</p>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">{t.price}</label>
-                      <PriceInput
-                        value={item.price}
-                        onChange={(val) => updateItemInForm(index, 'price', val)}
-                      />
-                      {productionErrors[`item_${index}_price`] && (
-                        <p className="text-red-600 text-xs mt-1">{productionErrors[`item_${index}_price`]}</p>
                       )}
                     </div>
                     {!selectedItem && productionForm.items.length > 1 && (
