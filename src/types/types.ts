@@ -23,50 +23,45 @@ export enum Priority {
   Low = 'low',
 }
 
-
-export interface FactoryOrderItem {
-  _id: string;
-  productId: string;
-  productName: string;
-  productNameEn?: string;
-  displayProductName: string;
-  quantity: number;
-  unit: string;
-  unitEn?: string;
-  displayUnit: string;
-  department: Department;
-  assignedTo?: {
-    _id: string;
-    username: string;
-    name: string;
-    nameEn?: string;
-    displayName: string;
-    department: Department;
-  };
-  status: 'pending' | 'assigned' | 'completed';
-}
-
 export interface FactoryOrder {
-  id: string;
+  _id: string;
   orderNumber: string;
-  items: FactoryOrderItem[];
-  status: 'pending' | 'approved' | 'in_production' | 'completed' | 'cancelled';
-  date: string;
-  notes: string;
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  createdBy: string;
-}
-
-export interface AssignChefsForm {
-  items: Array<{
-    itemId: string;
-    assignedTo: string;
-    product: string;
+  items: {
+    _id: string;
+    product: {
+      _id: string;
+      name: string;
+      nameEn?: string;
+      unit: string;
+      unitEn?: string;
+      department: { _id: string; name: string; nameEn?: string; code: string };
+    };
     quantity: number;
-    unit: string;
-  }>;
+    status: 'pending' | 'assigned' | 'completed';
+    assignedTo?: { _id: string; name: string; nameEn?: string };
+    startedAt?: string | null;
+    completedAt?: string | null;
+  }[];
+  status: 'pending' | 'in_production' | 'completed' | 'cancelled';
+  notes?: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  createdBy: { _id: string; name: string; nameEn?: string };
+  createdAt: string;
+  approvedAt?: string | null;
+  statusHistory: {
+    status: string;
+    changedBy: { _id: string; name: string; nameEn?: string };
+    changedAt: string;
+    notes?: string;
+  }[];
 }
 
+export interface CreateFactoryOrderRequest {
+  orderNumber: string;
+  items: { product: string; quantity: number }[];
+  notes?: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+}
 
 export interface ReturnForm {
   itemId: string;
