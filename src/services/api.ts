@@ -1174,7 +1174,7 @@ export const factoryInventoryAPI = {
 export const factoryOrdersAPI = {
   create: async (data: { orderNumber: string; items: { product: string; quantity: number; price: number }[]; notes?: string; priority?: string }) => {
     try {
-      if (!data.orderNumber || !Array.isArray(data.items) || data.items.length === 0 || data.items.some(item => !isValidObjectId(item.product) || item.quantity < 1 || item.price <= 0)) {
+      if (!data.orderNumber || !Array.isArray(data.items) || data.items.length === 0 || data.items.some(item => !isValidObjectId(item.product) || item.quantity )) {
         console.error(`[${new Date().toISOString()}] factoryOrdersAPI.create - Invalid data:`, data);
         throw new Error(createErrorMessage('invalidItems', localStorage.getItem('language') === 'ar'));
       }
@@ -1183,7 +1183,6 @@ export const factoryOrdersAPI = {
         items: data.items.map(item => ({
           product: item.product,
           quantity: item.quantity,
-          price: item.price,
         })),
         notes: data.notes?.trim(),
         priority: data.priority?.trim() || 'medium',
