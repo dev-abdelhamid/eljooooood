@@ -1,3 +1,4 @@
+// pages/InventoryOrders.tsx
 import React, { useReducer, useEffect, useMemo, useCallback, useRef, Suspense } from 'react';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -21,7 +22,6 @@ import OrderCard from '../components/production/OrderCard';
 import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
 import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
-import { CreateFactoryOrderRequest } from '../types/types';
 
 const normalizeText = (text: string) => {
   return text
@@ -40,7 +40,7 @@ interface Product {
   nameEn?: string;
   unit: string;
   unitEn?: string;
-  department: { _id: string; name: string; nameEn?: string; code?: string };
+  department: { _id: string; name: string; nameEn?: string };
 }
 
 interface State {
@@ -51,7 +51,7 @@ interface State {
   isAssignModalOpen: boolean;
   isCreateModalOpen: boolean;
   assignFormData: AssignChefsForm;
-  createFormData: { productId: string; quantity: string; notes: string; priority: string };
+  createFormData: { productId: string; quantity: string; notes: string };
   filterStatus: string;
   searchQuery: string;
   sortBy: 'date' | 'totalQuantity';
@@ -84,7 +84,7 @@ const initialState: State = {
   isAssignModalOpen: false,
   isCreateModalOpen: false,
   assignFormData: { items: [] },
-  createFormData: { productId: '', quantity: '', notes: '', priority: 'medium' },
+  createFormData: { productId: '', quantity: '', notes: '' },
   filterStatus: '',
   searchQuery: '',
   sortBy: 'date',
@@ -101,7 +101,7 @@ const initialState: State = {
 const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case 'SET_ORDERS': return { ...state, orders: action.payload, error: '', currentPage: 1 };
-    case 'ADD_ORDER': return { ...state, orders: [action.payload, ...state.orders.filter(o => o._id !== action.payload._id)] };
+    case 'ADD_ORDER': return { ...state, orders: [action.payload, ...state.orders.filter(o => o.id !== action.payload.id)] };
     case 'SET_SELECTED_ORDER': return { ...state, selectedOrder: action.payload };
     case 'SET_CHEFS': return { ...state, chefs: action.payload };
     case 'SET_PRODUCTS': return { ...state, products: action.payload };
@@ -120,14 +120,14 @@ const reducer = (state: State, action: Action): State => {
     case 'SET_SOCKET_ERROR': return { ...state, socketError: action.payload };
     case 'UPDATE_ORDER_STATUS': return {
       ...state,
-      orders: state.orders.map(o => o._id === action.orderId ? { ...o, status: action.status! } : o),
-      selectedOrder: state.selectedOrder && state.selectedOrder._id === action.orderId
+      orders: state.orders.map(o => o.id === action.orderId ? { ...o, status: action.status! } : o),
+      selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
         ? { ...state.selectedOrder, status: action.status! } : state.selectedOrder,
     };
     case 'UPDATE_ITEM_STATUS': return {
       ...state,
       orders: state.orders.map(order =>
-        order._id === action.orderId
+        order.id === action.orderId
           ? {
               ...order,
               items: order.items.map(item =>
@@ -138,7 +138,7 @@ const reducer = (state: State, action: Action): State => {
             }
           : order
       ),
-      selectedOrder: state.selectedOrder && state.selectedOrder._id === action.orderId
+      selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
         ? {
             ...state.selectedOrder,
             items: state.selectedOrder.items.map(item =>
@@ -152,19 +152,18 @@ const reducer = (state: State, action: Action): State => {
     case 'TASK_ASSIGNED': return {
       ...state,
       orders: state.orders.map(order =>
-        order._id === action.orderId
+        order.id === action.orderId
           ? {
               ...order,
               items: order.items.map(i => {
-                const assignment = action.items?.find(a => a.itemId === i._id);
+                const assignment = action.items?.find(a => a._id === i._id);
                 return assignment
                   ? {
                       ...i,
                       assignedTo: assignment.assignedTo
                         ? {
-                            _id: assignment.assignedTo,
-                            name: state.chefs.find(c => c._id === assignment.assignedTo)?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                            nameEn: state.chefs.find(c => c._id === assignment.assignedTo)?.nameEn,
+                            ...assignment.assignedTo,
+                            displayName: state.isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name,
                           }
                         : undefined,
                       status: assignment.status || i.status,
@@ -175,19 +174,18 @@ const reducer = (state: State, action: Action): State => {
             }
           : order
       ),
-      selectedOrder: state.selectedOrder && state.selectedOrder._id === action.orderId
+      selectedOrder: state.selectedOrder && state.selectedOrder.id === action.orderId
         ? {
             ...state.selectedOrder,
             items: state.selectedOrder.items.map(i => {
-              const assignment = action.items?.find(a => a.itemId === i._id);
+              const assignment = action.items?.find(a => a._id === i._id);
               return assignment
                 ? {
                     ...i,
                     assignedTo: assignment.assignedTo
                       ? {
-                          _id: assignment.assignedTo,
-                          name: state.chefs.find(c => c._id === assignment.assignedTo)?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                          nameEn: state.chefs.find(c => c._id === assignment.assignedTo)?.nameEn,
+                          ...assignment.assignedTo,
+                          displayName: state.isRtl ? assignment.assignedTo.name : assignment.assignedTo.nameEn || assignment.assignedTo.name,
                         }
                       : undefined,
                     status: assignment.status || i.status,
@@ -205,14 +203,18 @@ const reducer = (state: State, action: Action): State => {
 
 const ORDERS_PER_PAGE = { card: 12, table: 50 };
 const validTransitions: Record<OrderStatus, OrderStatus[]> = {
-  pending: ['in_production', 'cancelled'],
+  pending: ['approved', 'cancelled'],
+  approved: ['in_production', 'cancelled'],
   in_production: ['completed', 'cancelled'],
   completed: [],
+  in_transit: [],
+  delivered: [],
   cancelled: [],
 };
 const statusOptions = [
   { value: '', label: 'all_statuses' },
   { value: 'pending', label: 'pending' },
+  { value: 'approved', label: 'approved' },
   { value: 'in_production', label: 'in_production' },
   { value: 'completed', label: 'completed' },
   { value: 'cancelled', label: 'cancelled' },
@@ -220,12 +222,6 @@ const statusOptions = [
 const sortOptions = [
   { value: 'date', label: 'sort_date' },
   { value: 'totalQuantity', label: 'sort_total_quantity' },
-];
-const priorityOptions = [
-  { value: 'low', label: 'low' },
-  { value: 'medium', label: 'medium' },
-  { value: 'high', label: 'high' },
-  { value: 'urgent', label: 'urgent' },
 ];
 
 const translateUnit = (unit: string, isRtl: boolean) => {
@@ -277,7 +273,6 @@ export const InventoryOrders: React.FC = () => {
     socket.on('connect', () => {
       dispatch({ type: 'SET_SOCKET_CONNECTED', payload: true });
       dispatch({ type: 'SET_SOCKET_ERROR', payload: null });
-      console.log('WebSocket connected');
     });
 
     socket.on('connect_error', (err) => {
@@ -292,48 +287,43 @@ export const InventoryOrders: React.FC = () => {
         return;
       }
       const mappedOrder: FactoryOrder = {
-        _id: order._id,
+        id: order._id,
         orderNumber: order.orderNumber,
         items: Array.isArray(order.items)
           ? order.items.map((item: any) => ({
               _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
-              product: {
-                _id: item.product?._id || 'unknown',
-                name: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                nameEn: item.product?.nameEn,
-                unit: item.product?.unit || 'unit',
-                unitEn: item.product?.unitEn,
-                department: {
-                  _id: item.product?.department?._id || 'unknown',
-                  name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                  nameEn: item.product?.department?.nameEn,
-                  code: item.product?.department?.code || '',
-                },
-              },
+              productId: item.product?._id || 'unknown',
+              productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+              productNameEn: item.product?.nameEn,
+              displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
               quantity: Number(item.quantity) || 1,
-              status: item.status || 'pending',
+              unit: item.product?.unit || 'unit',
+              unitEn: item.product?.unitEn,
+              displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
+              department: {
+                _id: item.product?.department?._id || 'unknown',
+                name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                nameEn: item.product?.department?.nameEn,
+                displayName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name,
+              },
               assignedTo: item.assignedTo
                 ? {
                     _id: item.assignedTo._id,
+                    username: item.assignedTo.username,
                     name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
                     nameEn: item.assignedTo.nameEn,
+                    displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
+                    department: item.assignedTo.department,
                   }
                 : undefined,
-              startedAt: item.startedAt ? new Date(item.startedAt).toISOString() : null,
-              completedAt: item.completedAt ? new Date(item.completedAt).toISOString() : null,
+              status: item.status || 'pending',
             }))
           : [],
         status: order.status || 'pending',
+        date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
         notes: order.notes || '',
         priority: order.priority || 'medium',
-        createdBy: {
-          _id: order.createdBy?._id || 'unknown',
-          name: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-          nameEn: order.createdBy?.nameEn,
-        },
-        createdAt: order.createdAt ? new Date(order.createdAt).toISOString() : new Date().toISOString(),
-        approvedAt: order.approvedAt ? new Date(order.approvedAt).toISOString() : null,
-        statusHistory: order.statusHistory || [],
+        createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
       };
       dispatch({ type: 'ADD_ORDER', payload: mappedOrder });
       playNotificationSound('/sounds/notification.mp3', [200, 100, 200]);
@@ -348,7 +338,7 @@ export const InventoryOrders: React.FC = () => {
         return;
       }
       dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status });
-      toast.info(isRtl ? `تم تحديث حالة الطلب ${orderId} إلى ${t(status)}` : `Order ${orderId} status updated to ${t(status)}`, {
+      toast.info(isRtl ? `تم تحديث حالة الطلب ${orderId} إلى ${status}` : `Order ${orderId} status updated to ${status}`, {
         position: isRtl ? 'top-left' : 'top-right',
       });
     });
@@ -373,13 +363,6 @@ export const InventoryOrders: React.FC = () => {
       toast.info(isRtl ? 'تم تعيين الشيفات' : 'Chefs assigned', { position: isRtl ? 'top-left' : 'top-right' });
     });
 
-    socket.on('factoryOrderCompleted', ({ orderId, orderNumber }: { orderId: string; orderNumber: string }) => {
-      dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: 'completed' });
-      toast.success(isRtl ? `تم إكمال طلب الإنتاج ${orderNumber}` : `Factory order ${orderNumber} completed`, {
-        position: isRtl ? 'top-left' : 'top-right',
-      });
-    });
-
     return () => {
       clearInterval(reconnectInterval);
       socket.off('connect');
@@ -388,9 +371,8 @@ export const InventoryOrders: React.FC = () => {
       socket.off('orderStatusUpdated');
       socket.off('itemStatusUpdated');
       socket.off('taskAssigned');
-      socket.off('factoryOrderCompleted');
     };
-  }, [user, socket, isConnected, isRtl, t, playNotificationSound]);
+  }, [user, socket, isConnected, isRtl, language, playNotificationSound]);
 
   const fetchData = useCallback(
     async (retryCount = 0) => {
@@ -402,81 +384,73 @@ export const InventoryOrders: React.FC = () => {
       dispatch({ type: 'SET_LOADING', payload: true });
       try {
         const query: Record<string, any> = {
-          status: state.filterStatus || undefined,
-          lang: isRtl ? 'ar' : 'en',
+          sortBy: state.sortBy,
+          sortOrder: state.sortOrder,
         };
-        if (user.role === 'production' && user.department) {
-          query.department = user.department._id;
-        }
+        if (user.role === 'production' && user.department) query.department = user.department._id;
         const [ordersResponse, chefsResponse, productsResponse] = await Promise.all([
-          factoryOrdersAPI.getAll(),
+          factoryOrdersAPI.getAll(query),
           chefsAPI.getAll(),
           productsAPI.getAll(),
         ]);
-
-        const mappedOrders: FactoryOrder[] = ordersResponse.data
+        const mappedOrders: FactoryOrder[] = ordersResponse
           .filter((order: any) => order && order._id && order.orderNumber)
           .map((order: any) => ({
-            _id: order._id,
+            id: order._id,
             orderNumber: order.orderNumber,
             items: Array.isArray(order.items)
               ? order.items.map((item: any) => ({
                   _id: item._id || `temp-${Math.random().toString(36).substring(2)}`,
-                  product: {
-                    _id: item.product?._id || 'unknown',
-                    name: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                    nameEn: item.product?.nameEn,
-                    unit: item.product?.unit || 'unit',
-                    unitEn: item.product?.unitEn,
-                    department: {
-                      _id: item.product?.department?._id || 'unknown',
-                      name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-                      nameEn: item.product?.department?.nameEn,
-                      code: item.product?.department?.code || '',
-                    },
-                  },
+                  productId: item.product?._id || 'unknown',
+                  productName: item.product?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                  productNameEn: item.product?.nameEn,
+                  displayProductName: isRtl ? item.product?.name : item.product?.nameEn || item.product?.name,
                   quantity: Number(item.quantity) || 1,
-                  status: item.status || 'pending',
+                  unit: item.product?.unit || 'unit',
+                  unitEn: item.product?.unitEn,
+                  displayUnit: translateUnit(item.product?.unit || 'unit', isRtl),
+                  department: {
+                    _id: item.product?.department?._id || 'unknown',
+                    name: item.product?.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
+                    nameEn: item.product?.department?.nameEn,
+                    displayName: isRtl ? item.product?.department?.name : item.product?.department?.nameEn || item.product?.department?.name,
+                  },
                   assignedTo: item.assignedTo
                     ? {
                         _id: item.assignedTo._id,
+                        username: item.assignedTo.username,
                         name: item.assignedTo.name || (isRtl ? 'غير معروف' : 'Unknown'),
                         nameEn: item.assignedTo.nameEn,
+                        displayName: isRtl ? item.assignedTo.name : item.assignedTo.nameEn || item.assignedTo.name,
+                        department: item.assignedTo.department,
                       }
                     : undefined,
-                  startedAt: item.startedAt ? new Date(item.startedAt).toISOString() : null,
-                  completedAt: item.completedAt ? new Date(item.completedAt).toISOString() : null,
+                  status: item.status || 'pending',
                 }))
               : [],
             status: order.status || 'pending',
+            date: formatDate(order.createdAt ? new Date(order.createdAt) : new Date(), language),
             notes: order.notes || '',
             priority: order.priority || 'medium',
-            createdBy: {
-              _id: order.createdBy?._id || 'unknown',
-              name: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
-              nameEn: order.createdBy?.nameEn,
-            },
-            createdAt: order.createdAt ? new Date(order.createdAt).toISOString() : new Date().toISOString(),
-            approvedAt: order.approvedAt ? new Date(order.approvedAt).toISOString() : null,
-            statusHistory: order.statusHistory || [],
+            createdBy: order.createdBy?.name || (isRtl ? 'غير معروف' : 'Unknown'),
           }));
-
         dispatch({ type: 'SET_ORDERS', payload: mappedOrders });
         dispatch({
           type: 'SET_CHEFS',
-          payload: chefsResponse.data
+          payload: chefsResponse
             .filter((chef: any) => chef && chef.user?._id)
             .map((chef: any) => ({
               _id: chef._id,
               userId: chef.user._id,
               name: chef.user?.name || chef.name || (isRtl ? 'غير معروف' : 'Unknown'),
               nameEn: chef.user?.nameEn || chef.nameEn,
+              displayName: isRtl ? (chef.user?.name || chef.name) : (chef.user?.nameEn || chef.nameEn || chef.user?.name || chef.name),
               department: chef.department
                 ? {
                     _id: chef.department._id,
                     name: chef.department.name || (isRtl ? 'غير معروف' : 'Unknown'),
                     nameEn: chef.department.nameEn,
-                    code: chef.department.code || '',
+                    displayName: isRtl ? chef.department.name : (chef.department.nameEn || chef.department.name),
                   }
                 : null,
               status: chef.status || 'active',
@@ -484,7 +458,7 @@ export const InventoryOrders: React.FC = () => {
         });
         dispatch({
           type: 'SET_PRODUCTS',
-          payload: productsResponse.data
+          payload: productsResponse
             .filter((product: any) => product && product._id)
             .map((product: any) => ({
               _id: product._id,
@@ -496,7 +470,7 @@ export const InventoryOrders: React.FC = () => {
                 _id: product.department?._id || 'unknown',
                 name: product.department?.name || (isRtl ? 'غير معروف' : 'Unknown'),
                 nameEn: product.department?.nameEn,
-                code: product.department?.code || '',
+                displayName: isRtl ? product.department?.name : product.department?.nameEn || product.department?.name,
               },
             }))
             .sort((a: Product, b: Product) => {
@@ -512,21 +486,17 @@ export const InventoryOrders: React.FC = () => {
           setTimeout(() => fetchData(retryCount + 1), 2000);
           return;
         }
-        const errorMessage = err.status === 404
+        const errorMessage = err.response?.status === 404
           ? isRtl ? 'لم يتم العثور على طلبات' : 'No orders found'
-          : err.message || (isRtl ? 'خطأ في جلب الطلبات' : 'Error fetching orders');
+          : isRtl ? `خطأ في جلب الطلبات: ${err.message}` : `Error fetching orders: ${err.message}`;
         dispatch({ type: 'SET_ERROR', payload: errorMessage });
         toast.error(errorMessage, { position: isRtl ? 'top-left' : 'top-right' });
       } finally {
         dispatch({ type: 'SET_LOADING', payload: false });
       }
     },
-    [user, state.filterStatus, isRtl, language]
+    [user, state.sortBy, state.sortOrder, isRtl, language]
   );
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
 
   const handleSearchChange = useCallback((value: string) => {
     dispatch({ type: 'SET_SEARCH_QUERY', payload: value });
@@ -541,16 +511,16 @@ export const InventoryOrders: React.FC = () => {
           order =>
             normalizeText(order.orderNumber || '').includes(normalizedQuery) ||
             normalizeText(order.notes || '').includes(normalizedQuery) ||
-            normalizeText(order.createdBy?.name || '').includes(normalizedQuery) ||
+            normalizeText(order.createdBy || '').includes(normalizedQuery) ||
             order.items.some(item =>
-              normalizeText(item.product?.name || '').includes(normalizedQuery)
+              normalizeText(item.displayProductName || '').includes(normalizedQuery)
             )
         )
         .filter(
           order =>
             (!state.filterStatus || order.status === state.filterStatus) &&
             (user?.role === 'production' && user?.department
-              ? order.items.some(item => item.product?.department?._id === user.department._id)
+              ? order.items.some(item => item.department._id === user.department._id)
               : true)
         );
     },
@@ -561,8 +531,8 @@ export const InventoryOrders: React.FC = () => {
     return [...filteredOrders].sort((a, b) => {
       if (state.sortBy === 'date') {
         return state.sortOrder === 'asc'
-          ? new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-          : new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          ? new Date(a.date).getTime() - new Date(b.date).getTime()
+          : new Date(b.date).getTime() - new Date(a.date).getTime();
       } else {
         const totalA = calculateTotalQuantity(a);
         const totalB = calculateTotalQuantity(b);
@@ -583,24 +553,24 @@ export const InventoryOrders: React.FC = () => {
 
   const updateOrderStatus = useCallback(
     async (orderId: string, newStatus: OrderStatus) => {
-      const order = state.orders.find(o => o._id === orderId);
+      const order = state.orders.find(o => o.id === orderId);
       if (!order || !validTransitions[order.status].includes(newStatus)) {
         toast.error(isRtl ? 'انتقال غير صالح' : 'Invalid transition', { position: isRtl ? 'top-left' : 'top-right' });
         return;
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        const response = await factoryOrdersAPI.updateStatus(orderId, { status: newStatus });
+        await factoryOrdersAPI.updateStatus(orderId, { status: newStatus });
         dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: newStatus });
         if (socket && isConnected) {
           emit('orderStatusUpdated', { orderId, status: newStatus });
         }
-        toast.success(isRtl ? 'تم تحديث حالة الطلب بنجاح' : 'Order status updated successfully', {
+        toast.success(isRtl ? `تم تحديث الحالة إلى: ${newStatus}` : `Order status updated to: ${newStatus}`, {
           position: isRtl ? 'top-left' : 'top-right',
         });
       } catch (err: any) {
         console.error('Update order status error:', err.message);
-        toast.error(err.message || (isRtl ? 'فشل في تحديث الحالة' : 'Failed to update status'), {
+        toast.error(isRtl ? `فشل في تحديث الحالة: ${err.message}` : `Failed to update status: ${err.message}`, {
           position: isRtl ? 'top-left' : 'top-right',
         });
       } finally {
@@ -610,366 +580,501 @@ export const InventoryOrders: React.FC = () => {
     [state.orders, isRtl, socket, isConnected, emit]
   );
 
-  const confirmProduction = useCallback(
-    async (orderId: string) => {
+  const updateItemStatus = useCallback(
+    async (orderId: string, itemId: string, status: FactoryOrder['items'][0]['status']) => {
+      if (!user?.id) {
+        toast.error(isRtl ? 'لا يوجد مستخدم مرتبط' : 'No user associated', { position: isRtl ? 'top-left' : 'top-right' });
+        return;
+      }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        const response = await factoryOrdersAPI.confirmProduction(orderId);
-        dispatch({ type: 'UPDATE_ORDER_STATUS', orderId, status: 'completed' });
+        await factoryOrdersAPI.updateItemStatus(orderId, itemId, { status });
+        dispatch({ type: 'UPDATE_ITEM_STATUS', orderId, payload: { itemId, status } });
         if (socket && isConnected) {
-          emit('factoryOrderCompleted', { orderId, orderNumber: state.orders.find(o => o._id === orderId)?.orderNumber });
+          emit('itemStatusUpdated', { orderId, itemId, status });
         }
-        toast.success(isRtl ? 'تم تأكيد الإنتاج بنجاح' : 'Production confirmed successfully', {
+        toast.success(isRtl ? `تم تحديث حالة العنصر إلى: ${status}` : `Item status updated to: ${status}`, {
           position: isRtl ? 'top-left' : 'top-right',
         });
       } catch (err: any) {
-        console.error('Confirm production error:', err.message);
-        toast.error(err.message || (isRtl ? 'فشل في تأكيد الإنتاج' : 'Failed to confirm production'), {
+        console.error('Update item status error:', err.message);
+        toast.error(isRtl ? `فشل في تحديث حالة العنصر: ${err.message}` : `Failed to update item status: ${err.message}`, {
           position: isRtl ? 'top-left' : 'top-right',
         });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     },
-    [state.orders, isRtl, socket, isConnected, emit]
+    [isRtl, user, socket, isConnected, emit]
   );
 
-  const handleAssignChefs = useCallback(
-    async (orderId: string, formData: AssignChefsForm) => {
-      if (!formData.items.length || formData.items.some(item => !item.itemId || !item.assignedTo)) {
-        toast.error(isRtl ? 'بيانات التعيين غير صالحة' : 'Invalid assignment data', {
+  const assignChefs = useCallback(
+    async (orderId: string) => {
+      if (!user?.id || state.assignFormData.items.some(item => !item.assignedTo)) {
+        toast.error(isRtl ? 'يرجى تعيين شيف واحد على الأقل' : 'Please assign at least one chef', {
           position: isRtl ? 'top-left' : 'top-right',
         });
         return;
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        const response = await factoryOrdersAPI.assignChefs(orderId, formData);
-        dispatch({ type: 'TASK_ASSIGNED', orderId, items: formData.items });
+        await factoryOrdersAPI.assignChefs(orderId, { items: state.assignFormData.items });
+        const items = state.assignFormData.items.map(item => ({
+          _id: item.itemId,
+          assignedTo: state.chefs.find(chef => chef.userId === item.assignedTo) || {
+            _id: item.assignedTo,
+            name: isRtl ? 'غير معروف' : 'Unknown',
+            department: { _id: 'unknown', name: isRtl ? 'غير معروف' : 'Unknown' },
+          },
+          status: 'assigned',
+        }));
+        dispatch({ type: 'TASK_ASSIGNED', orderId, items });
         dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: false });
         dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
         if (socket && isConnected) {
-          emit('taskAssigned', { orderId, items: formData.items });
+          emit('taskAssigned', { orderId, items });
         }
         toast.success(isRtl ? 'تم تعيين الشيفات بنجاح' : 'Chefs assigned successfully', {
           position: isRtl ? 'top-left' : 'top-right',
         });
       } catch (err: any) {
         console.error('Assign chefs error:', err.message);
-        toast.error(err.message || (isRtl ? 'فشل في تعيين الشيفات' : 'Failed to assign chefs'), {
+        toast.error(isRtl ? `فشل في تعيين الشيفات: ${err.message}` : `Failed to assign chefs: ${err.message}`, {
           position: isRtl ? 'top-left' : 'top-right',
         });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     },
-    [isRtl, socket, isConnected, emit]
+    [user, state.assignFormData, state.chefs, socket, isConnected, emit, isRtl]
   );
 
-  const handleCreateOrder = useCallback(
+  const createOrder = useCallback(
     async () => {
-      const { productId, quantity, notes, priority } = state.createFormData;
-      if (!productId || !quantity || !Number.isInteger(Number(quantity)) || Number(quantity) < 1) {
-        toast.error(isRtl ? 'يرجى إدخال بيانات صالحة للمنتج والكمية' : 'Please enter valid product and quantity', {
+      if (!user?.id || !state.createFormData.productId || !state.createFormData.quantity) {
+        toast.error(isRtl ? 'يرجى ملء جميع الحقول المطلوبة' : 'Please fill all required fields', {
           position: isRtl ? 'top-left' : 'top-right',
         });
         return;
       }
-      const orderNumber = `ORD-${Date.now()}`;
-      const data: CreateFactoryOrderRequest = {
-        orderNumber,
-        items: [{ product: productId, quantity: Number(quantity) }],
-        notes: notes.trim(),
-        priority: priority || 'medium',
-      };
       dispatch({ type: 'SET_SUBMITTING', payload: 'create' });
       try {
-        const response = await factoryOrdersAPI.create(data);
-        dispatch({ type: 'ADD_ORDER', payload: response.data });
+        const orderNumber = `ORD-${Date.now()}`; // Generate a unique order number
+        const response = await factoryOrdersAPI.create({
+          orderNumber,
+          items: [
+            {
+              product: state.createFormData.productId,
+              quantity: Number(state.createFormData.quantity),
+            },
+          ],
+          notes: state.createFormData.notes,
+          priority: 'medium',
+        });
+        const newOrder: FactoryOrder = {
+          id: response._id,
+          orderNumber: response.orderNumber,
+          items: response.items.map((item: any) => ({
+            _id: item._id,
+            productId: item.product._id,
+            productName: item.product.name,
+            productNameEn: item.product.nameEn,
+            displayProductName: isRtl ? item.product.name : item.product.nameEn || item.product.name,
+            quantity: Number(item.quantity),
+            unit: item.product.unit,
+            unitEn: item.product.unitEn,
+            displayUnit: translateUnit(item.product.unit, isRtl),
+            department: {
+              _id: item.product.department._id,
+              name: item.product.department.name,
+              nameEn: item.product.department.nameEn,
+              displayName: isRtl ? item.product.department.name : item.product.department.nameEn || item.product.department.name,
+            },
+            status: item.status || 'pending',
+          })),
+          status: response.status || 'pending',
+          date: formatDate(new Date(response.createdAt), language),
+          notes: response.notes || '',
+          priority: response.priority || 'medium',
+          createdBy: user.name || (isRtl ? 'غير معروف' : 'Unknown'),
+        };
+        dispatch({ type: 'ADD_ORDER', payload: newOrder });
         dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
-        dispatch({ type: 'SET_CREATE_FORM', payload: { productId: '', quantity: '', notes: '', priority: 'medium' } });
+        dispatch({ type: 'SET_CREATE_FORM', payload: { productId: '', quantity: '', notes: '' } });
         if (socket && isConnected) {
-          emit('newFactoryOrder', response.data);
+          emit('newFactoryOrder', newOrder);
         }
-        toast.success(isRtl ? 'تم إنشاء الطلب بنجاح' : 'Order created successfully', {
+        toast.success(isRtl ? 'تم إنشاء طلب الإنتاج بنجاح' : 'Production order created successfully', {
           position: isRtl ? 'top-left' : 'top-right',
         });
       } catch (err: any) {
         console.error('Create order error:', err.message);
-        toast.error(err.message || (isRtl ? 'فشل في إنشاء الطلب' : 'Failed to create order'), {
+        toast.error(isRtl ? `فشل في إنشاء الطلب: ${err.message}` : `Failed to create order: ${err.message}`, {
           position: isRtl ? 'top-left' : 'top-right',
         });
       } finally {
         dispatch({ type: 'SET_SUBMITTING', payload: null });
       }
     },
-    [state.createFormData, isRtl, socket, isConnected, emit]
+    [user, state.createFormData, isRtl, socket, isConnected, emit, language]
   );
 
-  const handleViewModeToggle = useCallback(() => {
-    dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' });
-  }, [state.viewMode]);
-
-  const handlePageChange = useCallback((page: number) => {
-    dispatch({ type: 'SET_PAGE', payload: page });
-    if (listRef.current) {
-      listRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, []);
-
-  const handleSortChange = useCallback((value: string) => {
-    dispatch({ type: 'SET_SORT', by: value as 'date' | 'totalQuantity', order: state.sortOrder });
-  }, [state.sortOrder]);
-
-  const handleSortOrderToggle = useCallback(() => {
-    dispatch({ type: 'SET_SORT', by: state.sortBy, order: state.sortOrder === 'asc' ? 'desc' : 'asc' });
-  }, [state.sortBy, state.sortOrder]);
-
-  const openAssignModal = useCallback((order: FactoryOrder) => {
-    dispatch({ type: 'SET_SELECTED_ORDER', payload: order });
-    dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: true });
-    dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: order.items.map(item => ({ itemId: item._id, assignedTo: item.assignedTo?._id || '' })) } });
-  }, []);
-
-  const renderOrderItem = useCallback(
-    (item: FactoryOrder['items'][0]) => {
-      const productName = isRtl ? item.product.name : (item.product.nameEn || item.product.name);
-      const unit = translateUnit(item.product.unit, isRtl);
-      return (
-        <div key={item._id} className="flex justify-between py-1">
-          <span>{productName}</span>
-          <span>
-            {item.quantity} {unit}
-          </span>
-        </div>
-      );
+  const openAssignModal = useCallback(
+    (order: FactoryOrder) => {
+      if (order.status !== 'approved') {
+        toast.error(isRtl ? 'الطلب لم يتم الموافقة عليه' : 'Order not approved', {
+          position: isRtl ? 'top-left' : 'top-right',
+        });
+        return;
+      }
+      dispatch({ type: 'SET_SELECTED_ORDER', payload: order });
+      dispatch({
+        type: 'SET_ASSIGN_FORM',
+        payload: {
+          items: order.items
+            .filter(item => !item.assignedTo)
+            .map(item => ({
+              itemId: item._id,
+              assignedTo: '',
+              product: item.displayProductName,
+              quantity: item.quantity,
+              unit: translateUnit(item.unit, isRtl),
+            })),
+        },
+      });
+      dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: true });
     },
     [isRtl]
   );
 
-  const renderSkeleton = useCallback(
-    () =>
-      state.viewMode === 'card' ? (
-        Array.from({ length: ORDERS_PER_PAGE.card }).map((_, i) => <OrderCardSkeleton key={i} />)
-      ) : (
-        <OrderTableSkeleton />
-      ),
-    [state.viewMode]
-  );
+  const handlePageChange = useCallback((page: number) => {
+    dispatch({ type: 'SET_PAGE', payload: page });
+    listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   return (
-    <div className={`container mx-auto p-4 ${isRtl ? 'text-right' : 'text-left'}`}>
-      <h1 className="text-2xl font-bold mb-4">{t('inventory_orders')}</h1>
-
-      {/* Filters and Controls */}
-      <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-4">
-        <div className="flex items-center gap-4 w-full sm:w-auto">
-          <ProductSearchInput
-            value={state.searchQuery}
-            onChange={handleSearchChange}
-            placeholder={t('search_orders')}
-            isRtl={isRtl}
-          />
-          <Select
-            options={statusOptions.map(opt => ({ ...opt, label: t(opt.label) }))}
-            value={state.filterStatus}
-            onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
-            placeholder={t('filter_by_status')}
-            className="w-40"
-          />
-          <Select
-            options={sortOptions.map(opt => ({ ...opt, label: t(opt.label) }))}
-            value={state.sortBy}
-            onChange={handleSortChange}
-            placeholder={t('sort_by')}
-            className="w-40"
-          />
-          <Button
-            variant="outline"
-            onClick={handleSortOrderToggle}
-            className="px-2"
-            title={state.sortOrder === 'asc' ? t('sort_ascending') : t('sort_descending')}
-          >
-            {state.sortOrder === 'asc' ? '↑' : '↓'}
-          </Button>
-        </div>
-        <div className="flex items-center gap-4">
-          <Button
-            variant="outline"
-            onClick={handleViewModeToggle}
-            className="px-2"
-            title={state.viewMode === 'card' ? t('table_view') : t('card_view')}
-          >
-            {state.viewMode === 'card' ? <Table2 size={20} /> : <Grid size={20} />}
-          </Button>
-          {user?.role === 'admin' && (
-            <Button
-              onClick={() => dispatch({ type: 'SET_CREATE_MODAL', isOpen: true })}
-              className="flex items-center gap-2"
-            >
-              <PlusCircle size={20} />
-              {t('create_order')}
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Error and Socket Status */}
-      {state.error && (
-        <div className="bg-red-100 text-red-700 p-4 rounded mb-4 flex items-center gap-2">
-          <AlertCircle size={20} />
-          {state.error}
-        </div>
-      )}
-      {!state.socketConnected && state.socketError && (
-        <div className="bg-yellow-100 text-yellow-700 p-4 rounded mb-4 flex items-center gap-2">
-          <AlertCircle size={20} />
-          {state.socketError}
-        </div>
-      )}
-
-      {/* Orders Display */}
-      <Suspense fallback={renderSkeleton()}>
-        {state.loading ? (
-          renderSkeleton()
-        ) : paginatedOrders.length === 0 ? (
-          <div className="text-center text-gray-500 py-8">
-            {t('no_orders_found')}
+    <div className="px-2 py-4">
+      <Suspense fallback={<OrderTableSkeleton isRtl={isRtl} />}>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: 'easeOut' }} className="mb-6">
+          <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+            <div className="w-full sm:w-auto text-center sm:text-start">
+              <h1 className="text-xl font-bold text-gray-900 flex items-center justify-center sm:justify-start gap-2">
+                <ShoppingCart className="w-5 h-5 text-amber-700" />
+                {isRtl ? 'طلبات الإنتاج' : 'Production Orders'}
+              </h1>
+              <p className="text-xs text-gray-600 mt-1">{isRtl ? 'إدارة طلبات إنتاج المخزون' : 'Manage inventory production orders'}</p>
+            </div>
+            <div className="flex gap-2 flex-wrap justify-center sm:justify-end w-full sm:w-auto">
+              <Button
+                variant="primary"
+                onClick={() => dispatch({ type: 'SET_CREATE_MODAL', isOpen: true })}
+                className="flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300"
+              >
+                <PlusCircle className="w-4 h-4" />
+                {isRtl ? 'إنشاء طلب جديد' : 'Create New Order'}
+              </Button>
+            </div>
           </div>
-        ) : (
-          <motion.div
-            ref={listRef}
-            className={state.viewMode === 'card' ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4' : 'w-full'}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
-          >
-            {state.viewMode === 'card' ? (
-              paginatedOrders.map(order => (
-                <OrderCard
-                  key={order._id}
-                  order={order}
-                  isRtl={isRtl}
-                  translateUnit={translateUnit}
-                  onStatusUpdate={updateOrderStatus}
-                  onConfirmProduction={confirmProduction}
-                  onAssignChefs={openAssignModal}
-                  isSubmitting={state.submitting === order._id}
-                  userRole={user?.role}
-                  renderOrderItem={renderOrderItem}
+          <Card className="p-3 mt-6 bg-white shadow-md rounded-xl border border-gray-200">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
+                <ProductSearchInput
+                  value={state.searchQuery}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  placeholder={isRtl ? 'ابحث حسب رقم الطلب أو المنتج...' : 'Search by order number or product...'}
+                  ariaLabel={isRtl ? 'بحث' : 'Search'}
+                  className="w-full"
                 />
-              ))
-            ) : (
-              <OrderTable
-                orders={paginatedOrders}
-                isRtl={isRtl}
-                translateUnit={translateUnit}
-                onStatusUpdate={updateOrderStatus}
-                onConfirmProduction={confirmProduction}
-                onAssignChefs={openAssignModal}
-                isSubmitting={state.submitting}
-                userRole={user?.role}
-              />
-            )}
-          </motion.div>
-        )}
-      </Suspense>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="mt-4">
-          <Pagination
-            currentPage={state.currentPage}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-            isRtl={isRtl}
-          />
-        </div>
-      )}
-
-      {/* Create Order Modal */}
-      <Modal
-        isOpen={state.isCreateModalOpen}
-        onClose={() => dispatch({ type: 'SET_CREATE_MODAL', isOpen: false })}
-        title={t('create_order')}
-        isRtl={isRtl}
-      >
-        <div className="space-y-4">
-          <Input
-            label={t('order_number')}
-            value={`ORD-${Date.now()}`}
-            disabled
-            isRtl={isRtl}
-          />
-          <ProductDropdown
-            products={state.products}
-            value={state.createFormData.productId}
-            onChange={(value) =>
-              dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, productId: value } })
-            }
-            placeholder={t('select_product')}
-            isRtl={isRtl}
-          />
-          <Input
-            label={t('quantity')}
-            type="number"
-            value={state.createFormData.quantity}
-            onChange={(e) =>
-              dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, quantity: e.target.value } })
-            }
-            placeholder={t('enter_quantity')}
-            min="1"
-            isRtl={isRtl}
-          />
-          <Select
-            options={priorityOptions.map(opt => ({ ...opt, label: t(opt.label) }))}
-            value={state.createFormData.priority}
-            onChange={(value) =>
-              dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, priority: value } })
-            }
-            placeholder={t('select_priority')}
-            isRtl={isRtl}
-          />
-          <Input
-            label={t('notes')}
-            value={state.createFormData.notes}
-            onChange={(e) =>
-              dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, notes: e.target.value } })
-            }
-            placeholder={t('enter_notes')}
-            isRtl={isRtl}
-          />
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => dispatch({ type: 'SET_CREATE_MODAL', isOpen: false })}
-              disabled={state.submitting === 'create'}
-            >
-              {t('cancel')}
-            </Button>
-            <Button
-              onClick={handleCreateOrder}
-              disabled={state.submitting === 'create'}
-              className="flex items-center gap-2"
-            >
-              {state.submitting === 'create' ? t('submitting') : t('create')}
-              {state.submitting === 'create' && <div className="animate-spin h-5 w-5 border-2 border-t-transparent rounded-full" />}
-            </Button>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}</label>
+                <ProductDropdown
+                  options={statusOptions.map(opt => ({
+                    value: opt.value,
+                    label: isRtl ? { '': 'كل الحالات', pending: 'قيد الانتظار', approved: 'تم الموافقة', in_production: 'في الإنتاج', completed: 'مكتمل', cancelled: 'ملغى' }[opt.value] : opt.label,
+                  }))}
+                  value={state.filterStatus}
+                  onChange={(value) => dispatch({ type: 'SET_FILTER_STATUS', payload: value })}
+                  ariaLabel={isRtl ? 'تصفية حسب الحالة' : 'Filter by Status'}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'ترتيب حسب' : 'Sort By'}</label>
+                <ProductDropdown
+                  options={sortOptions.map(opt => ({
+                    value: opt.value,
+                    label: isRtl ? { date: 'التاريخ', totalQuantity: 'الكمية الإجمالية' }[opt.value] : opt.label,
+                  }))}
+                  value={state.sortBy}
+                  onChange={(value) => dispatch({ type: 'SET_SORT', by: value as any, order: state.sortOrder })}
+                  ariaLabel={isRtl ? 'ترتيب حسب' : 'Sort By'}
+                  className="w-full"
+                />
+              </div>
+            </div>
+            <div className={`flex flex-col sm:flex-row justify-between items-center gap-3 mt-4 ${isRtl ? 'flex-row-reverse' : ''}`}>
+              <div className="text-xs text-center text-gray-600">
+                {isRtl ? `عدد الطلبات: ${filteredOrders.length}` : `Orders count: ${filteredOrders.length}`}
+              </div>
+              <Button
+                variant="secondary"
+                onClick={() => dispatch({ type: 'SET_VIEW_MODE', payload: state.viewMode === 'card' ? 'table' : 'card' })}
+                className="flex items-center gap-1 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300"
+              >
+                {state.viewMode === 'card' ? <Table2 className="w-4 h-4" /> : <Grid className="w-4 h-4" />}
+                {state.viewMode === 'card' ? (isRtl ? 'عرض كجدول' : 'View as Table') : (isRtl ? 'عرض كبطاقات' : 'View as Cards')}
+              </Button>
+            </div>
+          </Card>
+          <div ref={listRef} className="mt-6 min-h-[300px]">
+            <AnimatePresence>
+              {state.loading ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3 }}
+                  className="space-y-1"
+                >
+                  {state.viewMode === 'card' ? (
+                    <div className="grid grid-cols-1 gap-1">
+                      {Array.from({ length: ORDERS_PER_PAGE.card }, (_, i) => (
+                        <motion.div
+                          key={i}
+                          initial={{ opacity: 0, scale: 0.95 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ duration: 0.3, delay: i * 0.05 }}
+                        >
+                          <OrderCardSkeleton isRtl={isRtl} />
+                        </motion.div>
+                      ))}
+                    </div>
+                  ) : (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <OrderTableSkeleton isRtl={isRtl} rows={ORDERS_PER_PAGE.table} />
+                    </motion.div>
+                  )}
+                </motion.div>
+              ) : state.error ? (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.4 }}
+                  className="mt-6"
+                >
+                  <Card className="p-5 max-w-md mx-auto text-center bg-red-50 shadow-md rounded-xl border border-red-100">
+                    <div className={`flex items-center justify-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                      <AlertCircle className="w-5 h-5 text-red-600" />
+                      <p className="text-xs font-medium text-red-600">{state.error}</p>
+                    </div>
+                    <Button
+                      variant="primary"
+                      onClick={() => fetchData()}
+                      className="mt-3 bg-amber-600 hover:bg-amber-700 text-white rounded-full px-3 py-1.5 text-xs shadow transition-all duration-300"
+                    >
+                      {isRtl ? 'إعادة المحاولة' : 'Retry'}
+                    </Button>
+                  </Card>
+                </motion.div>
+              ) : (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.4 }}
+                  className="space-y-3"
+                >
+                  {paginatedOrders.length === 0 ? (
+                    <Card className="p-6 text-center bg-white shadow-md rounded-xl border border-gray-200">
+                      <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
+                      <h3 className="text-base font-medium text-gray-800 mb-1">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
+                      <p className="text-xs text-gray-500">
+                        {state.filterStatus || state.searchQuery
+                          ? isRtl ? 'لا توجد طلبات مطابقة' : 'No matching orders'
+                          : isRtl ? 'لا توجد طلبات بعد' : 'No orders yet'}
+                      </p>
+                    </Card>
+                  ) : (
+                    <>
+                      {state.viewMode === 'table' ? (
+                        <OrderTable
+                          orders={paginatedOrders}
+                          calculateAdjustedTotal={() => ''} // No total amount for factory orders
+                          calculateTotalQuantity={calculateTotalQuantity}
+                          translateUnit={translateUnit}
+                          updateOrderStatus={updateOrderStatus}
+                          openAssignModal={openAssignModal}
+                          submitting={state.submitting}
+                          isRtl={isRtl}
+                          startIndex={(state.currentPage - 1) * ORDERS_PER_PAGE[state.viewMode] + 1}
+                        />
+                      ) : (
+                        <div className="grid grid-cols-1 gap-4">
+                          {paginatedOrders.map(order => (
+                            <motion.div
+                              key={order.id}
+                              initial={{ opacity: 0, scale: 0.95 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ duration: 0.3 }}
+                            >
+                              <OrderCard
+                                order={order}
+                                calculateAdjustedTotal={() => ''} // No total amount for factory orders
+                                calculateTotalQuantity={calculateTotalQuantity}
+                                translateUnit={translateUnit}
+                                updateOrderStatus={updateOrderStatus}
+                                openAssignModal={openAssignModal}
+                                submitting={state.submitting}
+                                isRtl={isRtl}
+                              />
+                            </motion.div>
+                          ))}
+                        </div>
+                      )}
+                      {totalPages > 1 && (
+                        <Pagination
+                          currentPage={state.currentPage}
+                          totalPages={totalPages}
+                          isRtl={isRtl}
+                          handlePageChange={handlePageChange}
+                        />
+                      )}
+                    </>
+                  )}
+                  <AssignChefsModal
+                    isOpen={state.isAssignModalOpen}
+                    onClose={() => {
+                      dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: false });
+                      dispatch({ type: 'SET_ASSIGN_FORM', payload: { items: [] } });
+                      dispatch({ type: 'SET_SELECTED_ORDER', payload: null });
+                    }}
+                    selectedOrder={state.selectedOrder}
+                    chefs={state.chefs}
+                    assignFormData={state.assignFormData}
+                    setAssignForm={(data) => dispatch({ type: 'SET_ASSIGN_FORM', payload: data })}
+                    assignChefs={assignChefs}
+                    error={state.error}
+                    submitting={state.submitting}
+                    isRtl={isRtl}
+                  />
+                  <Modal
+                    isOpen={state.isCreateModalOpen}
+                    onClose={() => {
+                      dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
+                      dispatch({ type: 'SET_CREATE_FORM', payload: { productId: '', quantity: '', notes: '' } });
+                    }}
+                    title={isRtl ? 'إنشاء طلب إنتاج جديد' : 'Create New Production Order'}
+                    size="md"
+                    className="bg-white rounded-lg shadow-xl border border-gray-100"
+                  >
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        createOrder();
+                      }}
+                      className="space-y-6"
+                    >
+                      <div>
+                        <label className={`block text-sm font-medium text-gray-900 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                          {isRtl ? 'المنتج' : 'Product'}
+                        </label>
+                        <Select
+                          id="product-select"
+                          options={[
+                            { value: '', label: isRtl ? 'اختر منتج' : 'Select Product' },
+                            ...state.products
+                              .filter(product => user?.role === 'production' && user?.department ? product.department._id === user.department._id : true)
+                              .map(product => ({
+                                value: product._id,
+                                label: isRtl ? product.name : product.nameEn || product.name,
+                              })),
+                          ]}
+                          value={state.createFormData.productId}
+                          onChange={(value) => dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, productId: value } })}
+                          className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                          aria-label={isRtl ? 'اختر منتج' : 'Select Product'}
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm font-medium text-gray-900 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                          {isRtl ? 'الكمية' : 'Quantity'}
+                        </label>
+                        <Input
+                          type="number"
+                          value={state.createFormData.quantity}
+                          onChange={(e) => dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, quantity: e.target.value } })}
+                          placeholder={isRtl ? 'أدخل الكمية' : 'Enter quantity'}
+                          className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                          aria-label={isRtl ? 'الكمية' : 'Quantity'}
+                          min="1"
+                        />
+                      </div>
+                      <div>
+                        <label className={`block text-sm font-medium text-gray-900 mb-1 ${isRtl ? 'text-right' : 'text-left'}`}>
+                          {isRtl ? 'ملاحظات' : 'Notes'}
+                        </label>
+                        <Input
+                          type="text"
+                          value={state.createFormData.notes}
+                          onChange={(e) => dispatch({ type: 'SET_CREATE_FORM', payload: { ...state.createFormData, notes: e.target.value } })}
+                          placeholder={isRtl ? 'أدخل ملاحظات (اختياري)' : 'Enter notes (optional)'}
+                          className="w-full rounded-md border-gray-200 focus:ring-amber-500 text-sm shadow-sm"
+                          aria-label={isRtl ? 'ملاحظات' : 'Notes'}
+                        />
+                      </div>
+                      {state.error && (
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className={`p-3 bg-red-50 border border-red-200 rounded-md flex items-center gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}
+                        >
+                          <AlertCircle className="w-5 h-5 text-red-600" />
+                          <span className="text-red-600 text-sm">{state.error}</span>
+                        </motion.div>
+                      )}
+                      <div className={`flex justify-end gap-2 ${isRtl ? 'flex-row-reverse' : ''}`}>
+                        <Button
+                          variant="secondary"
+                          onClick={() => {
+                            dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
+                            dispatch({ type: 'SET_CREATE_FORM', payload: { productId: '', quantity: '', notes: '' } });
+                          }}
+                          className="bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-md px-4 py-2 text-sm shadow-sm"
+                          aria-label={isRtl ? 'إلغاء' : 'Cancel'}
+                        >
+                          {isRtl ? 'إلغاء' : 'Cancel'}
+                        </Button>
+                        <Button
+                          type="submit"
+                          variant="primary"
+                          disabled={state.submitting !== null}
+                          className="bg-amber-500 hover:bg-amber-600 text-white rounded-md px-4 py-2 text-sm shadow-sm disabled:opacity-50"
+                          aria-label={isRtl ? 'إنشاء الطلب' : 'Create Order'}
+                        >
+                          {state.submitting === 'create' ? (isRtl ? 'جارٍ الإنشاء...' : 'Creating...') : (isRtl ? 'إنشاء الطلب' : 'Create Order')}
+                        </Button>
+                      </div>
+                    </form>
+                  </Modal>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-        </div>
-      </Modal>
-
-      {/* Assign Chefs Modal */}
-      <AssignChefsModal
-        isOpen={state.isAssignModalOpen}
-        onClose={() => dispatch({ type: 'SET_ASSIGN_MODAL', isOpen: false })}
-        order={state.selectedOrder}
-        chefs={state.chefs}
-        formData={state.assignFormData}
-        onSubmit={(formData) => handleAssignChefs(state.selectedOrder?._id || '', formData)}
-        isSubmitting={state.submitting === state.selectedOrder?._id}
-        isRtl={isRtl}
-      />
+        </motion.div>
+      </Suspense>
     </div>
   );
 };
+
+export default InventoryOrders;
