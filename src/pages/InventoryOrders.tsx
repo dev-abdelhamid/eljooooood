@@ -10,7 +10,7 @@ import { Input } from '../components/UI/Input';
 import { ShoppingCart, AlertCircle, PlusCircle, Table2, Grid } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
-import { factoryOrdersAPI, chefsAPI, productsAPI , ordersAPI } from '../services/api';
+import { factoryOrdersAPI, chefsAPI, productsAPI } from '../services/api';
 import { formatDate } from '../utils/formatDate';
 import { useOrderNotifications } from '../hooks/useOrderNotifications';
 import { FactoryOrder, Chef, AssignChefsForm, OrderStatus } from '../types/types';
@@ -20,7 +20,6 @@ import OrderTable from '../components/Shared/OrderTable';
 import OrderCard from '../components/Shared/OrderCard';
 import OrderCardSkeleton from '../components/Shared/OrderCardSkeleton';
 import OrderTableSkeleton from '../components/Shared/OrderTableSkeleton';
-
 import { ProductSearchInput, ProductDropdown } from './OrdersTablePage';
 
 const normalizeText = (text: string) => {
@@ -528,7 +527,6 @@ export const InventoryOrders: React.FC = () => {
   );
 
   const sortedOrders = useMemo(() => {
-    const priorityOrder = { urgent: 4, high: 3, medium: 2, low: 1 };
     return [...filteredOrders].sort((a, b) => {
       if (state.sortBy === 'date') {
         return state.sortOrder === 'asc'
@@ -619,7 +617,7 @@ export const InventoryOrders: React.FC = () => {
       }
       dispatch({ type: 'SET_SUBMITTING', payload: orderId });
       try {
-        await factoryOrdersAPI.assignChef(orderId, { items: state.assignFormData.items });
+        await factoryOrdersAPI.assignChefs(orderId, { items: state.assignFormData.items });
         const items = state.assignFormData.items.map(item => ({
           _id: item.itemId,
           assignedTo: state.chefs.find(chef => chef.userId === item.assignedTo) || {
@@ -779,7 +777,7 @@ export const InventoryOrders: React.FC = () => {
             </div>
           </div>
           <Card className="p-3 mt-6 bg-white shadow-md rounded-xl border border-gray-200">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">{isRtl ? 'بحث' : 'Search'}</label>
                 <ProductSearchInput
@@ -895,7 +893,7 @@ export const InventoryOrders: React.FC = () => {
                   className="space-y-3"
                 >
                   {paginatedOrders.length === 0 ? (
-                    <Card className="p-6 text-center bg-white shadow-md rounded-xl border border-gray-200">
+                    <Card className="p-6 text-center bg-white shadow-md rounded-xl border border-gray-100">
                       <ShoppingCart className="w-10 h-10 text-gray-400 mx-auto mb-3" />
                       <h3 className="text-base font-medium text-gray-800 mb-1">{isRtl ? 'لا توجد طلبات' : 'No Orders'}</h3>
                       <p className="text-xs text-gray-500">
