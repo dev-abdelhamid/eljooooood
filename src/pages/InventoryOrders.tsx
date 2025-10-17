@@ -683,7 +683,13 @@ export const InventoryOrders: React.FC = () => {
         priority: response.data.priority || 'medium',
         createdBy: user.name || (isRtl ? 'غير معروف' : 'Unknown'),
       };
-    
+      dispatch({ type: 'ADD_ORDER', payload: newOrder });
+      dispatch({ type: 'SET_CREATE_MODAL', isOpen: false });
+      dispatch({ type: 'SET_CREATE_FORM', payload: { productId: '', quantity: 1, notes: '' } });
+      dispatch({ type: 'SET_FORM_ERRORS', payload: {} });
+      if (socket && isConnected) {
+        emit('newFactoryOrder', newOrder);
+      }
       toast.success(isRtl ? 'تم إنشاء طلب الإنتاج بنجاح' : 'Production order created successfully', {
         position: isRtl ? 'top-left' : 'top-right',
       });

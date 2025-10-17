@@ -692,11 +692,7 @@ export const FactoryInventory: React.FC = () => {
       value = numValue;
     }
     dispatchProductionForm({ type: 'UPDATE_ITEM', payload: { index, field, value } });
-    setProductionErrors((prev) => ({
-      ...prev,
-      [`item_${index}_${field}`]: undefined,
-    });
-  }, [t]);
+
   const handleProductChange = useCallback(
     (index: number, productId: string) => {
       if (!isValidObjectId(productId)) {
@@ -717,11 +713,7 @@ export const FactoryInventory: React.FC = () => {
         type: 'UPDATE_ITEM',
         payload: { index, field: 'product', value: productId },
       });
-      setProductionErrors((prev) => ({
-        ...prev,
-        [`item_${index}_product`]: undefined,
-      });
-    },
+ 
     [t, productionForm.items]
   );
   const removeItemFromForm = useCallback((index: number) => {
